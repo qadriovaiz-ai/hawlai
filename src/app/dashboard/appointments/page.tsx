@@ -96,11 +96,11 @@ function AppointmentCard({ appt }: { appt: Record<string, unknown> & { id: strin
           {lead?.name ?? "Unknown"}
         </Link>
         <p className="text-sm text-slate-500">{lead?.vehicle ?? ""} • {String(appt.appointment_type).replace(/_/g, " ")}</p>
-        {appt.notes && (
+        {typeof appt.notes === "string" ? (
   <p className="text-xs text-slate-400 mt-0.5 truncate">
-    {String(appt.notes ?? "")}
+    {appt.notes}
   </p>
-)}
+) : null}
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <span className={`badge ${getAppointmentStatusColor(appt.status as "scheduled" | "completed" | "cancelled")}`}>
