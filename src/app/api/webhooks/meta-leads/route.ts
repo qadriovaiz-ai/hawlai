@@ -58,9 +58,24 @@ export async function GET(request: Request) {
 
   const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
 
+  // Debug logging — visible in Vercel's Logs/Observability tab.
+  // Remove once verification is confirmed working.
+  console.log("[meta-leads webhook] GET verification attempt", {
+    mode,
+    tokenReceived: token,
+    tokenExpectedIsSet: Boolean(expectedToken),
+    tokenMatches: token === expectedToken,
+    challenge,
+    fullUrl: request.url,
+  });
+
   if (mode === "subscribe" && token && token === expectedToken) {
-    return new NextResponse(challenge, { status: 200 });
+    return new NextResponse(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    });
   }
+
   return NextResponse.json({ error: "Verification failed" }, { status: 403 });
 }
 
