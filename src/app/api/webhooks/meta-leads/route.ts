@@ -2,80 +2,38 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { qualifyLead } from "@/lib/ai-engine";
 import { NextResponse } from "next/server";
 
-/**
- * Meta Lead Ads Webhook
- * ---------------------
- * Receives new customer leads from Meta (Facebook/Instagram) Lead Ads
- * and inserts them into the `leads` table tagged with source = "meta_ads_paid".
- *
- * SETUP REQUIRED (do these before this works end-to-end):
- * 1. Set env vars in Vercel: SUPABASE_SERVICE_ROLE_KEY, META_WEBHOOK_VERIFY_TOKEN
- * 2. In Meta Developer Console, register this URL as the webhook callback:
- *      https://<your-vercel-domain>/api/webhooks/meta-leads
- * 3. Meta will call GET first to verify the webhook (handled below).
- * 4. Meta sends a lightweight notification on lead creation — this code
- *    assumes you've already resolved that into full lead field data
- *    (name/phone/etc.) via the Meta Graph API "leadgen" lookup. If you're
- *    using a no-code bridge (Zapier/Make/Pabbly) instead of raw Meta API,
- *    point that bridge's outgoing webhook at this same URL with a JSON
- *    body matching the shape in parseIncomingLead() below.
- *
- * IMPORTANT: dealership_id must be passed in the request — typically via
- * the ad's tracked "form_id" or a custom field mapped to a dealership in
- * your own lookup table. For now this expects it directly in the payload;
- * tighten this once you have a form_id -> dealership_id mapping table.
- */
-
-interface IncomingMetaLead {
-  dealership_id: string;
-  full_name: string;
-  phone_number: string;
-  email?: string | null;
-  vehicle_interest?: string | null;
-  budget?: number | null;
-}
-
-function parseIncomingLead(body: any): IncomingMetaLead | null {
-  if (!body?.dealership_id || !body?.full_name || !body?.phone_number) {
-    return null;
+async function fetchLeadFromMeta(leadgenId: string) {
+  const token = process.env.META_PAGE_ACCESS_TOKEN;
+  if (!token) throw new Error("META_PAGE_ACCESS_TOKEN not set");
+  const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error?.message ?? "Failed to fetch lead from Meta");
   }
-  return {
-    dealership_id: body.dealership_id,
-    full_name: body.full_name,
-    phone_number: body.phone_number,
-    email: body.email ?? null,
-    vehicle_interest: body.vehicle_interest ?? null,
-    budget: body.budget ? Number(body.budget) : null,
-  };
+  return data;
 }
 
-// Meta calls GET once to verify webhook ownership when you first register the URL.
+function parseFieldData(fieldData: any[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const field of fieldData ?? []) {
+    result[field.name] = field.values?.[0] ?? "";
+  }
+  return result;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
-
   const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
-
-  // Debug logging — visible in Vercel's Logs/Observability tab.
-  // Remove once verification is confirmed working.
-  console.log("[meta-leads webhook] GET verification attempt", {
-    mode,
-    tokenReceived: token,
-    tokenExpectedIsSet: Boolean(expectedToken),
-    tokenMatches: token === expectedToken,
-    challenge,
-    fullUrl: request.url,
-  });
-
   if (mode === "subscribe" && token && token === expectedToken) {
     return new NextResponse(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
   }
-
   return NextResponse.json({ error: "Verification failed" }, { status: 403 });
 }
 
@@ -87,55 +45,69 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsed = parseIncomingLead(body);
-  if (!parsed) {
-    return NextResponse.json(
-      { error: "Missing required fields: dealership_id, full_name, phone_number" },
-      { status: 400 }
-    );
+  console.log("[meta-leads] Incoming POST:", JSON.stringify(body, null, 2));
+
+  const entries = body?.entry ?? [];
+  const results = [];
+
+  for (const entry of entries) {
+    for (const change of entry?.changes ?? []) {
+      const leadgenId = change?.value?.leadgen_id;
+      if (!leadgenId) continue;
+      try {
+        const metaLead = await fetchLeadFromMeta(leadgenId);
+        const fields = parseFieldData(metaLead.field_data ?? []);
+        console.log("[meta-leads] Lead fetched:", { leadgenId, fields });
+
+        const name = fields["full_name"] ?? fields["name"] ?? "Unknown";
+        const phone = fields["phone_number"] ?? fields["phone"] ?? "";
+        const email = fields["email"] ?? null;
+        const vehicle = fields["vehicle_type"] ?? fields["car_model"] ?? null;
+        const budget = fields["budget"] ? Number(fields["budget"]) : null;
+
+        const dealershipId = process.env.META_DEFAULT_DEALERSHIP_ID;
+        if (!dealershipId) {
+          console.error("[meta-leads] META_DEFAULT_DEALERSHIP_ID not set");
+          continue;
+        }
+
+        const qualification = qualifyLead({
+          purchaseYear: null,
+          budget,
+          phone,
+        });
+
+        const supabase = createServiceClient();
+        const { data, error } = await supabase
+          .from("leads")
+          .insert({
+            dealership_id: dealershipId,
+            name,
+            phone,
+            email,
+            vehicle,
+            budget,
+            source: "meta_ads_paid",
+            ai_score: qualification.score,
+            lead_temperature: qualification.temperature,
+            status: "ready_to_call",
+            qualification_reason: qualification.reason,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error("[meta-leads] Supabase error:", error.message);
+          continue;
+        }
+
+        console.log("[meta-leads] Lead saved:", data.id);
+        results.push(data.id);
+      } catch (err: any) {
+        console.error("[meta-leads] Error:", leadgenId, err.message);
+      }
+    }
   }
 
-  // Score the lead. NOTE: ai-engine's qualifyLead() was designed for
-  // "replace my old car" leads (purchase_year/budget). Fresh ad leads
-  // won't have purchase_year, so this will score lower than CSV leads
-  // by default — budget is the main signal available here. Revisit
-  // scoring weights once real ad-lead data comes in.
-  const qualification = qualifyLead({
-    purchaseYear: null,
-    budget: parsed.budget ?? null,
-    phone: parsed.phone_number,
-  });
-
-  const supabase = createServiceClient();
-
-  const { data, error } = await supabase
-    .from("leads")
-    .insert({
-      dealership_id: parsed.dealership_id,
-      name: parsed.full_name,
-      phone: parsed.phone_number,
-      email: parsed.email,
-      vehicle: parsed.vehicle_interest,
-      budget: parsed.budget,
-      source: "meta_ads_paid",
-      ai_score: qualification.score,
-      lead_temperature: qualification.temperature,
-      status: "ready_to_call",
-      qualification_reason: qualification.reason,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // TODO: trigger Vapi outbound call here so the lead gets called
-  // within ~60 seconds of arriving, e.g.:
-  // await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/calls/trigger`, {
-  //   method: "POST",
-  //   body: JSON.stringify({ lead_id: data.id }),
-  // });
-
-  return NextResponse.json({ success: true, lead: data });
+  return NextResponse.json({ success: true, processed: results.length });
 }
