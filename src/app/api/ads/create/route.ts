@@ -58,14 +58,14 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
     throw new Error("Missing META_PAGE_ACCESS_TOKEN, META_AD_ACCOUNT_ID, or META_PAGE_ID");
   }
 
-  const baseUrl = "https://graph.facebook.com/v19.0";
+  const baseUrl = "https://graph.facebook.com/v23.0";
 
   const campaignRes = await fetch(`${baseUrl}/${adAccountId}/campaigns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: `AutoPilot Lead Campaign - ${dealershipId.slice(0, 8)} - ${Date.now()}`,
-      objective: "LEAD_GENERATION",
+      objective: "OUTCOME_LEADS",
       status: "PAUSED",
       special_ad_categories: [],
       access_token: token,
@@ -91,7 +91,7 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       campaign_id: campaign.id,
       daily_budget: adCopy.budget_per_day * 100,
       billing_event: "IMPRESSIONS",
-      optimization_goal: "LEAD_GENERATION",
+      optimization_goal: "QUALITY_LEAD",
       targeting,
       status: "PAUSED",
       access_token: token,
