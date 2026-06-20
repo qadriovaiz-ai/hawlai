@@ -67,14 +67,12 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       name: `AutoPilot Lead Campaign - ${dealershipId.slice(0, 8)} - ${Date.now()}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
-     special_ad_categories: ["NONE"],
+      special_ad_categories: ["NONE"],
       access_token: token,
     }),
   });
   const campaign = await campaignRes.json();
- if (campaign.error) {
-  throw new Error(JSON.stringify(campaign.error));
-}
+  if (campaign.error) throw new Error(JSON.stringify(campaign.error));
 
   const targeting: any = {
     age_min: 25,
@@ -94,6 +92,7 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       daily_budget: adCopy.budget_per_day * 100,
       billing_event: "IMPRESSIONS",
       optimization_goal: "QUALITY_LEAD",
+      is_adset_budget_sharing_enabled: false,
       targeting,
       status: "PAUSED",
       access_token: token,
