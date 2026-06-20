@@ -16,9 +16,7 @@ async function generateAdCopy(prompt: string) {
         {
           role: "user",
           content: `You are an expert Facebook Lead Ad copywriter for Indian automobile dealerships.
-
 Based on this dealer's requirement: "${prompt}"
-
 Generate a compelling Facebook Lead Ad in JSON format only (no markdown, no explanation):
 {
   "headline": "short punchy headline under 40 chars in Hinglish or Hindi",
@@ -60,26 +58,28 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
 
   const baseUrl = "https://graph.facebook.com/v23.0";
 
+  // Step 1: Create Campaign with budget at campaign level
   const campaignRes = await fetch(`${baseUrl}/${adAccountId}/campaigns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: `AutoPilot Lead Campaign - ${dealershipId.slice(0, 8)} - ${Date.now()}`,
+      name: `AutoPilot Campaign - ${Date.now()}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
       special_ad_categories: ["NONE"],
+      daily_budget: adCopy.budget_per_day * 100,
+      is_adset_budget_sharing_enabled: true,
       access_token: token,
     }),
   });
   const campaign = await campaignRes.json();
   if (campaign.error) throw new Error(JSON.stringify(campaign.error));
 
+  // Step 2: Create Ad Set (no budget here since campaign has it)
   const targeting: any = {
     age_min: 25,
     age_max: 55,
-    geo_locations: adCopy.targeting_city
-      ? { cities: [{ key: adCopy.targeting_city, radius: 25, distance_unit: "kilometer" }] }
-      : { countries: ["IN"] },
+    geo_locations: { countries: ["IN"] },
     publisher_platforms: ["facebook", "instagram"],
   };
 
@@ -89,17 +89,15 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
     body: JSON.stringify({
       name: `AutoPilot Ad Set - ${adCopy.car_type ?? "Cars"}`,
       campaign_id: campaign.id,
-      daily_budget: adCopy.budget_per_day * 100,
       billing_event: "IMPRESSIONS",
       optimization_goal: "QUALITY_LEAD",
-      is_adset_budget_sharing_enabled: true,
       targeting,
       status: "PAUSED",
       access_token: token,
     }),
   });
   const adSet = await adSetRes.json();
-  if (adSet.error) throw new Error(`Ad Set error: ${adSet.error.message}`);
+  if (adSet.error) throw new Error(`Ad Set error: ${JSON.stringify(adSet.error)}`);
 
   return {
     campaign_id: campaign.id,
@@ -140,7 +138,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       ad: result,
-      message: "Ad created successfully! It's paused — review and activate from Meta Ads Manager.",
+      message: "Ad created! Paused mode mein hai — Meta Ads Manager se activate karo.",
     });
   } catch (err: any) {
     console.error("[ads/create] Error:", err.message);
