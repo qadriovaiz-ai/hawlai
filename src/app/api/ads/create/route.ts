@@ -12,10 +12,9 @@ async function generateAdCopy(prompt: string) {
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 500,
-      messages: [
-        {
-          role: "user",
-          content: `You are an expert Facebook Lead Ad copywriter for Indian automobile dealerships.
+      messages: [{
+        role: "user",
+        content: `You are an expert Facebook Lead Ad copywriter for Indian automobile dealerships.
 Based on this dealer's requirement: "${prompt}"
 Generate a compelling Facebook Lead Ad in JSON format only (no markdown, no explanation):
 {
@@ -26,24 +25,15 @@ Generate a compelling Facebook Lead Ad in JSON format only (no markdown, no expl
   "budget_per_day": number in INR (suggest 500 if not mentioned),
   "car_type": "car model/type extracted from prompt or null"
 }`,
-        },
-      ],
+      }],
     }),
   });
-
   const data = await response.json();
   const text = data.content?.[0]?.text ?? "{}";
   try {
     return JSON.parse(text.replace(/```json|```/g, "").trim());
   } catch {
-    return {
-      headline: "Best Car Deals Near You",
-      body: "Limited time offer! Get your dream car today. Fill the form now.",
-      cta: "GET_QUOTE",
-      targeting_city: null,
-      budget_per_day: 500,
-      car_type: null,
-    };
+    return { headline: "Best Car Deals Near You", body: "Limited time offer! Fill the form now.", cta: "GET_QUOTE", targeting_city: null, budget_per_day: 500, car_type: null };
   }
 }
 
@@ -51,14 +41,11 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
   const token = process.env.META_PAGE_ACCESS_TOKEN;
   const adAccountId = process.env.META_AD_ACCOUNT_ID;
   const pageId = process.env.META_PAGE_ID;
-
-  if (!token || !adAccountId || !pageId) {
-    throw new Error("Missing META_PAGE_ACCESS_TOKEN, META_AD_ACCOUNT_ID, or META_PAGE_ID");
-  }
+  if (!token || !adAccountId || !pageId) throw new Error("Missing env vars");
 
   const baseUrl = "https://graph.facebook.com/v23.0";
 
-  // Step 1: Create Campaign with budget at campaign level
+  // Campaign — no budget here
   const campaignRes = await fetch(`${baseUrl}/${adAccountId}/campaigns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -67,31 +54,29 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
       special_ad_categories: ["NONE"],
-      daily_budget: adCopy.budget_per_day * 100,
-      is_adset_budget_sharing_enabled: true,
       access_token: token,
     }),
   });
   const campaign = await campaignRes.json();
   if (campaign.error) throw new Error(JSON.stringify(campaign.error));
 
-  // Step 2: Create Ad Set (no budget here since campaign has it)
-  const targeting: any = {
-    age_min: 25,
-    age_max: 55,
-    geo_locations: { countries: ["IN"] },
-    publisher_platforms: ["facebook", "instagram"],
-  };
-
+  // Ad Set — budget here
   const adSetRes = await fetch(`${baseUrl}/${adAccountId}/adsets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: `AutoPilot Ad Set - ${adCopy.car_type ?? "Cars"}`,
       campaign_id: campaign.id,
+      daily_budget: adCopy.budget_per_day * 100,
       billing_event: "IMPRESSIONS",
       optimization_goal: "QUALITY_LEAD",
-      targeting,
+      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+      targeting: {
+        age_min: 25,
+        age_max: 55,
+        geo_locations: { countries: ["IN"] },
+        publisher_platforms: ["facebook", "instagram"],
+      },
       status: "PAUSED",
       access_token: token,
     }),
@@ -115,31 +100,18 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase
-    .from("profiles")
-    .select("dealership_id")
-    .eq("id", user.id)
-    .single();
+    .from("profiles").select("dealership_id").eq("id", user.id).single();
 
-  if (!profile?.dealership_id) {
-    return NextResponse.json({ error: "No dealership found" }, { status: 400 });
-  }
+  if (!profile?.dealership_id) return NextResponse.json({ error: "No dealership found" }, { status: 400 });
 
   const body = await request.json();
   const { prompt } = body;
-
-  if (!prompt || prompt.trim().length < 10) {
-    return NextResponse.json({ error: "Please provide a detailed prompt" }, { status: 400 });
-  }
+  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Please provide a detailed prompt" }, { status: 400 });
 
   try {
     const adCopy = await generateAdCopy(prompt);
     const result = await createMetaLeadAd(adCopy, profile.dealership_id);
-
-    return NextResponse.json({
-      success: true,
-      ad: result,
-      message: "Ad created! Paused mode mein hai — Meta Ads Manager se activate karo.",
-    });
+    return NextResponse.json({ success: true, ad: result, message: "Ad created! Paused mode mein hai." });
   } catch (err: any) {
     console.error("[ads/create] Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
