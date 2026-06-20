@@ -67,12 +67,14 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       name: `AutoPilot Lead Campaign - ${dealershipId.slice(0, 8)} - ${Date.now()}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
-      special_ad_categories: [],
+     special_ad_categories: ["NONE"],
       access_token: token,
     }),
   });
   const campaign = await campaignRes.json();
-  if (campaign.error) throw new Error(`Campaign error: ${campaign.error.message}`);
+ if (campaign.error) {
+  throw new Error(JSON.stringify(campaign.error));
+}
 
   const targeting: any = {
     age_min: 25,
