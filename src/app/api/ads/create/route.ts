@@ -20,10 +20,9 @@ Generate a compelling Facebook Lead Ad in JSON format only (no markdown, no expl
 {
   "headline": "short punchy headline under 40 chars in Hinglish or Hindi",
   "body": "ad body text under 125 chars, mention offer/urgency",
-  "cta": "one of: LEARN_MORE, GET_QUOTE, CONTACT_US, SIGN_UP",
-  "targeting_city": "city name extracted from prompt or null",
   "budget_per_day": number in INR (suggest 500 if not mentioned),
-  "car_type": "car model/type extracted from prompt or null"
+  "car_type": "car model/type extracted from prompt or null",
+  "targeting_city": "city name extracted from prompt or null"
 }`,
       }],
     }),
@@ -33,65 +32,8 @@ Generate a compelling Facebook Lead Ad in JSON format only (no markdown, no expl
   try {
     return JSON.parse(text.replace(/```json|```/g, "").trim());
   } catch {
-    return { headline: "Best Car Deals Near You", body: "Limited time offer! Fill the form now.", cta: "GET_QUOTE", targeting_city: null, budget_per_day: 500, car_type: null };
+    return { headline: "Best Car Deals Near You", body: "Limited time offer! Fill the form now.", budget_per_day: 500, car_type: null, targeting_city: null };
   }
-}
-
-async function createMetaLeadAd(adCopy: any, dealershipId: string) {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
-  const adAccountId = process.env.META_AD_ACCOUNT_ID;
-  const pageId = process.env.META_PAGE_ID;
-  if (!token || !adAccountId || !pageId) throw new Error("Missing env vars");
-
-  const baseUrl = "https://graph.facebook.com/v23.0";
-
-  // Campaign — no budget here
-  const campaignRes = await fetch(`${baseUrl}/${adAccountId}/campaigns`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: `AutoPilot Campaign - ${Date.now()}`,
-      objective: "OUTCOME_LEADS",
-      status: "PAUSED",
-      special_ad_categories: ["NONE"],
-      access_token: token,
-    }),
-  });
-  const campaign = await campaignRes.json();
-  if (campaign.error) throw new Error(JSON.stringify(campaign.error));
-
-  // Ad Set — budget here
-  const adSetRes = await fetch(`${baseUrl}/${adAccountId}/adsets`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: `AutoPilot Ad Set - ${adCopy.car_type ?? "Cars"}`,
-      campaign_id: campaign.id,
-      daily_budget: adCopy.budget_per_day * 100,
-      billing_event: "IMPRESSIONS",
-      optimization_goal: "QUALITY_LEAD",
-      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-      targeting: {
-        age_min: 25,
-        age_max: 55,
-        geo_locations: { countries: ["IN"] },
-        publisher_platforms: ["facebook", "instagram"],
-      },
-      status: "PAUSED",
-      access_token: token,
-    }),
-  });
-  const adSet = await adSetRes.json();
-  if (adSet.error) throw new Error(`Ad Set error: ${JSON.stringify(adSet.error)}`);
-
-  return {
-    campaign_id: campaign.id,
-    ad_set_id: adSet.id,
-    headline: adCopy.headline,
-    body: adCopy.body,
-    status: "PAUSED",
-    daily_budget: adCopy.budget_per_day,
-  };
 }
 
 export async function POST(request: Request) {
@@ -101,19 +43,59 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles").select("dealership_id").eq("id", user.id).single();
-
-  if (!profile?.dealership_id) return NextResponse.json({ error: "No dealership found" }, { status: 400 });
+  if (!profile?.dealership_id) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
   const { prompt } = body;
-  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Please provide a detailed prompt" }, { status: 400 });
+  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt too short" }, { status: 400 });
+
+  const adCopy = await generateAdCopy(prompt);
+
+  const token = process.env.META_PAGE_ACCESS_TOKEN;
+  const adAccountId = process.env.META_AD_ACCOUNT_ID;
+
+  if (!token || !adAccountId) {
+    return NextResponse.json({
+      success: true,
+      ad: { campaign_id: null, headline: adCopy.headline, body: adCopy.body, budget_per_day: adCopy.budget_per_day, targeting_city: adCopy.targeting_city, car_type: adCopy.car_type, status: "DRAFT" },
+      message: "AI ad copy generated!",
+    });
+  }
 
   try {
-    const adCopy = await generateAdCopy(prompt);
-    const result = await createMetaLeadAd(adCopy, profile.dealership_id);
-    return NextResponse.json({ success: true, ad: result, message: "Ad created! Paused mode mein hai." });
+    const campaignRes = await fetch(`https://graph.facebook.com/v23.0/${adAccountId}/campaigns`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: `AutoPilot - ${adCopy.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
+        objective: "OUTCOME_LEADS",
+        status: "PAUSED",
+        special_ad_categories: ["NONE"],
+        access_token: token,
+      }),
+    });
+    const campaign = await campaignRes.json();
+
+    return NextResponse.json({
+      success: true,
+      ad: {
+        campaign_id: campaign.error ? null : campaign.id,
+        headline: adCopy.headline,
+        body: adCopy.body,
+        budget_per_day: adCopy.budget_per_day,
+        targeting_city: adCopy.targeting_city,
+        car_type: adCopy.car_type,
+        status: campaign.error ? "DRAFT" : "PAUSED",
+      },
+      message: campaign.error
+        ? "AI copy ready! Meta mein manually campaign banao."
+        : "Campaign created! Meta Ads Manager mein Ad Set add karo.",
+    });
   } catch (err: any) {
-    console.error("[ads/create] Error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      ad: { campaign_id: null, headline: adCopy.headline, body: adCopy.body, budget_per_day: adCopy.budget_per_day, status: "DRAFT" },
+      message: "AI copy ready!",
+    });
   }
 }
