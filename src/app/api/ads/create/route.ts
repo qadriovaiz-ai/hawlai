@@ -92,7 +92,7 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       daily_budget: adCopy.budget_per_day * 100,
       billing_event: "IMPRESSIONS",
       optimization_goal: "QUALITY_LEAD",
-      is_adset_budget_sharing_enabled: false,
+      is_adset_budget_sharing_enabled: true,
       targeting,
       status: "PAUSED",
       access_token: token,
