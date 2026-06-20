@@ -67,6 +67,7 @@ async function createMetaLeadAd(adCopy: any, dealershipId: string) {
       name: `AutoPilot Lead Campaign - ${dealershipId.slice(0, 8)} - ${Date.now()}`,
       objective: "LEAD_GENERATION",
       status: "PAUSED",
+      special_ad_categories: [],
       access_token: token,
     }),
   });
