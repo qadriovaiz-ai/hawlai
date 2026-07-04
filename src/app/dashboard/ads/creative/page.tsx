@@ -236,7 +236,7 @@ export default function AdCreativePage() {
             <img src={result.generated_image_url} alt="Generated ad creative" className="w-full rounded-lg border border-green-100" />
           )}
           
-            href={result.generated_image_url}
+            <a href={result.generated_image_url}
             download
             className="btn-secondary w-full justify-center"
           >
