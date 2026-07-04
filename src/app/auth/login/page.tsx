@@ -99,7 +99,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-6">
-          Trusted by 500+ automobile dealerships across India
+        AI-powered lead qualification for automobile dealerships
         </p>
       </div>
     </div>
