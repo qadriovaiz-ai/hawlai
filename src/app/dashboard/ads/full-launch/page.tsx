@@ -37,7 +37,7 @@ export default function FullLaunchPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/ads/launch-full", {
+      const res = await fetch("/api/ads/adlaunch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photo_base64: photoBase64, prompt, image_mode: "template" }),
