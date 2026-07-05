@@ -139,7 +139,8 @@ async function metaPost(path: string, params: Record<string, any>) {
   });
   const data = await res.json();
   if (!res.ok || data.error) {
-    throw new Error(data?.error?.message ?? `Meta API error on ${path}`);
+    const e = data.error ?? {};
+    throw new Error(`[${path}] ${e.message ?? "Meta API error"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}${e.error_subcode ? ` (subcode ${e.error_subcode})` : ""}`);
   }
   return data;
 }
