@@ -250,7 +250,7 @@ export async function POST(request: Request) {
     // Step 6: ad set (targeting + budget)
     const cityKey = plan.targeting_city ? await resolveCityKey(plan.targeting_city) : null;
     const targeting = cityKey
-      ? { geo_locations: { cities: [{ key: cityKey, radius: 25, distance_unit: "kilometer" }] }, age_min: 21, age_max: 55, targeting_automation: { advantage_audience: 1 } }
+      ? { geo_locations: { cities: [{ key: cityKey, radius: 25, distance_unit: "kilometer" }] }, age_min: 21, targeting_automation: { advantage_audience: 1 } }
       : { geo_locations: { countries: ["IN"] }, age_min: 21, targeting_automation: { advantage_audience: 1 } };
 
     const adsetRes = await metaPost(`${AD_ACCOUNT}/adsets`, {
