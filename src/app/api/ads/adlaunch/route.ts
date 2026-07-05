@@ -239,11 +239,12 @@ export async function POST(request: Request) {
     });
 
     // Step 5: campaign
-    const campaignRes = await metaPost(`${AD_ACCOUNT}/campaigns`, {
+   const campaignRes = await metaPost(`${AD_ACCOUNT}/campaigns`, {
       name: `AutoPilot - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
       special_ad_categories: ["NONE"],
+      is_adset_budget_sharing_enabled: false,
     });
 
     // Step 6: ad set (targeting + budget)
