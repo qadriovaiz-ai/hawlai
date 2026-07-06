@@ -71,7 +71,7 @@ export default async function ConnectFacebookPage({
             Apna Facebook Page connect karo taaki ads tumhare apne account se launch hon, na ki kisi shared account se.
           </p>
           
-            href="/api/auth/facebook/connect"
+            <a href="/api/auth/facebook/connect"
             className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors"
           >
             <Facebook className="w-4 h-4" /> Connect Facebook Page
