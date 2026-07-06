@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/calls", label: "Call History", icon: Phone },
   { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/ads", label: "Launch Ad", icon: Megaphone },
+ { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
 ];
 
 export default function Sidebar({ dealershipName }: { dealershipName: string }) {
