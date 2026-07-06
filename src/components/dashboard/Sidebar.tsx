@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Phone, Calendar, BarChart3,
-  PhoneCall, Car, ChevronRight, Megaphone
+  PhoneCall, Car, ChevronRight, Megaphone, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,8 @@ const NAV_ITEMS = [
   { href: "/dashboard/calls", label: "Call History", icon: Phone },
   { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
- { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
+  { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
+  { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
 ];
 
 export default function Sidebar({ dealershipName }: { dealershipName: string }) {
