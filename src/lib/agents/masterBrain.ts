@@ -37,12 +37,14 @@ interface MasterBrainResult {
 
 async function classifyIntent(message: string): Promise<ClassifiedIntent> {
   let rawText = "";
+  let httpStatus: number | null = null;
+  let bodyText = "";
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
@@ -65,12 +67,23 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
       }),
     });
 
+    httpStatus = response.status;
+    // Read as text first (never throws), THEN try to parse — this way we
+    // always have something readable to log even if the body is empty,
+    // truncated, or not JSON at all.
+    bodyText = await response.text();
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not set in this environment");
+    }
     if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`Anthropic API returned ${response.status}: ${errBody.slice(0, 300)}`);
+      throw new Error(`Anthropic API returned ${httpStatus}: ${bodyText.slice(0, 300)}`);
+    }
+    if (!bodyText.trim()) {
+      throw new Error(`Anthropic API returned an empty body (status ${httpStatus})`);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(bodyText);
     rawText = data.content?.[0]?.text ?? "";
 
     // Claude sometimes wraps JSON in a code fence or adds a stray sentence
@@ -78,10 +91,15 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : rawText).replace(/```json|```/g, "").trim();
 
-    if (!clean) throw new Error("Empty response text from Claude");
+    if (!clean) throw new Error("Claude's response had no JSON in it");
     return JSON.parse(clean);
   } catch (err: any) {
-    console.error("[master-brain] classifyIntent error:", err.message, "| raw text:", rawText);
+    console.error(
+      "[master-brain] classifyIntent error:", err.message,
+      "| http status:", httpStatus,
+      "| body (first 300 chars):", bodyText.slice(0, 300),
+      "| parsed text:", rawText
+    );
     return { intent: "unclear" };
   }
 }
