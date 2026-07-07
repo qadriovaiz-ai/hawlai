@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 
 const GRAPH_VERSION = "v23.0";
-const RAW_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID ?? "";
-const AD_ACCOUNT = RAW_AD_ACCOUNT_ID.startsWith("act_") ? RAW_AD_ACCOUNT_ID : `act_${RAW_AD_ACCOUNT_ID}`;
 
 // ------------------------------------------------------------------
 // Step 1: Claude reads the dealer's one-line prompt and extracts
@@ -128,10 +126,10 @@ function buildTextOverlaySvg(width: number, height: number, headline: string, bo
 }
 
 // ------------------------------------------------------------------
-// Step 3: Meta Graph API helpers
+// Step 3: Meta Graph API helpers — token/ad-account now come from the
+// calling dealership's own connection, not a shared env var.
 // ------------------------------------------------------------------
-async function metaPost(path: string, params: Record<string, any>) {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
+async function metaPost(path: string, params: Record<string, any>, token: string) {
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -145,9 +143,8 @@ async function metaPost(path: string, params: Record<string, any>) {
   return data;
 }
 
-async function resolveCityKey(cityName: string): Promise<string | null> {
+async function resolveCityKey(cityName: string, token: string): Promise<string | null> {
   try {
-    const token = process.env.META_PAGE_ACCESS_TOKEN;
     const url = `https://graph.facebook.com/${GRAPH_VERSION}/search?type=adgeolocation&location_types=["city"]&q=${encodeURIComponent(cityName)}&access_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
@@ -166,6 +163,29 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  // Pull this dealer's own Facebook connection. Falls back to the legacy
+  // shared env vars only if the dealer hasn't connected their own Page yet
+  // (keeps this working during the transition, but every dealer should
+  // eventually go through Settings -> Connect Facebook).
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select("fb_page_access_token, fb_ad_account_id, fb_page_id, fb_lead_form_id")
+    .eq("id", dealershipId)
+    .single();
+
+  const pageAccessToken: string | undefined = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const rawAdAccountId: string = dealership?.fb_ad_account_id ?? process.env.META_AD_ACCOUNT_ID ?? "";
+  const adAccount = rawAdAccountId.startsWith("act_") ? rawAdAccountId : `act_${rawAdAccountId}`;
+  const pageId: string | undefined = dealership?.fb_page_id ?? process.env.META_PAGE_ID;
+  const leadFormId: string | undefined = dealership?.fb_lead_form_id ?? process.env.META_LEAD_FORM_ID;
+
+  if (!pageAccessToken || !rawAdAccountId || !pageId || !leadFormId) {
+    return NextResponse.json(
+      { error: "Facebook Page connect nahi hai. Pehle Settings mein jaake apna Facebook Page connect karo, phir ad launch karo." },
+      { status: 400 }
+    );
+  }
 
   const body = await request.json();
   const { photo_base64, prompt, image_mode } = body;
@@ -215,16 +235,14 @@ export async function POST(request: Request) {
     const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
 
     // Step 3: upload the image to Meta and get an image_hash
-    const uploadRes = await metaPost(`${AD_ACCOUNT}/adimages`, {
+    const uploadRes = await metaPost(`${adAccount}/adimages`, {
       bytes: finalBuffer.toString("base64"),
-    });
+    }, pageAccessToken);
     const imageHash = Object.values(uploadRes.images ?? {})[0] && (Object.values(uploadRes.images ?? {})[0] as any).hash;
     if (!imageHash) throw new Error("Meta ne image hash return nahi kiya");
 
     // Step 4: create the ad creative (linked to the Instant Form)
-    const pageId = process.env.META_PAGE_ID;
-    const leadFormId = process.env.META_LEAD_FORM_ID;
-    const creativeRes = await metaPost(`${AD_ACCOUNT}/adcreatives`, {
+    const creativeRes = await metaPost(`${adAccount}/adcreatives`, {
       name: `${plan.headline} - Creative`,
       object_story_spec: {
         page_id: pageId,
@@ -236,24 +254,24 @@ export async function POST(request: Request) {
           call_to_action: { type: "LEARN_MORE", value: { lead_gen_form_id: leadFormId } },
         },
       },
-    });
+    }, pageAccessToken);
 
     // Step 5: campaign
-   const campaignRes = await metaPost(`${AD_ACCOUNT}/campaigns`, {
+    const campaignRes = await metaPost(`${adAccount}/campaigns`, {
       name: `AutoPilot - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
       special_ad_categories: ["NONE"],
       is_adset_budget_sharing_enabled: false,
-    });
+    }, pageAccessToken);
 
     // Step 6: ad set (targeting + budget)
-    const cityKey = plan.targeting_city ? await resolveCityKey(plan.targeting_city) : null;
+    const cityKey = plan.targeting_city ? await resolveCityKey(plan.targeting_city, pageAccessToken) : null;
     const targeting = cityKey
       ? { geo_locations: { cities: [{ key: cityKey, radius: 25, distance_unit: "kilometer" }] }, age_min: 21, targeting_automation: { advantage_audience: 1 } }
       : { geo_locations: { countries: ["IN"] }, age_min: 21, targeting_automation: { advantage_audience: 1 } };
 
-    const adsetRes = await metaPost(`${AD_ACCOUNT}/adsets`, {
+    const adsetRes = await metaPost(`${adAccount}/adsets`, {
       name: `${plan.headline} - AdSet`,
       campaign_id: campaignRes.id,
       daily_budget: Math.round((plan.daily_budget ?? 500) * 100),
@@ -263,15 +281,15 @@ export async function POST(request: Request) {
       targeting,
       status: "PAUSED",
       promoted_object: { page_id: pageId },
-    });
+    }, pageAccessToken);
 
     // Step 7: the ad itself
-    const adRes = await metaPost(`${AD_ACCOUNT}/ads`, {
+    const adRes = await metaPost(`${adAccount}/ads`, {
       name: plan.headline,
       adset_id: adsetRes.id,
       creative: { creative_id: creativeRes.id },
       status: "PAUSED",
-    });
+    }, pageAccessToken);
 
     const { data: updated } = await serviceClient
       .from("ad_creatives")
