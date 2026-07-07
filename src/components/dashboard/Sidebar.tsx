@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
+  { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
   { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
 ];
 
