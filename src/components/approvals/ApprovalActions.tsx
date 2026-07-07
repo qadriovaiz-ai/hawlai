@@ -13,7 +13,7 @@ export default function ApprovalActions({ approvalId }: { approvalId: string }) 
     let rejection_reason: string | null = null;
 
     if (status === "rejected") {
-      rejection_reason = window.prompt("Reject karne ki wajah (optional):");
+      rejection_reason = window.prompt("Reason for rejecting (optional):");
     }
 
     try {

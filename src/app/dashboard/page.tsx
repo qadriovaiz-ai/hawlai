@@ -58,8 +58,8 @@ export default async function DashboardHomePage() {
           <Rocket className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold text-purple-800">Naya Ad Launch Karo</p>
-          <p className="text-xs text-purple-600">Photo + requirement do, AI poora ad ready kar dega</p>
+          <p className="text-sm font-semibold text-purple-800">Launch New Ad</p>
+          <p className="text-xs text-purple-600">Give a photo + requirement, AI will get the full ad ready</p>
         </div>
         <ArrowRight className="w-4 h-4 text-purple-400" />
       </Link>
@@ -72,7 +72,7 @@ export default async function DashboardHomePage() {
           </Link>
         </div>
         {recentLeads.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-8">Koi lead abhi tak nahi aaya hai</p>
+          <p className="text-sm text-slate-400 text-center py-8">No leads yet</p>
         ) : (
           <div className="space-y-2">
             {recentLeads.map((lead) => (

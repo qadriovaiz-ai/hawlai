@@ -33,33 +33,33 @@ export default async function ConnectFacebookPage({
           <Facebook className="w-5 h-5 text-blue-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Facebook Connect Karo</h1>
-          <p className="text-sm text-slate-500">Apna khud ka Page aur Ad Account jodo</p>
+          <h1 className="text-xl font-bold text-slate-900">Connect Facebook</h1>
+          <p className="text-sm text-slate-500">Connect your own Page and Ad Account</p>
         </div>
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">Connect karte waqt error aaya: {error}</p>
+          <p className="text-sm text-red-700">An error occurred while connecting: {error}</p>
         </div>
       )}
 
       {hasPending ? (
         <div className="card p-5">
-          <p className="text-sm font-semibold text-slate-700 mb-4">Apna Page, Ad Account aur Lead Form choose karo</p>
+          <p className="text-sm font-semibold text-slate-700 mb-4">Choose your Page, Ad Account and Lead Form</p>
           <ConnectFacebookForm pending={dealership.fb_connect_pending} />
         </div>
       ) : isConnected ? (
         <div className="card p-5 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-500" />
-            <p className="text-sm font-semibold text-green-700">Connected Hai</p>
+            <p className="text-sm font-semibold text-green-700">Connected</p>
           </div>
           <div className="text-sm space-y-1.5 text-slate-600">
             <p><span className="text-slate-400">Page:</span> {dealership.fb_page_name}</p>
             <p><span className="text-slate-400">Ad Account:</span> {dealership.fb_ad_account_id}</p>
-            <p><span className="text-slate-400">Lead Form:</span> {dealership.fb_lead_form_name ?? "Koi nahi"}</p>
+            <p><span className="text-slate-400">Lead Form:</span> {dealership.fb_lead_form_name ?? "None"}</p>
           </div>
           <a href="/api/auth/facebook/connect" className="btn-secondary inline-flex mt-2">
             Reconnect / Change Page
@@ -68,7 +68,7 @@ export default async function ConnectFacebookPage({
       ) : (
         <div className="card p-8 text-center space-y-4">
           <p className="text-sm text-slate-500">
-            Apna Facebook Page connect karo taaki ads tumhare apne account se launch hon, na ki kisi shared account se.
+            Connect your Facebook Page so ads launch from your own account, not a shared one.
           </p>
           
             <a href="/api/auth/facebook/connect"

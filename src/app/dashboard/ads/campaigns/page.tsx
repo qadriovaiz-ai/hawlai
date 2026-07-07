@@ -35,11 +35,11 @@ export default async function CampaignsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">My Campaigns</h1>
-            <p className="text-sm text-slate-500">Activate, pause, ya naya ad launch karo</p>
+            <p className="text-sm text-slate-500">Activate, pause, or launch a new ad</p>
           </div>
         </div>
         <Link href="/dashboard/ads/full-launch" className="btn-primary">
-          Naya Ad Launch Karo
+          Launch New Ad
         </Link>
       </div>
 
@@ -48,10 +48,10 @@ export default async function CampaignsPage() {
           <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <Megaphone className="w-7 h-7 text-purple-400" />
           </div>
-          <p className="text-slate-700 font-medium">Abhi koi campaign launch nahi hua</p>
-          <p className="text-slate-400 text-sm mt-1 mb-4">Pehla ad launch karo, phir yahan se manage karo</p>
+          <p className="text-slate-700 font-medium">No campaigns launched yet</p>
+          <p className="text-slate-400 text-sm mt-1 mb-4">Launch your first ad, then manage it from here</p>
           <Link href="/dashboard/ads/full-launch" className="btn-primary inline-flex">
-            Ad Launch Karo <ArrowRight className="w-4 h-4" />
+            Launch Ad <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       ) : (

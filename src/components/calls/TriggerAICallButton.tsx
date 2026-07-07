@@ -19,7 +19,7 @@ export default function TriggerAICallButton({ leadId }: { leadId: string }) {
         body: JSON.stringify({ lead_id: leadId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Call trigger nahi ho paya");
+      if (!res.ok) throw new Error(data.error ?? "Couldn't trigger the call");
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -30,7 +30,7 @@ export default function TriggerAICallButton({ leadId }: { leadId: string }) {
 
   return (
     <div className="relative">
-      <button onClick={handleTrigger} disabled={loading} className="btn-secondary" title="AI se automatically call karo">
+      <button onClick={handleTrigger} disabled={loading} className="btn-secondary" title="Automatically call with AI">
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4 text-purple-500" />}
         AI Call
       </button>

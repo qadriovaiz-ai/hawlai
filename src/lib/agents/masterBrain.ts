@@ -60,7 +60,7 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
 {"intent":"ad_launch" | "analytics_query" | "unclear","daily_budget":number or null (rupees per day, if mentioned),"duration_days":number or null (how many days the campaign should run, default 1 if a launch but not mentioned),"car_type":"car model mentioned or null","targeting_city":"city mentioned or null"}
 
 "ad_launch" = they want to create/launch/run an ad or campaign.
-"analytics_query" = they're asking about spend, leads, performance, results, kitna kharcha hua, kaise chal raha hai, etc.
+"analytics_query" = they're asking about spend, leads, performance, or results.
 "unclear" = anything else.`,
           },
         ],
@@ -117,12 +117,12 @@ async function answerAnalyticsQuery(supabase: any, dealershipId: string): Promis
   const coldLeads = leads?.filter((l: any) => l.lead_temperature === "cold").length ?? 0;
 
   if (totalLeads === 0) {
-    return "Abhi tak koi lead nahi aaya hai. Pehle ek ad launch karo, phir yahan performance dikhega.";
+    return "No leads yet. Launch an ad first, then performance will show up here.";
   }
 
-  return `Total ${totalLeads} leads aaye hain — ${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold. ` +
-    `${calls?.length ?? 0} calls ho chuki hain, aur ${appointments?.length ?? 0} appointments book hue hain. ` +
-    `Detailed cost-per-lead ke liye Analytics page dekho.`;
+  return `You have ${totalLeads} total leads — ${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold. ` +
+    `${calls?.length ?? 0} calls made, and ${appointments?.length ?? 0} appointments booked. ` +
+    `See the Analytics page for detailed cost-per-lead.`;
 }
 
 export async function routeRequest(
@@ -160,7 +160,7 @@ export async function routeRequest(
       return {
         intent: "ad_launch",
         status: "pending_approval",
-        message: `Yeh campaign ka estimated kharcha ₹${totalEstimate.toLocaleString("en-IN")} hai, jo tumhare ₹${threshold.toLocaleString("en-IN")} approval limit se zyada hai. Maine ise "Pending Approvals" mein daal diya hai — waha se Approve karne ke baad hi launch hoga.`,
+        message: `This campaign's estimated cost is ₹${totalEstimate.toLocaleString("en-IN")}, which is above your ₹${threshold.toLocaleString("en-IN")} approval limit. I've added it to "Pending Approvals" — it'll launch once you approve it there.`,
         details: approval,
       };
     }
@@ -168,7 +168,7 @@ export async function routeRequest(
     return {
       intent: "ad_launch",
       status: "auto_approved",
-      message: `Yeh campaign (~₹${totalEstimate.toLocaleString("en-IN")}, tumhari approval limit ke andar) launch karne layak hai. Ab "Launch Ad" page pe jaake car ki photo upload karo — wahan se poora ad ban ke launch ho jayega.`,
+      message: `This campaign (~₹${totalEstimate.toLocaleString("en-IN")}, within your approval limit) is good to launch. Go to the "Launch Ad" page and upload the car photo — the full ad will be built and launched from there.`,
       details: classification,
     };
   }
@@ -182,6 +182,6 @@ export async function routeRequest(
     intent: "unclear",
     status: "unclear",
     message:
-      'Samajh nahi aaya. Ya toh ek ad launch karne ko bolo (jaise "Swift ka ad chalao Lucknow mein, 1000 per day, 5 din") ya performance poocho (jaise "is mahine ka performance kaisa hai").',
+      'I didn\'t quite get that. Ask me to launch an ad (e.g. "launch a Swift ad in Lucknow, 1000 per day, 5 days") or ask about performance (e.g. "how is this month\'s performance").',
   };
 }

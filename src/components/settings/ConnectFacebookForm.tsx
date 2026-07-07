@@ -28,7 +28,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
         body: JSON.stringify({ page_id: pageId, ad_account_id: adAccountId, lead_form_id: leadFormId || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Save nahi ho paya");
+      if (!res.ok) throw new Error(data.error ?? "Couldn't save");
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -42,7 +42,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
       <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
         <p className="text-sm text-red-700">
-          Koi Facebook Page nahi mili is account se. Confirm karo ki tum us Facebook account se login kiye ho jiske paas Page Admin access hai.
+          No Facebook Page found on this account. Make sure you're logged in with the Facebook account that has Page Admin access.
         </p>
       </div>
     );
@@ -70,7 +70,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
           onChange={(e) => setAdAccountId(e.target.value)}
           className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
-          {adAccounts.length === 0 && <option value="">Koi Ad Account nahi mila</option>}
+          {adAccounts.length === 0 && <option value="">No Ad Account found</option>}
           {adAccounts.map((a: any) => (
             <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
           ))}
@@ -84,13 +84,13 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
           onChange={(e) => setLeadFormId(e.target.value)}
           className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
-          <option value="">Koi select nahi</option>
+          <option value="">None selected</option>
           {leadForms.map((f: any) => (
             <option key={f.id} value={f.id}>{f.name} ({f.status})</option>
           ))}
         </select>
         {leadForms.length === 0 && (
-          <p className="text-xs text-slate-400 mt-1">Is Page ke liye koi Lead Form nahi mila</p>
+          <p className="text-xs text-slate-400 mt-1">No Lead Form found for this Page</p>
         )}
       </div>
 

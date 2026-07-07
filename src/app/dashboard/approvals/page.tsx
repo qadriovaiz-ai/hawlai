@@ -36,7 +36,7 @@ export default async function ApprovalsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Pending Approvals</h1>
-          <p className="text-sm text-slate-500">Budget-limit se upar wale actions yahan approval ke liye rukte hain</p>
+          <p className="text-sm text-slate-500">Actions above your budget limit wait here for approval</p>
         </div>
       </div>
 
@@ -45,12 +45,12 @@ export default async function ApprovalsPage() {
           <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="w-7 h-7 text-purple-400" />
           </div>
-          <p className="text-slate-700 font-medium">Koi pending approval nahi hai</p>
-          <p className="text-slate-400 text-sm mt-1">Jab koi action tumhari approval limit se upar jayega, woh yahan dikhega</p>
+          <p className="text-slate-700 font-medium">No pending approvals</p>
+          <p className="text-slate-400 text-sm mt-1">When an action goes over your approval limit, it'll show up here</p>
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-slate-500">{pending.length} action{pending.length > 1 ? "s" : ""} tumhare decision ka wait kar rahe hain</p>
+          <p className="text-sm text-slate-500">{pending.length} action{pending.length > 1 ? "s" : ""} waiting for your decision</p>
           {pending.map((approval) => {
             const details = approval.action_details ?? {};
             return (
@@ -74,7 +74,7 @@ export default async function ApprovalsPage() {
                     )}
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-xs text-slate-400">
                       {details.daily_budget && <span>Daily budget: {formatCurrency(details.daily_budget)}</span>}
-                      {details.duration_days && <span>Duration: {details.duration_days} din</span>}
+                      {details.duration_days && <span>Duration: {details.duration_days} days</span>}
                       {details.car_type && <span>Car: {details.car_type}</span>}
                       {details.targeting_city && <span>City: {details.targeting_city}</span>}
                     </div>

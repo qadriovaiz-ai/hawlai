@@ -30,8 +30,8 @@ export async function PATCH(
     .eq("dealership_id", dealershipId)
     .single();
 
-  if (fetchError || !creative) return NextResponse.json({ error: "Campaign nahi mila" }, { status: 404 });
-  if (!creative.meta_ad_id) return NextResponse.json({ error: "Yeh ad abhi Meta pe launch nahi hua" }, { status: 400 });
+  if (fetchError || !creative) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  if (!creative.meta_ad_id) return NextResponse.json({ error: "This ad hasn't been launched on Meta yet" }, { status: 400 });
 
   const { data: dealership } = await supabase
     .from("dealerships")
@@ -41,7 +41,7 @@ export async function PATCH(
 
   const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
-    return NextResponse.json({ error: "Facebook Page connect nahi hai" }, { status: 400 });
+    return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
   }
 
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${creative.meta_ad_id}`, {

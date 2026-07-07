@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock } from "lucide-react";
 
 const EXAMPLES = [
-  "Swift chahiye, Lucknow, budget 8 lakh tak, daily spend 500",
+  "Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500",
   "Honda City second hand buyers, Delhi NCR, 10-15 lakh range",
   "Tata Nexon SUV interested buyers, Kanpur city, daily budget 500",
 ];
@@ -34,8 +34,8 @@ export default function FullLaunchPage() {
   async function handleLaunch() {
     setError(null);
     setResult(null);
-    if (!photoBase64) return setError("Pehle car ki photo upload karo");
-    if (prompt.trim().length < 10) return setError("Requirement thodi detail mein likho");
+    if (!photoBase64) return setError("Upload the car photo first");
+    if (prompt.trim().length < 10) return setError("Add a bit more detail to the requirement");
 
     setLoading(true);
     try {
@@ -50,7 +50,7 @@ export default function FullLaunchPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Kuch gadbad ho gaya");
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -66,13 +66,13 @@ export default function FullLaunchPage() {
           <Rocket className="w-5 h-5 text-purple-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Ad Launch Karo — Full Auto</h1>
-          <p className="text-sm text-slate-500">Photo + requirement do, poora ad ready ho jayega</p>
+          <h1 className="text-xl font-bold text-slate-900">Launch Ad — Full Auto</h1>
+          <p className="text-sm text-slate-500">Give a photo + requirement, the full ad gets ready</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">1. Car ki photo</p>
+        <p className="text-sm font-semibold text-slate-700">1. Car Photo</p>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
         {photoPreview ? (
           <div className="relative">
@@ -87,17 +87,17 @@ export default function FullLaunchPage() {
             className="w-full h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
           >
             <ImagePlus className="w-8 h-8" />
-            <span className="text-sm font-medium">Photo select karo</span>
+            <span className="text-sm font-medium">Select Photo</span>
           </button>
         )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">2. Requirement ek line mein likho</p>
+        <p className="text-sm font-semibold text-slate-700">2. Describe your requirement in one line</p>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Jaise: Swift chahiye, Lucknow, budget 8 lakh tak, daily spend 500"
+          placeholder="e.g. Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500"
           className="w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <div className="space-y-2">
@@ -114,8 +114,8 @@ export default function FullLaunchPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">3. Schedule karo (optional)</p>
-        <p className="text-xs text-slate-400">Khali chhodo to abhi ready hoga (paused) — tum khud Campaigns page se Activate karoge. Date/time dogi to us waqt se delivery start hogi jab tum Activate karoge.</p>
+        <p className="text-sm font-semibold text-slate-700">3. Schedule (optional)</p>
+        <p className="text-xs text-slate-400">Leave this blank to have it ready now (paused) — you'll activate it yourself from the Campaigns page. Set a date/time and delivery will only start then, once you activate it.</p>
         <div className="flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
           <input
@@ -134,11 +134,11 @@ export default function FullLaunchPage() {
       >
         {loading ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" /> Ad banake Meta pe launch kar raha hai...
+            <Loader2 className="w-4 h-4 animate-spin" /> Building the ad and launching on Meta...
           </>
         ) : (
           <>
-            <Rocket className="w-4 h-4" /> Ad Launch Karo
+            <Rocket className="w-4 h-4" /> Launch Ad
           </>
         )}
       </button>
@@ -147,7 +147,7 @@ export default function FullLaunchPage() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-red-700">Error aaya</p>
+            <p className="text-sm font-semibold text-red-700">Error</p>
             <p className="text-sm text-red-600 mt-0.5">{error}</p>
           </div>
         </div>
@@ -157,7 +157,7 @@ export default function FullLaunchPage() {
         <div className="bg-green-50 border border-green-200 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-500" />
-            <p className="text-sm font-semibold text-green-700">Ad Ready Hai — Meta Ads Manager mein Paused pada hai</p>
+            <p className="text-sm font-semibold text-green-700">Ad Ready — sitting Paused in Meta Ads Manager</p>
           </div>
           {result.creative?.generated_image_url && (
             <img src={result.creative.generated_image_url} alt="" className="w-full rounded-lg border border-green-100" />
@@ -170,10 +170,10 @@ export default function FullLaunchPage() {
             <p className="text-xs font-mono text-slate-500 pt-2 border-t border-slate-100">Ad ID: {result.meta?.ad_id}</p>
           </div>
           <p className="text-xs text-green-600">
-            ✅ Ad paused status mein ready hai. "My Campaigns" page se review karke Activate kar sakte ho — Meta Ads Manager kholne ki zarurat nahi.
+            ✅ The ad is ready in paused status. Review and Activate it from "My Campaigns" — no need to open Meta Ads Manager.
           </p>
           <Link href="/dashboard/ads/campaigns" className="btn-primary inline-flex text-sm">
-            My Campaigns pe jao
+            Go to My Campaigns
           </Link>
         </div>
       )}

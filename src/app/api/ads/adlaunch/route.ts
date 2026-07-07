@@ -182,7 +182,7 @@ export async function POST(request: Request) {
 
   if (!pageAccessToken || !rawAdAccountId || !pageId || !leadFormId) {
     return NextResponse.json(
-      { error: "Facebook Page connect nahi hai. Pehle Settings mein jaake apna Facebook Page connect karo, phir ad launch karo." },
+      { error: "Facebook Page isn't connected. Go to Settings and connect your Facebook Page first, then launch the ad." },
       { status: 400 }
     );
   }
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
   const { photo_base64, prompt, image_mode, scheduled_start } = body;
 
   if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
-  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt bahut chota hai, thoda detail likho" }, { status: 400 });
+  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt is too short, add a bit more detail" }, { status: 400 });
 
   const match = String(photo_base64).match(/^data:(image\/\w+);base64,(.+)$/);
   const mimeType = match?.[1] ?? "image/jpeg";
@@ -239,7 +239,7 @@ export async function POST(request: Request) {
       bytes: finalBuffer.toString("base64"),
     }, pageAccessToken);
     const imageHash = Object.values(uploadRes.images ?? {})[0] && (Object.values(uploadRes.images ?? {})[0] as any).hash;
-    if (!imageHash) throw new Error("Meta ne image hash return nahi kiya");
+    if (!imageHash) throw new Error("Meta didn't return an image hash");
 
     // Step 4: create the ad creative (linked to the Instant Form)
     const creativeRes = await metaPost(`${adAccount}/adcreatives`, {

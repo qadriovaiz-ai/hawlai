@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Brain, Loader2, AlertCircle, Send } from "lucide-react";
 
 const EXAMPLES = [
-  "Swift ka ad chalao Lucknow mein, 1000 per day, 5 din",
-  "Diwali sale, poore Delhi mein, 20000 per day, 10 din",
-  "Is mahine ka performance kaisa hai?",
+  "Launch a Swift ad in Lucknow, 1000 per day, 5 days",
+  "Diwali sale, all over Delhi, 20000 per day, 10 days",
+  "How is this month's performance?",
 ];
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
@@ -25,7 +25,7 @@ export default function MasterBrainPage() {
   async function handleAsk() {
     setError(null);
     setResult(null);
-    if (message.trim().length < 3) return setError("Kuch toh likho");
+    if (message.trim().length < 3) return setError("Please type something");
 
     setLoading(true);
     try {
@@ -35,7 +35,7 @@ export default function MasterBrainPage() {
         body: JSON.stringify({ message }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Kuch gadbad ho gaya");
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -52,7 +52,7 @@ export default function MasterBrainPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Master Brain</h1>
-          <p className="text-sm text-slate-500">Ek line likho — yeh decide karega kya karna hai</p>
+          <p className="text-sm text-slate-500">Type a message — it'll decide what to do</p>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ export default function MasterBrainPage() {
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder='Jaise: "Swift ka ad chalao Lucknow mein, 1000 per day" ya "is mahine ka performance kaisa hai?"'
+          placeholder={`e.g. "Launch a Swift ad in Lucknow, 1000 per day" or "how is this month's performance?"`}
           className="w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <div className="space-y-2">
@@ -88,7 +88,7 @@ export default function MasterBrainPage() {
           className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {loading ? "Soch raha hai..." : "Bhejo"}
+          {loading ? "Thinking..." : "Send"}
         </button>
       </div>
 

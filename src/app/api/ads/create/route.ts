@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { prompt } = body;
-  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt too short" }, { status: 400 });
+  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt is too short" }, { status: 400 });
 
   const adCopy = await generateAdCopy(prompt);
 
@@ -92,8 +92,8 @@ export async function POST(request: Request) {
         status: campaign.error ? "DRAFT" : "PAUSED",
       },
       message: campaign.error
-        ? "AI copy ready! Meta mein manually campaign banao."
-        : "Campaign created! Meta Ads Manager mein Ad Set add karo.",
+        ? "AI copy ready! Create the campaign manually in Meta."
+        : "Campaign created! Add an Ad Set in Meta Ads Manager.",
     });
   } catch (err: any) {
     return NextResponse.json({

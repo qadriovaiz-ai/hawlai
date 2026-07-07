@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { message } = body;
   if (!message || message.trim().length < 3) {
-    return NextResponse.json({ error: "Kuch toh likho" }, { status: 400 });
+    return NextResponse.json({ error: "Please type something" }, { status: 400 });
   }
 
   try {

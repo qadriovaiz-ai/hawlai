@@ -47,10 +47,10 @@ export default function AdCreativePage() {
     setError(null);
     setResult(null);
 
-    if (!photoBase64) return setError("Pehle car ki photo upload karo");
-    if (!headline.trim()) return setError("Headline daalo");
-    if (!bodyCopy.trim()) return setError("Ad body text daalo");
-    if (mode === "ai_generate" && prompt.trim().length < 5) return setError("AI mode ke liye prompt likho (kam se kam 5 characters)");
+    if (!photoBase64) return setError("Upload the car photo first");
+    if (!headline.trim()) return setError("Enter a headline");
+    if (!bodyCopy.trim()) return setError("Enter the ad body text");
+    if (mode === "ai_generate" && prompt.trim().length < 5) return setError("Write a prompt for AI mode (at least 5 characters)");
 
     setLoading(true);
     try {
@@ -68,7 +68,7 @@ export default function AdCreativePage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Kuch gadbad ho gaya");
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setResult(data.creative);
     } catch (err: any) {
       setError(err.message);
@@ -87,13 +87,13 @@ export default function AdCreativePage() {
           <ImagePlus className="w-5 h-5 text-purple-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Ad Creative Banao</h1>
-          <p className="text-sm text-slate-500">Photo upload karo, ready-to-launch ad image banao</p>
+          <h1 className="text-xl font-bold text-slate-900">Create Ad Creative</h1>
+          <p className="text-sm text-slate-500">Upload a photo, create a ready-to-launch ad image</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">1. Car ki photo upload karo</p>
+        <p className="text-sm font-semibold text-slate-700">1. Upload the car photo</p>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
         {photoPreview ? (
           <div className="relative">
@@ -111,13 +111,13 @@ export default function AdCreativePage() {
             className="w-full h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
           >
             <ImagePlus className="w-8 h-8" />
-            <span className="text-sm font-medium">Photo select karo</span>
+            <span className="text-sm font-medium">Select Photo</span>
           </button>
         )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">2. Background style choose karo</p>
+        <p className="text-sm font-semibold text-slate-700">2. Choose a background style</p>
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setMode("template")}
@@ -160,7 +160,7 @@ export default function AdCreativePage() {
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Jaise: sunset highway, dramatic lighting"
+              placeholder="e.g. sunset highway, dramatic lighting"
               className="w-full h-20 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <div className="flex flex-wrap gap-2">
@@ -179,23 +179,23 @@ export default function AdCreativePage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">3. Ad ka text likho</p>
+        <p className="text-sm font-semibold text-slate-700">3. Write the ad text</p>
         <input
           value={headline}
           onChange={(e) => setHeadline(e.target.value)}
-          placeholder="Headline — jaise: Swift Chahiye? Ab Milegi!"
+          placeholder="Headline — e.g. Great Swift Deals, Limited Time!"
           className="w-full p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <input
           value={bodyCopy}
           onChange={(e) => setBodyCopy(e.target.value)}
-          placeholder="Body — jaise: Lucknow mein best deals. Free test drive!"
+          placeholder="Body — e.g. Best deals in Lucknow. Free test drive!"
           className="w-full p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <input
           value={priceText}
           onChange={(e) => setPriceText(e.target.value)}
-          placeholder="Price (optional) — jaise: ₹8L se shuru"
+          placeholder="Price (optional) — e.g. Starting ₹8L"
           className="w-full p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
       </div>
@@ -207,11 +207,11 @@ export default function AdCreativePage() {
       >
         {loading ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" /> Creative bana raha hai...
+            <Loader2 className="w-4 h-4 animate-spin" /> Creating the creative...
           </>
         ) : (
           <>
-            <Sparkles className="w-4 h-4" /> Ad Creative Banao
+            <Sparkles className="w-4 h-4" /> Create Ad Creative
           </>
         )}
       </button>
@@ -220,7 +220,7 @@ export default function AdCreativePage() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-red-700">Error aaya</p>
+            <p className="text-sm font-semibold text-red-700">Error</p>
             <p className="text-sm text-red-600 mt-0.5">{error}</p>
           </div>
         </div>
@@ -230,7 +230,7 @@ export default function AdCreativePage() {
         <div className="bg-green-50 border border-green-200 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-500" />
-            <p className="text-sm font-semibold text-green-700">Creative Ready Hai!</p>
+            <p className="text-sm font-semibold text-green-700">Creative Ready!</p>
           </div>
           {result.generated_image_url && (
             <img src={result.generated_image_url} alt="Generated ad creative" className="w-full rounded-lg border border-green-100" />
