@@ -2,9 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { qualifyLead } from "@/lib/ai-engine";
 import { NextResponse } from "next/server";
 
-async function fetchLeadFromMeta(leadgenId: string) {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
-  if (!token) throw new Error("META_PAGE_ACCESS_TOKEN not set");
+async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
   const res = await fetch(url);
   const data = await res.json();
@@ -50,12 +48,34 @@ export async function POST(request: Request) {
   const entries = body?.entry ?? [];
   const results = [];
 
+  const supabase = createServiceClient();
+
   for (const entry of entries) {
+    // entry.id is the Facebook Page ID this event came from — use it to
+    // find which dealership owns this page, so leads from different
+    // dealers' pages land in the right place with the right token.
+    const pageId: string | undefined = entry?.id;
+    const { data: dealership } = pageId
+      ? await supabase.from("dealerships").select("id, fb_page_access_token").eq("fb_page_id", pageId).maybeSingle()
+      : { data: null };
+
+    const dealershipId: string | undefined = dealership?.id ?? process.env.META_DEFAULT_DEALERSHIP_ID;
+    const pageAccessToken: string | undefined = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+
+    if (!dealershipId) {
+      console.error("[meta-leads] Could not resolve a dealership for page:", pageId);
+      continue;
+    }
+    if (!pageAccessToken) {
+      console.error("[meta-leads] No access token available for dealership:", dealershipId);
+      continue;
+    }
+
     for (const change of entry?.changes ?? []) {
       const leadgenId = change?.value?.leadgen_id;
       if (!leadgenId) continue;
       try {
-        const metaLead = await fetchLeadFromMeta(leadgenId);
+        const metaLead = await fetchLeadFromMeta(leadgenId, pageAccessToken);
         const fields = parseFieldData(metaLead.field_data ?? []);
         console.log("[meta-leads] Lead fetched:", { leadgenId, fields });
 
@@ -65,11 +85,10 @@ export async function POST(request: Request) {
         const vehicle = fields["vehicle_type"] ?? fields["car_model"] ?? null;
         const budget = fields["budget"] ? Number(fields["budget"]) : null;
 
-        const dealershipId = process.env.META_DEFAULT_DEALERSHIP_ID;
-        if (!dealershipId) {
-          console.error("[meta-leads] META_DEFAULT_DEALERSHIP_ID not set");
-          continue;
-        }
+        // Which ad/campaign actually generated this lead — needed to
+        // compute cost-per-lead per campaign on the Campaigns page.
+        const metaCampaignId = change?.value?.campaign_id ?? metaLead.campaign_id ?? null;
+        const metaAdId = change?.value?.ad_id ?? metaLead.ad_id ?? null;
 
         const qualification = qualifyLead({
           purchaseYear: null,
@@ -77,7 +96,6 @@ export async function POST(request: Request) {
           phone,
         });
 
-        const supabase = createServiceClient();
         const { data, error } = await supabase
           .from("leads")
           .insert({
@@ -92,6 +110,8 @@ export async function POST(request: Request) {
             lead_temperature: qualification.temperature,
             status: "ready_to_call",
             qualification_reason: qualification.reason,
+            meta_campaign_id: metaCampaignId,
+            meta_ad_id: metaAdId,
           })
           .select()
           .single();

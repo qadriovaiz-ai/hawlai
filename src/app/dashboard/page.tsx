@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, Flame, PhoneCall, Calendar, Rocket, ArrowRight } from "lucide-react";
-import { formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
+import { Users, Flame, PhoneCall, Calendar, Rocket, ArrowRight, IndianRupee, TrendingDown } from "lucide-react";
+import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
+import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 export default async function DashboardHomePage() {
   const supabase = await createClient();
@@ -13,9 +14,10 @@ export default async function DashboardHomePage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/auth/login");
 
-  const [{ data: leads }, { data: appointments }] = await Promise.all([
+  const [{ data: leads }, { data: appointments }, performance] = await Promise.all([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
     supabase.from("appointments").select("id").eq("dealership_id", dealershipId),
+    getCampaignPerformance(supabase, dealershipId),
   ]);
 
   const totalLeads = leads?.length ?? 0;
@@ -29,6 +31,13 @@ export default async function DashboardHomePage() {
     { label: "Hot Leads", value: hotLeads, icon: Flame, color: "bg-red-50 text-red-600" },
     { label: "In Call Queue", value: inQueue, icon: PhoneCall, color: "bg-purple-50 text-purple-600" },
     { label: "Appointments", value: totalAppointments, icon: Calendar, color: "bg-green-50 text-green-600" },
+    { label: "Total Ad Spend", value: formatCurrency(performance.totals.spend), icon: IndianRupee, color: "bg-amber-50 text-amber-600" },
+    {
+      label: "Cost / Lead",
+      value: performance.totals.cost_per_lead !== null ? formatCurrency(performance.totals.cost_per_lead) : "—",
+      icon: TrendingDown,
+      color: "bg-blue-50 text-blue-600",
+    },
   ];
 
   return (
@@ -38,7 +47,7 @@ export default async function DashboardHomePage() {
         <p className="text-slate-500 text-sm mt-0.5">Quick overview of your leads and activity</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {kpis.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="card p-5">
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${color}`}>
