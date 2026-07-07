@@ -9,8 +9,12 @@ const GRAPH_VERSION = "v23.0";
 // Step 1: Claude reads the dealer's one-line prompt and extracts
 // everything needed — copy, budget, city, and an image scene idea.
 // ------------------------------------------------------------------
-async function generateAdPlan(prompt: string) {
+async function generateAdPlan(prompt: string, brandProfile?: any) {
   try {
+    const brandContext = brandProfile
+      ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
+      : "";
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -25,7 +29,7 @@ async function generateAdPlan(prompt: string) {
           {
             role: "user",
             content: `You are an expert Facebook Lead Ad strategist for Indian car dealerships.
-Based on this dealer's requirement: "${prompt}"
+Based on this dealer's requirement: "${prompt}"${brandContext}
 Return JSON only (no markdown, no explanation):
 {"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"car model extracted or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'"}`,
           },
@@ -200,8 +204,16 @@ export async function POST(request: Request) {
 
   const serviceClient = createServiceClient();
 
+  // Brand Agent — pull the dealer's saved tone/persona/messaging so the
+  // ad copy stays consistent with how they want to sound, if they've set one up.
+  const { data: brandProfile } = await supabase
+    .from("brand_profiles")
+    .select("tone_of_voice, target_persona, messaging_pillars, preferred_language")
+    .eq("dealership_id", dealershipId)
+    .maybeSingle();
+
   // Step 1: plan the ad (copy + targeting + scene)
-  const plan = await generateAdPlan(prompt);
+  const plan = await generateAdPlan(prompt, brandProfile);
 
   const { data: draft } = await serviceClient
     .from("ad_creatives")
