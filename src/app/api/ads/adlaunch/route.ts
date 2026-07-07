@@ -188,7 +188,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start } = body;
 
   if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
   if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt bahut chota hai, thoda detail likho" }, { status: 400 });
@@ -281,6 +281,7 @@ export async function POST(request: Request) {
       targeting,
       status: "PAUSED",
       promoted_object: { page_id: pageId },
+      ...(scheduled_start ? { start_time: new Date(scheduled_start).toISOString() } : {}),
     }, pageAccessToken);
 
     // Step 7: the ad itself
@@ -297,6 +298,12 @@ export async function POST(request: Request) {
         generated_image_url: publicUrlData.publicUrl,
         status: "launched",
         meta_ad_id: adRes.id,
+        meta_campaign_id: campaignRes.id,
+        meta_adset_id: adsetRes.id,
+        meta_status: "PAUSED",
+        daily_budget: plan.daily_budget ?? 500,
+        targeting_city: plan.targeting_city ?? null,
+        scheduled_start: scheduled_start ? new Date(scheduled_start).toISOString() : null,
       })
       .eq("id", draft.id)
       .select()
