@@ -36,6 +36,7 @@ interface MasterBrainResult {
 }
 
 async function classifyIntent(message: string): Promise<ClassifiedIntent> {
+  let rawText = "";
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -46,14 +47,14 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 300,
+        max_tokens: 500,
         messages: [
           {
             role: "user",
             content: `You are the routing brain for an Indian car dealership's marketing dashboard.
 A dealer typed this request: "${message}"
 
-Classify it and return JSON only (no markdown, no explanation):
+Classify it and return JSON only (no markdown, no explanation, no extra text before or after):
 {"intent":"ad_launch" | "analytics_query" | "unclear","daily_budget":number or null (rupees per day, if mentioned),"duration_days":number or null (how many days the campaign should run, default 1 if a launch but not mentioned),"car_type":"car model mentioned or null","targeting_city":"city mentioned or null"}
 
 "ad_launch" = they want to create/launch/run an ad or campaign.
@@ -63,12 +64,24 @@ Classify it and return JSON only (no markdown, no explanation):
         ],
       }),
     });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`Anthropic API returned ${response.status}: ${errBody.slice(0, 300)}`);
+    }
+
     const data = await response.json();
-    const text = data.content?.[0]?.text ?? "";
-    const clean = text.replace(/```json|```/g, "").trim();
+    rawText = data.content?.[0]?.text ?? "";
+
+    // Claude sometimes wraps JSON in a code fence or adds a stray sentence
+    // despite instructions — pull out just the {...} block to be safe.
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const clean = (jsonMatch ? jsonMatch[0] : rawText).replace(/```json|```/g, "").trim();
+
+    if (!clean) throw new Error("Empty response text from Claude");
     return JSON.parse(clean);
   } catch (err: any) {
-    console.error("[master-brain] classifyIntent error:", err.message);
+    console.error("[master-brain] classifyIntent error:", err.message, "| raw text:", rawText);
     return { intent: "unclear" };
   }
 }
