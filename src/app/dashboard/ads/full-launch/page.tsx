@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus } from "lucide-react";
+import Link from "next/link";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock } from "lucide-react";
 
 const EXAMPLES = [
   "Swift chahiye, Lucknow, budget 8 lakh tak, daily spend 500",
@@ -14,6 +15,7 @@ export default function FullLaunchPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [scheduledStart, setScheduledStart] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,12 @@ export default function FullLaunchPage() {
       const res = await fetch("/api/ads/adlaunch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_base64: photoBase64, prompt, image_mode: "template" }),
+        body: JSON.stringify({
+          photo_base64: photoBase64,
+          prompt,
+          image_mode: "template",
+          scheduled_start: scheduledStart || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Kuch gadbad ho gaya");
@@ -106,6 +113,20 @@ export default function FullLaunchPage() {
         </div>
       </div>
 
+      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700">3. Schedule karo (optional)</p>
+        <p className="text-xs text-slate-400">Khali chhodo to abhi ready hoga (paused) — tum khud Campaigns page se Activate karoge. Date/time dogi to us waqt se delivery start hogi jab tum Activate karoge.</p>
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
+          <input
+            type="datetime-local"
+            value={scheduledStart}
+            onChange={(e) => setScheduledStart(e.target.value)}
+            className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+      </div>
+
       <button
         onClick={handleLaunch}
         disabled={loading}
@@ -149,8 +170,11 @@ export default function FullLaunchPage() {
             <p className="text-xs font-mono text-slate-500 pt-2 border-t border-slate-100">Ad ID: {result.meta?.ad_id}</p>
           </div>
           <p className="text-xs text-green-600">
-            ✅ Meta Ads Manager mein jaake review karo, sab sahi lage to Active kar do.
+            ✅ Ad paused status mein ready hai. "My Campaigns" page se review karke Activate kar sakte ho — Meta Ads Manager kholne ki zarurat nahi.
           </p>
+          <Link href="/dashboard/ads/campaigns" className="btn-primary inline-flex text-sm">
+            My Campaigns pe jao
+          </Link>
         </div>
       )}
     </div>
