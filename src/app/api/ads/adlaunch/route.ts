@@ -329,6 +329,6 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     await serviceClient.from("ad_creatives").update({ status: "failed", error_message: err.message }).eq("id", draft.id);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message, plan }, { status: 500 });
   }
 }
