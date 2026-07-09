@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Phone, Calendar, BarChart3,
-  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search, Share2
+  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,13 +13,16 @@ const NAV_ITEMS = [
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/master-brain", label: "Master Brain", icon: Brain },
   { href: "/dashboard/research", label: "Research", icon: Search },
+  { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
   { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/dashboard/leads", label: "Leads", icon: Users },
   { href: "/dashboard/pipeline", label: "Pipeline", icon: Kanban },
+  { href: "/dashboard/retention", label: "Retention", icon: Heart },
   { href: "/dashboard/queue", label: "Call Queue", icon: PhoneCall },
   { href: "/dashboard/calls", label: "Call History", icon: Phone },
   { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/optimization", label: "Optimization", icon: Gauge },
   { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
   { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
   { href: "/dashboard/social", label: "Social Post", icon: Share2 },
