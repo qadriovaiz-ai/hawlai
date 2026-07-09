@@ -5,8 +5,10 @@ import { Brain, Loader2, AlertCircle, Send } from "lucide-react";
 
 const EXAMPLES = [
   "Launch a Swift ad in Lucknow, 1000 per day, 5 days",
-  "Diwali sale, all over Delhi, 20000 per day, 10 days",
   "How is this month's performance?",
+  "Give me SEO keyword ideas for Hyundai Creta",
+  "What are competitors advertising in Lucknow?",
+  "What should I do about my current campaigns?",
 ];
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
