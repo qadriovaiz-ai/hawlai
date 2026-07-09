@@ -4,32 +4,58 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Phone, Calendar, BarChart3,
-  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard, CalendarDays
+  PhoneCall, Car, Megaphone, Settings, Brain, ShieldCheck, Sparkles,
+  Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard, CalendarDays
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/dashboard/master-brain", label: "Master Brain", icon: Brain },
-  { href: "/dashboard/research", label: "Research", icon: Search },
-  { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
-  { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
-  { href: "/dashboard/leads", label: "Leads", icon: Users },
-  { href: "/dashboard/pipeline", label: "Pipeline", icon: Kanban },
-  { href: "/dashboard/retention", label: "Retention", icon: Heart },
-  { href: "/dashboard/queue", label: "Call Queue", icon: PhoneCall },
-  { href: "/dashboard/calls", label: "Call History", icon: Phone },
-  { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/optimization", label: "Optimization", icon: Gauge },
-  { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
-  { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
-  { href: "/dashboard/creative-studio", label: "Creative Studio", icon: Clapperboard },
-  { href: "/dashboard/social", label: "Social Post", icon: Share2 },
-  { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
-  { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
+const NAV_GROUPS = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard/reports", label: "Reports", icon: FileText },
+      { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
+      { href: "/dashboard/master-brain", label: "Master Brain", icon: Brain },
+    ],
+  },
+  {
+    label: "Leads & Sales",
+    items: [
+      { href: "/dashboard/leads", label: "Leads", icon: Users },
+      { href: "/dashboard/pipeline", label: "Pipeline", icon: Kanban },
+      { href: "/dashboard/retention", label: "Retention", icon: Heart },
+      { href: "/dashboard/queue", label: "Call Queue", icon: PhoneCall },
+      { href: "/dashboard/calls", label: "Call History", icon: Phone },
+      { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
+      { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
+    ],
+  },
+  {
+    label: "Marketing",
+    items: [
+      { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
+      { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
+      { href: "/dashboard/creative-studio", label: "Creative Studio", icon: Clapperboard },
+      { href: "/dashboard/social", label: "Social Post", icon: Share2 },
+      { href: "/dashboard/research", label: "Research", icon: Search },
+      { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [
+      { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/dashboard/optimization", label: "Optimization", icon: Gauge },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
+      { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
+      { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 export default function Sidebar({ dealershipName }: { dealershipName: string }) {
@@ -39,7 +65,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
     <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
       <div className="p-5 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shrink-0 shadow-sm shadow-brand-600/30">
             <Car className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -48,27 +74,37 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
           </div>
         </div>
       </div>
-      <nav className="flex-1 p-3 space-y-0.5">
-        <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          Main Menu
-        </p>
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
-          return (
-            <Link key={href} href={href} className={cn("sidebar-link", isActive ? "sidebar-link-active" : "sidebar-link-inactive")}>
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="flex-1">{label}</span>
-              {isActive && <ChevronRight className="w-3 h-3 opacity-40" />}
-            </Link>
-          );
-        })}
+
+      <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map(({ href, label, icon: Icon }) => {
+                const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+                return (
+                  <Link key={href} href={href} className={cn("sidebar-link", isActive ? "sidebar-link-active" : "sidebar-link-inactive")}>
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
+
       <div className="p-3 border-t border-slate-100">
-        <div className="bg-brand-50 rounded-lg p-3">
+        <div className="bg-gradient-to-br from-brand-50 to-purple-50 border border-brand-100 rounded-lg p-3">
           <p className="text-xs font-semibold text-brand-700 mb-0.5">AI Engine Active</p>
           <p className="text-xs text-brand-600">Scoring leads automatically</p>
           <div className="mt-2 flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            <span className="relative flex w-2 h-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full w-2 h-2 bg-green-500"></span>
+            </span>
             <span className="text-xs text-green-600 font-medium">Online</span>
           </div>
         </div>
