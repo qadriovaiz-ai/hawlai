@@ -5,6 +5,7 @@ const SCOPES = [
   "pages_show_list",
   "pages_read_engagement",
   "pages_manage_ads",
+  "pages_manage_posts",
   "ads_management",
   "ads_read",
   "leads_retrieval",
