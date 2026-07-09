@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Phone, Calendar, BarChart3,
-  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search
+  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search, Share2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
   { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
+  { href: "/dashboard/social", label: "Social Post", icon: Share2 },
   { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
   { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
 ];
