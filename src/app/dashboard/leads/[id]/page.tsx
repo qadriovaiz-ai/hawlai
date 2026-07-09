@@ -5,6 +5,7 @@ import { ArrowLeft, Phone, Mail, Car, Calendar, DollarSign, Zap } from "lucide-r
 import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon, getStatusColor, getStatusLabel } from "@/lib/utils";
 import AddToQueueButton from "@/components/leads/AddToQueueButton";
 import CreateAppointmentModal from "@/components/appointments/CreateAppointmentModal";
+import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -50,6 +51,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <div className="flex items-center gap-3">
             <AddToQueueButton leadId={lead.id} currentStatus={lead.status} />
             <CreateAppointmentModal leadId={lead.id} leadName={lead.name} dealershipId={lead.dealership_id} />
+            <GenerateMessageButton leadId={lead.id} />
           </div>
         </div>
       </div>
