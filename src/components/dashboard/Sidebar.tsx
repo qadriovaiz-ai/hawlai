@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Phone, Calendar, BarChart3,
-  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard
+  PhoneCall, Car, ChevronRight, Megaphone, Settings, Brain, ShieldCheck, Sparkles, Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard, CalendarDays
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
+  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/dashboard/master-brain", label: "Master Brain", icon: Brain },
   { href: "/dashboard/research", label: "Research", icon: Search },
   { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
