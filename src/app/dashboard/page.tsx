@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Users, Flame, PhoneCall, Calendar, Rocket, ArrowRight, IndianRupee, TrendingDown } from "lucide-react";
 import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
+import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
 
 export default async function DashboardHomePage() {
   const supabase = await createClient();
@@ -14,10 +16,13 @@ export default async function DashboardHomePage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/auth/login");
 
-  const [{ data: leads }, { data: appointments }, performance] = await Promise.all([
+  await syncOpportunities(supabase, dealershipId);
+
+  const [{ data: leads }, { data: appointments }, performance, opportunities] = await Promise.all([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
     supabase.from("appointments").select("id").eq("dealership_id", dealershipId),
     getCampaignPerformance(supabase, dealershipId),
+    getOpenOpportunities(supabase, dealershipId),
   ]);
 
   const totalLeads = leads?.length ?? 0;
@@ -46,6 +51,8 @@ export default async function DashboardHomePage() {
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
         <p className="text-slate-500 text-sm mt-0.5">Quick overview of your leads and activity</p>
       </div>
+
+      <OpportunityFeed initial={opportunities} />
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {kpis.map(({ label, value, icon: Icon, color }) => (
