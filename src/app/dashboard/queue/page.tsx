@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Phone, Eye, ArrowRight } from "lucide-react";
 import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import MarkCalledButton from "@/components/calls/MarkCalledButton";
+import DraftMessagePreview from "@/components/leads/DraftMessagePreview";
 
 export default async function QueuePage() {
   const supabase = await createClient();
@@ -43,37 +44,40 @@ export default async function QueuePage() {
         <div className="space-y-3">
           <p className="text-sm text-slate-500">{leads.length} leads waiting to be called</p>
           {leads.map((lead, i) => (
-            <div key={lead.id} className="card p-4 flex items-center gap-4">
-              <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">
-                {i + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-semibold text-slate-900">{lead.name}</p>
-                  <span className={`badge ${getTemperatureColor(lead.lead_temperature)}`}>
-                    {getTemperatureIcon(lead.lead_temperature)} {lead.lead_temperature}
-                  </span>
+            <div key={lead.id} className="card p-4 space-y-2">
+              <div className="flex items-center gap-4">
+                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">
+                  {i + 1}
                 </div>
-                <p className="text-sm text-slate-500">
-                  {lead.vehicle ?? "Unknown vehicle"} • {lead.purchase_year ?? "—"} • {lead.budget ? formatCurrency(lead.budget) : "—"}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-semibold text-slate-900">{lead.name}</p>
+                    <span className={`badge ${getTemperatureColor(lead.lead_temperature)}`}>
+                      {getTemperatureIcon(lead.lead_temperature)} {lead.lead_temperature}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500">
+                    {lead.vehicle ?? "Unknown vehicle"} • {lead.purchase_year ?? "—"} • {lead.budget ? formatCurrency(lead.budget) : "—"}
+                  </p>
+                </div>
+                <div className="text-center shrink-0">
+                  <p className="text-xs text-slate-400">AI Score</p>
+                  <p className="text-xl font-bold text-slate-900">{lead.ai_score}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={`tel:${lead.phone}`}
+                    className="btn-primary"
+                  >
+                    <Phone className="w-4 h-4" /> Call {lead.phone}
+                  </a>
+                  <MarkCalledButton leadId={lead.id} dealershipId={dealershipId} />
+                  <Link href={`/dashboard/leads/${lead.id}`} className="btn-secondary px-2 py-2">
+                    <Eye className="w-4 h-4" />
+                  </Link>
+                </div>
               </div>
-              <div className="text-center shrink-0">
-                <p className="text-xs text-slate-400">AI Score</p>
-                <p className="text-xl font-bold text-slate-900">{lead.ai_score}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href={`tel:${lead.phone}`}
-                  className="btn-primary"
-                >
-                  <Phone className="w-4 h-4" /> Call {lead.phone}
-                </a>
-                <MarkCalledButton leadId={lead.id} dealershipId={dealershipId} />
-                <Link href={`/dashboard/leads/${lead.id}`} className="btn-secondary px-2 py-2">
-                  <Eye className="w-4 h-4" />
-                </Link>
-              </div>
+              {lead.draft_followup_message && <DraftMessagePreview message={lead.draft_followup_message} />}
             </div>
           ))}
         </div>
