@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 const EXAMPLES = [
@@ -21,6 +21,27 @@ export default function FullLaunchPage() {
   const [result, setResult] = useState<any>(null);
   const [errorPlan, setErrorPlan] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [competitorLoading, setCompetitorLoading] = useState(false);
+  const [competitorAds, setCompetitorAds] = useState<any[]>([]);
+  const [competitorError, setCompetitorError] = useState<string | null>(null);
+  const [competitorSearched, setCompetitorSearched] = useState(false);
+
+  async function handleCheckCompetitors() {
+    setCompetitorLoading(true);
+    setCompetitorSearched(true);
+    setCompetitorError(null);
+    try {
+      const res = await fetch(`/api/research/competitor-ads?q=${encodeURIComponent(prompt)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't check competitors right now");
+      setCompetitorAds(data.ads ?? []);
+    } catch (err: any) {
+      setCompetitorError(err.message);
+      setCompetitorAds([]);
+    } finally {
+      setCompetitorLoading(false);
+    }
+  }
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -117,6 +138,32 @@ export default function FullLaunchPage() {
             </button>
           ))}
         </div>
+
+        <button
+          onClick={handleCheckCompetitors}
+          disabled={competitorLoading || prompt.trim().length < 3}
+          className="btn-secondary text-xs w-full justify-center"
+        >
+          {competitorLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+          Check what competitors are running for this
+        </button>
+
+        {competitorSearched && !competitorLoading && (
+          <div className="space-y-2 pt-1">
+            {competitorError ? (
+              <p className="text-xs text-slate-400">{competitorError}</p>
+            ) : competitorAds.length === 0 ? (
+              <p className="text-xs text-slate-400">No active competitor ads found for this.</p>
+            ) : (
+              competitorAds.slice(0, 3).map((ad, i) => (
+                <div key={i} className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
+                  <p className="text-xs font-semibold text-slate-700">{ad.page_name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{ad.body ?? ad.title ?? "—"}</p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">

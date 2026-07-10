@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopBar from "@/components/dashboard/TopBar";
+import MasterBrainWidget from "@/components/dashboard/MasterBrainWidget";
 
 export default async function DashboardLayout({
   children,
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
           {children}
         </main>
       </div>
+      <MasterBrainWidget />
     </div>
   );
 }
