@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Phone, Calendar, BarChart3,
   PhoneCall, Car, Megaphone, Settings, ShieldCheck, Sparkles,
-  Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard, CalendarDays
+  Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard, CalendarDays, Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
       { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
+      { href: "/dashboard/website", label: "Website", icon: Globe },
       { href: "/dashboard/creative-studio", label: "Creative Studio", icon: Clapperboard },
       { href: "/dashboard/social", label: "Social Post", icon: Share2 },
       { href: "/dashboard/research", label: "Research", icon: Search },
