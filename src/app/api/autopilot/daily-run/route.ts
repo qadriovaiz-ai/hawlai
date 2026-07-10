@@ -11,7 +11,10 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    const { searchParams } = new URL(request.url);
+    const querySecret = searchParams.get("secret");
+    const isAuthorized = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
+    if (!isAuthorized) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   } else {
