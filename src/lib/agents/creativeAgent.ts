@@ -34,6 +34,7 @@ export interface CopyVariation {
   angle: string;
   headline: string;
   body: string;
+  score: number;
 }
 
 function brandContextFor(brandProfile?: BrandProfile | null): string {
@@ -110,7 +111,7 @@ export async function generateCopyVariations(
   count: number = 3
 ): Promise<CopyVariation[]> {
   const fallback: CopyVariation[] = [
-    { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today." },
+    { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today.", score: 50 },
   ];
 
   const parsed = await callClaude(
@@ -118,8 +119,8 @@ export async function generateCopyVariations(
 Topic: "${topic}"
 ${brandContextFor(brandProfile)}
 
-Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). Return JSON only:
-{"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish"}]}`,
+Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian car buyers — be genuinely critical and vary the scores based on real strength, not uniformly high. Return JSON only:
+{"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}`,
     700
   );
 

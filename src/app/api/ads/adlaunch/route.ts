@@ -31,7 +31,7 @@ async function generateAdPlan(prompt: string, brandProfile?: any) {
             content: `You are an expert Facebook Lead Ad strategist for Indian car dealerships.
 Based on this dealer's requirement: "${prompt}"${brandContext}
 Return JSON only (no markdown, no explanation):
-{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"car model extracted or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'"}`,
+{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"car model extracted or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian car-buyer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger"}`,
           },
         ],
       }),
@@ -52,6 +52,8 @@ Return JSON only (no markdown, no explanation):
       targeting_city: city,
       background_style: "studio_white",
       image_scene_prompt: "clean professional studio background",
+      confidence_score: 50,
+      score_reasoning: "Generated via fallback template — not AI-scored.",
     };
   }
 }
@@ -224,6 +226,8 @@ export async function POST(request: Request) {
       background_style: plan.background_style,
       headline: plan.headline,
       body_copy: plan.body,
+      creative_score: plan.confidence_score ?? null,
+      score_reasoning: plan.score_reasoning ?? null,
       status: "draft",
     })
     .select()

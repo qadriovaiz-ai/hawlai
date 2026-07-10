@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock } from "lucide-react";
+import ScoreBadge from "@/components/shared/ScoreBadge";
 
 const EXAMPLES = [
   "Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500",
@@ -18,6 +19,7 @@ export default function FullLaunchPage() {
   const [scheduledStart, setScheduledStart] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [errorPlan, setErrorPlan] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -34,6 +36,7 @@ export default function FullLaunchPage() {
   async function handleLaunch() {
     setError(null);
     setResult(null);
+    setErrorPlan(null);
     if (!photoBase64) return setError("Upload the car photo first");
     if (prompt.trim().length < 10) return setError("Add a bit more detail to the requirement");
 
@@ -50,7 +53,10 @@ export default function FullLaunchPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      if (!res.ok) {
+        setErrorPlan(data.plan ?? null);
+        throw new Error(data.error ?? "Something went wrong");
+      }
       setResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -144,12 +150,25 @@ export default function FullLaunchPage() {
       </button>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-red-700">Error</p>
-            <p className="text-sm text-red-600 mt-0.5">{error}</p>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-700">Error</p>
+              <p className="text-sm text-red-600 mt-0.5">{error}</p>
+            </div>
           </div>
+          {errorPlan && (
+            <div className="bg-white rounded-lg border border-red-100 p-4 space-y-2 text-sm">
+              <p className="text-xs text-slate-400">The ad copy was still generated — you can see it below even though launch failed:</p>
+              <div className="flex items-center gap-2">
+                <ScoreBadge score={errorPlan.confidence_score} />
+                <span className="text-xs text-slate-400">{errorPlan.score_reasoning}</span>
+              </div>
+              <p><span className="text-slate-400">Headline:</span> <span className="font-semibold">{errorPlan.headline}</span></p>
+              <p><span className="text-slate-400">Body:</span> {errorPlan.body}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -163,6 +182,10 @@ export default function FullLaunchPage() {
             <img src={result.creative.generated_image_url} alt="" className="w-full rounded-lg border border-green-100" />
           )}
           <div className="bg-white rounded-lg border border-green-100 p-4 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <ScoreBadge score={result.plan?.confidence_score} />
+              <span className="text-xs text-slate-400">{result.plan?.score_reasoning}</span>
+            </div>
             <p><span className="text-slate-400">Headline:</span> <span className="font-semibold">{result.plan?.headline}</span></p>
             <p><span className="text-slate-400">Body:</span> {result.plan?.body}</p>
             <p><span className="text-slate-400">Daily Budget:</span> ₹{result.plan?.daily_budget}</p>

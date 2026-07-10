@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers } from "lucide-react";
+import ScoreBadge from "@/components/shared/ScoreBadge";
 
 export default function CreativeStudioPage() {
   const [topic, setTopic] = useState("");
@@ -130,10 +131,14 @@ export default function CreativeStudioPage() {
 
       {variations && (
         <div className="space-y-3">
-          {variations.map((v, i) => (
-            <div key={i} className="card p-4 space-y-1.5">
+          {[...variations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).map((v, i) => (
+            <div key={i} className={`card p-4 space-y-1.5 ${i === 0 ? "ring-2 ring-green-200" : ""}`}>
               <div className="flex items-center justify-between">
-                <span className="badge bg-purple-50 text-purple-700 border border-purple-200">{v.angle}</span>
+                <div className="flex items-center gap-2">
+                  <span className="badge bg-purple-50 text-purple-700 border border-purple-200">{v.angle}</span>
+                  <ScoreBadge score={v.score} />
+                  {i === 0 && <span className="text-xs font-semibold text-green-600">Best pick</span>}
+                </div>
                 <button onClick={() => copyVariation(v, i)} className="text-slate-400 hover:text-purple-600">
                   {copiedIndex === i ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </button>

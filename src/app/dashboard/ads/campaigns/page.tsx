@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
+import ScoreBadge from "@/components/shared/ScoreBadge";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -106,6 +107,7 @@ export default async function CampaignsPage() {
                     <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                       <p className="font-semibold text-slate-900 truncate">{c.headline}</p>
                       <span className={`badge ${STATUS_BADGE[status] ?? STATUS_BADGE.PAUSED}`}>{status}</span>
+                      <ScoreBadge score={c.creative_score} />
                       {isScheduledFuture && (
                         <span className="badge bg-blue-50 text-blue-700 border border-blue-200">
                           <Clock className="w-3 h-3 inline mr-1" />
