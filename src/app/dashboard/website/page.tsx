@@ -1,13 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Globe, Loader2, Sparkles, ImagePlus, Check, ExternalLink, AlertCircle } from "lucide-react";
+import { Globe, Loader2, Sparkles, ImagePlus, Check, ExternalLink, AlertCircle, Plus, X, Link2 } from "lucide-react";
+import { LANDING_THEMES } from "@/lib/landingThemes";
+
+interface CarListing {
+  name: string;
+  price?: string;
+  image_url?: string;
+}
 
 export default function WebsitePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [savingExternal, setSavingExternal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -17,20 +25,29 @@ export default function WebsitePage() {
   const [offerText, setOfferText] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [published, setPublished] = useState(false);
+  const [theme, setTheme] = useState("navy_amber");
+  const [cars, setCars] = useState<CarListing[]>([]);
+  const [externalUrl, setExternalUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const carFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingCarIndex, setUploadingCarIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/website")
       .then((res) => res.json())
       .then((data) => {
-        if (data) {
-          setSlug(data.slug ?? "");
-          setHeadline(data.headline ?? "");
-          setSubheadline(data.subheadline ?? "");
-          setOfferText(data.offer_text ?? "");
-          setHeroImageUrl(data.hero_image_url ?? "");
-          setPublished(data.published ?? false);
+        const page = data?.landingPage;
+        if (page) {
+          setSlug(page.slug ?? "");
+          setHeadline(page.headline ?? "");
+          setSubheadline(page.subheadline ?? "");
+          setOfferText(page.offer_text ?? "");
+          setHeroImageUrl(page.hero_image_url ?? "");
+          setPublished(page.published ?? false);
+          setTheme(page.theme ?? "navy_amber");
+          setCars(page.car_listings ?? []);
         }
+        setExternalUrl(data?.externalWebsiteUrl ?? "");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -52,28 +69,62 @@ export default function WebsitePage() {
     }
   }
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function uploadImage(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const res = await fetch("/api/website/upload-hero", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ photo_base64: reader.result, filename: "img" }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? "Upload failed");
+          resolve(data.url);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleHeroChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      setUploading(true);
-      try {
-        const res = await fetch("/api/website/upload-hero", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ photo_base64: reader.result }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Upload failed");
-        setHeroImageUrl(data.url);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setUploading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    setUploading(true);
+    try {
+      setHeroImageUrl(await uploadImage(file));
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleCarImageChange(e: React.ChangeEvent<HTMLInputElement>, index: number) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingCarIndex(index);
+    try {
+      const url = await uploadImage(file);
+      setCars((prev) => prev.map((c, i) => (i === index ? { ...c, image_url: url } : c)));
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setUploadingCarIndex(null);
+    }
+  }
+
+  function addCar() {
+    setCars((prev) => [...prev, { name: "", price: "" }]);
+  }
+  function updateCar(index: number, field: keyof CarListing, value: string) {
+    setCars((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
+  }
+  function removeCar(index: number) {
+    setCars((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleSave(publishOverride?: boolean) {
@@ -91,6 +142,8 @@ export default function WebsitePage() {
           offer_text: offerText,
           hero_image_url: heroImageUrl,
           published: publishOverride ?? published,
+          theme,
+          car_listings: cars.filter((c) => c.name.trim()),
         }),
       });
       const data = await res.json();
@@ -102,6 +155,24 @@ export default function WebsitePage() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveExternalUrl() {
+    setSavingExternal(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/website", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ external_website_url: externalUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingExternal(false);
     }
   }
 
@@ -123,9 +194,30 @@ export default function WebsitePage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Website</h1>
-          <p className="text-sm text-slate-500">A public landing page for your dealership</p>
+          <p className="text-sm text-slate-500">A public landing page for your dealership — or link one you already have</p>
         </div>
       </div>
+
+      {/* Already have a website? */}
+      <div className="card p-5 space-y-3">
+        <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-slate-400" /> Already have your own website?
+        </label>
+        <p className="text-xs text-slate-400">If you set this, ads can point here instead of the built-in page below.</p>
+        <div className="flex items-center gap-2">
+          <input
+            value={externalUrl}
+            onChange={(e) => setExternalUrl(e.target.value)}
+            placeholder="https://your-dealership-website.com"
+            className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <button onClick={handleSaveExternalUrl} disabled={savingExternal} className="btn-secondary text-sm">
+            {savingExternal ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-xs text-slate-400 text-center">— or use Hawlai's built-in page —</p>
 
       <div className="card p-5 space-y-3">
         <label className="text-sm font-semibold text-slate-700 block">Page URL</label>
@@ -143,6 +235,27 @@ export default function WebsitePage() {
             Preview page <ExternalLink className="w-3 h-3" />
           </a>
         )}
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <label className="text-sm font-semibold text-slate-700 block">Theme</label>
+        <div className="grid grid-cols-2 gap-2">
+          {Object.values(LANDING_THEMES).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTheme(t.key)}
+              className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-colors ${
+                theme === t.key ? "border-purple-400 ring-2 ring-purple-100" : "border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              <div className="flex shrink-0">
+                <div className="w-4 h-4 rounded-l" style={{ backgroundColor: t.dark }} />
+                <div className="w-4 h-4 rounded-r" style={{ backgroundColor: t.accent }} />
+              </div>
+              <span className="text-xs font-medium text-slate-700">{t.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="card p-5 space-y-3">
@@ -175,7 +288,7 @@ export default function WebsitePage() {
 
       <div className="card p-5 space-y-3">
         <label className="text-sm font-semibold text-slate-700 block">Hero Image (optional)</label>
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleHeroChange} className="hidden" />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
@@ -192,6 +305,52 @@ export default function WebsitePage() {
             </>
           )}
         </button>
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-slate-700">Featured Cars (optional)</label>
+          <button onClick={addCar} className="btn-secondary text-xs">
+            <Plus className="w-3.5 h-3.5" /> Add car
+          </button>
+        </div>
+        {cars.length === 0 && <p className="text-xs text-slate-400">Add specific cars/offers to show in a gallery on the page.</p>}
+        {cars.map((car, i) => (
+          <div key={i} className="flex items-center gap-2 border border-slate-100 rounded-lg p-2.5">
+            <input
+              ref={i === 0 ? carFileInputRef : undefined}
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleCarImageChange(e, i)}
+              className="hidden"
+              id={`car-file-${i}`}
+            />
+            <label htmlFor={`car-file-${i}`} className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 cursor-pointer overflow-hidden">
+              {uploadingCarIndex === i ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+              ) : car.image_url ? (
+                <img src={car.image_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <ImagePlus className="w-4 h-4 text-slate-400" />
+              )}
+            </label>
+            <input
+              value={car.name}
+              onChange={(e) => updateCar(i, "name", e.target.value)}
+              placeholder="Car name"
+              className="flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <input
+              value={car.price ?? ""}
+              onChange={(e) => updateCar(i, "price", e.target.value)}
+              placeholder="Price"
+              className="w-28 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <button onClick={() => removeCar(i)} className="text-slate-300 hover:text-red-500 shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
       </div>
 
       {error && (

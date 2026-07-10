@@ -186,7 +186,7 @@ export async function POST(request: Request) {
   const pageId: string | undefined = dealership?.fb_page_id ?? process.env.META_PAGE_ID;
   const leadFormId: string | undefined = dealership?.fb_lead_form_id ?? process.env.META_LEAD_FORM_ID;
 
-  if (!pageAccessToken || !rawAdAccountId || !pageId || !leadFormId) {
+  if (!pageAccessToken || !rawAdAccountId || !pageId) {
     return NextResponse.json(
       { error: "Facebook Page isn't connected. Go to Settings and connect your Facebook Page first, then launch the ad." },
       { status: 400 }
@@ -194,7 +194,43 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode, scheduled_start } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start, destination } = body;
+  const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
+
+  if (adDestination === "instant_form" && !leadFormId) {
+    return NextResponse.json(
+      { error: "No Instant Form connected for this Page. Connect one in Settings, or choose 'Website' as the destination instead." },
+      { status: 400 }
+    );
+  }
+
+  let destinationUrl: string | null = null;
+  if (adDestination === "website") {
+    const { data: dealershipUrls } = await supabase
+      .from("dealerships")
+      .select("external_website_url")
+      .eq("id", dealershipId)
+      .single();
+    if (dealershipUrls?.external_website_url) {
+      destinationUrl = dealershipUrls.external_website_url;
+    } else {
+      const { data: landingPage } = await supabase
+        .from("landing_pages")
+        .select("slug, published")
+        .eq("dealership_id", dealershipId)
+        .maybeSingle();
+      if (landingPage?.published) {
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.vercel.app";
+        destinationUrl = `${baseUrl}/p/${landingPage.slug}`;
+      }
+    }
+    if (!destinationUrl) {
+      return NextResponse.json(
+        { error: "No website set up yet. Either add your website URL or publish your landing page in the Website tab first." },
+        { status: 400 }
+      );
+    }
+  }
 
   if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
   if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt is too short, add a bit more detail" }, { status: 400 });
@@ -257,7 +293,8 @@ export async function POST(request: Request) {
     const imageHash = Object.values(uploadRes.images ?? {})[0] && (Object.values(uploadRes.images ?? {})[0] as any).hash;
     if (!imageHash) throw new Error("Meta didn't return an image hash");
 
-    // Step 4: create the ad creative (linked to the Instant Form)
+    // Step 4: create the ad creative — links to either the Instant Form
+    // (stays inside Facebook) or an external website/landing page.
     const creativeRes = await metaPost(`${adAccount}/adcreatives`, {
       name: `${plan.headline} - Creative`,
       object_story_spec: {
@@ -266,8 +303,11 @@ export async function POST(request: Request) {
           image_hash: imageHash,
           message: plan.body,
           name: plan.headline,
-          link: `https://fb.me/${pageId}`,
-          call_to_action: { type: "LEARN_MORE", value: { lead_gen_form_id: leadFormId } },
+          link: adDestination === "website" ? destinationUrl! : `https://fb.me/${pageId}`,
+          call_to_action:
+            adDestination === "website"
+              ? { type: "LEARN_MORE", value: { link: destinationUrl } }
+              : { type: "LEARN_MORE", value: { lead_gen_form_id: leadFormId } },
         },
       },
     }, pageAccessToken);

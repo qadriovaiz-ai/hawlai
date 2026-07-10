@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { photo_base64 } = await request.json();
+  const { photo_base64, filename } = await request.json();
   if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
 
   const match = String(photo_base64).match(/^data:(image\/\w+);base64,(.+)$/);
@@ -21,7 +21,8 @@ export async function POST(request: Request) {
 
   const serviceClient = createServiceClient();
   const ext = mimeType.includes("png") ? "png" : "jpg";
-  const filePath = `landing/${dealershipId}/hero.${ext}`;
+  const safeName = (filename ?? "hero").replace(/[^a-zA-Z0-9_-]/g, "");
+  const filePath = `landing/${dealershipId}/${safeName || "hero"}-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await serviceClient.storage
     .from("ad-creatives")

@@ -17,6 +17,7 @@ export default function FullLaunchPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
+  const [destination, setDestination] = useState<"instant_form" | "website">("instant_form");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [errorPlan, setErrorPlan] = useState<any>(null);
@@ -71,6 +72,7 @@ export default function FullLaunchPage() {
           prompt,
           image_mode: "template",
           scheduled_start: scheduledStart || null,
+          destination,
         }),
       });
       const data = await res.json();
@@ -167,7 +169,31 @@ export default function FullLaunchPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">3. Schedule (optional)</p>
+        <p className="text-sm font-semibold text-slate-700">3. Where should clicks go?</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setDestination("instant_form")}
+            className={`text-left p-3 rounded-lg border text-xs transition-colors ${
+              destination === "instant_form" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-50/50" : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <p className="font-semibold text-slate-800">Instant Form</p>
+            <p className="text-slate-400 mt-0.5">Stays inside Facebook — fastest for the lead</p>
+          </button>
+          <button
+            onClick={() => setDestination("website")}
+            className={`text-left p-3 rounded-lg border text-xs transition-colors ${
+              destination === "website" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-50/50" : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <p className="font-semibold text-slate-800">My Website</p>
+            <p className="text-slate-400 mt-0.5">Sends clicks to your landing page or own site</p>
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700">4. Schedule (optional)</p>
         <p className="text-xs text-slate-400">Leave this blank to have it ready now (paused) — you'll activate it yourself from the Campaigns page. Set a date/time and delivery will only start then, once you activate it.</p>
         <div className="flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
