@@ -67,8 +67,18 @@ export default async function ApprovalsPage() {
                       </span>
                     </div>
                     <p className="font-semibold text-slate-900">
-                      {approval.action_type.replaceAll("_", " ")} — {formatCurrency(approval.amount ?? 0)}
+                      {approval.action_type.replaceAll("_", " ")}
+                      {approval.amount ? ` — ${formatCurrency(approval.amount)}` : ""}
                     </p>
+                    {details.headline && approval.action_type === "change_campaign_targeting" && (
+                      <p className="text-sm text-slate-500 mt-0.5">"{details.headline}"</p>
+                    )}
+                    {details.summary && approval.action_type === "change_campaign_targeting" && (
+                      <p className="text-sm text-slate-600 mt-0.5">{details.summary}</p>
+                    )}
+                    {details.estimated_impact && approval.action_type === "change_campaign_targeting" && (
+                      <p className="text-xs text-slate-400 mt-0.5 italic">Estimated impact: {details.estimated_impact}</p>
+                    )}
                     {details.original_request && (
                       <p className="text-sm text-slate-500 mt-0.5">"{details.original_request}"</p>
                     )}

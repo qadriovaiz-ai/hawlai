@@ -60,6 +60,84 @@ export async function matchCampaign(campaigns: CampaignSummary[], description: s
   }
 }
 
+export async function proposeTargetingChange(campaign: CampaignSummary, requestText: string): Promise<{
+  age_min: number;
+  age_max: number;
+  genders: number[]; // [] = all, [1] = male only, [2] = female only
+  summary: string;
+  estimated_impact: string;
+} | null> {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: `A dealer wants to change targeting on campaign "${campaign.headline}" (currently targeting ${campaign.targeting_city ?? "all of India"}, ₹${campaign.daily_budget}/day).
+Their request: "${requestText}"
+
+Interpret this into a Meta Ads targeting change. Return JSON only:
+{"age_min":number (13-65),"age_max":number (13-65),"genders":[] for all genders, [1] for men only, [2] for women only, or [1,2] for both explicitly,"summary":"1 sentence describing exactly what will change","estimated_impact":"1 short honest sentence estimating the likely effect — be realistic, not always positive, e.g. could note a smaller narrower audience"}`,
+          },
+        ],
+      }),
+    });
+    const data = await response.json();
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    return JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
+  } catch (err: any) {
+    console.error("[campaign-edit-agent] proposeTargetingChange error:", err.message);
+    return null;
+  }
+}
+
+export async function applyTargetingChange(
+  supabase: any,
+  dealershipId: string,
+  campaignId: string,
+  change: { age_min: number; age_max: number; genders: number[] }
+): Promise<{ success: boolean; error?: string }> {
+  const { data: campaign } = await supabase
+    .from("ad_creatives").select("meta_adset_id").eq("id", campaignId).single();
+  if (!campaign?.meta_adset_id) return { success: false, error: "This campaign has no ad set to update" };
+
+  const { data: dealership } = await supabase
+    .from("dealerships").select("fb_page_access_token").eq("id", dealershipId).single();
+  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  if (!token) return { success: false, error: "Facebook Page isn't connected" };
+
+  // Fetch current targeting so we only change age/gender, not location.
+  const currentRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${campaign.meta_adset_id}?fields=targeting&access_token=${token}`);
+  const currentData = await currentRes.json();
+  const currentTargeting = currentData?.targeting ?? {};
+
+  const newTargeting = {
+    ...currentTargeting,
+    age_min: change.age_min,
+    age_max: change.age_max,
+    ...(change.genders.length > 0 && { genders: change.genders }),
+  };
+
+  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${campaign.meta_adset_id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targeting: JSON.stringify(newTargeting), access_token: token }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) return { success: false, error: data.error?.message ?? "Meta API error" };
+
+  return { success: true };
+}
+
 export async function setCampaignStatus(
   supabase: any,
   dealershipId: string,

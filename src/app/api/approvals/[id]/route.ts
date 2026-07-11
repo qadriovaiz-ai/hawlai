@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -48,6 +49,18 @@ export async function PATCH(
       }
 
       await supabase.from("ad_creatives").update({ daily_budget: details.new_budget }).eq("id", details.campaign_id);
+    }
+
+    if (approval?.action_type === "change_campaign_targeting") {
+      const details = approval.action_details as any;
+      const outcome = await applyTargetingChange(supabase, approval.dealership_id, details.campaign_id, {
+        age_min: details.age_min,
+        age_max: details.age_max,
+        genders: details.genders ?? [],
+      });
+      if (!outcome.success) {
+        return NextResponse.json({ error: outcome.error ?? "Couldn't apply the targeting change" }, { status: 500 });
+      }
     }
   }
 

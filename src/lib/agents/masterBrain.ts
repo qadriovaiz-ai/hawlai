@@ -13,7 +13,7 @@ import { generateSeoIdeas } from "./seoAgent";
 import { searchCompetitorAds } from "./researchAgent";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { generateSocialCaption } from "./socialMediaAgent";
-import { matchCampaign, setCampaignStatus } from "./campaignEditAgent";
+import { matchCampaign, setCampaignStatus, proposeTargetingChange } from "./campaignEditAgent";
 
 type Intent =
   | "ad_launch"
@@ -27,6 +27,7 @@ type Intent =
   | "campaign_pause"
   | "campaign_resume"
   | "campaign_budget_change"
+  | "campaign_targeting_change"
   | "unclear";
 
 interface ClassifiedIntent {
@@ -80,6 +81,7 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
 "campaign_pause" = asking to pause, stop, or turn off a specific existing campaign (not a general "what should I pause" question — that's optimization_query).
 "campaign_resume" = asking to resume, restart, unpause, or turn back on a specific existing campaign.
 "campaign_budget_change" = asking to increase/decrease/change the budget of a specific existing campaign.
+"campaign_targeting_change" = asking to change WHO a specific existing campaign targets — age, gender, audience (not city/location, and not budget).
 "unclear" = anything else, including greetings or vague requests.`,
           },
         ],
@@ -316,10 +318,58 @@ export async function routeRequest(
     };
   }
 
+  if (classification.intent === "campaign_targeting_change") {
+    const { data: campaigns } = await supabase
+      .from("ad_creatives")
+      .select("id, headline, car_type, targeting_city, daily_budget, meta_status, meta_ad_id")
+      .eq("dealership_id", dealershipId)
+      .eq("status", "launched");
+
+    const matched = await matchCampaign(campaigns ?? [], message);
+    if (!matched) {
+      return {
+        intent: "campaign_targeting_change",
+        status: "unclear",
+        message: (campaigns?.length ?? 0) === 0
+          ? "You don't have any launched campaigns yet."
+          : "I'm not sure which campaign you mean — go to \"Marketing\" -> \"My Campaigns\" to change targeting directly.",
+      };
+    }
+
+    const change = await proposeTargetingChange(matched, message);
+    if (!change) {
+      return {
+        intent: "campaign_targeting_change",
+        status: "unclear",
+        message: "I couldn't work out the exact targeting change from that — try being more specific, e.g. 'target only women aged 25-40'.",
+      };
+    }
+
+    // Same principle as budget changes: propose it, don't apply it —
+    // the dealer reviews the exact change and estimated impact before
+    // anything actually updates on Meta.
+    const { data: approval } = await supabase
+      .from("pending_approvals")
+      .insert({
+        dealership_id: dealershipId,
+        requested_by_agent: "master_brain",
+        action_type: "change_campaign_targeting",
+        action_details: { campaign_id: matched.id, headline: matched.headline, ...change },
+      })
+      .select().single();
+
+    return {
+      intent: "campaign_targeting_change",
+      status: "pending_approval",
+      message: `Understood. ${change.summary}\n\nEstimated impact: ${change.estimated_impact}\n\nI've queued this in Approvals — review and Apply when ready.`,
+      details: approval,
+    };
+  }
+
   return {
     intent: "unclear",
     status: "unclear",
     message:
-      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, pause/resume a campaign, change a campaign\'s budget, or follow up with past customers.',
+      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, pause/resume a campaign, change a campaign\'s budget or targeting, or follow up with past customers.',
   };
 }
