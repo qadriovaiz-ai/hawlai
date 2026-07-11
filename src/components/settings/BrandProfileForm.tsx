@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Loader2, AlertCircle, Plus, X } from "lucide-react";
+import { CheckCircle, Loader2, AlertCircle, Plus, X, Wand2, ChevronDown, ChevronUp } from "lucide-react";
 
 interface BrandProfileFormProps {
   initial: {
@@ -24,6 +24,38 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [showAnalyzer, setShowAnalyzer] = useState(!initial?.tone_of_voice);
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+
+  async function handleAnalyzeWebsite() {
+    setAnalyzeError(null);
+    setAnalysisSummary(null);
+    if (!websiteUrl.trim()) return setAnalyzeError("Enter your website URL first");
+    setAnalyzing(true);
+    try {
+      const res = await fetch("/api/brand-profile/analyze-website", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: websiteUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setTone(data.tone_of_voice ?? tone);
+      setAgeRange(data.target_persona?.age_range ?? ageRange);
+      setIncome(data.target_persona?.income ?? income);
+      setConcerns((data.target_persona?.concerns ?? []).join(", "));
+      if (data.messaging_pillars?.length) setPillars(data.messaging_pillars);
+      setAnalysisSummary(data.summary);
+    } catch (err: any) {
+      setAnalyzeError(err.message);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   function updatePillar(i: number, value: string) {
     setPillars((prev) => prev.map((p, idx) => (idx === i ? value : p)));
@@ -67,6 +99,36 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
 
   return (
     <div className="space-y-5">
+      <div className="card p-5 space-y-3 bg-purple-50/50 border-purple-100">
+        <button onClick={() => setShowAnalyzer(!showAnalyzer)} className="w-full flex items-center justify-between text-left">
+          <span className="text-sm font-semibold text-purple-900 flex items-center gap-2">
+            <Wand2 className="w-4 h-4" /> Have a website? Let AI draft this for you
+          </span>
+          {showAnalyzer ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
+        </button>
+        {showAnalyzer && (
+          <div className="space-y-2.5">
+            <p className="text-xs text-purple-600">Paste your website URL — AI will read it and draft your tone, target customer, and messaging pillars below. You can review and edit everything before saving.</p>
+            <div className="flex items-center gap-2">
+              <input
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder="https://yourdealership.com"
+                className="flex-1 p-2.5 text-sm border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+              />
+              <button onClick={handleAnalyzeWebsite} disabled={analyzing} className="btn-primary text-sm shrink-0">
+                {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                Analyze
+              </button>
+            </div>
+            {analyzeError && <p className="text-xs text-red-600">{analyzeError}</p>}
+            {analysisSummary && (
+              <p className="text-xs text-purple-700 bg-white rounded-lg p-2.5 border border-purple-100">{analysisSummary}</p>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="card p-5 space-y-3">
         <label className="text-sm font-semibold text-slate-700 block">Tone of Voice</label>
         <p className="text-xs text-slate-400">How should your ads sound? This is fed directly into every ad Claude writes for you.</p>
