@@ -52,7 +52,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <div className="flex items-center gap-3">
             <AddToQueueButton leadId={lead.id} currentStatus={lead.status} />
             <CreateAppointmentModal leadId={lead.id} leadName={lead.name} dealershipId={lead.dealership_id} />
-            <GenerateMessageButton leadId={lead.id} />
+            <GenerateMessageButton leadId={lead.id} phone={lead.phone} />
           </div>
         </div>
       </div>

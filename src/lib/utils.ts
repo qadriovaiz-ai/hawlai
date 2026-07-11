@@ -106,3 +106,13 @@ export function getAppointmentStatusColor(status: AppointmentStatus) {
       return "bg-red-100 text-red-700";
   }
 }
+
+// Builds a wa.me click-to-chat link — opens WhatsApp with the message
+// pre-filled, ready to send. Free, no API/account needed; the person
+// still has to tap Send themselves.
+export function toWhatsAppLink(phone: string | null | undefined, message: string): string {
+  let digits = (phone ?? "").replace(/\D/g, "");
+  // Assume Indian numbers when no country code is present (10 digits).
+  if (digits.length === 10) digits = `91${digits}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}

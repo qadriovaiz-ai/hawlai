@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { MessageCircle, Mail, Loader2, Copy, Check, X } from "lucide-react";
+import { toWhatsAppLink } from "@/lib/utils";
 
-export default function GenerateMessageButton({ leadId }: { leadId: string }) {
+export default function GenerateMessageButton({ leadId, phone }: { leadId: string; phone?: string | null }) {
   const [open, setOpen] = useState(false);
   const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp");
   const [loading, setLoading] = useState(false);
@@ -88,10 +89,22 @@ export default function GenerateMessageButton({ leadId }: { leadId: string }) {
                     {result.message}
                   </p>
                 </div>
-                <button onClick={handleCopy} className="btn-primary w-full text-sm justify-center">
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copied ? "Copied!" : "Copy to clipboard"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleCopy} className="btn-secondary flex-1 text-sm justify-center">
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  {channel === "whatsapp" && phone && (
+                    <a
+                      href={toWhatsAppLink(phone, result.message)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary bg-green-600 hover:bg-green-700 flex-1 text-sm justify-center"
+                    >
+                      <MessageCircle className="w-4 h-4" /> Send via WhatsApp
+                    </a>
+                  )}
+                </div>
               </div>
             )}
           </div>

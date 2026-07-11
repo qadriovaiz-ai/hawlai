@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Heart, Loader2, Copy, Check, X } from "lucide-react";
+import { Heart, Loader2, Copy, Check, X, MessageCircle } from "lucide-react";
+import { toWhatsAppLink } from "@/lib/utils";
 
 const ANGLES = [
   { value: "service_reminder", label: "Service Reminder" },
@@ -9,7 +10,7 @@ const ANGLES = [
   { value: "upsell", label: "Upgrade / Upsell" },
 ];
 
-export default function RetentionMessageButton({ leadId }: { leadId: string }) {
+export default function RetentionMessageButton({ leadId, phone }: { leadId: string; phone?: string | null }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -80,10 +81,22 @@ export default function RetentionMessageButton({ leadId }: { leadId: string }) {
                 <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3 border border-slate-100">
                   {message}
                 </p>
-                <button onClick={handleCopy} className="btn-primary w-full text-sm justify-center">
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copied ? "Copied!" : "Copy to clipboard"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleCopy} className="btn-secondary flex-1 text-sm justify-center">
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  {phone && (
+                    <a
+                      href={toWhatsAppLink(phone, message)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary bg-green-600 hover:bg-green-700 flex-1 text-sm justify-center"
+                    >
+                      <MessageCircle className="w-4 h-4" /> Send via WhatsApp
+                    </a>
+                  )}
+                </div>
               </div>
             )}
           </div>

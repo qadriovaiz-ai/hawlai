@@ -77,7 +77,7 @@ export default async function QueuePage() {
                   </Link>
                 </div>
               </div>
-              {lead.draft_followup_message && <DraftMessagePreview message={lead.draft_followup_message} />}
+              {lead.draft_followup_message && <DraftMessagePreview message={lead.draft_followup_message} phone={lead.phone} />}
             </div>
           ))}
         </div>

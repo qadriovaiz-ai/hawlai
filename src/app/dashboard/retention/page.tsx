@@ -59,7 +59,7 @@ export default async function RetentionPage() {
                   )}
                 </div>
               </div>
-              <RetentionMessageButton leadId={c.id} />
+              <RetentionMessageButton leadId={c.id} phone={c.phone} />
             </div>
           ))}
         </div>
