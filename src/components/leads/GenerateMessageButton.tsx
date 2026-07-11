@@ -1,16 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, Mail, Loader2, Copy, Check, X } from "lucide-react";
+import { MessageCircle, Mail, Loader2, Copy, Check, X, Send } from "lucide-react";
 import { toWhatsAppLink } from "@/lib/utils";
 
-export default function GenerateMessageButton({ leadId, phone }: { leadId: string; phone?: string | null }) {
+export default function GenerateMessageButton({ leadId, phone, email }: { leadId: string; phone?: string | null; email?: string | null }) {
   const [open, setOpen] = useState(false);
   const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ subject?: string; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   async function generate(ch: "whatsapp" | "email") {
     setChannel(ch);
@@ -32,6 +35,26 @@ export default function GenerateMessageButton({ leadId, phone }: { leadId: strin
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSendEmail() {
+    if (!result || !email) return;
+    setSendingEmail(true);
+    setEmailError(null);
+    try {
+      const res = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: email, subject: result.subject ?? "A message from us", body: result.message }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't send");
+      setEmailSent(true);
+    } catch (err: any) {
+      setEmailError(err.message);
+    } finally {
+      setSendingEmail(false);
     }
   }
 
@@ -104,7 +127,20 @@ export default function GenerateMessageButton({ leadId, phone }: { leadId: strin
                       <MessageCircle className="w-4 h-4" /> Send via WhatsApp
                     </a>
                   )}
+                  {channel === "email" && email && !emailSent && (
+                    <button onClick={handleSendEmail} disabled={sendingEmail} className="btn-primary flex-1 text-sm justify-center">
+                      {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {sendingEmail ? "Sending..." : "Send Email"}
+                    </button>
+                  )}
+                  {channel === "email" && emailSent && (
+                    <span className="flex-1 text-sm text-green-600 flex items-center justify-center gap-1.5"><Check className="w-4 h-4" /> Sent!</span>
+                  )}
                 </div>
+                {channel === "email" && !email && (
+                  <p className="text-xs text-slate-400">No email address on file for this lead — copy the text instead.</p>
+                )}
+                {emailError && <p className="text-xs text-red-600">{emailError}</p>}
               </div>
             )}
           </div>
