@@ -133,3 +133,56 @@ export async function generateExecutiveReport(supabase: any, dealershipId: strin
   const { summary, priorities } = await summarizeWithClaude(stats, businessCategory);
   return { stats, summary, priorities };
 }
+
+// ------------------------------------------------------------------
+// Explain This Campaign — Block 5
+// ------------------------------------------------------------------
+// Turns a campaign's raw stats into a plain-language explanation, on
+// demand, per campaign — different from the dashboard-wide executive
+// summary above, this is scoped to one specific campaign the dealer
+// is looking at right now.
+export async function explainCampaign(
+  campaign: { headline: string; body_copy?: string; daily_budget?: number; targeting_city?: string; creative_score?: number },
+  performance: { spend: number; leads: number; impressions: number; clicks: number; cost_per_lead: number | null } | null,
+  businessCategory: string = "car dealership"
+): Promise<string> {
+  const fallback = performance && (performance.spend > 0 || performance.leads > 0)
+    ? `This campaign has spent ${performance.spend} and generated ${performance.leads} leads so far. Check back after it's run a bit longer for a fuller picture.`
+    : "This campaign hasn't generated spend or lead data yet — check back once it's been running for a day or two.";
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: `Explain this Meta ad campaign to a ${businessCategory} business owner who doesn't know marketing jargon.
+Campaign: "${campaign.headline}" — ${campaign.body_copy ?? ""}
+Budget: ₹${campaign.daily_budget ?? "?"}/day, targeting ${campaign.targeting_city ?? "no specific city"}
+Ad quality score: ${campaign.creative_score ?? "not scored"}/100
+Performance so far: ${performance ? `₹${performance.spend} spent, ${performance.leads} leads, ${performance.impressions} impressions, ${performance.clicks} clicks, cost per lead ${performance.cost_per_lead ?? "not yet calculable"}` : "no data yet"}
+
+Write 3-4 plain-language sentences: what's working, what isn't, and one concrete next step. No jargon like CTR/CPM — describe things in terms a non-marketer understands (e.g. "getting plenty of clicks but few are becoming leads" instead of "low conversion rate"). Return plain text, no JSON, no markdown.`,
+          },
+        ],
+      }),
+    });
+    if (!response.ok) return fallback;
+    const bodyText = await response.text();
+    if (!bodyText.trim()) return fallback;
+    const data = JSON.parse(bodyText);
+    const text = data.content?.[0]?.text ?? "";
+    return text.trim() || fallback;
+  } catch (err: any) {
+    console.error("[reporting-agent] explainCampaign error:", err.message);
+    return fallback;
+  }
+}

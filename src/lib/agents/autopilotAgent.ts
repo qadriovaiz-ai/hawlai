@@ -17,6 +17,8 @@
 
 import { syncOpportunities } from "./opportunityAgent";
 import { generateFollowUpMessage } from "./contentAgent";
+import { analyzeCampaigns } from "./optimizationAgent";
+import { setCampaignStatus } from "./campaignEditAgent";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 
@@ -60,8 +62,53 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
   return drafted;
 }
 
-export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number }> {
+// ------------------------------------------------------------------
+// Opt-in only: Permission Tiers (Block 7). Nothing here runs unless
+// the dealer explicitly turned it on in Settings -> Automation.
+// Every action taken is logged as an already-'approved' entry with a
+// clear reason, so it's fully visible and explainable after the
+// fact — never a silent action.
+// ------------------------------------------------------------------
+async function applyAutoPause(supabase: any, dealershipId: string): Promise<number> {
+  const { data: dealership } = await supabase
+    .from("dealerships").select("auto_pause_low_performers").eq("id", dealershipId).single();
+  if (!dealership?.auto_pause_low_performers) return 0;
+
+  const result = await analyzeCampaigns(supabase, dealershipId);
+  const toPause = result.recommendations.filter((r) => r.action === "pause");
+  if (toPause.length === 0) return 0;
+
+  const { data: campaigns } = await supabase
+    .from("ad_creatives")
+    .select("id, headline, meta_ad_id, meta_status")
+    .eq("dealership_id", dealershipId)
+    .eq("status", "launched");
+
+  let pausedCount = 0;
+  for (const rec of toPause) {
+    const campaign = (campaigns ?? []).find((c: any) => c.id === rec.campaign_id && c.meta_status === "ACTIVE");
+    if (!campaign) continue;
+
+    const outcome = await setCampaignStatus(supabase, dealershipId, campaign, "PAUSED");
+    if (outcome.success) {
+      pausedCount++;
+      // Transparent log — always explainable, never silent.
+      await supabase.from("pending_approvals").insert({
+        dealership_id: dealershipId,
+        requested_by_agent: "autopilot_auto_pause",
+        action_type: "auto_paused_campaign",
+        action_details: { campaign_id: campaign.id, headline: campaign.headline, reason: rec.reason },
+        status: "approved",
+        reviewed_at: new Date().toISOString(),
+      });
+    }
+  }
+  return pausedCount;
+}
+
+export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number }> {
   await syncOpportunities(supabase, dealershipId);
   const drafted = await draftStuckLeadFollowUps(supabase, dealershipId);
-  return { drafted };
+  const auto_paused = await applyAutoPause(supabase, dealershipId);
+  return { drafted, auto_paused };
 }

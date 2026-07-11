@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Megaphone, Settings, ShieldCheck, Sparkles,
-  CalendarDays, BarChart3, Car,
+  CalendarDays, BarChart3, Car, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +29,7 @@ const NAV_GROUPS = [
     label: "Settings",
     items: [
       { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
+      { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
       { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
     ],
   },

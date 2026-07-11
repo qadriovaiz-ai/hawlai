@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
+import ExplainCampaignButton from "@/components/ads/ExplainCampaignButton";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
@@ -151,6 +152,7 @@ export default async function CampaignsPage() {
                     </div>
                   </div>
                 )}
+                <ExplainCampaignButton campaignId={c.id} />
               </div>
             );
           })}
