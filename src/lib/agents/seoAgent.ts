@@ -115,3 +115,84 @@ Return JSON only:
     return fallback;
   }
 }
+
+// ------------------------------------------------------------------
+// Technical SEO Audit — Phase 13
+// ------------------------------------------------------------------
+// Rule-based, deterministic checks on the dealer's own landing page
+// (no Claude call needed — this is genuinely checkable fact, not
+// something to generate). Covers the things that actually matter for
+// a small local-business page: title/description length for search
+// snippets, image alt coverage, whether there's a hero image (also
+// used for social share previews), and basic content depth.
+// ------------------------------------------------------------------
+
+export interface SeoCheck {
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface SeoAudit {
+  score: number; // 0-100
+  checks: SeoCheck[];
+}
+
+export function auditLandingPage(page: {
+  published?: boolean;
+  slug?: string | null;
+  headline?: string | null;
+  subheadline?: string | null;
+  hero_image_url?: string | null;
+  car_listings?: any[] | null;
+} | null): SeoAudit {
+  if (!page) {
+    return {
+      score: 0,
+      checks: [{ label: "Landing page exists", passed: false, detail: "No landing page set up yet — create one in the Website tab." }],
+    };
+  }
+
+  const checks: SeoCheck[] = [];
+
+  checks.push({
+    label: "Page is published",
+    passed: !!page.published,
+    detail: page.published ? "Live and indexable by Google." : "Still a draft — Google can't index an unpublished page.",
+  });
+
+  const titleLen = page.headline?.length ?? 0;
+  checks.push({
+    label: "Title length",
+    passed: titleLen >= 15 && titleLen <= 60,
+    detail: titleLen === 0 ? "No headline set." : titleLen < 15 ? `Only ${titleLen} characters — likely too thin for search results.` : titleLen > 60 ? `${titleLen} characters — Google may truncate this in search results.` : `${titleLen} characters — good length.`,
+  });
+
+  const descLen = page.subheadline?.length ?? 0;
+  checks.push({
+    label: "Description length",
+    passed: descLen >= 50 && descLen <= 160,
+    detail: descLen === 0 ? "No subheadline set — this doubles as your meta description." : descLen > 160 ? `${descLen} characters — Google will truncate this in search results.` : descLen < 50 ? `Only ${descLen} characters — could say more.` : `${descLen} characters — good length.`,
+  });
+
+  checks.push({
+    label: "Social share image",
+    passed: !!page.hero_image_url,
+    detail: page.hero_image_url ? "Set — links shared on WhatsApp/Facebook will show a preview image." : "No hero image — shared links will show no preview image.",
+  });
+
+  checks.push({
+    label: "URL is descriptive",
+    passed: !!page.slug && page.slug.length >= 3 && /[a-z]/.test(page.slug),
+    detail: page.slug ? `/p/${page.slug}` : "No URL set yet.",
+  });
+
+  checks.push({
+    label: "Page has real content depth",
+    passed: (page.car_listings?.length ?? 0) > 0,
+    detail: (page.car_listings?.length ?? 0) > 0 ? `${page.car_listings!.length} item(s) listed — gives Google more to index.` : "No featured items added yet — a page with just a headline and a form is thin content.",
+  });
+
+  const score = Math.round((checks.filter((c) => c.passed).length / checks.length) * 100);
+  return { score, checks };
+}

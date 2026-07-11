@@ -5,8 +5,49 @@ import { ShieldCheck, Phone, MapPin, IndianRupee } from "lucide-react";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ChatWidget from "@/components/website/ChatWidget";
 import { getTheme } from "@/lib/landingThemes";
+import type { Metadata } from "next";
 
 const oswald = Oswald({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display" });
+
+// Dynamic per-dealer SEO metadata — without this, every dealer's page
+// inherited Hawlai's own generic title/description (invisible bug:
+// looked fine in the browser, but Google indexing and WhatsApp/
+// Facebook link-share previews would all show "AutoPilot AI" instead
+// of the dealer's actual business).
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = createServiceClient();
+  const { data: page } = await supabase
+    .from("landing_pages")
+    .select("headline, subheadline, hero_image_url, dealerships(dealership_name, city)")
+    .eq("slug", slug)
+    .eq("published", true)
+    .maybeSingle();
+
+  if (!page) return { title: "Page not found" };
+
+  const dealership = (page as any).dealerships;
+  const name = dealership?.dealership_name ?? "Our Business";
+  const title = page.headline ? `${page.headline} | ${name}` : name;
+  const description = page.subheadline ?? `Get in touch with ${name}${dealership?.city ? ` in ${dealership.city}` : ""}.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: page.hero_image_url ? [page.hero_image_url] : undefined,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: page.hero_image_url ? [page.hero_image_url] : undefined,
+    },
+  };
+}
 
 export default async function PublicLandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
