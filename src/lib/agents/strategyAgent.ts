@@ -27,7 +27,8 @@ export async function generateMarketingStrategy(
   city: string | null,
   monthlyBudget: number,
   goal: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  businessCategory: string = "car dealership"
 ): Promise<MarketingPlan> {
   const fallback: MarketingPlan = {
     overview: "Focus on consistent lead generation through Meta ads, supported by organic social content and follow-up on existing leads.",
@@ -37,12 +38,12 @@ export async function generateMarketingStrategy(
     ],
     funnel_focus: "Awareness through Meta ads, conversion through fast follow-up calls",
     monthly_themes: [
-      { week: "Week 1", focus: "New arrivals / inventory highlight", action: "Launch a lead-gen ad + matching social post" },
+      { week: "Week 1", focus: "Highlight what you offer", action: "Launch a lead-gen ad + matching social post" },
       { week: "Week 2", focus: "Customer trust", action: "Share a testimonial or years-in-business story" },
-      { week: "Week 3", focus: "Offer push", action: "Highlight a specific finance/EMI offer" },
+      { week: "Week 3", focus: "Offer push", action: "Highlight a specific offer or promotion" },
       { week: "Week 4", focus: "Re-engagement", action: "Follow up with all leads still in Pipeline" },
     ],
-    recommended_offers: ["Free test drive", "Exchange bonus on old vehicle"],
+    recommended_offers: ["A free consultation or demo", "A limited-time discount"],
   };
 
   const brandContext = brandProfile
@@ -63,8 +64,8 @@ export async function generateMarketingStrategy(
         messages: [
           {
             role: "user",
-            content: `You are a marketing strategist creating a monthly plan for an Indian car dealership.
-Dealership: ${dealershipName}${city ? `, ${city}` : ""}
+            content: `You are a marketing strategist creating a monthly plan for an Indian ${businessCategory} business.
+Business: ${dealershipName}${city ? `, ${city}` : ""}
 Monthly budget: ₹${monthlyBudget}
 Goal: ${goal}
 ${brandContext}

@@ -16,12 +16,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Describe the post in a few words" }, { status: 400 });
   }
 
-  const { data: brandProfile } = await supabase
-    .from("brand_profiles")
-    .select("tone_of_voice, messaging_pillars, preferred_language")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
+  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+    supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
 
-  const caption = await generateSocialCaption(prompt, brandProfile);
+  const caption = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "car dealership");
   return NextResponse.json({ caption });
 }

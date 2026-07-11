@@ -14,7 +14,10 @@ export async function POST(request: Request) {
   const { carModel, details } = await request.json();
   if (!carModel || carModel.trim().length < 2) return NextResponse.json({ error: "Car model is required" }, { status: 400 });
 
-  const { data: brandProfile } = await supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle();
-  const listing = await generateProductDescription(carModel.trim(), details ?? "", brandProfile);
+  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+    supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
+  const listing = await generateProductDescription(carModel.trim(), details ?? "", brandProfile, dealership?.business_category ?? "car dealership");
   return NextResponse.json(listing);
 }

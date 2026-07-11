@@ -74,7 +74,7 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
   };
 }
 
-async function summarizeWithClaude(stats: ReportStats): Promise<{ summary: string; priorities: string[] }> {
+async function summarizeWithClaude(stats: ReportStats, businessCategory: string): Promise<{ summary: string; priorities: string[] }> {
   const fallback = {
     summary:
       stats.totalLeads === 0
@@ -97,7 +97,7 @@ async function summarizeWithClaude(stats: ReportStats): Promise<{ summary: strin
         messages: [
           {
             role: "user",
-            content: `You are writing a short executive summary for a car dealership owner, based on this data from their marketing dashboard:
+            content: `You are writing a short executive summary for a ${businessCategory} business owner, based on this data from their marketing dashboard:
 ${JSON.stringify(stats, null, 2)}
 
 Write it like a sharp marketing manager briefing a busy founder — plain language, no jargon, no fluff. Return JSON only (no markdown):
@@ -125,7 +125,11 @@ Write it like a sharp marketing manager briefing a busy founder — plain langua
 }
 
 export async function generateExecutiveReport(supabase: any, dealershipId: string): Promise<ExecutiveReport> {
-  const stats = await gatherStats(supabase, dealershipId);
-  const { summary, priorities } = await summarizeWithClaude(stats);
+  const [stats, { data: dealership }] = await Promise.all([
+    gatherStats(supabase, dealershipId),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
+  const businessCategory = dealership?.business_category ?? "car dealership";
+  const { summary, priorities } = await summarizeWithClaude(stats, businessCategory);
   return { stats, summary, priorities };
 }

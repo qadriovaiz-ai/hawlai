@@ -64,7 +64,7 @@ export async function analyzeWebsite(url: string): Promise<BusinessIntelligenceR
         messages: [
           {
             role: "user",
-            content: `Here is the text content of an Indian car dealership's website:
+            content: `Here is the text content of an Indian business's website (business type unknown — infer it from the content itself):
 """
 ${pageText}
 """

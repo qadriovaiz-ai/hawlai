@@ -35,7 +35,8 @@ export interface GeneratedMessage {
 export async function generateFollowUpMessage(
   lead: LeadInfo,
   brandProfile: BrandProfile | null,
-  channel: "whatsapp" | "email"
+  channel: "whatsapp" | "email",
+  businessCategory: string = "car dealership"
 ): Promise<GeneratedMessage> {
   const brandContext = brandProfile
     ? `Brand tone to match: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -70,11 +71,11 @@ export async function generateFollowUpMessage(
         messages: [
           {
             role: "user",
-            content: `You are writing a follow-up ${channel} message for an Indian car dealership's sales team to send to a lead.
+            content: `You are writing a follow-up ${channel} message for an Indian ${businessCategory} business's sales team to send to a lead.
 ${leadContext}
 ${brandContext}
 ${channelInstructions}
-The goal: get them to book a test drive or reply. No markdown, no explanation, JSON only.`,
+The goal: get them to book an appointment/demo/visit or reply. No markdown, no explanation, JSON only.`,
           },
         ],
       }),

@@ -25,7 +25,7 @@ export interface OptimizationResult {
   summary: string;
 }
 
-async function getRecommendations(campaigns: CampaignPerformance[]): Promise<{ recommendations: OptimizationRecommendation[]; summary: string }> {
+async function getRecommendations(campaigns: CampaignPerformance[], businessCategory: string): Promise<{ recommendations: OptimizationRecommendation[]; summary: string }> {
   const fallback = {
     recommendations: [],
     summary: "Not enough spend/lead data yet to make confident recommendations.",
@@ -45,7 +45,7 @@ async function getRecommendations(campaigns: CampaignPerformance[]): Promise<{ r
         messages: [
           {
             role: "user",
-            content: `You are a paid-ads optimization specialist reviewing campaigns for an Indian car dealership.
+            content: `You are a paid-ads optimization specialist reviewing campaigns for an Indian ${businessCategory} business.
 Campaign data: ${JSON.stringify(campaigns, null, 2)}
 
 For each campaign with meaningful spend or leads, recommend one action. Return JSON only:
@@ -75,7 +75,11 @@ Only include campaigns where you have enough signal (spend > 0 or leads > 0) to 
 }
 
 export async function analyzeCampaigns(supabase: any, dealershipId: string): Promise<OptimizationResult> {
-  const performance = await getCampaignPerformance(supabase, dealershipId);
+  const [performance, { data: dealership }] = await Promise.all([
+    getCampaignPerformance(supabase, dealershipId),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
+  const businessCategory = dealership?.business_category ?? "car dealership";
   const hasEnoughData = performance.campaigns.some((c) => c.spend > 0 || c.leads > 0);
 
   if (!hasEnoughData) {
@@ -89,6 +93,6 @@ export async function analyzeCampaigns(supabase: any, dealershipId: string): Pro
     };
   }
 
-  const { recommendations, summary } = await getRecommendations(performance.campaigns);
+  const { recommendations, summary } = await getRecommendations(performance.campaigns, businessCategory);
   return { hasEnoughData: true, recommendations, summary };
 }

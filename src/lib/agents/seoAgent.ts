@@ -19,7 +19,7 @@ export interface BlogPost {
   content: string;
 }
 
-export async function generateBlogPost(topic: string, city?: string | null): Promise<BlogPost> {
+export async function generateBlogPost(topic: string, city?: string | null, businessCategory: string = "car dealership"): Promise<BlogPost> {
   const fallback: BlogPost = {
     title: `A Buyer's Guide to ${topic}`,
     content: `${topic} is a popular choice for buyers in ${city ?? "India"}. Contact us to learn more about pricing, financing, and availability.`,
@@ -39,7 +39,7 @@ export async function generateBlogPost(topic: string, city?: string | null): Pro
         messages: [
           {
             role: "user",
-            content: `Write a helpful, SEO-friendly blog post for an Indian car dealership.
+            content: `Write a helpful, SEO-friendly blog post for an Indian ${businessCategory} business.
 Topic: "${topic}"${city ? `, location: ${city}` : ""}
 
 400-600 words, informative and genuinely useful (not just sales-y), plain language, a few short paragraphs with natural subheadings. Return JSON only:
@@ -66,7 +66,8 @@ Topic: "${topic}"${city ? `, location: ${city}` : ""}
 
 export async function generateSeoIdeas(
   topic: string,
-  city?: string | null
+  city?: string | null,
+  businessCategory: string = "car dealership"
 ): Promise<SeoIdeas> {
   const fallback: SeoIdeas = {
     keywords: [`${topic} ${city ?? ""}`.trim(), `best ${topic} deals`, `${topic} price`],
@@ -87,11 +88,11 @@ export async function generateSeoIdeas(
         messages: [
           {
             role: "user",
-            content: `You are an SEO researcher for an Indian car dealership.
+            content: `You are an SEO researcher for an Indian ${businessCategory} business.
 Topic: "${topic}"${city ? `, location: ${city}` : ""}
 
 Return JSON only:
-{"keywords":["8-10 realistic search keywords/phrases Indian car buyers would actually type into Google, mixing high-intent (e.g. 'X price on-road') and informational (e.g. 'X vs Y comparison') terms"],"contentIdeas":["4-5 short blog post or video content title ideas that would rank for these keywords and also help the dealership's brand"]}`,
+{"keywords":["8-10 realistic search keywords/phrases Indian customers would actually type into Google, mixing high-intent (e.g. 'X price on-road') and informational (e.g. 'X vs Y comparison') terms"],"contentIdeas":["4-5 short blog post or video content title ideas that would rank for these keywords and also help the dealership's brand"]}`,
           },
         ],
       }),

@@ -12,7 +12,8 @@ const GRAPH_VERSION = "v23.0";
 
 export async function generateSocialCaption(
   prompt: string,
-  brandProfile?: { tone_of_voice?: string | null; messaging_pillars?: string[] | null; preferred_language?: string | null } | null
+  brandProfile?: { tone_of_voice?: string | null; messaging_pillars?: string[] | null; preferred_language?: string | null } | null,
+  businessCategory: string = "car dealership"
 ): Promise<string> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -32,7 +33,7 @@ export async function generateSocialCaption(
         messages: [
           {
             role: "user",
-            content: `Write a short, engaging Facebook post caption for an Indian car dealership's organic (non-ad) post.
+            content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
 What the post is about: "${prompt}"
 ${brandContext}
 Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end. Return JSON only: {"caption":"the caption text"}`,

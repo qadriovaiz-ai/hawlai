@@ -24,12 +24,11 @@ export async function POST(request: Request) {
     .single();
   if (leadError || !lead) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
 
-  const { data: brandProfile } = await supabase
-    .from("brand_profiles")
-    .select("tone_of_voice, messaging_pillars, preferred_language")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
+  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+    supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
 
-  const message = await generateRetentionMessage(lead, brandProfile, angle);
+  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "car dealership");
   return NextResponse.json({ message });
 }

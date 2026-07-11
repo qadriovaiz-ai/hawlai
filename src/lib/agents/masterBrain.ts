@@ -41,7 +41,7 @@ interface MasterBrainResult {
   details?: Record<string, any>;
 }
 
-async function classifyIntent(message: string): Promise<ClassifiedIntent> {
+async function classifyIntent(message: string, businessCategory: string): Promise<ClassifiedIntent> {
   let rawText = "";
   let httpStatus: number | null = null;
   let bodyText = "";
@@ -59,11 +59,11 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
         messages: [
           {
             role: "user",
-            content: `You are the routing brain for an Indian car dealership's marketing dashboard.
+            content: `You are the routing brain for an Indian ${businessCategory} business's marketing dashboard.
 A dealer typed this request: "${message}"
 
 Classify it and return JSON only (no markdown, no explanation, no extra text before or after):
-{"intent":"ad_launch"|"analytics_query"|"seo_query"|"research_query"|"optimization_query"|"social_post_idea"|"retention_query"|"strategy_query"|"unclear","daily_budget":number or null (rupees per day, if mentioned),"duration_days":number or null (default 1 if a launch but not mentioned),"car_type":"car model mentioned or null","targeting_city":"city mentioned or null","topic":"the general subject/car-model/campaign topic they're asking about, or null"}
+{"intent":"ad_launch"|"analytics_query"|"seo_query"|"research_query"|"optimization_query"|"social_post_idea"|"retention_query"|"strategy_query"|"unclear","daily_budget":number or null (rupees per day, if mentioned),"duration_days":number or null (default 1 if a launch but not mentioned),"car_type":"the main product/service/item mentioned (e.g. car model, property type, course name, menu item) or null","targeting_city":"city mentioned or null","topic":"the general subject/product/campaign topic they're asking about, or null"}
 
 "ad_launch" = wants to create/launch/run a paid ad or campaign.
 "analytics_query" = asking about spend, leads, performance, results.
@@ -127,7 +127,11 @@ export async function routeRequest(
   dealershipId: string,
   message: string
 ): Promise<MasterBrainResult> {
-  const classification = await classifyIntent(message);
+  const { data: dealershipInfo } = await supabase
+    .from("dealerships").select("business_category").eq("id", dealershipId).single();
+  const businessCategory = dealershipInfo?.business_category ?? "car dealership";
+
+  const classification = await classifyIntent(message, businessCategory);
   const topic = classification.topic ?? classification.car_type ?? message;
 
   if (classification.intent === "ad_launch") {
@@ -162,7 +166,7 @@ export async function routeRequest(
     return {
       intent: "ad_launch",
       status: "auto_approved",
-      message: `This campaign (~₹${totalEstimate.toLocaleString("en-IN")}, within your approval limit) is good to launch. Go to the "Launch Ad" page and upload the car photo — the full ad will be built and launched from there.`,
+      message: `This campaign (~₹${totalEstimate.toLocaleString("en-IN")}, within your approval limit) is good to launch. Go to the "Launch Ad" page and upload a photo — the full ad will be built and launched from there.`,
       details: classification,
     };
   }
@@ -172,7 +176,7 @@ export async function routeRequest(
   }
 
   if (classification.intent === "seo_query") {
-    const ideas = await generateSeoIdeas(topic, classification.targeting_city);
+    const ideas = await generateSeoIdeas(topic, classification.targeting_city, businessCategory);
     return {
       intent: "seo_query",
       status: "answered",
@@ -204,7 +208,7 @@ export async function routeRequest(
   if (classification.intent === "social_post_idea") {
     const { data: brandProfile } = await supabase
       .from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle();
-    const caption = await generateSocialCaption(topic, brandProfile);
+    const caption = await generateSocialCaption(topic, brandProfile, businessCategory);
     return {
       intent: "social_post_idea",
       status: "answered",

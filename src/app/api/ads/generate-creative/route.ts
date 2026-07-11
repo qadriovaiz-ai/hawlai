@@ -50,7 +50,7 @@ async function applyTemplateBackground(inputBuffer: Buffer, style: string): Prom
 // AI mode: sends the car photo + prompt to Gemini 2.5 Flash Image
 // to regenerate the background/scene around the (unchanged) car.
 // ------------------------------------------------------------------
-async function generateAIImage(prompt: string, base64Data: string, mimeType: string): Promise<Buffer> {
+async function generateAIImage(prompt: string, base64Data: string, mimeType: string, businessCategory: string = "car dealership"): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set in environment variables");
 
@@ -64,7 +64,7 @@ async function generateAIImage(prompt: string, base64Data: string, mimeType: str
           {
             parts: [
               {
-                text: `This is a car photo for a Facebook/Instagram ad for an Indian car dealership. Keep the car itself completely realistic and unchanged. Only change the background/scene to match this request: "${prompt}". Make it look like a professional automotive advertisement, photorealistic, high quality lighting.`,
+                text: `This is a product photo for a Facebook/Instagram ad for an Indian ${businessCategory} business. Keep the product itself completely realistic and unchanged. Only change the background/scene to match this request: "${prompt}". Make it look like a professional advertisement, photorealistic, high quality lighting.`,
               },
               { inline_data: { mime_type: mimeType, data: base64Data } },
             ],
@@ -125,6 +125,10 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
+  const { data: dealership } = await supabase
+    .from("dealerships").select("business_category").eq("id", dealershipId).single();
+  const businessCategory = dealership?.business_category ?? "car dealership";
+
   const body = await request.json();
   const { photo_base64, mode, prompt, background_style, headline, body_copy, price_text } = body;
 
@@ -164,7 +168,7 @@ export async function POST(request: Request) {
 
   try {
     const processedBuffer = mode === "ai_generate"
-      ? await generateAIImage(prompt, rawBase64, mimeType)
+      ? await generateAIImage(prompt, rawBase64, mimeType, businessCategory)
       : await applyTemplateBackground(inputBuffer, background_style ?? "studio_white");
 
     const finalBuffer = await sharp(processedBuffer)

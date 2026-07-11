@@ -13,7 +13,7 @@ export async function POST() {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, city")
+    .select("dealership_name, city, business_category")
     .eq("id", dealershipId)
     .single();
 
@@ -23,6 +23,6 @@ export async function POST() {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
-  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile);
+  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership");
   return NextResponse.json(copy);
 }

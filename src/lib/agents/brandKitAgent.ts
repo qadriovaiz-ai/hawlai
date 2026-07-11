@@ -14,7 +14,8 @@ interface BrandProfile {
 
 export async function generateLogoConcept(
   dealershipName: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  businessCategory: string = "car dealership"
 ): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
@@ -29,7 +30,7 @@ export async function generateLogoConcept(
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: `Design a clean, modern, professional logo concept for an Indian car dealership named "${dealershipName}".${toneHint} Simple, memorable, works in a single color, no photorealistic cars — an icon/wordmark style logo suitable for a business, on a plain white background. High contrast, print-ready look.` },
+            { text: `Design a clean, modern, professional logo concept for an Indian ${businessCategory} business named "${dealershipName}".${toneHint} Simple, memorable, works in a single color — an icon/wordmark style logo, on a plain white background. High contrast, print-ready look.` },
           ],
         }],
       }),

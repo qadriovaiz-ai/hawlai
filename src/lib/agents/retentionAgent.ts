@@ -22,19 +22,20 @@ interface BrandProfile {
 export async function generateRetentionMessage(
   customer: CustomerInfo,
   brandProfile: BrandProfile | null,
-  angle: "service_reminder" | "referral" | "upsell"
+  angle: "service_reminder" | "referral" | "upsell",
+  businessCategory: string = "car dealership"
 ): Promise<string> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
     : "Default to a warm, professional tone in Hinglish.";
 
   const angleInstructions: Record<string, string> = {
-    service_reminder: "Remind them it may be time for a service check-up or maintenance on their vehicle. Warm, not pushy.",
+    service_reminder: "Remind them it may be time for a follow-up service, check-up, or renewal, if relevant to what they bought. Warm, not pushy.",
     referral: "Ask them to refer a friend or family member, mention any referral benefit if relevant to the brand pillars.",
-    upsell: "Let them know about upgrade options, accessories, or a trade-in offer, in a low-pressure way.",
+    upsell: "Let them know about upgrade options, add-ons, or a trade-in/exchange offer, in a low-pressure way.",
   };
 
-  const fallback = `Hi ${customer.name}, hope you're loving your${customer.vehicle ? ` ${customer.vehicle}` : " car"}! Just checking in — let us know if there's anything we can help with.`;
+  const fallback = `Hi ${customer.name}, hope you're loving your${customer.vehicle ? ` ${customer.vehicle}` : " purchase"}! Just checking in — let us know if there's anything we can help with.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -50,8 +51,8 @@ export async function generateRetentionMessage(
         messages: [
           {
             role: "user",
-            content: `Write a short WhatsApp-style message for an Indian car dealership to send an EXISTING CUSTOMER (already bought a car), not a new lead.
-Customer: ${customer.name}${customer.vehicle ? `, owns a ${customer.vehicle}` : ""}.
+            content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already made a purchase), not a new lead.
+Customer: ${customer.name}${customer.vehicle ? `, bought/has: ${customer.vehicle}` : ""}.
 Goal: ${angleInstructions[angle]}
 ${brandContext}
 2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}`,

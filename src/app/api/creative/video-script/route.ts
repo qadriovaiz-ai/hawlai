@@ -14,12 +14,11 @@ export async function POST(request: Request) {
   const { topic } = await request.json();
   if (!topic || topic.trim().length < 2) return NextResponse.json({ error: "Topic is too short" }, { status: 400 });
 
-  const { data: brandProfile } = await supabase
-    .from("brand_profiles")
-    .select("tone_of_voice, messaging_pillars, preferred_language")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
+  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+    supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
 
-  const script = await generateVideoScript(topic.trim(), brandProfile);
+  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "car dealership");
   return NextResponse.json(script);
 }

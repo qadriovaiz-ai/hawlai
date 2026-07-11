@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import BrandProfileForm from "@/components/settings/BrandProfileForm";
+import BusinessCategoryField from "@/components/settings/BusinessCategoryField";
 
 export default async function BrandProfilePage() {
   const supabase = await createClient();
@@ -12,11 +13,10 @@ export default async function BrandProfilePage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const { data: brandProfile } = await supabase
-    .from("brand_profiles")
-    .select("*")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
+  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+    supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+  ]);
 
   return (
     <div className="max-w-xl mx-auto space-y-6">
@@ -30,6 +30,7 @@ export default async function BrandProfilePage() {
         </div>
       </div>
 
+      <BusinessCategoryField initial={dealership?.business_category ?? null} />
       <BrandProfileForm initial={brandProfile} />
     </div>
   );

@@ -9,7 +9,7 @@ const GRAPH_VERSION = "v23.0";
 // Step 1: Claude reads the dealer's one-line prompt and extracts
 // everything needed — copy, budget, city, and an image scene idea.
 // ------------------------------------------------------------------
-async function generateAdPlan(prompt: string, brandProfile?: any) {
+async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "car dealership") {
   try {
     const brandContext = brandProfile
       ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
@@ -28,10 +28,10 @@ async function generateAdPlan(prompt: string, brandProfile?: any) {
         messages: [
           {
             role: "user",
-            content: `You are an expert Facebook Lead Ad strategist for Indian car dealerships.
+            content: `You are an expert Facebook Lead Ad strategist for Indian ${businessCategory} businesses.
 Based on this dealer's requirement: "${prompt}"${brandContext}
 Return JSON only (no markdown, no explanation):
-{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"car model extracted or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian car-buyer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger"}`,
+{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger"}`,
           },
         ],
       }),
@@ -88,7 +88,7 @@ async function applyTemplateBackground(inputBuffer: Buffer, style: string): Prom
     .toBuffer();
 }
 
-async function generateAIImage(scenePrompt: string, base64Data: string, mimeType: string): Promise<Buffer> {
+async function generateAIImage(scenePrompt: string, base64Data: string, mimeType: string, businessCategory: string = "car dealership"): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
   const res = await fetch(
@@ -99,7 +99,7 @@ async function generateAIImage(scenePrompt: string, base64Data: string, mimeType
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: `Facebook ad for an Indian car dealership. Keep the car unchanged and realistic. Only change the background to: "${scenePrompt}". Photorealistic, professional automotive advertisement lighting.` },
+            { text: `Facebook ad for an Indian ${businessCategory} business. Keep the product in the photo unchanged and realistic. Only change the background to: "${scenePrompt}". Photorealistic, professional advertisement lighting.` },
             { inline_data: { mime_type: mimeType, data: base64Data } },
           ],
         }],
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
   // eventually go through Settings -> Connect Facebook).
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, fb_ad_account_id, fb_page_id, fb_lead_form_id")
+    .select("fb_page_access_token, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category")
     .eq("id", dealershipId)
     .single();
 
@@ -251,7 +251,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   // Step 1: plan the ad (copy + targeting + scene)
-  const plan = await generateAdPlan(prompt, brandProfile);
+  const plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "car dealership");
 
   const { data: draft } = await serviceClient
     .from("ad_creatives")
@@ -272,7 +272,7 @@ export async function POST(request: Request) {
   try {
     // Step 2: build the image
     const processedBuffer = image_mode === "ai_generate"
-      ? await generateAIImage(plan.image_scene_prompt, rawBase64, mimeType)
+      ? await generateAIImage(plan.image_scene_prompt, rawBase64, mimeType, dealership?.business_category ?? "car dealership")
       : await applyTemplateBackground(inputBuffer, plan.background_style ?? "studio_white");
 
     const finalBuffer = await sharp(processedBuffer)

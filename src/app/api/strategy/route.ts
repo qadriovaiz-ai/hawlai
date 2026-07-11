@@ -35,10 +35,10 @@ export async function POST(request: Request) {
   if (!monthly_budget || monthly_budget <= 0) return NextResponse.json({ error: "Enter a valid monthly budget" }, { status: 400 });
   if (!goal) return NextResponse.json({ error: "Choose a goal" }, { status: 400 });
 
-  const { data: dealership } = await supabase.from("dealerships").select("dealership_name, city").eq("id", dealershipId).single();
+  const { data: dealership } = await supabase.from("dealerships").select("dealership_name, city, business_category").eq("id", dealershipId).single();
   const { data: brandProfile } = await supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle();
 
-  const plan = await generateMarketingStrategy(dealership?.dealership_name ?? "the dealership", dealership?.city ?? null, monthly_budget, goal, brandProfile);
+  const plan = await generateMarketingStrategy(dealership?.dealership_name ?? "the business", dealership?.city ?? null, monthly_budget, goal, brandProfile, dealership?.business_category ?? "car dealership");
 
   const { data: saved, error } = await supabase
     .from("marketing_strategies")

@@ -75,7 +75,8 @@ async function callClaude(prompt: string, maxTokens: number): Promise<any | null
 
 export async function generateVideoScript(
   topic: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  businessCategory: string = "car dealership"
 ): Promise<VideoScript> {
   const fallback: VideoScript = {
     title: topic,
@@ -88,7 +89,7 @@ export async function generateVideoScript(
   };
 
   const parsed = await callClaude(
-    `You are a short-form video scriptwriter for an Indian car dealership's Instagram Reels / YouTube Shorts.
+    `You are a short-form video scriptwriter for an Indian ${businessCategory} business's Instagram Reels / YouTube Shorts.
 Topic: "${topic}"
 ${brandContextFor(brandProfile)}
 
@@ -108,18 +109,19 @@ Write a 15-30 second video script, 3-6 scenes. Return JSON only:
 export async function generateCopyVariations(
   topic: string,
   brandProfile?: BrandProfile | null,
-  count: number = 3
+  count: number = 3,
+  businessCategory: string = "car dealership"
 ): Promise<CopyVariation[]> {
   const fallback: CopyVariation[] = [
     { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today.", score: 50 },
   ];
 
   const parsed = await callClaude(
-    `You are an ad copywriter for an Indian car dealership, A/B testing different angles for the same offer.
+    `You are an ad copywriter for an Indian ${businessCategory} business, A/B testing different angles for the same offer.
 Topic: "${topic}"
 ${brandContextFor(brandProfile)}
 
-Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian car buyers — be genuinely critical and vary the scores based on real strength, not uniformly high. Return JSON only:
+Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian customers — be genuinely critical and vary the scores based on real strength, not uniformly high. Return JSON only:
 {"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}`,
     700
   );
@@ -141,18 +143,19 @@ export interface ProductDescription {
 }
 
 export async function generateProductDescription(
-  carModel: string,
+  itemName: string,
   details: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  businessCategory: string = "car dealership"
 ): Promise<ProductDescription> {
   const fallback: ProductDescription = {
-    title: carModel,
-    description: `Discover the ${carModel} — available now. Contact us for full details and pricing.`,
+    title: itemName,
+    description: `Discover the ${itemName} — available now. Contact us for full details and pricing.`,
     highlights: [],
   };
   const parsed = await callClaude(
-    `Write a product listing description for a car at an Indian dealership.
-Car: "${carModel}"
+    `Write a product/service listing description for an Indian ${businessCategory} business.
+Item: "${itemName}"
 Details provided: "${details}"
 ${brandContextFor(brandProfile)}
 Return JSON only:
