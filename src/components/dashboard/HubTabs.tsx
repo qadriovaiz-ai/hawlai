@@ -1,20 +1,19 @@
 "use client";
 
 import { useState, ReactNode } from "react";
-import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Tab {
   key: string;
   label: string;
-  icon: LucideIcon;
+  icon: ReactNode;
   content: ReactNode;
 }
 
-export default function HubTabs({ title, description, icon: HeaderIcon, tabs }: {
+export default function HubTabs({ title, description, icon, tabs }: {
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: ReactNode;
   tabs: Tab[];
 }) {
   const [activeKey, setActiveKey] = useState(tabs[0]?.key);
@@ -24,7 +23,7 @@ export default function HubTabs({ title, description, icon: HeaderIcon, tabs }: 
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <HeaderIcon className="w-5 h-5 text-purple-600" />
+          {icon}
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">{title}</h1>
@@ -34,7 +33,6 @@ export default function HubTabs({ title, description, icon: HeaderIcon, tabs }: 
 
       <div className="border-b border-slate-200 flex items-center gap-1 overflow-x-auto">
         {tabs.map((tab) => {
-          const Icon = tab.icon;
           const isActive = tab.key === activeKey;
           return (
             <button
@@ -47,7 +45,7 @@ export default function HubTabs({ title, description, icon: HeaderIcon, tabs }: 
                   : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-200"
               )}
             >
-              <Icon className="w-4 h-4" />
+              {tab.icon}
               {tab.label}
             </button>
           );

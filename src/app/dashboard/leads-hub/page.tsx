@@ -9,19 +9,19 @@ import AppointmentsPage from "../appointments/page";
 
 export default function LeadsHubPage() {
   const tabs = [
-    { key: "leads", label: "Leads", icon: Users, content: <LeadsPage searchParams={Promise.resolve({})} /> },
-    { key: "pipeline", label: "Pipeline", icon: Kanban, content: <PipelinePage /> },
-    { key: "retention", label: "Retention", icon: Heart, content: <RetentionPage /> },
-    { key: "queue", label: "Call Queue", icon: PhoneCall, content: <QueuePage /> },
-    { key: "calls", label: "Call History", icon: Phone, content: <CallsPage /> },
-    { key: "appointments", label: "Appointments", icon: Calendar, content: <AppointmentsPage /> },
+    { key: "leads", label: "Leads", icon: <Users className="w-4 h-4" />, content: <LeadsPage searchParams={Promise.resolve({})} /> },
+    { key: "pipeline", label: "Pipeline", icon: <Kanban className="w-4 h-4" />, content: <PipelinePage /> },
+    { key: "retention", label: "Retention", icon: <Heart className="w-4 h-4" />, content: <RetentionPage /> },
+    { key: "queue", label: "Call Queue", icon: <PhoneCall className="w-4 h-4" />, content: <QueuePage /> },
+    { key: "calls", label: "Call History", icon: <Phone className="w-4 h-4" />, content: <CallsPage /> },
+    { key: "appointments", label: "Appointments", icon: <Calendar className="w-4 h-4" />, content: <AppointmentsPage /> },
   ];
 
   return (
     <HubTabs
       title="Leads & Sales"
       description="Every lead, every stage, every follow-up — in one place"
-      icon={Users}
+      icon={<Users className="w-5 h-5 text-purple-600" />}
       tabs={tabs}
     />
   );
