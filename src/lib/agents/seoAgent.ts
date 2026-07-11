@@ -14,6 +14,56 @@ export interface SeoIdeas {
   contentIdeas: string[];
 }
 
+export interface BlogPost {
+  title: string;
+  content: string;
+}
+
+export async function generateBlogPost(topic: string, city?: string | null): Promise<BlogPost> {
+  const fallback: BlogPost = {
+    title: `A Buyer's Guide to ${topic}`,
+    content: `${topic} is a popular choice for buyers in ${city ?? "India"}. Contact us to learn more about pricing, financing, and availability.`,
+  };
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1200,
+        messages: [
+          {
+            role: "user",
+            content: `Write a helpful, SEO-friendly blog post for an Indian car dealership.
+Topic: "${topic}"${city ? `, location: ${city}` : ""}
+
+400-600 words, informative and genuinely useful (not just sales-y), plain language, a few short paragraphs with natural subheadings. Return JSON only:
+{"title":"SEO-friendly title, under 70 chars","content":"the full article body, plain text with \\n\\n between paragraphs and short subheadings on their own line where natural"}`,
+          },
+        ],
+      }),
+    });
+    if (!response.ok) return fallback;
+    const bodyText = await response.text();
+    if (!bodyText.trim()) return fallback;
+    const data = JSON.parse(bodyText);
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
+    if (!clean) return fallback;
+    const parsed = JSON.parse(clean);
+    return { title: parsed.title ?? fallback.title, content: parsed.content ?? fallback.content };
+  } catch (err: any) {
+    console.error("[seo-agent] generateBlogPost error:", err.message);
+    return fallback;
+  }
+}
+
 export async function generateSeoIdeas(
   topic: string,
   city?: string | null

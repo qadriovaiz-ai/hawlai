@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { photo_base64, caption } = await request.json();
+  const { photo_base64, caption, scheduled_time } = await request.json();
   if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
   if (!caption || caption.trim().length < 1) return NextResponse.json({ error: "Caption is required" }, { status: 400 });
 
@@ -49,8 +49,9 @@ export async function POST(request: Request) {
   const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
 
   try {
-    const result = await postPhotoToPage(pageId, pageAccessToken, publicUrlData.publicUrl, caption);
-    return NextResponse.json({ success: true, post_id: result.id });
+    const scheduledPublishTime = scheduled_time ? Math.floor(new Date(scheduled_time).getTime() / 1000) : undefined;
+    const result = await postPhotoToPage(pageId, pageAccessToken, publicUrlData.publicUrl, caption, scheduledPublishTime);
+    return NextResponse.json({ success: true, post_id: result.id, scheduled: !!scheduledPublishTime });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

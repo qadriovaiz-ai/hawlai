@@ -96,6 +96,25 @@ export async function POST(request: Request) {
           phone,
         });
 
+        // Dedupe: same phone number for this dealership within the
+        // last 30 days is almost certainly the same person re-submitting
+        // the same or a different ad — skip instead of cluttering the
+        // pipeline with duplicates.
+        if (phone) {
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: existingLead } = await supabase
+            .from("leads")
+            .select("id")
+            .eq("dealership_id", dealershipId)
+            .eq("phone", phone)
+            .gte("created_at", thirtyDaysAgo)
+            .maybeSingle();
+          if (existingLead) {
+            console.log("[meta-leads] Skipping duplicate lead for phone:", phone);
+            continue;
+          }
+        }
+
         const { data, error } = await supabase
           .from("leads")
           .insert({

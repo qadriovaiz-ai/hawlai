@@ -127,3 +127,42 @@ Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. 
   if (!parsed || !Array.isArray(parsed.variations)) return fallback;
   return parsed.variations;
 }
+
+// ------------------------------------------------------------------
+// Phase 3 addition: product descriptions — pure text generation, no
+// new dependencies. (Blog posts live in seoAgent.ts, generated from
+// there instead, to avoid having two separate blog generators.)
+// ------------------------------------------------------------------
+
+export interface ProductDescription {
+  title: string;
+  description: string;
+  highlights: string[];
+}
+
+export async function generateProductDescription(
+  carModel: string,
+  details: string,
+  brandProfile?: BrandProfile | null
+): Promise<ProductDescription> {
+  const fallback: ProductDescription = {
+    title: carModel,
+    description: `Discover the ${carModel} — available now. Contact us for full details and pricing.`,
+    highlights: [],
+  };
+  const parsed = await callClaude(
+    `Write a product listing description for a car at an Indian dealership.
+Car: "${carModel}"
+Details provided: "${details}"
+${brandContextFor(brandProfile)}
+Return JSON only:
+{"title":"short listing title","description":"2-3 sentence description, honest and specific to what was given, not generic","highlights":["4-5 short bullet-point features, based on the details given"]}`,
+    500
+  );
+  if (!parsed) return fallback;
+  return {
+    title: parsed.title ?? fallback.title,
+    description: parsed.description ?? fallback.description,
+    highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+  };
+}

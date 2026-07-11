@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers } from "lucide-react";
+import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Car, Sparkles } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 export default function CreativeStudioPage() {
@@ -15,6 +15,12 @@ export default function CreativeStudioPage() {
   const [variations, setVariations] = useState<any[] | null>(null);
   const [variationsError, setVariationsError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  const [carModel, setCarModel] = useState("");
+  const [carDetails, setCarDetails] = useState("");
+  const [listingLoading, setListingLoading] = useState(false);
+  const [listing, setListing] = useState<any>(null);
+  const [listingError, setListingError] = useState<string | null>(null);
 
   async function handleGenerateScript() {
     setScriptError(null);
@@ -56,6 +62,26 @@ export default function CreativeStudioPage() {
     }
   }
 
+  async function handleGenerateListing() {
+    setListingError(null);
+    if (carModel.trim().length < 2) return setListingError("Enter a car model");
+    setListingLoading(true);
+    try {
+      const res = await fetch("/api/creative/product-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ carModel, details: carDetails }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setListing(data);
+    } catch (err: any) {
+      setListingError(err.message);
+    } finally {
+      setListingLoading(false);
+    }
+  }
+
   function copyVariation(v: any, i: number) {
     navigator.clipboard.writeText(`${v.headline}\n\n${v.body}`);
     setCopiedIndex(i);
@@ -70,7 +96,7 @@ export default function CreativeStudioPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Creative Studio</h1>
-          <p className="text-sm text-slate-500">Video scripts and ad copy variations for A/B testing</p>
+          <p className="text-sm text-slate-500">Video scripts, copy variations, and product listings</p>
         </div>
       </div>
 
@@ -85,11 +111,11 @@ export default function CreativeStudioPage() {
         <div className="flex flex-wrap gap-2">
           <button onClick={handleGenerateScript} disabled={scriptLoading} className="btn-secondary text-sm">
             {scriptLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-            Generate Video Script
+            Video Script
           </button>
           <button onClick={handleGenerateVariations} disabled={variationsLoading} className="btn-secondary text-sm">
             {variationsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
-            Generate Copy Variations
+            Copy Variations
           </button>
         </div>
       </div>
@@ -149,6 +175,38 @@ export default function CreativeStudioPage() {
           ))}
         </div>
       )}
+
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Car className="w-4 h-4 text-slate-400" /> Product Listing</p>
+        <input
+          value={carModel}
+          onChange={(e) => setCarModel(e.target.value)}
+          placeholder="Car model, e.g. 2022 Hyundai Creta SX"
+          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        <input
+          value={carDetails}
+          onChange={(e) => setCarDetails(e.target.value)}
+          placeholder="Details — km driven, price, features (optional)"
+          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        <button onClick={handleGenerateListing} disabled={listingLoading} className="btn-secondary text-sm">
+          {listingLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          Generate Listing
+        </button>
+        {listingError && <p className="text-xs text-red-600">{listingError}</p>}
+        {listing && (
+          <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-1.5">
+            <p className="text-sm font-semibold text-slate-900">{listing.title}</p>
+            <p className="text-sm text-slate-600">{listing.description}</p>
+            {listing.highlights?.length > 0 && (
+              <ul className="text-xs text-slate-500 space-y-0.5 pt-1">
+                {listing.highlights.map((h: string, i: number) => <li key={i}>• {h}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

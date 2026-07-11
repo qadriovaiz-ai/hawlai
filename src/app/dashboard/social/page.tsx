@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Share2, Loader2, AlertCircle, CheckCircle, ImagePlus, Sparkles } from "lucide-react";
+import { Share2, Loader2, AlertCircle, CheckCircle, ImagePlus, Sparkles, CalendarClock } from "lucide-react";
 
 export default function SocialPostPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -12,6 +12,7 @@ export default function SocialPostPage() {
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [posted, setPosted] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -55,7 +56,7 @@ export default function SocialPostPage() {
       const res = await fetch("/api/social/post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_base64: photoBase64, caption }),
+        body: JSON.stringify({ photo_base64: photoBase64, caption, scheduled_time: scheduledTime || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
@@ -118,6 +119,20 @@ export default function SocialPostPage() {
         )}
       </div>
 
+      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700">3. Schedule (optional)</p>
+        <p className="text-xs text-slate-400">Leave blank to post now. Facebook needs at least 10 minutes and at most 6 months notice for scheduled posts.</p>
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
+          <input
+            type="datetime-local"
+            value={scheduledTime}
+            onChange={(e) => setScheduledTime(e.target.value)}
+            className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+      </div>
+
       {error && (
         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" />
@@ -128,7 +143,7 @@ export default function SocialPostPage() {
       {posted && (
         <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg p-3">
           <CheckCircle className="w-4 h-4 shrink-0" />
-          Posted to your Facebook Page!
+          {scheduledTime ? "Scheduled! It'll go live automatically at the chosen time." : "Posted to your Facebook Page!"}
         </div>
       )}
 
@@ -138,7 +153,7 @@ export default function SocialPostPage() {
         className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
       >
         {posting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
-        {posting ? "Posting..." : "Post to Facebook"}
+        {posting ? "Posting..." : scheduledTime ? "Schedule Post" : "Post to Facebook"}
       </button>
     </div>
   );

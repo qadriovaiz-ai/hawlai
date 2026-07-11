@@ -60,17 +60,30 @@ export async function postPhotoToPage(
   pageId: string,
   pageAccessToken: string,
   imagePublicUrl: string,
-  caption: string
+  caption: string,
+  scheduledPublishTime?: number
 ): Promise<{ id: string; permalink?: string }> {
+  const body: Record<string, any> = {
+    caption,
+    access_token: pageAccessToken,
+    url: imagePublicUrl,
+  };
+
+  if (scheduledPublishTime) {
+    // Meta requires scheduled posts to be at least 10 minutes and at
+    // most 6 months in the future — the API will reject anything
+    // outside that window, so we just pass it through and surface
+    // whatever error Meta gives back.
+    body.published = false;
+    body.scheduled_publish_time = scheduledPublishTime;
+  } else {
+    body.published = true;
+  }
+
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pageId}/photos`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      caption,
-      published: true,
-      access_token: pageAccessToken,
-      url: imagePublicUrl,
-    }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok || data.error) {

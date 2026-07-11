@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon, ge
 import AddToQueueButton from "@/components/leads/AddToQueueButton";
 import CreateAppointmentModal from "@/components/appointments/CreateAppointmentModal";
 import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
+import LeadCrmPanel from "@/components/leads/LeadCrmPanel";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -170,6 +171,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             ))}
           </div>
         )}
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold text-slate-700 mb-3">CRM</p>
+        <LeadCrmPanel leadId={lead.id} initialDealValue={lead.deal_value ?? null} />
       </div>
     </div>
   );

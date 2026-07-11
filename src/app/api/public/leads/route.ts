@@ -29,6 +29,21 @@ export async function POST(request: Request) {
 
   const qualification = qualifyLead({ purchaseYear: null, budget: budget ? Number(budget) : null, phone });
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: existingLead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("dealership_id", landingPage.dealership_id)
+    .eq("phone", phone.trim())
+    .gte("created_at", thirtyDaysAgo)
+    .maybeSingle();
+
+  if (existingLead) {
+    // Already have this person recently — don't create a duplicate,
+    // but still show the visitor a normal thank-you.
+    return NextResponse.json({ success: true });
+  }
+
   const { error } = await supabase.from("leads").insert({
     dealership_id: landingPage.dealership_id,
     name: name.trim(),

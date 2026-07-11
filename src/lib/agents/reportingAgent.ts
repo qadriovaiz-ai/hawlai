@@ -19,6 +19,8 @@ export interface ReportStats {
   campaignsLaunched: number;
   totalSpend: number;
   costPerLead: number | null;
+  totalRevenue: number;
+  roas: number | null;
   appointmentsScheduled: number;
   appointmentsCompleted: number;
   callsMade: number;
@@ -39,7 +41,7 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
     { data: calls },
     performance,
   ] = await Promise.all([
-    supabase.from("leads").select("lead_temperature, status").eq("dealership_id", dealershipId),
+    supabase.from("leads").select("lead_temperature, status, deal_value").eq("dealership_id", dealershipId),
     supabase.from("pending_approvals").select("id").eq("dealership_id", dealershipId).eq("status", "pending"),
     supabase.from("ad_creatives").select("id").eq("dealership_id", dealershipId).eq("status", "launched"),
     supabase.from("appointments").select("status").eq("dealership_id", dealershipId),
@@ -52,6 +54,8 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
     leadsByStage[lead.status] = (leadsByStage[lead.status] ?? 0) + 1;
   }
 
+  const totalRevenue = (leads ?? []).reduce((sum: number, l: any) => sum + (Number(l.deal_value) || 0), 0);
+
   return {
     totalLeads: leads?.length ?? 0,
     hotLeads: leads?.filter((l: any) => l.lead_temperature === "hot").length ?? 0,
@@ -62,6 +66,8 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
     campaignsLaunched: campaigns?.length ?? 0,
     totalSpend: performance.totals.spend,
     costPerLead: performance.totals.cost_per_lead,
+    totalRevenue,
+    roas: performance.totals.spend > 0 ? totalRevenue / performance.totals.spend : null,
     appointmentsScheduled: appointments?.filter((a: any) => a.status === "scheduled").length ?? 0,
     appointmentsCompleted: appointments?.filter((a: any) => a.status === "completed").length ?? 0,
     callsMade: calls?.length ?? 0,
