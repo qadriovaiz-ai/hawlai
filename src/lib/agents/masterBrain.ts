@@ -22,6 +22,7 @@ type Intent =
   | "optimization_query"
   | "social_post_idea"
   | "retention_query"
+  | "strategy_query"
   | "unclear";
 
 interface ClassifiedIntent {
@@ -62,7 +63,7 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
 A dealer typed this request: "${message}"
 
 Classify it and return JSON only (no markdown, no explanation, no extra text before or after):
-{"intent":"ad_launch"|"analytics_query"|"seo_query"|"research_query"|"optimization_query"|"social_post_idea"|"retention_query"|"unclear","daily_budget":number or null (rupees per day, if mentioned),"duration_days":number or null (default 1 if a launch but not mentioned),"car_type":"car model mentioned or null","targeting_city":"city mentioned or null","topic":"the general subject/car-model/campaign topic they're asking about, or null"}
+{"intent":"ad_launch"|"analytics_query"|"seo_query"|"research_query"|"optimization_query"|"social_post_idea"|"retention_query"|"strategy_query"|"unclear","daily_budget":number or null (rupees per day, if mentioned),"duration_days":number or null (default 1 if a launch but not mentioned),"car_type":"car model mentioned or null","targeting_city":"city mentioned or null","topic":"the general subject/car-model/campaign topic they're asking about, or null"}
 
 "ad_launch" = wants to create/launch/run a paid ad or campaign.
 "analytics_query" = asking about spend, leads, performance, results.
@@ -71,6 +72,7 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
 "optimization_query" = asking what to do about existing campaigns — scale, pause, improve.
 "social_post_idea" = wants a caption or idea for an organic (non-ad) social post.
 "retention_query" = asking about re-engaging or following up with existing customers.
+"strategy_query" = asking for a marketing plan, roadmap, budget allocation, or "what should my overall strategy be".
 "unclear" = anything else, including greetings or vague requests.`,
           },
         ],
@@ -219,10 +221,18 @@ export async function routeRequest(
     };
   }
 
+  if (classification.intent === "strategy_query") {
+    return {
+      intent: "strategy_query",
+      status: "answered",
+      message: 'Go to "Marketing" -> "Strategy" tab — enter your monthly budget and goal, and I\'ll generate a full roadmap: budget allocation across channels, this month\'s themes, and offer ideas.',
+    };
+  }
+
   return {
     intent: "unclear",
     status: "unclear",
     message:
-      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, or follow up with past customers.',
+      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, or follow up with past customers.',
   };
 }
