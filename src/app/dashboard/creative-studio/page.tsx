@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Car, Sparkles } from "lucide-react";
+import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Car, Sparkles, Palette } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 export default function CreativeStudioPage() {
@@ -21,6 +21,10 @@ export default function CreativeStudioPage() {
   const [listingLoading, setListingLoading] = useState(false);
   const [listing, setListing] = useState<any>(null);
   const [listingError, setListingError] = useState<string | null>(null);
+
+  const [logoLoading, setLogoLoading] = useState(false);
+  const [logos, setLogos] = useState<string[]>([]);
+  const [logoError, setLogoError] = useState<string | null>(null);
 
   async function handleGenerateScript() {
     setScriptError(null);
@@ -79,6 +83,21 @@ export default function CreativeStudioPage() {
       setListingError(err.message);
     } finally {
       setListingLoading(false);
+    }
+  }
+
+  async function handleGenerateLogo() {
+    setLogoError(null);
+    setLogoLoading(true);
+    try {
+      const res = await fetch("/api/brand-kit/logo", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setLogos((prev) => [data.url, ...prev]);
+    } catch (err: any) {
+      setLogoError(err.message);
+    } finally {
+      setLogoLoading(false);
     }
   }
 
@@ -204,6 +223,25 @@ export default function CreativeStudioPage() {
                 {listing.highlights.map((h: string, i: number) => <li key={i}>• {h}</li>)}
               </ul>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Palette className="w-4 h-4 text-slate-400" /> Logo Concepts</p>
+          <button onClick={handleGenerateLogo} disabled={logoLoading} className="btn-secondary text-sm">
+            {logoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Generate
+          </button>
+        </div>
+        <p className="text-xs text-slate-400">Uses your dealership name and brand tone. Generate a few and pick your favorite — treat these as starting concepts, not final production files.</p>
+        {logoError && <p className="text-xs text-red-600">{logoError}</p>}
+        {logos.length > 0 && (
+          <div className="grid grid-cols-3 gap-3">
+            {logos.map((url, i) => (
+              <img key={i} src={url} alt={`Logo concept ${i + 1}`} className="w-full aspect-square object-contain bg-white border border-slate-200 rounded-lg" />
+            ))}
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Oswald } from "next/font/google";
 import { ShieldCheck, Phone, MapPin, IndianRupee } from "lucide-react";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
+import ChatWidget from "@/components/website/ChatWidget";
 import { getTheme } from "@/lib/landingThemes";
 
 const oswald = Oswald({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display" });
@@ -149,6 +150,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
         {page.offer_text ?? "Book a Free Test Drive"}
       </a>
       <div className="sm:hidden h-14" />
+      <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
     </div>
   );
 }
