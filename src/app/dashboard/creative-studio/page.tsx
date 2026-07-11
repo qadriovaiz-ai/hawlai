@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Car, Sparkles, Palette } from "lucide-react";
+import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Car, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 export default function CreativeStudioPage() {
@@ -25,6 +25,17 @@ export default function CreativeStudioPage() {
   const [logoLoading, setLogoLoading] = useState(false);
   const [logos, setLogos] = useState<string[]>([]);
   const [logoError, setLogoError] = useState<string | null>(null);
+
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [videoStarting, setVideoStarting] = useState(false);
+  const [videoPolling, setVideoPolling] = useState(false);
+  const [videoResult, setVideoResult] = useState<any>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  const [voiceoverText, setVoiceoverText] = useState("");
+  const [voiceoverLoading, setVoiceoverLoading] = useState(false);
+  const [voiceoverUrl, setVoiceoverUrl] = useState<string | null>(null);
+  const [voiceoverError, setVoiceoverError] = useState<string | null>(null);
 
   async function handleGenerateScript() {
     setScriptError(null);
@@ -98,6 +109,71 @@ export default function CreativeStudioPage() {
       setLogoError(err.message);
     } finally {
       setLogoLoading(false);
+    }
+  }
+
+  async function handleGenerateVideo() {
+    setVideoError(null);
+    setVideoResult(null);
+    if (videoPrompt.trim().length < 5) return setVideoError("Describe the video in a bit more detail");
+    setVideoStarting(true);
+    try {
+      const res = await fetch("/api/creative/video/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: videoPrompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setVideoStarting(false);
+      setVideoPolling(true);
+      pollVideoStatus(data.id);
+    } catch (err: any) {
+      setVideoError(err.message);
+      setVideoStarting(false);
+    }
+  }
+
+  function pollVideoStatus(id: string) {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/creative/video/${id}/status`);
+        const data = await res.json();
+        if (data.status === "ready" || data.status === "failed") {
+          clearInterval(interval);
+          setVideoPolling(false);
+          if (data.status === "failed") {
+            setVideoError(data.error_message ?? "Video generation failed");
+          } else {
+            setVideoResult(data);
+          }
+        }
+      } catch {
+        clearInterval(interval);
+        setVideoPolling(false);
+        setVideoError("Lost connection while checking video status");
+      }
+    }, 8000);
+  }
+
+  async function handleGenerateVoiceover() {
+    setVoiceoverError(null);
+    setVoiceoverUrl(null);
+    if (voiceoverText.trim().length < 1) return setVoiceoverError("Enter some text to read");
+    setVoiceoverLoading(true);
+    try {
+      const res = await fetch("/api/creative/voiceover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: voiceoverText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setVoiceoverUrl(data.url);
+    } catch (err: any) {
+      setVoiceoverError(err.message);
+    } finally {
+      setVoiceoverLoading(false);
     }
   }
 
@@ -244,6 +320,41 @@ export default function CreativeStudioPage() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Video className="w-4 h-4 text-slate-400" /> AI Video</p>
+        <p className="text-xs text-slate-400">Describe a short video (5-8 seconds). Takes 1-3 minutes to generate — feel free to keep working elsewhere while it renders.</p>
+        <input
+          value={videoPrompt}
+          onChange={(e) => setVideoPrompt(e.target.value)}
+          placeholder="e.g. A red Swift driving down a sunny highway, cinematic, upbeat"
+          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        <button onClick={handleGenerateVideo} disabled={videoStarting || videoPolling} className="btn-secondary text-sm">
+          {videoStarting || videoPolling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          {videoPolling ? "Rendering..." : "Generate Video"}
+        </button>
+        {videoError && <p className="text-xs text-red-600">{videoError}</p>}
+        {videoResult?.video_url && (
+          <video src={videoResult.video_url} controls className="w-full rounded-lg border border-slate-200" />
+        )}
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Mic className="w-4 h-4 text-slate-400" /> AI Voiceover</p>
+        <textarea
+          value={voiceoverText}
+          onChange={(e) => setVoiceoverText(e.target.value)}
+          placeholder="Paste the script you want read out loud..."
+          className="w-full h-20 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        <button onClick={handleGenerateVoiceover} disabled={voiceoverLoading} className="btn-secondary text-sm">
+          {voiceoverLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+          Generate Voiceover
+        </button>
+        {voiceoverError && <p className="text-xs text-red-600">{voiceoverError}</p>}
+        {voiceoverUrl && <audio src={voiceoverUrl} controls className="w-full" />}
       </div>
     </div>
   );
