@@ -1,165 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import sharp from "sharp";
-
-const GRAPH_VERSION = "v23.0";
-
-// ------------------------------------------------------------------
-// Step 1: Claude reads the dealer's one-line prompt and extracts
-// everything needed — copy, budget, city, and an image scene idea.
-// ------------------------------------------------------------------
-async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "car dealership") {
-  try {
-    const brandContext = brandProfile
-      ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
-      : "";
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 500,
-        messages: [
-          {
-            role: "user",
-            content: `You are an expert Facebook Lead Ad strategist for Indian ${businessCategory} businesses.
-Based on this dealer's requirement: "${prompt}"${brandContext}
-Return JSON only (no markdown, no explanation):
-{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger"}`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    const text = data.content?.[0]?.text ?? "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean);
-  } catch (err: any) {
-    console.error("[launch-full] generateAdPlan error:", err.message);
-    const city = prompt.match(/(lucknow|delhi|mumbai|kanpur|agra|varanasi|jaipur|hyderabad|bangalore|pune)/i)?.[1] ?? "Lucknow";
-    const car = prompt.match(/(swift|nexon|city|creta|seltos|brezza|alto|baleno|innova|fortuner)/i)?.[1] ?? "car";
-    return {
-      headline: `${car.charAt(0).toUpperCase() + car.slice(1)} Chahiye? Ab Milegi!`,
-      body: `${city.charAt(0).toUpperCase() + city.slice(1)} mein best ${car} deals. Free test drive book karo!`,
-      daily_budget: 500,
-      car_type: car,
-      targeting_city: city,
-      background_style: "studio_white",
-      image_scene_prompt: "clean professional studio background",
-      confidence_score: 50,
-      score_reasoning: "Generated via fallback template — not AI-scored.",
-    };
-  }
-}
-
-// ------------------------------------------------------------------
-// Step 2: Build the creative image (template or AI background)
-// ------------------------------------------------------------------
-const TEMPLATE_COLORS: Record<string, [string, string]> = {
-  studio_white: ["#f8fafc", "#cbd5e1"],
-  showroom: ["#1e293b", "#0f172a"],
-  road: ["#334155", "#0f172a"],
-  sunset: ["#fb923c", "#7c2d12"],
-};
-
-async function applyTemplateBackground(inputBuffer: Buffer, style: string): Promise<Buffer> {
-  const width = 1080;
-  const height = 1080;
-  const [c1, c2] = TEMPLATE_COLORS[style] ?? TEMPLATE_COLORS.studio_white;
-  const bgSvg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${c1}" /><stop offset="100%" stop-color="${c2}" />
-    </linearGradient></defs>
-    <rect width="100%" height="100%" fill="url(#g)" />
-  </svg>`;
-  const carImage = await sharp(inputBuffer).resize(880, 660, { fit: "inside" }).toBuffer();
-  const carMeta = await sharp(carImage).metadata();
-  const carW = carMeta.width ?? 880;
-  const carH = carMeta.height ?? 660;
-  return sharp(Buffer.from(bgSvg))
-    .composite([{ input: carImage, top: Math.max(0, Math.round((height - carH) / 2) - 60), left: Math.max(0, Math.round((width - carW) / 2)) }])
-    .png()
-    .toBuffer();
-}
-
-async function generateAIImage(scenePrompt: string, base64Data: string, mimeType: string, businessCategory: string = "car dealership"): Promise<Buffer> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not set");
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: `Facebook ad for an Indian ${businessCategory} business. Keep the product in the photo unchanged and realistic. Only change the background to: "${scenePrompt}". Photorealistic, professional advertisement lighting.` },
-            { inline_data: { mime_type: mimeType, data: base64Data } },
-          ],
-        }],
-      }),
-    }
-  );
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message ?? "Gemini request failed");
-  const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  const imagePart = parts.find((p: any) => p.inlineData || p.inline_data);
-  const inline = imagePart?.inlineData ?? imagePart?.inline_data;
-  if (!inline?.data) throw new Error("Gemini did not return an image");
-  return Buffer.from(inline.data, "base64");
-}
-
-function escapeXml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function buildTextOverlaySvg(width: number, height: number, headline: string, bodyCopy: string) {
-  const bannerHeight = 240;
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="black" stop-opacity="0" /><stop offset="100%" stop-color="black" stop-opacity="0.78" />
-    </linearGradient></defs>
-    <rect x="0" y="${height - bannerHeight}" width="${width}" height="${bannerHeight}" fill="url(#fade)" />
-    <text x="40" y="${height - 150}" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="white">${escapeXml(headline)}</text>
-    <text x="40" y="${height - 95}" font-family="Arial, sans-serif" font-size="28" fill="#e2e8f0">${escapeXml(bodyCopy)}</text>
-  </svg>`;
-}
-
-// ------------------------------------------------------------------
-// Step 3: Meta Graph API helpers — token/ad-account now come from the
-// calling dealership's own connection, not a shared env var.
-// ------------------------------------------------------------------
-async function metaPost(path: string, params: Record<string, any>, token: string) {
-  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...params, access_token: token }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) {
-    const e = data.error ?? {};
-    throw new Error(`[${path}] ${e.message ?? "Meta API error"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}${e.error_subcode ? ` (subcode ${e.error_subcode})` : ""}`);
-  }
-  return data;
-}
-
-async function resolveCityKey(cityName: string, token: string): Promise<string | null> {
-  try {
-    const url = `https://graph.facebook.com/${GRAPH_VERSION}/search?type=adgeolocation&location_types=["city"]&q=${encodeURIComponent(cityName)}&access_token=${token}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const match = data?.data?.find((d: any) => d.country_code === "IN") ?? data?.data?.[0];
-    return match?.key ?? null;
-  } catch {
-    return null;
-  }
-}
+import {
+  generateAdPlan,
+  buildFinalCreativeImage,
+  metaPost,
+  resolveCityKey,
+  GRAPH_VERSION,
+} from "@/lib/adEngine";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -194,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode, scheduled_start, destination } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id } = body;
   const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
 
   if (adDestination === "instant_form" && !leadFormId) {
@@ -232,13 +80,15 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
-  if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt is too short, add a bit more detail" }, { status: 400 });
+  if (!draft_id) {
+    if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
+    if (!prompt || prompt.trim().length < 10) return NextResponse.json({ error: "Prompt is too short, add a bit more detail" }, { status: 400 });
+  }
 
-  const match = String(photo_base64).match(/^data:(image\/\w+);base64,(.+)$/);
+  const match = String(photo_base64 ?? "").match(/^data:(image\/\w+);base64,(.+)$/);
   const mimeType = match?.[1] ?? "image/jpeg";
-  const rawBase64 = match?.[2] ?? photo_base64;
-  const inputBuffer = Buffer.from(rawBase64, "base64");
+  const rawBase64 = match?.[2] ?? photo_base64 ?? "";
+  const inputBuffer = rawBase64 ? Buffer.from(rawBase64, "base64") : Buffer.alloc(0);
 
   const serviceClient = createServiceClient();
 
@@ -250,41 +100,76 @@ export async function POST(request: Request) {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
-  // Step 1: plan the ad (copy + targeting + scene)
-  const plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "car dealership");
+  // Step 1: plan the ad (copy + targeting + scene) — unless we're
+  // launching an already-previewed draft, in which case reuse its
+  // saved plan exactly as shown to the dealer, rather than risking
+  // Claude generating something slightly different a second time.
+  let plan: any;
+  let draft: any;
 
-  const { data: draft } = await serviceClient
-    .from("ad_creatives")
-    .insert({
-      dealership_id: dealershipId,
-      mode: image_mode === "ai_generate" ? "ai_generate" : "template",
-      prompt,
-      background_style: plan.background_style,
-      headline: plan.headline,
-      body_copy: plan.body,
-      creative_score: plan.confidence_score ?? null,
-      score_reasoning: plan.score_reasoning ?? null,
-      status: "draft",
-    })
-    .select()
-    .single();
+  if (draft_id) {
+    const { data: existingDraft, error: draftFetchError } = await serviceClient
+      .from("ad_creatives")
+      .select("*")
+      .eq("id", draft_id)
+      .eq("dealership_id", dealershipId)
+      .eq("status", "draft")
+      .single();
+
+    if (draftFetchError || !existingDraft) {
+      return NextResponse.json({ error: "That preview has expired or was already launched — generate a new one." }, { status: 404 });
+    }
+    if (!existingDraft.plan_json || !existingDraft.generated_image_url) {
+      return NextResponse.json({ error: "That preview is incomplete — generate a new one." }, { status: 400 });
+    }
+
+    plan = existingDraft.plan_json;
+    draft = existingDraft;
+  } else {
+    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "car dealership");
+
+    const { data: newDraft } = await serviceClient
+      .from("ad_creatives")
+      .insert({
+        dealership_id: dealershipId,
+        mode: image_mode === "ai_generate" ? "ai_generate" : "template",
+        prompt,
+        background_style: plan.background_style,
+        headline: plan.headline,
+        body_copy: plan.body,
+        creative_score: plan.confidence_score ?? null,
+        score_reasoning: plan.score_reasoning ?? null,
+        plan_json: plan,
+        status: "draft",
+      })
+      .select()
+      .single();
+    draft = newDraft;
+  }
 
   try {
-    // Step 2: build the image
-    const processedBuffer = image_mode === "ai_generate"
-      ? await generateAIImage(plan.image_scene_prompt, rawBase64, mimeType, dealership?.business_category ?? "car dealership")
-      : await applyTemplateBackground(inputBuffer, plan.background_style ?? "studio_white");
+    // Step 2: build the image — unless launching from an already-
+    // previewed draft, in which case reuse that exact image (fetched
+    // back from our storage) instead of regenerating it.
+    let finalBuffer: Buffer;
+    let publicUrlData: { publicUrl: string };
 
-    const finalBuffer = await sharp(processedBuffer)
-      .resize(1080, 1080, { fit: "cover" })
-      .composite([{ input: Buffer.from(buildTextOverlaySvg(1080, 1080, plan.headline, plan.body)), top: 0, left: 0 }])
-      .png()
-      .toBuffer();
+    if (draft_id) {
+      const imageRes = await fetch(draft.generated_image_url);
+      if (!imageRes.ok) throw new Error("Couldn't retrieve the previewed image — generate a new preview.");
+      finalBuffer = Buffer.from(await imageRes.arrayBuffer());
+      publicUrlData = { publicUrl: draft.generated_image_url };
+    } else {
+      finalBuffer = await buildFinalCreativeImage(
+        image_mode, inputBuffer, rawBase64, mimeType, plan, dealership?.business_category ?? "car dealership"
+      );
 
-    // Save a copy in our own storage for preview/records
-    const filePath = `${dealershipId}/${draft.id}.png`;
-    await serviceClient.storage.from("ad-creatives").upload(filePath, finalBuffer, { contentType: "image/png", upsert: true });
-    const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
+      // Save a copy in our own storage for preview/records
+      const filePath = `${dealershipId}/${draft.id}.png`;
+      await serviceClient.storage.from("ad-creatives").upload(filePath, finalBuffer, { contentType: "image/png", upsert: true });
+      const { data } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
+      publicUrlData = data;
+    }
 
     // Step 3: upload the image to Meta and get an image_hash
     const uploadRes = await metaPost(`${adAccount}/adimages`, {
