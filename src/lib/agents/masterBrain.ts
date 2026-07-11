@@ -13,6 +13,7 @@ import { generateSeoIdeas } from "./seoAgent";
 import { searchCompetitorAds } from "./researchAgent";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { generateSocialCaption } from "./socialMediaAgent";
+import { matchCampaign, setCampaignStatus } from "./campaignEditAgent";
 
 type Intent =
   | "ad_launch"
@@ -23,6 +24,9 @@ type Intent =
   | "social_post_idea"
   | "retention_query"
   | "strategy_query"
+  | "campaign_pause"
+  | "campaign_resume"
+  | "campaign_budget_change"
   | "unclear";
 
 interface ClassifiedIntent {
@@ -73,6 +77,9 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
 "social_post_idea" = wants a caption or idea for an organic (non-ad) social post.
 "retention_query" = asking about re-engaging or following up with existing customers.
 "strategy_query" = asking for a marketing plan, roadmap, budget allocation, or "what should my overall strategy be".
+"campaign_pause" = asking to pause, stop, or turn off a specific existing campaign (not a general "what should I pause" question — that's optimization_query).
+"campaign_resume" = asking to resume, restart, unpause, or turn back on a specific existing campaign.
+"campaign_budget_change" = asking to increase/decrease/change the budget of a specific existing campaign.
 "unclear" = anything else, including greetings or vague requests.`,
           },
         ],
@@ -233,10 +240,86 @@ export async function routeRequest(
     };
   }
 
+  if (classification.intent === "campaign_pause" || classification.intent === "campaign_resume") {
+    const { data: campaigns } = await supabase
+      .from("ad_creatives")
+      .select("id, headline, car_type, targeting_city, daily_budget, meta_status, meta_ad_id")
+      .eq("dealership_id", dealershipId)
+      .eq("status", "launched");
+
+    const matched = await matchCampaign(campaigns ?? [], message);
+    if (!matched) {
+      return {
+        intent: classification.intent,
+        status: "unclear",
+        message: (campaigns?.length ?? 0) === 0
+          ? "You don't have any launched campaigns yet."
+          : "I'm not sure which campaign you mean — go to \"Marketing\" -> \"My Campaigns\" to pick the right one directly.",
+      };
+    }
+
+    const newStatus = classification.intent === "campaign_pause" ? "PAUSED" : "ACTIVE";
+    const result = await setCampaignStatus(supabase, dealershipId, matched, newStatus);
+    return {
+      intent: classification.intent,
+      status: result.success ? "auto_approved" : "unclear",
+      message: result.success
+        ? `Done — "${matched.headline}" is now ${newStatus === "PAUSED" ? "paused" : "active"}.`
+        : `Couldn't update "${matched.headline}": ${result.error}`,
+    };
+  }
+
+  if (classification.intent === "campaign_budget_change") {
+    const { data: campaigns } = await supabase
+      .from("ad_creatives")
+      .select("id, headline, car_type, targeting_city, daily_budget, meta_status, meta_ad_id")
+      .eq("dealership_id", dealershipId)
+      .eq("status", "launched");
+
+    const matched = await matchCampaign(campaigns ?? [], message);
+    if (!matched) {
+      return {
+        intent: "campaign_budget_change",
+        status: "unclear",
+        message: (campaigns?.length ?? 0) === 0
+          ? "You don't have any launched campaigns yet."
+          : "I'm not sure which campaign you mean — go to \"Marketing\" -> \"My Campaigns\" to change the budget directly.",
+      };
+    }
+    if (!classification.daily_budget) {
+      return {
+        intent: "campaign_budget_change",
+        status: "unclear",
+        message: `Found "${matched.headline}" — what should the new daily budget be?`,
+      };
+    }
+
+    // Budget changes always go through approval — Ovaiz chose this
+    // explicitly earlier, and that doesn't change just because the
+    // request arrived via chat instead of a form.
+    const { data: approval } = await supabase
+      .from("pending_approvals")
+      .insert({
+        dealership_id: dealershipId,
+        requested_by_agent: "master_brain",
+        action_type: "change_campaign_budget",
+        action_details: { campaign_id: matched.id, headline: matched.headline, old_budget: matched.daily_budget, new_budget: classification.daily_budget },
+        amount: classification.daily_budget,
+      })
+      .select().single();
+
+    return {
+      intent: "campaign_budget_change",
+      status: "pending_approval",
+      message: `Got it — I've queued a budget change for "${matched.headline}" (₹${matched.daily_budget} -> ₹${classification.daily_budget}/day) in Approvals for your review.`,
+      details: approval,
+    };
+  }
+
   return {
     intent: "unclear",
     status: "unclear",
     message:
-      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, or follow up with past customers.',
+      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, pause/resume a campaign, change a campaign\'s budget, or follow up with past customers.',
   };
 }

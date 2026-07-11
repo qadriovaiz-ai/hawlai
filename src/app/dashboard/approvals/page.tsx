@@ -72,11 +72,17 @@ export default async function ApprovalsPage() {
                     {details.original_request && (
                       <p className="text-sm text-slate-500 mt-0.5">"{details.original_request}"</p>
                     )}
+                    {details.headline && approval.action_type === "change_campaign_budget" && (
+                      <p className="text-sm text-slate-500 mt-0.5">"{details.headline}"</p>
+                    )}
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-xs text-slate-400">
                       {details.daily_budget && <span>Daily budget: {formatCurrency(details.daily_budget)}</span>}
                       {details.duration_days && <span>Duration: {details.duration_days} days</span>}
                       {details.car_type && <span>Item: {details.car_type}</span>}
                       {details.targeting_city && <span>City: {details.targeting_city}</span>}
+                      {approval.action_type === "change_campaign_budget" && (
+                        <span>{formatCurrency(details.old_budget ?? 0)} -&gt; {formatCurrency(details.new_budget ?? 0)}</span>
+                      )}
                     </div>
                   </div>
                   <ApprovalActions approvalId={approval.id} />
