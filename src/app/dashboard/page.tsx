@@ -67,7 +67,7 @@ export default async function DashboardHomePage() {
       </div>
 
       <Link
-        href="/dashboard/ads/full-launch"
+        href="/dashboard/marketing"
         className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-xl p-4 hover:bg-purple-100 transition-colors"
       >
         <div className="w-9 h-9 bg-purple-600 rounded-lg flex items-center justify-center shrink-0">

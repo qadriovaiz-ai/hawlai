@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, Phone, Calendar, BarChart3,
-  PhoneCall, Car, Megaphone, Settings, ShieldCheck, Sparkles,
-  Kanban, FileText, Search, Share2, TrendingUp, Gauge, Heart, Clapperboard, CalendarDays, Globe
+  LayoutDashboard, Users, Megaphone, Settings, ShieldCheck, Sparkles,
+  CalendarDays, BarChart3, Car,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,39 +13,16 @@ const NAV_GROUPS = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/dashboard/reports", label: "Reports", icon: FileText },
       { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
     ],
   },
   {
-    label: "Leads & Sales",
+    label: "Work",
     items: [
-      { href: "/dashboard/leads", label: "Leads", icon: Users },
-      { href: "/dashboard/pipeline", label: "Pipeline", icon: Kanban },
-      { href: "/dashboard/retention", label: "Retention", icon: Heart },
-      { href: "/dashboard/queue", label: "Call Queue", icon: PhoneCall },
-      { href: "/dashboard/calls", label: "Call History", icon: Phone },
-      { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
+      { href: "/dashboard/marketing", label: "Marketing", icon: Megaphone },
+      { href: "/dashboard/leads-hub", label: "Leads & Sales", icon: Users },
+      { href: "/dashboard/insights", label: "Insights", icon: BarChart3 },
       { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
-    ],
-  },
-  {
-    label: "Marketing",
-    items: [
-      { href: "/dashboard/ads/full-launch", label: "Launch Ad", icon: Megaphone },
-      { href: "/dashboard/ads/campaigns", label: "My Campaigns", icon: BarChart3 },
-      { href: "/dashboard/website", label: "Website", icon: Globe },
-      { href: "/dashboard/creative-studio", label: "Creative Studio", icon: Clapperboard },
-      { href: "/dashboard/social", label: "Social Post", icon: Share2 },
-      { href: "/dashboard/research", label: "Research", icon: Search },
-      { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
-    ],
-  },
-  {
-    label: "Performance",
-    items: [
-      { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/dashboard/optimization", label: "Optimization", icon: Gauge },
     ],
   },
   {
