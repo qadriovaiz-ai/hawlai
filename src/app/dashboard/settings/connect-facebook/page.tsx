@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Facebook, CheckCircle, AlertCircle, Mail } from "lucide-react";
 import ConnectFacebookForm from "@/components/settings/ConnectFacebookForm";
+import FacebookSetupGuide from "@/components/settings/FacebookSetupGuide";
 
 export default async function ConnectFacebookPage({
   searchParams,
@@ -45,6 +46,8 @@ export default async function ConnectFacebookPage({
           <p className="text-sm text-red-300">An error occurred while connecting: {error}</p>
         </div>
       )}
+
+      {!isConnected && <FacebookSetupGuide />}
 
       {hasPending ? (
         <div className="card p-5">
