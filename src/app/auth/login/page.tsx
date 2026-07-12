@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Car, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,11 +37,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-brand-600 rounded-2xl mb-4 shadow-lg">
-            <Car className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">Hawlai</h1>
-          <p className="text-slate-400 text-sm mt-1">Lead Qualification Platform</p>
+          <Image src="/logo-full.png" alt="Hawlai — AI Marketing. Smarter Growth." width={220} height={220} className="mx-auto rounded-2xl" />
         </div>
 
         {/* Card */}

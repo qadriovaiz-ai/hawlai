@@ -1,10 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Megaphone, Settings, ShieldCheck, Sparkles,
-  CalendarDays, BarChart3, Car, Zap,
+  CalendarDays, BarChart3, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,8 +43,8 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
     <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
       <div className="p-5 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shrink-0 shadow-sm shadow-brand-600/30">
-            <Car className="w-5 h-5 text-white" />
+          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 shadow-sm shadow-brand-600/30">
+            <Image src="/logo-icon.png" alt="Hawlai" width={36} height={36} className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-slate-900 truncate">Hawlai</p>

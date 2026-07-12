@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Car } from "lucide-react";
+import Image from "next/image";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopBar from "@/components/dashboard/TopBar";
 import MasterBrainWidget from "@/components/dashboard/MasterBrainWidget";
@@ -33,8 +33,8 @@ export default async function DashboardLayout({
       <div className="min-h-screen bg-slate-50">
         <header className="h-14 flex items-center px-5 border-b border-slate-200 bg-white">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shrink-0">
-              <Car className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0">
+              <Image src="/logo-icon.png" alt="Hawlai" width={28} height={28} className="w-full h-full object-cover" />
             </div>
             <span className="text-sm font-bold text-slate-900">Hawlai</span>
           </Link>

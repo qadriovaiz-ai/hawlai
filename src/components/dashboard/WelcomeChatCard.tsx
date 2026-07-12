@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
+import Image from "next/image";
+import { Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
 
 export default function WelcomeChatCard({ dealershipName, ownerName }: { dealershipName: string; ownerName: string | null }) {
   const router = useRouter();
@@ -116,8 +117,8 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
 
   return (
     <div className="w-full max-w-2xl text-center">
-      <div className="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-600/30">
-        <Sparkles className="w-6 h-6 text-white" />
+      <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-6 shadow-lg shadow-brand-600/30">
+        <Image src="/logo-icon.png" alt="Hawlai" width={56} height={56} className="w-full h-full object-cover" />
       </div>
       <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
         {ownerName ? `Welcome, ${ownerName}. ` : "Welcome. "}Tell me about {dealershipName}.
