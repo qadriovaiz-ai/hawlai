@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AutoPilot AI — Lead Qualification Platform",
-  description: "AI-powered lead qualification and calling platform for automobile dealerships",
+  title: "Hawlai — AI Marketing Operating System",
+  description: "AI-powered marketing automation, lead qualification, and advertising platform for any business",
 };
 
 export default function RootLayout({

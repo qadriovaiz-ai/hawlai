@@ -36,7 +36,7 @@ export default async function DashboardLayout({
             <div className="w-7 h-7 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shrink-0">
               <Car className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-900">AutoPilot AI</span>
+            <span className="text-sm font-bold text-slate-900">Hawlai</span>
           </Link>
         </header>
         <main>{children}</main>

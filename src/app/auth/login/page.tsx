@@ -38,7 +38,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 bg-brand-600 rounded-2xl mb-4 shadow-lg">
             <Car className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">AutoPilot AI</h1>
+          <h1 className="text-2xl font-bold text-white">Hawlai</h1>
           <p className="text-slate-400 text-sm mt-1">Lead Qualification Platform</p>
         </div>
 

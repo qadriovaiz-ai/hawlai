@@ -12,7 +12,7 @@ const oswald = Oswald({ subsets: ["latin"], weight: ["500", "600", "700"], varia
 // Dynamic per-dealer SEO metadata — without this, every dealer's page
 // inherited Hawlai's own generic title/description (invisible bug:
 // looked fine in the browser, but Google indexing and WhatsApp/
-// Facebook link-share previews would all show "AutoPilot AI" instead
+// Facebook link-share previews would all show "Hawlai" instead
 // of the dealer's actual business).
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

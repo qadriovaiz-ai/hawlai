@@ -46,7 +46,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
             <Car className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900 truncate">AutoPilot AI</p>
+            <p className="text-sm font-bold text-slate-900 truncate">Hawlai</p>
             <p className="text-xs text-slate-500 truncate">{dealershipName}</p>
           </div>
         </div>

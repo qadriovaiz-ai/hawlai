@@ -5,7 +5,7 @@ export default function PrivacyPolicyPage() {
       <p className="text-sm text-slate-500 mb-8">Last updated: July 2026</p>
 
       <p className="text-slate-700">
-        AutoPilot AI ("we", "our", "us") provides lead management and advertising automation
+        Hawlai ("we", "our", "us") provides lead management and advertising automation
         tools for automobile dealerships in India. This policy explains what information we
         collect, how we use it, and how it is protected.
       </p>

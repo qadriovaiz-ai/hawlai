@@ -199,7 +199,7 @@ export async function POST(request: Request) {
 
     // Step 5: campaign
     const campaignRes = await metaPost(`${adAccount}/campaigns`, {
-      name: `AutoPilot - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
+      name: `Hawlai - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
       special_ad_categories: ["NONE"],
