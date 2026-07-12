@@ -28,14 +28,18 @@ export async function PATCH(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { business_category } = await request.json();
-  if (!business_category || business_category.trim().length < 2) {
+  const { business_category, onboarding_completed } = await request.json();
+
+  if (business_category !== undefined && business_category.trim().length < 2) {
     return NextResponse.json({ error: "Enter a business type" }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("dealerships")
-    .update({ business_category: business_category.trim() })
+    .update({
+      ...(business_category !== undefined && { business_category: business_category.trim() }),
+      ...(onboarding_completed !== undefined && { onboarding_completed }),
+    })
     .eq("id", dealershipId)
     .select()
     .single();
