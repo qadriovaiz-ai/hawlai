@@ -14,6 +14,7 @@ import { searchCompetitorAds } from "./researchAgent";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { generateSocialCaption } from "./socialMediaAgent";
 import { matchCampaign, setCampaignStatus, proposeTargetingChange } from "./campaignEditAgent";
+import { getCampaignPerformance } from "./analyticsAgent";
 
 type Intent =
   | "ad_launch"
@@ -112,23 +113,78 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
   }
 }
 
-async function answerAnalyticsQuery(supabase: any, dealershipId: string): Promise<string> {
-  const [{ data: leads }, { data: calls }, { data: appointments }] = await Promise.all([
+async function answerAnalyticsQuery(supabase: any, dealershipId: string, question: string): Promise<string> {
+  const [{ data: leads }, { data: calls }, { data: appointments }, liveCampaigns, { data: history }] = await Promise.all([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId),
     supabase.from("calls").select("*").eq("dealership_id", dealershipId),
     supabase.from("appointments").select("*").eq("dealership_id", dealershipId),
+    getCampaignPerformance(supabase, dealershipId),
+    // Permanent record — includes campaigns that are paused or no
+    // longer 'launched' status, not just what's currently live.
+    supabase.from("campaign_performance_history").select("*").eq("dealership_id", dealershipId),
   ]);
 
   const totalLeads = leads?.length ?? 0;
+  if (totalLeads === 0 && liveCampaigns.campaigns.length === 0) {
+    return "No leads or campaigns yet. Launch an ad first, then performance will show up here.";
+  }
+
+  // Aggregate the permanent history into lifetime-per-campaign totals
+  // — this is what makes past/paused campaigns answerable, not just
+  // whatever is currently live.
+  const lifetimeByCampaign = new Map<string, { headline: string; spend: number; leads: number; revenue: number; conversions: number }>();
+  for (const row of history ?? []) {
+    const existing = lifetimeByCampaign.get(row.ad_creative_id) ?? { headline: row.headline ?? "Untitled", spend: 0, leads: 0, revenue: 0, conversions: 0 };
+    existing.spend += Number(row.spend ?? 0);
+    existing.leads += Number(row.leads ?? 0);
+    existing.revenue += Number(row.revenue ?? 0);
+    existing.conversions += Number(row.conversions ?? 0);
+    lifetimeByCampaign.set(row.ad_creative_id, existing);
+  }
+
   const hotLeads = leads?.filter((l: any) => l.lead_temperature === "hot").length ?? 0;
   const warmLeads = leads?.filter((l: any) => l.lead_temperature === "warm").length ?? 0;
   const coldLeads = leads?.filter((l: any) => l.lead_temperature === "cold").length ?? 0;
 
-  if (totalLeads === 0) return "No leads yet. Launch an ad first, then performance will show up here.";
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 350,
+        messages: [
+          {
+            role: "user",
+            content: `A dealer asked: "${question}"
 
-  return `You have ${totalLeads} total leads — ${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold. ` +
-    `${calls?.length ?? 0} calls made, and ${appointments?.length ?? 0} appointments booked. ` +
-    `See the Analytics page for detailed cost-per-lead.`;
+Answer using ONLY this real data — don't invent numbers:
+Leads: ${totalLeads} total (${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold). ${calls?.length ?? 0} calls made, ${appointments?.length ?? 0} appointments booked.
+
+Lifetime performance per campaign (includes past/paused ones, not just currently active):
+${Array.from(lifetimeByCampaign.values()).map((c) => `- "${c.headline}": ₹${c.spend} spent, ${c.leads} leads, ${c.conversions} sales, ₹${c.revenue} revenue`).join("\n") || "No historical campaign data recorded yet."}
+
+Currently live campaigns:
+${liveCampaigns.campaigns.map((c) => `- "${c.headline}" (${c.meta_status}): ₹${c.spend} spent, ${c.leads} leads`).join("\n") || "None currently active."}
+
+Answer in 2-4 plain-language sentences, directly addressing what they asked. If the data doesn't cover what they're asking, say so honestly rather than guessing.`,
+          },
+        ],
+      }),
+    });
+    if (!response.ok) throw new Error("Claude API error");
+    const bodyText = await response.text();
+    const data = JSON.parse(bodyText);
+    const text = data.content?.[0]?.text ?? "";
+    return text.trim() || "Couldn't generate an answer right now — check the Analytics page directly.";
+  } catch (err: any) {
+    console.error("[master-brain] answerAnalyticsQuery error:", err.message);
+    return `You have ${totalLeads} total leads — ${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold. See the Analytics page for campaign-level detail.`;
+  }
 }
 
 export async function routeRequest(
@@ -181,7 +237,7 @@ export async function routeRequest(
   }
 
   if (classification.intent === "analytics_query") {
-    return { intent: "analytics_query", status: "answered", message: await answerAnalyticsQuery(supabase, dealershipId) };
+    return { intent: "analytics_query", status: "answered", message: await answerAnalyticsQuery(supabase, dealershipId, message) };
   }
 
   if (classification.intent === "seo_query") {
