@@ -22,35 +22,35 @@ export default function KPICards({ kpis }: { kpis: KPIs }) {
       label: "Hot Leads 🔥",
       value: kpis.hotLeads,
       icon: Flame,
-      color: "text-red-600 bg-red-50",
+      color: "text-red-400 bg-red-500/10",
       change: `${kpis.totalLeads > 0 ? Math.round((kpis.hotLeads / kpis.totalLeads) * 100) : 0}%`,
     },
     {
       label: "Warm Leads ⚡",
       value: kpis.warmLeads,
       icon: Zap,
-      color: "text-amber-600 bg-amber-50",
+      color: "text-amber-400 bg-amber-500/10",
       change: `${kpis.totalLeads > 0 ? Math.round((kpis.warmLeads / kpis.totalLeads) * 100) : 0}%`,
     },
     {
       label: "Cold Leads ❄️",
       value: kpis.coldLeads,
       icon: Snowflake,
-      color: "text-blue-600 bg-blue-50",
+      color: "text-blue-400 bg-blue-500/10",
       change: `${kpis.totalLeads > 0 ? Math.round((kpis.coldLeads / kpis.totalLeads) * 100) : 0}%`,
     },
     {
       label: "Appointments",
       value: kpis.appointments,
       icon: Calendar,
-      color: "text-green-600 bg-green-50",
+      color: "text-green-400 bg-green-500/10",
       change: "+5%",
     },
     {
       label: "Calls Made",
       value: kpis.calls,
       icon: Phone,
-      color: "text-purple-600 bg-purple-50",
+      color: "text-purple-400 bg-purple-500/10",
       change: "+18%",
     },
   ];
@@ -63,7 +63,7 @@ export default function KPICards({ kpis }: { kpis: KPIs }) {
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
               <Icon className="w-4 h-4" />
             </div>
-            <span className="text-xs text-green-600 font-medium bg-green-50 px-1.5 py-0.5 rounded">
+            <span className="text-xs text-green-400 font-medium bg-green-500/10 px-1.5 py-0.5 rounded">
               {change}
             </span>
           </div>

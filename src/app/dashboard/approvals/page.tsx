@@ -5,9 +5,9 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import ApprovalActions from "@/components/approvals/ApprovalActions";
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-amber-50 text-amber-700 border border-amber-200",
-  approved: "bg-green-50 text-green-700 border border-green-200",
-  rejected: "bg-red-50 text-red-700 border border-red-200",
+  pending: "bg-amber-500/10 text-amber-300 border border-amber-700/50",
+  approved: "bg-green-500/10 text-green-300 border border-green-700/50",
+  rejected: "bg-red-500/10 text-red-300 border border-red-700/50",
 };
 
 export default async function ApprovalsPage() {
@@ -31,8 +31,8 @@ export default async function ApprovalsPage() {
   return (
     <div className="max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <ShieldCheck className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <ShieldCheck className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Pending Approvals</h1>
@@ -42,7 +42,7 @@ export default async function ApprovalsPage() {
 
       {pending.length === 0 ? (
         <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="w-7 h-7 text-purple-400" />
           </div>
           <p className="text-slate-700 font-medium">No pending approvals</p>

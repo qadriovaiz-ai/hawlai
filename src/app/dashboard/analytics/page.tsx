@@ -90,9 +90,9 @@ export default async function AnalyticsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Qualification Rate", value: `${qualificationRate}%`, sub: "Hot + Warm leads", color: "bg-brand-50 text-brand-700" },
-          { label: "Hot Lead Percentage", value: `${hotPct}%`, sub: "Of all leads", color: "bg-red-50 text-red-700" },
-          { label: "Appointment Rate", value: `${appointmentRate}%`, sub: "Leads to appointments", color: "bg-green-50 text-green-700" },
-          { label: "Call Completion", value: `${callCompletionRate}%`, sub: "Calls answered", color: "bg-purple-50 text-purple-700" },
+          { label: "Hot Lead Percentage", value: `${hotPct}%`, sub: "Of all leads", color: "bg-red-500/10 text-red-300" },
+          { label: "Appointment Rate", value: `${appointmentRate}%`, sub: "Leads to appointments", color: "bg-green-500/10 text-green-300" },
+          { label: "Call Completion", value: `${callCompletionRate}%`, sub: "Calls answered", color: "bg-purple-500/10 text-purple-300" },
         ].map(({ label, value, sub, color }) => (
           <div key={label} className="card p-5">
             <div className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold mb-3 ${color}`}>
@@ -147,7 +147,7 @@ export default async function AnalyticsPage() {
                     <td className="py-2 text-slate-700">{c.revenue > 0 ? formatCurrency(c.revenue) : "—"}</td>
                     <td className="py-2 font-medium">
                       {c.spend > 0 && c.revenue > 0 ? (
-                        <span className={c.revenue / c.spend >= 1 ? "text-green-600" : "text-amber-600"}>
+                        <span className={c.revenue / c.spend >= 1 ? "text-green-400" : "text-amber-400"}>
                           {(c.revenue / c.spend).toFixed(1)}x
                         </span>
                       ) : "—"}

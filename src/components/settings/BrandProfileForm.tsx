@@ -128,16 +128,16 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
 
   return (
     <div className="space-y-5">
-      <div className="card p-5 space-y-3 bg-purple-50/50 border-purple-100">
+      <div className="card p-5 space-y-3 bg-purple-500/10/50 border-purple-700/40">
         <button onClick={() => setShowAnalyzer(!showAnalyzer)} className="w-full flex items-center justify-between text-left">
-          <span className="text-sm font-semibold text-purple-900 flex items-center gap-2">
+          <span className="text-sm font-semibold text-purple-200 flex items-center gap-2">
             <Wand2 className="w-4 h-4" /> Let AI fill this in for you
           </span>
           {showAnalyzer ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
         </button>
         {showAnalyzer && (
           <div className="space-y-2.5">
-            <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 border border-purple-100 w-fit">
+            <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 border border-purple-700/40 w-fit">
               <button
                 onClick={() => setAnalyzeMode("describe")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -158,22 +158,22 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
 
             {analyzeMode === "describe" ? (
               <>
-                <p className="text-xs text-purple-600">Tell me about your business in your own words — what you sell, who your customers are, what makes you different. AI will turn this into your brand profile below.</p>
+                <p className="text-xs text-purple-400">Tell me about your business in your own words — what you sell, who your customers are, what makes you different. AI will turn this into your brand profile below.</p>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="e.g. Hum ek car dealership hain Lucknow mein, 20 saal se. Family-friendly hain, honest dealings pe focus karte hain, EMI options bhi dete hain..."
-                  className="w-full h-24 p-2.5 text-sm border border-purple-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
+                  className="w-full h-24 p-2.5 text-sm border border-purple-700/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
                 />
               </>
             ) : (
               <>
-                <p className="text-xs text-purple-600">Paste your website URL — AI will read it and draft your profile below.</p>
+                <p className="text-xs text-purple-400">Paste your website URL — AI will read it and draft your profile below.</p>
                 <input
                   value={websiteUrl}
                   onChange={(e) => setWebsiteUrl(e.target.value)}
                   placeholder="https://yourbusiness.com"
-                  className="w-full p-2.5 text-sm border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
+                  className="w-full p-2.5 text-sm border border-purple-700/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
                 />
               </>
             )}
@@ -182,9 +182,9 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
               Analyze
             </button>
-            {analyzeError && <p className="text-xs text-red-600">{analyzeError}</p>}
+            {analyzeError && <p className="text-xs text-red-400">{analyzeError}</p>}
             {analysisSummary && (
-              <p className="text-xs text-purple-700 bg-slate-100 rounded-lg p-2.5 border border-purple-100">{analysisSummary}</p>
+              <p className="text-xs text-purple-300 bg-slate-100 rounded-lg p-2.5 border border-purple-700/40">{analysisSummary}</p>
             )}
           </div>
         )}
@@ -269,7 +269,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>

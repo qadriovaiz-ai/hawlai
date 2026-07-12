@@ -22,8 +22,8 @@ export default async function RetentionPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Heart className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Heart className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Customer Retention</h1>

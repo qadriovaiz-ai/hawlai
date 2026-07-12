@@ -110,16 +110,16 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
       </div>
 
       {/* CSV Format hint */}
-      <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
+      <div className="bg-blue-500/10 border border-blue-700/40 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
         <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-blue-700">
+        <p className="text-xs text-blue-300">
           CSV format: <strong>Name, Phone, Vehicle, Purchase Year, Budget</strong> — All leads are automatically scored by the AI engine.
         </p>
       </div>
 
       {/* Upload result */}
       {result && (
-        <div className={`rounded-lg px-4 py-3 mb-4 flex items-start gap-3 ${result.success > 0 ? "bg-green-50 border border-green-100" : "bg-red-50 border border-red-100"}`}>
+        <div className={`rounded-lg px-4 py-3 mb-4 flex items-start gap-3 ${result.success > 0 ? "bg-green-500/10 border border-green-700/40" : "bg-red-500/10 border border-red-700/40"}`}>
           {result.success > 0 ? (
             <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
           ) : (
@@ -127,10 +127,10 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
           )}
           <div>
             {result.success > 0 && (
-              <p className="text-sm font-medium text-green-700">{result.success} leads imported successfully</p>
+              <p className="text-sm font-medium text-green-300">{result.success} leads imported successfully</p>
             )}
             {result.errors.length > 0 && (
-              <ul className="text-xs text-red-600 mt-1 space-y-0.5">
+              <ul className="text-xs text-red-400 mt-1 space-y-0.5">
                 {result.errors.slice(0, 5).map((e, i) => <li key={i}>• {e}</li>)}
                 {result.errors.length > 5 && <li>...and {result.errors.length - 5} more errors</li>}
               </ul>

@@ -49,7 +49,7 @@ export default function PrivacyPolicyPage() {
       <h2 className="text-lg font-semibold text-slate-900 mt-8 mb-2">Contact</h2>
       <p className="text-slate-700">
         For any privacy questions or data deletion requests, contact us at{" "}
-        <a href="mailto:qadriovaiz.ai@gmail.com" className="text-purple-600">qadriovaiz.ai@gmail.com</a>.
+        <a href="mailto:qadriovaiz.ai@gmail.com" className="text-purple-400">qadriovaiz.ai@gmail.com</a>.
       </p>
     </div>
   );

@@ -54,8 +54,8 @@ export default function AutomationSettingsPage() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Zap className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Zap className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Automation Permissions</h1>
@@ -114,7 +114,7 @@ export default function AutomationSettingsPage() {
       </div>
 
       {saving && <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Saving...</p>}
-      {saved && <p className="text-xs text-green-600 flex items-center gap-1.5"><Check className="w-3 h-3" /> Saved</p>}
+      {saved && <p className="text-xs text-green-400 flex items-center gap-1.5"><Check className="w-3 h-3" /> Saved</p>}
     </div>
   );
 }

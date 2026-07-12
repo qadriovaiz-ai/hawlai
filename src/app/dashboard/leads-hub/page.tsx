@@ -21,7 +21,7 @@ export default function LeadsHubPage() {
     <HubTabs
       title="Leads & Sales"
       description="Every lead, every stage, every follow-up — in one place"
-      icon={<Users className="w-5 h-5 text-purple-600" />}
+      icon={<Users className="w-5 h-5 text-purple-400" />}
       tabs={tabs}
     />
   );

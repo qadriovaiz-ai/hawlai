@@ -5,9 +5,9 @@ import Link from "next/link";
 import { Sparkles, Check, X, ArrowRight, AlertCircle } from "lucide-react";
 
 const PRIORITY_STYLE: Record<string, string> = {
-  high: "border-l-red-400 bg-red-50/50",
-  medium: "border-l-amber-400 bg-amber-50/50",
-  low: "border-l-slate-300 bg-slate-50/50",
+  high: "border-l-red-400 bg-red-500/10",
+  medium: "border-l-amber-400 bg-amber-500/10",
+  low: "border-l-slate-300 bg-slate-500/10",
 };
 
 const PRIORITY_ICON: Record<string, string> = {
@@ -44,13 +44,13 @@ export default function OpportunityFeed({ initial }: { initial: Opportunity[] })
 
   if (items.length === 0) {
     return (
-      <div className="card p-5 flex items-center gap-3 bg-green-50/50 border-green-100">
-        <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
-          <Check className="w-4 h-4 text-green-600" />
+      <div className="card p-5 flex items-center gap-3 bg-green-500/10 border-green-700/40">
+        <div className="w-9 h-9 bg-green-500/20 rounded-lg flex items-center justify-center shrink-0">
+          <Check className="w-4 h-4 text-green-400" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-green-800">You're all caught up</p>
-          <p className="text-xs text-green-600">No open opportunities right now</p>
+          <p className="text-sm font-semibold text-green-300">You're all caught up</p>
+          <p className="text-xs text-green-500">No open opportunities right now</p>
         </div>
       </div>
     );
@@ -84,7 +84,7 @@ export default function OpportunityFeed({ initial }: { initial: Opportunity[] })
                 onClick={() => handleAction(item.id, "completed")}
                 disabled={loadingId === item.id}
                 title="Mark as done"
-                className="w-7 h-7 flex items-center justify-center rounded-md text-green-600 hover:bg-green-100 transition-colors disabled:opacity-40"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-green-500 hover:bg-green-500/20 transition-colors disabled:opacity-40"
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -92,7 +92,7 @@ export default function OpportunityFeed({ initial }: { initial: Opportunity[] })
                 onClick={() => handleAction(item.id, "dismissed")}
                 disabled={loadingId === item.id}
                 title="Dismiss"
-                className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 transition-colors disabled:opacity-40"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-300/20 transition-colors disabled:opacity-40"
               >
                 <X className="w-4 h-4" />
               </button>

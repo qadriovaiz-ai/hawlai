@@ -4,10 +4,10 @@ import { Gauge, Zap, Pause, Eye, MapPin } from "lucide-react";
 import { analyzeCampaigns } from "@/lib/agents/optimizationAgent";
 
 const ACTION_STYLE: Record<string, { label: string; icon: any; className: string }> = {
-  scale: { label: "Scale Up", icon: Zap, className: "bg-green-50 text-green-700 border border-green-200" },
-  pause: { label: "Pause", icon: Pause, className: "bg-red-50 text-red-700 border border-red-200" },
-  watch: { label: "Watch", icon: Eye, className: "bg-amber-50 text-amber-700 border border-amber-200" },
-  fix_targeting: { label: "Fix Targeting", icon: MapPin, className: "bg-blue-50 text-blue-700 border border-blue-200" },
+  scale: { label: "Scale Up", icon: Zap, className: "bg-green-500/10 text-green-300 border border-green-700/50" },
+  pause: { label: "Pause", icon: Pause, className: "bg-red-500/10 text-red-300 border border-red-700/50" },
+  watch: { label: "Watch", icon: Eye, className: "bg-amber-500/10 text-amber-300 border border-amber-700/50" },
+  fix_targeting: { label: "Fix Targeting", icon: MapPin, className: "bg-blue-500/10 text-blue-300 border border-blue-700/50" },
 };
 
 export default async function OptimizationPage() {
@@ -24,8 +24,8 @@ export default async function OptimizationPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Gauge className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Gauge className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Optimization</h1>
@@ -33,8 +33,8 @@ export default async function OptimizationPage() {
         </div>
       </div>
 
-      <div className="card p-5 bg-purple-50 border-purple-100">
-        <p className="text-sm text-purple-900 leading-relaxed">{result.summary}</p>
+      <div className="card p-5 bg-purple-500/10 border-purple-700/40">
+        <p className="text-sm text-purple-200 leading-relaxed">{result.summary}</p>
       </div>
 
       {result.recommendations.length > 0 && (

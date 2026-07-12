@@ -74,8 +74,8 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   if (profile) {
     return (
       <div className="w-full max-w-xl animate-fade-in-up">
-        <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <Check className="w-7 h-7 text-green-600" />
+        <div className="w-14 h-14 bg-green-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <Check className="w-7 h-7 text-green-400" />
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 text-center leading-tight">
           Got it — here's what I set up
@@ -98,7 +98,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
               <p className="text-xs text-slate-400">Key Points</p>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {profile.messaging_pillars.map((p: string, i: number) => (
-                  <span key={i} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full">{p}</span>
+                  <span key={i} className="text-xs bg-purple-500/10 text-purple-300 px-2 py-1 rounded-full">{p}</span>
                 ))}
               </div>
             </div>
@@ -149,7 +149,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
+      {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
     </div>
   );
 }

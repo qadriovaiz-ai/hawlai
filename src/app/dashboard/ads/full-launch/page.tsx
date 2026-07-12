@@ -153,8 +153,8 @@ export default function FullLaunchPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-            <Rocket className="w-5 h-5 text-purple-600" />
+          <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+            <Rocket className="w-5 h-5 text-purple-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Launch Ad — Full Auto</h1>
@@ -196,7 +196,7 @@ export default function FullLaunchPage() {
               <button
                 key={i}
                 onClick={() => setPrompt(ex)}
-                className="block w-full text-left text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg px-3 py-2 transition-colors"
+                className="block w-full text-left text-xs text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg px-3 py-2 transition-colors"
               >
                 {ex}
               </button>
@@ -236,7 +236,7 @@ export default function FullLaunchPage() {
             <button
               onClick={() => setDestination("instant_form")}
               className={`text-left p-3 rounded-lg border text-xs transition-colors ${
-                destination === "instant_form" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-50/50" : "border-slate-200 hover:border-slate-300"
+                destination === "instant_form" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-500/10/50" : "border-slate-200 hover:border-slate-300"
               }`}
             >
               <p className="font-semibold text-slate-800">Instant Form</p>
@@ -245,7 +245,7 @@ export default function FullLaunchPage() {
             <button
               onClick={() => setDestination("website")}
               className={`text-left p-3 rounded-lg border text-xs transition-colors ${
-                destination === "website" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-50/50" : "border-slate-200 hover:border-slate-300"
+                destination === "website" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-500/10/50" : "border-slate-200 hover:border-slate-300"
               }`}
             >
               <p className="font-semibold text-slate-800">My Website</p>
@@ -276,9 +276,9 @@ export default function FullLaunchPage() {
         </button>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-red-400">{error}</p>
           </div>
         )}
       </div>
@@ -376,7 +376,7 @@ export default function FullLaunchPage() {
             <div key={step} className="flex items-center gap-3">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                  i < executionStepIndex ? "bg-green-500" : i === executionStepIndex ? "bg-purple-100" : "bg-slate-100"
+                  i < executionStepIndex ? "bg-green-500" : i === executionStepIndex ? "bg-purple-500/20" : "bg-slate-100"
                 }`}
               >
                 {i < executionStepIndex ? (
@@ -401,8 +401,8 @@ export default function FullLaunchPage() {
   if (stage === "success" && result) {
     return (
       <div className="max-w-md mx-auto py-16 text-center space-y-5">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto animate-fade-in-up">
-          <PartyPopper className="w-8 h-8 text-green-600" />
+        <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto animate-fade-in-up">
+          <PartyPopper className="w-8 h-8 text-green-400" />
         </div>
         <div>
           <h2 className="text-lg font-bold text-slate-900">Campaign Successfully Launched!</h2>
@@ -421,12 +421,12 @@ export default function FullLaunchPage() {
   // ------------------------------------------------------------
   return (
     <div className="max-w-md mx-auto py-16 text-center space-y-5">
-      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+      <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
         <AlertCircle className="w-8 h-8 text-red-500" />
       </div>
       <div>
         <h2 className="text-lg font-bold text-slate-900">Couldn't launch this one</h2>
-        <p className="text-sm text-red-600 mt-1">{error}</p>
+        <p className="text-sm text-red-400 mt-1">{error}</p>
       </div>
       <div className="flex items-center gap-3 justify-center">
         <button onClick={handleModify} className="btn-secondary">Back to Edit</button>

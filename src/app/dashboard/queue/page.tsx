@@ -31,7 +31,7 @@ export default async function QueuePage() {
 
       {!leads || leads.length === 0 ? (
         <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Phone className="w-7 h-7 text-purple-400" />
           </div>
           <p className="text-slate-700 font-medium">No leads in the queue</p>

@@ -39,9 +39,9 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
 
   if (pages.length === 0) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+      <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-        <p className="text-sm text-red-700">
+        <p className="text-sm text-red-300">
           No Facebook Page found on this account. Make sure you're logged in with the Facebook account that has Page Admin access.
         </p>
       </div>
@@ -95,9 +95,9 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-700/50 rounded-lg p-3 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
 

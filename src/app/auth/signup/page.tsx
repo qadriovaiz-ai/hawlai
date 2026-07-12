@@ -82,7 +82,7 @@ export default function SignupPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-brand-900 to-slate-900 flex items-center justify-center p-4">
         <div className="bg-slate-100 rounded-2xl shadow-2xl p-8 text-center max-w-md w-full">
-          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">✅</span>
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">Account created!</h2>
@@ -128,7 +128,7 @@ export default function SignupPage() {
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>
+              <div className="p-3 bg-red-500/10 border border-red-700/50 rounded-lg text-sm text-red-400">{error}</div>
             )}
 
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">

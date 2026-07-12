@@ -13,9 +13,9 @@ const EXAMPLES = [
 ];
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  pending_approval: { label: "Pending Approval", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  auto_approved: { label: "Auto-Approved", className: "bg-green-50 text-green-700 border-green-200" },
-  answered: { label: "Answered", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  pending_approval: { label: "Pending Approval", className: "bg-amber-500/10 text-amber-300 border-amber-700/50" },
+  auto_approved: { label: "Auto-Approved", className: "bg-green-500/10 text-green-300 border-green-700/50" },
+  answered: { label: "Answered", className: "bg-blue-500/10 text-blue-300 border-blue-700/50" },
   unclear: { label: "Unclear", className: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 

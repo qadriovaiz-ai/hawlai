@@ -35,7 +35,7 @@ export default function TriggerAICallButton({ leadId }: { leadId: string }) {
         AI Call
       </button>
       {error && (
-        <p className="absolute top-full left-0 mt-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1 whitespace-nowrap z-10">
+        <p className="absolute top-full left-0 mt-1 text-xs text-red-400 bg-red-500/10 border border-red-700/50 rounded px-2 py-1 whitespace-nowrap z-10">
           {error}
         </p>
       )}

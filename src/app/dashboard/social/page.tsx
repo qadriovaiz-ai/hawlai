@@ -71,8 +71,8 @@ export default function SocialPostPage() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Share2 className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Share2 className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Social Post</h1>
@@ -134,14 +134,14 @@ export default function SocialPostPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
       {posted && (
-        <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-green-300 bg-green-500/10 border border-green-700/40 rounded-lg p-3">
           <CheckCircle className="w-4 h-4 shrink-0" />
           {scheduledTime ? "Scheduled! It'll go live automatically at the chosen time." : "Posted to your Facebook Page!"}
         </div>

@@ -48,15 +48,15 @@ export default async function DashboardHomePage() {
 
   const kpis = [
     { label: "Total Leads", value: totalLeads, icon: Users, color: "bg-brand-50 text-brand-600" },
-    { label: "Hot Leads", value: hotLeads, icon: Flame, color: "bg-red-50 text-red-600" },
-    { label: "In Call Queue", value: inQueue, icon: PhoneCall, color: "bg-purple-50 text-purple-600" },
-    { label: "Appointments", value: totalAppointments, icon: Calendar, color: "bg-green-50 text-green-600" },
-    { label: "Total Ad Spend", value: formatCurrency(performance.totals.spend), icon: IndianRupee, color: "bg-amber-50 text-amber-600" },
+    { label: "Hot Leads", value: hotLeads, icon: Flame, color: "bg-red-500/10 text-red-400" },
+    { label: "In Call Queue", value: inQueue, icon: PhoneCall, color: "bg-purple-500/10 text-purple-400" },
+    { label: "Appointments", value: totalAppointments, icon: Calendar, color: "bg-green-500/10 text-green-400" },
+    { label: "Total Ad Spend", value: formatCurrency(performance.totals.spend), icon: IndianRupee, color: "bg-amber-500/10 text-amber-400" },
     {
       label: "Cost / Lead",
       value: performance.totals.cost_per_lead !== null ? formatCurrency(performance.totals.cost_per_lead) : "—",
       icon: TrendingDown,
-      color: "bg-blue-50 text-blue-600",
+      color: "bg-blue-500/10 text-blue-400",
     },
   ];
 
@@ -83,14 +83,14 @@ export default async function DashboardHomePage() {
 
       <Link
         href="/dashboard/marketing"
-        className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-xl p-4 hover:bg-purple-100 transition-colors"
+        className="flex items-center gap-3 bg-purple-500/10 border border-purple-700/40 rounded-xl p-4 hover:bg-purple-500/20 transition-colors"
       >
         <div className="w-9 h-9 bg-purple-600 rounded-lg flex items-center justify-center shrink-0">
           <Rocket className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold text-purple-800">Launch New Ad</p>
-          <p className="text-xs text-purple-600">Give a photo + requirement, AI will get the full ad ready</p>
+          <p className="text-sm font-semibold text-purple-300">Launch New Ad</p>
+          <p className="text-xs text-purple-500">Give a photo + requirement, AI will get the full ad ready</p>
         </div>
         <ArrowRight className="w-4 h-4 text-purple-400" />
       </Link>

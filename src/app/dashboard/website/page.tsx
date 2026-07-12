@@ -189,8 +189,8 @@ export default function WebsitePage() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Globe className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Globe className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Website</h1>
@@ -231,7 +231,7 @@ export default function WebsitePage() {
           />
         </div>
         {publicUrl && (
-          <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-600 hover:underline inline-flex items-center gap-1">
+          <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-400 hover:underline inline-flex items-center gap-1">
             Preview page <ExternalLink className="w-3 h-3" />
           </a>
         )}
@@ -354,7 +354,7 @@ export default function WebsitePage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" /> {error}
         </div>
       )}
@@ -367,12 +367,12 @@ export default function WebsitePage() {
         <button
           onClick={() => handleSave(!published)}
           disabled={saving || !slug}
-          className={published ? "btn-secondary flex-1 justify-center text-amber-600" : "btn-primary flex-1 justify-center"}
+          className={published ? "btn-secondary flex-1 justify-center text-amber-400" : "btn-primary flex-1 justify-center"}
         >
           {published ? "Unpublish" : "Publish Page"}
         </button>
       </div>
-      {published && <p className="text-xs text-green-600 text-center">✅ Live — accepting leads from the public</p>}
+      {published && <p className="text-xs text-green-400 text-center">✅ Live — accepting leads from the public</p>}
     </div>
   );
 }

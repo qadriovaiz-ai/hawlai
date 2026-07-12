@@ -83,8 +83,8 @@ export default function AdCreativePage() {
         <Link href="/dashboard/ads" className="btn-secondary px-2 py-2">
           <ArrowLeft className="w-4 h-4" />
         </Link>
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <ImagePlus className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <ImagePlus className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Create Ad Creative</h1>
@@ -122,20 +122,20 @@ export default function AdCreativePage() {
           <button
             onClick={() => setMode("template")}
             className={`p-3 rounded-lg border-2 text-left transition-colors ${
-              mode === "template" ? "border-purple-500 bg-purple-50" : "border-slate-200"
+              mode === "template" ? "border-purple-500 bg-purple-500/10" : "border-slate-200"
             }`}
           >
-            <Palette className="w-4 h-4 text-purple-600 mb-1" />
+            <Palette className="w-4 h-4 text-purple-400 mb-1" />
             <p className="text-sm font-semibold text-slate-800">Quick Template</p>
             <p className="text-xs text-slate-500">Fast, free, preset backgrounds</p>
           </button>
           <button
             onClick={() => setMode("ai_generate")}
             className={`p-3 rounded-lg border-2 text-left transition-colors ${
-              mode === "ai_generate" ? "border-purple-500 bg-purple-50" : "border-slate-200"
+              mode === "ai_generate" ? "border-purple-500 bg-purple-500/10" : "border-slate-200"
             }`}
           >
-            <Sparkles className="w-4 h-4 text-purple-600 mb-1" />
+            <Sparkles className="w-4 h-4 text-purple-400 mb-1" />
             <p className="text-sm font-semibold text-slate-800">AI Studio</p>
             <p className="text-xs text-slate-500">Custom scene from a prompt</p>
           </button>
@@ -148,7 +148,7 @@ export default function AdCreativePage() {
                 key={s.id}
                 onClick={() => setBackgroundStyle(s.id)}
                 className={`px-3 py-2 rounded-lg text-sm border transition-colors ${
-                  backgroundStyle === s.id ? "border-purple-500 bg-purple-50 text-purple-700" : "border-slate-200 text-slate-600"
+                  backgroundStyle === s.id ? "border-purple-500 bg-purple-500/10 text-purple-300" : "border-slate-200 text-slate-600"
                 }`}
               >
                 {s.label}
@@ -168,7 +168,7 @@ export default function AdCreativePage() {
                 <button
                   key={i}
                   onClick={() => setPrompt(ex)}
-                  className="text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-full px-3 py-1 transition-colors"
+                  className="text-xs text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 rounded-full px-3 py-1 transition-colors"
                 >
                   {ex}
                 </button>
@@ -217,23 +217,23 @@ export default function AdCreativePage() {
       </button>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+        <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-red-700">Error</p>
-            <p className="text-sm text-red-600 mt-0.5">{error}</p>
+            <p className="text-sm font-semibold text-red-300">Error</p>
+            <p className="text-sm text-red-400 mt-0.5">{error}</p>
           </div>
         </div>
       )}
 
       {result && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-5 space-y-3">
+        <div className="bg-green-500/10 border border-green-700/50 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-500" />
-            <p className="text-sm font-semibold text-green-700">Creative Ready!</p>
+            <p className="text-sm font-semibold text-green-300">Creative Ready!</p>
           </div>
           {result.generated_image_url && (
-            <img src={result.generated_image_url} alt="Generated ad creative" className="w-full rounded-lg border border-green-100" />
+            <img src={result.generated_image_url} alt="Generated ad creative" className="w-full rounded-lg border border-green-700/40" />
           )}
           
             <a href={result.generated_image_url}

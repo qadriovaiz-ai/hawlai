@@ -4,18 +4,18 @@ import { useState, useEffect } from "react";
 import { CalendarDays, Plus, Loader2, Trash2, X, Megaphone, Share2, Mail, TrendingUp, MoreHorizontal } from "lucide-react";
 
 const CHANNEL_META: Record<string, { label: string; icon: any; className: string }> = {
-  paid_ads: { label: "Paid Ads", icon: Megaphone, className: "bg-purple-50 text-purple-700 border-purple-200" },
-  social: { label: "Social", icon: Share2, className: "bg-blue-50 text-blue-700 border-blue-200" },
-  email_whatsapp: { label: "Email/WhatsApp", icon: Mail, className: "bg-green-50 text-green-700 border-green-200" },
-  seo: { label: "SEO", icon: TrendingUp, className: "bg-amber-50 text-amber-700 border-amber-200" },
+  paid_ads: { label: "Paid Ads", icon: Megaphone, className: "bg-purple-500/10 text-purple-300 border-purple-700/50" },
+  social: { label: "Social", icon: Share2, className: "bg-blue-500/10 text-blue-300 border-blue-700/50" },
+  email_whatsapp: { label: "Email/WhatsApp", icon: Mail, className: "bg-green-500/10 text-green-300 border-green-700/50" },
+  seo: { label: "SEO", icon: TrendingUp, className: "bg-amber-500/10 text-amber-300 border-amber-700/50" },
   other: { label: "Other", icon: MoreHorizontal, className: "bg-slate-100 text-slate-600 border-slate-200" },
 };
 
 const STATUS_BADGE: Record<string, string> = {
   planned: "bg-slate-100 text-slate-600 border border-slate-200",
-  in_progress: "bg-blue-50 text-blue-700 border border-blue-200",
-  completed: "bg-green-50 text-green-700 border border-green-200",
-  cancelled: "bg-red-50 text-red-500 border border-red-200 line-through",
+  in_progress: "bg-blue-500/10 text-blue-300 border border-blue-700/50",
+  completed: "bg-green-500/10 text-green-300 border border-green-700/50",
+  cancelled: "bg-red-500/10 text-red-500 border border-red-700/50 line-through",
 };
 
 export default function CalendarPage() {
@@ -132,8 +132,8 @@ export default function CalendarPage() {
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-            <CalendarDays className="w-5 h-5 text-purple-600" />
+          <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+            <CalendarDays className="w-5 h-5 text-purple-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Marketing Calendar</h1>
@@ -183,7 +183,7 @@ export default function CalendarPage() {
               placeholder="Notes (optional)"
               className="bg-slate-100 text-slate-900 w-full h-16 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-400">{error}</p>}
             <button onClick={handleAdd} disabled={saving} className="btn-primary w-full justify-center text-sm">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Add

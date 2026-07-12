@@ -15,18 +15,18 @@ export default function DraftMessagePreview({ message, phone }: { message: strin
   }
 
   return (
-    <div className="mt-2 bg-green-50 border border-green-100 rounded-lg overflow-hidden">
+    <div className="mt-2 bg-green-500/10 border border-green-700/40 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-2 px-3 py-2 text-left"
       >
-        <Sparkles className="w-3.5 h-3.5 text-green-600 shrink-0" />
-        <span className="text-xs font-medium text-green-700 flex-1">Follow-up message ready — drafted overnight</span>
+        <Sparkles className="w-3.5 h-3.5 text-green-400 shrink-0" />
+        <span className="text-xs font-medium text-green-300 flex-1">Follow-up message ready — drafted overnight</span>
         {open ? <ChevronUp className="w-3.5 h-3.5 text-green-500" /> : <ChevronDown className="w-3.5 h-3.5 text-green-500" />}
       </button>
       {open && (
         <div className="px-3 pb-3 space-y-2">
-          <p className="text-xs text-slate-700 bg-slate-100 rounded-lg p-2.5 border border-green-100 whitespace-pre-wrap">
+          <p className="text-xs text-slate-700 bg-slate-100 rounded-lg p-2.5 border border-green-700/40 whitespace-pre-wrap">
             {message}
           </p>
           <div className="flex items-center gap-2">

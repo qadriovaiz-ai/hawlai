@@ -26,13 +26,13 @@ export default function ExplainCampaignButton({ campaignId }: { campaignId: stri
   return (
     <div className="pt-2">
       {!open ? (
-        <button onClick={handleClick} className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1.5 font-medium">
+        <button onClick={handleClick} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1.5 font-medium">
           <MessageCircleQuestion className="w-3.5 h-3.5" /> Explain this campaign
         </button>
       ) : (
-        <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 space-y-2">
+        <div className="bg-purple-500/10 border border-purple-700/40 rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-purple-700 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-purple-300 flex items-center gap-1.5">
               <MessageCircleQuestion className="w-3.5 h-3.5" /> In plain language
             </p>
             <button onClick={() => setOpen(false)} className="text-purple-300 hover:text-purple-500">
@@ -44,7 +44,7 @@ export default function ExplainCampaignButton({ campaignId }: { campaignId: stri
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking...
             </div>
           ) : (
-            <p className="text-sm text-purple-900 leading-relaxed">{explanation}</p>
+            <p className="text-sm text-purple-200 leading-relaxed">{explanation}</p>
           )}
         </div>
       )}

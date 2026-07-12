@@ -22,7 +22,7 @@ export default function HubTabs({ title, description, icon, tabs }: {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
           {icon}
         </div>
         <div>

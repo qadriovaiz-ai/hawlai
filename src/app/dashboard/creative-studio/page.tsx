@@ -186,8 +186,8 @@ export default function CreativeStudioPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Clapperboard className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Clapperboard className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Creative Studio</h1>
@@ -216,7 +216,7 @@ export default function CreativeStudioPage() {
       </div>
 
       {scriptError && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" /> {scriptError}
         </div>
       )}
@@ -230,7 +230,7 @@ export default function CreativeStudioPage() {
           <div className="space-y-3">
             {script.scenes?.map((scene: any, i: number) => (
               <div key={i} className="flex gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold flex items-center justify-center shrink-0">
                   {scene.scene_number}
                 </div>
                 <div className="flex-1">
@@ -245,7 +245,7 @@ export default function CreativeStudioPage() {
       )}
 
       {variationsError && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" /> {variationsError}
         </div>
       )}
@@ -256,11 +256,11 @@ export default function CreativeStudioPage() {
             <div key={i} className={`card p-4 space-y-1.5 ${i === 0 ? "ring-2 ring-green-200" : ""}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="badge bg-purple-50 text-purple-700 border border-purple-200">{v.angle}</span>
+                  <span className="badge bg-purple-500/10 text-purple-300 border border-purple-700/50">{v.angle}</span>
                   <ScoreBadge score={v.score} />
-                  {i === 0 && <span className="text-xs font-semibold text-green-600">Best pick</span>}
+                  {i === 0 && <span className="text-xs font-semibold text-green-400">Best pick</span>}
                 </div>
-                <button onClick={() => copyVariation(v, i)} className="text-slate-400 hover:text-purple-600">
+                <button onClick={() => copyVariation(v, i)} className="text-slate-400 hover:text-purple-400">
                   {copiedIndex === i ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
@@ -289,7 +289,7 @@ export default function CreativeStudioPage() {
           {listingLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           Generate Listing
         </button>
-        {listingError && <p className="text-xs text-red-600">{listingError}</p>}
+        {listingError && <p className="text-xs text-red-400">{listingError}</p>}
         {listing && (
           <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-1.5">
             <p className="text-sm font-semibold text-slate-900">{listing.title}</p>
@@ -312,7 +312,7 @@ export default function CreativeStudioPage() {
           </button>
         </div>
         <p className="text-xs text-slate-400">Uses your dealership name and brand tone. Generate a few and pick your favorite — treat these as starting concepts, not final production files.</p>
-        {logoError && <p className="text-xs text-red-600">{logoError}</p>}
+        {logoError && <p className="text-xs text-red-400">{logoError}</p>}
         {logos.length > 0 && (
           <div className="grid grid-cols-3 gap-3">
             {logos.map((url, i) => (
@@ -335,7 +335,7 @@ export default function CreativeStudioPage() {
           {videoStarting || videoPolling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
           {videoPolling ? "Rendering..." : "Generate Video"}
         </button>
-        {videoError && <p className="text-xs text-red-600">{videoError}</p>}
+        {videoError && <p className="text-xs text-red-400">{videoError}</p>}
         {videoResult?.video_url && (
           <video src={videoResult.video_url} controls className="bg-slate-100 text-slate-900 w-full rounded-lg border border-slate-200" />
         )}
@@ -353,7 +353,7 @@ export default function CreativeStudioPage() {
           {voiceoverLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
           Generate Voiceover
         </button>
-        {voiceoverError && <p className="text-xs text-red-600">{voiceoverError}</p>}
+        {voiceoverError && <p className="text-xs text-red-400">{voiceoverError}</p>}
         {voiceoverUrl && <audio src={voiceoverUrl} controls className="w-full" />}
       </div>
     </div>

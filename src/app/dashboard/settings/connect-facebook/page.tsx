@@ -30,8 +30,8 @@ export default async function ConnectFacebookPage({
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-          <Facebook className="w-5 h-5 text-blue-600" />
+        <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+          <Facebook className="w-5 h-5 text-blue-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Connect Facebook</h1>
@@ -40,9 +40,9 @@ export default async function ConnectFacebookPage({
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+        <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">An error occurred while connecting: {error}</p>
+          <p className="text-sm text-red-300">An error occurred while connecting: {error}</p>
         </div>
       )}
 
@@ -55,7 +55,7 @@ export default async function ConnectFacebookPage({
         <div className="card p-5 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-500" />
-            <p className="text-sm font-semibold text-green-700">Connected</p>
+            <p className="text-sm font-semibold text-green-300">Connected</p>
           </div>
           <div className="text-sm space-y-1.5 text-slate-600">
             <p><span className="text-slate-400">Page:</span> {dealership.fb_page_name}</p>
@@ -82,8 +82,8 @@ export default async function ConnectFacebookPage({
 
       <div className="pt-4 border-t border-slate-100">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-            <Mail className="w-5 h-5 text-red-600" />
+          <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center">
+            <Mail className="w-5 h-5 text-red-400" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900">Connect Gmail</h2>
@@ -92,17 +92,17 @@ export default async function ConnectFacebookPage({
         </div>
 
         {gmail === "connected" && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 text-sm text-green-700">Gmail connected!</div>
+          <div className="bg-green-500/10 border border-green-700/50 rounded-xl p-3 mb-3 text-sm text-green-300">Gmail connected!</div>
         )}
         {gmail_error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 text-sm text-red-700">{gmail_error}</div>
+          <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-3 mb-3 text-sm text-red-300">{gmail_error}</div>
         )}
 
         {isGmailConnected ? (
           <div className="card p-5 space-y-3">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-500" />
-              <p className="text-sm font-semibold text-green-700">Connected</p>
+              <p className="text-sm font-semibold text-green-300">Connected</p>
             </div>
             <p className="text-sm text-slate-600">Sending as: {dealership?.gmail_email}</p>
             <a href="/api/auth/gmail/connect" className="btn-secondary inline-flex mt-2">

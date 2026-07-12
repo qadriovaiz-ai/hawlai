@@ -75,8 +75,8 @@ export default function SeoPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <TrendingUp className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <TrendingUp className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">SEO & Content</h1>
@@ -97,7 +97,7 @@ export default function SeoPage() {
             <div className="flex items-center gap-3">
               <div
                 className={`text-2xl font-bold ${
-                  audit.score >= 75 ? "text-green-600" : audit.score >= 50 ? "text-amber-600" : "text-red-600"
+                  audit.score >= 75 ? "text-green-400" : audit.score >= 50 ? "text-amber-400" : "text-red-400"
                 }`}
               >
                 {audit.score}/100
@@ -156,7 +156,7 @@ export default function SeoPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
@@ -168,7 +168,7 @@ export default function SeoPage() {
             <p className="text-sm font-semibold text-slate-700 mb-3">Keywords</p>
             <div className="flex flex-wrap gap-2">
               {result.keywords.map((k, i) => (
-                <span key={i} className="text-xs bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full">
+                <span key={i} className="text-xs bg-purple-500/10 text-purple-300 px-2.5 py-1 rounded-full">
                   {k}
                 </span>
               ))}
@@ -190,7 +190,7 @@ export default function SeoPage() {
       )}
 
       {blogError && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {blogError}
         </div>
@@ -200,7 +200,7 @@ export default function SeoPage() {
         <div className="card p-5 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-900">{blogPost.title}</p>
-            <button onClick={copyBlogPost} className="text-slate-400 hover:text-purple-600 shrink-0">
+            <button onClick={copyBlogPost} className="text-slate-400 hover:text-purple-400 shrink-0">
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>

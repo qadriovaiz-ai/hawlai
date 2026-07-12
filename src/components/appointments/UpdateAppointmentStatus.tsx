@@ -27,10 +27,10 @@ export default function UpdateAppointmentStatus({ appointmentId, currentStatus }
         <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
       ) : (
         <>
-          <button onClick={() => update("completed")} className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded transition-colors border border-green-200">
+          <button onClick={() => update("completed")} className="text-xs px-2 py-1 bg-green-500/10 text-green-300 hover:bg-green-500/20 rounded transition-colors border border-green-700/50">
             Complete
           </button>
-          <button onClick={() => update("cancelled")} className="text-xs px-2 py-1 bg-red-50 text-red-700 hover:bg-red-100 rounded transition-colors border border-red-200">
+          <button onClick={() => update("cancelled")} className="text-xs px-2 py-1 bg-red-500/10 text-red-300 hover:bg-red-500/20 rounded transition-colors border border-red-700/50">
             Cancel
           </button>
         </>

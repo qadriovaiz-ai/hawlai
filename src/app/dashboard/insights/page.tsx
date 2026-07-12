@@ -21,7 +21,7 @@ export default function InsightsHubPage() {
     <HubTabs
       title="Insights"
       description="Performance, recommendations, and market intelligence — in one place"
-      icon={<BarChart3 className="w-5 h-5 text-purple-600" />}
+      icon={<BarChart3 className="w-5 h-5 text-purple-400" />}
       tabs={tabs}
     />
   );

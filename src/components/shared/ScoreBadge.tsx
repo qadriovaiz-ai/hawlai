@@ -5,10 +5,10 @@ export default function ScoreBadge({ score }: { score: number | null | undefined
 
   const className =
     score >= 75
-      ? "bg-green-50 text-green-700 border-green-200"
+      ? "bg-green-500/10 text-green-300 border-green-700/50"
       : score >= 50
-      ? "bg-amber-50 text-amber-700 border-amber-200"
-      : "bg-red-50 text-red-700 border-red-200";
+      ? "bg-amber-500/10 text-amber-300 border-amber-700/50"
+      : "bg-red-500/10 text-red-300 border-red-700/50";
 
   return (
     <span className={`badge ${className}`}>

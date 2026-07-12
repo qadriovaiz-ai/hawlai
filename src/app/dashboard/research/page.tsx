@@ -35,8 +35,8 @@ export default function ResearchPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Search className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Search className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Research</h1>
@@ -63,7 +63,7 @@ export default function ResearchPage() {
             <button
               key={ex}
               onClick={() => handleSearch(ex)}
-              className="text-xs text-slate-500 hover:text-purple-600 bg-slate-50 hover:bg-purple-500/10 px-2.5 py-1 rounded-full transition-colors"
+              className="text-xs text-slate-500 hover:text-purple-400 bg-slate-50 hover:bg-purple-500/10 px-2.5 py-1 rounded-full transition-colors"
             >
               {ex}
             </button>
@@ -72,7 +72,7 @@ export default function ResearchPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
@@ -93,7 +93,7 @@ export default function ResearchPage() {
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
                   <Building2 className="w-3.5 h-3.5 text-slate-400" /> {ad.page_name}
                 </div>
-                <span className={`badge ${ad.is_active ? "bg-green-50 text-green-700 border border-green-200" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>
+                <span className={`badge ${ad.is_active ? "bg-green-500/10 text-green-300 border border-green-700/50" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>
                   {ad.is_active ? "Active" : "Ended"}
                 </span>
               </div>

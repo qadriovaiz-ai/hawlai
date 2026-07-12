@@ -21,7 +21,7 @@ export default function MarketingHubPage() {
     <HubTabs
       title="Marketing"
       description="Strategy, ads, campaigns, content, and your website — all in one place"
-      icon={<Megaphone className="w-5 h-5 text-purple-600" />}
+      icon={<Megaphone className="w-5 h-5 text-purple-400" />}
       tabs={tabs}
     />
   );

@@ -82,7 +82,7 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
           <div className="bg-slate-100 rounded-xl max-w-lg w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                {channel === "whatsapp" ? <MessageCircle className="w-4 h-4 text-green-600" /> : <Mail className="w-4 h-4 text-blue-600" />}
+                {channel === "whatsapp" ? <MessageCircle className="w-4 h-4 text-green-400" /> : <Mail className="w-4 h-4 text-blue-400" />}
                 {channel === "whatsapp" ? "WhatsApp Message" : "Email Draft"}
               </p>
               <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -96,7 +96,7 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
               </div>
             )}
 
-            {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">{error}</p>}
+            {error && <p className="text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">{error}</p>}
 
             {result && !loading && (
               <div className="space-y-3">
@@ -134,13 +134,13 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
                     </button>
                   )}
                   {channel === "email" && emailSent && (
-                    <span className="flex-1 text-sm text-green-600 flex items-center justify-center gap-1.5"><Check className="w-4 h-4" /> Sent!</span>
+                    <span className="flex-1 text-sm text-green-400 flex items-center justify-center gap-1.5"><Check className="w-4 h-4" /> Sent!</span>
                   )}
                 </div>
                 {channel === "email" && !email && (
                   <p className="text-xs text-slate-400">No email address on file for this lead — copy the text instead.</p>
                 )}
-                {emailError && <p className="text-xs text-red-600">{emailError}</p>}
+                {emailError && <p className="text-xs text-red-400">{emailError}</p>}
               </div>
             )}
           </div>

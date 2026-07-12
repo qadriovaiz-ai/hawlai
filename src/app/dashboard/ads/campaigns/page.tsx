@@ -9,7 +9,7 @@ import ScoreBadge from "@/components/shared/ScoreBadge";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 const STATUS_BADGE: Record<string, string> = {
-  ACTIVE: "bg-green-50 text-green-700 border border-green-200",
+  ACTIVE: "bg-green-500/10 text-green-300 border border-green-700/50",
   PAUSED: "bg-slate-100 text-slate-600 border border-slate-200",
 };
 
@@ -38,8 +38,8 @@ export default async function CampaignsPage() {
     <div className="max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-            <Megaphone className="w-5 h-5 text-purple-600" />
+          <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+            <Megaphone className="w-5 h-5 text-purple-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">My Campaigns</h1>
@@ -78,7 +78,7 @@ export default async function CampaignsPage() {
 
       {!campaigns || campaigns.length === 0 ? (
         <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Megaphone className="w-7 h-7 text-purple-400" />
           </div>
           <p className="text-slate-700 font-medium">No campaigns launched yet</p>
@@ -110,7 +110,7 @@ export default async function CampaignsPage() {
                       <span className={`badge ${STATUS_BADGE[status] ?? STATUS_BADGE.PAUSED}`}>{status}</span>
                       <ScoreBadge score={c.creative_score} />
                       {isScheduledFuture && (
-                        <span className="badge bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="badge bg-blue-500/10 text-blue-300 border border-blue-700/50">
                           <Clock className="w-3 h-3 inline mr-1" />
                           Scheduled: {formatDate(c.scheduled_start)}
                         </span>

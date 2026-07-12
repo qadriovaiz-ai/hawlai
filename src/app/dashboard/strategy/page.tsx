@@ -55,8 +55,8 @@ export default function StrategyPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Target className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <Target className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Marketing Strategy</h1>
@@ -80,7 +80,7 @@ export default function StrategyPage() {
             </select>
           </div>
         </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-400">{error}</p>}
         <button onClick={handleGenerate} disabled={generating} className="btn-primary text-sm">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           {strategy ? "Regenerate Plan" : "Generate Plan"}
@@ -89,8 +89,8 @@ export default function StrategyPage() {
 
       {plan && (
         <div className="space-y-4">
-          <div className="card p-5 bg-purple-50 border-purple-100">
-            <p className="text-sm text-purple-900 leading-relaxed">{plan.overview}</p>
+          <div className="card p-5 bg-purple-500/10 border-purple-700/40">
+            <p className="text-sm text-purple-200 leading-relaxed">{plan.overview}</p>
           </div>
 
           <div className="card p-5">
@@ -116,7 +116,7 @@ export default function StrategyPage() {
             <div className="space-y-3">
               {plan.monthly_themes?.map((w: any, i: number) => (
                 <div key={i} className="flex gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                  <span className="text-xs font-semibold text-purple-600 shrink-0 w-16">{w.week}</span>
+                  <span className="text-xs font-semibold text-purple-400 shrink-0 w-16">{w.week}</span>
                   <div>
                     <p className="text-sm font-medium text-slate-800">{w.focus}</p>
                     <p className="text-xs text-slate-500">{w.action}</p>

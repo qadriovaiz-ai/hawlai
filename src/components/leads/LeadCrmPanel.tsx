@@ -98,7 +98,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
     <div className="space-y-4">
       <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
-          <IndianRupee className="w-4 h-4 text-green-600" /> Deal Value
+          <IndianRupee className="w-4 h-4 text-green-400" /> Deal Value
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -117,7 +117,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
 
       <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
-          <CheckSquare className="w-4 h-4 text-purple-600" /> Tasks
+          <CheckSquare className="w-4 h-4 text-purple-400" /> Tasks
         </p>
         <div className="flex items-center gap-2 mb-3">
           <input
@@ -156,7 +156,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
 
       <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
-          <StickyNote className="w-4 h-4 text-amber-600" /> Notes
+          <StickyNote className="w-4 h-4 text-amber-400" /> Notes
         </p>
         <div className="flex items-center gap-2 mb-3">
           <input

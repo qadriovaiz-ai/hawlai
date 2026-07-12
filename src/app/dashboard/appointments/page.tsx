@@ -34,8 +34,8 @@ export default async function AppointmentsPage() {
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: "Total", value: appointments?.length ?? 0, color: "text-slate-900" },
-          { label: "Upcoming", value: upcoming.length, color: "text-blue-600" },
-          { label: "Completed", value: appointments?.filter((a) => a.status === "completed").length ?? 0, color: "text-green-600" },
+          { label: "Upcoming", value: upcoming.length, color: "text-blue-400" },
+          { label: "Completed", value: appointments?.filter((a) => a.status === "completed").length ?? 0, color: "text-green-400" },
         ].map(({ label, value, color }) => (
           <div key={label} className="card p-4 text-center">
             <p className={`text-2xl font-bold ${color}`}>{value}</p>

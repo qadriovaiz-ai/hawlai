@@ -17,21 +17,21 @@ export default async function ReportsPage() {
   const { stats } = report;
 
   const cards = [
-    { label: "Total Leads", value: stats.totalLeads, icon: Flame, color: "bg-red-50 text-red-600" },
-    { label: "Campaigns Launched", value: stats.campaignsLaunched, icon: Megaphone, color: "bg-purple-50 text-purple-600" },
-    { label: "Total Ad Spend", value: formatCurrency(stats.totalSpend), icon: IndianRupee, color: "bg-amber-50 text-amber-600" },
-    { label: "Cost / Lead", value: stats.costPerLead !== null ? formatCurrency(stats.costPerLead) : "—", icon: IndianRupee, color: "bg-blue-50 text-blue-600" },
-    { label: "Revenue", value: formatCurrency(stats.totalRevenue), icon: IndianRupee, color: "bg-green-50 text-green-600" },
+    { label: "Total Leads", value: stats.totalLeads, icon: Flame, color: "bg-red-500/10 text-red-400" },
+    { label: "Campaigns Launched", value: stats.campaignsLaunched, icon: Megaphone, color: "bg-purple-500/10 text-purple-400" },
+    { label: "Total Ad Spend", value: formatCurrency(stats.totalSpend), icon: IndianRupee, color: "bg-amber-500/10 text-amber-400" },
+    { label: "Cost / Lead", value: stats.costPerLead !== null ? formatCurrency(stats.costPerLead) : "—", icon: IndianRupee, color: "bg-blue-500/10 text-blue-400" },
+    { label: "Revenue", value: formatCurrency(stats.totalRevenue), icon: IndianRupee, color: "bg-green-500/10 text-green-400" },
     { label: "ROAS", value: stats.roas !== null ? `${stats.roas.toFixed(1)}x` : "—", icon: TrendingUp, color: "bg-emerald-50 text-emerald-600" },
-    { label: "Pending Approvals", value: stats.pendingApprovals, icon: ShieldCheck, color: "bg-orange-50 text-orange-600" },
-    { label: "Appointments Completed", value: stats.appointmentsCompleted, icon: CheckCircle2, color: "bg-green-50 text-green-600" },
+    { label: "Pending Approvals", value: stats.pendingApprovals, icon: ShieldCheck, color: "bg-orange-500/10 text-orange-400" },
+    { label: "Appointments Completed", value: stats.appointmentsCompleted, icon: CheckCircle2, color: "bg-green-500/10 text-green-400" },
   ];
 
   return (
     <div className="max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-          <FileText className="w-5 h-5 text-purple-600" />
+        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+          <FileText className="w-5 h-5 text-purple-400" />
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Executive Summary</h1>
@@ -39,14 +39,14 @@ export default async function ReportsPage() {
         </div>
       </div>
 
-      <div className="card p-5 bg-purple-50 border-purple-100">
-        <p className="text-sm text-purple-900 leading-relaxed">{report.summary}</p>
+      <div className="card p-5 bg-purple-500/10 border-purple-700/40">
+        <p className="text-sm text-purple-200 leading-relaxed">{report.summary}</p>
       </div>
 
       {report.priorities.length > 0 && (
         <div className="card p-5 space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <ListChecks className="w-4 h-4 text-purple-600" /> Priorities
+            <ListChecks className="w-4 h-4 text-purple-400" /> Priorities
           </div>
           <ul className="space-y-1.5">
             {report.priorities.map((p, i) => (

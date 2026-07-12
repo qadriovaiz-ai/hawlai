@@ -66,7 +66,7 @@ export default function TopBar({ user, profile }: Props) {
               </div>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-500/10 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 Sign out
