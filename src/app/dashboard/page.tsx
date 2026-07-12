@@ -6,15 +6,30 @@ import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } f
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
 import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
+import WelcomeChatCard from "@/components/dashboard/WelcomeChatCard";
 
 export default async function DashboardHomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("dealership_id, full_name").eq("id", user.id).single();
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/auth/login");
+
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select("dealership_name, onboarding_completed")
+    .eq("id", dealershipId)
+    .single();
+
+  if (!dealership?.onboarding_completed) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <WelcomeChatCard dealershipName={dealership?.dealership_name ?? "your business"} ownerName={profile?.full_name ?? null} />
+      </div>
+    );
+  }
 
   await syncOpportunities(supabase, dealershipId);
 
