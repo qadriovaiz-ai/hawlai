@@ -92,7 +92,7 @@ export default function AdCreativePage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">1. Upload the car photo</p>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
         {photoPreview ? (
@@ -116,7 +116,7 @@ export default function AdCreativePage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">2. Choose a background style</p>
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -178,7 +178,7 @@ export default function AdCreativePage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">3. Write the ad text</p>
         <input
           value={headline}

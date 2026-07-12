@@ -41,7 +41,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <div className="bg-slate-100 rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-semibold text-slate-900 mb-1">Welcome back</h2>
           <p className="text-slate-500 text-sm mb-6">Sign in to your dealership account</p>
 

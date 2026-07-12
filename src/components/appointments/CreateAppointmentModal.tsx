@@ -55,7 +55,7 @@ export default function CreateAppointmentModal({ leadId, leadName, dealershipId 
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h3 className="font-semibold text-slate-900">Book Appointment</h3>
           <button onClick={() => setOpen(false)} className="p-1 hover:bg-slate-100 rounded transition-colors">

@@ -31,7 +31,7 @@ export default async function DashboardLayout({
   if (!onboardingCompleted) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <header className="h-14 flex items-center px-5 border-b border-slate-200 bg-white">
+        <header className="h-14 flex items-center px-5 border-b border-slate-200 bg-slate-100">
           <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0">
               <Image src="/logo-icon.png" alt="Hawlai" width={28} height={28} className="w-full h-full object-cover" />

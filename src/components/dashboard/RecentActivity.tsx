@@ -25,7 +25,7 @@ export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
       </div>
       <div className="divide-y divide-slate-50">
         {leads.map((lead) => (
-          <div key={lead.id} className="px-5 py-3.5 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+          <div key={lead.id} className="px-5 py-3.5 flex items-center gap-4 hover:bg-slate-200 transition-colors">
             <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
               <span className="text-sm font-semibold text-slate-600">
                 {lead.name?.charAt(0).toUpperCase()}

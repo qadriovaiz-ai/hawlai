@@ -38,7 +38,7 @@ export default function LeadStageSelect({ leadId, currentStatus }: { leadId: str
         value={currentStatus}
         onChange={(e) => handleChange(e.target.value)}
         disabled={loading}
-        className="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+        className="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
       >
         {STAGES.map((s) => (
           <option key={s.value} value={s.value}>

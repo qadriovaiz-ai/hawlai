@@ -142,7 +142,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters }: Pr
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {leads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={lead.id} className="hover:bg-slate-200 transition-colors">
                     <td className="table-cell font-medium text-slate-900">{lead.name}</td>
                     <td className="table-cell text-slate-600">{lead.phone ?? "—"}</td>
                     <td className="table-cell text-slate-600 max-w-32 truncate">{lead.vehicle ?? "—"}</td>
@@ -187,7 +187,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters }: Pr
                           <button
                             onClick={() => handleAddToQueue(lead.id)}
                             disabled={queuing === lead.id}
-                            className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-500/10 rounded transition-colors"
                             title="Add to Call Queue"
                           >
                             <PhoneCall className="w-4 h-4" />
@@ -196,7 +196,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters }: Pr
                         <button
                           onClick={() => handleDelete(lead.id)}
                           disabled={deleting === lead.id}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-500/10 rounded transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />

@@ -81,7 +81,7 @@ export default function SignupPage() {
   if (success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-brand-900 to-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-md w-full">
+        <div className="bg-slate-100 rounded-2xl shadow-2xl p-8 text-center max-w-md w-full">
           <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">✅</span>
           </div>
@@ -99,7 +99,7 @@ export default function SignupPage() {
           <Image src="/logo-full.png" alt="Hawlai — AI Marketing. Smarter Growth." width={220} height={220} className="mx-auto rounded-2xl" />
         </div>
 
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <div className="bg-slate-100 rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-semibold text-slate-900 mb-1">Create account</h2>
           <p className="text-slate-500 text-sm mb-6">Register your dealership</p>
 

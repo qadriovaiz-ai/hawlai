@@ -40,7 +40,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
   const pathname = usePathname();
 
   return (
-    <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-full shrink-0">
+    <div className="w-64 bg-slate-100 border-r border-slate-200 flex flex-col h-full shrink-0">
       <div className="p-5 border-b border-slate-100">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 shadow-sm shadow-brand-600/30">
@@ -75,15 +75,15 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
       </nav>
 
       <div className="p-3 border-t border-slate-100">
-        <div className="bg-gradient-to-br from-brand-50 to-purple-50 border border-brand-100 rounded-lg p-3">
-          <p className="text-xs font-semibold text-brand-700 mb-0.5">AI Engine Active</p>
-          <p className="text-xs text-brand-600">Scoring leads automatically</p>
+        <div className="bg-brand-900/40 border border-brand-700/40 rounded-lg p-3">
+          <p className="text-xs font-semibold text-brand-300 mb-0.5">AI Engine Active</p>
+          <p className="text-xs text-brand-400">Scoring leads automatically</p>
           <div className="mt-2 flex items-center gap-1.5">
             <span className="relative flex w-2 h-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full w-2 h-2 bg-green-500"></span>
             </span>
-            <span className="text-xs text-green-600 font-medium">Online</span>
+            <span className="text-xs text-green-400 font-medium">Online</span>
           </div>
         </div>
       </div>

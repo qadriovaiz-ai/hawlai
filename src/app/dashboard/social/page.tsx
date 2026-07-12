@@ -80,7 +80,7 @@ export default function SocialPostPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">1. Photo</p>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
         <button
@@ -98,7 +98,7 @@ export default function SocialPostPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">2. What's the post about?</p>
         <input
           value={prompt}
@@ -119,7 +119,7 @@ export default function SocialPostPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">3. Schedule (optional)</p>
         <p className="text-xs text-slate-400">Leave blank to post now. Facebook needs at least 10 minutes and at most 6 months notice for scheduled posts.</p>
         <div className="flex items-center gap-2">

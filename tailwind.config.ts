@@ -21,6 +21,23 @@ const config: Config = {
           800: "#3730a3",
           900: "#312e81",
         },
+        // Inverted slate scale for a dark theme (Emergent-style near-black
+        // UI) — every component was already written treating 50 as "the
+        // lightest/background shade" and 900 as "the darkest/text shade",
+        // so flipping the actual hex values here re-themes the entire app
+        // dark without touching a single className anywhere else.
+        slate: {
+          50: "#0b0b0f",
+          100: "#151519",
+          200: "#232329",
+          300: "#33333c",
+          400: "#6b6b76",
+          500: "#8c8c98",
+          600: "#a7a7b3",
+          700: "#c2c2cb",
+          800: "#dcdce1",
+          900: "#f2f2f4",
+        },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

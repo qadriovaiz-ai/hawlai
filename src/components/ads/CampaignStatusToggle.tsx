@@ -42,7 +42,7 @@ export default function CampaignStatusToggle({
       <button
         onClick={toggle}
         disabled={loading}
-        className={isActive ? "btn-secondary text-amber-600 border-amber-200 hover:bg-amber-50" : "btn-primary"}
+        className={isActive ? "btn-secondary text-amber-600 border-amber-200 hover:bg-amber-500/10" : "btn-primary"}
       >
         {loading ? (
           <Loader2 className="w-4 h-4 animate-spin" />

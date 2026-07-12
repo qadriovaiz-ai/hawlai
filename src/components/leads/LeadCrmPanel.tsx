@@ -96,7 +96,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
           <IndianRupee className="w-4 h-4 text-green-600" /> Deal Value
         </p>
@@ -115,7 +115,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
         <p className="text-xs text-slate-400 mt-1.5">Set this once the sale closes — used to calculate real ROAS.</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
           <CheckSquare className="w-4 h-4 text-purple-600" /> Tasks
         </p>
@@ -154,7 +154,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <div className="bg-slate-100 rounded-xl border border-slate-200 p-4">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
           <StickyNote className="w-4 h-4 text-amber-600" /> Notes
         </p>

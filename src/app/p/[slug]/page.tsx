@@ -99,7 +99,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
           >
             {page.headline ?? dealershipName}
           </h1>
-          <p className="text-lg sm:text-xl text-slate-300 max-w-lg mb-8 leading-relaxed">
+          <p className="text-lg sm:text-xl text-neutral-300 max-w-lg mb-8 leading-relaxed">
             {page.subheadline ?? (city ? `Serving ${city} with trust and transparency.` : "Your trusted car partner.")}
           </p>
           <a
@@ -132,11 +132,11 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
           <div className="w-10 h-[3px] mb-8" style={{ backgroundColor: theme.accent }} />
           <div className="grid sm:grid-cols-3 gap-5">
             {carListings.map((car, i) => (
-              <div key={i} className="bg-white rounded-xl overflow-hidden border border-slate-200/70 shadow-sm">
+              <div key={i} className="bg-white rounded-xl overflow-hidden border border-neutral-200/70 shadow-sm">
                 {car.image_url ? (
                   <img src={car.image_url} alt={car.name} className="w-full h-36 object-cover" />
                 ) : (
-                  <div className="w-full h-36 bg-slate-100" />
+                  <div className="w-full h-36 bg-neutral-100" />
                 )}
                 <div className="p-3.5">
                   <p className="font-semibold text-sm">{car.name}</p>
@@ -153,7 +153,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
       )}
 
       {/* Lead capture */}
-      <section id="get-in-touch" className="bg-white border-y border-slate-200/70">
+      <section id="get-in-touch" className="bg-white border-y border-neutral-200/70">
         <div className="max-w-3xl mx-auto px-6 py-14 sm:py-16 grid sm:grid-cols-5 gap-10 items-start">
           <div className="sm:col-span-2 space-y-4">
             <h2
@@ -162,10 +162,10 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
             >
               Get in touch
             </h2>
-            <p className="text-slate-500 leading-relaxed">
+            <p className="text-neutral-500 leading-relaxed">
               Leave your number and we'll call you back — no pressure, just a real conversation.
             </p>
-            <div className="flex items-center gap-2 text-sm text-slate-500 pt-2">
+            <div className="flex items-center gap-2 text-sm text-neutral-500 pt-2">
               <ShieldCheck className="w-4 h-4 shrink-0" style={{ color: theme.accent }} />
               Your details go only to {dealershipName}
             </div>
@@ -176,7 +176,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
         </div>
       </section>
 
-      <footer className="max-w-3xl mx-auto px-6 py-8 flex items-center justify-between text-sm text-slate-400">
+      <footer className="max-w-3xl mx-auto px-6 py-8 flex items-center justify-between text-sm text-neutral-400">
         <span>{dealershipName}{city ? ` · ${city}` : ""}</span>
         <span className="flex items-center gap-1.5">
           <Phone className="w-3.5 h-3.5" /> Call to enquire

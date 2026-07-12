@@ -63,7 +63,7 @@ export default function ResearchPage() {
             <button
               key={ex}
               onClick={() => handleSearch(ex)}
-              className="text-xs text-slate-500 hover:text-purple-600 bg-slate-50 hover:bg-purple-50 px-2.5 py-1 rounded-full transition-colors"
+              className="text-xs text-slate-500 hover:text-purple-600 bg-slate-50 hover:bg-purple-500/10 px-2.5 py-1 rounded-full transition-colors"
             >
               {ex}
             </button>

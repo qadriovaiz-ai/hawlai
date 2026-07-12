@@ -41,7 +41,7 @@ export default function ApprovalActions({ approvalId }: { approvalId: string }) 
       <button
         onClick={() => decide("rejected")}
         disabled={loading !== null}
-        className="btn-secondary text-red-600 border-red-200 hover:bg-red-50"
+        className="btn-secondary text-red-600 border-red-200 hover:bg-red-500/10"
       >
         {loading === "reject" ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
         Reject

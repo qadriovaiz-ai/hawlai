@@ -137,7 +137,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
         </button>
         {showAnalyzer && (
           <div className="space-y-2.5">
-            <div className="flex items-center gap-1.5 bg-white rounded-lg p-1 border border-purple-100 w-fit">
+            <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 border border-purple-100 w-fit">
               <button
                 onClick={() => setAnalyzeMode("describe")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -163,7 +163,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="e.g. Hum ek car dealership hain Lucknow mein, 20 saal se. Family-friendly hain, honest dealings pe focus karte hain, EMI options bhi dete hain..."
-                  className="w-full h-24 p-2.5 text-sm border border-purple-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  className="w-full h-24 p-2.5 text-sm border border-purple-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
                 />
               </>
             ) : (
@@ -173,7 +173,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
                   value={websiteUrl}
                   onChange={(e) => setWebsiteUrl(e.target.value)}
                   placeholder="https://yourbusiness.com"
-                  className="w-full p-2.5 text-sm border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  className="w-full p-2.5 text-sm border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
                 />
               </>
             )}
@@ -184,7 +184,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
             </button>
             {analyzeError && <p className="text-xs text-red-600">{analyzeError}</p>}
             {analysisSummary && (
-              <p className="text-xs text-purple-700 bg-white rounded-lg p-2.5 border border-purple-100">{analysisSummary}</p>
+              <p className="text-xs text-purple-700 bg-slate-100 rounded-lg p-2.5 border border-purple-100">{analysisSummary}</p>
             )}
           </div>
         )}

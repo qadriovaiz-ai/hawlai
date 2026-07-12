@@ -82,7 +82,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         </h1>
         <p className="text-slate-500 text-center mt-2">{profile.summary}</p>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-sm mt-6">
+        <div className="bg-slate-100 rounded-2xl border border-slate-200 p-5 space-y-3 shadow-sm mt-6">
           {profile.business_category && (
             <div>
               <p className="text-xs text-slate-400">Business Type</p>
@@ -127,7 +127,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         A couple of sentences is enough — what you sell, who your customers are, what makes you different. I'll set up your Brand Voice from it.
       </p>
 
-      <div className="mt-8 bg-white border border-slate-200 rounded-2xl shadow-sm text-left">
+      <div className="mt-8 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left">
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}

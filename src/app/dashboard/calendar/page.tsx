@@ -147,7 +147,7 @@ export default function CalendarPage() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-slate-100 rounded-xl max-w-md w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-700">Add Calendar Item</p>
               <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">

@@ -74,7 +74,7 @@ export default function MasterBrainWidget() {
       {/* Slide-in panel */}
       <div
         className={cn(
-          "fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-white border-l border-slate-200 shadow-2xl flex flex-col transition-transform duration-300 ease-out",
+          "fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-slate-100 border-l border-slate-200 shadow-2xl flex flex-col transition-transform duration-300 ease-out",
           open ? "translate-x-0" : "translate-x-full"
         )}
       >

@@ -40,21 +40,21 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME }: { slug:
 
   if (submitted) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
+      <div className="bg-white border border-neutral-200 rounded-xl p-8 text-center shadow-sm">
         <CheckCircle className="w-9 h-9 mx-auto mb-3" style={{ color: theme.accent }} />
         <p className="font-semibold text-[#122744] text-lg">Thank you!</p>
-        <p className="text-sm text-slate-500 mt-1">We'll reach out to you shortly.</p>
+        <p className="text-sm text-neutral-500 mt-1">We'll reach out to you shortly.</p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-6 space-y-3.5 shadow-sm">
+    <form onSubmit={handleSubmit} className="bg-white border border-neutral-200 rounded-xl p-6 space-y-3.5 shadow-sm">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Your name"
-        className="w-full p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2"
+        className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
         style={{ "--tw-ring-color": `${theme.accent}66` } as React.CSSProperties}
       />
       <input
@@ -62,14 +62,14 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME }: { slug:
         onChange={(e) => setPhone(e.target.value)}
         placeholder="Phone number"
         type="tel"
-        className="w-full p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2"
+        className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
         style={{ "--tw-ring-color": `${theme.accent}66` } as React.CSSProperties}
       />
       <input
         value={vehicle}
         onChange={(e) => setVehicle(e.target.value)}
         placeholder="Which car are you interested in? (optional)"
-        className="w-full p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2"
+        className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
         style={{ "--tw-ring-color": `${theme.accent}66` } as React.CSSProperties}
       />
       {/* Honeypot field — hidden from real users, bots tend to fill everything */}

@@ -71,7 +71,7 @@ export default async function CallsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {calls.map((call) => (
-                  <tr key={call.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={call.id} className="hover:bg-slate-200 transition-colors">
                     <td className="table-cell">
                       <Link href={`/dashboard/leads/${call.lead_id}`} className="font-medium text-brand-600 hover:underline">
                         {call.leads?.name ?? "Unknown"}

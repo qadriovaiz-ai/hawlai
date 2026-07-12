@@ -26,7 +26,7 @@ export default function DraftMessagePreview({ message, phone }: { message: strin
       </button>
       {open && (
         <div className="px-3 pb-3 space-y-2">
-          <p className="text-xs text-slate-700 bg-white rounded-lg p-2.5 border border-green-100 whitespace-pre-wrap">
+          <p className="text-xs text-slate-700 bg-slate-100 rounded-lg p-2.5 border border-green-100 whitespace-pre-wrap">
             {message}
           </p>
           <div className="flex items-center gap-2">

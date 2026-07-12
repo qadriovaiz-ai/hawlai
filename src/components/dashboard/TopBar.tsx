@@ -31,7 +31,7 @@ export default function TopBar({ user, profile }: Props) {
     .slice(0, 2);
 
   return (
-    <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0">
+    <div className="h-16 bg-slate-100 border-b border-slate-200 px-6 flex items-center justify-between shrink-0">
       <div>
         <p className="text-sm text-slate-500">
           {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
@@ -60,13 +60,13 @@ export default function TopBar({ user, profile }: Props) {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg border border-slate-200 shadow-lg py-1 z-50">
+            <div className="absolute right-0 top-full mt-1 w-48 bg-slate-100 rounded-lg border border-slate-200 shadow-lg py-1 z-50">
               <div className="px-3 py-2 border-b border-slate-100">
                 <p className="text-xs text-slate-500 truncate">{user.email}</p>
               </div>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 Sign out

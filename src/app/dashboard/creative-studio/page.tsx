@@ -316,7 +316,7 @@ export default function CreativeStudioPage() {
         {logos.length > 0 && (
           <div className="grid grid-cols-3 gap-3">
             {logos.map((url, i) => (
-              <img key={i} src={url} alt={`Logo concept ${i + 1}`} className="w-full aspect-square object-contain bg-white border border-slate-200 rounded-lg" />
+              <img key={i} src={url} alt={`Logo concept ${i + 1}`} className="w-full aspect-square object-contain bg-slate-100 border border-slate-200 rounded-lg" />
             ))}
           </div>
         )}

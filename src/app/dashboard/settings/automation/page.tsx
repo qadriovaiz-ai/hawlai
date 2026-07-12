@@ -81,7 +81,7 @@ export default function AutomationSettingsPage() {
             onClick={toggleAutoPause}
             className={`w-11 h-6 rounded-full transition-colors relative ${autoPause ? "bg-purple-600" : "bg-slate-200"}`}
           >
-            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoPause ? "translate-x-5" : "translate-x-0.5"}`} />
+            <span className={`absolute top-0.5 w-5 h-5 bg-slate-100 rounded-full shadow-sm transition-transform ${autoPause ? "translate-x-5" : "translate-x-0.5"}`} />
           </button>
         </div>
         <p className="text-xs text-slate-400">

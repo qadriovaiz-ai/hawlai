@@ -162,7 +162,7 @@ export default function FullLaunchPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">1. Photo</p>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
           {photoPreview ? (
@@ -183,7 +183,7 @@ export default function FullLaunchPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">2. Describe your requirement in one line</p>
           <textarea
             value={prompt}
@@ -230,7 +230,7 @@ export default function FullLaunchPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">3. Where should clicks go?</p>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -254,7 +254,7 @@ export default function FullLaunchPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+        <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">4. Schedule (optional)</p>
           <p className="text-xs text-slate-400">Leave this blank to have it ready now (paused) — you'll activate it yourself from the Campaigns page.</p>
           <div className="flex items-center gap-2">
@@ -310,7 +310,7 @@ export default function FullLaunchPage() {
           <ArrowLeft className="w-4 h-4" /> Back to edit
         </button>
 
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           <img src={draft.generated_image_url} alt="" className="w-full aspect-square object-cover" />
           <div className="p-5 space-y-4">
             <div className="flex items-center justify-between">

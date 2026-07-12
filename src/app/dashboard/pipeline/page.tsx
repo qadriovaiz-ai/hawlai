@@ -54,7 +54,7 @@ export default async function PipelinePage() {
             <div key={stage.value} className={`bg-slate-50 rounded-xl border-t-4 ${stage.color} p-3 space-y-2 min-h-[200px]`}>
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs font-semibold text-slate-600">{stage.label}</p>
-                <span className="text-xs font-bold text-slate-400 bg-white rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full w-5 h-5 flex items-center justify-center">
                   {stageLeads.length}
                 </span>
               </div>
@@ -64,7 +64,7 @@ export default async function PipelinePage() {
               ) : (
                 <div className="space-y-2">
                   {stageLeads.map((lead) => (
-                    <div key={lead.id} className="bg-white rounded-lg border border-slate-200 p-2.5 space-y-1.5">
+                    <div key={lead.id} className="bg-slate-100 rounded-lg border border-slate-200 p-2.5 space-y-1.5">
                       <Link href={`/dashboard/leads/${lead.id}`} className="block">
                         <div className="flex items-center justify-between gap-1">
                           <p className="text-sm font-semibold text-slate-900 truncate">{lead.name}</p>

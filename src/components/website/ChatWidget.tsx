@@ -54,7 +54,7 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
       )}
 
       {open && (
-        <div className="fixed bottom-20 sm:bottom-5 right-5 z-40 w-[92vw] max-w-sm h-[65vh] max-h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-20 sm:bottom-5 right-5 z-40 w-[92vw] max-w-sm h-[65vh] max-h-[500px] bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 text-white shrink-0" style={{ backgroundColor: accentColor }}>
             <p className="text-sm font-semibold">Ask {dealershipName}</p>
             <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white">
@@ -62,15 +62,15 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2.5 bg-slate-50">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5 bg-neutral-50">
             {messages.length === 0 && (
-              <p className="text-xs text-slate-400 text-center py-6">Ask about pricing, availability, offers — anything!</p>
+              <p className="text-xs text-neutral-400 text-center py-6">Ask about pricing, availability, offers — anything!</p>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                    m.role === "user" ? "text-white rounded-tr-sm" : "bg-white border border-slate-200 text-slate-700 rounded-tl-sm"
+                    m.role === "user" ? "text-white rounded-tr-sm" : "bg-white border border-neutral-200 text-neutral-700 rounded-tl-sm"
                   }`}
                   style={m.role === "user" ? { backgroundColor: accentColor } : undefined}
                 >
@@ -80,16 +80,16 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-white border border-slate-200 rounded-xl rounded-tl-sm px-3 py-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                <div className="bg-white border border-neutral-200 rounded-xl rounded-tl-sm px-3 py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-neutral-400" />
                 </div>
               </div>
             )}
             <div ref={scrollRef} />
           </div>
 
-          <div className="p-2.5 border-t border-slate-200 bg-white shrink-0">
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg p-1">
+          <div className="p-2.5 border-t border-neutral-200 bg-white shrink-0">
+            <div className="flex items-center gap-1.5 bg-neutral-50 border border-neutral-200 rounded-lg p-1">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

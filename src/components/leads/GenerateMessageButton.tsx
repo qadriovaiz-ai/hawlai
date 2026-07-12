@@ -79,7 +79,7 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
 
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setOpen(false)}>
-          <div className="bg-white rounded-xl max-w-lg w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-slate-100 rounded-xl max-w-lg w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                 {channel === "whatsapp" ? <MessageCircle className="w-4 h-4 text-green-600" /> : <Mail className="w-4 h-4 text-blue-600" />}
