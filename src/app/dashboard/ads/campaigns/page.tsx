@@ -131,7 +131,7 @@ export default async function CampaignsPage() {
                 </div>
 
                 {perf && (perf.spend > 0 || perf.leads > 0) && (
-                  <div className="grid grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 pt-3 border-t border-slate-100">
                     <div>
                       <p className="text-xs text-slate-400">Spend</p>
                       <p className="text-sm font-semibold text-slate-800">{formatCurrency(perf.spend)}</p>
@@ -148,6 +148,16 @@ export default async function CampaignsPage() {
                       <p className="text-xs text-slate-400">Cost / Lead</p>
                       <p className="text-sm font-semibold text-slate-800">
                         {perf.cost_per_lead !== null ? formatCurrency(perf.cost_per_lead) : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Sales</p>
+                      <p className="text-sm font-semibold text-slate-800">{perf.conversions}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">ROAS</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {perf.roas !== null ? `${perf.roas.toFixed(1)}x` : "—"}
                       </p>
                     </div>
                   </div>

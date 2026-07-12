@@ -67,11 +67,13 @@ export default async function AnalyticsPage() {
   // history — this survives even if a campaign is later paused,
   // deleted on Meta, or Facebook access is ever lost, since it's our
   // own stored copy, not a live re-fetch from Meta each time.
-  const campaignTotals = new Map<string, { headline: string; spend: number; leads: number; days: number }>();
+  const campaignTotals = new Map<string, { headline: string; spend: number; leads: number; revenue: number; conversions: number; days: number }>();
   for (const row of perfHistory ?? []) {
-    const existing = campaignTotals.get(row.ad_creative_id) ?? { headline: row.headline ?? "Untitled", spend: 0, leads: 0, days: 0 };
+    const existing = campaignTotals.get(row.ad_creative_id) ?? { headline: row.headline ?? "Untitled", spend: 0, leads: 0, revenue: 0, conversions: 0, days: 0 };
     existing.spend += Number(row.spend ?? 0);
     existing.leads += Number(row.leads ?? 0);
+    existing.revenue += Number(row.revenue ?? 0);
+    existing.conversions += Number(row.conversions ?? 0);
     existing.days += 1;
     campaignTotals.set(row.ad_creative_id, existing);
   }
@@ -128,6 +130,9 @@ export default async function AnalyticsPage() {
                   <th className="pb-2 font-medium">Total Spend</th>
                   <th className="pb-2 font-medium">Total Leads</th>
                   <th className="pb-2 font-medium">Avg. Cost/Lead</th>
+                  <th className="pb-2 font-medium">Sales</th>
+                  <th className="pb-2 font-medium">Revenue</th>
+                  <th className="pb-2 font-medium">ROAS</th>
                 </tr>
               </thead>
               <tbody>
@@ -138,6 +143,15 @@ export default async function AnalyticsPage() {
                     <td className="py-2 text-slate-700">{formatCurrency(c.spend)}</td>
                     <td className="py-2 text-slate-700">{c.leads}</td>
                     <td className="py-2 text-slate-700">{c.leads > 0 ? formatCurrency(c.spend / c.leads) : "—"}</td>
+                    <td className="py-2 text-slate-700">{c.conversions}</td>
+                    <td className="py-2 text-slate-700">{c.revenue > 0 ? formatCurrency(c.revenue) : "—"}</td>
+                    <td className="py-2 font-medium">
+                      {c.spend > 0 && c.revenue > 0 ? (
+                        <span className={c.revenue / c.spend >= 1 ? "text-green-600" : "text-amber-600"}>
+                          {(c.revenue / c.spend).toFixed(1)}x
+                        </span>
+                      ) : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -23,6 +23,9 @@ export interface CampaignPerformance {
   ctr: number;
   leads: number;
   cost_per_lead: number | null;
+  revenue: number;
+  conversions: number;
+  roas: number | null;
 }
 
 async function fetchInsights(campaignId: string, token: string) {
@@ -78,6 +81,24 @@ export async function getCampaignPerformance(
     leadCountByCampaign[cid] = (leadCountByCampaign[cid] ?? 0) + 1;
   }
 
+  // Revenue per campaign — which leads actually converted to a sale
+  // (deal_value set on the CRM side), grouped by originating campaign.
+  const { data: convertedLeads } = await supabase
+    .from("leads")
+    .select("meta_campaign_id, deal_value")
+    .eq("dealership_id", dealershipId)
+    .eq("status", "converted")
+    .not("meta_campaign_id", "is", null)
+    .not("deal_value", "is", null);
+
+  const revenueByCampaign: Record<string, { revenue: number; conversions: number }> = {};
+  for (const lead of convertedLeads ?? []) {
+    const cid = lead.meta_campaign_id;
+    if (!revenueByCampaign[cid]) revenueByCampaign[cid] = { revenue: 0, conversions: 0 };
+    revenueByCampaign[cid].revenue += Number(lead.deal_value ?? 0);
+    revenueByCampaign[cid].conversions += 1;
+  }
+
   const campaigns: CampaignPerformance[] = await Promise.all(
     launchedAds.map(async (ad: any) => {
       const insights = await fetchInsights(ad.meta_campaign_id, token);
@@ -98,6 +119,9 @@ export async function getCampaignPerformance(
         ctr,
         leads: leadCount,
         cost_per_lead: leadCount > 0 ? spend / leadCount : null,
+        revenue: revenueByCampaign[ad.meta_campaign_id]?.revenue ?? 0,
+        conversions: revenueByCampaign[ad.meta_campaign_id]?.conversions ?? 0,
+        roas: spend > 0 && revenueByCampaign[ad.meta_campaign_id]?.revenue ? revenueByCampaign[ad.meta_campaign_id].revenue / spend : null,
       };
     })
   );
@@ -137,6 +161,9 @@ export async function snapshotCampaignPerformance(supabase: any, dealershipId: s
     clicks: c.clicks,
     leads: c.leads,
     cost_per_lead: c.cost_per_lead,
+    revenue: c.revenue,
+    conversions: c.conversions,
+    roas: c.roas,
   }));
 
   const { error } = await supabase
