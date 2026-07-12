@@ -19,6 +19,7 @@ import { syncOpportunities } from "./opportunityAgent";
 import { generateFollowUpMessage } from "./contentAgent";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { setCampaignStatus } from "./campaignEditAgent";
+import { snapshotCampaignPerformance } from "./analyticsAgent";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 
@@ -106,9 +107,10 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
   return pausedCount;
 }
 
-export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number }> {
+export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number; snapshotted: number }> {
   await syncOpportunities(supabase, dealershipId);
   const drafted = await draftStuckLeadFollowUps(supabase, dealershipId);
   const auto_paused = await applyAutoPause(supabase, dealershipId);
-  return { drafted, auto_paused };
+  const snapshotted = await snapshotCampaignPerformance(supabase, dealershipId);
+  return { drafted, auto_paused, snapshotted };
 }

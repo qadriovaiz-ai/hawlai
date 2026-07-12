@@ -114,3 +114,38 @@ export async function getCampaignPerformance(
     },
   };
 }
+
+// ------------------------------------------------------------------
+// Permanent snapshot — run once a day (via Autopilot cron) so
+// performance history survives even if Meta access is ever lost,
+// an ad account changes, or a campaign gets deleted on Meta's side.
+// getCampaignPerformance() above always reflects live Meta data;
+// this is the durable copy of that same data, one row per campaign
+// per day.
+// ------------------------------------------------------------------
+export async function snapshotCampaignPerformance(supabase: any, dealershipId: string): Promise<number> {
+  const performance = await getCampaignPerformance(supabase, dealershipId);
+  if (performance.campaigns.length === 0) return 0;
+
+  const rows = performance.campaigns.map((c) => ({
+    dealership_id: dealershipId,
+    ad_creative_id: c.id,
+    snapshot_date: new Date().toISOString().slice(0, 10),
+    headline: c.headline,
+    spend: c.spend,
+    impressions: c.impressions,
+    clicks: c.clicks,
+    leads: c.leads,
+    cost_per_lead: c.cost_per_lead,
+  }));
+
+  const { error } = await supabase
+    .from("campaign_performance_history")
+    .upsert(rows, { onConflict: "ad_creative_id,snapshot_date" });
+
+  if (error) {
+    console.error("[analytics-agent] snapshotCampaignPerformance error:", error.message);
+    return 0;
+  }
+  return rows.length;
+}
