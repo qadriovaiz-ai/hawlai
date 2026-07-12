@@ -85,7 +85,7 @@ export default function SocialPostPage() {
         <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full border-2 border-dashed border-slate-200 rounded-lg py-6 flex flex-col items-center gap-2 hover:border-purple-300 transition-colors"
+          className="bg-slate-100 text-slate-900 w-full border-2 border-dashed border-slate-200 rounded-lg py-6 flex flex-col items-center gap-2 hover:border-purple-300 transition-colors"
         >
           {photoPreview ? (
             <img src={photoPreview} alt="Preview" className="max-h-40 rounded-lg" />
@@ -104,7 +104,7 @@ export default function SocialPostPage() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g. New Swift arrivals this week"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <button onClick={handleGenerateCaption} disabled={generating} className="btn-secondary text-sm">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -114,7 +114,7 @@ export default function SocialPostPage() {
           <textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
-            className="w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         )}
       </div>
@@ -128,7 +128,7 @@ export default function SocialPostPage() {
             type="datetime-local"
             value={scheduledTime}
             onChange={(e) => setScheduledTime(e.target.value)}
-            className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
       </div>

@@ -197,7 +197,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
           value={tone}
           onChange={(e) => setTone(e.target.value)}
           placeholder="e.g. Trustworthy, family-friendly, no hard-sell. Confident but warm."
-          className="w-full h-20 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full h-20 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
       </div>
 
@@ -210,7 +210,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               value={ageRange}
               onChange={(e) => setAgeRange(e.target.value)}
               placeholder="e.g. 30-45"
-              className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
           <div>
@@ -219,7 +219,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               value={income}
               onChange={(e) => setIncome(e.target.value)}
               placeholder="e.g. Middle class"
-              className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
         </div>
@@ -229,7 +229,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
             value={concerns}
             onChange={(e) => setConcerns(e.target.value)}
             placeholder="e.g. EMI affordability, resale value, service cost"
-            className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
       </div>
@@ -243,7 +243,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               value={p}
               onChange={(e) => updatePillar(i, e.target.value)}
               placeholder="e.g. 0% down payment available"
-              className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <button onClick={() => removePillar(i)} className="btn-secondary px-2 py-2">
               <X className="w-4 h-4" />
@@ -260,7 +260,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           <option value="hinglish">Hinglish</option>
           <option value="hindi">Hindi</option>

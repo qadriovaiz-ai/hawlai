@@ -47,7 +47,7 @@ export default function BusinessCategoryField({ initial }: { initial: string | n
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="e.g. Car Dealership, Real Estate, Restaurant"
-          className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <button onClick={() => handleSave()} disabled={saving} className="btn-primary text-sm shrink-0">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}

@@ -134,7 +134,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
           placeholder="e.g. Hum ek jewelry business hain, affordable fashion jewelry banate hain, young customers ke liye..."
           disabled={loading}
           autoFocus
-          className="w-full h-28 p-5 text-sm border-0 resize-none focus:outline-none disabled:opacity-60 rounded-t-2xl"
+          className="w-full h-28 p-5 text-sm bg-transparent text-slate-900 placeholder-slate-500 border-0 resize-none focus:outline-none disabled:opacity-60 rounded-t-2xl"
         />
         <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
           <button onClick={handleSkip} className="text-xs text-slate-400 hover:text-slate-600">

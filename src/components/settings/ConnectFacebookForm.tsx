@@ -55,7 +55,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
         <select
           value={pageId}
           onChange={(e) => { setPageId(e.target.value); setLeadFormId(""); }}
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           {pages.map((p: any) => (
             <option key={p.id} value={p.id}>{p.name}</option>
@@ -68,7 +68,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
         <select
           value={adAccountId}
           onChange={(e) => setAdAccountId(e.target.value)}
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           {adAccounts.length === 0 && <option value="">No Ad Account found</option>}
           {adAccounts.map((a: any) => (
@@ -82,7 +82,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
         <select
           value={leadFormId}
           onChange={(e) => setLeadFormId(e.target.value)}
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           <option value="">None selected</option>
           {leadForms.map((f: any) => (

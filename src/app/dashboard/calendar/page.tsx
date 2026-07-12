@@ -111,7 +111,7 @@ export default function CalendarPage() {
           <select
             value={item.status}
             onChange={(e) => handleStatusChange(item.id, e.target.value)}
-            className="text-xs border border-slate-200 rounded-md px-2 py-1.5"
+            className="bg-slate-100 text-slate-900 text-xs border border-slate-200 rounded-md px-2 py-1.5"
           >
             <option value="planned">Planned</option>
             <option value="in_progress">In Progress</option>
@@ -158,13 +158,13 @@ export default function CalendarPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Diwali sale social post"
-              className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <div className="grid grid-cols-2 gap-3">
               <select
                 value={channel}
                 onChange={(e) => setChannel(e.target.value)}
-                className="p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 {Object.entries(CHANNEL_META).map(([value, meta]) => (
                   <option key={value} value={value}>{meta.label}</option>
@@ -174,14 +174,14 @@ export default function CalendarPage() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Notes (optional)"
-              className="w-full h-16 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 w-full h-16 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button onClick={handleAdd} disabled={saving} className="btn-primary w-full justify-center text-sm">

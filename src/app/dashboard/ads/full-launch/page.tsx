@@ -175,7 +175,7 @@ export default function FullLaunchPage() {
           ) : (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
+              className="bg-slate-100 text-slate-900 w-full h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
             >
               <ImagePlus className="w-8 h-8" />
               <span className="text-sm font-medium">Select Photo</span>
@@ -189,7 +189,7 @@ export default function FullLaunchPage() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500"
-            className="w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <div className="space-y-2">
             {EXAMPLES.map((ex, i) => (
@@ -263,7 +263,7 @@ export default function FullLaunchPage() {
               type="datetime-local"
               value={scheduledStart}
               onChange={(e) => setScheduledStart(e.target.value)}
-              className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
         </div>

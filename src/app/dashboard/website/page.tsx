@@ -209,7 +209,7 @@ export default function WebsitePage() {
             value={externalUrl}
             onChange={(e) => setExternalUrl(e.target.value)}
             placeholder="https://your-dealership-website.com"
-            className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <button onClick={handleSaveExternalUrl} disabled={savingExternal} className="btn-secondary text-sm">
             {savingExternal ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
@@ -227,7 +227,7 @@ export default function WebsitePage() {
             value={slug}
             onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
             placeholder="your-dealership-name"
-            className="flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
         {publicUrl && (
@@ -270,19 +270,19 @@ export default function WebsitePage() {
           value={headline}
           onChange={(e) => setHeadline(e.target.value)}
           placeholder="Headline"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <input
           value={subheadline}
           onChange={(e) => setSubheadline(e.target.value)}
           placeholder="Subheadline"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <input
           value={offerText}
           onChange={(e) => setOfferText(e.target.value)}
           placeholder="Offer / call to action"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
       </div>
 
@@ -292,7 +292,7 @@ export default function WebsitePage() {
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="w-full border-2 border-dashed border-slate-200 rounded-lg py-4 flex flex-col items-center gap-2 hover:border-purple-300 transition-colors"
+          className="bg-slate-100 text-slate-900 w-full border-2 border-dashed border-slate-200 rounded-lg py-4 flex flex-col items-center gap-2 hover:border-purple-300 transition-colors"
         >
           {uploading ? (
             <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
@@ -316,7 +316,7 @@ export default function WebsitePage() {
         </div>
         {cars.length === 0 && <p className="text-xs text-slate-400">Add specific cars/offers to show in a gallery on the page.</p>}
         {cars.map((car, i) => (
-          <div key={i} className="flex items-center gap-2 border border-slate-100 rounded-lg p-2.5">
+          <div key={i} className="bg-slate-100 text-slate-900 flex items-center gap-2 border border-slate-100 rounded-lg p-2.5">
             <input
               ref={i === 0 ? carFileInputRef : undefined}
               type="file"
@@ -338,13 +338,13 @@ export default function WebsitePage() {
               value={car.name}
               onChange={(e) => updateCar(i, "name", e.target.value)}
               placeholder="Car name"
-              className="flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <input
               value={car.price ?? ""}
               onChange={(e) => updateCar(i, "price", e.target.value)}
               placeholder="Price"
-              className="w-28 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="bg-slate-100 text-slate-900 w-28 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <button onClick={() => removeCar(i)} className="text-slate-300 hover:text-red-500 shrink-0">
               <X className="w-4 h-4" />

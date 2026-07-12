@@ -68,14 +68,14 @@ export default function StrategyPage() {
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-slate-500 block mb-1">Monthly budget (₹)</label>
-            <div className="flex items-center gap-2 border border-slate-200 rounded-lg p-2.5">
+            <div className="bg-slate-100 text-slate-900 flex items-center gap-2 border border-slate-200 rounded-lg p-2.5">
               <IndianRupee className="w-4 h-4 text-slate-400 shrink-0" />
               <input value={budget} onChange={(e) => setBudget(e.target.value.replace(/\D/g, ""))} placeholder="30000" className="flex-1 text-sm focus:outline-none" />
             </div>
           </div>
           <div>
             <label className="text-xs text-slate-500 block mb-1">Goal</label>
-            <select value={goal} onChange={(e) => setGoal(e.target.value)} className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+            <select value={goal} onChange={(e) => setGoal(e.target.value)} className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
               {GOALS.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>

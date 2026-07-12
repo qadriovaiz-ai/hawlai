@@ -201,7 +201,7 @@ export default function CreativeStudioPage() {
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           placeholder="e.g. Diwali offer on Maruti Swift"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <div className="flex flex-wrap gap-2">
           <button onClick={handleGenerateScript} disabled={scriptLoading} className="btn-secondary text-sm">
@@ -277,13 +277,13 @@ export default function CreativeStudioPage() {
           value={carModel}
           onChange={(e) => setCarModel(e.target.value)}
           placeholder="Car model, e.g. 2022 Hyundai Creta SX"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <input
           value={carDetails}
           onChange={(e) => setCarDetails(e.target.value)}
           placeholder="Details — km driven, price, features (optional)"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <button onClick={handleGenerateListing} disabled={listingLoading} className="btn-secondary text-sm">
           {listingLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -329,7 +329,7 @@ export default function CreativeStudioPage() {
           value={videoPrompt}
           onChange={(e) => setVideoPrompt(e.target.value)}
           placeholder="e.g. A red Swift driving down a sunny highway, cinematic, upbeat"
-          className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <button onClick={handleGenerateVideo} disabled={videoStarting || videoPolling} className="btn-secondary text-sm">
           {videoStarting || videoPolling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
@@ -337,7 +337,7 @@ export default function CreativeStudioPage() {
         </button>
         {videoError && <p className="text-xs text-red-600">{videoError}</p>}
         {videoResult?.video_url && (
-          <video src={videoResult.video_url} controls className="w-full rounded-lg border border-slate-200" />
+          <video src={videoResult.video_url} controls className="bg-slate-100 text-slate-900 w-full rounded-lg border border-slate-200" />
         )}
       </div>
 
@@ -347,7 +347,7 @@ export default function CreativeStudioPage() {
           value={voiceoverText}
           onChange={(e) => setVoiceoverText(e.target.value)}
           placeholder="Paste the script you want read out loud..."
-          className="w-full h-20 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="bg-slate-100 text-slate-900 w-full h-20 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <button onClick={handleGenerateVoiceover} disabled={voiceoverLoading} className="btn-secondary text-sm">
           {voiceoverLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}

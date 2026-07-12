@@ -134,13 +134,13 @@ export default function SeoPage() {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g. Maruti Swift"
-            className="p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <input
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder="City (optional)"
-            className="p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
         <div className="flex flex-wrap gap-2">

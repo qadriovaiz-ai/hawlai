@@ -106,7 +106,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
             value={dealValue}
             onChange={(e) => setDealValue(e.target.value)}
             placeholder="e.g. 850000"
-            className="flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <button onClick={saveDealValue} disabled={savingDeal} className="btn-secondary text-xs">
             {savingDeal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dealSaved ? <Check className="w-3.5 h-3.5" /> : "Save"}
@@ -125,7 +125,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
             onChange={(e) => setNewTask(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addTask()}
             placeholder="e.g. Call back tomorrow"
-            className="flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <button onClick={addTask} disabled={savingTask} className="btn-secondary text-xs">
             {savingTask ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
@@ -143,7 +143,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
                   type="checkbox"
                   checked={task.status === "completed"}
                   onChange={() => toggleTask(task.id, task.status)}
-                  className="rounded border-slate-300"
+                  className="bg-slate-100 text-slate-900 rounded border-slate-300"
                 />
                 <span className={task.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}>
                   {task.title}
@@ -164,7 +164,7 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
             onChange={(e) => setNewNote(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addNote()}
             placeholder="Add a note..."
-            className="flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <button onClick={addNote} disabled={savingNote} className="btn-secondary text-xs">
             {savingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
