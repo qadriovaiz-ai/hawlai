@@ -20,6 +20,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const { data: calls } = await supabase.from("calls").select("*").eq("lead_id", id).order("created_at", { ascending: false });
   const { data: appointments } = await supabase.from("appointments").select("*").eq("lead_id", id).order("appointment_date", { ascending: true });
 
+  let sourceCampaign: string | null = null;
+  if (lead.meta_campaign_id) {
+    const { data: campaign } = await supabase
+      .from("ad_creatives")
+      .select("headline")
+      .eq("meta_campaign_id", lead.meta_campaign_id)
+      .eq("dealership_id", lead.dealership_id)
+      .maybeSingle();
+    sourceCampaign = campaign?.headline ?? null;
+  }
+
   const vehicleAge = lead.purchase_year ? new Date().getFullYear() - lead.purchase_year : null;
 
   return (
@@ -73,6 +84,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               { icon: Car, label: "Vehicle", value: lead.vehicle },
               { icon: Calendar, label: "Purchase Year", value: lead.purchase_year ? `${lead.purchase_year} (${vehicleAge} years ago)` : null },
               { icon: DollarSign, label: "Budget", value: lead.budget ? formatCurrency(lead.budget) : null },
+              { icon: Zap, label: "Source", value: sourceCampaign ?? lead.source?.replaceAll("_", " ") ?? null },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-3">
                 <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />

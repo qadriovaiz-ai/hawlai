@@ -36,6 +36,8 @@ export interface Lead {
   purchase_year: number | null;
   budget: number | null;
   source: string;
+  meta_campaign_id: string | null;
+  meta_ad_id: string | null;
   ai_score: number;
   lead_temperature: LeadTemperature;
   status: LeadStatus;

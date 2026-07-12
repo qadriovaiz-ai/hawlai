@@ -19,9 +19,10 @@ interface Props {
   page: number;
   pageSize: number;
   filters: { q?: string; temp?: string; status?: string };
+  campaignMap?: Record<string, string>;
 }
 
-export default function LeadsTable({ leads, total, page, pageSize, filters }: Props) {
+export default function LeadsTable({ leads, total, page, pageSize, filters, campaignMap = {} }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -128,6 +129,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters }: Pr
                   <th className="table-header">Name</th>
                   <th className="table-header">Phone</th>
                   <th className="table-header">Vehicle</th>
+                  <th className="table-header">Source</th>
                   <th className="table-header">Year</th>
                   <th className="table-header">Budget</th>
                   <th className="table-header">
@@ -146,6 +148,15 @@ export default function LeadsTable({ leads, total, page, pageSize, filters }: Pr
                     <td className="table-cell font-medium text-slate-900">{lead.name}</td>
                     <td className="table-cell text-slate-600">{lead.phone ?? "—"}</td>
                     <td className="table-cell text-slate-600 max-w-32 truncate">{lead.vehicle ?? "—"}</td>
+                    <td className="table-cell max-w-40">
+                      {lead.meta_campaign_id && campaignMap[lead.meta_campaign_id] ? (
+                        <span className="badge bg-purple-500/10 text-purple-300 border-purple-700/40 truncate max-w-full" title={campaignMap[lead.meta_campaign_id]}>
+                          {campaignMap[lead.meta_campaign_id]}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">{lead.source?.replaceAll("_", " ") ?? "unknown"}</span>
+                      )}
+                    </td>
                     <td className="table-cell text-slate-600">{lead.purchase_year ?? "—"}</td>
                     <td className="table-cell text-slate-600">
                       {lead.budget ? formatCurrency(lead.budget) : "—"}

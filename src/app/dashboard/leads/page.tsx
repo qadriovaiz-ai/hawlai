@@ -40,6 +40,21 @@ export default async function LeadsPage({
 
   const { data: leads, count } = await query;
 
+  // Map each lead's meta_campaign_id to the actual ad's headline, so
+  // the table can show "came from: [Diwali Swift Offer]" instead of
+  // just a raw ID — this is what actually answers "which ad brought
+  // this lead in", not just "was it from Meta at all".
+  const campaignIds = Array.from(new Set((leads ?? []).map((l) => l.meta_campaign_id).filter(Boolean)));
+  let campaignMap: Record<string, string> = {};
+  if (campaignIds.length > 0) {
+    const { data: campaigns } = await supabase
+      .from("ad_creatives")
+      .select("meta_campaign_id, headline")
+      .eq("dealership_id", dealershipId)
+      .in("meta_campaign_id", campaignIds as string[]);
+    campaignMap = Object.fromEntries((campaigns ?? []).map((c) => [c.meta_campaign_id, c.headline]));
+  }
+
   return (
     <div className="space-y-5 max-w-7xl">
       <LeadsHeader dealershipId={dealershipId} />
@@ -48,6 +63,7 @@ export default async function LeadsPage({
         total={count ?? 0}
         page={page}
         pageSize={pageSize}
+        campaignMap={campaignMap}
         filters={{ q: params.q, temp: params.temp, status: params.status }}
       />
     </div>
