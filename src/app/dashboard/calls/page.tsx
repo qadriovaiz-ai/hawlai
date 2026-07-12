@@ -73,7 +73,7 @@ export default async function CallsPage() {
                 {calls.map((call) => (
                   <tr key={call.id} className="hover:bg-slate-200 transition-colors">
                     <td className="table-cell">
-                      <Link href={`/dashboard/leads/${call.lead_id}`} className="font-medium text-brand-600 hover:underline">
+                      <Link href={`/dashboard/leads/${call.lead_id}`} className="font-medium text-brand-400 hover:underline">
                         {call.leads?.name ?? "Unknown"}
                       </Link>
                       <p className="text-xs text-slate-400">{call.leads?.vehicle ?? ""}</p>

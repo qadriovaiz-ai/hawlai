@@ -41,7 +41,7 @@ export default function HubTabs({ title, description, icon, tabs }: {
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors -mb-px",
                 isActive
-                  ? "border-brand-600 text-brand-700"
+                  ? "border-brand-600 text-brand-300"
                   : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-200"
               )}
             >

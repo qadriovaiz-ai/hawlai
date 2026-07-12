@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AnalyticsCharts from "@/components/dashboard/AnalyticsCharts";
+import CampaignPerformanceCharts from "@/components/dashboard/CampaignPerformanceCharts";
 import { formatCurrency } from "@/lib/utils";
 import { History } from "lucide-react";
 
@@ -79,6 +80,19 @@ export default async function AnalyticsPage() {
   }
   const campaignTotalsList = Array.from(campaignTotals.values()).sort((a, b) => b.spend - a.spend);
 
+  // Aggregate the same permanent history by date (summed across all
+  // campaigns) for the time-series charts — same data source as the
+  // per-campaign table below, just grouped differently.
+  const dailyTotals = new Map<string, { date: string; spend: number; leads: number; revenue: number }>();
+  for (const row of perfHistory ?? []) {
+    const existing = dailyTotals.get(row.snapshot_date) ?? { date: row.snapshot_date, spend: 0, leads: 0, revenue: 0 };
+    existing.spend += Number(row.spend ?? 0);
+    existing.leads += Number(row.leads ?? 0);
+    existing.revenue += Number(row.revenue ?? 0);
+    dailyTotals.set(row.snapshot_date, existing);
+  }
+  const dailyChartData = Array.from(dailyTotals.values()).sort((a, b) => a.date.localeCompare(b.date));
+
   return (
     <div className="max-w-6xl space-y-6">
       <div>
@@ -89,7 +103,7 @@ export default async function AnalyticsPage() {
       {/* KPI Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Qualification Rate", value: `${qualificationRate}%`, sub: "Hot + Warm leads", color: "bg-brand-50 text-brand-700" },
+          { label: "Qualification Rate", value: `${qualificationRate}%`, sub: "Hot + Warm leads", color: "bg-brand-500/10 text-brand-300" },
           { label: "Hot Lead Percentage", value: `${hotPct}%`, sub: "Of all leads", color: "bg-red-500/10 text-red-300" },
           { label: "Appointment Rate", value: `${appointmentRate}%`, sub: "Leads to appointments", color: "bg-green-500/10 text-green-300" },
           { label: "Call Completion", value: `${callCompletionRate}%`, sub: "Calls answered", color: "bg-purple-500/10 text-purple-300" },
@@ -109,6 +123,11 @@ export default async function AnalyticsPage() {
         sourceData={sourceData}
         monthlyTrend={monthlyTrend}
       />
+
+      <div>
+        <p className="text-sm font-semibold text-slate-700 mb-3">Campaign Performance — Meta-style graphs</p>
+        <CampaignPerformanceCharts data={dailyChartData} />
+      </div>
 
       <div className="card p-5 space-y-3">
         <div className="flex items-center gap-2">

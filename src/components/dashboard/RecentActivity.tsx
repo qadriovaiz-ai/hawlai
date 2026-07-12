@@ -19,7 +19,7 @@ export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
     <div className="card">
       <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900">Recent Leads</h3>
-        <Link href="/dashboard/leads" className="text-xs text-brand-600 hover:underline flex items-center gap-1">
+        <Link href="/dashboard/leads" className="text-xs text-brand-400 hover:underline flex items-center gap-1">
           View all <ArrowRight className="w-3 h-3" />
         </Link>
       </div>

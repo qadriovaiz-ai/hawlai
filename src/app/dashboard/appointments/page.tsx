@@ -92,7 +92,7 @@ function AppointmentCard({ appt }: { appt: Record<string, unknown> & { id: strin
         </p>
       </div>
       <div className="flex-1 min-w-0">
-        <Link href={`/dashboard/leads/${appt.lead_id}`} className="font-semibold text-slate-900 hover:text-brand-600 transition-colors">
+        <Link href={`/dashboard/leads/${appt.lead_id}`} className="font-semibold text-slate-900 hover:text-brand-400 transition-colors">
           {lead?.name ?? "Unknown"}
         </Link>
         <p className="text-sm text-slate-500">{lead?.vehicle ?? ""} • {String(appt.appointment_type).replace(/_/g, " ")}</p>

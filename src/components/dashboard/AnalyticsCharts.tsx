@@ -23,10 +23,10 @@ export default function AnalyticsCharts({
         <h3 className="text-sm font-semibold text-slate-900 mb-4">AI Score Distribution</h3>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={scoreBuckets} margin={{ left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="range" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={{ border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "12px" }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#232329" />
+            <XAxis dataKey="range" tick={{ fontSize: 12, fill: "#8c8c98" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 12, fill: "#8c8c98" }} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip contentStyle={{ background: "#151519", border: "1px solid #33333c", borderRadius: "8px", fontSize: "12px", color: "#f2f2f4" }} />
             <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} name="Leads" />
           </BarChart>
         </ResponsiveContainer>
@@ -48,7 +48,7 @@ export default function AnalyticsCharts({
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "12px" }} />
+                <Tooltip contentStyle={{ background: "#151519", border: "1px solid #33333c", borderRadius: "8px", fontSize: "12px", color: "#f2f2f4" }} />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap gap-2 justify-center mt-2">
@@ -68,10 +68,10 @@ export default function AnalyticsCharts({
         <h3 className="text-sm font-semibold text-slate-900 mb-4">6-Month Activity Trend</h3>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={monthlyTrend} margin={{ left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip contentStyle={{ border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "12px" }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#232329" />
+            <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#8c8c98" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 12, fill: "#8c8c98" }} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip contentStyle={{ background: "#151519", border: "1px solid #33333c", borderRadius: "8px", fontSize: "12px", color: "#f2f2f4" }} />
             <Legend wrapperStyle={{ fontSize: "12px" }} />
             <Line type="monotone" dataKey="leads" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} name="Leads" />
             <Line type="monotone" dataKey="calls" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} name="Calls" />

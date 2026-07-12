@@ -47,7 +47,7 @@ export default async function DashboardHomePage() {
   const recentLeads = leads?.slice(0, 5) ?? [];
 
   const kpis = [
-    { label: "Total Leads", value: totalLeads, icon: Users, color: "bg-brand-50 text-brand-600" },
+    { label: "Total Leads", value: totalLeads, icon: Users, color: "bg-brand-500/10 text-brand-400" },
     { label: "Hot Leads", value: hotLeads, icon: Flame, color: "bg-red-500/10 text-red-400" },
     { label: "In Call Queue", value: inQueue, icon: PhoneCall, color: "bg-purple-500/10 text-purple-400" },
     { label: "Appointments", value: totalAppointments, icon: Calendar, color: "bg-green-500/10 text-green-400" },
@@ -98,7 +98,7 @@ export default async function DashboardHomePage() {
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-700">Recent Leads</h2>
-          <Link href="/dashboard/leads" className="text-xs text-brand-600 font-medium hover:underline">
+          <Link href="/dashboard/leads" className="text-xs text-brand-400 font-medium hover:underline">
             View all
           </Link>
         </div>

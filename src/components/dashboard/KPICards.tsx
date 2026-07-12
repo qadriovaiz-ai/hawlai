@@ -15,7 +15,7 @@ export default function KPICards({ kpis }: { kpis: KPIs }) {
       label: "Total Leads",
       value: kpis.totalLeads,
       icon: Users,
-      color: "text-brand-600 bg-brand-50",
+      color: "text-brand-400 bg-brand-500/10",
       change: "+12%",
     },
     {

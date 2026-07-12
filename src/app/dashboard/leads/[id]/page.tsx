@@ -33,7 +33,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       <div className="card p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-brand-100 rounded-full flex items-center justify-center text-xl font-bold text-brand-700">
+            <div className="w-14 h-14 bg-brand-500/20 rounded-full flex items-center justify-center text-xl font-bold text-brand-300">
               {lead.name.charAt(0)}
             </div>
             <div>
@@ -61,8 +61,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         {/* Customer Info */}
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <span className="w-5 h-5 bg-brand-100 rounded flex items-center justify-center">
-              <span className="text-xs text-brand-600">👤</span>
+            <span className="w-5 h-5 bg-brand-500/20 rounded flex items-center justify-center">
+              <span className="text-xs text-brand-400">👤</span>
             </span>
             Customer Information
           </h2>

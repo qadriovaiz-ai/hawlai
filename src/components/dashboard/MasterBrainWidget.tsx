@@ -102,7 +102,7 @@ export default function MasterBrainWidget() {
                   <button
                     key={i}
                     onClick={() => handleSend(ex)}
-                    className="w-full text-left text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 hover:border-brand-300 hover:bg-brand-50/50 transition-colors"
+                    className="w-full text-left text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 hover:border-brand-300 hover:bg-brand-500/10/50 transition-colors"
                   >
                     "{ex}"
                   </button>

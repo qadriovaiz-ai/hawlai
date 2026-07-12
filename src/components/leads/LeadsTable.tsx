@@ -178,7 +178,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters }: Pr
                       <div className="flex items-center gap-1">
                         <Link
                           href={`/dashboard/leads/${lead.id}`}
-                          className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded transition-colors"
                           title="View"
                         >
                           <Eye className="w-4 h-4" />

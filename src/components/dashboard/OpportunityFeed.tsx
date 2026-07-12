@@ -74,7 +74,7 @@ export default function OpportunityFeed({ initial }: { initial: Opportunity[] })
               <p className="text-sm font-medium text-slate-800">{item.title}</p>
               {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
               {item.action_href && (
-                <Link href={item.action_href} className="text-xs text-brand-600 font-medium hover:underline inline-flex items-center gap-0.5 mt-1">
+                <Link href={item.action_href} className="text-xs text-brand-400 font-medium hover:underline inline-flex items-center gap-0.5 mt-1">
                   Go fix this <ArrowRight className="w-3 h-3" />
                 </Link>
               )}

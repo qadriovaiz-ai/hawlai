@@ -83,7 +83,7 @@ export default function MasterBrainPage() {
                 <button
                   key={i}
                   onClick={() => handleSend(ex)}
-                  className="text-left text-sm text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-4 py-2.5 hover:border-brand-300 hover:bg-brand-50/50 transition-colors"
+                  className="text-left text-sm text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-4 py-2.5 hover:border-brand-300 hover:bg-brand-500/10/50 transition-colors"
                 >
                   "{ex}"
                 </button>
