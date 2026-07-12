@@ -31,7 +31,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
       { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
-      { href: "/dashboard/settings/connect-facebook", label: "Settings", icon: Settings },
+      { href: "/dashboard/settings/integrations", label: "Integrations", icon: Settings },
     ],
   },
 ];

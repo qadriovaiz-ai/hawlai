@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { qualifyLead } from "@/lib/ai-engine";
 import { NextResponse } from "next/server";
+import { sendSlackNotification } from "@/lib/agents/slackAgent";
 
 async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
@@ -138,6 +139,19 @@ export async function POST(request: Request) {
         if (error) {
           console.error("[meta-leads] Supabase error:", error.message);
           continue;
+        }
+
+        // Notify Slack for hot leads only — not every lead, to avoid
+        // noise; only if the dealer has connected a webhook.
+        if (data && qualification.temperature === "hot") {
+          const { data: dealershipInfo } = await supabase
+            .from("dealerships").select("slack_webhook_url, dealership_name").eq("id", dealershipId).single();
+          if (dealershipInfo?.slack_webhook_url) {
+            await sendSlackNotification(
+              dealershipInfo.slack_webhook_url,
+              `🔥 New *Hot* lead for ${dealershipInfo.dealership_name}: *${name}* (${phone})${vehicle ? ` — interested in ${vehicle}` : ""}. Check it out in Hawlai's Call Queue.`
+            );
+          }
         }
 
         console.log("[meta-leads] Lead saved:", data.id);
