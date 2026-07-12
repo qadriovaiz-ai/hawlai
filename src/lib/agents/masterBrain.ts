@@ -171,7 +171,7 @@ ${Array.from(lifetimeByCampaign.values()).map((c) => `- "${c.headline}": ₹${c.
 Currently live campaigns:
 ${liveCampaigns.campaigns.map((c) => `- "${c.headline}" (${c.meta_status}): ₹${c.spend} spent, ${c.leads} leads`).join("\n") || "None currently active."}
 
-Answer in 2-4 plain-language sentences, directly addressing what they asked. If the data doesn't cover what they're asking, say so honestly rather than guessing.`,
+Answer ONLY what they specifically asked — do not summarize or mention other metrics just because they're available above (e.g. if they didn't ask about lead temperature or appointments, don't bring those up). 1-3 plain-language sentences. If the data doesn't cover what they're asking, say so honestly rather than guessing.`,
           },
         ],
       }),
