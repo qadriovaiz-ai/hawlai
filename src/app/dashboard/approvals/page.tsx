@@ -116,8 +116,15 @@ export default async function ApprovalsPage() {
                   <span className="text-xs text-slate-400">{formatDate(approval.created_at)}</span>
                 </div>
                 <p className="font-semibold text-slate-900">
-                  {approval.action_type.replaceAll("_", " ")} — {formatCurrency(approval.amount ?? 0)}
+                  {approval.action_type.replaceAll("_", " ")}
+                  {approval.amount ? ` — ${formatCurrency(approval.amount)}` : ""}
                 </p>
+                {approval.action_details?.headline && (
+                  <p className="text-xs text-slate-500 mt-0.5">"{approval.action_details.headline}"</p>
+                )}
+                {approval.action_details?.reason && (
+                  <p className="text-xs text-slate-400 mt-0.5 italic">{approval.action_details.reason}</p>
+                )}
                 {approval.rejection_reason && (
                   <p className="text-xs text-red-500 mt-0.5">Reason: {approval.rejection_reason}</p>
                 )}
