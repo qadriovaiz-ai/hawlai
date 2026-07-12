@@ -146,6 +146,10 @@ async function answerAnalyticsQuery(supabase: any, dealershipId: string, questio
   const warmLeads = leads?.filter((l: any) => l.lead_temperature === "warm").length ?? 0;
   const coldLeads = leads?.filter((l: any) => l.lead_temperature === "cold").length ?? 0;
 
+  const totalRevenue = Array.from(lifetimeByCampaign.values()).reduce((sum, c) => sum + c.revenue, 0);
+  const totalConversions = Array.from(lifetimeByCampaign.values()).reduce((sum, c) => sum + c.conversions, 0);
+  const anyCampaignLive = liveCampaigns.campaigns.some((c) => c.meta_status === "ACTIVE");
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -156,22 +160,22 @@ async function answerAnalyticsQuery(supabase: any, dealershipId: string, questio
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 350,
+        max_tokens: 250,
         messages: [
           {
             role: "user",
             content: `A dealer asked: "${question}"
 
-Answer using ONLY this real data — don't invent numbers:
-Leads: ${totalLeads} total (${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold). ${calls?.length ?? 0} calls made, ${appointments?.length ?? 0} appointments booked.
+Facts (use ONLY what's relevant to answer their exact question — never invent numbers):
+- Total sales / conversions: ${totalConversions}
+- Total revenue: ₹${totalRevenue}
+- Any campaign currently live/active: ${anyCampaignLive ? "Yes" : "No"}
+- Live campaigns right now: ${liveCampaigns.campaigns.map((c) => `"${c.headline}" (${c.meta_status})`).join(", ") || "none"}
+- Per-campaign lifetime totals: ${Array.from(lifetimeByCampaign.values()).map((c) => `"${c.headline}": ₹${c.spend} spent, ${c.leads} leads, ${c.conversions} sales, ₹${c.revenue} revenue`).join("; ") || "no campaign history recorded"}
+- Total leads: ${totalLeads} (${hotLeads} Hot, ${warmLeads} Warm, ${coldLeads} Cold)
+- Calls made: ${calls?.length ?? 0}, appointments booked: ${appointments?.length ?? 0}
 
-Lifetime performance per campaign (includes past/paused ones, not just currently active):
-${Array.from(lifetimeByCampaign.values()).map((c) => `- "${c.headline}": ₹${c.spend} spent, ${c.leads} leads, ${c.conversions} sales, ₹${c.revenue} revenue`).join("\n") || "No historical campaign data recorded yet."}
-
-Currently live campaigns:
-${liveCampaigns.campaigns.map((c) => `- "${c.headline}" (${c.meta_status}): ₹${c.spend} spent, ${c.leads} leads`).join("\n") || "None currently active."}
-
-Answer ONLY what they specifically asked — do not summarize or mention other metrics just because they're available above (e.g. if they didn't ask about lead temperature or appointments, don't bring those up). 1-3 plain-language sentences. If the data doesn't cover what they're asking, say so honestly rather than guessing.`,
+STRICT RULE: Only state facts that directly answer what was asked. Do NOT mention lead temperature (Hot/Warm/Cold), calls, or appointments UNLESS the question specifically asks about leads/calls/appointments. If they only asked about sales/revenue/campaigns, answer ONLY that — 1-2 short sentences, nothing else appended.`,
           },
         ],
       }),
