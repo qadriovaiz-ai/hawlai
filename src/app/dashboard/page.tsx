@@ -25,7 +25,7 @@ export default async function DashboardHomePage() {
 
   if (!dealership?.onboarding_completed) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center px-6">
         <WelcomeChatCard dealershipName={dealership?.dealership_name ?? "your business"} ownerName={profile?.full_name ?? null} />
       </div>
     );
