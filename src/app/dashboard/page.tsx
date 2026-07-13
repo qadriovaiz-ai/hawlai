@@ -1,12 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, Flame, PhoneCall, Calendar, Rocket, ArrowRight, IndianRupee, TrendingDown } from "lucide-react";
+import { Gauge, IndianRupee, TrendingUp, Megaphone, Flame, ArrowRight, Rocket } from "lucide-react";
 import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
+import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
 import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
 import WelcomeChatCard from "@/components/dashboard/WelcomeChatCard";
+import AskHawlAI from "@/components/dashboard/AskHawlAI";
 
 export default async function DashboardHomePage() {
   const supabase = await createClient();
@@ -19,7 +21,7 @@ export default async function DashboardHomePage() {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, onboarding_completed")
+    .select("dealership_name, onboarding_completed, business_category")
     .eq("id", dealershipId)
     .single();
 
@@ -33,43 +35,39 @@ export default async function DashboardHomePage() {
 
   await syncOpportunities(supabase, dealershipId);
 
-  const [{ data: leads }, { data: appointments }, performance, opportunities] = await Promise.all([
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const [{ data: leads }, performance, opportunities, growth] = await Promise.all([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
-    supabase.from("appointments").select("id").eq("dealership_id", dealershipId),
     getCampaignPerformance(supabase, dealershipId),
     getOpenOpportunities(supabase, dealershipId),
+    generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "car dealership"),
   ]);
 
-  const totalLeads = leads?.length ?? 0;
-  const hotLeads = leads?.filter((l) => l.lead_temperature === "hot").length ?? 0;
-  const inQueue = leads?.filter((l) => l.status === "ready_to_call").length ?? 0;
-  const totalAppointments = appointments?.length ?? 0;
+  const leadsToday = leads?.filter((l) => new Date(l.created_at) >= todayStart).length ?? 0;
+  const activeCampaigns = performance.campaigns.filter((c) => c.meta_status === "ACTIVE").length;
+  const totalRevenue = performance.campaigns.reduce((s, c) => s + c.revenue, 0);
   const recentLeads = leads?.slice(0, 5) ?? [];
 
+  const scoreColorClass = growth.healthScore >= 70 ? "bg-green-500/10 text-green-400" : growth.healthScore >= 40 ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400";
+
   const kpis = [
-    { label: "Total Leads", value: totalLeads, icon: Users, color: "bg-brand-500/10 text-brand-400" },
-    { label: "Hot Leads", value: hotLeads, icon: Flame, color: "bg-red-500/10 text-red-400" },
-    { label: "In Call Queue", value: inQueue, icon: PhoneCall, color: "bg-purple-500/10 text-purple-400" },
-    { label: "Appointments", value: totalAppointments, icon: Calendar, color: "bg-green-500/10 text-green-400" },
-    { label: "Total Ad Spend", value: formatCurrency(performance.totals.spend), icon: IndianRupee, color: "bg-amber-500/10 text-amber-400" },
-    {
-      label: "Cost / Lead",
-      value: performance.totals.cost_per_lead !== null ? formatCurrency(performance.totals.cost_per_lead) : "—",
-      icon: TrendingDown,
-      color: "bg-blue-500/10 text-blue-400",
-    },
+    { label: "Business Health", value: `${growth.healthScore}/100`, icon: Gauge, color: scoreColorClass },
+    { label: "Revenue (Lifetime)", value: formatCurrency(totalRevenue), icon: IndianRupee, color: "bg-green-500/10 text-green-400" },
+    { label: "Marketing ROI", value: performance.totals.spend > 0 && totalRevenue > 0 ? `${(totalRevenue / performance.totals.spend).toFixed(1)}x` : "—", icon: TrendingUp, color: "bg-purple-500/10 text-purple-400" },
+    { label: "Active Campaigns", value: activeCampaigns, icon: Megaphone, color: "bg-blue-500/10 text-blue-400" },
+    { label: "Leads Today", value: leadsToday, icon: Flame, color: "bg-red-500/10 text-red-400" },
   ];
 
   return (
     <div className="max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Quick overview of your leads and activity</p>
+        <h1 className="text-2xl font-bold text-slate-900">Welcome, {profile?.full_name ?? "there"} 👋</h1>
+        <p className="text-slate-500 text-sm mt-0.5">{growth.headline}</p>
       </div>
 
-      <OpportunityFeed initial={opportunities} />
-
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {kpis.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="card p-5">
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${color}`}>
@@ -80,6 +78,10 @@ export default async function DashboardHomePage() {
           </div>
         ))}
       </div>
+
+      <AskHawlAI />
+
+      <OpportunityFeed initial={opportunities} />
 
       <Link
         href="/dashboard/marketing"
@@ -97,7 +99,7 @@ export default async function DashboardHomePage() {
 
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-slate-700">Recent Leads</h2>
+          <h2 className="text-sm font-semibold text-slate-700">Recent Activity</h2>
           <Link href="/dashboard/leads" className="text-xs text-brand-400 font-medium hover:underline">
             View all
           </Link>
