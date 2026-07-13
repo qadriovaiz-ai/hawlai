@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, Megaphone, ShieldCheck, Sparkles,
-  CalendarDays, BarChart3, Zap, Link2,
+  LayoutDashboard, Brain, CalendarDays, Target, Users2, Building2, Palette,
+  Clapperboard, Share2, Megaphone, Mail, MessageCircle, Users, Globe, TrendingUp,
+  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,23 +15,50 @@ const NAV_GROUPS = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard/master-brain", label: "AI Agent", icon: Brain },
       { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
     ],
   },
   {
-    label: "Work",
+    label: "Strategy & Brand",
     items: [
-      { href: "/dashboard/marketing", label: "Marketing", icon: Megaphone },
-      { href: "/dashboard/leads-hub", label: "Leads & Sales", icon: Users },
-      { href: "/dashboard/insights", label: "Insights", icon: BarChart3 },
-      { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
+      { href: "/dashboard/strategy", label: "Marketing Strategy", icon: Target },
+      { href: "/dashboard/audience", label: "Audience", icon: Users2 },
+      { href: "/dashboard/research", label: "Competitors", icon: Building2 },
+      { href: "/dashboard/settings/brand", label: "Brand", icon: Palette },
+    ],
+  },
+  {
+    label: "Create",
+    items: [
+      { href: "/dashboard/creative-studio", label: "Creative Studio", icon: Clapperboard },
+      { href: "/dashboard/social", label: "Social Media", icon: Share2 },
+    ],
+  },
+  {
+    label: "Grow",
+    items: [
+      { href: "/dashboard/ads/campaigns", label: "Ads Manager", icon: Megaphone },
+      { href: "/dashboard/email", label: "Email", icon: Mail },
+      { href: "/dashboard/whatsapp", label: "WhatsApp", icon: MessageCircle },
+      { href: "/dashboard/leads-hub", label: "CRM", icon: Users },
+      { href: "/dashboard/website", label: "Website", icon: Globe },
+      { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { href: "/dashboard/insights", label: "Analytics", icon: BarChart3 },
+      { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
     ],
   },
   {
     label: "Settings",
     items: [
-      { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
-      { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
+      { href: "/dashboard/assets", label: "Assets", icon: FolderOpen },
+      { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
+      { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
       { href: "/dashboard/settings/integrations", label: "Integrations", icon: Link2 },
     ],
   },
