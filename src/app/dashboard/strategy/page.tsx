@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb } from "lucide-react";
+import DeepStrategyPanel from "@/components/strategy/DeepStrategyPanel";
 
 const GOALS = ["More leads", "More sales", "Brand awareness", "Website traffic"];
 
@@ -63,6 +64,8 @@ export default function StrategyPage() {
           <p className="text-sm text-slate-500">Your monthly roadmap, generated from your brand and budget</p>
         </div>
       </div>
+
+      <DeepStrategyPanel />
 
       <div className="card p-5 space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
