@@ -74,7 +74,7 @@ export async function generateDeepStrategy(
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1400,
+        max_tokens: 2500,
         messages: [
           {
             role: "user",
@@ -99,7 +99,11 @@ Be specific and honest — a small local business's SWOT should not read like a 
         ],
       }),
     });
-    if (!response.ok) return fallback;
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      console.error("[deep-strategy-agent] Claude API not ok:", response.status, errBody.slice(0, 300));
+      return fallback;
+    }
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
