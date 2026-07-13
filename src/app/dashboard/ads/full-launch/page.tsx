@@ -2,7 +2,8 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store } from "lucide-react";
+import ProductPicker from "@/components/ads/ProductPicker";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 const EXAMPLES = [
@@ -27,6 +28,7 @@ export default function FullLaunchPage() {
 
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [showProductPicker, setShowProductPicker] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
   const [destination, setDestination] = useState<"instant_form" | "website">("instant_form");
@@ -168,20 +170,46 @@ export default function FullLaunchPage() {
           {photoPreview ? (
             <div className="relative">
               <img src={photoPreview} alt="" className="w-full h-56 object-cover rounded-lg" />
-              <button onClick={() => fileInputRef.current?.click()} className="absolute bottom-2 right-2 btn-secondary text-xs">
-                Change Photo
-              </button>
+              <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                <button onClick={() => setShowProductPicker(true)} className="btn-secondary text-xs">
+                  <Store className="w-3.5 h-3.5" /> Pick from Store
+                </button>
+                <button onClick={() => fileInputRef.current?.click()} className="btn-secondary text-xs">
+                  Change Photo
+                </button>
+              </div>
             </div>
           ) : (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-slate-100 text-slate-900 w-full h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
-            >
-              <ImagePlus className="w-8 h-8" />
-              <span className="text-sm font-medium">Select Photo</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-slate-100 text-slate-900 h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
+              >
+                <ImagePlus className="w-8 h-8" />
+                <span className="text-sm font-medium">Select Photo</span>
+              </button>
+              <button
+                onClick={() => setShowProductPicker(true)}
+                className="bg-slate-100 text-slate-900 h-40 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
+              >
+                <Store className="w-8 h-8" />
+                <span className="text-sm font-medium">Pick from Store</span>
+              </button>
+            </div>
           )}
         </div>
+
+        {showProductPicker && (
+          <ProductPicker
+            onClose={() => setShowProductPicker(false)}
+            onSelect={(photoBase64, promptPrefill) => {
+              setPhotoBase64(photoBase64);
+              setPhotoPreview(photoBase64);
+              setPrompt((prev) => (prev.trim() ? prev : promptPrefill));
+              setShowProductPicker(false);
+            }}
+          />
+        )}
 
         <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">2. Describe your requirement in one line</p>
