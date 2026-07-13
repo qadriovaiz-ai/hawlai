@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight } from "lucide-react";
+import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
 import WooCommerceConnect from "@/components/settings/WooCommerceConnect";
+import WebsiteConnect from "@/components/settings/WebsiteConnect";
+import WordPressConnect from "@/components/settings/WordPressConnect";
 
 const PENDING_APPROVAL = [
   { name: "Google Ads", note: "Requires Google Ads API developer approval" },
@@ -87,6 +89,34 @@ export default async function IntegrationsPage() {
               Connect <ArrowRight className="w-3 h-3" />
             </Link>
           )}
+        </div>
+
+        {/* Website (any platform) */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-brand-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Globe className="w-4 h-4 text-brand-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Website</p>
+              <p className="text-xs text-slate-400">Any platform — just the link</p>
+            </div>
+          </div>
+          <WebsiteConnect />
+        </div>
+
+        {/* WordPress */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-blue-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <FileText className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">WordPress</p>
+              <p className="text-xs text-slate-400">Publish blog posts directly</p>
+            </div>
+          </div>
+          <WordPressConnect />
         </div>
 
         {/* Slack */}

@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, Megaphone, Settings, ShieldCheck, Sparkles,
-  CalendarDays, BarChart3, Zap,
+  LayoutDashboard, Users, Megaphone, ShieldCheck, Sparkles,
+  CalendarDays, BarChart3, Zap, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Sparkles },
       { href: "/dashboard/settings/automation", label: "Automation", icon: Zap },
-      { href: "/dashboard/settings/integrations", label: "Integrations", icon: Settings },
+      { href: "/dashboard/settings/integrations", label: "Integrations", icon: Link2 },
     ],
   },
 ];
