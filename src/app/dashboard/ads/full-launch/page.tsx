@@ -32,6 +32,7 @@ export default function FullLaunchPage() {
   const [prompt, setPrompt] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
   const [destination, setDestination] = useState<"instant_form" | "website">("instant_form");
+  const [productDestinationUrl, setProductDestinationUrl] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<any>(null);
@@ -117,6 +118,7 @@ export default function FullLaunchPage() {
           image_mode: "template",
           scheduled_start: scheduledStart || null,
           destination,
+          product_destination_url: productDestinationUrl,
         }),
       });
       const data = await res.json();
@@ -146,6 +148,8 @@ export default function FullLaunchPage() {
     setPlan(null);
     setResult(null);
     setError(null);
+    setProductDestinationUrl(null);
+    setDestination("instant_form");
   }
 
   // ------------------------------------------------------------
@@ -202,10 +206,14 @@ export default function FullLaunchPage() {
         {showProductPicker && (
           <ProductPicker
             onClose={() => setShowProductPicker(false)}
-            onSelect={(photoBase64, promptPrefill) => {
+            onSelect={(photoBase64, promptPrefill, productUrl) => {
               setPhotoBase64(photoBase64);
               setPhotoPreview(photoBase64);
               setPrompt((prev) => (prev.trim() ? prev : promptPrefill));
+              if (productUrl) {
+                setDestination("website");
+                setProductDestinationUrl(productUrl);
+              }
               setShowProductPicker(false);
             }}
           />
@@ -264,7 +272,7 @@ export default function FullLaunchPage() {
             <button
               onClick={() => setDestination("instant_form")}
               className={`text-left p-3 rounded-lg border text-xs transition-colors ${
-                destination === "instant_form" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-500/10/50" : "border-slate-200 hover:border-slate-300"
+                destination === "instant_form" ? "border-purple-400 ring-2 ring-purple-500/30 bg-purple-500/10" : "border-slate-200 hover:border-slate-300"
               }`}
             >
               <p className="font-semibold text-slate-800">Instant Form</p>
@@ -273,13 +281,18 @@ export default function FullLaunchPage() {
             <button
               onClick={() => setDestination("website")}
               className={`text-left p-3 rounded-lg border text-xs transition-colors ${
-                destination === "website" ? "border-purple-400 ring-2 ring-purple-100 bg-purple-500/10/50" : "border-slate-200 hover:border-slate-300"
+                destination === "website" ? "border-purple-400 ring-2 ring-purple-500/30 bg-purple-500/10" : "border-slate-200 hover:border-slate-300"
               }`}
             >
               <p className="font-semibold text-slate-800">My Website</p>
               <p className="text-slate-400 mt-0.5">Sends clicks to your landing page or own site</p>
             </button>
           </div>
+          {productDestinationUrl && destination === "website" && (
+            <p className="text-xs text-purple-400 truncate">
+              Linked to this exact product page: {productDestinationUrl}
+            </p>
+          )}
         </div>
 
         <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">

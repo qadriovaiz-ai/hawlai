@@ -128,7 +128,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
 
   return (
     <div className="space-y-5">
-      <div className="card p-5 space-y-3 bg-purple-500/10/50 border-purple-700/40">
+      <div className="card p-5 space-y-3 bg-purple-500/10 border-purple-700/40">
         <button onClick={() => setShowAnalyzer(!showAnalyzer)} className="w-full flex items-center justify-between text-left">
           <span className="text-sm font-semibold text-purple-200 flex items-center gap-2">
             <Wand2 className="w-4 h-4" /> Let AI fill this in for you

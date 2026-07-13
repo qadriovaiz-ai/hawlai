@@ -31,6 +31,7 @@ export interface WooCommerceProduct {
   title: string;
   price: string | null;
   image_url: string | null;
+  product_url: string | null;
 }
 
 export async function fetchWooCommerceProducts(storeUrl: string, consumerKey: string, consumerSecret: string, limit: number = 20): Promise<WooCommerceProduct[]> {
@@ -46,5 +47,6 @@ export async function fetchWooCommerceProducts(storeUrl: string, consumerKey: st
     title: p.name,
     price: p.price ?? null,
     image_url: p.images?.[0]?.src ?? null,
+    product_url: p.permalink ?? null,
   }));
 }

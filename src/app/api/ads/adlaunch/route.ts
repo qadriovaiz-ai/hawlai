@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url } = body;
   const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
 
   if (adDestination === "instant_form" && !leadFormId) {
@@ -54,22 +54,29 @@ export async function POST(request: Request) {
 
   let destinationUrl: string | null = null;
   if (adDestination === "website") {
-    const { data: dealershipUrls } = await supabase
-      .from("dealerships")
-      .select("external_website_url")
-      .eq("id", dealershipId)
-      .single();
-    if (dealershipUrls?.external_website_url) {
-      destinationUrl = dealershipUrls.external_website_url;
+    // A specific product page (picked via Shopify/WooCommerce in
+    // Launch Ad) always wins — that's a more precise destination than
+    // a generic homepage/landing page.
+    if (product_destination_url) {
+      destinationUrl = product_destination_url;
     } else {
-      const { data: landingPage } = await supabase
-        .from("landing_pages")
-        .select("slug, published")
-        .eq("dealership_id", dealershipId)
-        .maybeSingle();
-      if (landingPage?.published) {
-        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.vercel.app";
-        destinationUrl = `${baseUrl}/p/${landingPage.slug}`;
+      const { data: dealershipUrls } = await supabase
+        .from("dealerships")
+        .select("external_website_url")
+        .eq("id", dealershipId)
+        .single();
+      if (dealershipUrls?.external_website_url) {
+        destinationUrl = dealershipUrls.external_website_url;
+      } else {
+        const { data: landingPage } = await supabase
+          .from("landing_pages")
+          .select("slug, published")
+          .eq("dealership_id", dealershipId)
+          .maybeSingle();
+        if (landingPage?.published) {
+          const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.vercel.app";
+          destinationUrl = `${baseUrl}/p/${landingPage.slug}`;
+        }
       }
     }
     if (!destinationUrl) {

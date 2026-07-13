@@ -39,6 +39,7 @@ export interface ShopifyProduct {
   title: string;
   price: string | null;
   image_url: string | null;
+  product_url: string | null;
 }
 
 export async function fetchShopifyProducts(storeUrl: string, accessToken: string, limit: number = 20): Promise<ShopifyProduct[]> {
@@ -53,5 +54,9 @@ export async function fetchShopifyProducts(storeUrl: string, accessToken: string
     title: p.title,
     price: p.variants?.[0]?.price ?? null,
     image_url: p.images?.[0]?.src ?? null,
+    // Uses the .myshopify.com domain by default — if the store has a
+    // custom domain connected, that would need to be entered
+    // separately since Shopify's API doesn't expose it here.
+    product_url: p.handle ? `https://${domain}/products/${p.handle}` : null,
   }));
 }

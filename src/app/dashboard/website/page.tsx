@@ -245,7 +245,7 @@ export default function WebsitePage() {
               key={t.key}
               onClick={() => setTheme(t.key)}
               className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-colors ${
-                theme === t.key ? "border-purple-400 ring-2 ring-purple-100" : "border-slate-200 hover:border-slate-300"
+                theme === t.key ? "border-purple-400 ring-2 ring-purple-500/30" : "border-slate-200 hover:border-slate-300"
               }`}
             >
               <div className="flex shrink-0">

@@ -9,13 +9,14 @@ interface Product {
   title: string;
   price: string | null;
   image_url: string | null;
+  product_url: string | null;
 }
 
 export default function ProductPicker({
   onSelect,
   onClose,
 }: {
-  onSelect: (photoBase64: string, promptPrefill: string) => void;
+  onSelect: (photoBase64: string, promptPrefill: string, productUrl: string | null) => void;
   onClose: () => void;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -43,7 +44,7 @@ export default function ProductPicker({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't load that product's image");
       const priceText = product.price ? `, priced at ₹${product.price}` : "";
-      onSelect(data.base64, `${product.title}${priceText}`);
+      onSelect(data.base64, `${product.title}${priceText}`, product.product_url);
     } catch (err: any) {
       setError(err.message);
     } finally {

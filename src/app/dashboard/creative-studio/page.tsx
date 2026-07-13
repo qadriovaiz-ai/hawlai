@@ -253,7 +253,7 @@ export default function CreativeStudioPage() {
       {variations && (
         <div className="space-y-3">
           {[...variations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).map((v, i) => (
-            <div key={i} className={`card p-4 space-y-1.5 ${i === 0 ? "ring-2 ring-green-200" : ""}`}>
+            <div key={i} className={`card p-4 space-y-1.5 ${i === 0 ? "ring-2 ring-green-500/30" : ""}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="badge bg-purple-500/10 text-purple-300 border border-purple-700/50">{v.angle}</span>
