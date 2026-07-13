@@ -2,8 +2,9 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil } from "lucide-react";
 import ProductPicker from "@/components/ads/ProductPicker";
+import PhotoEditor from "@/components/ads/PhotoEditor";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 const EXAMPLES = [
@@ -29,6 +30,7 @@ export default function FullLaunchPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
+  const [showPhotoEditor, setShowPhotoEditor] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
   const [destination, setDestination] = useState<"instant_form" | "website">("instant_form");
@@ -175,6 +177,9 @@ export default function FullLaunchPage() {
             <div className="relative">
               <img src={photoPreview} alt="" className="w-full h-56 object-cover rounded-lg" />
               <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                <button onClick={() => setShowPhotoEditor(true)} className="btn-secondary text-xs">
+                  <Pencil className="w-3.5 h-3.5" /> Edit Photo
+                </button>
                 <button onClick={() => setShowProductPicker(true)} className="btn-secondary text-xs">
                   <Store className="w-3.5 h-3.5" /> Pick from Store
                 </button>
@@ -215,6 +220,18 @@ export default function FullLaunchPage() {
                 setProductDestinationUrl(productUrl);
               }
               setShowProductPicker(false);
+            }}
+          />
+        )}
+
+        {showPhotoEditor && photoBase64 && (
+          <PhotoEditor
+            imageBase64={photoBase64}
+            onClose={() => setShowPhotoEditor(false)}
+            onSave={(editedBase64) => {
+              setPhotoBase64(editedBase64);
+              setPhotoPreview(editedBase64);
+              setShowPhotoEditor(false);
             }}
           />
         )}

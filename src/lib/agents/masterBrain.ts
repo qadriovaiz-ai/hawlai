@@ -15,6 +15,7 @@ import { analyzeCampaigns } from "./optimizationAgent";
 import { generateSocialCaption } from "./socialMediaAgent";
 import { matchCampaign, setCampaignStatus, proposeTargetingChange } from "./campaignEditAgent";
 import { getCampaignPerformance } from "./analyticsAgent";
+import { runOrchestration } from "./orchestratorAgent";
 
 type Intent =
   | "ad_launch"
@@ -29,6 +30,7 @@ type Intent =
   | "campaign_resume"
   | "campaign_budget_change"
   | "campaign_targeting_change"
+  | "orchestrate_goal"
   | "unclear";
 
 interface ClassifiedIntent {
@@ -83,6 +85,7 @@ Classify it and return JSON only (no markdown, no explanation, no extra text bef
 "campaign_resume" = asking to resume, restart, unpause, or turn back on a specific existing campaign.
 "campaign_budget_change" = asking to increase/decrease/change the budget of a specific existing campaign.
 "campaign_targeting_change" = asking to change WHO a specific existing campaign targets — age, gender, audience (not city/location, and not budget).
+"orchestrate_goal" = a BROAD goal needing multiple things drafted together — launching a new product/brand/service, "create a complete campaign for X", "help me promote X" where X hasn't been advertised before. NOT this if it's clearly just one specific thing (a single ad, a single post, a single question) — those go to their own specific intent above.
 "unclear" = anything else, including greetings or vague requests.`,
           },
         ],
@@ -197,7 +200,7 @@ export async function routeRequest(
   message: string
 ): Promise<MasterBrainResult> {
   const { data: dealershipInfo } = await supabase
-    .from("dealerships").select("business_category").eq("id", dealershipId).single();
+    .from("dealerships").select("business_category, dealership_name, city").eq("id", dealershipId).single();
   const businessCategory = dealershipInfo?.business_category ?? "car dealership";
 
   const classification = await classifyIntent(message, businessCategory);
@@ -426,10 +429,43 @@ export async function routeRequest(
     };
   }
 
+  if (classification.intent === "orchestrate_goal") {
+    const { data: brandProfile } = await supabase
+      .from("brand_profiles")
+      .select("tone_of_voice, target_persona, messaging_pillars, preferred_language")
+      .eq("dealership_id", dealershipId)
+      .maybeSingle();
+
+    const result = await runOrchestration(
+      message,
+      dealershipInfo?.dealership_name ?? "the business",
+      dealershipInfo?.city ?? null,
+      brandProfile,
+      businessCategory
+    );
+
+    const sections = [
+      `Here's a full draft for "${result.topic}":`,
+      result.strategySummary ? `**Strategy:** ${result.strategySummary}` : null,
+      result.seoKeywords.length > 0 ? `**SEO keywords to target:** ${result.seoKeywords.slice(0, 6).join(", ")}` : null,
+      result.socialCaption ? `**Social post draft:**\n${result.socialCaption}` : null,
+      result.adCopyOptions.length > 0
+        ? `**Ad copy options:**\n${result.adCopyOptions.map((c, i) => `${i + 1}. "${c.headline}" — ${c.body}`).join("\n")}`
+        : null,
+      `\n${result.nextStep}`,
+    ].filter(Boolean);
+
+    return {
+      intent: "orchestrate_goal",
+      status: "answered",
+      message: sections.join("\n\n"),
+    };
+  }
+
   return {
     intent: "unclear",
     status: "unclear",
     message:
-      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, pause/resume a campaign, change a campaign\'s budget or targeting, or follow up with past customers.',
+      'I didn\'t quite get that. Try asking me to launch an ad, check performance, get SEO/content ideas, research competitors, get campaign recommendations, brainstorm a social post, plan your monthly strategy, pause/resume a campaign, change a campaign\'s budget or targeting, follow up with past customers, or describe a bigger goal like "launch my new X" for a full draft across strategy, SEO, social, and ad copy.',
   };
 }

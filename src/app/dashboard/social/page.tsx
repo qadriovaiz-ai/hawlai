@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Share2, Loader2, AlertCircle, CheckCircle, ImagePlus, Sparkles, CalendarClock } from "lucide-react";
+import InfluencerOutreach from "@/components/social/InfluencerOutreach";
 
 export default function SocialPostPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -155,6 +156,8 @@ export default function SocialPostPage() {
         {posting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
         {posting ? "Posting..." : scheduledTime ? "Schedule Post" : "Post to Facebook"}
       </button>
+
+      <InfluencerOutreach />
     </div>
   );
 }

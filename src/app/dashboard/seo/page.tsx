@@ -1,17 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge } from "lucide-react";
+import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target } from "lucide-react";
 
 export default function SeoPage() {
   const [audit, setAudit] = useState<{ score: number; checks: { label: string; passed: boolean; detail: string }[] } | null>(null);
   const [auditLoading, setAuditLoading] = useState(true);
+
+  const [cro, setCro] = useState<{ conversionRate: number | null; suggestions: { issue: string; fix: string; impact: string }[] } | null>(null);
+  const [croLoading, setCroLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/seo/audit")
       .then((res) => res.json())
       .then(setAudit)
       .finally(() => setAuditLoading(false));
+    fetch("/api/cro")
+      .then((res) => res.json())
+      .then(setCro)
+      .finally(() => setCroLoading(false));
   }, []);
 
   const [topic, setTopic] = useState("");
@@ -124,6 +131,44 @@ export default function SeoPage() {
                 </div>
               ))}
             </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <Target className="w-4 h-4 text-slate-400" /> Conversion Optimization
+        </p>
+        {croLoading ? (
+          <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> Checking...
+          </div>
+        ) : cro ? (
+          <div className="space-y-3">
+            {cro.conversionRate !== null && (
+              <p className="text-xs text-slate-500">Roughly {cro.conversionRate} leads per launched campaign</p>
+            )}
+            {cro.suggestions.length === 0 ? (
+              <p className="text-sm text-green-400">No obvious conversion issues found right now.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {cro.suggestions.map((s, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span
+                      className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${
+                        s.impact === "high" ? "bg-red-500/10 text-red-400" : s.impact === "medium" ? "bg-amber-500/10 text-amber-400" : "bg-slate-200 text-slate-500"
+                      }`}
+                    >
+                      {s.impact}
+                    </span>
+                    <div>
+                      <p className="text-sm text-slate-700">{s.issue}</p>
+                      <p className="text-xs text-slate-400">→ {s.fix}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : null}
       </div>
