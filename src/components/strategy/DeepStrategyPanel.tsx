@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   Loader2, Package, IndianRupee, Crosshair, Star, TrendingUp, TrendingDown,
-  Lightbulb, ShieldAlert, Users2, CalendarRange, ChevronDown, ChevronUp,
+  Lightbulb, ShieldAlert, Users2, CalendarRange, ChevronDown, ChevronUp, RefreshCw,
 } from "lucide-react";
 
 export default function DeepStrategyPanel() {
@@ -25,12 +25,30 @@ export default function DeepStrategyPanel() {
     }
   }, [open, loaded]);
 
+  function handleRegenerate() {
+    setLoading(true);
+    fetch("/api/strategy/deep?regenerate=true")
+      .then((res) => res.json())
+      .then((data) => {
+        setStrategy(data);
+        setLoaded(true);
+      })
+      .finally(() => setLoading(false));
+  }
+
   return (
     <div className="card p-5 space-y-3">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between text-left">
-        <span className="text-sm font-semibold text-slate-700">Full Strategic Analysis</span>
-        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={() => setOpen(!open)} className="flex-1 flex items-center justify-between text-left">
+          <span className="text-sm font-semibold text-slate-700">Full Strategic Analysis</span>
+          {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+        {open && loaded && (
+          <button onClick={handleRegenerate} disabled={loading} className="ml-3 text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 shrink-0 disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate
+          </button>
+        )}
+      </div>
       <p className="text-xs text-slate-400">
         Product analysis, pricing strategy, positioning, USP, SWOT, market gaps, personas, and a full quarterly + annual plan.
       </p>
