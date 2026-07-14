@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateDeepStrategy } from "@/lib/agents/deepStrategyAgent";
+import { searchCompetitorAds } from "@/lib/agents/researchAgent";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -22,15 +23,33 @@ export async function GET(request: Request) {
   }
 
   const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, city, business_category").eq("id", dealershipId).single(),
+    supabase.from("dealerships").select("dealership_name, city, business_category, fb_page_access_token").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
+
+  // Pull real competitor ad data if Facebook is connected — a real
+  // Meta Ad Library search on the dealer's own business category and
+  // city, not a made-up example.
+  let competitorContext: string | null = null;
+  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  if (token && dealership?.business_category) {
+    try {
+      const query = `${dealership.business_category}${dealership.city ? ` ${dealership.city}` : ""}`;
+      const { ads } = await searchCompetitorAds(token, query);
+      if (ads.length > 0) {
+        competitorContext = ads.slice(0, 5).map((ad) => `"${ad.page_name}": ${ad.body ?? ad.title ?? "(no text)"}`).join(" | ");
+      }
+    } catch {
+      // No competitor data — the agent is told to note this honestly.
+    }
+  }
 
   const strategy = await generateDeepStrategy(
     dealership?.dealership_name ?? "the business",
     dealership?.city ?? null,
     brandProfile,
-    dealership?.business_category ?? "car dealership"
+    dealership?.business_category ?? "car dealership",
+    competitorContext
   );
 
   await supabase.from("deep_strategies").upsert(

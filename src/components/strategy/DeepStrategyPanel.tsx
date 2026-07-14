@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Loader2, Package, IndianRupee, Crosshair, Star, TrendingUp, TrendingDown,
   Lightbulb, ShieldAlert, Users2, CalendarRange, ChevronDown, ChevronUp, RefreshCw,
+  Building2, Swords, Target,
 } from "lucide-react";
 
 export default function DeepStrategyPanel() {
@@ -50,7 +51,7 @@ export default function DeepStrategyPanel() {
         )}
       </div>
       <p className="text-xs text-slate-400">
-        Product analysis, pricing strategy, positioning, USP, SWOT, market gaps, personas, and a full quarterly + annual plan.
+        All 13 strategy tasks: business analysis, competitor analysis, target audience, product analysis, pricing, positioning, USP, SWOT, market gaps, personas, and a full quarterly + annual plan.
       </p>
 
       {open && (
@@ -61,6 +62,25 @@ export default function DeepStrategyPanel() {
             </div>
           ) : strategy ? (
             <>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="bg-slate-100 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Building2 className="w-3.5 h-3.5" /> Business Analysis</p>
+                  <p className="text-sm text-slate-700">{strategy.businessAnalysis}</p>
+                </div>
+                <div className="bg-slate-100 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Swords className="w-3.5 h-3.5" /> Competitor Analysis</p>
+                  <p className="text-sm text-slate-700">{strategy.competitorAnalysis}</p>
+                </div>
+                <div className="bg-slate-100 rounded-lg p-3 sm:col-span-2">
+                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Target className="w-3.5 h-3.5" /> Target Audience</p>
+                  <p className="text-sm text-slate-700">{strategy.targetAudience?.description}</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Age: {strategy.targetAudience?.ageRange}</span>
+                    <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Income: {strategy.targetAudience?.income}</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="bg-slate-100 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Package className="w-3.5 h-3.5" /> Product Analysis</p>

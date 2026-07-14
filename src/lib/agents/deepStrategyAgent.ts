@@ -22,7 +22,10 @@ export interface Persona {
 }
 
 export interface DeepStrategy {
+  businessAnalysis: string;
   productAnalysis: string;
+  competitorAnalysis: string;
+  targetAudience: { ageRange: string; income: string; description: string };
   pricingStrategy: string;
   positioningStatement: string;
   usp: string;
@@ -41,7 +44,10 @@ export async function generateDeepStrategy(
   competitorContext?: string | null
 ): Promise<DeepStrategy> {
   const fallback: DeepStrategy = {
+    businessAnalysis: `${dealershipName} is a ${businessCategory} business${city ? ` based in ${city}` : ""}. Add a Brand Voice description for a sharper analysis.`,
     productAnalysis: "Add a Brand Voice description first so this can be tailored to your actual offering.",
+    competitorAnalysis: competitorContext ? "Competitor ad data was available but couldn't be analyzed right now — try regenerating." : "No competitor ad data available yet — this fills in once we can find running competitor ads in your area.",
+    targetAudience: { ageRange: "25-45", income: "Middle income", description: "Local customers looking for a reliable, trustworthy option." },
     pricingStrategy: "Consider value-based pricing with a clear entry-level offer to reduce first-purchase friction.",
     positioningStatement: `${dealershipName} is a trusted, local ${businessCategory} focused on straightforward, honest service.`,
     usp: "Reliable local service with transparent pricing.",
@@ -74,7 +80,7 @@ export async function generateDeepStrategy(
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2500,
+        max_tokens: 3000,
         messages: [
           {
             role: "user",
@@ -84,7 +90,10 @@ ${competitorContext ? `Known competitor activity: ${competitorContext}` : "No co
 
 Return JSON only, no markdown:
 {
+"businessAnalysis":"2-3 sentences analyzing this business overall — what it does, its market position, how it likely operates day to day",
 "productAnalysis":"2-3 sentences on what they're likely offering and how it fits the local market",
+"competitorAnalysis":"2-3 sentences analyzing the competitive landscape based on the competitor activity given above — if none was given, say so honestly and suggest what to look for",
+"targetAudience":{"ageRange":"e.g. 25-45","income":"e.g. Middle to upper-middle income","description":"1-2 sentences describing who they are and what they want"},
 "pricingStrategy":"2-3 sentences of concrete pricing approach advice for this business type",
 "positioningStatement":"one sharp, specific positioning statement (the 'for X who need Y, we are Z' style)",
 "usp":"one clear, specific unique selling proposition — not generic",
@@ -113,7 +122,14 @@ Be specific and honest — a small local business's SWOT should not read like a 
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
     return {
+      businessAnalysis: parsed.businessAnalysis ?? fallback.businessAnalysis,
       productAnalysis: parsed.productAnalysis ?? fallback.productAnalysis,
+      competitorAnalysis: parsed.competitorAnalysis ?? fallback.competitorAnalysis,
+      targetAudience: {
+        ageRange: parsed.targetAudience?.ageRange ?? fallback.targetAudience.ageRange,
+        income: parsed.targetAudience?.income ?? fallback.targetAudience.income,
+        description: parsed.targetAudience?.description ?? fallback.targetAudience.description,
+      },
       pricingStrategy: parsed.pricingStrategy ?? fallback.pricingStrategy,
       positioningStatement: parsed.positioningStatement ?? fallback.positioningStatement,
       usp: parsed.usp ?? fallback.usp,
