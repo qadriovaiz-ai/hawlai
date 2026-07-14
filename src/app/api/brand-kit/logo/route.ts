@@ -21,6 +21,15 @@ export async function POST() {
     const filePath = `logos/${dealershipId}/${Date.now()}.png`;
     await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
     const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
+
+    // Persist as the dealership's current logo so it survives page
+    // reloads and shows up on the Brand Building page without the
+    // dealer needing to regenerate the whole kit.
+    await supabase.from("brand_kits").upsert(
+      { dealership_id: dealershipId, logo_url: publicUrlData.publicUrl, updated_at: new Date().toISOString() },
+      { onConflict: "dealership_id" }
+    );
+
     return NextResponse.json({ url: publicUrlData.publicUrl });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
