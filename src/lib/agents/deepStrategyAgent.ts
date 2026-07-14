@@ -43,7 +43,8 @@ export async function generateDeepStrategy(
   businessCategory: string = "car dealership",
   competitorContext?: string | null
 ): Promise<DeepStrategy> {
-  const fallback: DeepStrategy = {
+  const fallback: DeepStrategy & { _fallback?: boolean } = {
+    _fallback: true,
     businessAnalysis: `${dealershipName} is a ${businessCategory} business${city ? ` based in ${city}` : ""}. Add a Brand Voice description for a sharper analysis.`,
     productAnalysis: "Add a Brand Voice description first so this can be tailored to your actual offering.",
     competitorAnalysis: competitorContext ? "Competitor ad data was available but couldn't be analyzed right now — try regenerating." : "No competitor ad data available yet — this fills in once we can find running competitor ads in your area.",

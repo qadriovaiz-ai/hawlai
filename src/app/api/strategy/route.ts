@@ -40,6 +40,10 @@ export async function POST(request: Request) {
 
   const plan = await generateMarketingStrategy(dealership?.dealership_name ?? "the business", dealership?.city ?? null, monthly_budget, goal, brandProfile, dealership?.business_category ?? "car dealership");
 
+  if ((plan as any)._fallback) {
+    return NextResponse.json({ error: "Couldn't generate your plan right now — please try again in a moment." }, { status: 503 });
+  }
+
   const { data: saved, error } = await supabase
     .from("marketing_strategies")
     .insert({ dealership_id: dealershipId, monthly_budget, goal, plan })

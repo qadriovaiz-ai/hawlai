@@ -16,10 +16,14 @@ export async function GET(request: Request) {
   const forceRegenerate = searchParams.get("regenerate") === "true";
 
   // Saved once, reused on every visit — only a fresh Claude call when
-  // explicitly asked to regenerate, not on every page open.
+  // explicitly asked to regenerate, not on every page open. But if the
+  // saved row predates the current fields (schema changed since it was
+  // cached), don't trust it — regenerate instead of showing blanks.
   if (!forceRegenerate) {
     const { data: saved } = await supabase.from("deep_strategies").select("strategy").eq("dealership_id", dealershipId).maybeSingle();
-    if (saved) return NextResponse.json({ ...saved.strategy, _cached: true });
+    if (saved && saved.strategy?.businessAnalysis && saved.strategy?.competitorAnalysis && saved.strategy?.targetAudience) {
+      return NextResponse.json({ ...saved.strategy, _cached: true });
+    }
   }
 
   const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
@@ -52,10 +56,15 @@ export async function GET(request: Request) {
     competitorContext
   );
 
-  await supabase.from("deep_strategies").upsert(
-    { dealership_id: dealershipId, strategy, updated_at: new Date().toISOString() },
-    { onConflict: "dealership_id" }
-  );
+  // Never cache a fallback result — a transient API hiccup shouldn't
+  // permanently stick the dealer with placeholder text until they
+  // notice and manually hit Regenerate.
+  if (!(strategy as any)._fallback) {
+    await supabase.from("deep_strategies").upsert(
+      { dealership_id: dealershipId, strategy, updated_at: new Date().toISOString() },
+      { onConflict: "dealership_id" }
+    );
+  }
 
   return NextResponse.json({ ...strategy, _cached: false });
 }

@@ -30,7 +30,8 @@ export async function generateMarketingStrategy(
   brandProfile?: BrandProfile | null,
   businessCategory: string = "car dealership"
 ): Promise<MarketingPlan> {
-  const fallback: MarketingPlan = {
+  const fallback: MarketingPlan & { _fallback?: boolean } = {
+    _fallback: true,
     overview: "Focus on consistent lead generation through Meta ads, supported by organic social content and follow-up on existing leads.",
     budget_allocation: [
       { channel: "Meta Ads", percent: 80, reason: "Primary lead-gen channel currently connected" },
