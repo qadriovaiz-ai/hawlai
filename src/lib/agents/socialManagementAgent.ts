@@ -23,6 +23,59 @@ export const SOCIAL_TASKS: SocialTaskMeta[] = [
   { key: "viral_trends", label: "Viral Trend Detection", needsInput: false, instructions: "Search for current trending Instagram Reels/YouTube Shorts formats, audio, or hashtags in India relevant to this business category (this month). Return 5 trends as {trend, howToUse} — howToUse should explain how this specific business could adapt the trend. Base this on what you actually find via search, not guesses." },
 ];
 
+// Single-reply generator for the REAL auto-reply pipeline (webhook ->
+// generate -> send, no human review). Deliberately separate from
+// generateSocialTask's reply_suggestions (which gives 3 variants for
+// a human to pick from) — auto-send needs exactly one confident,
+// safe reply, and a tighter prompt that explicitly avoids committing
+// to anything risky (prices, promises, complaint resolutions) since
+// nobody reviews this before it goes out.
+export async function generateAutoReply(
+  channel: "dm" | "comment",
+  incomingText: string,
+  dealershipName: string,
+  businessCategory: string,
+  brandProfile?: BrandProfile | null
+): Promise<string | null> {
+  const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.";
+  const safety = channel === "comment"
+    ? "This reply is PUBLIC on a comment thread — keep it brief, warm, and generic. Never share prices, personal details, or specific commitments publicly; if the comment needs specifics, invite them to DM instead."
+    : "This is a private DM auto-reply sent with NO human review before sending. If the message is a complaint, a complex question, or anything you're not confident about, reply with acknowledgement + 'our team will get back to you shortly' rather than guessing or promising something specific.";
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 300,
+        messages: [{
+          role: "user",
+          content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
+${brandContext}
+${safety}
+Incoming message: "${incomingText}"
+
+Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`,
+        }],
+      }),
+    });
+    if (!response.ok) return null;
+    const bodyText = await response.text();
+    if (!bodyText.trim()) return null;
+    const data = JSON.parse(bodyText);
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
+    if (!clean) return null;
+    const parsed = JSON.parse(clean);
+    return parsed.reply ?? null;
+  } catch (err: any) {
+    console.error("[auto-reply] error:", err.message);
+    return null;
+  }
+}
+
 interface BrandProfile {
   tone_of_voice?: string | null;
 }
