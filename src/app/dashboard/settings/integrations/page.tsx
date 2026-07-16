@@ -15,7 +15,8 @@ const PENDING_APPROVAL = [
   { name: "Pinterest Ads", note: "Requires Pinterest Ads API approval" },
 ];
 
-export default async function IntegrationsPage() {
+export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+  const params = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -45,6 +46,17 @@ export default async function IntegrationsPage() {
           <p className="text-sm text-slate-500">Every connected account, in one place</p>
         </div>
       </div>
+
+      {params.google_ads_error && (
+        <div className="bg-red-500/10 border border-red-700/40 rounded-lg p-3 text-sm text-red-400">
+          Google Ads connection failed: {decodeURIComponent(params.google_ads_error)}
+        </div>
+      )}
+      {params.google_ads === "connected" && (
+        <div className="bg-green-500/10 border border-green-700/40 rounded-lg p-3 text-sm text-green-400">
+          Google Ads connected successfully.
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         {/* Meta */}
