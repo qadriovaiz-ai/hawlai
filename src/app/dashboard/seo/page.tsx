@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target } from "lucide-react";
+import SeoToolkit from "@/components/seo/SeoToolkit";
 
 export default function SeoPage() {
   const [audit, setAudit] = useState<{ score: number; checks: { label: string; passed: boolean; detail: string }[] } | null>(null);
@@ -252,6 +253,8 @@ export default function SeoPage() {
           <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{blogPost.content}</p>
         </div>
       )}
+
+      <SeoToolkit />
     </div>
   );
 }
