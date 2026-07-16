@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Mail, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
+import EmailMarketingTools from "@/components/email/EmailMarketingTools";
 
 export default async function EmailPage() {
   const supabase = await createClient();
@@ -57,6 +58,8 @@ export default async function EmailPage() {
           Go to a lead to draft and send an email <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
+
+      <EmailMarketingTools />
     </div>
   );
 }
