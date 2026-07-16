@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Share2, Loader2, AlertCircle, CheckCircle, ImagePlus, Sparkles, CalendarClock } from "lucide-react";
 import InfluencerOutreach from "@/components/social/InfluencerOutreach";
+import SocialManagement from "@/components/social/SocialManagement";
 
 export default function SocialPostPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -158,6 +159,7 @@ export default function SocialPostPage() {
       </button>
 
       <InfluencerOutreach />
+      <SocialManagement />
     </div>
   );
 }
