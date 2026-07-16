@@ -35,7 +35,7 @@ export default function SeoPage() {
 
   async function handleGenerate() {
     setError(null);
-    if (topic.trim().length < 2) return setError("Type a car model or topic");
+    if (topic.trim().length < 2) return setError("Type a topic or keyword first");
     setLoading(true);
     try {
       const res = await fetch("/api/seo/keywords", {
@@ -55,7 +55,7 @@ export default function SeoPage() {
 
   async function handleGenerateBlogPost() {
     setBlogError(null);
-    if (topic.trim().length < 2) return setBlogError("Type a car model or topic first");
+    if (topic.trim().length < 2) return setBlogError("Type a topic first");
     setBlogLoading(true);
     try {
       const res = await fetch("/api/seo/blog-post", {
@@ -179,7 +179,7 @@ export default function SeoPage() {
           <input
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            placeholder="e.g. Maruti Swift"
+            placeholder="e.g. a product, service, or topic"
             className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <input

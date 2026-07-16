@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Car, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
+import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Tag, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
 export default function CreativeStudioPage() {
@@ -79,7 +79,7 @@ export default function CreativeStudioPage() {
 
   async function handleGenerateListing() {
     setListingError(null);
-    if (carModel.trim().length < 2) return setListingError("Enter a car model");
+    if (carModel.trim().length < 2) return setListingError("Enter a product/item name");
     setListingLoading(true);
     try {
       const res = await fetch("/api/creative/product-description", {
@@ -200,7 +200,7 @@ export default function CreativeStudioPage() {
         <input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="e.g. Diwali offer on Maruti Swift"
+          placeholder="e.g. Diwali offer on your top product/service"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <div className="flex flex-wrap gap-2">
@@ -272,17 +272,17 @@ export default function CreativeStudioPage() {
       )}
 
       <div className="card p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Car className="w-4 h-4 text-slate-400" /> Product Listing</p>
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Tag className="w-4 h-4 text-slate-400" /> Product Listing</p>
         <input
           value={carModel}
           onChange={(e) => setCarModel(e.target.value)}
-          placeholder="Car model, e.g. 2022 Hyundai Creta SX"
+          placeholder="Product/item name, e.g. 2BHK Apartment in Sector 45"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <input
           value={carDetails}
           onChange={(e) => setCarDetails(e.target.value)}
-          placeholder="Details — km driven, price, features (optional)"
+          placeholder="Details — price, size, features (optional)"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <button onClick={handleGenerateListing} disabled={listingLoading} className="btn-secondary text-sm">
