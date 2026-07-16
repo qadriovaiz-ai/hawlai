@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MessageCircle, ArrowRight } from "lucide-react";
+import WhatsappMarketingTools from "@/components/whatsapp/WhatsappMarketingTools";
 
 export default function WhatsAppPage() {
   return (
@@ -32,6 +33,8 @@ export default function WhatsAppPage() {
           Go to Leads to send a WhatsApp message <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
+
+      <WhatsappMarketingTools />
     </div>
   );
 }
