@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText } from "lucide-react";
+import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText, Radio } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
 import WooCommerceConnect from "@/components/settings/WooCommerceConnect";
@@ -9,9 +9,9 @@ import WebsiteConnect from "@/components/settings/WebsiteConnect";
 import WordPressConnect from "@/components/settings/WordPressConnect";
 
 const PENDING_APPROVAL = [
-  { name: "Google Ads", note: "Requires Google Ads API developer approval" },
   { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
   { name: "TikTok Ads", note: "Requires TikTok Marketing API approval" },
+  { name: "Snapchat Ads", note: "Requires Snapchat Marketing API approval" },
   { name: "Pinterest Ads", note: "Requires Pinterest Ads API approval" },
 ];
 
@@ -26,12 +26,13 @@ export default async function IntegrationsPage() {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id")
     .eq("id", dealershipId)
     .single();
 
   const isMetaConnected = !!dealership?.fb_page_id;
   const isGmailConnected = !!dealership?.gmail_email;
+  const isGoogleAdsConnected = !!dealership?.google_ads_email;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -88,6 +89,26 @@ export default async function IntegrationsPage() {
             <Link href="/dashboard/settings/connect-facebook" className="btn-secondary text-xs w-full justify-center">
               Connect <ArrowRight className="w-3 h-3" />
             </Link>
+          )}
+        </div>
+
+        {/* Google Ads */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-yellow-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Radio className="w-4 h-4 text-yellow-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Google Ads</p>
+              <p className="text-xs text-slate-400">Basic Access pending Google review</p>
+            </div>
+          </div>
+          {isGoogleAdsConnected ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.google_ads_email})</span>
+          ) : (
+            <a href="/api/auth/google-ads/connect" className="btn-secondary text-xs w-full justify-center">
+              Connect <ArrowRight className="w-3 h-3" />
+            </a>
           )}
         </div>
 
