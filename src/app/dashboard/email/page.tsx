@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Mail, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
 import EmailMarketingTools from "@/components/email/EmailMarketingTools";
+import EmailAutomationSettings from "@/components/email/EmailAutomationSettings";
 
 export default async function EmailPage() {
   const supabase = await createClient();
@@ -59,6 +60,7 @@ export default async function EmailPage() {
         </Link>
       </div>
 
+      <EmailAutomationSettings />
       <EmailMarketingTools />
     </div>
   );
