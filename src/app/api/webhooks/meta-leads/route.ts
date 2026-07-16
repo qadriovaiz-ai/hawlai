@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { qualifyLead } from "@/lib/ai-engine";
 import { NextResponse } from "next/server";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
+import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 
 async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
@@ -52,6 +53,12 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
 
   for (const entry of entries) {
+    // DM/comment auto-reply — separate concern from leadgen below, but
+    // has to live on this same URL since Meta only allows one Callback
+    // URL per Page product. No-ops if the dealer hasn't enabled either
+    // toggle or this entry has no messaging/feed payload.
+    await handleAutoReplyEntry(entry, supabase);
+
     // entry.id is the Facebook Page ID this event came from — use it to
     // find which dealership owns this page, so leads from different
     // dealers' pages land in the right place with the right token.

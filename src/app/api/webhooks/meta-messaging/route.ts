@@ -1,8 +1,13 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { generateAutoReply } from "@/lib/agents/socialManagementAgent";
+import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 
-const GRAPH_VERSION = "v19.0";
+// Kept as a standalone endpoint in case a separate Callback URL is
+// ever configured for this specifically, but in practice Meta only
+// allows ONE Callback URL per "Page" product — so the same logic
+// (handleAutoReplyEntry) also runs from /api/webhooks/meta-leads,
+// which is the URL actually registered in the Meta App dashboard
+// alongside leadgen. This route is safe to leave unconfigured.
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -16,26 +21,6 @@ export async function GET(request: Request) {
   return NextResponse.json({ error: "Verification failed" }, { status: 403 });
 }
 
-async function sendDmReply(pageAccessToken: string, recipientId: string, text: string) {
-  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/me/messages?access_token=${pageAccessToken}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send DM reply");
-}
-
-async function sendCommentReply(pageAccessToken: string, commentId: string, text: string) {
-  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${commentId}/comments?access_token=${pageAccessToken}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send comment reply");
-}
-
 export async function POST(request: Request) {
   let body: any;
   try {
@@ -45,89 +30,8 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const entries = body?.entry ?? [];
-
-  for (const entry of entries) {
-    const pageId: string | undefined = entry?.id;
-    if (!pageId) continue;
-
-    const { data: dealership } = await supabase
-      .from("dealerships")
-      .select("id, dealership_name, business_category, fb_page_access_token, dm_auto_reply_enabled, comment_auto_reply_enabled")
-      .eq("fb_page_id", pageId)
-      .maybeSingle();
-    if (!dealership || !dealership.fb_page_access_token) continue;
-
-    const { data: brandProfile } = await supabase
-      .from("brand_profiles")
-      .select("tone_of_voice")
-      .eq("dealership_id", dealership.id)
-      .maybeSingle();
-
-    // --- DMs (Messenger/Instagram) ---
-    if (dealership.dm_auto_reply_enabled) {
-      for (const msgEvent of entry?.messaging ?? []) {
-        const senderId = msgEvent?.sender?.id;
-        const text = msgEvent?.message?.text;
-        // Skip echoes (our own sent messages bouncing back) and non-text.
-        if (!senderId || !text || msgEvent?.message?.is_echo) continue;
-
-        let replyText: string | null = null;
-        let success = true;
-        let errorMsg: string | null = null;
-        try {
-          replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile);
-          if (replyText) {
-            await sendDmReply(dealership.fb_page_access_token, senderId, replyText);
-          } else {
-            success = false;
-            errorMsg = "No reply generated";
-          }
-        } catch (err: any) {
-          success = false;
-          errorMsg = err.message;
-        }
-        await supabase.from("auto_reply_log").insert({
-          dealership_id: dealership.id, channel: "dm", source_id: senderId,
-          incoming_text: text, reply_text: replyText, success, error: errorMsg,
-        });
-      }
-    }
-
-    // --- Comments (feed) ---
-    if (dealership.comment_auto_reply_enabled) {
-      for (const change of entry?.changes ?? []) {
-        if (change?.field !== "feed") continue;
-        const value = change?.value;
-        if (value?.item !== "comment" || value?.verb !== "add") continue;
-        // Don't reply to our own comments (e.g. replies we just sent).
-        if (value?.from?.id === pageId) continue;
-
-        const commentId = value?.comment_id;
-        const text = value?.message;
-        if (!commentId || !text) continue;
-
-        let replyText: string | null = null;
-        let success = true;
-        let errorMsg: string | null = null;
-        try {
-          replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile);
-          if (replyText) {
-            await sendCommentReply(dealership.fb_page_access_token, commentId, replyText);
-          } else {
-            success = false;
-            errorMsg = "No reply generated";
-          }
-        } catch (err: any) {
-          success = false;
-          errorMsg = err.message;
-        }
-        await supabase.from("auto_reply_log").insert({
-          dealership_id: dealership.id, channel: "comment", source_id: commentId,
-          incoming_text: text, reply_text: replyText, success, error: errorMsg,
-        });
-      }
-    }
+  for (const entry of body?.entry ?? []) {
+    await handleAutoReplyEntry(entry, supabase);
   }
 
   return NextResponse.json({ success: true });
