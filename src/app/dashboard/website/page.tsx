@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Globe, Loader2, Sparkles, ImagePlus, Check, ExternalLink, AlertCircle, Plus, X, Link2 } from "lucide-react";
 import { LANDING_THEMES } from "@/lib/landingThemes";
+import CroToolkit from "@/components/cro/CroToolkit";
 
 interface CarListing {
   name: string;
@@ -373,6 +374,8 @@ export default function WebsitePage() {
         </button>
       </div>
       {published && <p className="text-xs text-green-400 text-center">✅ Live — accepting leads from the public</p>}
+
+      <CroToolkit />
     </div>
   );
 }

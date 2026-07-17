@@ -120,12 +120,12 @@ export function toWhatsAppLink(phone: string | null | undefined, message: string
 // Fires a public analytics event for a landing page (view, click,
 // chat_open, form_submit). Never throws — tracking must never break
 // the page for a real visitor.
-export function trackEvent(slug: string, eventType: string, coords?: { xPct: number; yPct: number }) {
+export function trackEvent(slug: string, eventType: string, coords?: { xPct: number; yPct: number }, variant?: string | null) {
   try {
     fetch("/api/public/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct }),
+      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct, variant }),
       keepalive: true,
     }).catch(() => {});
   } catch {

@@ -77,6 +77,22 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
   const defaultPillars = ["Transparent pricing, no hidden charges", "Verified, quality-checked vehicles", "Support that continues after the sale"];
   const displayPillars = pillars.length > 0 ? pillars : defaultPillars;
 
+  // A/B testing — a random variant is assigned per page request (not
+  // sticky per-visitor across multiple visits, but consistent for the
+  // one render the visitor sees, which is what gets tracked). Results
+  // are compared in CRO's A/B Testing tool using page_events.variant.
+  const { data: abTest } = dealership?.id
+    ? await supabase.from("ab_tests").select("*").eq("dealership_id", dealership.id).eq("active", true).maybeSingle()
+    : { data: null };
+
+  const assignedVariant: "A" | "B" | null = abTest ? (Math.random() < 0.5 ? "A" : "B") : null;
+  const displayHeadline = abTest?.element === "headline" && assignedVariant
+    ? (assignedVariant === "A" ? abTest.variant_a : abTest.variant_b)
+    : (page.headline ?? dealershipName);
+  const displayOfferText = abTest?.element === "cta" && assignedVariant
+    ? (assignedVariant === "A" ? abTest.variant_a : abTest.variant_b)
+    : (page.offer_text ?? "Book a Free Test Drive");
+
   return (
     <div className={`${oswald.variable} font-sans`} style={{ backgroundColor: theme.bg, color: "#1C1917" }}>
       {/* Hero */}
@@ -98,7 +114,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
             className="text-4xl sm:text-6xl leading-[1.05] mb-5 uppercase tracking-tight"
             style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}
           >
-            {page.headline ?? dealershipName}
+            {displayHeadline}
           </h1>
           <p className="text-lg sm:text-xl text-neutral-300 max-w-lg mb-8 leading-relaxed">
             {page.subheadline ?? (city ? `Serving ${city} with trust and transparency.` : "Your trusted car partner.")}
@@ -108,7 +124,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
             className="inline-flex items-center gap-2 font-semibold px-6 py-3.5 rounded-md transition-opacity hover:opacity-90"
             style={{ backgroundColor: theme.accent, color: theme.accentText, fontFamily: "var(--font-display)" }}
           >
-            {page.offer_text ?? "Book a Free Test Drive"}
+            {displayOfferText}
           </a>
         </div>
       </section>
@@ -172,7 +188,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
             </div>
           </div>
           <div className="sm:col-span-3">
-            <LandingLeadForm slug={slug} theme={theme} />
+            <LandingLeadForm slug={slug} theme={theme} variant={assignedVariant} />
           </div>
         </div>
       </section>
@@ -189,11 +205,11 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
         className="sm:hidden fixed bottom-0 inset-x-0 text-center py-3.5 font-semibold z-40 uppercase text-sm tracking-wide"
         style={{ backgroundColor: theme.accent, color: theme.accentText, fontFamily: "var(--font-display)" }}
       >
-        {page.offer_text ?? "Book a Free Test Drive"}
+        {displayOfferText}
       </a>
       <div className="sm:hidden h-14" />
       <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
-      <PageTracker slug={slug} />
+      <PageTracker slug={slug} variant={assignedVariant} />
     </div>
   );
 }

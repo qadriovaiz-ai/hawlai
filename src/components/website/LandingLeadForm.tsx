@@ -7,7 +7,7 @@ import { trackEvent } from "@/lib/utils";
 
 const DEFAULT_THEME: LandingTheme = { key: "navy_amber", label: "Navy & Amber", bg: "#FAF8F5", dark: "#122744", accent: "#D9A441", accentText: "#122744" };
 
-export default function LandingLeadForm({ slug, theme = DEFAULT_THEME }: { slug: string; theme?: LandingTheme }) {
+export default function LandingLeadForm({ slug, theme = DEFAULT_THEME, variant }: { slug: string; theme?: LandingTheme; variant?: string | null }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [vehicle, setVehicle] = useState("");
@@ -31,7 +31,7 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME }: { slug:
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      trackEvent(slug, "form_submit");
+      trackEvent(slug, "form_submit", undefined, variant);
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message);

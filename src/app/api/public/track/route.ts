@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "whatsapp_click"];
 
 export async function POST(request: Request) {
-  const { slug, eventType, xPct, yPct } = await request.json();
+  const { slug, eventType, xPct, yPct, variant } = await request.json();
   if (!slug || !VALID_EVENTS.includes(eventType)) {
     return NextResponse.json({ error: "Invalid tracking event" }, { status: 400 });
   }
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     event_type: eventType,
     x_pct: typeof xPct === "number" ? xPct : null,
     y_pct: typeof yPct === "number" ? yPct : null,
+    variant: typeof variant === "string" ? variant : null,
   });
 
   return NextResponse.json({ ok: true });
