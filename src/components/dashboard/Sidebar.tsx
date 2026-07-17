@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Brain, CalendarDays, Target, Users2, Building2, Palette,
   Clapperboard, Share2, Megaphone, Mail, MessageCircle, Users, Globe, TrendingUp,
-  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2, PenTool, FileText, Layers, Film, Radio, UserCheck,
+  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2, PenTool, FileText, Layers, Film, Radio, UserCheck, Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +48,7 @@ const NAV_GROUPS = [
       { href: "/dashboard/whatsapp", label: "WhatsApp", icon: MessageCircle },
       { href: "/dashboard/leads-hub", label: "CRM", icon: Users },
       { href: "/dashboard/crm-marketing", label: "CRM Marketing", icon: UserCheck },
+      { href: "/dashboard/marketing-automation", label: "Marketing Automation", icon: Workflow },
       { href: "/dashboard/website", label: "Website", icon: Globe },
       { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
     ],

@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { runDailyAutopilot } from "@/lib/agents/autopilotAgent";
 import { runEmailAutomation } from "@/lib/automation/emailAutomation";
+import { runWorkflows } from "@/lib/automation/workflowEngine";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -37,6 +38,11 @@ export async function GET(request: Request) {
       results[dealership.id].emailAutomation = await runEmailAutomation(supabase, dealership.id);
     } catch (err: any) {
       results[dealership.id].emailAutomation = { error: err.message };
+    }
+    try {
+      results[dealership.id].workflows = await runWorkflows(supabase, dealership.id);
+    } catch (err: any) {
+      results[dealership.id].workflows = { error: err.message };
     }
   }
 
