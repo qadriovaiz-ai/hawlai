@@ -4,6 +4,7 @@ import { Oswald } from "next/font/google";
 import { ShieldCheck, Phone, MapPin, IndianRupee } from "lucide-react";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ChatWidget from "@/components/website/ChatWidget";
+import PageTracker from "@/components/website/PageTracker";
 import { getTheme } from "@/lib/landingThemes";
 import type { Metadata } from "next";
 
@@ -192,6 +193,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
       </a>
       <div className="sm:hidden h-14" />
       <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
+      <PageTracker slug={slug} />
     </div>
   );
 }

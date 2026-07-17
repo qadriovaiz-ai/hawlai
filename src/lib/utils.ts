@@ -116,3 +116,19 @@ export function toWhatsAppLink(phone: string | null | undefined, message: string
   if (digits.length === 10) digits = `91${digits}`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
+
+// Fires a public analytics event for a landing page (view, click,
+// chat_open, form_submit). Never throws — tracking must never break
+// the page for a real visitor.
+export function trackEvent(slug: string, eventType: string, coords?: { xPct: number; yPct: number }) {
+  try {
+    fetch("/api/public/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // no-op
+  }
+}

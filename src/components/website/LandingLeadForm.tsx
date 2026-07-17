@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, CheckCircle, Send } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
+import { trackEvent } from "@/lib/utils";
 
 const DEFAULT_THEME: LandingTheme = { key: "navy_amber", label: "Navy & Amber", bg: "#FAF8F5", dark: "#122744", accent: "#D9A441", accentText: "#122744" };
 
@@ -30,6 +31,7 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME }: { slug:
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      trackEvent(slug, "form_submit");
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message);
@@ -68,7 +70,7 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME }: { slug:
       <input
         value={vehicle}
         onChange={(e) => setVehicle(e.target.value)}
-        placeholder="Which car are you interested in? (optional)"
+        placeholder="What are you interested in? (optional)"
         className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
         style={{ "--tw-ring-color": `${theme.accent}66` } as React.CSSProperties}
       />

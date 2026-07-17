@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { trackEvent } from "@/lib/utils";
 
 interface Message {
   role: "user" | "assistant";
@@ -48,7 +49,7 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
     <>
       {!open && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => { setOpen(true); trackEvent(slug, "chat_open"); }}
           className="fixed bottom-20 sm:bottom-5 right-5 z-40 w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
           style={{ backgroundColor: accentColor }}
         >

@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AnalyticsCharts from "@/components/dashboard/AnalyticsCharts";
 import CampaignPerformanceCharts from "@/components/dashboard/CampaignPerformanceCharts";
+import GrowthMetricsCard from "@/components/dashboard/GrowthMetricsCard";
+import WebsiteAnalyticsCard from "@/components/dashboard/WebsiteAnalyticsCard";
 import { formatCurrency } from "@/lib/utils";
 import { History } from "lucide-react";
 
@@ -178,6 +180,9 @@ export default async function AnalyticsPage() {
           </div>
         )}
       </div>
+
+      <GrowthMetricsCard />
+      <WebsiteAnalyticsCard />
     </div>
   );
 }
