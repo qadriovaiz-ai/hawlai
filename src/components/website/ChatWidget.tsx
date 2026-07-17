@@ -6,6 +6,7 @@ import { MessageCircle, X, Send, Loader2 } from "lucide-react";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  bookingLink?: string | null;
 }
 
 export default function ChatWidget({ slug, dealershipName, accentColor }: { slug: string; dealershipName: string; accentColor: string }) {
@@ -13,6 +14,7 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [leadCaptured, setLeadCaptured] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,7 +35,8 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
         body: JSON.stringify({ slug, message: text, history: messages }),
       });
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "Sorry, something went wrong. Please try the contact form below." }]);
+      if (data.leadCaptured) setLeadCaptured(true);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "Sorry, something went wrong. Please try the contact form below.", bookingLink: data.bookingLink }]);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, something went wrong. Please try the contact form below." }]);
     } finally {
@@ -67,7 +70,7 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
               <p className="text-xs text-neutral-400 text-center py-6">Ask about pricing, availability, offers — anything!</p>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
                     m.role === "user" ? "text-white rounded-tr-sm" : "bg-white border border-neutral-200 text-neutral-700 rounded-tl-sm"
@@ -76,8 +79,22 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
                 >
                   {m.content}
                 </div>
+                {m.bookingLink && (
+                  <a
+                    href={m.bookingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-white"
+                    style={{ backgroundColor: accentColor }}
+                  >
+                    📅 Book a meeting
+                  </a>
+                )}
               </div>
             ))}
+            {leadCaptured && (
+              <p className="text-center text-xs text-green-600 bg-green-50 rounded-lg py-1.5 px-2">✓ Got it — our team will reach out shortly.</p>
+            )}
             {loading && (
               <div className="flex justify-start">
                 <div className="bg-white border border-neutral-200 rounded-xl rounded-tl-sm px-3 py-2">
