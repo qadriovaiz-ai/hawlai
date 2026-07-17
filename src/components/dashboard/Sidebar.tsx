@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Brain, CalendarDays, Target, Users2, Building2, Palette,
   Clapperboard, Share2, Megaphone, Mail, MessageCircle, Users, Globe, TrendingUp,
-  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2, PenTool, FileText, Layers, Film, Radio, UserCheck, Workflow,
+  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2, PenTool, FileText, Layers, Film, Radio, UserCheck, Workflow, Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ const NAV_GROUPS = [
       { href: "/dashboard/strategy", label: "Marketing Strategy", icon: Target },
       { href: "/dashboard/audience", label: "Audience", icon: Users2 },
       { href: "/dashboard/research", label: "Competitors", icon: Building2 },
+      { href: "/dashboard/competitor-intel", label: "Competitor Intelligence", icon: Radar },
       { href: "/dashboard/brand-building", label: "Brand Building", icon: PenTool },
       { href: "/dashboard/settings/brand", label: "Brand Voice", icon: Palette },
     ],

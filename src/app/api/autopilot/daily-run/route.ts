@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { runDailyAutopilot } from "@/lib/agents/autopilotAgent";
 import { runEmailAutomation } from "@/lib/automation/emailAutomation";
 import { runWorkflows } from "@/lib/automation/workflowEngine";
+import { checkCompetitorAlerts } from "@/lib/automation/competitorMonitor";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -43,6 +44,11 @@ export async function GET(request: Request) {
       results[dealership.id].workflows = await runWorkflows(supabase, dealership.id);
     } catch (err: any) {
       results[dealership.id].workflows = { error: err.message };
+    }
+    try {
+      results[dealership.id].competitorAlerts = await checkCompetitorAlerts(supabase, dealership.id);
+    } catch (err: any) {
+      results[dealership.id].competitorAlerts = { error: err.message };
     }
   }
 
