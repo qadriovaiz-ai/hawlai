@@ -4,6 +4,7 @@ import { FileText, Flame, ShieldCheck, Megaphone, IndianRupee, CheckCircle2, Lis
 import { formatCurrency } from "@/lib/utils";
 import { generateExecutiveReport } from "@/lib/agents/reportingAgent";
 import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
+import ReportToolsCard from "@/components/reports/ReportToolsCard";
 
 export default async function ReportsPage() {
   const supabase = await createClient();
@@ -135,6 +136,8 @@ export default async function ReportsPage() {
           )}
         </div>
       </div>
+
+      <ReportToolsCard />
     </div>
   );
 }

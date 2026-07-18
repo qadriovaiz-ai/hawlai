@@ -5,6 +5,7 @@ import { runEmailAutomation } from "@/lib/automation/emailAutomation";
 import { runWorkflows } from "@/lib/automation/workflowEngine";
 import { checkCompetitorAlerts } from "@/lib/automation/competitorMonitor";
 import { checkTopicAlerts } from "@/lib/automation/topicMonitor";
+import { runReportSnapshots } from "@/lib/automation/reportSnapshot";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const { data: dealerships, error } = await supabase.from("dealerships").select("id");
+  const { data: dealerships, error } = await supabase.from("dealerships").select("id, business_category");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const results: Record<string, any> = {};
@@ -55,6 +56,11 @@ export async function GET(request: Request) {
       results[dealership.id].topicAlerts = await checkTopicAlerts(supabase, dealership.id);
     } catch (err: any) {
       results[dealership.id].topicAlerts = { error: err.message };
+    }
+    try {
+      results[dealership.id].reportSnapshots = await runReportSnapshots(supabase, dealership.id, dealership.business_category ?? "business");
+    } catch (err: any) {
+      results[dealership.id].reportSnapshots = { error: err.message };
     }
   }
 
