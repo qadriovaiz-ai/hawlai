@@ -5,6 +5,8 @@ import { ShieldCheck, Phone, MapPin, IndianRupee } from "lucide-react";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ChatWidget from "@/components/website/ChatWidget";
 import PageTracker from "@/components/website/PageTracker";
+import Popup from "@/components/website/Popup";
+import TrackingScripts from "@/components/website/TrackingScripts";
 import { getTheme } from "@/lib/landingThemes";
 import type { Metadata } from "next";
 
@@ -210,6 +212,18 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
       <div className="sm:hidden h-14" />
       <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
       <PageTracker slug={slug} variant={assignedVariant} />
+      <TrackingScripts gaId={page.ga_tracking_id} metaPixelId={page.meta_pixel_id} gtmId={page.gtm_id} />
+      {page.popup_enabled && page.popup_headline && page.popup_body && (
+        <Popup
+          slug={slug}
+          trigger={page.popup_trigger ?? "exit_intent"}
+          delaySeconds={page.popup_delay_seconds ?? 15}
+          headline={page.popup_headline}
+          body={page.popup_body}
+          ctaText={page.popup_cta_text ?? "Get in touch"}
+          accentColor={theme.dark}
+        />
+      )}
     </div>
   );
 }

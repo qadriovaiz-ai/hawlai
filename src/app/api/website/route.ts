@@ -28,7 +28,11 @@ export async function PATCH(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
-  const { slug, headline, subheadline, offer_text, hero_image_url, published, theme, car_listings, external_website_url } = body;
+  const {
+    slug, headline, subheadline, offer_text, hero_image_url, published, theme, car_listings, external_website_url,
+    popup_enabled, popup_trigger, popup_delay_seconds, popup_headline, popup_body, popup_cta_text,
+    ga_tracking_id, meta_pixel_id, gtm_id,
+  } = body;
 
   if (slug) {
     const { data: existing } = await supabase
@@ -57,6 +61,15 @@ export async function PATCH(request: Request) {
         ...(published !== undefined && { published }),
         ...(theme !== undefined && { theme }),
         ...(car_listings !== undefined && { car_listings }),
+        ...(popup_enabled !== undefined && { popup_enabled }),
+        ...(popup_trigger !== undefined && { popup_trigger }),
+        ...(popup_delay_seconds !== undefined && { popup_delay_seconds }),
+        ...(popup_headline !== undefined && { popup_headline }),
+        ...(popup_body !== undefined && { popup_body }),
+        ...(popup_cta_text !== undefined && { popup_cta_text }),
+        ...(ga_tracking_id !== undefined && { ga_tracking_id }),
+        ...(meta_pixel_id !== undefined && { meta_pixel_id }),
+        ...(gtm_id !== undefined && { gtm_id }),
       },
       { onConflict: "dealership_id" }
     )

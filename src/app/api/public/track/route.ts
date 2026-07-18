@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
-const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "whatsapp_click"];
+const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "whatsapp_click", "popup_shown"];
 
 export async function POST(request: Request) {
   const { slug, eventType, xPct, yPct, variant } = await request.json();
