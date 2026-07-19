@@ -6,6 +6,7 @@ import { runWorkflows } from "@/lib/automation/workflowEngine";
 import { checkCompetitorAlerts } from "@/lib/automation/competitorMonitor";
 import { checkTopicAlerts } from "@/lib/automation/topicMonitor";
 import { runReportSnapshots } from "@/lib/automation/reportSnapshot";
+import { runContentAutopilot } from "@/lib/automation/contentAutopilot";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -61,6 +62,11 @@ export async function GET(request: Request) {
       results[dealership.id].reportSnapshots = await runReportSnapshots(supabase, dealership.id, dealership.business_category ?? "business");
     } catch (err: any) {
       results[dealership.id].reportSnapshots = { error: err.message };
+    }
+    try {
+      results[dealership.id].contentAutopilot = await runContentAutopilot(supabase, dealership.id);
+    } catch (err: any) {
+      results[dealership.id].contentAutopilot = { error: err.message };
     }
   }
 
