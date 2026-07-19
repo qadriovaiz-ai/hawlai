@@ -1,11 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import MasterChatPage from "@/components/chat/MasterChatPage";
 
-export default async function AIAgentPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
-
-  return <MasterChatPage />;
+// Moved to /chat for an immersive, ChatGPT-style layout without the
+// full department sidebar. Kept as a redirect so old links/bookmarks
+// still work.
+export default function MasterBrainRedirect() {
+  redirect("/chat");
 }

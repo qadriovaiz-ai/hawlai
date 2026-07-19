@@ -14,7 +14,7 @@ const NAV_GROUPS = [
   {
     label: "Overview",
     items: [
-      { href: "/dashboard/master-brain", label: "Master Chat", icon: Brain },
+      { href: "/chat", label: "Master Chat", icon: Brain },
       { href: "/dashboard/autopilot", label: "Autopilot", icon: Zap },
       { href: "/dashboard/overview", label: "Dashboard", icon: LayoutDashboard },
       { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
@@ -82,7 +82,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
   return (
     <div className="w-64 bg-slate-100 border-r border-slate-200 flex flex-col h-full shrink-0">
       <div className="p-5 border-b border-slate-100">
-        <div className="flex items-center gap-3">
+        <Link href="/chat" className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 shadow-sm shadow-brand-600/30">
             <Image src="/logo-icon.png" alt="Hawlai" width={36} height={36} className="w-full h-full object-cover" />
           </div>
@@ -90,7 +90,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
             <p className="text-sm font-bold text-slate-900 truncate">Hawlai</p>
             <p className="text-xs text-slate-500 truncate">{dealershipName}</p>
           </div>
-        </div>
+        </Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3 space-y-4">

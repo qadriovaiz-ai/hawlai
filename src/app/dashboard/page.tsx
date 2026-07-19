@@ -33,5 +33,5 @@ export default async function DashboardEntryPage() {
     );
   }
 
-  redirect("/dashboard/master-brain");
+  redirect("/chat");
 }

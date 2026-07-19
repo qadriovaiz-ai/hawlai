@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
 import { Brain, Loader2, Send, User, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +54,7 @@ export default function MasterChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] max-w-3xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-5.5rem)] max-w-3xl mx-auto">
       <div className="flex items-center gap-2.5 pb-4 border-b border-slate-200 shrink-0">
         <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shadow-sm shadow-brand-600/30">
           <Brain className="w-4.5 h-4.5 text-white" />
@@ -64,9 +63,6 @@ export default function MasterChatPage() {
           <p className="text-sm font-semibold text-slate-900">Hawlai — Ask me anything</p>
           <p className="text-xs text-slate-400">I can generate, save, and prep work across every department. Anything that spends money or sends something live still needs your approval.</p>
         </div>
-        <Link href="/dashboard/overview" className="text-xs text-slate-400 hover:text-brand-600 whitespace-nowrap shrink-0">
-          View Dashboard →
-        </Link>
       </div>
 
       <div className="flex-1 overflow-y-auto py-4 space-y-4">
