@@ -16,7 +16,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/dashboard/master-brain", label: "Master Chat", icon: Brain },
       { href: "/dashboard/autopilot", label: "Autopilot", icon: Zap },
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard/overview", label: "Dashboard", icon: LayoutDashboard },
       { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
     ],
   },
