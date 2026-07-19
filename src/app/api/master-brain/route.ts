@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { routeRequest } from "@/lib/agents/masterBrain";
+import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -13,13 +13,13 @@ export async function POST(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
-  const { message } = body;
-  if (!message || message.trim().length < 3) {
+  const { message, history } = body;
+  if (!message || message.trim().length < 1) {
     return NextResponse.json({ error: "Please type something" }, { status: 400 });
   }
 
   try {
-    const result = await routeRequest(supabase, dealershipId, message);
+    const result = await runMasterBrainChat(supabase, dealershipId, Array.isArray(history) ? history : [], message);
     return NextResponse.json(result);
   } catch (err: any) {
     console.error("[master-brain] error:", err.message);

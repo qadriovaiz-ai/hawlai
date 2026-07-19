@@ -6,21 +6,14 @@ import { cn } from "@/lib/utils";
 
 const EXAMPLES = [
   "How is this month's performance?",
-  "What should I do about my current campaigns?",
-  "Give me SEO keyword ideas for Hyundai Creta",
+  "Build my brand kit and write a launch Instagram post",
+  "Research my competitor and suggest a content gap",
 ];
-
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  pending_approval: { label: "Pending Approval", className: "bg-amber-500/10 text-amber-300 border-amber-700/50" },
-  auto_approved: { label: "Auto-Approved", className: "bg-green-500/10 text-green-300 border-green-700/50" },
-  answered: { label: "Answered", className: "bg-blue-500/10 text-blue-300 border-blue-700/50" },
-  unclear: { label: "Unclear", className: "bg-slate-100 text-slate-500 border-slate-200" },
-};
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  status?: string;
+  toolsUsed?: string[];
 }
 
 export default function MasterBrainWidget() {
@@ -46,13 +39,13 @@ export default function MasterBrainWidget() {
       const res = await fetch("/api/master-brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: toSend }),
+        body: JSON.stringify({ message: toSend, history: thread.map((m) => ({ role: m.role, content: m.content })) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setThread((prev) => [...prev, { role: "assistant", content: data.message, status: data.status }]);
+      setThread((prev) => [...prev, { role: "assistant", content: data.reply, toolsUsed: data.toolsUsed }]);
     } catch (err: any) {
-      setThread((prev) => [...prev, { role: "assistant", content: err.message ?? "Something went wrong", status: "unclear" }]);
+      setThread((prev) => [...prev, { role: "assistant", content: err.message ?? "Something went wrong" }]);
     } finally {
       setLoading(false);
     }
@@ -119,9 +112,9 @@ export default function MasterBrainWidget() {
                 </div>
               )}
               <div className={cn("max-w-[85%] space-y-1", msg.role === "user" && "flex flex-col items-end")}>
-                {msg.role === "assistant" && msg.status && (
-                  <span className={cn("badge text-[10px]", STATUS_META[msg.status]?.className ?? STATUS_META.unclear.className)}>
-                    {STATUS_META[msg.status]?.label ?? msg.status}
+                {msg.role === "assistant" && msg.toolsUsed && msg.toolsUsed.length > 0 && (
+                  <span className="badge text-[10px] bg-purple-500/10 text-purple-400 border-purple-700/50">
+                    Used: {msg.toolsUsed.join(", ").replace(/_/g, " ")}
                   </span>
                 )}
                 <div

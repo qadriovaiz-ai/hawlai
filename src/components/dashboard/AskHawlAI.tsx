@@ -26,7 +26,7 @@ export default function AskHawlAI() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setResponse(data.message);
+      setResponse(data.reply);
     } catch (err: any) {
       setError(err.message);
     } finally {
