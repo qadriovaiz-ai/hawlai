@@ -21,6 +21,7 @@ export default function MasterBrainWidget() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [thread, setThread] = useState<ChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,11 +40,12 @@ export default function MasterBrainWidget() {
       const res = await fetch("/api/master-brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: toSend, history: thread.map((m) => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ message: toSend, history: thread.map((m) => ({ role: m.role, content: m.content })), conversationId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setThread((prev) => [...prev, { role: "assistant", content: data.reply, toolsUsed: data.toolsUsed }]);
+      if (!conversationId && data.conversationId) setConversationId(data.conversationId);
     } catch (err: any) {
       setThread((prev) => [...prev, { role: "assistant", content: err.message ?? "Something went wrong" }]);
     } finally {

@@ -13,14 +13,39 @@ export async function POST(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
-  const { message, history } = body;
+  const { message, history, conversationId } = body;
   if (!message || message.trim().length < 1) {
     return NextResponse.json({ error: "Please type something" }, { status: 400 });
   }
 
+  // Auto-create a conversation on the first message if the caller
+  // didn't already have one (e.g. sending from a fresh /chat screen).
+  let activeConversationId = conversationId;
+  if (!activeConversationId) {
+    const { data: newConvo } = await supabase
+      .from("chat_conversations")
+      .insert({ dealership_id: dealershipId, title: message.trim().slice(0, 60) })
+      .select("id")
+      .single();
+    activeConversationId = newConvo?.id ?? null;
+  }
+
+  if (activeConversationId) {
+    await supabase.from("chat_messages").insert({ conversation_id: activeConversationId, role: "user", content: message });
+  }
+
   try {
     const result = await runMasterBrainChat(supabase, dealershipId, Array.isArray(history) ? history : [], message);
-    return NextResponse.json(result);
+
+    if (activeConversationId) {
+      await supabase.from("chat_messages").insert({
+        conversation_id: activeConversationId, role: "assistant", content: result.reply, tools_used: result.toolsUsed ?? [],
+      });
+      // Touch updated_at so the sidebar re-sorts this conversation to the top.
+      await supabase.from("chat_conversations").update({ updated_at: new Date().toISOString() }).eq("id", activeConversationId);
+    }
+
+    return NextResponse.json({ ...result, conversationId: activeConversationId });
   } catch (err: any) {
     console.error("[master-brain] error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });

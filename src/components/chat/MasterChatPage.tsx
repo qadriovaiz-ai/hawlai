@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Brain, Loader2, Send, User, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,11 +19,19 @@ interface ChatMessage {
   toolsUsed?: string[];
 }
 
-export default function MasterChatPage() {
+export default function MasterChatPage({
+  conversationId: initialConversationId,
+  initialMessages = [],
+}: {
+  conversationId?: string | null;
+  initialMessages?: ChatMessage[];
+}) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [thread, setThread] = useState<ChatMessage[]>([]);
+  const [thread, setThread] = useState<ChatMessage[]>(initialMessages);
+  const [conversationId, setConversationId] = useState<string | null | undefined>(initialConversationId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -41,11 +50,24 @@ export default function MasterChatPage() {
       const res = await fetch("/api/master-brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: toSend, history: thread.map((m) => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          message: toSend,
+          history: thread.map((m) => ({ role: m.role, content: m.content })),
+          conversationId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setThread((prev) => [...prev, { role: "assistant", content: data.reply, toolsUsed: data.toolsUsed }]);
+
+      // First message of a brand-new chat — now that the conversation
+      // exists in the DB, update the URL to /chat/[id] so a refresh
+      // (or the sidebar list) keeps this thread, without losing what's
+      // already on screen.
+      if (!conversationId && data.conversationId) {
+        setConversationId(data.conversationId);
+        router.replace(`/chat/${data.conversationId}`, { scroll: false });
+      }
     } catch (err: any) {
       setThread((prev) => [...prev, { role: "assistant", content: err.message ?? "Something went wrong. Try again." }]);
     } finally {
@@ -54,8 +76,8 @@ export default function MasterChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5.5rem)] max-w-3xl mx-auto">
-      <div className="flex items-center gap-2.5 pb-4 border-b border-slate-200 shrink-0">
+    <div className="flex flex-col h-full max-w-3xl mx-auto px-4 sm:px-6">
+      <div className="flex items-center gap-2.5 py-4 border-b border-slate-200 shrink-0">
         <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shadow-sm shadow-brand-600/30">
           <Brain className="w-4.5 h-4.5 text-white" />
         </div>
@@ -131,7 +153,7 @@ export default function MasterChatPage() {
         <div ref={scrollRef} />
       </div>
 
-      <div className="pt-3 border-t border-slate-200 shrink-0">
+      <div className="pt-3 pb-4 border-t border-slate-200 shrink-0">
         <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-400 transition-all">
           <input
             value={message}
