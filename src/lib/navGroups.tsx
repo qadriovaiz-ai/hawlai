@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Brain, CalendarDays, Target, Users2, Building2, Palette,
   Clapperboard, Share2, Megaphone, Mail, MessageCircle, Users, Globe, TrendingUp,
-  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2, PenTool, FileText, Layers, Film, Radio, UserCheck, Workflow, Radar, BookOpenText, Star, Compass,
+  BarChart3, Zap, FolderOpen, ShieldCheck, CreditCard, Link2, PenTool, FileText, Layers, Film, Radio, UserCheck, Workflow, Radar, BookOpenText, Star, Compass, Layout,
 } from "lucide-react";
 
 export const NAV_GROUPS = [
@@ -48,6 +48,7 @@ export const NAV_GROUPS = [
       { href: "/dashboard/crm-marketing", label: "CRM Marketing", icon: UserCheck },
       { href: "/dashboard/marketing-automation", label: "Marketing Automation", icon: Workflow },
       { href: "/dashboard/website", label: "Website", icon: Globe },
+      { href: "/dashboard/website-builder", label: "Website Builder", icon: Layout },
       { href: "/dashboard/seo", label: "SEO", icon: TrendingUp },
     ],
   },

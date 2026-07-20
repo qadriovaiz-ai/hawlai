@@ -23,7 +23,21 @@ export async function POST(request: Request) {
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!landingPage || !landingPage.published) {
+  let dealershipId = landingPage?.published ? landingPage.dealership_id : null;
+  let source = "landing_page";
+
+  if (!dealershipId) {
+    // Not a quick-launch landing page — check if it's a multi-page
+    // Website Builder site instead (different slug namespace, same
+    // lead-capture contract).
+    const { data: website } = await supabase.from("websites").select("dealership_id, published").eq("slug", slug).maybeSingle();
+    if (website?.published) {
+      dealershipId = website.dealership_id;
+      source = "website";
+    }
+  }
+
+  if (!dealershipId) {
     return NextResponse.json({ error: "This page is not accepting leads right now" }, { status: 404 });
   }
 
@@ -33,7 +47,7 @@ export async function POST(request: Request) {
   const { data: existingLead } = await supabase
     .from("leads")
     .select("id")
-    .eq("dealership_id", landingPage.dealership_id)
+    .eq("dealership_id", dealershipId)
     .eq("phone", phone.trim())
     .gte("created_at", thirtyDaysAgo)
     .maybeSingle();
@@ -45,12 +59,12 @@ export async function POST(request: Request) {
   }
 
   const { error } = await supabase.from("leads").insert({
-    dealership_id: landingPage.dealership_id,
+    dealership_id: dealershipId,
     name: name.trim(),
     phone: phone.trim(),
     vehicle: vehicle ?? null,
     budget: budget ? Number(budget) : null,
-    source: "landing_page",
+    source,
     ai_score: qualification.score,
     lead_temperature: qualification.temperature,
     status: "ready_to_call",
