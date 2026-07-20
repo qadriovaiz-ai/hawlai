@@ -14,11 +14,18 @@ export async function GET() {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { data: website } = await supabase.from("websites").select("*").eq("dealership_id", dealershipId).maybeSingle();
-  if (!website) return NextResponse.json({ website: null, pages: [] });
+  try {
+    const { data: website, error: websiteError } = await supabase.from("websites").select("*").eq("dealership_id", dealershipId).maybeSingle();
+    if (websiteError) throw new Error(websiteError.message);
+    if (!website) return NextResponse.json({ website: null, pages: [] });
 
-  const { data: pages } = await supabase.from("website_pages").select("*").eq("website_id", website.id).order("order_index", { ascending: true });
-  return NextResponse.json({ website, pages: pages ?? [] });
+    const { data: pages, error: pagesError } = await supabase.from("website_pages").select("*").eq("website_id", website.id).order("order_index", { ascending: true });
+    if (pagesError) throw new Error(pagesError.message);
+    return NextResponse.json({ website, pages: pages ?? [] });
+  } catch (err: any) {
+    console.error("[website-builder/generate GET] error:", err.message);
+    return NextResponse.json({ error: `Couldn't load your website — the database tables may not be set up yet. (${err.message})` }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -28,7 +35,7 @@ export async function POST(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { siteType } = await request.json();
+  const { siteType, description } = await request.json();
   if (!siteType || !SITE_TYPES.find((t) => t.key === siteType)) {
     return NextResponse.json({ error: "Valid siteType required" }, { status: 400 });
   }
@@ -43,7 +50,8 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "business",
     dealership?.city ?? null,
     siteType,
-    brandProfile
+    brandProfile,
+    description ?? null
   );
 
   const base = (dealership?.dealership_name ?? "site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";

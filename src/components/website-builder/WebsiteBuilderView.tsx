@@ -59,25 +59,41 @@ export default function WebsiteBuilderView() {
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [siteType, setSiteType] = useState(SITE_TYPES[0].key);
+  const [description, setDescription] = useState("");
   const [activePage, setActivePage] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
 
   function load() {
-    fetch("/api/website-builder/generate").then((r) => r.json()).then((d) => {
-      setWebsite(d.website);
-      setPages(d.pages ?? []);
-      if (d.pages?.length > 0) setActivePage((prev: string | null) => prev ?? d.pages[0].id);
-    }).finally(() => setLoading(false));
+    setLoading(true);
+    setLoadError(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    fetch("/api/website-builder/generate", { signal: controller.signal })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
+        setWebsite(d.website);
+        setPages(d.pages ?? []);
+        if (d.pages?.length > 0) setActivePage((prev: string | null) => prev ?? d.pages[0].id);
+      })
+      .catch((err: any) => {
+        setLoadError(err.name === "AbortError" ? "Request timed out — check your connection and try again." : (err.message ?? "Something went wrong loading your website."));
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
   }
   useEffect(load, []);
 
   async function handleGenerate() {
     setGenerating(true);
     try {
-      await fetch("/api/website-builder/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ siteType }) });
+      await fetch("/api/website-builder/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ siteType, description }) });
       load();
     } finally {
       setGenerating(false);
@@ -161,6 +177,15 @@ export default function WebsiteBuilderView() {
 
   if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>;
 
+  if (loadError) {
+    return (
+      <div className="card p-5 space-y-2">
+        <p className="text-sm text-red-400">{loadError}</p>
+        <button onClick={load} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Try again</button>
+      </div>
+    );
+  }
+
   const currentPage = pages.find((p) => p.id === activePage);
 
   return (
@@ -175,6 +200,13 @@ export default function WebsiteBuilderView() {
           ))}
         </div>
         {website && <p className="text-xs text-amber-500">Regenerating replaces all pages and any manual edits you've made.</p>}
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder="Describe what you want — e.g. 'A calm, natural skincare brand for sensitive skin, focus on ingredients and no harsh chemicals' or 'Modern 2BHK/3BHK flats in Varanasi, highlight nearby schools and metro access'. Leave blank and I'll write sensible content for your business type."
+          className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-3 py-2 placeholder:text-slate-500"
+        />
         <button onClick={handleGenerate} disabled={generating} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {website ? "Regenerate" : "Generate Full Website"}
         </button>

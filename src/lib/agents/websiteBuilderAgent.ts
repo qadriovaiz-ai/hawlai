@@ -108,7 +108,8 @@ export async function generateWebsite(
   businessCategory: string,
   city: string | null,
   siteTypeKey: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  customInstructions?: string | null
 ): Promise<{ pages: GeneratedPage[]; _fallback?: boolean }> {
   const siteType = SITE_TYPES.find((t) => t.key === siteTypeKey) ?? SITE_TYPES[0];
 
@@ -139,7 +140,7 @@ export async function generateWebsite(
           role: "user",
           content: `You are building a complete ${siteType.label} website for "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}.
 ${brandContext}
-
+${customInstructions?.trim() ? `\nThe business owner specifically asked for: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions about this business type.\n` : ""}
 Generate content for these pages: ${siteType.pages.map((p) => `${p.slug} (${p.title})`).join(", ")}.
 
 ${SECTION_LIBRARY_NOTE}
