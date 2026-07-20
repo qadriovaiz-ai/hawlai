@@ -107,19 +107,19 @@ export default function WorkflowBuilder() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-purple-500">Step {i + 1} — send after</span>
                   <div className="flex items-center gap-1.5">
-                    <input type="number" min={0} value={step.delayDays} onChange={(e) => updateStep(i, "delayDays", Number(e.target.value))} className="w-14 text-xs bg-white border border-slate-200 rounded px-1.5 py-1 text-center" />
+                    <input type="number" min={0} value={step.delayDays} onChange={(e) => updateStep(i, "delayDays", Number(e.target.value))} className="w-14 text-xs bg-slate-200 border border-slate-200 rounded px-1.5 py-1 text-center" />
                     <span className="text-xs text-slate-500">days</span>
                     {steps.length > 1 && <button onClick={() => removeStep(i)} className="text-red-400 hover:text-red-500 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>}
                   </div>
                 </div>
-                <select value={step.emailTaskType} onChange={(e) => updateStep(i, "emailTaskType", e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5">
+                <select value={step.emailTaskType} onChange={(e) => updateStep(i, "emailTaskType", e.target.value)} className="w-full text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5">
                   {EMAIL_TASKS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                   <option value="custom">Custom message</option>
                 </select>
                 {step.emailTaskType === "custom" && (
                   <>
-                    <input value={step.customSubject} onChange={(e) => updateStep(i, "customSubject", e.target.value)} placeholder="Subject" className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5" />
-                    <textarea value={step.customBody} onChange={(e) => updateStep(i, "customBody", e.target.value)} placeholder="Email body" rows={3} className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5" />
+                    <input value={step.customSubject} onChange={(e) => updateStep(i, "customSubject", e.target.value)} placeholder="Subject" className="w-full text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5" />
+                    <textarea value={step.customBody} onChange={(e) => updateStep(i, "customBody", e.target.value)} placeholder="Email body" rows={3} className="w-full text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5" />
                   </>
                 )}
               </div>

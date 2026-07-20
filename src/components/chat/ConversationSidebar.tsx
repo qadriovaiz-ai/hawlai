@@ -33,15 +33,15 @@ export default function ConversationSidebar({ dealershipName }: { dealershipName
   }
 
   return (
-    <div className="w-64 h-screen bg-slate-900 flex flex-col shrink-0">
-      <div className="p-3 border-b border-slate-800">
+    <div className="w-64 h-screen bg-slate-50 flex flex-col shrink-0">
+      <div className="p-3 border-b border-slate-200">
         <Link href="/chat" className="flex items-center gap-2 px-2 py-2">
           <div className="w-6 h-6 rounded-md overflow-hidden shrink-0">
             <Image src="/logo-icon.png" alt="Hawlai" width={24} height={24} className="w-full h-full object-cover" />
           </div>
           <span className="text-sm font-bold text-white">Hawlai</span>
         </Link>
-        <button onClick={handleNewChat} className="w-full mt-2 flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-200 text-sm hover:bg-slate-800 transition-colors">
+        <button onClick={handleNewChat} className="w-full mt-2 flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-800 text-sm hover:bg-slate-200 transition-colors">
           <Plus className="w-4 h-4" /> New chat
         </button>
       </div>
@@ -57,7 +57,7 @@ export default function ConversationSidebar({ dealershipName }: { dealershipName
               key={c.id}
               href={`/chat/${c.id}`}
               className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm truncate transition-colors ${
-                activeId === c.id ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800/60"
+                activeId === c.id ? "bg-slate-200 text-white" : "text-slate-700 hover:bg-slate-200/60"
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
@@ -70,11 +70,11 @@ export default function ConversationSidebar({ dealershipName }: { dealershipName
         )}
       </div>
 
-      <div className="p-3 border-t border-slate-800">
-        <button onClick={() => setMenuOpen(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 transition-colors">
+      <div className="p-3 border-t border-slate-200">
+        <button onClick={() => setMenuOpen(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-200/60 transition-colors">
           <Menu className="w-4 h-4" /> Main Menu
         </button>
-        <p className="text-xs text-slate-600 px-2.5 pt-1 truncate">{dealershipName}</p>
+        <p className="text-xs text-slate-400 px-2.5 pt-1 truncate">{dealershipName}</p>
       </div>
       {menuOpen && <MainMenuPanel onClose={() => setMenuOpen(false)} />}
     </div>

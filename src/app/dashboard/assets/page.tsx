@@ -105,7 +105,7 @@ export default async function AssetsPage() {
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                 {logos.map((l) => (
-                  <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-2">
+                  <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-200 flex items-center justify-center p-2">
                     <img src={l.url} alt="Logo" className="max-w-full max-h-full object-contain" />
                   </a>
                 ))}

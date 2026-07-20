@@ -107,18 +107,18 @@ export default function InfluencerCrmView() {
                     </div>
                     <button onClick={() => remove(inf.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                   </div>
-                  <select value={inf.status} onChange={(e) => updateField(inf.id, "status", e.target.value)} className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5">
+                  <select value={inf.status} onChange={(e) => updateField(inf.id, "status", e.target.value)} className="text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5">
                     {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                   </select>
                   <div className="grid grid-cols-3 gap-2">
                     <label className="text-xs text-slate-500">Cost (₹)
-                      <input type="number" defaultValue={inf.agreed_amount} onBlur={(e) => updateField(inf.id, "agreedAmount", Number(e.target.value))} className="w-full text-xs bg-white border border-slate-200 rounded px-2 py-1 mt-0.5" />
+                      <input type="number" defaultValue={inf.agreed_amount} onBlur={(e) => updateField(inf.id, "agreedAmount", Number(e.target.value))} className="w-full text-xs bg-slate-200 border border-slate-200 rounded px-2 py-1 mt-0.5" />
                     </label>
                     <label className="text-xs text-slate-500">Leads
-                      <input type="number" defaultValue={inf.leads_generated} onBlur={(e) => updateField(inf.id, "leadsGenerated", Number(e.target.value))} className="w-full text-xs bg-white border border-slate-200 rounded px-2 py-1 mt-0.5" />
+                      <input type="number" defaultValue={inf.leads_generated} onBlur={(e) => updateField(inf.id, "leadsGenerated", Number(e.target.value))} className="w-full text-xs bg-slate-200 border border-slate-200 rounded px-2 py-1 mt-0.5" />
                     </label>
                     <label className="text-xs text-slate-500">Revenue (₹)
-                      <input type="number" defaultValue={inf.revenue_generated} onBlur={(e) => updateField(inf.id, "revenueGenerated", Number(e.target.value))} className="w-full text-xs bg-white border border-slate-200 rounded px-2 py-1 mt-0.5" />
+                      <input type="number" defaultValue={inf.revenue_generated} onBlur={(e) => updateField(inf.id, "revenueGenerated", Number(e.target.value))} className="w-full text-xs bg-slate-200 border border-slate-200 rounded px-2 py-1 mt-0.5" />
                     </label>
                   </div>
                   {roi !== null && <p className="text-xs text-slate-500">ROI: <span className={`font-semibold ${roi >= 0 ? "text-green-500" : "text-red-400"}`}>{roi.toFixed(0)}%</span></p>}

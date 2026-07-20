@@ -21,7 +21,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   if (!dealership?.onboarding_completed) redirect("/dashboard");
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden">
+    <div className="flex h-screen bg-slate-200 overflow-hidden">
       <ConversationSidebar dealershipName={dealership?.dealership_name ?? "Your business"} />
       <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
     </div>

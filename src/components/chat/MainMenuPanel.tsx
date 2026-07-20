@@ -8,7 +8,7 @@ export default function MainMenuPanel({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-80 max-w-[85vw] h-full bg-white shadow-2xl flex flex-col">
+      <div className="relative w-80 max-w-[85vw] h-full bg-slate-100 shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 shrink-0">
           <p className="text-sm font-bold text-slate-900">Main Menu</p>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
