@@ -25,7 +25,7 @@ export default function CalendarSyncCard() {
   }
 
   function copyUrl() {
-    const url = `${window.location.origin}/api/calendar/${token}`;
+    const url = `${window.location.origin}/api/ics-feed/${token}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -40,7 +40,7 @@ export default function CalendarSyncCard() {
         <>
           <p className="text-xs text-slate-400">Subscribe to this link in Google Calendar, Outlook, or Apple Calendar ("Add calendar by URL") to see your booked appointments automatically — updates live, no manual export needed.</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs bg-slate-100 rounded-lg px-3 py-2 text-slate-600 truncate">/api/calendar/{token}</code>
+            <code className="flex-1 text-xs bg-slate-100 rounded-lg px-3 py-2 text-slate-600 truncate">/api/ics-feed/{token}</code>
             <button onClick={copyUrl} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0">
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} Copy link
             </button>
