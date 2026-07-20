@@ -2,29 +2,70 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWebsite, SITE_TYPES } from "@/lib/agents/websiteBuilderAgent";
 
+async function withTimeout<T>(promiseLike: PromiseLike<T>, label: string, ms = 8000): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([Promise.resolve(promiseLike), timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
   return profile?.dealership_id as string | undefined;
 }
 
 export async function GET() {
+  console.log("[website-builder GET] start");
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  console.log("[website-builder GET] client created");
+
+  let user;
+  try {
+    const result = await withTimeout(supabase.auth.getUser(), "auth.getUser");
+    user = result.data.user;
+  } catch (err: any) {
+    console.error("[website-builder GET] auth.getUser failed:", err.message);
+    return NextResponse.json({ error: `Auth check failed: ${err.message}` }, { status: 500 });
+  }
+  console.log("[website-builder GET] user resolved:", user?.id ?? "none");
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const dealershipId = await getDealership(supabase, user.id);
+
+  let dealershipId: string | undefined;
+  try {
+    dealershipId = await withTimeout(getDealership(supabase, user.id), "getDealership");
+  } catch (err: any) {
+    console.error("[website-builder GET] getDealership failed:", err.message);
+    return NextResponse.json({ error: `Dealership lookup failed: ${err.message}` }, { status: 500 });
+  }
+  console.log("[website-builder GET] dealershipId:", dealershipId ?? "none");
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   try {
-    const { data: website, error: websiteError } = await supabase.from("websites").select("*").eq("dealership_id", dealershipId).maybeSingle();
+    console.log("[website-builder GET] querying websites...");
+    const { data: website, error: websiteError } = await withTimeout(
+      supabase.from("websites").select("*").eq("dealership_id", dealershipId).maybeSingle(),
+      "websites query"
+    );
+    console.log("[website-builder GET] websites query done. error:", websiteError?.message ?? "none", "found:", !!website);
     if (websiteError) throw new Error(websiteError.message);
     if (!website) return NextResponse.json({ website: null, pages: [] });
 
-    const { data: pages, error: pagesError } = await supabase.from("website_pages").select("*").eq("website_id", website.id).order("order_index", { ascending: true });
+    console.log("[website-builder GET] querying website_pages...");
+    const { data: pages, error: pagesError } = await withTimeout(
+      supabase.from("website_pages").select("*").eq("website_id", website.id).order("order_index", { ascending: true }),
+      "website_pages query"
+    );
+    console.log("[website-builder GET] website_pages query done. error:", pagesError?.message ?? "none", "count:", pages?.length ?? 0);
     if (pagesError) throw new Error(pagesError.message);
     return NextResponse.json({ website, pages: pages ?? [] });
   } catch (err: any) {
     console.error("[website-builder/generate GET] error:", err.message);
-    return NextResponse.json({ error: `Couldn't load your website — the database tables may not be set up yet. (${err.message})` }, { status: 500 });
+    return NextResponse.json({ error: `Couldn't load your website. (${err.message})` }, { status: 500 });
   }
 }
 
