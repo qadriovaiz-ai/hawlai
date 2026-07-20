@@ -5,6 +5,17 @@ import Link from "next/link";
 import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X } from "lucide-react";
 import { SITE_TYPES } from "@/lib/agents/websiteBuilderAgent";
 
+function suggestSiteType(businessCategory: string | null): string {
+  if (!businessCategory) return SITE_TYPES[0].key;
+  const c = businessCategory.toLowerCase();
+  if (/real estate|property|realtor|realestate/.test(c)) return "real_estate";
+  if (/restaurant|food|cafe|catering|dining/.test(c)) return "restaurant";
+  if (/retail|ecommerce|e-commerce|shop|store|product/.test(c)) return "ecommerce";
+  if (/consult|agency|law|finance|professional|corporate/.test(c)) return "professional";
+  if (/design|photograph|creative|portfolio|artist|studio/.test(c)) return "portfolio";
+  return "service_business";
+}
+
 const SECTION_TYPES = [
   { type: "hero", label: "Hero" },
   { type: "text", label: "Text" },
@@ -78,6 +89,7 @@ export default function WebsiteBuilderView() {
         if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
         setWebsite(d.website);
         setPages(d.pages ?? []);
+        if (!d.website && d.businessCategory) setSiteType(suggestSiteType(d.businessCategory));
         if (d.pages?.length > 0) setActivePage((prev: string | null) => prev ?? d.pages[0].id);
       })
       .catch((err: any) => {
@@ -192,6 +204,7 @@ export default function WebsiteBuilderView() {
     <div className="space-y-5">
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">{website ? "Regenerate Website" : "Build Your Website"}</p>
+        <p className="text-xs text-slate-400">We've pre-selected the type that best matches your business — pick a different one if it's not quite right.</p>
         <div className="flex flex-wrap gap-1.5">
           {SITE_TYPES.map((t) => (
             <button key={t.key} onClick={() => setSiteType(t.key)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${siteType === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>

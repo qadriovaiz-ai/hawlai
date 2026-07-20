@@ -45,6 +45,8 @@ export async function GET() {
   console.log("[website-builder GET] dealershipId:", dealershipId ?? "none");
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
+  const { data: dealershipRow } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).maybeSingle();
+
   try {
     console.log("[website-builder GET] querying websites...");
     const { data: website, error: websiteError } = await withTimeout(
@@ -53,7 +55,7 @@ export async function GET() {
     );
     console.log("[website-builder GET] websites query done. error:", websiteError?.message ?? "none", "found:", !!website);
     if (websiteError) throw new Error(websiteError.message);
-    if (!website) return NextResponse.json({ website: null, pages: [] });
+    if (!website) return NextResponse.json({ website: null, pages: [], businessCategory: dealershipRow?.business_category ?? null });
 
     console.log("[website-builder GET] querying website_pages...");
     const { data: pages, error: pagesError } = await withTimeout(

@@ -138,7 +138,9 @@ export async function generateWebsite(
         max_tokens: 6000,
         messages: [{
           role: "user",
-          content: `You are building a complete ${siteType.label} website for "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}.
+          content: `You are building website content for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed and non-negotiable — every page must be genuinely about this business, never a different industry or an invented example business.
+
+The dealer picked "${siteType.label}" as the closest-fitting page structure/template (it just decides which pages exist and their generic purpose, e.g. a "Products" page). If "${siteType.label}" doesn't perfectly match a ${businessCategory} business, ADAPT each page's purpose to fit the REAL business instead of inventing unrelated content — e.g. a "Products" page for a real estate business should show property listings, for a services business should show services offered, etc. Never let the template category override the actual business identity above.
 ${brandContext}
 ${customInstructions?.trim() ? `\nThe business owner specifically asked for: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions about this business type.\n` : ""}
 Generate content for these pages: ${siteType.pages.map((p) => `${p.slug} (${p.title})`).join(", ")}.
