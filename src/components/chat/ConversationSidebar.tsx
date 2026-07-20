@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { Plus, MessageSquare, Trash2, LayoutGrid, Loader2 } from "lucide-react";
+import { Plus, MessageSquare, Trash2, Menu, Loader2 } from "lucide-react";
 import Image from "next/image";
+import MainMenuPanel from "./MainMenuPanel";
 
 export default function ConversationSidebar({ dealershipName }: { dealershipName: string }) {
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const params = useParams();
   const activeId = params?.id as string | undefined;
@@ -69,11 +71,12 @@ export default function ConversationSidebar({ dealershipName }: { dealershipName
       </div>
 
       <div className="p-3 border-t border-slate-800">
-        <Link href="/dashboard/overview" className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 transition-colors">
-          <LayoutGrid className="w-4 h-4" /> Full Dashboard
-        </Link>
+        <button onClick={() => setMenuOpen(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 transition-colors">
+          <Menu className="w-4 h-4" /> Main Menu
+        </button>
         <p className="text-xs text-slate-600 px-2.5 pt-1 truncate">{dealershipName}</p>
       </div>
+      {menuOpen && <MainMenuPanel onClose={() => setMenuOpen(false)} />}
     </div>
   );
 }
