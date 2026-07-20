@@ -86,6 +86,16 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
+  console.log("[website-builder POST] generating with:", JSON.stringify({
+    dealershipId,
+    dealershipName: dealership?.dealership_name,
+    businessCategory: dealership?.business_category,
+    city: dealership?.city,
+    siteType,
+    description,
+    brandProfile,
+  }));
+
   const { pages: generatedPages } = await generateWebsite(
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "business",

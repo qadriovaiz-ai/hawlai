@@ -147,7 +147,9 @@ ${SECTION_LIBRARY_NOTE}
 
 For each page, choose 2-4 sections that make sense for that page's purpose (e.g. Home gets a hero + features/testimonials + cta_banner; About gets text/image_text about the business's story; Services/Products gets features_grid or pricing; Team gets team_grid; Contact gets a hero + contact_form). Every page except Contact should still include a contact_form or cta_banner near the end to drive leads.
 
-Return JSON only, no markdown: {"pages": [{"slug": "home", "title": "Home", "metaDescription": "under 160 chars", "sections": [...]}]} — one object per page listed above, in the same order. Be specific to this real business — never generic "Lorem ipsum" style filler, and never invent fake statistics, awards, or client names.`,
+Return JSON only, no markdown: {"pages": [{"slug": "home", "title": "Home", "metaDescription": "under 160 chars", "sections": [...]}]} — one object per page listed above, in the same order. Be specific to this real business — never generic "Lorem ipsum" style filler, and never invent fake statistics, awards, or client names.
+
+IMPORTANT: Every single page must be about "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""}. Do not write about any other industry, product category, or business type under any circumstances — re-read the business name and category above before writing each page.`,
         }],
       }),
     });
