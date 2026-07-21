@@ -92,6 +92,8 @@ export default function WebsiteBuilderView() {
   const [pageActionLoading, setPageActionLoading] = useState(false);
   const [pageActionError, setPageActionError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
+  const [dragPageIndex, setDragPageIndex] = useState<number | null>(null);
+  const [overPageIndex, setOverPageIndex] = useState<number | null>(null);
 
   function load() {
     setLoading(true);
@@ -195,6 +197,14 @@ export default function WebsiteBuilderView() {
     }
   }
 
+  async function reorderPages(fromIndex: number, toIndex: number) {
+    const next = [...pages];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setPages(next);
+    await fetch("/api/website-builder/pages/reorder", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageIds: next.map((p) => p.id) }) });
+  }
+
   async function handleAddPage() {
     if (!newPageTitle.trim()) return;
     setPageActionLoading(true);
@@ -296,6 +306,15 @@ export default function WebsiteBuilderView() {
       if (target < 0 || target >= sections.length) return sections;
       const next = [...sections];
       [next[sectionIndex], next[target]] = [next[target], next[sectionIndex]];
+      return next;
+    });
+  }
+
+  function reorderSections(pageId: string, fromIndex: number, toIndex: number) {
+    mutatePageSections(pageId, (sections) => {
+      const next = [...sections];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
       return next;
     });
   }
@@ -464,8 +483,17 @@ export default function WebsiteBuilderView() {
           <div className="card p-5 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex flex-wrap gap-1.5">
-                {pages.map((p) => (
-                  <button key={p.id} onClick={() => setActivePage(p.id)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${activePage === p.id ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
+                {pages.map((p, pi) => (
+                  <button
+                    key={p.id}
+                    draggable
+                    onDragStart={() => setDragPageIndex(pi)}
+                    onDragOver={(e) => { e.preventDefault(); if (dragPageIndex !== null && dragPageIndex !== pi) setOverPageIndex(pi); }}
+                    onDrop={(e) => { e.preventDefault(); if (dragPageIndex !== null && dragPageIndex !== pi) reorderPages(dragPageIndex, pi); setDragPageIndex(null); setOverPageIndex(null); }}
+                    onDragEnd={() => { setDragPageIndex(null); setOverPageIndex(null); }}
+                    onClick={() => setActivePage(p.id)}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border cursor-grab active:cursor-grabbing ${activePage === p.id ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"} ${overPageIndex === pi ? "ring-2 ring-purple-400" : ""} ${dragPageIndex === pi ? "opacity-40" : ""}`}
+                  >
                     {p.title}
                   </button>
                 ))}
@@ -509,6 +537,7 @@ export default function WebsiteBuilderView() {
                     onRemoveItem={(i, itemIndex) => removeItem(currentPage.id, i, itemIndex)}
                     onMoveSection={(i, dir) => moveSection(currentPage.id, i, dir)}
                     onRemoveSection={(i) => removeSection(currentPage.id, i)}
+                    onReorderSections={(from, to) => reorderSections(currentPage.id, from, to)}
                   />
                 </div>
 

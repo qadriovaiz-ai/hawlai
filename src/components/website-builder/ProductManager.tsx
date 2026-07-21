@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Trash2, Pencil, X, Check, Package } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, X, Check, Package, GripVertical } from "lucide-react";
 import ImageUploader from "./ImageUploader";
 
 interface Product {
@@ -27,6 +27,16 @@ export default function ProductManager() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  async function reorderProducts(fromIndex: number, toIndex: number) {
+    const next = [...products];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setProducts(next);
+    await fetch("/api/products/reorder", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productIds: next.map((p) => p.id) }) });
+  }
 
   function load() {
     setLoading(true);
@@ -164,8 +174,17 @@ export default function ProductManager() {
         )}
 
         <div className="space-y-2">
-          {products.map((p) => (
-            <div key={p.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${p.is_active ? "border-slate-200" : "border-slate-200 opacity-50"}`}>
+          {products.map((p, pi) => (
+            <div
+              key={p.id}
+              draggable
+              onDragStart={() => setDragIndex(pi)}
+              onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== pi) setOverIndex(pi); }}
+              onDrop={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== pi) reorderProducts(dragIndex, pi); setDragIndex(null); setOverIndex(null); }}
+              onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+              className={`flex items-center gap-2 p-2.5 rounded-lg border ${p.is_active ? "border-slate-200" : "border-slate-200 opacity-50"} ${overIndex === pi ? "ring-2 ring-purple-400" : ""} ${dragIndex === pi ? "opacity-40" : ""}`}
+            >
+              <span className="text-slate-300 cursor-grab active:cursor-grabbing"><GripVertical className="w-4 h-4" /></span>
               <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden shrink-0">
                 {p.images?.[0] && <img src={p.images[0]} alt="" className="w-full h-full object-cover" />}
               </div>

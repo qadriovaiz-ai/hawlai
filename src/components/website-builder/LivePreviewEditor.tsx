@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronUp, ChevronDown, Trash2, Plus, X } from "lucide-react";
+import { useState } from "react";
+import { ChevronUp, ChevronDown, Trash2, Plus, X, GripVertical } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
 import ImageUploader from "./ImageUploader";
 
@@ -18,6 +19,7 @@ interface Props {
   onRemoveItem: (sectionIndex: number, itemIndex: number) => void;
   onMoveSection: (sectionIndex: number, direction: -1 | 1) => void;
   onRemoveSection: (sectionIndex: number) => void;
+  onReorderSections: (fromIndex: number, toIndex: number) => void;
 }
 
 const ITEM_FIELDS: Record<string, { key: string; label: string; multiline?: boolean }[]> = {
@@ -39,9 +41,10 @@ function EditableText({ value, onChange, style, className, placeholder, multilin
   return multiline ? <textarea {...shared} rows={2} /> : <input {...shared} />;
 }
 
-function SectionToolbar({ onMoveUp, onMoveDown, onRemove, disableUp, disableDown }: { onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; disableUp: boolean; disableDown: boolean }) {
+function SectionToolbar({ onMoveUp, onMoveDown, onRemove, disableUp, disableDown, dragHandleProps }: { onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; disableUp: boolean; disableDown: boolean; dragHandleProps: any }) {
   return (
     <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/90 backdrop-blur rounded-lg shadow-sm border border-slate-200 px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <span {...dragHandleProps} className="text-slate-400 hover:text-slate-700 p-1 cursor-grab active:cursor-grabbing"><GripVertical className="w-3.5 h-3.5" /></span>
       <button onClick={onMoveUp} disabled={disableUp} className="text-slate-400 hover:text-slate-700 disabled:opacity-30 p-1"><ChevronUp className="w-3.5 h-3.5" /></button>
       <button onClick={onMoveDown} disabled={disableDown} className="text-slate-400 hover:text-slate-700 disabled:opacity-30 p-1"><ChevronDown className="w-3.5 h-3.5" /></button>
       <button onClick={onRemove} className="text-slate-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -49,17 +52,35 @@ function SectionToolbar({ onMoveUp, onMoveDown, onRemove, disableUp, disableDown
   );
 }
 
-export default function LivePreviewEditor({ sections, theme, onUpdateField, onUpdateItem, onAddItem, onRemoveItem, onMoveSection, onRemoveSection }: Props) {
+export default function LivePreviewEditor({ sections, theme, onUpdateField, onUpdateItem, onAddItem, onRemoveItem, onMoveSection, onRemoveSection, onReorderSections }: Props) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
   return (
     <div style={{ backgroundColor: theme.bg }} className="rounded-xl overflow-hidden border border-slate-200">
       {sections.map((section, i) => (
-        <div key={i} className="relative group">
+        <div
+          key={i}
+          className={`relative group ${dragIndex === i ? "opacity-40" : ""} ${overIndex === i && dragIndex !== null && dragIndex !== i ? "border-t-2 border-purple-500" : ""}`}
+          onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null) setOverIndex(i); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragIndex !== null && dragIndex !== i) onReorderSections(dragIndex, i);
+            setDragIndex(null);
+            setOverIndex(null);
+          }}
+        >
           <SectionToolbar
             onMoveUp={() => onMoveSection(i, -1)}
             onMoveDown={() => onMoveSection(i, 1)}
             onRemove={() => onRemoveSection(i)}
             disableUp={i === 0}
             disableDown={i === sections.length - 1}
+            dragHandleProps={{
+              draggable: true,
+              onDragStart: () => setDragIndex(i),
+              onDragEnd: () => { setDragIndex(null); setOverIndex(null); },
+            }}
           />
           <SectionBlock
             section={section}
