@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronUp, ChevronDown, Trash2, Plus, X, GripVertical } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
 import ImageUploader from "./ImageUploader";
+import RichTextArea from "./RichTextArea";
 
 // Renders page sections styled exactly like the live storefront
 // (SectionRenderer's look), but every text field is an editable
@@ -31,14 +32,11 @@ const ITEM_FIELDS: Record<string, { key: string; label: string; multiline?: bool
 };
 
 function EditableText({ value, onChange, style, className, placeholder, multiline }: { value: string; onChange: (v: string) => void; style?: React.CSSProperties; className?: string; placeholder?: string; multiline?: boolean }) {
-  const shared = {
-    value,
-    onChange: (e: any) => onChange(e.target.value),
-    placeholder,
-    style,
-    className: `bg-transparent border border-transparent hover:border-dashed hover:border-current focus:border-dashed focus:border-current focus:outline-none rounded px-1 -mx-1 w-full ${className ?? ""}`,
-  };
-  return multiline ? <textarea {...shared} rows={2} /> : <input {...shared} />;
+  const sharedClassName = `bg-transparent border border-transparent hover:border-dashed hover:border-current focus:border-dashed focus:border-current focus:outline-none rounded px-1 -mx-1 w-full ${className ?? ""}`;
+  if (multiline) {
+    return <RichTextArea value={value} onChange={onChange} placeholder={placeholder} style={style} className={sharedClassName} rows={2} />;
+  }
+  return <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={style} className={sharedClassName} />;
 }
 
 function SectionToolbar({ onMoveUp, onMoveDown, onRemove, disableUp, disableDown, dragHandleProps }: { onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; disableUp: boolean; disableDown: boolean; dragHandleProps: any }) {

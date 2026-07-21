@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Pencil, X, Check, Package, GripVertical } from "lucide-react";
 import ImageUploader from "./ImageUploader";
+import RichTextArea from "./RichTextArea";
 
 interface Product {
   id: string;
@@ -141,7 +142,7 @@ export default function ProductManager() {
         {adding && (
           <div className="bg-slate-100 rounded-lg p-3 space-y-2">
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product name" className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" rows={2} className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+            <RichTextArea value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Description" rows={2} className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
             <div className="grid grid-cols-2 gap-2">
               <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Price (₹)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
               <input value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} placeholder="Compare-at price (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
