@@ -310,7 +310,7 @@ export default function WebsiteBuilderView() {
             <div className="space-y-1.5">
               {plan.pages.map((p, i) => (
                 <div key={i} className="flex items-center gap-2 bg-slate-100 rounded-lg p-2">
-                  <input value={p.title} onChange={(e) => updatePlanPage(i, "title", e.target.value)} className="flex-1 text-xs bg-white text-slate-900 border border-slate-300 rounded px-2 py-1.5" placeholder="Page title" />
+                  <input value={p.title} onChange={(e) => updatePlanPage(i, "title", e.target.value)} className="flex-1 text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1.5" placeholder="Page title" />
                   <span className="text-[10px] text-slate-400 uppercase w-16 shrink-0">{p.pageType}</span>
                   <button onClick={() => removePlanPage(i)} className="text-slate-400 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
@@ -387,9 +387,9 @@ export default function WebsiteBuilderView() {
                             <button onClick={() => removeItem(currentPage.id, i, itemIndex)} className="absolute top-2 right-2 text-slate-400 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
                             {(ITEM_FIELDS[section.type] ?? []).map((f) => (
                               f.multiline ? (
-                                <textarea key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} rows={2} placeholder={f.label} className="w-full text-xs bg-white text-slate-900 border border-slate-300 rounded px-2 py-1 pr-6" />
+                                <textarea key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} rows={2} placeholder={f.label} className="w-full text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1 pr-6" />
                               ) : (
-                                <input key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} placeholder={f.label} className="w-full text-xs bg-white text-slate-900 border border-slate-300 rounded px-2 py-1 pr-6" />
+                                <input key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} placeholder={f.label} className="w-full text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1 pr-6" />
                               )
                             ))}
                           </div>
@@ -405,7 +405,7 @@ export default function WebsiteBuilderView() {
                   {addSectionOpen && (
                     <div className="absolute z-10 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-1.5 flex flex-col gap-0.5 w-44">
                       {SECTION_TYPES.map((s) => (
-                        <button key={s.type} onClick={() => addSection(currentPage.id, s.type)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-slate-100 text-slate-700">
+                        <button key={s.type} onClick={() => addSection(currentPage.id, s.type)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100 text-slate-50">
                           {s.label}
                         </button>
                       ))}
