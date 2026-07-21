@@ -3,8 +3,19 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, CheckCircle, Tag, X } from "lucide-react";
+import { Loader2, CheckCircle, Tag, X, Wallet, Truck } from "lucide-react";
 import { getCart, clearCart, cartTotal, type CartItem } from "@/lib/cart";
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) return resolve(true);
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 export default function CheckoutPage() {
   const params = useParams();
@@ -18,15 +29,25 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [paidOnline, setPaidOnline] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [couponApplying, setCouponApplying] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay">("cod");
 
   useEffect(() => {
     setItems(getCart(slug));
   }, [slug]);
+
+  useEffect(() => {
+    fetch("/api/public/payment-config")
+      .then((r) => r.json())
+      .then((d) => setRazorpayEnabled(Boolean(d.razorpayEnabled)))
+      .catch(() => setRazorpayEnabled(false));
+  }, []);
 
   const subtotal = cartTotal(items);
   const total = Math.max(0, subtotal - discountAmount);
@@ -54,6 +75,83 @@ export default function CheckoutPage() {
     setDiscountAmount(0);
   }
 
+  function orderPayload() {
+    return {
+      slug,
+      customerName: name,
+      customerPhone: phone,
+      customerEmail: email || null,
+      shippingAddress: address,
+      items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      discountCode: appliedCode,
+      honeypot,
+    };
+  }
+
+  async function payWithRazorpay() {
+    const res = await fetch("/api/public/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...orderPayload(), paymentMethod: "razorpay" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Couldn't start online payment");
+
+    const ready = await loadRazorpayScript();
+    if (!ready) throw new Error("Couldn't load the payment gateway — please check your connection and try again");
+
+    await new Promise<void>((resolve, reject) => {
+      const rzp = new (window as any).Razorpay({
+        key: data.razorpay.keyId,
+        amount: data.razorpay.amount,
+        currency: data.razorpay.currency,
+        order_id: data.razorpay.orderId,
+        name: "Complete Payment",
+        prefill: { name, contact: phone, email },
+        handler: async (response: any) => {
+          try {
+            const verifyRes = await fetch("/api/public/orders/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...orderPayload(),
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              }),
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok) throw new Error(verifyData.error ?? "Payment verification failed");
+            clearCart(slug);
+            setPaidOnline(true);
+            setOrderId(verifyData.orderId);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        },
+        modal: {
+          ondismiss: () => reject(new Error("Payment cancelled")),
+        },
+        theme: { color: "#171717" },
+      });
+      rzp.on("payment.failed", () => reject(new Error("Payment failed — please try again")));
+      rzp.open();
+    });
+  }
+
+  async function payWithCod() {
+    const res = await fetch("/api/public/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...orderPayload(), paymentMethod: "cod" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+    clearCart(slug);
+    setOrderId(data.orderId);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -64,24 +162,11 @@ export default function CheckoutPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/public/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug,
-          customerName: name,
-          customerPhone: phone,
-          customerEmail: email || null,
-          shippingAddress: address,
-          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-          discountCode: appliedCode,
-          honeypot,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      clearCart(slug);
-      setOrderId(data.orderId);
+      if (paymentMethod === "razorpay" && razorpayEnabled) {
+        await payWithRazorpay();
+      } else {
+        await payWithCod();
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -94,7 +179,11 @@ export default function CheckoutPage() {
       <div className="px-6 py-20 max-w-md mx-auto text-center">
         <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" />
         <h1 className="text-xl font-bold mb-2">Order placed!</h1>
-        <p className="text-sm text-neutral-500 mb-6">The business will contact you shortly to confirm. Payment is Cash on Delivery.</p>
+        <p className="text-sm text-neutral-500 mb-6">
+          {paidOnline
+            ? "Payment received. The business will contact you shortly to confirm delivery."
+            : "The business will contact you shortly to confirm. Payment is Cash on Delivery."}
+        </p>
         <Link href={`/site/${slug}`} className="text-sm underline">Back to store</Link>
       </div>
     );
@@ -160,14 +249,33 @@ export default function CheckoutPage() {
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" className="w-full text-sm border border-neutral-300 rounded-lg px-3 py-2.5" />
         <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" rows={3} className="w-full text-sm border border-neutral-300 rounded-lg px-3 py-2.5" />
 
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-          Payment: Cash on Delivery. The business will confirm your order by phone.
-        </div>
+        {razorpayEnabled ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod("razorpay")}
+              className={`flex items-center justify-center gap-1.5 text-sm font-medium py-2.5 rounded-lg border ${paymentMethod === "razorpay" ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 text-neutral-600"}`}
+            >
+              <Wallet className="w-4 h-4" /> Pay Online
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod("cod")}
+              className={`flex items-center justify-center gap-1.5 text-sm font-medium py-2.5 rounded-lg border ${paymentMethod === "cod" ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 text-neutral-600"}`}
+            >
+              <Truck className="w-4 h-4" /> Cash on Delivery
+            </button>
+          </div>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+            Payment: Cash on Delivery. The business will confirm your order by phone.
+          </div>
+        )}
 
         {error && <p className="text-xs text-red-500">{error}</p>}
 
         <button type="submit" disabled={loading} className="w-full bg-neutral-900 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Place Order
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null} {paymentMethod === "razorpay" && razorpayEnabled ? "Pay & Place Order" : "Place Order"}
         </button>
       </form>
     </div>
