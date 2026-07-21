@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, CheckCircle } from "lucide-react";
+import { Loader2, CheckCircle, Tag, X } from "lucide-react";
 import { getCart, clearCart, cartTotal, type CartItem } from "@/lib/cart";
 
 export default function CheckoutPage() {
@@ -18,12 +18,41 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponApplying, setCouponApplying] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
 
   useEffect(() => {
     setItems(getCart(slug));
   }, [slug]);
 
-  const total = cartTotal(items);
+  const subtotal = cartTotal(items);
+  const total = Math.max(0, subtotal - discountAmount);
+
+  async function applyCoupon() {
+    if (!couponInput.trim()) return;
+    setCouponApplying(true);
+    setCouponError(null);
+    try {
+      const r = await fetch("/api/public/discounts/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, code: couponInput.trim(), subtotal }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Invalid code");
+      setAppliedCode(couponInput.trim().toUpperCase());
+      setDiscountAmount(d.discountAmount);
+      setCouponInput("");
+    } catch (err: any) {
+      setCouponError(err.message);
+    } finally {
+      setCouponApplying(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCode(null);
+    setDiscountAmount(0);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,6 +74,7 @@ export default function CheckoutPage() {
           customerEmail: email || null,
           shippingAddress: address,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          discountCode: appliedCode,
           honeypot,
         }),
       });
@@ -83,18 +113,45 @@ export default function CheckoutPage() {
     <div className="px-6 py-10 max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-6">Checkout</h1>
 
-      <div className="bg-neutral-50 rounded-xl p-4 mb-6 space-y-1.5">
+      <div className="bg-neutral-50 rounded-xl p-4 mb-4 space-y-1.5">
         {items.map((item) => (
           <div key={item.productId} className="flex justify-between text-sm">
             <span>{item.name} x{item.quantity}</span>
             <span>₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
           </div>
         ))}
+        <div className="flex justify-between text-sm pt-2 border-t border-neutral-200 mt-2">
+          <span>Subtotal</span>
+          <span>₹{subtotal.toLocaleString("en-IN")}</span>
+        </div>
+        {appliedCode && (
+          <div className="flex justify-between text-sm text-green-600">
+            <span>Discount ({appliedCode})</span>
+            <span>-₹{discountAmount.toLocaleString("en-IN")}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold pt-2 border-t border-neutral-200 mt-2">
           <span>Total</span>
           <span>₹{total.toLocaleString("en-IN")}</span>
         </div>
       </div>
+
+      {appliedCode ? (
+        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 text-sm">
+          <span className="text-green-700 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> {appliedCode} applied</span>
+          <button onClick={removeCoupon} className="text-green-700 hover:text-green-900"><X className="w-4 h-4" /></button>
+        </div>
+      ) : (
+        <div className="mb-4">
+          <div className="flex gap-2">
+            <input value={couponInput} onChange={(e) => setCouponInput(e.target.value)} placeholder="Discount code" className="flex-1 text-sm border border-neutral-300 rounded-lg px-3 py-2" />
+            <button onClick={applyCoupon} disabled={couponApplying || !couponInput.trim()} className="text-sm bg-neutral-200 hover:bg-neutral-300 px-4 py-2 rounded-lg disabled:opacity-50">
+              {couponApplying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+            </button>
+          </div>
+          {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <input type="text" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} className="hidden" tabIndex={-1} autoComplete="off" />

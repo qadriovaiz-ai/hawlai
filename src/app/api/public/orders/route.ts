@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { sendEmail } from "@/lib/agents/gmailAgent";
+import { validateDiscountCode } from "@/lib/discounts";
 
 // Public, unauthenticated endpoint — the storefront checkout page posts
 // here. Prices are ALWAYS re-read from the products table server-side
@@ -9,7 +10,7 @@ import { sendEmail } from "@/lib/agents/gmailAgent";
 // gateway is wired up yet, so we never claim a payment "succeeded".
 export async function POST(request: Request) {
   const body = await request.json();
-  const { slug, customerName, customerPhone, customerEmail, shippingAddress, items, honeypot } = body;
+  const { slug, customerName, customerPhone, customerEmail, shippingAddress, items, discountCode, honeypot } = body;
 
   if (honeypot) return NextResponse.json({ success: true, orderId: "ok" });
 
@@ -49,6 +50,16 @@ export async function POST(request: Request) {
     subtotal += Number(product.price) * qty;
   }
 
+  let discountAmount = 0;
+  let appliedDiscountId: string | null = null;
+  if (discountCode) {
+    const result = await validateDiscountCode(supabase, website.dealership_id, discountCode, subtotal);
+    if (!result.valid) return NextResponse.json({ error: result.error }, { status: 400 });
+    discountAmount = result.discountAmount ?? 0;
+    appliedDiscountId = result.discountId ?? null;
+  }
+  const total = Math.max(0, subtotal - discountAmount);
+
   const { data: order, error } = await supabase.from("orders").insert({
     dealership_id: website.dealership_id,
     website_id: website.id,
@@ -58,13 +69,20 @@ export async function POST(request: Request) {
     shipping_address: String(shippingAddress).trim(),
     items: resolvedItems,
     subtotal,
-    total: subtotal, // no shipping/tax calc yet — kept transparent rather than guessed
+    discount_code: appliedDiscountId ? String(discountCode).trim().toUpperCase() : null,
+    discount_amount: discountAmount,
+    total,
     payment_method: "cod",
     payment_status: "pending",
     status: "new",
   }).select("id").single();
 
   if (error) return NextResponse.json({ error: "Something went wrong placing your order, please try again" }, { status: 500 });
+
+  if (appliedDiscountId) {
+    const { data: dc } = await supabase.from("discount_codes").select("used_count").eq("id", appliedDiscountId).single();
+    await supabase.from("discount_codes").update({ used_count: (dc?.used_count ?? 0) + 1 }).eq("id", appliedDiscountId);
+  }
 
   // Best-effort: decrement tracked inventory. Not wrapped in a strict
   // transaction (Supabase JS client doesn't expose one here) — under
@@ -88,12 +106,12 @@ export async function POST(request: Request) {
         website.dealership_id,
         dealership.gmail_email,
         `New order from ${customerName}`,
-        `New order placed on your website.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${shippingAddress}\n\nItems:\n${itemLines}\n\nTotal: ₹${subtotal}\nPayment: Cash on Delivery (pending)\n\nView and confirm this order in your Hawlai dashboard.`
+        `New order placed on your website.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${shippingAddress}\n\nItems:\n${itemLines}\n\nSubtotal: ₹${subtotal}${discountAmount > 0 ? `\nDiscount (${discountCode}): -₹${discountAmount}` : ""}\nTotal: ₹${total}\nPayment: Cash on Delivery (pending)\n\nView and confirm this order in your Hawlai dashboard.`
       );
     }
   } catch {
     // Non-fatal — order is already saved.
   }
 
-  return NextResponse.json({ success: true, orderId: order.id, total: subtotal });
+  return NextResponse.json({ success: true, orderId: order.id, subtotal, discountAmount, total });
 }
