@@ -235,11 +235,16 @@ export async function generateWebsite(
     title: p.title,
     pageType: p.pageType,
     metaDescription: `${p.title} — ${dealershipName}`,
-    sections: [
-      { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Get in Touch" },
-      { type: "text", heading: p.title, body: "Content coming soon — regenerate once the API is available." },
-      { type: "contact_form", heading: "Get in Touch" },
-    ],
+    sections: p.pageType === "products"
+      ? [
+          { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Shop Now" },
+          { type: "product_catalog", heading: `Our ${p.title}` },
+        ]
+      : [
+          { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Get in Touch" },
+          { type: "text", heading: p.title, body: "Content coming soon — regenerate once the API is available." },
+          { type: "contact_form", heading: "Get in Touch" },
+        ],
   }));
 
   const brandContext = brandProfile?.tone_of_voice
@@ -283,12 +288,27 @@ IMPORTANT: Every single page must be about "${dealershipName}", a ${businessCate
 
     const resultPages: GeneratedPage[] = pageList.map((p) => {
       const match = parsed.pages.find((pg: any) => pg.slug === p.slug) ?? parsed.pages[pageList.indexOf(p)];
+      let sections: any[] = Array.isArray(match?.sections) && match.sections.length > 0 ? match.sections : fallbackPages.find((f) => f.slug === p.slug)!.sections;
+
+      // Pages meant to list real products (shop/products/menu/listings)
+      // must show the owner's actual catalog, not AI-invented items —
+      // swap out any invented features_grid/pricing block for a live
+      // product_catalog block; the storefront fetches real product rows
+      // for this at render time. Keep the AI's hero + any trailing CTA.
+      if (p.pageType === "products") {
+        const hero = sections.find((s) => s.type === "hero");
+        const trailing = sections.find((s) => s.type === "contact_form" || s.type === "cta_banner");
+        const catalog = { type: "product_catalog", heading: `Our ${p.title}` };
+        sections = [hero, catalog, trailing].filter(Boolean);
+        if (sections.length === 0) sections = [catalog];
+      }
+
       return {
         slug: p.slug,
         title: p.title,
         pageType: p.pageType,
         metaDescription: match?.metaDescription ?? `${p.title} — ${dealershipName}`,
-        sections: Array.isArray(match?.sections) && match.sections.length > 0 ? match.sections : fallbackPages.find((f) => f.slug === p.slug)!.sections,
+        sections,
       };
     });
     return { pages: resultPages };

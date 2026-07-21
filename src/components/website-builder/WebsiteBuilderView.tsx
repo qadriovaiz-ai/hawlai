@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2 } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe } from "lucide-react";
+import ProductManager from "./ProductManager";
+import OrdersPanel from "./OrdersPanel";
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
 // preview the AI's theme choice before the owner confirms the plan.
@@ -64,6 +66,7 @@ const ITEM_FIELDS: Record<string, { key: string; label: string; multiline?: bool
 };
 
 export default function WebsiteBuilderView() {
+  const [tab, setTab] = useState<"website" | "products" | "orders">("website");
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -238,8 +241,27 @@ export default function WebsiteBuilderView() {
 
   const currentPage = pages.find((p) => p.id === activePage);
 
+  const TABS: { key: "website" | "products" | "orders"; label: string; icon: any }[] = [
+    { key: "website", label: "Website", icon: Globe },
+    { key: "products", label: "Products", icon: Package },
+    { key: "orders", label: "Orders", icon: ClipboardList },
+  ];
+
   return (
     <div className="space-y-5">
+      <div className="flex gap-1.5">
+        {TABS.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={`text-sm px-3.5 py-2 rounded-lg flex items-center gap-1.5 ${tab === t.key ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+            <t.icon className="w-3.5 h-3.5" /> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "products" && <ProductManager />}
+      {tab === "orders" && <OrdersPanel />}
+
+      {tab === "website" && (
+      <>
       {!plan && (
         <div className="card p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">{website ? "Regenerate Website" : "Build Your Website"}</p>
@@ -400,6 +422,8 @@ export default function WebsiteBuilderView() {
       <Link href="/dashboard/website" className="card p-4 flex items-center justify-between hover:border-purple-400 transition-colors">
         <span className="text-sm text-slate-700">Need just a single quick-launch landing page for ads instead? Use the Website page</span>
       </Link>
+      </>
+      )}
     </div>
   );
 }

@@ -1,18 +1,31 @@
 import type { LandingTheme } from "@/lib/landingThemes";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
+import ProductCatalog from "@/components/website/ProductCatalog";
 
-export default function SectionRenderer({ sections, theme, slug }: { sections: any[]; theme: LandingTheme; slug: string }) {
+interface StorefrontProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  compare_at_price: number | null;
+  images: string[];
+  inventory_count: number | null;
+}
+
+export default function SectionRenderer({ sections, theme, slug, products }: { sections: any[]; theme: LandingTheme; slug: string; products?: StorefrontProduct[] }) {
   return (
     <>
       {sections.map((section, i) => (
-        <SectionBlock key={i} section={section} theme={theme} slug={slug} />
+        <SectionBlock key={i} section={section} theme={theme} slug={slug} products={products} />
       ))}
     </>
   );
 }
 
-function SectionBlock({ section, theme, slug }: { section: any; theme: LandingTheme; slug: string }) {
+function SectionBlock({ section, theme, slug, products }: { section: any; theme: LandingTheme; slug: string; products?: StorefrontProduct[] }) {
   switch (section.type) {
+    case "product_catalog":
+      return <ProductCatalog products={products ?? []} slug={slug} theme={theme} heading={section.heading} />;
     case "hero":
       return (
         <section className="px-6 py-16 sm:py-24 text-center" style={{ backgroundColor: theme.dark }}>

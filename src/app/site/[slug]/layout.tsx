@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTheme } from "@/lib/landingThemes";
+import CartIcon from "@/components/website/CartIcon";
 
 export default async function SiteLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -15,9 +16,10 @@ export default async function SiteLayout({ children, params }: { children: React
 
   if (!website || !website.published) notFound();
 
-  const { data: pages } = await supabase.from("website_pages").select("slug, title").eq("website_id", website.id).order("order_index", { ascending: true });
+  const { data: pages } = await supabase.from("website_pages").select("slug, title, page_type").eq("website_id", website.id).order("order_index", { ascending: true });
   const theme = getTheme(website.theme_key);
   const dealershipName = (website as any).dealerships?.dealership_name ?? "Business";
+  const hasStore = (pages ?? []).some((p) => p.page_type === "products");
 
   return (
     <div style={{ backgroundColor: theme.bg }} className="min-h-screen">
@@ -29,6 +31,7 @@ export default async function SiteLayout({ children, params }: { children: React
               {p.title}
             </Link>
           ))}
+          {hasStore && <CartIcon slug={slug} color={theme.dark} />}
         </div>
       </nav>
       <main>{children}</main>
