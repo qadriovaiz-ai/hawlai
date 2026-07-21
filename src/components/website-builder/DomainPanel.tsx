@@ -107,7 +107,7 @@ export default function DomainPanel() {
             onChange={(e) => { setQuery(e.target.value); setCheckResult(null); setCheckError(null); }}
             onKeyDown={(e) => e.key === "Enter" && handleCheck()}
             placeholder="mybrand.com"
-            className="flex-1 text-sm bg-slate-100 border border-slate-300 rounded-lg px-3 py-2.5"
+            className="flex-1 text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2.5"
           />
           <button onClick={handleCheck} disabled={checking || !query.trim()} className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
             {checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} Check

@@ -275,7 +275,7 @@ export default function WebsiteBuilderView() {
             onChange={(e) => setPrompt(e.target.value)}
             rows={4}
             placeholder={`Create a premium website for my skincare brand. I sell Vitamin C Serum and Face Wash. Theme should be luxury.`}
-            className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-3 py-2 placeholder:text-slate-500"
+            className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-3 py-2 placeholder:text-slate-500"
           />
           {planError && <p className="text-xs text-red-400">{planError}</p>}
           <button onClick={handlePlan} disabled={planning || !prompt.trim()} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
@@ -310,7 +310,7 @@ export default function WebsiteBuilderView() {
             <div className="space-y-1.5">
               {plan.pages.map((p, i) => (
                 <div key={i} className="flex items-center gap-2 bg-slate-100 rounded-lg p-2">
-                  <input value={p.title} onChange={(e) => updatePlanPage(i, "title", e.target.value)} className="flex-1 text-xs bg-white border border-slate-300 rounded px-2 py-1.5" placeholder="Page title" />
+                  <input value={p.title} onChange={(e) => updatePlanPage(i, "title", e.target.value)} className="flex-1 text-xs bg-white text-slate-900 border border-slate-300 rounded px-2 py-1.5" placeholder="Page title" />
                   <span className="text-[10px] text-slate-400 uppercase w-16 shrink-0">{p.pageType}</span>
                   <button onClick={() => removePlanPage(i)} className="text-slate-400 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
@@ -365,19 +365,19 @@ export default function WebsiteBuilderView() {
                     </div>
 
                     {section.headline !== undefined && (
-                      <input value={section.headline ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "headline", e.target.value)} className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Headline" />
+                      <input value={section.headline ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "headline", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Headline" />
                     )}
                     {section.heading !== undefined && (
-                      <input value={section.heading ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "heading", e.target.value)} className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Heading" />
+                      <input value={section.heading ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "heading", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Heading" />
                     )}
                     {section.subheadline !== undefined && (
-                      <input value={section.subheadline ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "subheadline", e.target.value)} className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Subheadline" />
+                      <input value={section.subheadline ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "subheadline", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Subheadline" />
                     )}
                     {section.body !== undefined && (
-                      <textarea value={section.body ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "body", e.target.value)} rows={3} className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Body text" />
+                      <textarea value={section.body ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "body", e.target.value)} rows={3} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Body text" />
                     )}
                     {section.ctaText !== undefined && (
-                      <input value={section.ctaText ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "ctaText", e.target.value)} className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Button text" />
+                      <input value={section.ctaText ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "ctaText", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Button text" />
                     )}
 
                     {section.items && (
@@ -387,9 +387,9 @@ export default function WebsiteBuilderView() {
                             <button onClick={() => removeItem(currentPage.id, i, itemIndex)} className="absolute top-2 right-2 text-slate-400 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
                             {(ITEM_FIELDS[section.type] ?? []).map((f) => (
                               f.multiline ? (
-                                <textarea key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} rows={2} placeholder={f.label} className="w-full text-xs bg-white border border-slate-300 rounded px-2 py-1 pr-6" />
+                                <textarea key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} rows={2} placeholder={f.label} className="w-full text-xs bg-white text-slate-900 border border-slate-300 rounded px-2 py-1 pr-6" />
                               ) : (
-                                <input key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} placeholder={f.label} className="w-full text-xs bg-white border border-slate-300 rounded px-2 py-1 pr-6" />
+                                <input key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} placeholder={f.label} className="w-full text-xs bg-white text-slate-900 border border-slate-300 rounded px-2 py-1 pr-6" />
                               )
                             ))}
                           </div>
