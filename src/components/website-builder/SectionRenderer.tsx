@@ -49,7 +49,9 @@ function SectionBlock({ section, theme, slug, products }: { section: any; theme:
       return (
         <section className="px-6 py-12 max-w-4xl mx-auto">
           <div className={`flex flex-col ${section.imagePosition === "right" ? "sm:flex-row-reverse" : "sm:flex-row"} gap-8 items-center`}>
-            <div className="flex-1 aspect-video bg-neutral-100 rounded-xl" />
+            <div className="flex-1 aspect-video bg-neutral-100 rounded-xl overflow-hidden">
+              {section.imageUrl && <img src={section.imageUrl} alt="" className="w-full h-full object-cover" />}
+            </div>
             <div className="flex-1">
               {section.heading && <h2 className="text-2xl font-bold mb-2" style={{ color: theme.dark }}>{section.heading}</h2>}
               <p className="text-neutral-600 leading-relaxed">{section.body}</p>

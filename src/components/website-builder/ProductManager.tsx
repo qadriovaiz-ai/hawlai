@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Pencil, X, Check, Package } from "lucide-react";
+import ImageUploader from "./ImageUploader";
 
 interface Product {
   id: string;
@@ -35,6 +36,22 @@ export default function ProductManager() {
       .finally(() => setLoading(false));
   }
   useEffect(load, []);
+
+  function addImage(url: string) {
+    setForm((prev) => {
+      const arr = prev.images.split(",").map((s) => s.trim()).filter(Boolean);
+      arr.push(url);
+      return { ...prev, images: arr.join(",") };
+    });
+  }
+
+  function removeImage(index: number) {
+    setForm((prev) => {
+      const arr = prev.images.split(",").map((s) => s.trim()).filter(Boolean);
+      arr.splice(index, 1);
+      return { ...prev, images: arr.join(",") };
+    });
+  }
 
   function startAdd() {
     setForm(EMPTY_FORM);
@@ -119,7 +136,18 @@ export default function ProductManager() {
               <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Price (₹)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
               <input value={form.compareAtPrice} onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })} placeholder="Compare-at price (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
             </div>
-            <input value={form.images} onChange={(e) => setForm({ ...form, images: e.target.value })} placeholder="Image URL(s), comma-separated" className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+            <div>
+              <p className="text-xs text-slate-500 mb-1.5">Images</p>
+              <div className="flex flex-wrap gap-2">
+                {form.images.split(",").map((s) => s.trim()).filter(Boolean).map((url, i) => (
+                  <div key={i} className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-300 group">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button onClick={() => removeImage(i)} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100"><X className="w-4 h-4" /></button>
+                  </div>
+                ))}
+                <ImageUploader kind="product" onUploaded={addImage} compact className="w-14" />
+              </div>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="SKU (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
               <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Category (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />

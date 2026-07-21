@@ -2,6 +2,7 @@
 
 import { ChevronUp, ChevronDown, Trash2, Plus, X } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
+import ImageUploader from "./ImageUploader";
 
 // Renders page sections styled exactly like the live storefront
 // (SectionRenderer's look), but every text field is an editable
@@ -104,7 +105,12 @@ function SectionBlock({ section, theme, sectionIndex, onUpdateField, onUpdateIte
       return (
         <section className="px-6 py-12 max-w-4xl mx-auto">
           <div className={`flex flex-col ${section.imagePosition === "right" ? "sm:flex-row-reverse" : "sm:flex-row"} gap-8 items-center`}>
-            <div className="flex-1 aspect-video bg-neutral-100 rounded-xl" />
+            <div className="flex-1 aspect-video bg-neutral-100 rounded-xl overflow-hidden relative group/img">
+              {section.imageUrl && <img src={section.imageUrl} alt="" className="w-full h-full object-cover" />}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 bg-black/30 transition-opacity">
+                <ImageUploader kind="section" currentUrl={undefined} onUploaded={(url) => update("imageUrl", url)} compact className="[&>button]:w-10 [&>button]:h-10" />
+              </div>
+            </div>
             <div className="flex-1">
               <EditableText value={section.heading ?? ""} onChange={(v) => update("heading", v)} placeholder="Heading" className="text-2xl font-bold mb-2" style={{ color: theme.dark }} />
               <EditableText value={section.body ?? ""} onChange={(v) => update("body", v)} placeholder="Body text" multiline className="text-neutral-600 leading-relaxed" />

@@ -210,7 +210,7 @@ Return JSON only, no markdown, no preamble: {"businessSummary":"...","themeKey":
 const SECTION_LIBRARY_NOTE = `Available section types and their exact JSON shape (use ONLY these):
 - {"type":"hero","headline":"...","subheadline":"...","ctaText":"..."}
 - {"type":"text","heading":"...","body":"..."}
-- {"type":"image_text","heading":"...","body":"...","imagePosition":"left"}
+- {"type":"image_text","heading":"...","body":"...","imagePosition":"left"} (leave imageUrl unset — the owner uploads a real photo afterward)
 - {"type":"features_grid","heading":"...","items":[{"title":"...","description":"..."}]} (3-4 items)
 - {"type":"testimonials","heading":"...","items":[{"quote":"...","author":"..."}]} (2-3 items)
 - {"type":"team_grid","heading":"...","items":[{"name":"...","role":"...","bio":"..."}]} (2-4 items)

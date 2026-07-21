@@ -8,6 +8,7 @@ import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
 import OffersPanel from "./OffersPanel";
 import LivePreviewEditor from "./LivePreviewEditor";
+import ImageUploader from "./ImageUploader";
 import { getTheme } from "@/lib/landingThemes";
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
@@ -38,7 +39,7 @@ function emptySection(type: string): any {
   switch (type) {
     case "hero": return { type, headline: "New headline", subheadline: "", ctaText: "Get in Touch" };
     case "text": return { type, heading: "New section", body: "" };
-    case "image_text": return { type, heading: "New section", body: "", imagePosition: "left" };
+    case "image_text": return { type, heading: "New section", body: "", imagePosition: "left", imageUrl: "" };
     case "features_grid": return { type, heading: "Features", items: [{ title: "Feature", description: "" }] };
     case "testimonials": return { type, heading: "What people say", items: [{ quote: "", author: "" }] };
     case "team_grid": return { type, heading: "Our Team", items: [{ name: "", role: "", bio: "" }] };
@@ -439,8 +440,8 @@ export default function WebsiteBuilderView() {
             <div>
               <p className="text-xs font-semibold text-slate-600 mb-1.5">Logo</p>
               <div className="flex items-center gap-2">
-                {logoUrl && <img src={logoUrl} alt="Logo" className="w-9 h-9 rounded-lg object-cover border border-slate-200" />}
-                <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="Logo image URL" className="flex-1 text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+                <ImageUploader kind="logo" currentUrl={logoUrl} onUploaded={(url) => { setLogoUrl(url); }} compact />
+                <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="Or paste an image URL" className="flex-1 text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
                 <button onClick={saveLogo} disabled={logoSaving} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg disabled:opacity-50">
                   {logoSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
                 </button>
