@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
 import OffersPanel from "./OffersPanel";
+import LivePreviewEditor from "./LivePreviewEditor";
+import { getTheme } from "@/lib/landingThemes";
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
 // preview the AI's theme choice before the owner confirms the plan.
@@ -88,6 +90,7 @@ export default function WebsiteBuilderView() {
   const [newPageTitle, setNewPageTitle] = useState("");
   const [pageActionLoading, setPageActionLoading] = useState(false);
   const [pageActionError, setPageActionError] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
 
   function load() {
     setLoading(true);
@@ -487,52 +490,26 @@ export default function WebsiteBuilderView() {
 
             {currentPage && (
               <div className="space-y-3 pt-2">
-                {currentPage.sections.map((section: any, i: number) => (
-                  <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-purple-500 capitalize">{section.type.replace(/_/g, " ")}</p>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => moveSection(currentPage.id, i, -1)} disabled={i === 0} className="text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => moveSection(currentPage.id, i, 1)} disabled={i === currentPage.sections.length - 1} className="text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => removeSection(currentPage.id, i)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
-
-                    {section.headline !== undefined && (
-                      <input value={section.headline ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "headline", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Headline" />
-                    )}
-                    {section.heading !== undefined && (
-                      <input value={section.heading ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "heading", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Heading" />
-                    )}
-                    {section.subheadline !== undefined && (
-                      <input value={section.subheadline ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "subheadline", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Subheadline" />
-                    )}
-                    {section.body !== undefined && (
-                      <textarea value={section.body ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "body", e.target.value)} rows={3} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Body text" />
-                    )}
-                    {section.ctaText !== undefined && (
-                      <input value={section.ctaText ?? ""} onChange={(e) => updateSectionField(currentPage.id, i, "ctaText", e.target.value)} className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-2 py-1.5" placeholder="Button text" />
-                    )}
-
-                    {section.items && (
-                      <div className="space-y-2 pt-1">
-                        {section.items.map((item: any, itemIndex: number) => (
-                          <div key={itemIndex} className="bg-slate-200 rounded-lg p-2.5 space-y-1.5 relative">
-                            <button onClick={() => removeItem(currentPage.id, i, itemIndex)} className="absolute top-2 right-2 text-slate-400 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
-                            {(ITEM_FIELDS[section.type] ?? []).map((f) => (
-                              f.multiline ? (
-                                <textarea key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} rows={2} placeholder={f.label} className="w-full text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1 pr-6" />
-                              ) : (
-                                <input key={f.key} value={item[f.key] ?? ""} onChange={(e) => updateItemField(currentPage.id, i, itemIndex, f.key, e.target.value)} placeholder={f.label} className="w-full text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1 pr-6" />
-                              )
-                            ))}
-                          </div>
-                        ))}
-                        <button onClick={() => addItem(currentPage.id, i)} className="text-xs text-purple-500 hover:text-purple-400 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add item</button>
-                      </div>
-                    )}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-400">Live preview — click any text to edit it directly</p>
+                  <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                    <button onClick={() => setPreviewMode("desktop")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "desktop" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Monitor className="w-3.5 h-3.5" /> Desktop</button>
+                    <button onClick={() => setPreviewMode("mobile")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "mobile" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Smartphone className="w-3.5 h-3.5" /> Mobile</button>
                   </div>
-                ))}
+                </div>
+
+                <div className={previewMode === "mobile" ? "max-w-[375px] mx-auto" : ""}>
+                  <LivePreviewEditor
+                    sections={currentPage.sections}
+                    theme={getTheme(website?.theme_key)}
+                    onUpdateField={(i, field, value) => updateSectionField(currentPage.id, i, field, value)}
+                    onUpdateItem={(i, itemIndex, field, value) => updateItemField(currentPage.id, i, itemIndex, field, value)}
+                    onAddItem={(i) => addItem(currentPage.id, i)}
+                    onRemoveItem={(i, itemIndex) => removeItem(currentPage.id, i, itemIndex)}
+                    onMoveSection={(i, dir) => moveSection(currentPage.id, i, dir)}
+                    onRemoveSection={(i) => removeSection(currentPage.id, i)}
+                  />
+                </div>
 
                 <div className="relative">
                   <button onClick={() => setAddSectionOpen(!addSectionOpen)} className="text-xs text-purple-500 hover:text-purple-400 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add section</button>
