@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ShoppingCart, Check } from "lucide-react";
+import { useRef, useState } from "react";
+import { ShoppingCart, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
 import { addToCart } from "@/lib/cart";
 import { renderRichText } from "@/lib/richText";
@@ -14,6 +14,64 @@ interface Product {
   compare_at_price: number | null;
   images: string[];
   inventory_count: number | null;
+}
+
+function ProductImageGallery({ images, alt }: { images: string[]; alt: string }) {
+  const [index, setIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+
+  if (images.length === 0) return <div className="aspect-square bg-neutral-100" />;
+
+  function go(delta: number) {
+    setIndex((i) => (i + delta + images.length) % images.length);
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current == null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(delta) > 40) go(delta < 0 ? 1 : -1);
+    touchStartX.current = null;
+  }
+
+  return (
+    <div className="relative aspect-square bg-neutral-100 group/gallery overflow-hidden" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <img src={images[index]} alt={alt} className="w-full h-full object-cover" />
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(-1); }}
+            aria-label="Previous image"
+            className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/85 text-neutral-700 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-opacity"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(1); }}
+            aria-label="Next image"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/85 text-neutral-700 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-opacity"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <div className="absolute bottom-1.5 left-0 right-0 flex items-center justify-center gap-1">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIndex(i); }}
+                aria-label={`Show image ${i + 1}`}
+                className={`w-1.5 h-1.5 rounded-full transition-colors ${i === index ? "bg-white" : "bg-white/50"}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function ProductCatalog({ products, slug, theme, heading }: { products: Product[]; slug: string; theme: LandingTheme; heading?: string }) {
@@ -42,9 +100,7 @@ export default function ProductCatalog({ products, slug, theme, heading }: { pro
           const outOfStock = p.inventory_count != null && p.inventory_count <= 0;
           return (
             <div key={p.id} className="rounded-xl border border-neutral-200 overflow-hidden flex flex-col">
-              <div className="aspect-square bg-neutral-100">
-                {p.images?.[0] && <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />}
-              </div>
+              <ProductImageGallery images={p.images ?? []} alt={p.name} />
               <div className="p-4 flex flex-col gap-2 flex-1">
                 <p className="font-semibold" style={{ color: theme.dark }}>{p.name}</p>
                 {p.description && <p className="text-sm text-neutral-500 line-clamp-2">{renderRichText(p.description)}</p>}
