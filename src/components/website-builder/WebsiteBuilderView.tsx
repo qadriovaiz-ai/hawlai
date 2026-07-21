@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2 } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
+import DomainPanel from "./DomainPanel";
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
 // preview the AI's theme choice before the owner confirms the plan.
@@ -66,7 +67,7 @@ const ITEM_FIELDS: Record<string, { key: string; label: string; multiline?: bool
 };
 
 export default function WebsiteBuilderView() {
-  const [tab, setTab] = useState<"website" | "products" | "orders">("website");
+  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain">("website");
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -241,10 +242,11 @@ export default function WebsiteBuilderView() {
 
   const currentPage = pages.find((p) => p.id === activePage);
 
-  const TABS: { key: "website" | "products" | "orders"; label: string; icon: any }[] = [
+  const TABS: { key: "website" | "products" | "orders" | "domain"; label: string; icon: any }[] = [
     { key: "website", label: "Website", icon: Globe },
     { key: "products", label: "Products", icon: Package },
     { key: "orders", label: "Orders", icon: ClipboardList },
+    { key: "domain", label: "Domain", icon: Globe2 },
   ];
 
   return (
@@ -259,6 +261,7 @@ export default function WebsiteBuilderView() {
 
       {tab === "products" && <ProductManager />}
       {tab === "orders" && <OrdersPanel />}
+      {tab === "domain" && <DomainPanel />}
 
       {tab === "website" && (
       <>
