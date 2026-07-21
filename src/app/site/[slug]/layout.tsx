@@ -10,7 +10,7 @@ export default async function SiteLayout({ children, params }: { children: React
 
   const { data: website } = await supabase
     .from("websites")
-    .select("id, slug, theme_key, published, dealerships(dealership_name)")
+    .select("id, slug, theme_key, published, logo_url, dealerships(dealership_name)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -24,7 +24,10 @@ export default async function SiteLayout({ children, params }: { children: React
   return (
     <div style={{ backgroundColor: theme.bg }} className="min-h-screen">
       <nav className="flex items-center justify-between px-6 py-4 max-w-4xl mx-auto">
-        <Link href={`/site/${slug}`} className="font-bold text-lg" style={{ color: theme.dark }}>{dealershipName}</Link>
+        <Link href={`/site/${slug}`} className="font-bold text-lg flex items-center gap-2" style={{ color: theme.dark }}>
+          {(website as any).logo_url && <img src={(website as any).logo_url} alt={dealershipName} className="w-8 h-8 rounded-lg object-cover" />}
+          {dealershipName}
+        </Link>
         <div className="flex items-center gap-4">
           {(pages ?? []).map((p) => (
             <Link key={p.slug} href={p.slug === "home" ? `/site/${slug}` : `/site/${slug}/${p.slug}`} className="text-sm hover:underline" style={{ color: theme.dark }}>
