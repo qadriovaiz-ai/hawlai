@@ -2,19 +2,16 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X } from "lucide-react";
-import { SITE_TYPES } from "@/lib/agents/websiteBuilderAgent";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2 } from "lucide-react";
 
-function suggestSiteType(businessCategory: string | null): string {
-  if (!businessCategory) return SITE_TYPES[0].key;
-  const c = businessCategory.toLowerCase();
-  if (/real estate|property|realtor|realestate/.test(c)) return "real_estate";
-  if (/restaurant|food|cafe|catering|dining/.test(c)) return "restaurant";
-  if (/retail|ecommerce|e-commerce|shop|store|product/.test(c)) return "ecommerce";
-  if (/consult|agency|law|finance|professional|corporate/.test(c)) return "professional";
-  if (/design|photograph|creative|portfolio|artist|studio/.test(c)) return "portfolio";
-  return "service_business";
-}
+// Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
+// preview the AI's theme choice before the owner confirms the plan.
+const THEME_PREVIEWS: Record<string, { label: string; dark: string; accent: string; bg: string }> = {
+  navy_amber: { label: "Navy & Amber", dark: "#122744", accent: "#D9A441", bg: "#FAF8F5" },
+  crimson_charcoal: { label: "Crimson & Charcoal", dark: "#1F1B1B", accent: "#C0392B", bg: "#FAFAFA" },
+  forest_cream: { label: "Forest & Cream", dark: "#1E3A2B", accent: "#B08D57", bg: "#FBF9F3" },
+  midnight_sky: { label: "Midnight & Sky", dark: "#0B1E3D", accent: "#4FA3D1", bg: "#F7F9FC" },
+};
 
 const SECTION_TYPES = [
   { type: "hero", label: "Hero" },
@@ -72,8 +69,10 @@ export default function WebsiteBuilderView() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [siteType, setSiteType] = useState(SITE_TYPES[0].key);
-  const [description, setDescription] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [planning, setPlanning] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<{ businessSummary: string; themeKey: string; pages: { slug: string; title: string; pageType: string }[] } | null>(null);
   const [activePage, setActivePage] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
@@ -89,7 +88,6 @@ export default function WebsiteBuilderView() {
         if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
         setWebsite(d.website);
         setPages(d.pages ?? []);
-        if (!d.website && d.businessCategory) setSiteType(suggestSiteType(d.businessCategory));
         if (d.pages?.length > 0) setActivePage((prev: string | null) => prev ?? d.pages[0].id);
       })
       .catch((err: any) => {
@@ -102,10 +100,50 @@ export default function WebsiteBuilderView() {
   }
   useEffect(load, []);
 
+  async function handlePlan() {
+    if (!prompt.trim()) return;
+    setPlanning(true);
+    setPlanError(null);
+    try {
+      const r = await fetch("/api/website-builder/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
+      setPlan(d.plan);
+    } catch (err: any) {
+      setPlanError(err.message ?? "Couldn't plan the site — try again.");
+    } finally {
+      setPlanning(false);
+    }
+  }
+
+  function updatePlanPage(index: number, field: "title" | "slug", value: string) {
+    setPlan((prev) => {
+      if (!prev) return prev;
+      const nextPages = [...prev.pages];
+      nextPages[index] = { ...nextPages[index], [field]: value };
+      return { ...prev, pages: nextPages };
+    });
+  }
+
+  function removePlanPage(index: number) {
+    setPlan((prev) => (prev ? { ...prev, pages: prev.pages.filter((_, i) => i !== index) } : prev));
+  }
+
+  function addPlanPage() {
+    setPlan((prev) => (prev ? { ...prev, pages: [...prev.pages, { slug: "new-page", title: "New Page", pageType: "custom" }] } : prev));
+  }
+
   async function handleGenerate() {
+    if (!plan) return;
     setGenerating(true);
     try {
-      await fetch("/api/website-builder/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ siteType, description }) });
+      await fetch("/api/website-builder/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, pages: plan.pages, themeKey: plan.themeKey, businessSummary: plan.businessSummary }),
+      });
+      setPlan(null);
+      setPrompt("");
       load();
     } finally {
       setGenerating(false);
@@ -202,28 +240,65 @@ export default function WebsiteBuilderView() {
 
   return (
     <div className="space-y-5">
-      <div className="card p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">{website ? "Regenerate Website" : "Build Your Website"}</p>
-        <p className="text-xs text-slate-400">We've pre-selected the type that best matches your business — pick a different one if it's not quite right.</p>
-        <div className="flex flex-wrap gap-1.5">
-          {SITE_TYPES.map((t) => (
-            <button key={t.key} onClick={() => setSiteType(t.key)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${siteType === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
-              {t.label}
-            </button>
-          ))}
+      {!plan && (
+        <div className="card p-5 space-y-3">
+          <p className="text-sm font-semibold text-slate-700">{website ? "Regenerate Website" : "Build Your Website"}</p>
+          <p className="text-xs text-slate-400">Describe your website in one go — business, what you sell, and the vibe you want. AI will plan the pages and theme for you to review before anything is generated.</p>
+          {website && <p className="text-xs text-amber-500">Regenerating replaces all pages and any manual edits you've made.</p>}
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={4}
+            placeholder={`Create a premium website for my skincare brand. I sell Vitamin C Serum and Face Wash. Theme should be luxury.`}
+            className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-3 py-2 placeholder:text-slate-500"
+          />
+          {planError && <p className="text-xs text-red-400">{planError}</p>}
+          <button onClick={handlePlan} disabled={planning || !prompt.trim()} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
+            {planning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} Plan My Website
+          </button>
         </div>
-        {website && <p className="text-xs text-amber-500">Regenerating replaces all pages and any manual edits you've made.</p>}
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          placeholder="Describe what you want — e.g. 'A calm, natural skincare brand for sensitive skin, focus on ingredients and no harsh chemicals' or 'Modern 2BHK/3BHK flats in Varanasi, highlight nearby schools and metro access'. Leave blank and I'll write sensible content for your business type."
-          className="w-full text-sm bg-slate-200 border border-slate-300 rounded-lg px-3 py-2 placeholder:text-slate-500"
-        />
-        <button onClick={handleGenerate} disabled={generating} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {website ? "Regenerate" : "Generate Full Website"}
-        </button>
-      </div>
+      )}
+
+      {plan && (
+        <div className="card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Review Your Plan</p>
+            <button onClick={() => setPlan(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
+          </div>
+          <p className="text-xs text-slate-500 bg-slate-100 rounded-lg p-2.5">{plan.businessSummary}</p>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-600 mb-1.5">Theme</p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(THEME_PREVIEWS).map(([key, t]) => (
+                <button key={key} onClick={() => setPlan((prev) => (prev ? { ...prev, themeKey: key } : prev))} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border ${plan.themeKey === key ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-slate-100"}`}>
+                  <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: t.dark }} />
+                  <span className="w-3 h-3 rounded-full inline-block -ml-2" style={{ backgroundColor: t.accent }} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-600 mb-1.5">Pages</p>
+            <div className="space-y-1.5">
+              {plan.pages.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 bg-slate-100 rounded-lg p-2">
+                  <input value={p.title} onChange={(e) => updatePlanPage(i, "title", e.target.value)} className="flex-1 text-xs bg-white border border-slate-300 rounded px-2 py-1.5" placeholder="Page title" />
+                  <span className="text-[10px] text-slate-400 uppercase w-16 shrink-0">{p.pageType}</span>
+                  <button onClick={() => removePlanPage(i)} className="text-slate-400 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={addPlanPage} className="text-xs text-purple-500 hover:text-purple-400 flex items-center gap-1 mt-1.5"><Plus className="w-3.5 h-3.5" /> Add page</button>
+          </div>
+
+          <button onClick={handleGenerate} disabled={generating} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {website ? "Regenerate Website" : "Build Website"}
+          </button>
+        </div>
+      )}
 
       {website && (
         <>

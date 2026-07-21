@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { generateWebsite, SITE_TYPES } from "@/lib/agents/websiteBuilderAgent";
+import { generateWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
 
 async function withTimeout<T>(promiseLike: PromiseLike<T>, label: string, ms = 8000): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -78,10 +78,14 @@ export async function POST(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { siteType, description } = await request.json();
-  if (!siteType || !SITE_TYPES.find((t) => t.key === siteType)) {
-    return NextResponse.json({ error: "Valid siteType required" }, { status: 400 });
+  const { prompt, pages: planPages, themeKey, businessSummary } = await request.json();
+  if (!Array.isArray(planPages) || planPages.length === 0) {
+    return NextResponse.json({ error: "A confirmed page plan is required — call /api/website-builder/plan first" }, { status: 400 });
   }
+  const cleanPages: PlannedPage[] = planPages
+    .filter((p: any) => p?.slug && p?.title)
+    .map((p: any) => ({ slug: String(p.slug), title: String(p.title), pageType: String(p.pageType ?? "custom") }));
+  if (cleanPages.length === 0) return NextResponse.json({ error: "No valid pages in plan" }, { status: 400 });
 
   const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
@@ -93,21 +97,23 @@ export async function POST(request: Request) {
     dealershipName: dealership?.dealership_name,
     businessCategory: dealership?.business_category,
     city: dealership?.city,
-    siteType,
-    description,
-    brandProfile,
+    pages: cleanPages,
+    themeKey,
+    prompt,
   }));
 
   const { pages: generatedPages } = await generateWebsite(
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "business",
     dealership?.city ?? null,
-    siteType,
+    cleanPages,
+    businessSummary ?? null,
     brandProfile,
-    description ?? null
+    prompt ?? null
   );
 
   const base = (dealership?.dealership_name ?? "site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
+  const resolvedTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(themeKey) ? themeKey : "navy_amber";
 
   // Upsert the website row (one per dealership) — regenerating replaces its pages.
   const { data: existing } = await supabase.from("websites").select("id, slug").eq("dealership_id", dealershipId).maybeSingle();
@@ -116,7 +122,13 @@ export async function POST(request: Request) {
   if (existing) {
     websiteId = existing.id;
     slug = existing.slug;
-    await supabase.from("websites").update({ site_type: siteType, nav_order: generatedPages.map((p) => p.slug) }).eq("id", websiteId);
+    await supabase.from("websites").update({
+      site_type: "custom",
+      theme_key: resolvedTheme,
+      nav_order: generatedPages.map((p) => p.slug),
+      prompt: prompt ?? null,
+      business_summary: businessSummary ?? null,
+    }).eq("id", websiteId);
     await supabase.from("website_pages").delete().eq("website_id", websiteId);
   } else {
     slug = base;
@@ -128,7 +140,8 @@ export async function POST(request: Request) {
       attempt++;
     }
     const { data: newSite, error } = await supabase.from("websites").insert({
-      dealership_id: dealershipId, slug, site_type: siteType, nav_order: generatedPages.map((p) => p.slug),
+      dealership_id: dealershipId, slug, site_type: "custom", theme_key: resolvedTheme,
+      nav_order: generatedPages.map((p) => p.slug), prompt: prompt ?? null, business_summary: businessSummary ?? null,
     }).select("id").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     websiteId = newSite.id;
