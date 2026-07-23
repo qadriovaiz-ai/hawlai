@@ -12,6 +12,7 @@ interface Order {
   subtotal?: number;
   discount_code?: string | null;
   discount_amount?: number;
+  shipping_amount?: number;
   total: number;
   payment_method: string;
   payment_status: string;
@@ -71,6 +72,7 @@ export default function OrdersPanel() {
             </div>
             <p className="text-xs text-slate-500">{(o.items ?? []).map((it) => `${it.name} x${it.quantity}`).join(", ")}</p>
             {o.discount_code && <p className="text-xs text-green-500">Code {o.discount_code} applied (-₹{o.discount_amount})</p>}
+            {!!o.shipping_amount && <p className="text-xs text-slate-400">Shipping: ₹{o.shipping_amount}</p>}
             <p className="text-xs text-slate-400">Deliver to: {o.shipping_address}</p>
             <div className="flex items-center gap-2 flex-wrap">
               <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value)} className={`text-xs px-2 py-1 rounded-full border-0 ${STATUS_COLORS[o.status] ?? "bg-slate-100"}`}>

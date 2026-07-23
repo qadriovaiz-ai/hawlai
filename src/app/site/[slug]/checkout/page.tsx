@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2, CheckCircle, Tag, X, Wallet, Truck } from "lucide-react";
 import { getCart, clearCart, cartTotal, type CartItem } from "@/lib/cart";
+import { computeShippingAmount, type ShippingSettings } from "@/lib/shipping";
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -37,6 +38,7 @@ export default function CheckoutPage() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [razorpayEnabled, setRazorpayEnabled] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay">("cod");
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null);
 
   useEffect(() => {
     setItems(getCart(slug));
@@ -49,8 +51,20 @@ export default function CheckoutPage() {
       .catch(() => setRazorpayEnabled(false));
   }, []);
 
+  useEffect(() => {
+    fetch(`/api/public/shipping-config?slug=${encodeURIComponent(slug)}`)
+      .then((r) => r.json())
+      .then((d) => setShippingSettings({ shipping_mode: d.mode, shipping_rate: d.rate, shipping_free_threshold: d.freeThreshold }))
+      .catch(() => setShippingSettings(null));
+  }, [slug]);
+
   const subtotal = cartTotal(items);
-  const total = Math.max(0, subtotal - discountAmount);
+  const orderValue = Math.max(0, subtotal - discountAmount);
+  const shippingAmount = computeShippingAmount(shippingSettings, orderValue);
+  const total = orderValue + shippingAmount;
+  const freeShippingGap = shippingSettings?.shipping_mode === "free_above" && shippingSettings.shipping_free_threshold != null
+    ? Math.max(0, Number(shippingSettings.shipping_free_threshold) - orderValue)
+    : 0;
 
   async function applyCoupon() {
     if (!couponInput.trim()) return;
@@ -219,11 +233,19 @@ export default function CheckoutPage() {
             <span>-₹{discountAmount.toLocaleString("en-IN")}</span>
           </div>
         )}
+        <div className="flex justify-between text-sm">
+          <span>Shipping</span>
+          <span>{shippingAmount > 0 ? `₹${shippingAmount.toLocaleString("en-IN")}` : "Free"}</span>
+        </div>
         <div className="flex justify-between font-bold pt-2 border-t border-neutral-200 mt-2">
           <span>Total</span>
           <span>₹{total.toLocaleString("en-IN")}</span>
         </div>
       </div>
+
+      {freeShippingGap > 0 && (
+        <p className="text-xs text-neutral-500 mb-4">Add ₹{freeShippingGap.toLocaleString("en-IN")} more to get free shipping.</p>
+      )}
 
       {appliedCode ? (
         <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 text-sm">

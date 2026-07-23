@@ -20,6 +20,7 @@ export async function applyOrderSideEffects(
     shippingAddress: string;
     subtotal: number;
     discountAmount: number;
+    shippingAmount: number;
     total: number;
     paymentMethod: "cod" | "razorpay";
   }
@@ -35,6 +36,7 @@ export async function applyOrderSideEffects(
     shippingAddress,
     subtotal,
     discountAmount,
+    shippingAmount,
     total,
     paymentMethod,
   } = opts;
@@ -65,7 +67,7 @@ export async function applyOrderSideEffects(
         dealershipId,
         dealership.gmail_email,
         `New order from ${customerName}`,
-        `New order placed on your website.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${shippingAddress}\n\nItems:\n${itemLines}\n\nSubtotal: ₹${subtotal}${discountAmount > 0 ? `\nDiscount (${discountCode}): -₹${discountAmount}` : ""}\nTotal: ₹${total}\n${paymentLine}\n\nView and confirm this order in your Hawlai dashboard.`
+        `New order placed on your website.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${shippingAddress}\n\nItems:\n${itemLines}\n\nSubtotal: ₹${subtotal}${discountAmount > 0 ? `\nDiscount (${discountCode}): -₹${discountAmount}` : ""}${shippingAmount > 0 ? `\nShipping: ₹${shippingAmount}` : ""}\nTotal: ₹${total}\n${paymentLine}\n\nView and confirm this order in your Hawlai dashboard.`
       );
     }
   } catch {

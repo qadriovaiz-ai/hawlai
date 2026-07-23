@@ -1,4 +1,5 @@
 import { validateDiscountCode } from "@/lib/discounts";
+import { computeShippingAmount } from "@/lib/shipping";
 
 // Shared by both order-creation paths (COD, and Razorpay's
 // initiate + verify steps) so prices/discounts are always recomputed
@@ -30,6 +31,7 @@ export type OrderPricingResult =
       subtotal: number;
       discountAmount: number;
       appliedDiscountId: string | null;
+      shippingAmount: number;
       total: number;
     }
   | { ok: false; status: number; error: string };
@@ -43,7 +45,11 @@ export async function resolveOrderPricing(
   if (!slug) return { ok: false, status: 400, error: "Missing page reference" };
   if (!Array.isArray(items) || items.length === 0) return { ok: false, status: 400, error: "Your cart is empty" };
 
-  const { data: website } = await supabase.from("websites").select("id, dealership_id, published").eq("slug", slug).maybeSingle();
+  const { data: website } = await supabase
+    .from("websites")
+    .select("id, dealership_id, published, shipping_mode, shipping_rate, shipping_free_threshold")
+    .eq("slug", slug)
+    .maybeSingle();
   if (!website || !website.published) return { ok: false, status: 404, error: "This store isn't accepting orders right now" };
 
   const productIds = items.map((it: any) => it.productId).filter(Boolean);
@@ -80,6 +86,8 @@ export async function resolveOrderPricing(
     appliedDiscountId = result.discountId ?? null;
   }
 
-  const total = Math.max(0, subtotal - discountAmount);
-  return { ok: true, website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, total };
+  const orderValue = Math.max(0, subtotal - discountAmount);
+  const shippingAmount = computeShippingAmount(website, orderValue);
+  const total = orderValue + shippingAmount;
+  return { ok: true, website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total };
 }

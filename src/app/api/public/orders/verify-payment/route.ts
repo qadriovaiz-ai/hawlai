@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
   const pricing = await resolveOrderPricing(supabase, slug, items, discountCode);
   if (!pricing.ok) return NextResponse.json({ error: pricing.error }, { status: pricing.status });
-  const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, total } = pricing;
+  const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
 
   const { data: order, error } = await supabase.from("orders").insert({
     dealership_id: website.dealership_id,
@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     subtotal,
     discount_code: appliedDiscountId ? String(discountCode).trim().toUpperCase() : null,
     discount_amount: discountAmount,
+    shipping_amount: shippingAmount,
     total,
     payment_method: "razorpay",
     payment_status: "paid",
@@ -77,9 +78,10 @@ export async function POST(request: Request) {
     shippingAddress,
     subtotal,
     discountAmount,
+    shippingAmount,
     total,
     paymentMethod: "razorpay",
   });
 
-  return NextResponse.json({ success: true, orderId: order.id, subtotal, discountAmount, total });
+  return NextResponse.json({ success: true, orderId: order.id, subtotal, discountAmount, shippingAmount, total });
 }
