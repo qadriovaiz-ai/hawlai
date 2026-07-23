@@ -31,6 +31,8 @@ export default function DomainPanel() {
   const [checkResult, setCheckResult] = useState<any>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
+  const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [buyErrors, setBuyErrors] = useState<Record<string, string>>({});
 
   function load() {
     setLoading(true);
@@ -83,6 +85,23 @@ export default function DomainPanel() {
     load();
   }
 
+  async function handleBuy(order: DomainOrder) {
+    const verb = order.status === "purchased" ? "Finish connecting" : "Purchase";
+    const priceNote = order.price_estimate ? ` (~${order.currency} ${order.price_estimate}/yr)` : "";
+    if (order.status !== "purchased" && !confirm(`${verb} "${order.domain_name}"${priceNote} now? This charges your connected registrar account for real.`)) return;
+
+    setBuyingId(order.id);
+    setBuyErrors((prev) => { const next = { ...prev }; delete next[order.id]; return next; });
+    try {
+      const r = await fetch(`/api/domains/${order.id}/purchase`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.error) setBuyErrors((prev) => ({ ...prev, [order.id]: d.error ?? "Something went wrong" }));
+      load();
+    } finally {
+      setBuyingId(null);
+    }
+  }
+
   if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>;
 
   return (
@@ -97,7 +116,14 @@ export default function DomainPanel() {
       </div>
 
       <div className="card p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Get a Custom Domain</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700">Get a Custom Domain</p>
+          {registrarConnected ? (
+            <span className="text-[10px] px-2 py-1 rounded-full bg-green-100 text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Registrar connected, ready to purchase</span>
+          ) : (
+            <span className="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-500 flex items-center gap-1"><XCircle className="w-3 h-3" /> Registrar not connected</span>
+          )}
+        </div>
         {!registrarConnected && (
           <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2.5">Live availability search isn't connected yet — you can still request a domain below and the Hawlai team will confirm availability and price with you directly.</p>
         )}
@@ -146,18 +172,28 @@ export default function DomainPanel() {
           <p className="text-sm font-semibold text-slate-700">Your Requests</p>
           {orders.map((o) => {
             const meta = STATUS_META[o.status] ?? STATUS_META.requested;
+            const canBuy = registrarConnected && (o.status === "requested" || o.status === "awaiting_payment");
+            const canFinishConnecting = registrarConnected && o.status === "purchased";
             return (
-              <div key={o.id} className="flex items-center justify-between border border-slate-200 rounded-lg p-2.5">
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">{o.domain_name}</p>
-                  <p className="text-xs text-slate-400">{o.price_estimate ? `${o.currency} ${o.price_estimate}/yr · ` : ""}{new Date(o.created_at).toLocaleDateString("en-IN")}</p>
+              <div key={o.id} className="border border-slate-200 rounded-lg p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">{o.domain_name}</p>
+                    <p className="text-xs text-slate-400">{o.price_estimate ? `${o.currency} ${o.price_estimate}/yr · ` : ""}{new Date(o.created_at).toLocaleDateString("en-IN")}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-2 py-1 rounded-full flex items-center gap-1 ${meta.color}`}><meta.icon className="w-3 h-3" /> {meta.label}</span>
+                    {(canBuy || canFinishConnecting) && (
+                      <button onClick={() => handleBuy(o)} disabled={buyingId === o.id} className="text-[10px] bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded-full disabled:opacity-50">
+                        {buyingId === o.id ? "…" : canFinishConnecting ? "Finish Connecting" : "Buy Now"}
+                      </button>
+                    )}
+                    {(o.status === "requested" || o.status === "awaiting_payment") && (
+                      <button onClick={() => handleCancel(o.id)} className="text-slate-400 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-2 py-1 rounded-full flex items-center gap-1 ${meta.color}`}><meta.icon className="w-3 h-3" /> {meta.label}</span>
-                  {(o.status === "requested" || o.status === "awaiting_payment") && (
-                    <button onClick={() => handleCancel(o.id)} className="text-slate-400 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
-                  )}
-                </div>
+                {buyErrors[o.id] && <p className="text-xs text-red-500">{buyErrors[o.id]}</p>}
               </div>
             );
           })}
