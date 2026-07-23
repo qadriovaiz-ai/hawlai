@@ -2,6 +2,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import { getTheme } from "@/lib/landingThemes";
 import SectionRenderer from "@/components/website-builder/SectionRenderer";
+import { buildPageMetadata } from "@/lib/siteMetadata";
+import type { Metadata } from "next";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  return buildPageMetadata(slug, "home");
+}
 
 export default async function SiteHomePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

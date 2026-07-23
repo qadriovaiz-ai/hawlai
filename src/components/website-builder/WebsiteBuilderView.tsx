@@ -414,12 +414,25 @@ export default function WebsiteBuilderView() {
     setAddSectionOpen(false);
   }
 
+  function updatePageMeta(pageId: string, field: "title" | "meta_description" | "og_image_url", value: string) {
+    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, [field]: value } : p)));
+  }
+
   async function savePage(pageId: string) {
     const page = pages.find((p) => p.id === pageId);
     if (!page) return;
     setSaving(pageId);
     try {
-      await fetch(`/api/website-builder/pages/${pageId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sections: page.sections }) });
+      await fetch(`/api/website-builder/pages/${pageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sections: page.sections,
+          title: page.title,
+          metaDescription: page.meta_description,
+          ogImageUrl: page.og_image_url,
+        }),
+      });
     } finally {
       setTimeout(() => setSaving(null), 1000);
     }
@@ -609,6 +622,40 @@ export default function WebsiteBuilderView() {
               </div>
             )}
             {pageActionError && <p className="text-xs text-red-400">{pageActionError}</p>}
+
+            {currentPage && (
+              <div className="border-t border-slate-200 pt-3 space-y-2.5">
+                <p className="text-xs font-semibold text-slate-600">SEO — {currentPage.title}</p>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1">Page title (browser tab &amp; search results)</p>
+                  <input
+                    value={currentPage.title ?? ""}
+                    onChange={(e) => updatePageMeta(currentPage.id, "title", e.target.value)}
+                    className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1">Meta description ({(currentPage.meta_description ?? "").length}/160)</p>
+                  <textarea
+                    value={currentPage.meta_description ?? ""}
+                    onChange={(e) => updatePageMeta(currentPage.id, "meta_description", e.target.value.slice(0, 160))}
+                    rows={2}
+                    placeholder="Short summary shown under the title in Google search results"
+                    className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1">Open Graph image URL (shown on WhatsApp/Facebook link previews)</p>
+                  <input
+                    value={currentPage.og_image_url ?? ""}
+                    onChange={(e) => updatePageMeta(currentPage.id, "og_image_url", e.target.value)}
+                    placeholder="https://..."
+                    className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">Saved together with the page — click "Save Page" below.</p>
+              </div>
+            )}
 
             {currentPage && (
               <div className="space-y-3 pt-2">

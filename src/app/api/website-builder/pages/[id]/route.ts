@@ -42,6 +42,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const update: any = {};
   if (body.title !== undefined) update.title = body.title;
   if (body.metaDescription !== undefined) update.meta_description = body.metaDescription;
+  if (body.ogImageUrl !== undefined) update.og_image_url = body.ogImageUrl || null;
   if (body.sections !== undefined) update.sections = body.sections;
 
   const { error } = await supabase.from("website_pages").update(update).eq("id", id);
