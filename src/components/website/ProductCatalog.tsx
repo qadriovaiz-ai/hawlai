@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { ShoppingCart, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
 import { addToCart } from "@/lib/cart";
@@ -16,7 +17,7 @@ interface Product {
   inventory_count: number | null;
 }
 
-function ProductImageGallery({ images, alt }: { images: string[]; alt: string }) {
+export function ProductImageGallery({ images, alt }: { images: string[]; alt: string }) {
   const [index, setIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
 
@@ -100,9 +101,11 @@ export default function ProductCatalog({ products, slug, theme, heading }: { pro
           const outOfStock = p.inventory_count != null && p.inventory_count <= 0;
           return (
             <div key={p.id} className="rounded-xl border border-neutral-200 overflow-hidden flex flex-col">
-              <ProductImageGallery images={p.images ?? []} alt={p.name} />
+              <Link href={`/site/${slug}/products/${p.id}`}>
+                <ProductImageGallery images={p.images ?? []} alt={p.name} />
+              </Link>
               <div className="p-4 flex flex-col gap-2 flex-1">
-                <p className="font-semibold" style={{ color: theme.dark }}>{p.name}</p>
+                <Link href={`/site/${slug}/products/${p.id}`} className="font-semibold hover:underline" style={{ color: theme.dark }}>{p.name}</Link>
                 {p.description && <p className="text-sm text-neutral-500 line-clamp-2">{renderRichText(p.description)}</p>}
                 <div className="flex items-center gap-2 mt-auto pt-2">
                   <p className="font-bold" style={{ color: theme.accent }}>₹{Number(p.price).toLocaleString("en-IN")}</p>

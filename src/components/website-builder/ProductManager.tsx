@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Trash2, Pencil, X, Check, Package, GripVertical } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, X, Check, Package, GripVertical, Star } from "lucide-react";
 import ImageUploader from "./ImageUploader";
 import RichTextArea from "./RichTextArea";
 
@@ -30,6 +30,9 @@ export default function ProductManager() {
   const [error, setError] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [reviewsOpenFor, setReviewsOpenFor] = useState<string | null>(null);
+  const [reviewsByProduct, setReviewsByProduct] = useState<Record<string, any[]>>({});
+  const [reviewsLoading, setReviewsLoading] = useState<Record<string, boolean>>({});
 
   async function reorderProducts(fromIndex: number, toIndex: number) {
     const next = [...products];
@@ -129,6 +132,34 @@ export default function ProductManager() {
     await fetch(`/api/products/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !p.is_active }) });
   }
 
+  async function toggleReviews(productId: string) {
+    if (reviewsOpenFor === productId) { setReviewsOpenFor(null); return; }
+    setReviewsOpenFor(productId);
+    if (reviewsByProduct[productId]) return;
+    setReviewsLoading((prev) => ({ ...prev, [productId]: true }));
+    try {
+      const r = await fetch(`/api/reviews?productId=${productId}`);
+      const d = await r.json();
+      setReviewsByProduct((prev) => ({ ...prev, [productId]: d.reviews ?? [] }));
+    } finally {
+      setReviewsLoading((prev) => ({ ...prev, [productId]: false }));
+    }
+  }
+
+  async function toggleReviewHidden(review: any) {
+    setReviewsByProduct((prev) => ({
+      ...prev,
+      [review.product_id]: (prev[review.product_id] ?? []).map((r) => (r.id === review.id ? { ...r, is_hidden: !r.is_hidden } : r)),
+    }));
+    await fetch(`/api/reviews/${review.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isHidden: !review.is_hidden }) });
+  }
+
+  async function deleteReview(review: any) {
+    if (!confirm("Delete this review permanently?")) return;
+    setReviewsByProduct((prev) => ({ ...prev, [review.product_id]: (prev[review.product_id] ?? []).filter((r) => r.id !== review.id) }));
+    await fetch(`/api/reviews/${review.id}`, { method: "DELETE" });
+  }
+
   if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading products...</div>;
 
   return (
@@ -176,28 +207,53 @@ export default function ProductManager() {
 
         <div className="space-y-2">
           {products.map((p, pi) => (
-            <div
-              key={p.id}
-              draggable
-              onDragStart={() => setDragIndex(pi)}
-              onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== pi) setOverIndex(pi); }}
-              onDrop={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== pi) reorderProducts(dragIndex, pi); setDragIndex(null); setOverIndex(null); }}
-              onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
-              className={`flex items-center gap-2 p-2.5 rounded-lg border ${p.is_active ? "border-slate-200" : "border-slate-200 opacity-50"} ${overIndex === pi ? "ring-2 ring-purple-400" : ""} ${dragIndex === pi ? "opacity-40" : ""}`}
-            >
-              <span className="text-slate-300 cursor-grab active:cursor-grabbing"><GripVertical className="w-4 h-4" /></span>
-              <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden shrink-0">
-                {p.images?.[0] && <img src={p.images[0]} alt="" className="w-full h-full object-cover" />}
+            <div key={p.id}>
+              <div
+                draggable
+                onDragStart={() => setDragIndex(pi)}
+                onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== pi) setOverIndex(pi); }}
+                onDrop={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== pi) reorderProducts(dragIndex, pi); setDragIndex(null); setOverIndex(null); }}
+                onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                className={`flex items-center gap-2 p-2.5 rounded-lg border ${p.is_active ? "border-slate-200" : "border-slate-200 opacity-50"} ${overIndex === pi ? "ring-2 ring-purple-400" : ""} ${dragIndex === pi ? "opacity-40" : ""}`}
+              >
+                <span className="text-slate-300 cursor-grab active:cursor-grabbing"><GripVertical className="w-4 h-4" /></span>
+                <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden shrink-0">
+                  {p.images?.[0] && <img src={p.images[0]} alt="" className="w-full h-full object-cover" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-700 truncate">{p.name}</p>
+                  <p className="text-xs text-slate-400">₹{Number(p.price).toLocaleString("en-IN")} {p.inventory_count != null && `· ${p.inventory_count} in stock`}</p>
+                </div>
+                <button onClick={() => toggleActive(p)} className={`text-[10px] px-2 py-1 rounded-full ${p.is_active ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-500"}`}>
+                  {p.is_active ? "Active" : "Hidden"}
+                </button>
+                <button onClick={() => toggleReviews(p.id)} className={`hover:text-amber-500 ${reviewsOpenFor === p.id ? "text-amber-500" : "text-slate-400"}`} title="Reviews"><Star className="w-3.5 h-3.5" /></button>
+                <button onClick={() => startEdit(p)} className="text-slate-400 hover:text-slate-700"><Pencil className="w-3.5 h-3.5" /></button>
+                <button onClick={() => handleDelete(p.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-700 truncate">{p.name}</p>
-                <p className="text-xs text-slate-400">₹{Number(p.price).toLocaleString("en-IN")} {p.inventory_count != null && `· ${p.inventory_count} in stock`}</p>
-              </div>
-              <button onClick={() => toggleActive(p)} className={`text-[10px] px-2 py-1 rounded-full ${p.is_active ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-500"}`}>
-                {p.is_active ? "Active" : "Hidden"}
-              </button>
-              <button onClick={() => startEdit(p)} className="text-slate-400 hover:text-slate-700"><Pencil className="w-3.5 h-3.5" /></button>
-              <button onClick={() => handleDelete(p.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+
+              {reviewsOpenFor === p.id && (
+                <div className="mt-1.5 ml-6 border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-100">
+                  {reviewsLoading[p.id] ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                  ) : (reviewsByProduct[p.id] ?? []).length === 0 ? (
+                    <p className="text-xs text-slate-400">No reviews yet.</p>
+                  ) : (
+                    (reviewsByProduct[p.id] ?? []).map((r) => (
+                      <div key={r.id} className={`flex items-start justify-between gap-2 border-b border-slate-200 pb-2 last:border-0 last:pb-0 ${r.is_hidden ? "opacity-50" : ""}`}>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-700">{r.customer_name} · {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}{r.is_hidden ? " · hidden" : ""}</p>
+                          {r.comment && <p className="text-xs text-slate-500">{r.comment}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => toggleReviewHidden(r)} className="text-[10px] text-slate-400 hover:text-slate-700">{r.is_hidden ? "Unhide" : "Hide"}</button>
+                          <button onClick={() => deleteReview(r)} className="text-[10px] text-red-400 hover:text-red-600">Delete</button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           ))}
           {products.length === 0 && !adding && <p className="text-xs text-slate-400 text-center py-4">No products yet — add your first one above.</p>}
