@@ -8,6 +8,7 @@ import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
 import OffersPanel from "./OffersPanel";
 import ShippingPanel from "./ShippingPanel";
+import AbandonedCartsPanel from "./AbandonedCartsPanel";
 import LivePreviewEditor from "./LivePreviewEditor";
 import ImageUploader from "./ImageUploader";
 import { getTheme } from "@/lib/landingThemes";
@@ -374,7 +375,12 @@ export default function WebsiteBuilderView() {
 
       {tab === "products" && <ProductManager />}
       {tab === "offers" && <OffersPanel />}
-      {tab === "orders" && <OrdersPanel />}
+      {tab === "orders" && (
+        <div className="space-y-4">
+          <OrdersPanel />
+          <AbandonedCartsPanel />
+        </div>
+      )}
       {tab === "shipping" && <ShippingPanel />}
       {tab === "domain" && <DomainPanel />}
 

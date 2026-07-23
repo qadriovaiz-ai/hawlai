@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2, CheckCircle, Tag, X, Wallet, Truck } from "lucide-react";
@@ -57,6 +57,37 @@ export default function CheckoutPage() {
       .then((d) => setShippingSettings({ shipping_mode: d.mode, shipping_rate: d.rate, shipping_free_threshold: d.freeThreshold }))
       .catch(() => setShippingSettings(null));
   }, [slug]);
+
+  const abandonedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Captures an abandoned-cart snapshot for dealer follow-up — but only
+  // once the customer has actually typed a phone number or email
+  // themselves, debounced so it fires a moment after they stop typing
+  // rather than on every keystroke. Never fires once an order has
+  // actually been placed.
+  useEffect(() => {
+    if (abandonedTimer.current) clearTimeout(abandonedTimer.current);
+    if (orderId || honeypot) return;
+    const hasContact = phone.trim().length >= 8 || email.includes("@");
+    if (!hasContact || items.length === 0) return;
+
+    abandonedTimer.current = setTimeout(() => {
+      fetch("/api/public/abandoned-carts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          customerName: name || null,
+          customerPhone: phone.trim() || null,
+          customerEmail: email.trim() || null,
+          shippingAddress: address || null,
+          items: items.map((i) => ({ productId: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
+        }),
+      }).catch(() => {});
+    }, 1500);
+
+    return () => { if (abandonedTimer.current) clearTimeout(abandonedTimer.current); };
+  }, [slug, name, phone, email, address, items, orderId, honeypot]);
 
   const subtotal = cartTotal(items);
   const orderValue = Math.max(0, subtotal - discountAmount);

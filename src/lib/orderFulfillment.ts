@@ -57,6 +57,16 @@ export async function applyOrderSideEffects(
     }
   }
 
+  // A real order just happened for this phone number — any abandoned
+  // cart snapshot we'd captured for them is stale now, so drop it
+  // rather than show the dealer a "follow up" prompt for an order
+  // that's already placed.
+  try {
+    await supabase.from("abandoned_carts").delete().eq("dealership_id", dealershipId).eq("customer_phone", customerPhone);
+  } catch {
+    // Non-fatal.
+  }
+
   try {
     const { data: dealership } = await supabase.from("dealerships").select("gmail_email, dealership_name").eq("id", dealershipId).single();
     if (dealership?.gmail_email) {
