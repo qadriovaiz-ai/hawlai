@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTheme } from "@/lib/landingThemes";
+import { getSiteFontFamilies } from "@/lib/siteFonts";
 import CartIcon from "@/components/website/CartIcon";
 
 export default async function SiteLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
@@ -10,7 +11,7 @@ export default async function SiteLayout({ children, params }: { children: React
 
   const { data: website } = await supabase
     .from("websites")
-    .select("id, slug, theme_key, published, logo_url, dealerships(dealership_name)")
+    .select("id, slug, theme_key, published, logo_url, font_key, dealerships(dealership_name)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -18,11 +19,15 @@ export default async function SiteLayout({ children, params }: { children: React
 
   const { data: pages } = await supabase.from("website_pages").select("slug, title, page_type").eq("website_id", website.id).order("order_index", { ascending: true });
   const theme = getTheme(website.theme_key);
+  const fonts = getSiteFontFamilies((website as any).font_key);
   const dealershipName = (website as any).dealerships?.dealership_name ?? "Business";
   const hasStore = (pages ?? []).some((p) => p.page_type === "products");
 
   return (
-    <div style={{ backgroundColor: theme.bg }} className="min-h-screen">
+    <div
+      style={{ backgroundColor: theme.bg, fontFamily: "var(--font-body)", ["--font-heading" as string]: fonts.heading, ["--font-body" as string]: fonts.body } as React.CSSProperties}
+      className="min-h-screen site-fonts"
+    >
       <nav className="flex items-center justify-between px-6 py-4 max-w-4xl mx-auto">
         <Link href={`/site/${slug}`} className="font-bold text-lg flex items-center gap-2" style={{ color: theme.dark }}>
           {(website as any).logo_url && <img src={(website as any).logo_url} alt={dealershipName} className="w-8 h-8 rounded-lg object-cover" />}

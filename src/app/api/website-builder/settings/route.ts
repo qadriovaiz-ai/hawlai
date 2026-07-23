@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { FONT_PRESETS } from "@/lib/fontPresets";
 
 const VALID_THEMES = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"];
 const VALID_SHIPPING_MODES = ["free", "flat", "free_above"];
+const VALID_FONT_KEYS = FONT_PRESETS.map((f) => f.key);
 
 // Site-level settings (logo, theme) that the owner should be able to
 // change on their own, without triggering a full content regeneration —
@@ -22,6 +24,10 @@ export async function PATCH(request: Request) {
   if (body.themeKey !== undefined) {
     if (!VALID_THEMES.includes(body.themeKey)) return NextResponse.json({ error: "Invalid theme" }, { status: 400 });
     update.theme_key = body.themeKey;
+  }
+  if (body.fontKey !== undefined) {
+    if (!VALID_FONT_KEYS.includes(body.fontKey)) return NextResponse.json({ error: "Invalid font" }, { status: 400 });
+    update.font_key = body.fontKey;
   }
   if (body.shippingMode !== undefined) {
     if (!VALID_SHIPPING_MODES.includes(body.shippingMode)) return NextResponse.json({ error: "Invalid shipping mode" }, { status: 400 });

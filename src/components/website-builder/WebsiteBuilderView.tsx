@@ -12,6 +12,7 @@ import AbandonedCartsPanel from "./AbandonedCartsPanel";
 import LivePreviewEditor from "./LivePreviewEditor";
 import ImageUploader from "./ImageUploader";
 import { getTheme } from "@/lib/landingThemes";
+import { FONT_PRESETS } from "@/lib/fontPresets";
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
 // preview the AI's theme choice before the owner confirms the plan.
@@ -96,6 +97,7 @@ export default function WebsiteBuilderView() {
   const [logoUrl, setLogoUrl] = useState("");
   const [logoSaving, setLogoSaving] = useState(false);
   const [themeSaving, setThemeSaving] = useState(false);
+  const [fontSaving, setFontSaving] = useState(false);
   const [addPageOpen, setAddPageOpen] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
   const [pageActionLoading, setPageActionLoading] = useState(false);
@@ -222,6 +224,18 @@ export default function WebsiteBuilderView() {
       if (r.ok) setWebsite(d.website);
     } finally {
       setThemeSaving(false);
+    }
+  }
+
+  async function saveFont(fontKey: string) {
+    setFontSaving(true);
+    setWebsite((prev: any) => ({ ...prev, font_key: fontKey }));
+    try {
+      const r = await fetch("/api/website-builder/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fontKey }) });
+      const d = await r.json();
+      if (r.ok) setWebsite(d.website);
+    } finally {
+      setFontSaving(false);
     }
   }
 
@@ -580,6 +594,22 @@ export default function WebsiteBuilderView() {
                     <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: t.dark }} />
                     <span className="w-3 h-3 rounded-full inline-block -ml-2" style={{ backgroundColor: t.accent }} />
                     {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-1.5">Font</p>
+              <div className="flex flex-wrap gap-1.5">
+                {FONT_PRESETS.map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => saveFont(f.key)}
+                    disabled={fontSaving}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50 text-left ${(website.font_key ?? "modern") === f.key ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-slate-100"}`}
+                  >
+                    <span className="font-semibold text-slate-700">{f.label}</span>
+                    <span className="text-slate-400"> · {f.headingLabel} + {f.bodyLabel}</span>
                   </button>
                 ))}
               </div>

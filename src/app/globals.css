@@ -76,6 +76,17 @@
   animation: fade-in-up 0.25s ease-out;
 }
 
+/* Storefront custom fonts (Site Editor "Font" preset) — body font is
+   set directly via font-family on the .site-fonts wrapper (inherited
+   by everything below it, including form elements, since Tailwind's
+   preflight resets those to inherit font-family); headings need their
+   own rule since --font-heading is a different family than the body. */
+.site-fonts h1,
+.site-fonts h2,
+.site-fonts h3 {
+  font-family: var(--font-heading, inherit);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
