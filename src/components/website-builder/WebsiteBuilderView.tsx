@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2 } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2, Blocks } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
 import OffersPanel from "./OffersPanel";
 import ShippingPanel from "./ShippingPanel";
 import AbandonedCartsPanel from "./AbandonedCartsPanel";
+import BlocksBetaPanel from "./BlocksBetaPanel";
 import LivePreviewEditor from "./LivePreviewEditor";
 import ImageUploader from "./ImageUploader";
 import { getTheme } from "@/lib/landingThemes";
@@ -81,7 +82,7 @@ const ITEM_FIELDS: Record<string, { key: string; label: string; multiline?: bool
 };
 
 export default function WebsiteBuilderView() {
-  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping">("website");
+  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping" | "blocks">("website");
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -465,13 +466,14 @@ export default function WebsiteBuilderView() {
 
   const currentPage = pages.find((p) => p.id === activePage);
 
-  const TABS: { key: "website" | "products" | "orders" | "domain" | "offers" | "shipping"; label: string; icon: any }[] = [
+  const TABS: { key: "website" | "products" | "orders" | "domain" | "offers" | "shipping" | "blocks"; label: string; icon: any }[] = [
     { key: "website", label: "Website", icon: Globe },
     { key: "products", label: "Products", icon: Package },
     { key: "offers", label: "Offers", icon: Tag },
     { key: "orders", label: "Orders", icon: ClipboardList },
     { key: "shipping", label: "Shipping", icon: Truck },
     { key: "domain", label: "Domain", icon: Globe2 },
+    { key: "blocks", label: "Blocks (Beta)", icon: Blocks },
   ];
 
   return (
@@ -494,6 +496,7 @@ export default function WebsiteBuilderView() {
       )}
       {tab === "shipping" && <ShippingPanel />}
       {tab === "domain" && <DomainPanel />}
+      {tab === "blocks" && <BlocksBetaPanel />}
 
       {tab === "website" && (
       <>
