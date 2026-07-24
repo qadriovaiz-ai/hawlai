@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ChevronUp, ChevronDown, X, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2, Blocks } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
 import OffersPanel from "./OffersPanel";
 import ShippingPanel from "./ShippingPanel";
 import AbandonedCartsPanel from "./AbandonedCartsPanel";
-import BlocksBetaPanel from "./BlocksBetaPanel";
-import LivePreviewEditor from "./LivePreviewEditor";
+import BlockCanvas from "./blocks/BlockCanvas";
 import ImageUploader from "./ImageUploader";
 import { getTheme } from "@/lib/landingThemes";
 import { FONT_PRESETS } from "@/lib/fontPresets";
+import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
 // preview the AI's theme choice before the owner confirms the plan.
@@ -24,67 +24,11 @@ const THEME_PREVIEWS: Record<string, { label: string; dark: string; accent: stri
   midnight_sky: { label: "Midnight & Sky", dark: "#0B1E3D", accent: "#4FA3D1", bg: "#F7F9FC" },
 };
 
-const SECTION_TYPES = [
-  { type: "hero", label: "Hero" },
-  { type: "text", label: "Text" },
-  { type: "image_text", label: "Image + Text" },
-  { type: "features_grid", label: "Features Grid" },
-  { type: "testimonials", label: "Testimonials" },
-  { type: "team_grid", label: "Team" },
-  { type: "pricing", label: "Pricing" },
-  { type: "faq", label: "FAQ" },
-  { type: "cta_banner", label: "CTA Banner" },
-  { type: "contact_form", label: "Contact Form" },
-];
-
-// Default empty content for a freshly-added section, and the item
-// shape for list-based section types.
-function emptySection(type: string): any {
-  switch (type) {
-    case "hero": return { type, headline: "New headline", subheadline: "", ctaText: "Get in Touch" };
-    case "text": return { type, heading: "New section", body: "" };
-    case "image_text": return { type, heading: "New section", body: "", imagePosition: "left", imageUrl: "" };
-    case "features_grid": return { type, heading: "Features", items: [{ title: "Feature", description: "" }] };
-    case "testimonials": return { type, heading: "What people say", items: [{ quote: "", author: "" }] };
-    case "team_grid": return { type, heading: "Our Team", items: [{ name: "", role: "", bio: "" }] };
-    case "pricing": return { type, heading: "Pricing", items: [{ name: "Plan", price: "", features: [] }] };
-    case "faq": return { type, heading: "FAQ", items: [{ question: "", answer: "" }] };
-    case "cta_banner": return { type, headline: "Ready to get started?", ctaText: "Contact Us" };
-    case "contact_form": return { type, heading: "Get in Touch" };
-    default: return { type };
-  }
-}
-
-function emptyItem(sectionType: string): any {
-  switch (sectionType) {
-    case "features_grid": return { title: "", description: "" };
-    case "testimonials": return { quote: "", author: "" };
-    case "team_grid": return { name: "", role: "", bio: "" };
-    case "pricing": return { name: "", price: "", features: [] };
-    case "faq": return { question: "", answer: "" };
-    default: return {};
-  }
-}
-
-// Undo/redo history is capped and debounced per page: a burst of rapid
-// edits (e.g. typing a sentence into a text field) collapses into a
-// single undo step instead of one step per keystroke, so "last 20
-// changes" means 20 meaningful edits, not 20 characters.
-const HISTORY_LIMIT = 20;
-const HISTORY_DEBOUNCE_MS = 600;
-
-const ITEM_FIELDS: Record<string, { key: string; label: string; multiline?: boolean }[]> = {
-  features_grid: [{ key: "title", label: "Title" }, { key: "description", label: "Description", multiline: true }],
-  testimonials: [{ key: "quote", label: "Quote", multiline: true }, { key: "author", label: "Author" }],
-  team_grid: [{ key: "name", label: "Name" }, { key: "role", label: "Role" }, { key: "bio", label: "Bio", multiline: true }],
-  pricing: [{ key: "name", label: "Plan name" }, { key: "price", label: "Price" }],
-  faq: [{ key: "question", label: "Question" }, { key: "answer", label: "Answer", multiline: true }],
-};
-
 export default function WebsiteBuilderView() {
-  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping" | "blocks">("website");
+  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping">("website");
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -94,7 +38,7 @@ export default function WebsiteBuilderView() {
   const [plan, setPlan] = useState<{ businessSummary: string; themeKey: string; pages: { slug: string; title: string; pageType: string }[] } | null>(null);
   const [activePage, setActivePage] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
-  const [addSectionOpen, setAddSectionOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState("");
   const [logoSaving, setLogoSaving] = useState(false);
   const [themeSaving, setThemeSaving] = useState(false);
@@ -106,8 +50,12 @@ export default function WebsiteBuilderView() {
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [dragPageIndex, setDragPageIndex] = useState<number | null>(null);
   const [overPageIndex, setOverPageIndex] = useState<number | null>(null);
-  const [history, setHistory] = useState<Record<string, { past: any[][]; future: any[][] }>>({});
-  const historyBufferRef = useRef<Record<string, { baseline: any[]; timer: ReturnType<typeof setTimeout> }>>({});
+
+  useEffect(() => {
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((d) => setProducts((d.products ?? []).filter((p: any) => p.is_active)));
+  }, []);
 
   function load() {
     setLoading(true);
@@ -132,23 +80,6 @@ export default function WebsiteBuilderView() {
       });
   }
   useEffect(load, []);
-
-  useEffect(() => {
-    if (tab !== "website" || !activePage) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const key = e.key.toLowerCase();
-      if (key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        undo(activePage!);
-      } else if (key === "y" || (key === "z" && e.shiftKey)) {
-        e.preventDefault();
-        redo(activePage!);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [tab, activePage, pages, history]);
 
   async function handlePlan() {
     if (!prompt.trim()) return;
@@ -303,130 +234,8 @@ export default function WebsiteBuilderView() {
     }
   }
 
-  function commitHistorySnapshot(pageId: string, baseline: any[]) {
-    setHistory((h) => {
-      const entry = h[pageId] ?? { past: [], future: [] };
-      return { ...h, [pageId]: { past: [...entry.past, baseline].slice(-HISTORY_LIMIT), future: [] } };
-    });
-  }
-
-  function mutatePageSections(pageId: string, mutator: (sections: any[]) => any[]) {
-    const page = pages.find((p) => p.id === pageId);
-    if (!page) return;
-
-    const buf = historyBufferRef.current[pageId];
-    if (buf) clearTimeout(buf.timer);
-    const baseline = buf?.baseline ?? page.sections;
-    historyBufferRef.current[pageId] = {
-      baseline,
-      timer: setTimeout(() => {
-        commitHistorySnapshot(pageId, baseline);
-        delete historyBufferRef.current[pageId];
-      }, HISTORY_DEBOUNCE_MS),
-    };
-
-    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: mutator(p.sections) } : p)));
-  }
-
-  function undo(pageId: string) {
-    const page = pages.find((p) => p.id === pageId);
-    if (!page) return;
-    let past = history[pageId]?.past ?? [];
-    const future = history[pageId]?.future ?? [];
-
-    const buf = historyBufferRef.current[pageId];
-    if (buf) {
-      clearTimeout(buf.timer);
-      past = [...past, buf.baseline].slice(-HISTORY_LIMIT);
-      delete historyBufferRef.current[pageId];
-    }
-    if (past.length === 0) return;
-
-    const previous = past[past.length - 1];
-    setHistory((h) => ({ ...h, [pageId]: { past: past.slice(0, -1), future: [page.sections, ...future].slice(0, HISTORY_LIMIT) } }));
-    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: previous } : p)));
-  }
-
-  function redo(pageId: string) {
-    const buf = historyBufferRef.current[pageId];
-    if (buf) {
-      // A fresh edit is already pending — that supersedes redo.
-      clearTimeout(buf.timer);
-      commitHistorySnapshot(pageId, buf.baseline);
-      delete historyBufferRef.current[pageId];
-      return;
-    }
-    const page = pages.find((p) => p.id === pageId);
-    const entry = history[pageId];
-    if (!page || !entry || entry.future.length === 0) return;
-
-    const next = entry.future[0];
-    setHistory((h) => ({ ...h, [pageId]: { past: [...entry.past, page.sections].slice(-HISTORY_LIMIT), future: entry.future.slice(1) } }));
-    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: next } : p)));
-  }
-
-  function updateSectionField(pageId: string, sectionIndex: number, field: string, value: string) {
-    mutatePageSections(pageId, (sections) => {
-      const next = [...sections];
-      next[sectionIndex] = { ...next[sectionIndex], [field]: value };
-      return next;
-    });
-  }
-
-  function updateItemField(pageId: string, sectionIndex: number, itemIndex: number, field: string, value: string) {
-    mutatePageSections(pageId, (sections) => {
-      const next = [...sections];
-      const items = [...(next[sectionIndex].items ?? [])];
-      items[itemIndex] = { ...items[itemIndex], [field]: value };
-      next[sectionIndex] = { ...next[sectionIndex], items };
-      return next;
-    });
-  }
-
-  function addItem(pageId: string, sectionIndex: number) {
-    mutatePageSections(pageId, (sections) => {
-      const next = [...sections];
-      const items = [...(next[sectionIndex].items ?? []), emptyItem(next[sectionIndex].type)];
-      next[sectionIndex] = { ...next[sectionIndex], items };
-      return next;
-    });
-  }
-
-  function removeItem(pageId: string, sectionIndex: number, itemIndex: number) {
-    mutatePageSections(pageId, (sections) => {
-      const next = [...sections];
-      const items = (next[sectionIndex].items ?? []).filter((_: any, i: number) => i !== itemIndex);
-      next[sectionIndex] = { ...next[sectionIndex], items };
-      return next;
-    });
-  }
-
-  function moveSection(pageId: string, sectionIndex: number, direction: -1 | 1) {
-    mutatePageSections(pageId, (sections) => {
-      const target = sectionIndex + direction;
-      if (target < 0 || target >= sections.length) return sections;
-      const next = [...sections];
-      [next[sectionIndex], next[target]] = [next[target], next[sectionIndex]];
-      return next;
-    });
-  }
-
-  function reorderSections(pageId: string, fromIndex: number, toIndex: number) {
-    mutatePageSections(pageId, (sections) => {
-      const next = [...sections];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-  }
-
-  function removeSection(pageId: string, sectionIndex: number) {
-    mutatePageSections(pageId, (sections) => sections.filter((_, i) => i !== sectionIndex));
-  }
-
-  function addSection(pageId: string, type: string) {
-    mutatePageSections(pageId, (sections) => [...sections, emptySection(type)]);
-    setAddSectionOpen(false);
+  function updatePageBlocks(pageId: string, blocks: any[]) {
+    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: blocks } : p)));
   }
 
   function updatePageMeta(pageId: string, field: "title" | "meta_description" | "og_image_url", value: string) {
@@ -437,8 +246,9 @@ export default function WebsiteBuilderView() {
     const page = pages.find((p) => p.id === pageId);
     if (!page) return;
     setSaving(pageId);
+    setSaveError(null);
     try {
-      await fetch(`/api/website-builder/pages/${pageId}`, {
+      const res = await fetch(`/api/website-builder/pages/${pageId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -446,8 +256,17 @@ export default function WebsiteBuilderView() {
           title: page.title,
           metaDescription: page.meta_description,
           ogImageUrl: page.og_image_url,
+          expectedUpdatedAt: page.updated_at,
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveError(data.error ?? "Couldn't save — please try again");
+        return;
+      }
+      if (data.updatedAt) {
+        setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, updated_at: data.updatedAt } : p)));
+      }
     } finally {
       setTimeout(() => setSaving(null), 1000);
     }
@@ -466,14 +285,13 @@ export default function WebsiteBuilderView() {
 
   const currentPage = pages.find((p) => p.id === activePage);
 
-  const TABS: { key: "website" | "products" | "orders" | "domain" | "offers" | "shipping" | "blocks"; label: string; icon: any }[] = [
+  const TABS: { key: "website" | "products" | "orders" | "domain" | "offers" | "shipping"; label: string; icon: any }[] = [
     { key: "website", label: "Website", icon: Globe },
     { key: "products", label: "Products", icon: Package },
     { key: "offers", label: "Offers", icon: Tag },
     { key: "orders", label: "Orders", icon: ClipboardList },
     { key: "shipping", label: "Shipping", icon: Truck },
     { key: "domain", label: "Domain", icon: Globe2 },
-    { key: "blocks", label: "Blocks (Beta)", icon: Blocks },
   ];
 
   return (
@@ -496,7 +314,6 @@ export default function WebsiteBuilderView() {
       )}
       {tab === "shipping" && <ShippingPanel />}
       {tab === "domain" && <DomainPanel />}
-      {tab === "blocks" && <BlocksBetaPanel />}
 
       {tab === "website" && (
       <>
@@ -693,60 +510,24 @@ export default function WebsiteBuilderView() {
             {currentPage && (
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400">Live preview — click any text to edit it directly</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                      <button
-                        onClick={() => undo(currentPage.id)}
-                        disabled={!history[currentPage.id]?.past.length && !historyBufferRef.current[currentPage.id]}
-                        title="Undo (Ctrl+Z)"
-                        className="text-xs px-2 py-1 rounded-md flex items-center gap-1 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white"
-                      >
-                        <Undo2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => redo(currentPage.id)}
-                        disabled={!history[currentPage.id]?.future.length}
-                        title="Redo (Ctrl+Y)"
-                        className="text-xs px-2 py-1 rounded-md flex items-center gap-1 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white"
-                      >
-                        <Redo2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                      <button onClick={() => setPreviewMode("desktop")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "desktop" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Monitor className="w-3.5 h-3.5" /> Desktop</button>
-                      <button onClick={() => setPreviewMode("mobile")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "mobile" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Smartphone className="w-3.5 h-3.5" /> Mobile</button>
-                    </div>
+                  <p className="text-xs text-slate-400">Drag blocks from the palette, click any block to edit or select it</p>
+                  <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                    <button onClick={() => setPreviewMode("desktop")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "desktop" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Monitor className="w-3.5 h-3.5" /> Desktop</button>
+                    <button onClick={() => setPreviewMode("mobile")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "mobile" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Smartphone className="w-3.5 h-3.5" /> Mobile</button>
                   </div>
                 </div>
 
                 <div className={previewMode === "mobile" ? "max-w-[375px] mx-auto" : ""}>
-                  <LivePreviewEditor
-                    sections={currentPage.sections}
+                  <BlockCanvas
+                    blocks={legacyToBlocks(currentPage.sections)}
+                    onChange={(blocks) => updatePageBlocks(currentPage.id, blocks)}
                     theme={getTheme(website?.theme_key)}
-                    onUpdateField={(i, field, value) => updateSectionField(currentPage.id, i, field, value)}
-                    onUpdateItem={(i, itemIndex, field, value) => updateItemField(currentPage.id, i, itemIndex, field, value)}
-                    onAddItem={(i) => addItem(currentPage.id, i)}
-                    onRemoveItem={(i, itemIndex) => removeItem(currentPage.id, i, itemIndex)}
-                    onMoveSection={(i, dir) => moveSection(currentPage.id, i, dir)}
-                    onRemoveSection={(i) => removeSection(currentPage.id, i)}
-                    onReorderSections={(from, to) => reorderSections(currentPage.id, from, to)}
+                    slug={website.slug}
+                    products={products}
                   />
                 </div>
 
-                <div className="relative">
-                  <button onClick={() => setAddSectionOpen(!addSectionOpen)} className="text-xs text-purple-500 hover:text-purple-400 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add section</button>
-                  {addSectionOpen && (
-                    <div className="absolute z-10 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-1.5 flex flex-col gap-0.5 w-44">
-                      {SECTION_TYPES.map((s) => (
-                        <button key={s.type} onClick={() => addSection(currentPage.id, s.type)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100 text-slate-50">
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
+                {saveError && <p className="text-xs text-red-500">{saveError}</p>}
                 <button onClick={() => savePage(currentPage.id)} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2">
                   {saving === currentPage.id ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />} Save Page
                 </button>

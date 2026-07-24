@@ -39,13 +39,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!(await ownsPage(supabase, id, dealershipId))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await request.json();
+
+  // Optimistic concurrency: the block canvas only saves on an explicit
+  // "Save Page" click (no autosave), so two tabs editing the same page
+  // — or a stale tab left open across a page reload elsewhere — is a
+  // real scenario. If the caller tells us the updated_at it last saw,
+  // reject a save that would silently clobber a change made since.
+  if (body.expectedUpdatedAt !== undefined) {
+    const { data: current } = await supabase.from("website_pages").select("updated_at").eq("id", id).single();
+    if (current && current.updated_at !== body.expectedUpdatedAt) {
+      return NextResponse.json({ error: "This page was changed elsewhere — reload the page and try again" }, { status: 409 });
+    }
+  }
+
   const update: any = {};
   if (body.title !== undefined) update.title = body.title;
   if (body.metaDescription !== undefined) update.meta_description = body.metaDescription;
   if (body.ogImageUrl !== undefined) update.og_image_url = body.ogImageUrl || null;
   if (body.sections !== undefined) update.sections = body.sections;
 
-  const { error } = await supabase.from("website_pages").update(update).eq("id", id);
+  const { data: updated, error } = await supabase.from("website_pages").update(update).eq("id", id).select("updated_at").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, updatedAt: updated?.updated_at });
 }

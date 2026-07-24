@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
+import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 
 async function withTimeout<T>(promiseLike: PromiseLike<T>, label: string, ms = 8000): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -147,9 +148,14 @@ export async function POST(request: Request) {
     websiteId = newSite.id;
   }
 
+  // generateWebsite() (websiteBuilderAgent.ts) still emits the old
+  // fixed-shape sections — Phase 11 reworks the AI generation itself
+  // to emit blocks directly. Until then, convert here so a freshly
+  // (re)generated site is born block-shaped rather than adding more
+  // legacy rows for the Phase 10 bulk migration to have to find later.
   const pageRows = generatedPages.map((p, i) => ({
     website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
-    meta_description: p.metaDescription, sections: p.sections, order_index: i,
+    meta_description: p.metaDescription, sections: legacyToBlocks(p.sections), order_index: i,
   }));
   const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
   if (pagesError) return NextResponse.json({ error: pagesError.message }, { status: 500 });

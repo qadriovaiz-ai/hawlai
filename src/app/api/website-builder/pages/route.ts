@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 
 async function getWebsite(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -68,7 +69,12 @@ export async function POST(request: Request) {
     title: title.trim(),
     page_type: "custom",
     meta_description: `${title.trim()}`,
-    sections: [{ type: "hero", headline: title.trim(), subheadline: "", ctaText: "" }, { type: "text", heading: "", body: "" }],
+    // New pages are born block-shaped straight away — legacyToBlocks()
+    // converts this literal legacy shorthand once here rather than
+    // leaving it to whoever next opens the block canvas, so a blank
+    // page's very first save doesn't add another still-legacy row for
+    // the Phase 10 bulk migration to have to find later.
+    sections: legacyToBlocks([{ type: "hero", headline: title.trim(), subheadline: "", ctaText: "" }, { type: "text", heading: "", body: "" }]),
     order_index: maxOrder + 1,
   }).select("*").single();
 
