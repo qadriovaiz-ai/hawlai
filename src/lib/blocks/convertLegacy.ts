@@ -132,9 +132,11 @@ const CONVERTERS: Record<string, (s: any) => Block> = {
 // A row already in the new shape (top-level items are `type: "section"`
 // with a `children` array) is passed through untouched — this is what
 // makes the conversion idempotent, so callers never need to know
-// whether a given row has already been migrated.
-function isAlreadyBlockShaped(sections: any[]): boolean {
-  return sections.length > 0 && sections.every((s) => s && s.type === "section" && Array.isArray(s.children));
+// whether a given row has already been migrated. Exported so the bulk
+// migration can identify which rows still need converting without
+// duplicating this check.
+export function isAlreadyBlockShaped(sections: any[]): boolean {
+  return Array.isArray(sections) && sections.length > 0 && sections.every((s) => s && s.type === "section" && Array.isArray(s.children));
 }
 
 export function legacyToBlocks(sections: any[] | null | undefined): Block[] {
