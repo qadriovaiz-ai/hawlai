@@ -17,10 +17,11 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 import { BLOCK_REGISTRY, createBlock } from "@/lib/blocks/registry";
-import { moveBlock, removeBlock, insertBlockAt, findBlockById } from "@/lib/blocks/treeOps";
+import { moveBlock, removeBlock, insertBlockAt, findBlockById, updateBlockProps } from "@/lib/blocks/treeOps";
 import type { Block, BlockDefinition } from "@/lib/blocks/types";
 import type { LandingTheme } from "@/lib/landingThemes";
 import BlockRenderer from "./BlockRenderer";
+import PropertiesPanel from "./PropertiesPanel";
 
 // The root of the page's own block array — a page's top-level blocks
 // are always `type: "section"` (the one structural rule the whole
@@ -48,7 +49,9 @@ export default function BlockCanvas({
   slug: string;
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const selectedBlock = selectedId ? findBlockById(blocks, selectedId) : null;
 
   function handleDragStart(event: DragStartEvent) {
     const data = event.active.data.current as any;
@@ -94,13 +97,31 @@ export default function BlockCanvas({
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex gap-4 items-start">
         <BlockPalette />
-        <div className="flex-1 min-w-0 border border-dashed border-slate-300 rounded-xl p-4 bg-white">
+        <div className="flex-1 min-w-0 border border-dashed border-slate-300 rounded-xl p-4 bg-white" onClick={() => setSelectedId(null)}>
           <ContainerDropZone containerId={ROOT_CONTAINER} items={blocks}>
             {blocks.map((block, i) => (
-              <CanvasNode key={block.id} block={block} containerId={ROOT_CONTAINER} index={i} onChange={onChange} rootBlocks={blocks} theme={theme} slug={slug} />
+              <CanvasNode
+                key={block.id}
+                block={block}
+                containerId={ROOT_CONTAINER}
+                index={i}
+                onChange={onChange}
+                rootBlocks={blocks}
+                theme={theme}
+                slug={slug}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
             ))}
           </ContainerDropZone>
         </div>
+        <PropertiesPanel
+          block={selectedBlock}
+          onDeselect={() => setSelectedId(null)}
+          onChange={(props) => {
+            if (selectedId) onChange(updateBlockProps(blocks, selectedId, props));
+          }}
+        />
       </div>
       <DragOverlay>
         {activeType ? <div className="px-3 py-2 rounded-lg bg-purple-600 text-white text-xs shadow-lg">{BLOCK_REGISTRY[activeType]?.label ?? activeType}</div> : null}
@@ -135,6 +156,8 @@ function CanvasNode({
   rootBlocks,
   theme,
   slug,
+  selectedId,
+  onSelect,
 }: {
   block: Block;
   containerId: string;
@@ -143,6 +166,8 @@ function CanvasNode({
   rootBlocks: Block[];
   theme: LandingTheme;
   slug: string;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 }) {
   const def = BLOCK_REGISTRY[block.type];
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -150,14 +175,26 @@ function CanvasNode({
     data: { containerId, index },
   });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+  const isSelected = selectedId === block.id;
 
   return (
-    <div ref={setNodeRef} style={style} className="group/block relative border border-transparent hover:border-purple-300 rounded-lg pl-6 pr-5 py-1">
-      <button {...attributes} {...listeners} className="absolute left-0 top-1.5 p-0.5 text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing opacity-0 group-hover/block:opacity-100">
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(block.id);
+      }}
+      className={`group/block relative border rounded-lg pl-6 pr-5 py-1 cursor-pointer ${isSelected ? "border-purple-500 ring-1 ring-purple-300" : "border-transparent hover:border-purple-200"}`}
+    >
+      <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="absolute left-0 top-1.5 p-0.5 text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing opacity-0 group-hover/block:opacity-100">
         <GripVertical className="w-3.5 h-3.5" />
       </button>
       <button
-        onClick={() => onChange(removeBlock(rootBlocks, block.id))}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange(removeBlock(rootBlocks, block.id));
+        }}
         className="absolute right-0 top-1.5 p-0.5 text-slate-300 hover:text-red-500 opacity-0 group-hover/block:opacity-100"
         title="Delete block"
       >
@@ -169,7 +206,18 @@ function CanvasNode({
           <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">{def!.label}</p>
           <ContainerDropZone containerId={block.id} items={block.children ?? []}>
             {(block.children ?? []).map((child, i) => (
-              <CanvasNode key={child.id} block={child} containerId={block.id} index={i} onChange={onChange} rootBlocks={rootBlocks} theme={theme} slug={slug} />
+              <CanvasNode
+                key={child.id}
+                block={child}
+                containerId={block.id}
+                index={i}
+                onChange={onChange}
+                rootBlocks={rootBlocks}
+                theme={theme}
+                slug={slug}
+                selectedId={selectedId}
+                onSelect={onSelect}
+              />
             ))}
           </ContainerDropZone>
         </div>

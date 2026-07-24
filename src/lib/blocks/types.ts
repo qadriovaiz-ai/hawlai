@@ -16,6 +16,18 @@ export interface Block {
   children?: Block[];
 }
 
+export interface PropFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface PropField {
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "richtext" | "select" | "number" | "url" | "boolean" | "image";
+  options?: PropFieldOption[];
+}
+
 export interface BlockDefinition {
   label: string;
   icon: LucideIcon;
@@ -25,4 +37,7 @@ export interface BlockDefinition {
   // lands) — which child types are meaningful inside this container.
   allowedChildren?: string[];
   defaultProps: Record<string, any>;
+  // Drives the generic properties panel — one schema per block type
+  // instead of a hand-written form per type.
+  propFields: PropField[];
 }
