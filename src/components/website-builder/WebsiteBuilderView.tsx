@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2 } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
@@ -14,6 +14,13 @@ import ImageUploader from "./ImageUploader";
 import { getTheme } from "@/lib/landingThemes";
 import { FONT_PRESETS } from "@/lib/fontPresets";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
+
+// Undo/redo history is capped and debounced per page: a burst of rapid
+// edits (e.g. dragging blocks around, or typing into a text block)
+// collapses into a single undo step instead of one step per keystroke,
+// so "last 20 changes" means 20 meaningful edits, not 20 characters.
+const HISTORY_LIMIT = 20;
+const HISTORY_DEBOUNCE_MS = 600;
 
 // Kept in sync with LANDING_THEMES in src/lib/landingThemes.ts, used to
 // preview the AI's theme choice before the owner confirms the plan.
@@ -50,6 +57,8 @@ export default function WebsiteBuilderView() {
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [dragPageIndex, setDragPageIndex] = useState<number | null>(null);
   const [overPageIndex, setOverPageIndex] = useState<number | null>(null);
+  const [history, setHistory] = useState<Record<string, { past: any[][]; future: any[][] }>>({});
+  const historyBufferRef = useRef<Record<string, { baseline: any[]; timer: ReturnType<typeof setTimeout> }>>({});
 
   useEffect(() => {
     fetch("/api/products")
@@ -80,6 +89,23 @@ export default function WebsiteBuilderView() {
       });
   }
   useEffect(load, []);
+
+  useEffect(() => {
+    if (tab !== "website" || !activePage) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo(activePage!);
+      } else if (key === "y" || (key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        redo(activePage!);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tab, activePage, pages, history]);
 
   async function handlePlan() {
     if (!prompt.trim()) return;
@@ -234,8 +260,66 @@ export default function WebsiteBuilderView() {
     }
   }
 
+  function commitHistorySnapshot(pageId: string, baseline: any[]) {
+    setHistory((h) => {
+      const entry = h[pageId] ?? { past: [], future: [] };
+      return { ...h, [pageId]: { past: [...entry.past, baseline].slice(-HISTORY_LIMIT), future: [] } };
+    });
+  }
+
   function updatePageBlocks(pageId: string, blocks: any[]) {
+    const page = pages.find((p) => p.id === pageId);
+    if (!page) return;
+
+    const buf = historyBufferRef.current[pageId];
+    if (buf) clearTimeout(buf.timer);
+    const baseline = buf?.baseline ?? page.sections;
+    historyBufferRef.current[pageId] = {
+      baseline,
+      timer: setTimeout(() => {
+        commitHistorySnapshot(pageId, baseline);
+        delete historyBufferRef.current[pageId];
+      }, HISTORY_DEBOUNCE_MS),
+    };
+
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: blocks } : p)));
+  }
+
+  function undo(pageId: string) {
+    const page = pages.find((p) => p.id === pageId);
+    if (!page) return;
+    let past = history[pageId]?.past ?? [];
+    const future = history[pageId]?.future ?? [];
+
+    const buf = historyBufferRef.current[pageId];
+    if (buf) {
+      clearTimeout(buf.timer);
+      past = [...past, buf.baseline].slice(-HISTORY_LIMIT);
+      delete historyBufferRef.current[pageId];
+    }
+    if (past.length === 0) return;
+
+    const previous = past[past.length - 1];
+    setHistory((h) => ({ ...h, [pageId]: { past: past.slice(0, -1), future: [page.sections, ...future].slice(0, HISTORY_LIMIT) } }));
+    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: previous } : p)));
+  }
+
+  function redo(pageId: string) {
+    const buf = historyBufferRef.current[pageId];
+    if (buf) {
+      // A fresh edit is already pending — that supersedes redo.
+      clearTimeout(buf.timer);
+      commitHistorySnapshot(pageId, buf.baseline);
+      delete historyBufferRef.current[pageId];
+      return;
+    }
+    const page = pages.find((p) => p.id === pageId);
+    const entry = history[pageId];
+    if (!page || !entry || entry.future.length === 0) return;
+
+    const next = entry.future[0];
+    setHistory((h) => ({ ...h, [pageId]: { past: [...entry.past, page.sections].slice(-HISTORY_LIMIT), future: entry.future.slice(1) } }));
+    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: next } : p)));
   }
 
   function updatePageMeta(pageId: string, field: "title" | "meta_description" | "og_image_url", value: string) {
@@ -511,9 +595,29 @@ export default function WebsiteBuilderView() {
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-slate-400">Drag blocks from the palette, click any block to edit or select it</p>
-                  <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                    <button onClick={() => setPreviewMode("desktop")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "desktop" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Monitor className="w-3.5 h-3.5" /> Desktop</button>
-                    <button onClick={() => setPreviewMode("mobile")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "mobile" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Smartphone className="w-3.5 h-3.5" /> Mobile</button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                      <button
+                        onClick={() => undo(currentPage.id)}
+                        disabled={!history[currentPage.id]?.past.length && !historyBufferRef.current[currentPage.id]}
+                        title="Undo (Ctrl+Z)"
+                        className="text-xs px-2 py-1 rounded-md flex items-center gap-1 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white"
+                      >
+                        <Undo2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => redo(currentPage.id)}
+                        disabled={!history[currentPage.id]?.future.length}
+                        title="Redo (Ctrl+Y)"
+                        className="text-xs px-2 py-1 rounded-md flex items-center gap-1 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white"
+                      >
+                        <Redo2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                      <button onClick={() => setPreviewMode("desktop")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "desktop" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Monitor className="w-3.5 h-3.5" /> Desktop</button>
+                      <button onClick={() => setPreviewMode("mobile")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "mobile" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Smartphone className="w-3.5 h-3.5" /> Mobile</button>
+                    </div>
                   </div>
                 </div>
 
