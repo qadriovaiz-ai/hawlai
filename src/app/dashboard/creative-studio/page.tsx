@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Tag, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 
@@ -27,10 +27,16 @@ export default function CreativeStudioPage() {
   const [logoError, setLogoError] = useState<string | null>(null);
 
   const [videoPrompt, setVideoPrompt] = useState("");
+  const [videoModels, setVideoModels] = useState<{ key: string; label: string; description: string; configured: boolean }[]>([]);
+  const [selectedModel, setSelectedModel] = useState("veo");
   const [videoStarting, setVideoStarting] = useState(false);
   const [videoPolling, setVideoPolling] = useState(false);
   const [videoResult, setVideoResult] = useState<any>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/creative/video/models").then((r) => r.json()).then((d) => setVideoModels(d.models ?? []));
+  }, []);
 
   const [voiceoverText, setVoiceoverText] = useState("");
   const [voiceoverLoading, setVoiceoverLoading] = useState(false);
@@ -121,7 +127,7 @@ export default function CreativeStudioPage() {
       const res = await fetch("/api/creative/video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: videoPrompt }),
+        body: JSON.stringify({ prompt: videoPrompt, model: selectedModel }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
@@ -325,6 +331,28 @@ export default function CreativeStudioPage() {
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Video className="w-4 h-4 text-slate-400" /> AI Video</p>
         <p className="text-xs text-slate-400">Describe a short video (5-8 seconds). Takes 1-3 minutes to generate — feel free to keep working elsewhere while it renders.</p>
+
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-slate-600">Model</p>
+          <div className="flex flex-wrap gap-1.5">
+            {videoModels.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => m.configured && setSelectedModel(m.key)}
+                disabled={!m.configured}
+                title={m.configured ? m.description : `${m.description} — not connected yet`}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${
+                  selectedModel === m.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"
+                } ${!m.configured ? "opacity-40 cursor-not-allowed" : ""}`}
+              >
+                {m.label}
+                {!m.configured && <span className="text-[10px]">(not connected)</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <input
           value={videoPrompt}
           onChange={(e) => setVideoPrompt(e.target.value)}

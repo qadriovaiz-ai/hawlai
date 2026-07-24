@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { checkVideoOperation } from "@/lib/agents/videoAgent";
+import { getVideoAdapter } from "@/lib/videoModels";
 
 export async function GET(
   request: Request,
@@ -25,9 +25,10 @@ export async function GET(
 
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (record.status !== "pending") return NextResponse.json(record);
-  if (!record.operation_name) return NextResponse.json(record);
+  if (!record.operation_name && !record.task_id) return NextResponse.json(record);
 
-  const result = await checkVideoOperation(record.operation_name);
+  const adapter = getVideoAdapter(record.model_key ?? "veo");
+  const result = await adapter.check(record.task_id ?? record.operation_name, record.model_key ?? "veo");
 
   if (!result.done) return NextResponse.json(record);
 

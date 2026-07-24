@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { startVideoGeneration } from "@/lib/agents/videoAgent";
+import { getVideoAdapter, isModelConfigured } from "@/lib/videoModels";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -11,19 +11,25 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { prompt } = await request.json();
+  const { prompt, model } = await request.json();
   if (!prompt || prompt.trim().length < 5) return NextResponse.json({ error: "Describe the video in a bit more detail" }, { status: 400 });
+
+  const modelKey = model || "veo";
+  if (!isModelConfigured(modelKey)) {
+    return NextResponse.json({ error: "This model isn't connected yet — pick a connected model or ask the team to add the API key." }, { status: 400 });
+  }
 
   const { data: draft, error: insertError } = await supabase
     .from("video_generations")
-    .insert({ dealership_id: dealershipId, prompt: prompt.trim(), status: "pending" })
+    .insert({ dealership_id: dealershipId, prompt: prompt.trim(), status: "pending", model_key: modelKey })
     .select()
     .single();
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
   try {
-    const operationName = await startVideoGeneration(prompt.trim());
-    await supabase.from("video_generations").update({ operation_name: operationName }).eq("id", draft.id);
+    const adapter = getVideoAdapter(modelKey);
+    const taskId = await adapter.start(prompt.trim(), modelKey);
+    await supabase.from("video_generations").update({ task_id: taskId, operation_name: taskId }).eq("id", draft.id);
     return NextResponse.json({ id: draft.id });
   } catch (err: any) {
     await supabase.from("video_generations").update({ status: "failed", error_message: err.message }).eq("id", draft.id);
