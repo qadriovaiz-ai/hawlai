@@ -17,6 +17,7 @@ import BlockCanvas from "./blocks/BlockCanvas";
 export default function BlocksBetaPanel() {
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,12 @@ export default function BlocksBetaPanel() {
         }
       })
       .finally(() => setLoading(false));
+    // Real products for an accurate Product Grid block preview — same
+    // active-only filter the live storefront applies, never AI-authored
+    // or hand-filled.
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((d) => setProducts((d.products ?? []).filter((p: any) => p.is_active)));
   }, []);
 
   function selectPage(pageId: string) {
@@ -91,7 +98,7 @@ export default function BlocksBetaPanel() {
       </div>
 
       <div className="card p-4">
-        <BlockCanvas blocks={blocks} onChange={setBlocks} theme={getTheme(website.theme_key)} slug={website.slug} />
+        <BlockCanvas blocks={blocks} onChange={setBlocks} theme={getTheme(website.theme_key)} slug={website.slug} products={products} />
       </div>
     </div>
   );

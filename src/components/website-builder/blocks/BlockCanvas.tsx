@@ -46,11 +46,13 @@ export default function BlockCanvas({
   onChange,
   theme,
   slug,
+  products,
 }: {
   blocks: Block[];
   onChange: (blocks: Block[]) => void;
   theme: LandingTheme;
   slug: string;
+  products?: any[];
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -113,6 +115,7 @@ export default function BlockCanvas({
                 rootBlocks={blocks}
                 theme={theme}
                 slug={slug}
+                products={products}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
               />
@@ -160,6 +163,7 @@ function CanvasNode({
   rootBlocks,
   theme,
   slug,
+  products,
   selectedId,
   onSelect,
 }: {
@@ -170,6 +174,7 @@ function CanvasNode({
   rootBlocks: Block[];
   theme: LandingTheme;
   slug: string;
+  products?: any[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -219,6 +224,7 @@ function CanvasNode({
                 rootBlocks={rootBlocks}
                 theme={theme}
                 slug={slug}
+                products={products}
                 selectedId={selectedId}
                 onSelect={onSelect}
               />
@@ -230,7 +236,7 @@ function CanvasNode({
           <InlineLeafEditor block={block} onUpdate={(props) => onChange(updateBlockProps(rootBlocks, block.id, props))} />
         </div>
       ) : (
-        <BlockRenderer block={block} ctx={{ theme, slug }} />
+        <BlockRenderer block={block} ctx={{ theme, slug, products }} />
       )}
     </div>
   );
