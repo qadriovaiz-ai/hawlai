@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getTheme } from "@/lib/landingThemes";
 import SectionRenderer from "@/components/website-builder/SectionRenderer";
 import { buildPageMetadata } from "@/lib/siteMetadata";
+import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
+import { blockTreeContainsType } from "@/lib/blocks/utils";
 import type { Metadata } from "next";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string; page: string }> }): Promise<Metadata> {
@@ -21,7 +23,7 @@ export default async function SiteSubPage({ params }: { params: Promise<{ slug: 
   if (!page) notFound();
 
   const sections = page.sections ?? [];
-  const needsProducts = sections.some((s: any) => s.type === "product_catalog");
+  const needsProducts = blockTreeContainsType(legacyToBlocks(sections), "product_grid");
   const products = needsProducts
     ? (await supabase.from("products").select("id, name, description, price, compare_at_price, images, inventory_count").eq("dealership_id", website.dealership_id).eq("is_active", true).order("order_index", { ascending: true })).data ?? []
     : [];

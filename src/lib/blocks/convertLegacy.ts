@@ -33,8 +33,8 @@ function text(html: string, align: string = "left"): Block {
   return createBlock("text", { props: { html, align } });
 }
 
-function button(label: string, href: string = "#contact"): Block {
-  return createBlock("button", { props: { label, href, style: "solid" } });
+function button(label: string, href: string = "#contact", style: string = "solid"): Block {
+  return createBlock("button", { props: { label, href, style } });
 }
 
 function convertHero(s: any): Block {
@@ -88,11 +88,19 @@ function convertPricing(s: any): Block {
 }
 
 function convertFaq(s: any): Block {
-  return convertItemGrid(s, (item) => stack({ direction: "column" }, [heading(item.question ?? "", 3), text(item.answer ?? "")]));
+  // A vertical list, not a grid — matches the old faq section, which
+  // never wrapped its items in a multi-column layout.
+  return section({ background: "none" }, [
+    s.heading && heading(s.heading, 2, "center"),
+    stack({ direction: "column" }, (s.items ?? []).map((item: any) => stack({ direction: "column" }, [heading(item.question ?? "", 3), text(item.answer ?? "")]))),
+  ]);
 }
 
 function convertCtaBanner(s: any): Block {
-  return section({ background: "accent" }, [stack({ direction: "column", align: "center" }, [heading(s.headline ?? "", 2, "center"), s.ctaText && button(s.ctaText)])]);
+  // White button on the accent-colored background, matching the old
+  // cta_banner section — an accent-on-accent button (the generic
+  // default) would be invisible here.
+  return section({ background: "accent" }, [stack({ direction: "column", align: "center" }, [heading(s.headline ?? "", 2, "center"), s.ctaText && button(s.ctaText, "#contact", "white")])]);
 }
 
 function convertContactForm(s: any): Block {
