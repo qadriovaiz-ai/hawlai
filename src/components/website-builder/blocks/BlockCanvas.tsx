@@ -6,6 +6,7 @@ import {
   DragOverlay,
   closestCenter,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   useDraggable,
@@ -13,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 import { BLOCK_REGISTRY, createBlock } from "@/lib/blocks/registry";
@@ -56,7 +57,14 @@ export default function BlockCanvas({
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // Keyboard support (arrow keys to reorder once a drag handle is
+  // focused, Space/Enter to pick up and drop) — PointerSensor alone
+  // would leave keyboard-only users with no way to reorder blocks at
+  // all, since this canvas has no non-drag reorder controls.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const selectedBlock = selectedId ? findBlockById(blocks, selectedId) : null;
 
   function handleDragStart(event: DragStartEvent) {
@@ -134,7 +142,16 @@ export default function BlockCanvas({
         />
       </div>
       <DragOverlay>
-        {activeType ? <div className="px-3 py-2 rounded-lg bg-purple-600 text-white text-xs shadow-lg">{BLOCK_REGISTRY[activeType]?.label ?? activeType}</div> : null}
+        {activeType && BLOCK_REGISTRY[activeType]
+          ? (() => {
+              const Icon = BLOCK_REGISTRY[activeType].icon;
+              return (
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 text-white text-xs shadow-lg">
+                  <Icon className="w-3.5 h-3.5" /> {BLOCK_REGISTRY[activeType].label}
+                </div>
+              );
+            })()
+          : null}
       </DragOverlay>
     </DndContext>
   );
@@ -199,7 +216,13 @@ function CanvasNode({
       }}
       className={`group/block relative border rounded-lg pl-6 pr-5 py-1 cursor-pointer ${isSelected ? "border-purple-500 ring-1 ring-purple-300" : "border-transparent hover:border-purple-200"}`}
     >
-      <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="absolute left-0 top-1.5 p-0.5 text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing opacity-0 group-hover/block:opacity-100">
+      <button
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Reorder ${def?.label ?? block.type} block (arrow keys once picked up)`}
+        className="absolute left-0 top-1.5 p-0.5 text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing opacity-0 group-hover/block:opacity-100 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-purple-400 rounded"
+      >
         <GripVertical className="w-3.5 h-3.5" />
       </button>
       <button
