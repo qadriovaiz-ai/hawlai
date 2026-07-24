@@ -22,6 +22,10 @@ import type { Block, BlockDefinition } from "@/lib/blocks/types";
 import type { LandingTheme } from "@/lib/landingThemes";
 import BlockRenderer from "./BlockRenderer";
 import PropertiesPanel from "./PropertiesPanel";
+import RichTextArea from "../RichTextArea";
+import ImageUploader from "../ImageUploader";
+
+const HEADING_FONT_SIZE: Record<number, string> = { 1: "1.875rem", 2: "1.5rem", 3: "1.125rem" };
 
 // The root of the page's own block array — a page's top-level blocks
 // are always `type: "section"` (the one structural rule the whole
@@ -221,11 +225,47 @@ function CanvasNode({
             ))}
           </ContainerDropZone>
         </div>
+      ) : isSelected && (block.type === "heading" || block.type === "text" || block.type === "image") ? (
+        <div onClick={(e) => e.stopPropagation()}>
+          <InlineLeafEditor block={block} onUpdate={(props) => onChange(updateBlockProps(rootBlocks, block.id, props))} />
+        </div>
       ) : (
         <BlockRenderer block={block} ctx={{ theme, slug }} />
       )}
     </div>
   );
+}
+
+// Editing a heading/text/image block right where it sits in the canvas
+// (matching the old Live Preview Editor's click-to-edit feel) instead
+// of forcing every edit through the side panel — reuses the exact same
+// components the Site Editor's rich text and image upload features
+// already built, so a block's editing behavior is never a bespoke
+// reimplementation per type.
+function InlineLeafEditor({ block, onUpdate }: { block: Block; onUpdate: (props: Record<string, any>) => void }) {
+  if (block.type === "heading") {
+    return (
+      <input
+        autoFocus
+        value={block.props.text ?? ""}
+        onChange={(e) => onUpdate({ text: e.target.value })}
+        className="w-full bg-transparent border border-dashed border-purple-300 rounded px-1 outline-none font-bold"
+        style={{ fontSize: HEADING_FONT_SIZE[block.props.level] ?? HEADING_FONT_SIZE[2], textAlign: block.props.align }}
+      />
+    );
+  }
+  if (block.type === "text") {
+    return (
+      <RichTextArea
+        value={block.props.html ?? ""}
+        onChange={(v) => onUpdate({ html: v })}
+        rows={2}
+        className="w-full bg-transparent border border-dashed border-purple-300 rounded px-1"
+        style={{ textAlign: block.props.align as any }}
+      />
+    );
+  }
+  return <ImageUploader kind="section" currentUrl={block.props.url || undefined} onUploaded={(url) => onUpdate({ url })} />;
 }
 
 function BlockPalette() {
