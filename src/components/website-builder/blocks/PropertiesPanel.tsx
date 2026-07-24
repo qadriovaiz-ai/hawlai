@@ -10,14 +10,22 @@ import ImageUploader from "../ImageUploader";
 // schema (see registry.ts), so this form never needs a per-type branch;
 // adding a new block type or a new editable prop to an existing one
 // never touches this file.
+// Block types where "hide on mobile" doesn't make sense to expose —
+// layout containers (hiding a whole section/stack is a bigger decision
+// than a leaf toggle) and the two composite content blocks that render
+// their own multi-part components.
+const NO_MOBILE_TOGGLE = new Set(["section", "stack", "form", "product_grid"]);
+
 export default function PropertiesPanel({
   block,
   onChange,
   onDeselect,
+  onToggleHiddenMobile,
 }: {
   block: Block | null;
   onChange: (props: Record<string, any>) => void;
   onDeselect: () => void;
+  onToggleHiddenMobile: (hidden: boolean) => void;
 }) {
   if (!block) {
     return <div className="w-56 shrink-0 text-xs text-slate-400 p-3 sticky top-0">Select a block to edit its properties.</div>;
@@ -88,6 +96,13 @@ export default function PropertiesPanel({
           )}
         </div>
       ))}
+
+      {!NO_MOBILE_TOGGLE.has(block.type) && (
+        <label className="flex items-center gap-2 text-xs text-slate-500 pt-2 border-t border-slate-200">
+          <input type="checkbox" checked={!!block.responsive?.mobile?.hidden} onChange={(e) => onToggleHiddenMobile(e.target.checked)} className="w-4 h-4 accent-purple-600" />
+          Hide on mobile
+        </label>
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 import { BLOCK_REGISTRY, createBlock } from "@/lib/blocks/registry";
-import { moveBlock, removeBlock, insertBlockAt, findBlockById, updateBlockProps } from "@/lib/blocks/treeOps";
+import { moveBlock, removeBlock, insertBlockAt, findBlockById, updateBlockProps, updateBlockResponsiveMobile } from "@/lib/blocks/treeOps";
 import type { Block, BlockDefinition } from "@/lib/blocks/types";
 import type { LandingTheme } from "@/lib/landingThemes";
 import BlockRenderer from "./BlockRenderer";
@@ -127,6 +127,9 @@ export default function BlockCanvas({
           onDeselect={() => setSelectedId(null)}
           onChange={(props) => {
             if (selectedId) onChange(updateBlockProps(blocks, selectedId, props));
+          }}
+          onToggleHiddenMobile={(hidden) => {
+            if (selectedId) onChange(updateBlockResponsiveMobile(blocks, selectedId, { hidden }));
           }}
         />
       </div>

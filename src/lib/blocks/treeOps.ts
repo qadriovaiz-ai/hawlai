@@ -70,3 +70,11 @@ export function updateBlockProps(blocks: Block[], id: string, props: Record<stri
 export function removeBlock(blocks: Block[], id: string): Block[] {
   return removeBlockById(blocks, id).tree;
 }
+
+export function updateBlockResponsiveMobile(blocks: Block[], id: string, mobile: Record<string, any>): Block[] {
+  return blocks.map((b) => {
+    if (b.id === id) return { ...b, responsive: { ...b.responsive, mobile: { ...b.responsive?.mobile, ...mobile } } };
+    if (b.children) return { ...b, children: updateBlockResponsiveMobile(b.children, id, mobile) };
+    return b;
+  });
+}
