@@ -1,12 +1,15 @@
 // Website Builder Agent — generates a complete multi-page website:
-// which pages to include (based on site type) and real section
-// content for each, built from a shared library of section "blocks"
-// (hero, text, features, gallery, testimonials, team, pricing, faq,
-// cta, contact form) so any business type is assembled from the same
-// building blocks instead of needing a hardcoded template per
-// industry. Distinct from the existing single-page landing_pages
-// generator (quick-launch ad landing page) and seo_pages (standalone
-// SEO content) — this is the "real multi-page website" builder.
+// which pages to include (based on site type) and real content for
+// each, composed from the same Block registry the editor and public
+// renderer use (src/lib/blocks/registry.ts) so any business type is
+// assembled from the same building blocks instead of needing a
+// hardcoded template per industry. Distinct from the existing
+// single-page landing_pages generator (quick-launch ad landing page)
+// and seo_pages (standalone SEO content) — this is the "real
+// multi-page website" builder.
+
+import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
+import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 
 export interface SiteTypeMeta {
   key: string;
@@ -207,17 +210,152 @@ Return JSON only, no markdown, no preamble: {"businessSummary":"...","themeKey":
   }
 }
 
-const SECTION_LIBRARY_NOTE = `Available section types and their exact JSON shape (use ONLY these):
-- {"type":"hero","headline":"...","subheadline":"...","ctaText":"..."}
-- {"type":"text","heading":"...","body":"..."}
-- {"type":"image_text","heading":"...","body":"...","imagePosition":"left"} (leave imageUrl unset — the owner uploads a real photo afterward)
-- {"type":"features_grid","heading":"...","items":[{"title":"...","description":"..."}]} (3-4 items)
-- {"type":"testimonials","heading":"...","items":[{"quote":"...","author":"..."}]} (2-3 items)
-- {"type":"team_grid","heading":"...","items":[{"name":"...","role":"...","bio":"..."}]} (2-4 items)
-- {"type":"pricing","heading":"...","items":[{"name":"...","price":"...","features":["..."]}]} (2-3 items)
-- {"type":"faq","heading":"...","items":[{"question":"...","answer":"..."}]} (3-5 items)
-- {"type":"cta_banner","headline":"...","ctaText":"..."}
-- {"type":"contact_form","heading":"..."}`;
+// Block-tree generation — one Anthropic tool-use call per page,
+// registry-driven so the model's vocabulary of block types and their
+// props always matches src/lib/blocks/registry.ts exactly (adding a
+// new block type there automatically becomes something the AI can use,
+// no prompt edit required). "product_grid" is deliberately excluded —
+// real catalog data is spliced in programmatically after generation,
+// same principle the old "product_catalog" splice used.
+const AI_BLOCK_TYPES = Object.keys(BLOCK_REGISTRY).filter((t) => t !== "product_grid");
+
+const BLOCK_SCHEMA = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: AI_BLOCK_TYPES },
+    props: { type: "object", description: "Shape depends on `type` — see the block vocabulary in the prompt." },
+    children: { type: "array", items: { $ref: "#/$defs/block" }, description: "Only for container types (section, stack)." },
+  },
+  required: ["type", "props"],
+};
+
+const EMIT_PAGE_TOOL = {
+  name: "emit_page",
+  description: "Emit the content for one website page as a meta description and a tree of blocks.",
+  input_schema: {
+    type: "object",
+    $defs: { block: BLOCK_SCHEMA },
+    properties: {
+      metaDescription: { type: "string", description: "Under 160 characters, for search results." },
+      blocks: {
+        type: "array",
+        items: { $ref: "#/$defs/block" },
+        description: "Top-level blocks for this page. Every item MUST have type \"section\" — that is the only block type allowed at the top level.",
+      },
+    },
+    required: ["metaDescription", "blocks"],
+  },
+};
+
+function blockVocabularyNote(): string {
+  return AI_BLOCK_TYPES.map((type) => {
+    const def = BLOCK_REGISTRY[type];
+    const propsDesc = (def.propFields ?? []).map((f) => `${f.key}${f.options ? ` (${f.options.map((o) => o.value).join("|")})` : ""}`).join(", ") || "(no props)";
+    return `- "${type}"${def.isContainer ? " [container — can have children]" : ""}: props { ${propsDesc} }`;
+  }).join("\n");
+}
+
+// Validates a model-returned node against the registry before it's
+// ever trusted: unknown types are rejected, and children are rejected
+// on any type the registry doesn't mark as a container. A JSON Schema
+// can express the recursive shape but not "children only valid if
+// isContainer" cleanly, so this is real defense-in-depth, not
+// redundant with the schema above.
+function isValidBlockInput(node: any): boolean {
+  if (!node || typeof node !== "object" || typeof node.type !== "string") return false;
+  const def = BLOCK_REGISTRY[node.type];
+  if (!def || node.type === "product_grid") return false;
+  if (typeof node.props !== "object" || node.props === null) return false;
+  if (node.children !== undefined) {
+    if (!def.isContainer || !Array.isArray(node.children)) return false;
+    return node.children.every(isValidBlockInput);
+  }
+  return true;
+}
+
+function normalizeBlockInput(node: any): any {
+  const def = BLOCK_REGISTRY[node.type];
+  return {
+    id: generateBlockId(),
+    type: node.type,
+    props: node.props ?? {},
+    ...(def?.isContainer ? { children: (node.children ?? []).map(normalizeBlockInput) } : {}),
+  };
+}
+
+// Limits how many page-generation calls run at once — high enough to
+// keep total latency reasonable for a multi-page site, low enough to
+// avoid hammering the API or letting one slow call block everything.
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+async function generatePageBlocks(
+  dealershipName: string,
+  businessCategory: string,
+  city: string | null,
+  page: PlannedPage,
+  businessSummary: string | null,
+  brandContext: string,
+  customInstructions: string | null,
+  fallback: GeneratedPage
+): Promise<{ page: GeneratedPage; fellBack: boolean }> {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2000,
+        tools: [EMIT_PAGE_TOOL],
+        tool_choice: { type: "tool", name: "emit_page" },
+        messages: [{
+          role: "user",
+          content: `You are building the "${page.title}" page (slug: ${page.slug}, type: ${page.pageType}) for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed — the page must be genuinely about this business, never a different industry or an invented example.
+${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}
+${customInstructions?.trim() ? `\nThe owner's own description of what they want: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions.\n` : ""}
+Block vocabulary (use ONLY these types):
+${blockVocabularyNote()}
+
+Compose the page as a small tree: every top-level item must be type "section" (2-4 of them). A "section" typically contains one "stack" (direction "column" for simple stacked content, or "row" with 2-3 child "stack"s each given a widthFraction like 0.33 or 0.5 for side-by-side columns/cards). Put actual content — heading/text/image/button — inside those stacks, not directly inside "section".
+
+${page.pageType === "legal" ? `This is a legal page ("${page.slug}") — one section with a heading and genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly, not a generic disclaimer.` : `Include a "button" or "form" block near the end to drive leads, unless this is the contact page itself.`}
+
+Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client names. Call emit_page with the result.`,
+        }],
+      }),
+    });
+    if (!response.ok) return { page: fallback, fellBack: true };
+    const data = await response.json();
+    const toolUse = (data.content ?? []).find((c: any) => c.type === "tool_use" && c.name === "emit_page");
+    const input = toolUse?.input;
+    if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) return { page: fallback, fellBack: true };
+    if (!input.blocks.every((b: any) => b?.type === "section") || !input.blocks.every(isValidBlockInput)) return { page: fallback, fellBack: true };
+
+    return {
+      page: {
+        slug: page.slug,
+        title: page.title,
+        pageType: page.pageType,
+        metaDescription: typeof input.metaDescription === "string" && input.metaDescription.trim() ? input.metaDescription.trim() : fallback.metaDescription,
+        sections: input.blocks.map(normalizeBlockInput),
+      },
+      fellBack: false,
+    };
+  } catch (err: any) {
+    console.error("[website-builder-agent] page generation error:", page.slug, err.message);
+    return { page: fallback, fellBack: true };
+  }
+}
 
 export async function generateWebsite(
   dealershipName: string,
@@ -230,90 +368,50 @@ export async function generateWebsite(
 ): Promise<{ pages: GeneratedPage[]; _fallback?: boolean }> {
   const pageList = pages && pages.length > 0 ? pages : DEFAULT_PLAN_PAGES;
 
+  // Fallback content is still authored in the old flat shape (kept
+  // small and easy to read) and converted once — legacyToBlocks() is
+  // the single place that knows what these old shapes mean, so the
+  // fallback never needs its own parallel block-tree literals.
   const fallbackPages: GeneratedPage[] = pageList.map((p) => ({
     slug: p.slug,
     title: p.title,
     pageType: p.pageType,
     metaDescription: `${p.title} — ${dealershipName}`,
-    sections: p.pageType === "products"
-      ? [
-          { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Shop Now" },
-          { type: "product_catalog", heading: `Our ${p.title}` },
-        ]
-      : [
-          { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Get in Touch" },
-          { type: "text", heading: p.title, body: "Content coming soon — regenerate once the API is available." },
-          { type: "contact_form", heading: "Get in Touch" },
-        ],
+    sections: legacyToBlocks(
+      p.pageType === "products"
+        ? [
+            { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Shop Now" },
+            { type: "product_catalog", heading: `Our ${p.title}` },
+          ]
+        : [
+            { type: "hero", headline: `${dealershipName}`, subheadline: p.title, ctaText: "Get in Touch" },
+            { type: "text", heading: p.title, body: "Content coming soon — regenerate once the API is available." },
+            { type: "contact_form", heading: "Get in Touch" },
+          ]
+    ),
   }));
 
   const brandContext = brandProfile?.tone_of_voice
     ? `Brand tone: ${brandProfile.tone_of_voice}. Messaging pillars: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}.`
     : "No brand voice set yet — keep it natural, honest, and specific to this business.";
 
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 6000,
-        messages: [{
-          role: "user",
-          content: `You are building website content for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed and non-negotiable — every page must be genuinely about this business, never a different industry or an invented example business.
-${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}
-${customInstructions?.trim() ? `\nThe business owner's own description of what they want: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions about this business type.\n` : ""}
-Generate content for these pages: ${pageList.map((p) => `${p.slug} (${p.title}, type: ${p.pageType})`).join(", ")}.
+  const generated = await mapWithConcurrency(pageList, 3, (page) =>
+    generatePageBlocks(dealershipName, businessCategory, city, page, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!)
+  );
 
-${SECTION_LIBRARY_NOTE}
+  // Pages meant to list real products (shop/products/menu/listings)
+  // must show the owner's actual catalog, not AI-invented content —
+  // deterministically rebuilt as hero + live product_grid rather than
+  // trying to locate/preserve pieces of whatever tree the model
+  // returned, since a live product_grid was never something it could
+  // have produced anyway (excluded from AI_BLOCK_TYPES above).
+  const resultPages: GeneratedPage[] = generated.map(({ page }, i) => {
+    const p = pageList[i];
+    if (p.pageType !== "products") return page;
+    const hero = page.sections[0]?.type === "section" ? page.sections[0] : legacyToBlocks([{ type: "hero", headline: dealershipName, subheadline: p.title, ctaText: "Shop Now" }])[0];
+    const productGrid = legacyToBlocks([{ type: "product_catalog", heading: `Our ${p.title}` }])[0];
+    return { ...page, sections: [hero, productGrid] };
+  });
 
-For each page, choose 2-4 sections that make sense for that page's purpose (e.g. Home gets a hero + features/testimonials + cta_banner; About gets text/image_text about the business's story; Services/Products/Menu/Listings gets features_grid or pricing describing what's actually offered — use real product/service names if the owner mentioned any; Contact gets a hero + contact_form). Legal pages ("privacy-policy", "terms") should each get ONE "text" section with genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly — not a generic disclaimer. Every non-legal, non-contact page should still include a contact_form or cta_banner near the end to drive leads.
-
-Return JSON only, no markdown: {"pages": [{"slug": "home", "title": "Home", "metaDescription": "under 160 chars", "sections": [...]}]} — one object per page listed above, in the same order. Be specific to this real business — never generic "Lorem ipsum" style filler, and never invent fake statistics, awards, or client names.
-
-IMPORTANT: Every single page must be about "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""}. Do not write about any other industry, product category, or business type under any circumstances — re-read the business name and category above before writing each page.`,
-        }],
-      }),
-    });
-    if (!response.ok) return { pages: fallbackPages, _fallback: true };
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return { pages: fallbackPages, _fallback: true };
-    const data = JSON.parse(bodyText);
-    const text = data.content?.[0]?.text ?? "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return { pages: fallbackPages, _fallback: true };
-    const parsed = JSON.parse(clean);
-    if (!Array.isArray(parsed.pages) || parsed.pages.length === 0) return { pages: fallbackPages, _fallback: true };
-
-    const resultPages: GeneratedPage[] = pageList.map((p) => {
-      const match = parsed.pages.find((pg: any) => pg.slug === p.slug) ?? parsed.pages[pageList.indexOf(p)];
-      let sections: any[] = Array.isArray(match?.sections) && match.sections.length > 0 ? match.sections : fallbackPages.find((f) => f.slug === p.slug)!.sections;
-
-      // Pages meant to list real products (shop/products/menu/listings)
-      // must show the owner's actual catalog, not AI-invented items —
-      // swap out any invented features_grid/pricing block for a live
-      // product_catalog block; the storefront fetches real product rows
-      // for this at render time. Keep the AI's hero + any trailing CTA.
-      if (p.pageType === "products") {
-        const hero = sections.find((s) => s.type === "hero");
-        const trailing = sections.find((s) => s.type === "contact_form" || s.type === "cta_banner");
-        const catalog = { type: "product_catalog", heading: `Our ${p.title}` };
-        sections = [hero, catalog, trailing].filter(Boolean);
-        if (sections.length === 0) sections = [catalog];
-      }
-
-      return {
-        slug: p.slug,
-        title: p.title,
-        pageType: p.pageType,
-        metaDescription: match?.metaDescription ?? `${p.title} — ${dealershipName}`,
-        sections,
-      };
-    });
-    return { pages: resultPages };
-  } catch (err: any) {
-    console.error("[website-builder-agent] error:", err.message);
-    return { pages: fallbackPages, _fallback: true };
-  }
+  return { pages: resultPages, _fallback: generated.some((g) => g.fellBack) || undefined };
 }
