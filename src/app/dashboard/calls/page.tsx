@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDate, formatDuration, getCallStatusColor } from "@/lib/utils";
+import AutoCallSettings from "@/components/calls/AutoCallSettings";
 
 export default async function CallsPage() {
   const supabase = await createClient();
@@ -33,6 +34,8 @@ export default async function CallsPage() {
         <h1 className="text-2xl font-bold text-slate-900">Call History</h1>
         <p className="text-slate-500 text-sm mt-0.5">All recorded calls and their outcomes</p>
       </div>
+
+      <AutoCallSettings />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

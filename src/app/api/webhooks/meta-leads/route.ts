@@ -3,6 +3,7 @@ import { qualifyLead } from "@/lib/ai-engine";
 import { NextResponse } from "next/server";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
+import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
 
 async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
@@ -150,15 +151,28 @@ export async function POST(request: Request) {
 
         // Notify Slack for hot leads only — not every lead, to avoid
         // noise; only if the dealer has connected a webhook.
-        if (data && qualification.temperature === "hot") {
-          const { data: dealershipInfo } = await supabase
-            .from("dealerships").select("slack_webhook_url, dealership_name").eq("id", dealershipId).single();
-          if (dealershipInfo?.slack_webhook_url) {
-            await sendSlackNotification(
-              dealershipInfo.slack_webhook_url,
-              `🔥 New *Hot* lead for ${dealershipInfo.dealership_name}: *${name}* (${phone})${vehicle ? ` — interested in ${vehicle}` : ""}. Check it out in Hawlai's Call Queue.`
-            );
-          }
+        let dealershipInfo: { slack_webhook_url?: string | null; dealership_name?: string | null; auto_call_new_leads?: boolean } | null = null;
+        if (data) {
+          const { data: fetched } = await supabase
+            .from("dealerships").select("slack_webhook_url, dealership_name, auto_call_new_leads").eq("id", dealershipId).single();
+          dealershipInfo = fetched;
+        }
+
+        if (data && qualification.temperature === "hot" && dealershipInfo?.slack_webhook_url) {
+          await sendSlackNotification(
+            dealershipInfo.slack_webhook_url,
+            `🔥 New *Hot* lead for ${dealershipInfo.dealership_name}: *${name}* (${phone})${vehicle ? ` — interested in ${vehicle}` : ""}. Check it out in Hawlai's Call Queue.`
+          );
+        }
+
+        // Opt-in automatic AI calling — off by default. Best-effort:
+        // a failed/misconfigured call trigger should never take down
+        // lead capture itself, so errors are logged and swallowed
+        // rather than affecting the webhook's success response.
+        if (data && phone && dealershipInfo?.auto_call_new_leads) {
+          triggerVapiCall(supabase, { id: data.id, name, phone, dealership_id: dealershipId }).catch((err) =>
+            console.error("[meta-leads] Auto-call trigger failed:", err.message)
+          );
         }
 
         console.log("[meta-leads] Lead saved:", data.id);

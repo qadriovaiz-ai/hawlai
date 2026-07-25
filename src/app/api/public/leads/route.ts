@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { qualifyLead } from "@/lib/ai-engine";
+import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
 
 // Public, unauthenticated endpoint — the landing page's lead capture
 // form posts here directly, no login involved.
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   }
 
-  const { error } = await supabase.from("leads").insert({
+  const { data: newLead, error } = await supabase.from("leads").insert({
     dealership_id: dealershipId,
     name: name.trim(),
     phone: phone.trim(),
@@ -69,8 +70,19 @@ export async function POST(request: Request) {
     lead_temperature: qualification.temperature,
     status: "ready_to_call",
     qualification_reason: qualification.reason,
-  });
+  }).select("id").single();
 
   if (error) return NextResponse.json({ error: "Something went wrong, please try again" }, { status: 500 });
+
+  // Opt-in automatic AI calling — off by default, same as the Meta
+  // leads path. Best-effort: never lets a call-trigger failure affect
+  // the visitor's thank-you response.
+  const { data: dealershipInfo } = await supabase.from("dealerships").select("auto_call_new_leads").eq("id", dealershipId).single();
+  if (newLead && dealershipInfo?.auto_call_new_leads) {
+    triggerVapiCall(supabase, { id: newLead.id, name: name.trim(), phone: phone.trim(), dealership_id: dealershipId }).catch((err) =>
+      console.error("[public/leads] Auto-call trigger failed:", err.message)
+    );
+  }
+
   return NextResponse.json({ success: true });
 }

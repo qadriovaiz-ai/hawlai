@@ -7,6 +7,7 @@ import AddToQueueButton from "@/components/leads/AddToQueueButton";
 import CreateAppointmentModal from "@/components/appointments/CreateAppointmentModal";
 import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
 import LeadCrmPanel from "@/components/leads/LeadCrmPanel";
+import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -62,6 +63,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </div>
           <div className="flex items-center gap-3">
             <AddToQueueButton leadId={lead.id} currentStatus={lead.status} />
+            <TriggerAICallButton leadId={lead.id} />
             <CreateAppointmentModal leadId={lead.id} leadName={lead.name} dealershipId={lead.dealership_id} />
             <GenerateMessageButton leadId={lead.id} phone={lead.phone} email={lead.email} />
           </div>
