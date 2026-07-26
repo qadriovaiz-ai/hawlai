@@ -87,74 +87,80 @@ export async function POST(request: Request) {
     .map((p: any) => ({ slug: String(p.slug), title: String(p.title), pageType: String(p.pageType ?? "custom") }));
   if (cleanPages.length === 0) return NextResponse.json({ error: "No valid pages in plan" }, { status: 400 });
 
-  const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
-    supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
-  ]);
+  try {
+    const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
+      supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
+      supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
+    ]);
 
-  console.log("[website-builder POST] generating with:", JSON.stringify({
-    dealershipId,
-    dealershipName: dealership?.dealership_name,
-    businessCategory: dealership?.business_category,
-    city: dealership?.city,
-    pages: cleanPages,
-    themeKey,
-    prompt,
-  }));
+    console.log("[website-builder POST] generating with:", JSON.stringify({
+      dealershipId,
+      dealershipName: dealership?.dealership_name,
+      businessCategory: dealership?.business_category,
+      city: dealership?.city,
+      pages: cleanPages,
+      themeKey,
+      prompt,
+    }));
 
-  const { pages: generatedPages } = await generateWebsite(
-    dealership?.dealership_name ?? "the business",
-    dealership?.business_category ?? "business",
-    dealership?.city ?? null,
-    cleanPages,
-    businessSummary ?? null,
-    brandProfile,
-    prompt ?? null
-  );
+    const { pages: generatedPages } = await generateWebsite(
+      dealership?.dealership_name ?? "the business",
+      dealership?.business_category ?? "business",
+      dealership?.city ?? null,
+      cleanPages,
+      businessSummary ?? null,
+      brandProfile,
+      prompt ?? null
+    );
 
-  const base = (dealership?.dealership_name ?? "site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
-  const resolvedTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(themeKey) ? themeKey : "navy_amber";
+    const base = (dealership?.dealership_name ?? "site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
+    const resolvedTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(themeKey) ? themeKey : "navy_amber";
 
-  // Upsert the website row (one per dealership) — regenerating replaces its pages.
-  const { data: existing } = await supabase.from("websites").select("id, slug").eq("dealership_id", dealershipId).maybeSingle();
-  let websiteId: string;
-  let slug: string;
-  if (existing) {
-    websiteId = existing.id;
-    slug = existing.slug;
-    await supabase.from("websites").update({
-      site_type: "custom",
-      theme_key: resolvedTheme,
-      nav_order: generatedPages.map((p) => p.slug),
-      prompt: prompt ?? null,
-      business_summary: businessSummary ?? null,
-    }).eq("id", websiteId);
-    await supabase.from("website_pages").delete().eq("website_id", websiteId);
-  } else {
-    slug = base;
-    let attempt = 0;
-    while (attempt < 20) {
-      const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
-      const { data: taken } = await supabase.from("websites").select("id").eq("slug", candidate).maybeSingle();
-      if (!taken) { slug = candidate; break; }
-      attempt++;
+    // Upsert the website row (one per dealership) — regenerating replaces its pages.
+    const { data: existing } = await supabase.from("websites").select("id, slug").eq("dealership_id", dealershipId).maybeSingle();
+    let websiteId: string;
+    let slug: string;
+    if (existing) {
+      websiteId = existing.id;
+      slug = existing.slug;
+      await supabase.from("websites").update({
+        site_type: "custom",
+        theme_key: resolvedTheme,
+        nav_order: generatedPages.map((p) => p.slug),
+        prompt: prompt ?? null,
+        business_summary: businessSummary ?? null,
+      }).eq("id", websiteId);
+      await supabase.from("website_pages").delete().eq("website_id", websiteId);
+    } else {
+      slug = base;
+      let attempt = 0;
+      while (attempt < 20) {
+        const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
+        const { data: taken } = await supabase.from("websites").select("id").eq("slug", candidate).maybeSingle();
+        if (!taken) { slug = candidate; break; }
+        attempt++;
+      }
+      const { data: newSite, error } = await supabase.from("websites").insert({
+        dealership_id: dealershipId, slug, site_type: "custom", theme_key: resolvedTheme,
+        nav_order: generatedPages.map((p) => p.slug), prompt: prompt ?? null, business_summary: businessSummary ?? null,
+      }).select("id").single();
+      if (error) return NextResponse.json({ error: `Couldn't save the website: ${error.message}` }, { status: 500 });
+      if (!newSite) return NextResponse.json({ error: "Couldn't save the website — no row returned after insert" }, { status: 500 });
+      websiteId = newSite.id;
     }
-    const { data: newSite, error } = await supabase.from("websites").insert({
-      dealership_id: dealershipId, slug, site_type: "custom", theme_key: resolvedTheme,
-      nav_order: generatedPages.map((p) => p.slug), prompt: prompt ?? null, business_summary: businessSummary ?? null,
-    }).select("id").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    websiteId = newSite.id;
+
+    // generateWebsite() (websiteBuilderAgent.ts) emits block-shaped
+    // sections directly — no conversion needed here.
+    const pageRows = generatedPages.map((p, i) => ({
+      website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
+      meta_description: p.metaDescription, sections: p.sections, order_index: i,
+    }));
+    const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
+    if (pagesError) return NextResponse.json({ error: `Couldn't save the pages: ${pagesError.message}` }, { status: 500 });
+
+    return NextResponse.json({ success: true, websiteId, slug });
+  } catch (err: any) {
+    console.error("[website-builder/generate POST] error:", err.message, err.stack);
+    return NextResponse.json({ error: `Website generation failed: ${err.message}` }, { status: 500 });
   }
-
-  // generateWebsite() (websiteBuilderAgent.ts) emits block-shaped
-  // sections directly — no conversion needed here.
-  const pageRows = generatedPages.map((p, i) => ({
-    website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
-    meta_description: p.metaDescription, sections: p.sections, order_index: i,
-  }));
-  const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
-  if (pagesError) return NextResponse.json({ error: pagesError.message }, { status: 500 });
-
-  return NextResponse.json({ success: true, websiteId, slug });
 }

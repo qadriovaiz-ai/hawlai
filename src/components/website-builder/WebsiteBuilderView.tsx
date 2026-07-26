@@ -39,6 +39,7 @@ export default function WebsiteBuilderView() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -143,15 +144,20 @@ export default function WebsiteBuilderView() {
   async function handleGenerate() {
     if (!plan) return;
     setGenerating(true);
+    setGenerateError(null);
     try {
-      await fetch("/api/website-builder/generate", {
+      const r = await fetch("/api/website-builder/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, pages: plan.pages, themeKey: plan.themeKey, businessSummary: plan.businessSummary }),
       });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
       setPlan(null);
       setPrompt("");
       load();
+    } catch (err: any) {
+      setGenerateError(err.message ?? "Couldn't build the site — try again.");
     } finally {
       setGenerating(false);
     }
@@ -458,6 +464,7 @@ export default function WebsiteBuilderView() {
           <button onClick={handleGenerate} disabled={generating} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {website ? "Regenerate Website" : "Build Website"}
           </button>
+          {generateError && <p className="text-xs text-red-400 mt-2">{generateError}</p>}
         </div>
       )}
 
