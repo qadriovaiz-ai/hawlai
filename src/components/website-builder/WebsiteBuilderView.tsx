@@ -153,6 +153,9 @@ export default function WebsiteBuilderView() {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
+      if (d.fallbackWarnings?.length) {
+        setGenerateError(`Site built, but some pages used placeholder content instead of AI-generated content:\n${d.fallbackWarnings.join("\n")}`);
+      }
       setPlan(null);
       setPrompt("");
       load();

@@ -300,7 +300,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       try {
         const brandProfile = { tone_of_voice: ctx.toneOfVoice };
         const plan = await planWebsite(input.prompt, ctx.name, ctx.category, ctx.city, brandProfile);
-        const { pages: generatedPages } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt);
+        const { pages: generatedPages, fallbackWarnings } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt);
 
         const validTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(plan.themeKey) ? plan.themeKey : "navy_amber";
         const base = ctx.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
@@ -344,7 +344,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           success: true,
           pages: generatedPages.map((p) => p.title),
           theme: validTheme,
-          note: `Website built as a DRAFT with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}) — it is NOT live yet. Tell the person to review it in Website Builder and hit Publish there when they're happy with it.`,
+          note: `Website built as a DRAFT with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}) — it is NOT live yet. Tell the person to review it in Website Builder and hit Publish there when they're happy with it.${fallbackWarnings?.length ? ` Some pages fell back to placeholder content instead of real AI content (${fallbackWarnings.join("; ")}) — tell the person this happened and that they can hit Regenerate Website once it's resolved.` : ""}`,
         };
       } catch (err: any) {
         return { error: err.message };

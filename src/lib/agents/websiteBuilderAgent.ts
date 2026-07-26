@@ -308,7 +308,7 @@ async function generatePageBlocks(
   brandContext: string,
   customInstructions: string | null,
   fallback: GeneratedPage
-): Promise<{ page: GeneratedPage; fellBack: boolean }> {
+): Promise<{ page: GeneratedPage; fellBack: boolean; reason?: string }> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -334,12 +334,22 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
         }],
       }),
     });
-    if (!response.ok) return { page: fallback, fellBack: true };
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      return { page: fallback, fellBack: true, reason: `API returned ${response.status}: ${errBody.slice(0, 300)}` };
+    }
     const data = await response.json();
     const toolUse = (data.content ?? []).find((c: any) => c.type === "tool_use" && c.name === "emit_page");
     const input = toolUse?.input;
-    if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) return { page: fallback, fellBack: true };
-    if (!input.blocks.every((b: any) => b?.type === "section") || !input.blocks.every(isValidBlockInput)) return { page: fallback, fellBack: true };
+    if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) {
+      return { page: fallback, fellBack: true, reason: `No usable tool_use block in response (stop_reason: ${data.stop_reason ?? "unknown"})` };
+    }
+    if (!input.blocks.every((b: any) => b?.type === "section")) {
+      return { page: fallback, fellBack: true, reason: "Top-level block(s) weren't all type \"section\"" };
+    }
+    if (!input.blocks.every(isValidBlockInput)) {
+      return { page: fallback, fellBack: true, reason: "One or more blocks failed registry validation (unknown type, bad props, or invalid children)" };
+    }
 
     return {
       page: {
@@ -353,7 +363,7 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
     };
   } catch (err: any) {
     console.error("[website-builder-agent] page generation error:", page.slug, err.message);
-    return { page: fallback, fellBack: true };
+    return { page: fallback, fellBack: true, reason: `Exception: ${err.message}` };
   }
 }
 
@@ -365,7 +375,7 @@ export async function generateWebsite(
   businessSummary?: string | null,
   brandProfile?: BrandProfile | null,
   customInstructions?: string | null
-): Promise<{ pages: GeneratedPage[]; _fallback?: boolean }> {
+): Promise<{ pages: GeneratedPage[]; _fallback?: boolean; fallbackWarnings?: string[] }> {
   const pageList = pages && pages.length > 0 ? pages : DEFAULT_PLAN_PAGES;
 
   // Fallback content is still authored in the old flat shape (kept
@@ -413,5 +423,9 @@ export async function generateWebsite(
     return { ...page, sections: [hero, productGrid] };
   });
 
-  return { pages: resultPages, _fallback: generated.some((g) => g.fellBack) || undefined };
+  const fallbackWarnings = generated
+    .map((g, i) => (g.fellBack ? `${pageList[i].title}: ${g.reason ?? "unknown reason"}` : null))
+    .filter((w): w is string => !!w);
+
+  return { pages: resultPages, _fallback: generated.some((g) => g.fellBack) || undefined, fallbackWarnings };
 }

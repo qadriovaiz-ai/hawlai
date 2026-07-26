@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       prompt,
     }));
 
-    const { pages: generatedPages } = await generateWebsite(
+    const { pages: generatedPages, fallbackWarnings } = await generateWebsite(
       dealership?.dealership_name ?? "the business",
       dealership?.business_category ?? "business",
       dealership?.city ?? null,
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
     if (pagesError) return NextResponse.json({ error: `Couldn't save the pages: ${pagesError.message}` }, { status: 500 });
 
-    return NextResponse.json({ success: true, websiteId, slug });
+    return NextResponse.json({ success: true, websiteId, slug, fallbackWarnings: fallbackWarnings?.length ? fallbackWarnings : undefined });
   } catch (err: any) {
     console.error("[website-builder/generate POST] error:", err.message, err.stack);
     return NextResponse.json({ error: `Website generation failed: ${err.message}` }, { status: 500 });
