@@ -23,6 +23,7 @@
 import { generateBrandKit } from "./brandBuildingAgent";
 import { generateLogoConcept } from "./brandKitAgent";
 import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
+import { triggerVapiCall } from "./vapiCallAgent";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
 import { generateSocialTask, SOCIAL_TASKS } from "./socialManagementAgent";
@@ -259,6 +260,40 @@ const TOOLS = [
     name: "add_lead",
     description: "Manually add a new lead to the CRM. Use when the person gives you a name and phone number to add (e.g. someone they met offline).",
     input_schema: { type: "object", properties: { name: { type: "string" }, phone: { type: "string" }, email: { type: "string" }, notes: { type: "string" } }, required: ["name", "phone"] },
+  },
+  {
+    name: "trigger_call",
+    description: "Place a real, live AI phone call to a specific existing lead right now via the calling assistant. Only use this when the person explicitly names a lead and asks to call them (e.g. \"call Rahul\", \"ring up the lead from yesterday\") — this is a real phone call that costs money and reaches an actual person, so only trigger it on a clear, specific request, never proactively or for a lead that doesn't clearly match one in the CRM.",
+    input_schema: { type: "object", properties: { leadName: { type: "string", description: "The lead's name, as close as possible to how the person referred to them." } }, required: ["leadName"] },
+  },
+  {
+    name: "add_product",
+    description: "Add a real product to the business's store (Website Builder's Products tab / live storefront). Use when the person describes an actual product they sell and wants it listed, e.g. \"add a Mogra Nights candle at 599 rupees\". This is not a mockup or suggestion — it's saved and will genuinely appear for sale on their live site once published.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        description: { type: "string" },
+        price: { type: "number" },
+        category: { type: "string" },
+        inventoryCount: { type: "number", description: "Stock count, if the person mentions one. Omit for unlimited/untracked stock." },
+      },
+      required: ["name", "price"],
+    },
+  },
+  {
+    name: "create_discount_code",
+    description: "Create a real discount/coupon code customers can actually use at checkout on the business's store, e.g. \"make a WELCOME10 code for 10% off\". This is live the moment it's created — any customer who enters it gets the discount.",
+    input_schema: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "e.g. WELCOME10 — letters/numbers only, no spaces." },
+        discountType: { type: "string", enum: ["percentage", "fixed"] },
+        value: { type: "number", description: "Percent (0-100) if discountType is percentage, or a flat rupee amount if fixed." },
+        minOrderValue: { type: "number", description: "Optional minimum order subtotal to qualify." },
+      },
+      required: ["code", "discountType", "value"],
+    },
   },
   {
     name: "get_report_links",
@@ -541,6 +576,43 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const { data, error } = await supabase.from("leads").insert({ dealership_id: ctx.id, name: input.name, phone: input.phone, email: input.email ?? null, source: "manual_chat", qualification_reason: input.notes ?? null }).select().single();
       if (error) return { error: error.message };
       return { success: true, leadId: data.id };
+    }
+    case "trigger_call": {
+      const { data: matches } = await supabase.from("leads").select("id, name, phone, dealership_id").eq("dealership_id", ctx.id).ilike("name", `%${input.leadName}%`).limit(5);
+      if (!matches || matches.length === 0) return { error: `No lead found matching "${input.leadName}" — check the CRM for the exact name.` };
+      if (matches.length > 1) return { error: `Multiple leads match "${input.leadName}" (${matches.map((m: any) => m.name).join(", ")}) — ask the person to be more specific.` };
+      const lead = matches[0];
+      if (!lead.phone) return { error: `${lead.name} has no phone number on file, so a call can't be placed.` };
+      const result = await triggerVapiCall(supabase, lead);
+      if (!result.success) return { error: result.error };
+      return { success: true, calledLead: lead.name, note: `Call placed to ${lead.name}. Tell the person the call is in progress — the transcript and an updated lead score will appear once it ends.` };
+    }
+    case "add_product": {
+      const { data, error } = await supabase.from("products").insert({
+        dealership_id: ctx.id,
+        name: input.name,
+        description: input.description ?? null,
+        price: input.price,
+        category: input.category ?? null,
+        inventory_count: input.inventoryCount ?? null,
+      }).select("id").single();
+      if (error) return { error: error.message };
+      return { success: true, productId: data.id, note: `"${input.name}" added to the Products tab — saved with no image yet, the person can add one there.` };
+    }
+    case "create_discount_code": {
+      const code = String(input.code).trim().toUpperCase();
+      if (!/^[A-Z0-9_-]{3,20}$/.test(code)) return { error: "Code must be 3-20 letters/numbers, e.g. WELCOME10" };
+      const { data: existing } = await supabase.from("discount_codes").select("id").eq("dealership_id", ctx.id).eq("code", code).maybeSingle();
+      if (existing) return { error: `A code "${code}" already exists.` };
+      const { data, error } = await supabase.from("discount_codes").insert({
+        dealership_id: ctx.id,
+        code,
+        discount_type: input.discountType,
+        value: input.value,
+        min_order_value: input.minOrderValue ?? null,
+      }).select("id").single();
+      if (error) return { error: error.message };
+      return { success: true, code, note: `Code ${code} is live now — customers can use it at checkout immediately.` };
     }
     case "get_report_links": {
       const { data: dealership } = await supabase.from("dealerships").select("report_share_token").eq("id", ctx.id).single();
