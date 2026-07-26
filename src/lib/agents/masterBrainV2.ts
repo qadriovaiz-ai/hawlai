@@ -22,6 +22,7 @@
 
 import { generateBrandKit } from "./brandBuildingAgent";
 import { generateLogoConcept } from "./brandKitAgent";
+import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
 import { generateSocialTask, SOCIAL_TASKS } from "./socialManagementAgent";
@@ -77,8 +78,19 @@ const TOOLS = [
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "build_website",
+    description: "Build a REAL, live-rendering multi-page website (Home, About, Contact, Products/Services, etc — pages and theme chosen automatically based on the business) with actual pages saved to the database, viewable at its own URL. This is completely different from generate_content's 'website_copy' type, which only writes homepage TEXT and does not create any real pages — use build_website whenever the person wants an actual website/store built, not just copy for one. The site is created as a DRAFT (not published/live) so the person can review it first in Website Builder before making it public — mention that they still need to hit Publish there when ready.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "A rich description of the business for the site: what they sell/do, who their customers are, and the desired look/feel (e.g. luxury, playful, minimal). Write this yourself from what you know about the business and conversation so far — don't just ask the person to repeat themselves if they've already told you enough." },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
     name: "generate_content",
-    description: `Generate a marketing content piece. Valid contentType values: ${CONTENT_TYPES.map((t) => t.key).join(", ")}. Use for social posts, blogs, newsletters, sales sequences, hooks, CTAs, content calendars.`,
+    description: `Generate a marketing content piece. Valid contentType values: ${CONTENT_TYPES.map((t) => t.key).join(", ")}. Use for social posts, blogs, newsletters, sales sequences, hooks, CTAs, content calendars. The "website_copy" type only writes homepage text — it does NOT create a real website. If the person actually wants a website/store built (not just copy), use build_website instead.`,
     input_schema: {
       type: "object",
       properties: {
@@ -280,6 +292,60 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
         await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, logo_url: publicUrlData.publicUrl, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
         return { success: true, logoUrl: publicUrlData.publicUrl, note: "Saved to Brand Voice — the person can view/download it there, you cannot show the image inline." };
+      } catch (err: any) {
+        return { error: err.message };
+      }
+    }
+    case "build_website": {
+      try {
+        const brandProfile = { tone_of_voice: ctx.toneOfVoice };
+        const plan = await planWebsite(input.prompt, ctx.name, ctx.category, ctx.city, brandProfile);
+        const { pages: generatedPages } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt);
+
+        const validTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(plan.themeKey) ? plan.themeKey : "navy_amber";
+        const base = ctx.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
+
+        const { data: existing } = await supabase.from("websites").select("id, slug").eq("dealership_id", ctx.id).maybeSingle();
+        let websiteId: string;
+        let slug: string;
+        if (existing) {
+          websiteId = existing.id;
+          slug = existing.slug;
+          await supabase.from("websites").update({
+            site_type: "custom", theme_key: validTheme, nav_order: generatedPages.map((p) => p.slug),
+            prompt: input.prompt, business_summary: plan.businessSummary,
+          }).eq("id", websiteId);
+          await supabase.from("website_pages").delete().eq("website_id", websiteId);
+        } else {
+          slug = base;
+          let attempt = 0;
+          while (attempt < 20) {
+            const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
+            const { data: taken } = await supabase.from("websites").select("id").eq("slug", candidate).maybeSingle();
+            if (!taken) { slug = candidate; break; }
+            attempt++;
+          }
+          const { data: newSite, error } = await supabase.from("websites").insert({
+            dealership_id: ctx.id, slug, site_type: "custom", theme_key: validTheme,
+            nav_order: generatedPages.map((p) => p.slug), prompt: input.prompt, business_summary: plan.businessSummary,
+          }).select("id").single();
+          if (error) return { error: error.message };
+          websiteId = newSite.id;
+        }
+
+        const pageRows = generatedPages.map((p, i) => ({
+          website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
+          meta_description: p.metaDescription, sections: p.sections, order_index: i,
+        }));
+        const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
+        if (pagesError) return { error: pagesError.message };
+
+        return {
+          success: true,
+          pages: generatedPages.map((p) => p.title),
+          theme: validTheme,
+          note: `Website built as a DRAFT with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}) — it is NOT live yet. Tell the person to review it in Website Builder and hit Publish there when they're happy with it.`,
+        };
       } catch (err: any) {
         return { error: err.message };
       }
