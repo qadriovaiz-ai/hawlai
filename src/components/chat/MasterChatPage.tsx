@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Brain, Loader2, Send, User, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
 
 const EXAMPLES = [
   "Build my brand kit — logo colors, tagline, brand story",
@@ -123,13 +124,33 @@ export default function MasterChatPage({
               )}
               <div
                 className={cn(
-                  "rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+                  "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                   msg.role === "user"
-                    ? "bg-gradient-to-br from-brand-600 to-brand-700 text-white rounded-tr-sm"
+                    ? "bg-gradient-to-br from-brand-600 to-brand-700 text-white rounded-tr-sm whitespace-pre-wrap"
                     : "bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-sm"
                 )}
               >
-                {msg.content}
+                {msg.role === "assistant" ? (
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      h1: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1.5 first:mt-0">{children}</h3>,
+                      h2: ({ children }) => <h3 className="text-sm font-bold mt-3 mb-1.5 first:mt-0">{children}</h3>,
+                      h3: ({ children }) => <h4 className="text-sm font-semibold mt-2.5 mb-1 first:mt-0">{children}</h4>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5 last:mb-0">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 last:mb-0">{children}</ol>,
+                      li: ({ children }) => <li>{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
+                      a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">{children}</a>,
+                      hr: () => <hr className="my-2.5 border-slate-200" />,
+                      code: ({ children }) => <code className="bg-slate-200/70 px-1 py-0.5 rounded text-xs">{children}</code>,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : (
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                )}
               </div>
             </div>
             {msg.role === "user" && (

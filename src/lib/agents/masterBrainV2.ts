@@ -67,7 +67,7 @@ async function getContext(supabase: any, dealershipId: string): Promise<Dealersh
 const TOOLS = [
   {
     name: "generate_brand_kit",
-    description: "Generate the business's brand identity kit: colors, typography, tagline, mission, vision, brand story, social bios, guidelines. Use when the person wants to build/establish their brand identity from scratch or refresh it.",
+    description: "Generate the business's brand identity kit: colors, typography, tagline, mission, vision, brand story, social bios, guidelines. Use when the person wants to build/establish their brand identity from scratch or refresh it. Saved to the 'Brand Voice' page.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -488,7 +488,7 @@ export async function runMasterBrainChat(
 
 Guidelines:
 - When the person asks for something concrete, USE THE RELEVANT TOOL rather than just talking about it. For a broad request ("help me launch my skincare brand"), call multiple tools in sequence (e.g. brand kit, then a launch content piece, then SEO) and weave the results into one helpful reply.
-- Everything you generate is automatically saved and also shows up on its normal dashboard page — you don't need to tell the person to go save it, just mention where they can find/edit it if relevant (e.g. "you'll find this under Brand Building too").
+- Everything you generate is automatically saved and also shows up on its normal dashboard page. ALWAYS end your reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard."
 - generate_graphic produces a real image but you cannot display it inline — tell the person it's ready on the Graphic Design page.
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
