@@ -21,6 +21,7 @@
 // ------------------------------------------------------------------
 
 import { generateBrandKit } from "./brandBuildingAgent";
+import { generateLogoConcept } from "./brandKitAgent";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
 import { generateSocialTask, SOCIAL_TASKS } from "./socialManagementAgent";
@@ -67,7 +68,12 @@ async function getContext(supabase: any, dealershipId: string): Promise<Dealersh
 const TOOLS = [
   {
     name: "generate_brand_kit",
-    description: "Generate the business's brand identity kit: colors, typography, tagline, mission, vision, brand story, social bios, guidelines. Use when the person wants to build/establish their brand identity from scratch or refresh it. Saved to the 'Brand Voice' page.",
+    description: "Generate the business's brand identity kit: colors, typography, tagline, mission, vision, brand story, social bios, guidelines. Use when the person wants to build/establish their brand identity from scratch or refresh it. Saved to the 'Brand Voice' page. Note: this does NOT create an actual logo image — it's text/color guidance only. If the person's request implies they want a visual logo too (e.g. \"build my brand kit\", \"design a logo\"), also call generate_logo.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "generate_logo",
+    description: "Generate an actual AI logo image for the business and save it to the Brand Voice / Brand Building page. Note: you cannot display the image inline in chat — tell the person it's saved and they can view/download it there.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -263,6 +269,20 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category);
       if (!(kit as any)._fallback) await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, kit, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return kit;
+    }
+    case "generate_logo": {
+      try {
+        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category);
+        const { createServiceClient } = await import("../supabase/service");
+        const serviceClient = createServiceClient();
+        const filePath = `logos/${ctx.id}/${Date.now()}.png`;
+        await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
+        const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
+        await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, logo_url: publicUrlData.publicUrl, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
+        return { success: true, logoUrl: publicUrlData.publicUrl, note: "Saved to Brand Voice — the person can view/download it there, you cannot show the image inline." };
+      } catch (err: any) {
+        return { error: err.message };
+      }
     }
     case "generate_content": {
       const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] });
