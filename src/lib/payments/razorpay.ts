@@ -1,12 +1,15 @@
 import crypto from "crypto";
 
-// Razorpay is optional and off by default — it activates automatically
-// the moment RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET are set in the
-// environment. Callers must check isRazorpayConfigured() before offering
-// "Pay Online" so the storefront falls back to Cash on Delivery cleanly
-// when no Razorpay account is connected yet.
-export function isRazorpayConfigured(): boolean {
-  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+// Razorpay is per-dealership, not a shared platform account — each
+// business connects their OWN Key ID + Key Secret (from their own
+// Razorpay account) so their customers' payments settle directly into
+// their own bank account, not into whichever account happens to be in
+// the platform's env vars. Every function here takes credentials as
+// parameters; callers are responsible for fetching the right
+// dealership's own keys first.
+
+export function isRazorpayConfigured(keyId: string | null | undefined, keySecret: string | null | undefined): boolean {
+  return Boolean(keyId && keySecret);
 }
 
 interface RazorpayOrder {
@@ -15,10 +18,8 @@ interface RazorpayOrder {
   currency: string;
 }
 
-export async function createRazorpayOrder(amountInPaise: number, receipt: string): Promise<RazorpayOrder> {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new Error("Razorpay is not configured");
+export async function createRazorpayOrder(amountInPaise: number, receipt: string, keyId: string, keySecret: string): Promise<RazorpayOrder> {
+  if (!keyId || !keySecret) throw new Error("Razorpay is not connected for this business yet");
 
   const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   const res = await fetch("https://api.razorpay.com/v1/orders", {
@@ -38,9 +39,11 @@ export async function createRazorpayOrder(amountInPaise: number, receipt: string
 // account's key secret. Recomputing and comparing it here is the only
 // way to know a payment is real — the handler callback firing on the
 // client proves nothing by itself (it can be called with fabricated
-// arguments by anyone with devtools open).
-export function verifyRazorpaySignature(orderId: string, paymentId: string, signature: string): boolean {
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+// arguments by anyone with devtools open). Must be checked against the
+// SAME dealership's key secret that created the order, or a payment
+// to Dealership A's Razorpay account could be spoofed as paying for
+// Dealership B's order.
+export function verifyRazorpaySignature(orderId: string, paymentId: string, signature: string, keySecret: string | null | undefined): boolean {
   if (!keySecret || !orderId || !paymentId || !signature) return false;
 
   const expected = crypto.createHmac("sha256", keySecret).update(`${orderId}|${paymentId}`).digest("hex");

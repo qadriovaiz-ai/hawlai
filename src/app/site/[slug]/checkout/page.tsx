@@ -45,11 +45,11 @@ export default function CheckoutPage() {
   }, [slug]);
 
   useEffect(() => {
-    fetch("/api/public/payment-config")
+    fetch(`/api/public/payment-config?slug=${encodeURIComponent(slug)}`)
       .then((r) => r.json())
       .then((d) => setRazorpayEnabled(Boolean(d.razorpayEnabled)))
       .catch(() => setRazorpayEnabled(false));
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     fetch(`/api/public/shipping-config?slug=${encodeURIComponent(slug)}`)

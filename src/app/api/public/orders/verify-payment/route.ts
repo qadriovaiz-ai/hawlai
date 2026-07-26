@@ -10,8 +10,12 @@ import { verifyRazorpaySignature } from "@/lib/payments/razorpay";
 // handler firing proves nothing on its own (it can be invoked with
 // fabricated arguments from devtools), so payment_status is only ever
 // set to "paid" here, after recomputing the HMAC signature from
-// order_id + payment_id with our own key secret and confirming it
-// matches what Razorpay sent back.
+// order_id + payment_id with THIS SPECIFIC dealership's own key
+// secret and confirming it matches what Razorpay sent back — using
+// the wrong dealership's secret (or a shared platform-wide one) would
+// let a payment made on Business A's Razorpay account be spoofed as
+// paying for Business B's order, so the website/dealership must be
+// resolved from `slug` before verification, not after.
 export async function POST(request: Request) {
   const body = await request.json();
   const {
@@ -30,10 +34,6 @@ export async function POST(request: Request) {
   if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
     return NextResponse.json({ error: "Missing payment confirmation details" }, { status: 400 });
   }
-  if (!verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
-    return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
-  }
-
   if (!slug) return NextResponse.json({ error: "Missing page reference" }, { status: 400 });
   if (!customerName || String(customerName).trim().length < 2) return NextResponse.json({ error: "Name is required" }, { status: 400 });
   if (!customerPhone || String(customerPhone).trim().length < 8) return NextResponse.json({ error: "A valid phone number is required" }, { status: 400 });
@@ -43,6 +43,11 @@ export async function POST(request: Request) {
   const pricing = await resolveOrderPricing(supabase, slug, items, discountCode);
   if (!pricing.ok) return NextResponse.json({ error: pricing.error }, { status: pricing.status });
   const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
+
+  const { data: dealership } = await supabase.from("dealerships").select("razorpay_key_secret").eq("id", website.dealership_id).maybeSingle();
+  if (!verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature, dealership?.razorpay_key_secret)) {
+    return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
+  }
 
   const { data: order, error } = await supabase.from("orders").insert({
     dealership_id: website.dealership_id,

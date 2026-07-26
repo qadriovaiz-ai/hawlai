@@ -35,14 +35,15 @@ export async function POST(request: Request) {
   const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
 
   if (paymentMethod === "razorpay") {
-    if (!isRazorpayConfigured()) {
+    const { data: dealership } = await supabase.from("dealerships").select("razorpay_key_id, razorpay_key_secret").eq("id", website.dealership_id).maybeSingle();
+    if (!isRazorpayConfigured(dealership?.razorpay_key_id, dealership?.razorpay_key_secret)) {
       return NextResponse.json({ error: "Online payment isn't available right now — please choose Cash on Delivery" }, { status: 400 });
     }
     try {
-      const razorpayOrder = await createRazorpayOrder(Math.round(total * 100), `site_${slug}_${Date.now()}`);
+      const razorpayOrder = await createRazorpayOrder(Math.round(total * 100), `site_${slug}_${Date.now()}`, dealership!.razorpay_key_id!, dealership!.razorpay_key_secret!);
       return NextResponse.json({
         success: true,
-        razorpay: { orderId: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, keyId: process.env.RAZORPAY_KEY_ID },
+        razorpay: { orderId: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, keyId: dealership!.razorpay_key_id },
         subtotal,
         discountAmount,
         shippingAmount,

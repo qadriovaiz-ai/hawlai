@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2 } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2, CreditCard } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
 import OffersPanel from "./OffersPanel";
 import ShippingPanel from "./ShippingPanel";
+import PaymentsPanel from "./PaymentsPanel";
 import AbandonedCartsPanel from "./AbandonedCartsPanel";
 import BlockCanvas from "./blocks/BlockCanvas";
 import ImageUploader from "./ImageUploader";
@@ -32,7 +33,7 @@ const THEME_PREVIEWS: Record<string, { label: string; dark: string; accent: stri
 };
 
 export default function WebsiteBuilderView() {
-  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping">("website");
+  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping" | "payments">("website");
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -378,12 +379,13 @@ export default function WebsiteBuilderView() {
 
   const currentPage = pages.find((p) => p.id === activePage);
 
-  const TABS: { key: "website" | "products" | "orders" | "domain" | "offers" | "shipping"; label: string; icon: any }[] = [
+  const TABS: { key: "website" | "products" | "orders" | "domain" | "offers" | "shipping" | "payments"; label: string; icon: any }[] = [
     { key: "website", label: "Website", icon: Globe },
     { key: "products", label: "Products", icon: Package },
     { key: "offers", label: "Offers", icon: Tag },
     { key: "orders", label: "Orders", icon: ClipboardList },
     { key: "shipping", label: "Shipping", icon: Truck },
+    { key: "payments", label: "Payments", icon: CreditCard },
     { key: "domain", label: "Domain", icon: Globe2 },
   ];
 
@@ -406,6 +408,7 @@ export default function WebsiteBuilderView() {
         </div>
       )}
       {tab === "shipping" && <ShippingPanel />}
+      {tab === "payments" && <PaymentsPanel />}
       {tab === "domain" && <DomainPanel />}
 
       {tab === "website" && (
