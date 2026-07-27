@@ -422,12 +422,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return output;
     }
     case "research_competitor": {
-      const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category);
+      const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id });
       if (!_fallback) await saveGenerated(supabase, ctx.id, "competitor_intel_items", { task_type: input.taskType, competitor_name: input.competitorName, output });
       return output;
     }
     case "research_market": {
-      const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city);
+      const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city, { supabase, dealershipId: ctx.id });
       if (!_fallback) await saveGenerated(supabase, ctx.id, "research_items", { task_type: input.taskType, output });
       return output;
     }
@@ -502,7 +502,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "get_customer_sentiment": {
       const { data: leads } = await supabase.from("leads").select("qualification_reason, lead_temperature, status").eq("dealership_id", ctx.id).limit(200);
-      const { output } = await generateSentimentFromLeads(ctx.name, ctx.category, (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })));
+      const { output } = await generateSentimentFromLeads(ctx.name, ctx.category, (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })), { supabase, dealershipId: ctx.id });
       return output;
     }
     case "create_workflow": {

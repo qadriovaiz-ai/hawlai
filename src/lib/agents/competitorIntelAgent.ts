@@ -6,6 +6,8 @@
 // data. New Product Alerts is a separate real monitoring system, see
 // lib/automation/competitorMonitor.ts.
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface CompetitorTaskMeta {
   key: string;
   label: string;
@@ -39,7 +41,8 @@ export async function generateCompetitorIntel(
   taskKey: string,
   competitorName: string,
   dealershipName: string,
-  businessCategory: string
+  businessCategory: string,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = COMPETITOR_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -72,6 +75,7 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = (data.content ?? [])
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)

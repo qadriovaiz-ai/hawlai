@@ -22,7 +22,9 @@ export const RESEARCH_TASKS: ResearchTaskMeta[] = [
   { key: "customer_sentiment", label: "Customer Sentiment", usesWebSearch: false },
 ];
 
-async function callClaude(body: any): Promise<any | null> {
+import { logClaudeUsage } from "../usage/logUsage";
+
+async function callClaude(body: any, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -33,6 +35,7 @@ async function callClaude(body: any): Promise<any | null> {
     const bodyText = await response.text();
     if (!bodyText.trim()) return null;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "research", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -48,7 +51,8 @@ export async function generateResearch(
   taskKey: string,
   dealershipName: string,
   businessCategory: string,
-  city: string | null
+  city: string | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const location = city ? ` in ${city}, India` : " in India";
   const fallback = { output: { text: "Couldn't complete this research right now — try again shortly." }, _fallback: true };
@@ -59,7 +63,7 @@ export async function generateResearch(
       max_tokens: 2000,
       messages: [{ role: "user", content: `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
-    });
+    }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
 
@@ -69,7 +73,7 @@ export async function generateResearch(
       max_tokens: 2000,
       messages: [{ role: "user", content: `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
-    });
+    }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
 
@@ -79,7 +83,7 @@ export async function generateResearch(
       max_tokens: 2000,
       messages: [{ role: "user", content: `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
-    });
+    }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
 
@@ -91,7 +95,8 @@ export async function generateResearch(
 export async function generateSentimentFromLeads(
   dealershipName: string,
   businessCategory: string,
-  leadSignals: { qualificationReason: string | null; temperature: string; status: string }[]
+  leadSignals: { qualificationReason: string | null; temperature: string; status: string }[],
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const fallback = { output: { text: "Not enough lead data yet to analyze sentiment — this improves as more leads come in with qualification notes." }, _fallback: true };
   const withReasons = leadSignals.filter((l) => l.qualificationReason);
@@ -110,6 +115,6 @@ ${summaryInput}
 
 Identify recurring themes — common interests, hesitations, price sensitivity, what makes leads "hot" vs "cold". Return JSON only: {"positiveThemes": [], "concernsOrObjections": [], "summary": "2-3 sentence overall read"}. Base this ONLY on what's actually in the notes above — don't invent sentiment that isn't reflected in the data.`,
     }],
-  });
+  }, logContext);
   return parsed ? { output: parsed } : fallback;
 }

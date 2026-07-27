@@ -23,7 +23,8 @@ export async function POST(request: Request) {
     taskType,
     competitorName,
     dealership?.dealership_name ?? "the business",
-    dealership?.business_category ?? "business"
+    dealership?.business_category ?? "business",
+    { supabase, dealershipId }
   );
 
   let saved = null;

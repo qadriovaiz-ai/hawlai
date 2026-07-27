@@ -25,10 +25,11 @@ export async function POST(request: Request) {
     result = await generateSentimentFromLeads(
       dealership?.dealership_name ?? "the business",
       dealership?.business_category ?? "business",
-      (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status }))
+      (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })),
+      { supabase, dealershipId }
     );
   } else {
-    result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null);
+    result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId });
   }
 
   const { output, _fallback } = result;
