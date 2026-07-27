@@ -28,12 +28,15 @@ interface BrandProfile {
   tone_of_voice?: string | null;
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function generateEmailContent(
   taskKey: string,
   dealershipName: string,
   businessCategory: string,
   topic: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -69,6 +72,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "email_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

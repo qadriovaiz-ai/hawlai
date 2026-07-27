@@ -6,6 +6,8 @@
 // and viral trend detection (uses Claude's web_search tool so trends
 // are actually current instead of guessed from training data).
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface SocialTaskMeta {
   key: string;
   label: string;
@@ -85,7 +87,8 @@ export async function generateSocialTask(
   dealershipName: string,
   businessCategory: string,
   inputText: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = SOCIAL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -127,6 +130,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "social_task", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = (data.content ?? [])
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)

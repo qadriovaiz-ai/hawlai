@@ -7,6 +7,8 @@
 // generous max_tokens, JSON-only response, full fallback, never cache
 // a fallback in the API layer.
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface ContentTypeMeta {
   key: string;
   label: string;
@@ -48,7 +50,8 @@ export async function generateContent(
   dealershipName: string,
   businessCategory: string,
   topic: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
@@ -94,6 +97,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "content_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

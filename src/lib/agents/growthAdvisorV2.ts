@@ -8,6 +8,8 @@
 // of the AI) so the numbers are real arithmetic on real historical
 // data, with the AI only adding a narrative interpretation on top.
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 interface RevenueForecast {
   weeklyLeadCounts: number[]; // last 8 weeks, oldest first
   conversionRate: number | null;
@@ -69,6 +71,7 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
       if (response.ok) {
         const bodyText = await response.text();
         const data = JSON.parse(bodyText);
+        if (data.usage) await logClaudeUsage(supabase, dealershipId, "growth_advisor", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
         const text = data.content?.[0]?.text ?? "";
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
