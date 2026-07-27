@@ -9,6 +9,7 @@
 // ------------------------------------------------------------------
 
 import { getCampaignPerformance } from "./analyticsAgent";
+import { logClaudeUsage } from "../usage/logUsage";
 
 export interface GrowthReport {
   healthScore: number; // 0-100
@@ -72,6 +73,7 @@ Return JSON only:
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (data.usage) await logClaudeUsage(supabase, dealershipId, "growth_report", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

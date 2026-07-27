@@ -25,6 +25,8 @@ export const VIDEO_TASKS: VideoTaskMeta[] = [
   { key: "animation", label: "Animation Concepts", instructions: "3 short animation/motion-graphics concepts suited to a small business budget (e.g. animated text reveals, simple icon animations, kinetic typography), each with a one-line concept and where it'd be used." },
 ];
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 interface BrandProfile {
   tone_of_voice?: string | null;
 }
@@ -34,7 +36,8 @@ export async function generateVideoTask(
   dealershipName: string,
   businessCategory: string,
   topic: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = VIDEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -70,6 +73,7 @@ Return JSON only, no markdown. Shape the JSON sensibly (e.g. "ideas" array, "cap
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "video_marketing", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

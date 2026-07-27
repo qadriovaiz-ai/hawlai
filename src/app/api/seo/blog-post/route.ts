@@ -19,6 +19,6 @@ export async function POST(request: Request) {
     businessCategory = dealership?.business_category ?? "car dealership";
   }
 
-  const post = await generateBlogPost(topic.trim(), city, businessCategory);
+  const post = await generateBlogPost(topic.trim(), city, businessCategory, dealershipId ? { supabase, dealershipId } : undefined);
   return NextResponse.json(post);
 }

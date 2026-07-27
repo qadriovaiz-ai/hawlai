@@ -412,12 +412,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return output;
     }
     case "generate_ad_plan": {
-      const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice });
+      const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
       return output;
     }
     case "generate_video_task": {
-      const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice });
+      const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
       if (!_fallback) await saveGenerated(supabase, ctx.id, "video_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return output;
     }
@@ -482,9 +482,9 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_seo_keywords": {
       if (input.writeFullBlogPost) {
         const { generateBlogPost } = await import("./seoAgent");
-        return generateBlogPost(input.topic, ctx.city, ctx.category);
+        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id });
       }
-      return generateSeoIdeas(input.topic, ctx.city, ctx.category);
+      return generateSeoIdeas(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id });
     }
     case "generate_graphic": {
       try {

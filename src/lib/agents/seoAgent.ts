@@ -14,12 +14,19 @@ export interface SeoIdeas {
   contentIdeas: string[];
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface BlogPost {
   title: string;
   content: string;
 }
 
-export async function generateBlogPost(topic: string, city?: string | null, businessCategory: string = "car dealership"): Promise<BlogPost> {
+export async function generateBlogPost(
+  topic: string,
+  city?: string | null,
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
+): Promise<BlogPost> {
   const fallback: BlogPost = {
     title: `A Buyer's Guide to ${topic}`,
     content: `${topic} is a popular choice for buyers in ${city ?? "India"}. Contact us to learn more about pricing, financing, and availability.`,
@@ -52,6 +59,7 @@ Topic: "${topic}"${city ? `, location: ${city}` : ""}
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_blog_post", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -67,7 +75,8 @@ Topic: "${topic}"${city ? `, location: ${city}` : ""}
 export async function generateSeoIdeas(
   topic: string,
   city?: string | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<SeoIdeas> {
   const fallback: SeoIdeas = {
     keywords: [`${topic} ${city ?? ""}`.trim(), `best ${topic} deals`, `${topic} price`],
@@ -101,6 +110,7 @@ Return JSON only:
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_keywords", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
