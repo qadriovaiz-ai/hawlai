@@ -19,11 +19,14 @@ interface BrandProfile {
   preferred_language?: string | null;
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function generateRetentionMessage(
   customer: CustomerInfo,
   brandProfile: BrandProfile | null,
   angle: "service_reminder" | "referral" | "upsell",
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<string> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -64,6 +67,7 @@ ${brandContext}
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "retention_message", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

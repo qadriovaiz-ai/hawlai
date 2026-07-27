@@ -11,6 +11,7 @@
 // ------------------------------------------------------------------
 
 import { getCampaignPerformance, CampaignPerformance } from "./analyticsAgent";
+import { logClaudeUsage } from "../usage/logUsage";
 
 export interface OptimizationRecommendation {
   campaign_id: string;
@@ -25,7 +26,7 @@ export interface OptimizationResult {
   summary: string;
 }
 
-async function getRecommendations(campaigns: CampaignPerformance[], businessCategory: string): Promise<{ recommendations: OptimizationRecommendation[]; summary: string }> {
+async function getRecommendations(campaigns: CampaignPerformance[], businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ recommendations: OptimizationRecommendation[]; summary: string }> {
   const fallback = {
     recommendations: [],
     summary: "Not enough spend/lead data yet to make confident recommendations.",
@@ -59,6 +60,7 @@ Only include campaigns where you have enough signal (spend > 0 or leads > 0) to 
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "optimization_recommendations", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -93,6 +95,6 @@ export async function analyzeCampaigns(supabase: any, dealershipId: string): Pro
     };
   }
 
-  const { recommendations, summary } = await getRecommendations(performance.campaigns, businessCategory);
+  const { recommendations, summary } = await getRecommendations(performance.campaigns, businessCategory, { supabase, dealershipId });
   return { hasEnoughData: true, recommendations, summary };
 }

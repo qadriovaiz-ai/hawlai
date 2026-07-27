@@ -29,6 +29,6 @@ export async function POST(request: Request) {
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
 
-  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "car dealership");
+  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json({ message });
 }

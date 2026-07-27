@@ -8,6 +8,7 @@
 // ------------------------------------------------------------------
 
 import { getCampaignPerformance } from "./analyticsAgent";
+import { logClaudeUsage } from "../usage/logUsage";
 
 export interface ReportStats {
   totalLeads: number;
@@ -74,7 +75,7 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
   };
 }
 
-async function summarizeWithClaude(stats: ReportStats, businessCategory: string): Promise<{ summary: string; priorities: string[] }> {
+async function summarizeWithClaude(stats: ReportStats, businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ summary: string; priorities: string[] }> {
   const fallback = {
     summary:
       stats.totalLeads === 0
@@ -109,6 +110,7 @@ Write it like a sharp marketing manager briefing a busy founder — plain langua
     if (!response.ok) return fallback;
     const bodyText = await response.text();
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "executive_report", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -130,7 +132,7 @@ export async function generateExecutiveReport(supabase: any, dealershipId: strin
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
   const businessCategory = dealership?.business_category ?? "car dealership";
-  const { summary, priorities } = await summarizeWithClaude(stats, businessCategory);
+  const { summary, priorities } = await summarizeWithClaude(stats, businessCategory, { supabase, dealershipId });
   return { stats, summary, priorities };
 }
 
@@ -144,7 +146,8 @@ export async function generateExecutiveReport(supabase: any, dealershipId: strin
 export async function explainCampaign(
   campaign: { headline: string; body_copy?: string; daily_budget?: number; targeting_city?: string; creative_score?: number },
   performance: { spend: number; leads: number; impressions: number; clicks: number; cost_per_lead: number | null } | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<string> {
   const fallback = performance && (performance.spend > 0 || performance.leads > 0)
     ? `This campaign has spent ${performance.spend} and generated ${performance.leads} leads so far. Check back after it's run a bit longer for a fuller picture.`
@@ -179,6 +182,7 @@ Write 3-4 plain-language sentences: what's working, what isn't, and one concrete
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "explain_campaign", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     return text.trim() || fallback;
   } catch (err: any) {

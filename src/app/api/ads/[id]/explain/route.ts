@@ -29,6 +29,6 @@ export async function POST(
   const performance = await getCampaignPerformance(supabase, dealershipId);
   const thisPerf = performance.campaigns.find((c) => c.id === id) ?? null;
 
-  const explanation = await explainCampaign(campaign, thisPerf, dealership?.business_category ?? "car dealership");
+  const explanation = await explainCampaign(campaign, thisPerf, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json({ explanation });
 }
