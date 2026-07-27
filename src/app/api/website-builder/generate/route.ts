@@ -110,7 +110,8 @@ export async function POST(request: Request) {
       cleanPages,
       businessSummary ?? null,
       brandProfile,
-      prompt ?? null
+      prompt ?? null,
+      { supabase, dealershipId }
     );
 
     const base = (dealership?.dealership_name ?? "site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";

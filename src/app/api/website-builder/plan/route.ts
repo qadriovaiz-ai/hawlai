@@ -28,7 +28,8 @@ export async function POST(request: Request) {
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "business",
     dealership?.city ?? null,
-    brandProfile
+    brandProfile,
+    { supabase, dealershipId }
   );
 
   return NextResponse.json({ plan, prompt: prompt.trim() });

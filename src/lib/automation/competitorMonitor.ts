@@ -6,6 +6,8 @@
 // day. Uses Claude's web_search tool — this is real search-grounded
 // output, not fabricated "there's a new product" claims.
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function checkCompetitorAlerts(supabase: any, dealershipId: string) {
   const { data: watches } = await supabase
     .from("competitor_watches")
@@ -40,6 +42,7 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
       const bodyText = await response.text();
       if (!bodyText.trim()) continue;
       const data = JSON.parse(bodyText);
+      if (data.usage) await logClaudeUsage(supabase, dealershipId, "competitor_monitor", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
       const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

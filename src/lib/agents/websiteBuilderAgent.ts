@@ -10,6 +10,7 @@
 
 import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
+import { logClaudeUsage } from "../usage/logUsage";
 
 export interface SiteTypeMeta {
   key: string;
@@ -136,7 +137,8 @@ export async function planWebsite(
   dealershipName: string,
   businessCategory: string,
   city: string | null,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<WebsitePlan> {
   const fallback: WebsitePlan = {
     businessSummary: `${dealershipName} — ${businessCategory}`,
@@ -190,6 +192,7 @@ Return JSON only, no markdown, no preamble: {"businessSummary":"...","themeKey":
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -307,7 +310,8 @@ async function generatePageBlocks(
   businessSummary: string | null,
   brandContext: string,
   customInstructions: string | null,
-  fallback: GeneratedPage
+  fallback: GeneratedPage,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ page: GeneratedPage; fellBack: boolean; reason?: string }> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -339,6 +343,7 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
       return { page: fallback, fellBack: true, reason: `API returned ${response.status}: ${errBody.slice(0, 300)}` };
     }
     const data = await response.json();
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_page_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const toolUse = (data.content ?? []).find((c: any) => c.type === "tool_use" && c.name === "emit_page");
     const input = toolUse?.input;
     if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) {
@@ -374,7 +379,8 @@ export async function generateWebsite(
   pages: PlannedPage[],
   businessSummary?: string | null,
   brandProfile?: BrandProfile | null,
-  customInstructions?: string | null
+  customInstructions?: string | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ pages: GeneratedPage[]; _fallback?: boolean; fallbackWarnings?: string[] }> {
   const pageList = pages && pages.length > 0 ? pages : DEFAULT_PLAN_PAGES;
 
@@ -406,7 +412,7 @@ export async function generateWebsite(
     : "No brand voice set yet — keep it natural, honest, and specific to this business.";
 
   const generated = await mapWithConcurrency(pageList, 3, (page) =>
-    generatePageBlocks(dealershipName, businessCategory, city, page, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!)
+    generatePageBlocks(dealershipName, businessCategory, city, page, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext)
   );
 
   // Pages meant to list real products (shop/products/menu/listings)
