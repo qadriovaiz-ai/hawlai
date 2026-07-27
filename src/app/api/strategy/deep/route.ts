@@ -53,7 +53,8 @@ export async function GET(request: Request) {
     dealership?.city ?? null,
     brandProfile,
     dealership?.business_category ?? "car dealership",
-    competitorContext
+    competitorContext,
+    { supabase, dealershipId }
   );
 
   // Never cache a fallback result — a transient API hiccup shouldn't

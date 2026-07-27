@@ -34,7 +34,8 @@ export async function GET(request: Request) {
     dealership?.dealership_name ?? "the business",
     dealership?.city ?? null,
     brandProfile,
-    dealership?.business_category ?? "car dealership"
+    dealership?.business_category ?? "car dealership",
+    { supabase, dealershipId }
   );
 
   // Never cache a fallback result — a transient API hiccup shouldn't

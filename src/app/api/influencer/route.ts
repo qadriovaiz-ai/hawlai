@@ -19,6 +19,6 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
-  const plan = await generateInfluencerPlan(product.trim(), dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership");
+  const plan = await generateInfluencerPlan(product.trim(), dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json(plan);
 }

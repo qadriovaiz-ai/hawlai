@@ -314,7 +314,7 @@ async function saveGenerated(supabase: any, dealershipId: string, table: string,
 async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any): Promise<any> {
   switch (toolName) {
     case "generate_brand_kit": {
-      const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category);
+      const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });
       if (!(kit as any)._fallback) await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, kit, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return kit;
     }
@@ -466,7 +466,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return output;
     }
     case "generate_influencer_outreach": {
-      return generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category);
+      return generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });
     }
     case "get_analytics_summary": {
       const performance = await getCampaignPerformance(supabase, ctx.id);
@@ -475,7 +475,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_marketing_strategy": {
       const { data: competitorRows } = await supabase.from("competitor_intel_items").select("competitor_name, output").eq("dealership_id", ctx.id).limit(3);
       const competitorContext = (competitorRows ?? []).length > 0 ? JSON.stringify(competitorRows) : null;
-      const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext);
+      const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext, { supabase, dealershipId: ctx.id });
       if (!(strategy as any)._fallback) await supabase.from("deep_strategies").upsert({ dealership_id: ctx.id, strategy, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return strategy;
     }

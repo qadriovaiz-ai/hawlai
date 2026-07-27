@@ -8,6 +8,8 @@
 // rather than pretending to auto-find real influencer accounts.
 // ------------------------------------------------------------------
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface InfluencerOutreachPlan {
   searchTerms: string[];
   outreachMessage: string;
@@ -20,7 +22,8 @@ export async function generateInfluencerPlan(
   productOrService: string,
   city: string | null,
   brandProfile: any,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<InfluencerOutreachPlan> {
   const fallback: InfluencerOutreachPlan = {
     searchTerms: [`${businessCategory} ${city ?? "India"}`, `${businessCategory} reels`],
@@ -56,6 +59,7 @@ Return JSON only:
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "influencer_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

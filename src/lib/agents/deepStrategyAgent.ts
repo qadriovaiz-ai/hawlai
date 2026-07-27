@@ -9,6 +9,8 @@
 // being independent lookups.
 // ------------------------------------------------------------------
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 interface BrandProfile {
   tone_of_voice?: string | null;
   target_persona?: any;
@@ -41,7 +43,8 @@ export async function generateDeepStrategy(
   city: string | null,
   brandProfile?: BrandProfile | null,
   businessCategory: string = "car dealership",
-  competitorContext?: string | null
+  competitorContext?: string | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<DeepStrategy> {
   const fallback: DeepStrategy & { _fallback?: boolean } = {
     _fallback: true,
@@ -117,6 +120,7 @@ Be specific and honest — a small local business's SWOT should not read like a 
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

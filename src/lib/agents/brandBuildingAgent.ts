@@ -10,6 +10,8 @@
 // deepStrategyAgent.ts: generous max_tokens, never cache a fallback.
 // ------------------------------------------------------------------
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 interface BrandProfile {
   tone_of_voice?: string | null;
   target_persona?: any;
@@ -38,7 +40,8 @@ export async function generateBrandKit(
   dealershipName: string,
   city: string | null,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<BrandKit & { _fallback?: boolean }> {
   const fallback: BrandKit & { _fallback?: boolean } = {
     _fallback: true,
@@ -116,6 +119,7 @@ Be specific to this business type and city — avoid generic startup-brand-kit f
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "brand_kit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
