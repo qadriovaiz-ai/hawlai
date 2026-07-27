@@ -24,6 +24,7 @@ import { generateBrandKit } from "./brandBuildingAgent";
 import { generateLogoConcept } from "./brandKitAgent";
 import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
 import { triggerVapiCall } from "./vapiCallAgent";
+import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
 import { generateSocialTask, SOCIAL_TASKS } from "./socialManagementAgent";
@@ -655,6 +656,8 @@ Guidelines:
 - If a request is ambiguous, ask ONE clarifying question rather than guessing wildly, unless a reasonable default is obvious.`;
 
   const messages: any[] = [...history.slice(-10), { role: "user", content: message }];
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   for (let iteration = 0; iteration < 6; iteration++) {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -670,13 +673,19 @@ Guidelines:
     });
 
     if (!response.ok) {
+      if (totalInputTokens || totalOutputTokens) await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       return { reply: "Sorry, something went wrong on my end — try again in a moment.", toolsUsed };
     }
     const data = await response.json();
+    if (data.usage) {
+      totalInputTokens += data.usage.input_tokens ?? 0;
+      totalOutputTokens += data.usage.output_tokens ?? 0;
+    }
     const blocks = data.content ?? [];
     const toolUseBlocks = blocks.filter((b: any) => b.type === "tool_use");
 
     if (toolUseBlocks.length === 0) {
+      await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       const text = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
       return { reply: text || "Done!", toolsUsed };
     }
@@ -697,5 +706,6 @@ Guidelines:
     messages.push({ role: "user", content: toolResults });
   }
 
+  await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
   return { reply: "That took a lot of steps — here's what I've got so far, ask me to continue if you need more.", toolsUsed };
 }

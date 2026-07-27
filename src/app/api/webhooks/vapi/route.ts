@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { scoreLeadFromCall } from "@/lib/agents/callScoringAgent";
+import { logVapiUsage } from "@/lib/usage/logUsage";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
 
   if (callRecord) {
     await supabase.from("calls").update({ status, duration: durationSeconds, transcript, summary }).eq("id", callRecord.id);
+    if (durationSeconds > 0) await logVapiUsage(supabase, callRecord.dealership_id, "ai_call", durationSeconds);
   }
 
   const { data: lead } = await supabase.from("leads").select("id, name").eq("id", resolvedLeadId).maybeSingle();
