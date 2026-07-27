@@ -10,8 +10,11 @@ export async function POST(request: Request) {
   const { description } = await request.json();
   if (!description) return NextResponse.json({ error: "Describe your business first" }, { status: 400 });
 
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const dealershipId = profile?.dealership_id;
+
   try {
-    const result = await analyzeDescription(description);
+    const result = await analyzeDescription(description, dealershipId ? { supabase, dealershipId } : undefined);
     return NextResponse.json(result);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });

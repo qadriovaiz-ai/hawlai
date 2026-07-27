@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, city, business_category").eq("id", dealershipId).single();
   const { data: brandProfile } = await supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle();
 
-  const plan = await generateMarketingStrategy(dealership?.dealership_name ?? "the business", dealership?.city ?? null, monthly_budget, goal, brandProfile, dealership?.business_category ?? "car dealership");
+  const plan = await generateMarketingStrategy(dealership?.dealership_name ?? "the business", dealership?.city ?? null, monthly_budget, goal, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
 
   if ((plan as any)._fallback) {
     return NextResponse.json({ error: "Couldn't generate your plan right now — please try again in a moment." }, { status: 503 });

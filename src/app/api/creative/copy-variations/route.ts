@@ -19,6 +19,6 @@ export async function POST(request: Request) {
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
 
-  const variations = await generateCopyVariations(topic.trim(), brandProfile, 3, dealership?.business_category ?? "car dealership");
+  const variations = await generateCopyVariations(topic.trim(), brandProfile, 3, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json({ variations });
 }

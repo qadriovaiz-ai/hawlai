@@ -13,11 +13,14 @@ export interface SeoPageContent {
   slug: string;
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function generateSeoPage(
   topic: string,
   dealershipName: string,
   businessCategory: string,
-  city: string | null
+  city: string | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: SeoPageContent | null; _fallback?: boolean }> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -40,6 +43,7 @@ Write real, specific, useful content for this topic and business — not generic
     const bodyText = await response.text();
     if (!bodyText.trim()) return { output: null, _fallback: true };
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_page", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

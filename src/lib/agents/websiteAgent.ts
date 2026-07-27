@@ -18,11 +18,14 @@ export interface LandingPageCopy {
   offer_text: string;
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function generateLandingPageCopy(
   dealershipName: string,
   city: string | null,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<LandingPageCopy> {
   const fallback: LandingPageCopy = {
     headline: `${dealershipName} — Your Trusted Car Partner${city ? ` in ${city}` : ""}`,
@@ -59,6 +62,7 @@ Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "landing_page_copy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

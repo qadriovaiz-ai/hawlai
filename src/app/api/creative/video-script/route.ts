@@ -19,6 +19,6 @@ export async function POST(request: Request) {
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
 
-  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "car dealership");
+  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json(script);
 }

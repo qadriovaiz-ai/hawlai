@@ -32,11 +32,14 @@ export interface GeneratedMessage {
   message: string;
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function generateFollowUpMessage(
   lead: LeadInfo,
   brandProfile: BrandProfile | null,
   channel: "whatsapp" | "email",
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<GeneratedMessage> {
   const brandContext = brandProfile
     ? `Brand tone to match: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -85,6 +88,7 @@ The goal: get them to book an appointment/demo/visit or reply. No markdown, no e
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "follow_up_message", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

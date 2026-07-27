@@ -43,7 +43,9 @@ function brandContextFor(brandProfile?: BrandProfile | null): string {
     : "No brand profile set — default to a warm, professional tone in Hinglish.";
 }
 
-async function callClaude(prompt: string, maxTokens: number): Promise<any | null> {
+import { logClaudeUsage } from "../usage/logUsage";
+
+async function callClaude(prompt: string, maxTokens: number, operation: string, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -62,6 +64,7 @@ async function callClaude(prompt: string, maxTokens: number): Promise<any | null
     const bodyText = await response.text();
     if (!bodyText.trim()) return null;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, operation, data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -76,7 +79,8 @@ async function callClaude(prompt: string, maxTokens: number): Promise<any | null
 export async function generateVideoScript(
   topic: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<VideoScript> {
   const fallback: VideoScript = {
     title: topic,
@@ -95,7 +99,9 @@ ${brandContextFor(brandProfile)}
 
 Write a 15-30 second video script, 3-6 scenes. Return JSON only:
 {"title":"short title for the video","total_duration_seconds":number,"scenes":[{"scene_number":1,"visual":"what the camera shows, one short sentence","voiceover_or_caption":"what's said or shown as on-screen text, one short sentence","duration_seconds":number}]}`,
-    600
+    600,
+    "video_script",
+    logContext
   );
 
   if (!parsed || !Array.isArray(parsed.scenes)) return fallback;
@@ -110,7 +116,8 @@ export async function generateCopyVariations(
   topic: string,
   brandProfile?: BrandProfile | null,
   count: number = 3,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<CopyVariation[]> {
   const fallback: CopyVariation[] = [
     { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today.", score: 50 },
@@ -123,7 +130,9 @@ ${brandContextFor(brandProfile)}
 
 Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian customers — be genuinely critical and vary the scores based on real strength, not uniformly high. Return JSON only:
 {"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}`,
-    700
+    700,
+    "copy_variations",
+    logContext
   );
 
   if (!parsed || !Array.isArray(parsed.variations)) return fallback;
@@ -146,7 +155,8 @@ export async function generateProductDescription(
   itemName: string,
   details: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<ProductDescription> {
   const fallback: ProductDescription = {
     title: itemName,
@@ -160,7 +170,9 @@ Details provided: "${details}"
 ${brandContextFor(brandProfile)}
 Return JSON only:
 {"title":"short listing title","description":"2-3 sentence description, honest and specific to what was given, not generic","highlights":["4-5 short bullet-point features, based on the details given"]}`,
-    500
+    500,
+    "product_description",
+    logContext
   );
   if (!parsed) return fallback;
   return {

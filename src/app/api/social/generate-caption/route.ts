@@ -21,6 +21,6 @@ export async function POST(request: Request) {
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
 
-  const caption = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "car dealership");
+  const caption = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json({ caption });
 }

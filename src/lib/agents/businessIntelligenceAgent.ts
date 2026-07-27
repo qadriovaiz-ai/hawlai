@@ -31,7 +31,9 @@ export interface BusinessIntelligenceResult {
 
 const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Car Dealership', 'Real Estate', 'Restaurant', 'Coaching Institute'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"]},"messaging_pillars":["3-4 key selling points or values"]}`;
 
-async function extractProfile(sourceLabel: string, sourceText: string): Promise<BusinessIntelligenceResult | null> {
+import { logClaudeUsage } from "../usage/logUsage";
+
+async function extractProfile(sourceLabel: string, sourceText: string, logContext?: { supabase: any; dealershipId: string }): Promise<BusinessIntelligenceResult | null> {
   const fallback: BusinessIntelligenceResult = {
     summary: "Couldn't generate a detailed profile — try filling in the fields manually.",
     business_category: "",
@@ -63,6 +65,7 @@ async function extractProfile(sourceLabel: string, sourceText: string): Promise<
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "business_intelligence", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -81,7 +84,7 @@ async function extractProfile(sourceLabel: string, sourceText: string): Promise<
   }
 }
 
-export async function analyzeWebsite(url: string): Promise<BusinessIntelligenceResult> {
+export async function analyzeWebsite(url: string, logContext?: { supabase: any; dealershipId: string }): Promise<BusinessIntelligenceResult> {
   let pageText = "";
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { "User-Agent": "Mozilla/5.0 (compatible; HawlaiBot/1.0)" } });
@@ -96,17 +99,18 @@ export async function analyzeWebsite(url: string): Promise<BusinessIntelligenceR
     throw new Error("Couldn't find enough readable content on that page");
   }
 
-  const result = await extractProfile("Here is the text content of an Indian business's website", pageText);
+  const result = await extractProfile("Here is the text content of an Indian business's website", pageText, logContext);
   return result!;
 }
 
-export async function analyzeDescription(description: string): Promise<BusinessIntelligenceResult> {
+export async function analyzeDescription(description: string, logContext?: { supabase: any; dealershipId: string }): Promise<BusinessIntelligenceResult> {
   if (!description || description.trim().length < 10) {
     throw new Error("Tell me a bit more about your business — a couple of sentences is enough");
   }
   const result = await extractProfile(
     "Here is how the owner of an Indian business describes it, in their own words",
-    description.trim().slice(0, 2000)
+    description.trim().slice(0, 2000),
+    logContext
   );
   return result!;
 }

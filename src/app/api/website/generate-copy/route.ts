@@ -23,6 +23,6 @@ export async function POST() {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
-  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership");
+  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json(copy);
 }

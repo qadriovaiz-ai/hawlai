@@ -12,8 +12,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Enter a full URL starting with http:// or https://" }, { status: 400 });
   }
 
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const dealershipId = profile?.dealership_id;
+
   try {
-    const result = await analyzeWebsite(url);
+    const result = await analyzeWebsite(url, dealershipId ? { supabase, dealershipId } : undefined);
     return NextResponse.json(result);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });

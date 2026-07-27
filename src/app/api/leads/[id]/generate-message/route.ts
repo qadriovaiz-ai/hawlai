@@ -35,6 +35,6 @@ export async function POST(
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
 
-  const result = await generateFollowUpMessage(lead, brandProfile, channel, dealership?.business_category ?? "car dealership");
+  const result = await generateFollowUpMessage(lead, brandProfile, channel, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json(result);
 }

@@ -18,6 +18,6 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
-  const listing = await generateProductDescription(carModel.trim(), details ?? "", brandProfile, dealership?.business_category ?? "car dealership");
+  const listing = await generateProductDescription(carModel.trim(), details ?? "", brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
   return NextResponse.json(listing);
 }

@@ -22,13 +22,16 @@ export interface MarketingPlan {
   recommended_offers: string[];
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function generateMarketingStrategy(
   dealershipName: string,
   city: string | null,
   monthlyBudget: number,
   goal: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<MarketingPlan> {
   const fallback: MarketingPlan & { _fallback?: boolean } = {
     _fallback: true,
@@ -84,6 +87,7 @@ budget_allocation percents must sum to 100. Give exactly 4 weekly themes.`,
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
