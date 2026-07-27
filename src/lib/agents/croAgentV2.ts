@@ -5,6 +5,8 @@
 // suggestions are grounded in what's actually happening on this
 // specific page, not generic CRO advice.
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface CroTaskMeta {
   key: string;
   label: string;
@@ -30,7 +32,8 @@ export async function generateCroSuggestions(
   taskKey: string,
   dealershipName: string,
   businessCategory: string,
-  page: PageContext
+  page: PageContext,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = CRO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -80,6 +83,7 @@ Return JSON only, no markdown, no preamble. Be specific to this page's actual co
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "cro_suggestions", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

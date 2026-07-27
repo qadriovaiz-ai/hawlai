@@ -27,7 +27,8 @@ export async function POST(request: Request) {
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "car dealership",
     topic ?? "",
-    brandProfile
+    brandProfile,
+    { supabase, dealershipId }
   );
 
   let saved = null;

@@ -407,7 +407,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return output;
     }
     case "generate_whatsapp": {
-      const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice });
+      const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
       if (!_fallback) await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return output;
     }
@@ -441,7 +441,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         views: all.filter((e: any) => e.event_type === "view").length,
         chatOpens: all.filter((e: any) => e.event_type === "chat_open").length,
         formSubmits: all.filter((e: any) => e.event_type === "form_submit").length,
-      });
+      }, { supabase, dealershipId: ctx.id });
       if (!_fallback) await saveGenerated(supabase, ctx.id, "cro_items", { task_type: input.taskType, output });
       return output;
     }

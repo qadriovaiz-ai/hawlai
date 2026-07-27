@@ -37,7 +37,8 @@ export async function POST(request: Request) {
       views: all.filter((e) => e.event_type === "view").length,
       chatOpens: all.filter((e) => e.event_type === "chat_open").length,
       formSubmits: all.filter((e) => e.event_type === "form_submit").length,
-    }
+    },
+    { supabase, dealershipId }
   );
 
   let saved = null;
