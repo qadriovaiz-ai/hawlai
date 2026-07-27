@@ -42,10 +42,13 @@ export interface SalesAgentResult {
   suggestBooking: boolean;
 }
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export async function runSalesAgentTurn(
   context: DealershipContext,
   history: { role: "user" | "assistant"; content: string }[],
-  message: string
+  message: string,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<SalesAgentResult> {
   const fallback: SalesAgentResult = {
     reply: "Thanks for your question! Please leave your name and number in the form below and our team will get back to you shortly.",
@@ -95,6 +98,7 @@ Return JSON only, no markdown: {"reply": "your conversational reply", "leadCaptu
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "chatbot", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

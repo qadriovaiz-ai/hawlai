@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const { data: lead } = await supabase.from("leads").select("id, name").eq("id", resolvedLeadId).maybeSingle();
   if (!lead) return NextResponse.json({ received: true });
 
-  const result = await scoreLeadFromCall(transcript, lead.name);
+  const result = await scoreLeadFromCall(transcript, lead.name, callRecord ? { supabase, dealershipId: callRecord.dealership_id } : undefined);
   await supabase
     .from("leads")
     .update({

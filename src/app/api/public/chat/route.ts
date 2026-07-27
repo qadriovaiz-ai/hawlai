@@ -39,7 +39,8 @@ export async function POST(request: Request) {
       hasBookingLink: !!dealership?.booking_slug,
     },
     Array.isArray(history) ? history.slice(-6) : [],
-    message.trim()
+    message.trim(),
+    { supabase, dealershipId: page.dealership_id }
   );
 
   // Real CRM update — only when the visitor volunteered both a name

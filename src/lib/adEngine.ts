@@ -9,6 +9,7 @@
 // ------------------------------------------------------------------
 
 import sharp from "sharp";
+import { logClaudeUsage } from "./usage/logUsage";
 
 export const GRAPH_VERSION = "v23.0";
 
@@ -16,7 +17,7 @@ export const GRAPH_VERSION = "v23.0";
 // Step 1: Claude reads the dealer's one-line prompt and extracts
 // everything needed — copy, budget, city, and an image scene idea.
 // ------------------------------------------------------------------
-export async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "car dealership") {
+export async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "car dealership", logContext?: { supabase: any; dealershipId: string }) {
   try {
     const brandContext = brandProfile
       ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
@@ -44,6 +45,7 @@ Return JSON only (no markdown, no explanation):
       }),
     });
     const data = await response.json();
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "ad_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const clean = text.replace(/```json|```/g, "").trim();
     return JSON.parse(clean);

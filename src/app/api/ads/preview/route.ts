@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   const businessCategory = dealership?.business_category ?? "car dealership";
-  const plan = await generateAdPlan(prompt, brandProfile, businessCategory);
+  const plan = await generateAdPlan(prompt, brandProfile, businessCategory, { supabase, dealershipId });
 
   const serviceClient = createServiceClient();
 

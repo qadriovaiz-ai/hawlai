@@ -13,6 +13,8 @@
 // arrived via chat instead of a form.
 // ------------------------------------------------------------------
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 const GRAPH_VERSION = "v23.0";
 
 interface CampaignSummary {
@@ -25,7 +27,7 @@ interface CampaignSummary {
   meta_ad_id: string | null;
 }
 
-export async function matchCampaign(campaigns: CampaignSummary[], description: string): Promise<CampaignSummary | null> {
+export async function matchCampaign(campaigns: CampaignSummary[], description: string, logContext?: { supabase: any; dealershipId: string }): Promise<CampaignSummary | null> {
   if (campaigns.length === 0) return null;
   if (campaigns.length === 1) return campaigns[0]; // only one campaign — no ambiguity
 
@@ -49,6 +51,7 @@ export async function matchCampaign(campaigns: CampaignSummary[], description: s
       }),
     });
     const data = await response.json();
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "campaign_edit_match", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
@@ -60,7 +63,7 @@ export async function matchCampaign(campaigns: CampaignSummary[], description: s
   }
 }
 
-export async function proposeTargetingChange(campaign: CampaignSummary, requestText: string): Promise<{
+export async function proposeTargetingChange(campaign: CampaignSummary, requestText: string, logContext?: { supabase: any; dealershipId: string }): Promise<{
   age_min: number;
   age_max: number;
   genders: number[]; // [] = all, [1] = male only, [2] = female only
@@ -91,6 +94,7 @@ Interpret this into a Meta Ads targeting change. Return JSON only:
       }),
     });
     const data = await response.json();
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "campaign_edit_targeting", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     return JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());

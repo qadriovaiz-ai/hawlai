@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     plan = existingDraft.plan_json;
     draft = existingDraft;
   } else {
-    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "car dealership");
+    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
 
     const { data: newDraft } = await serviceClient
       .from("ad_creatives")

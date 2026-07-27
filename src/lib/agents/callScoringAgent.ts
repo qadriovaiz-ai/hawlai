@@ -6,6 +6,8 @@
 // was actually said is a far better signal than guessed demographics,
 // so this overwrites that guess.
 
+import { logClaudeUsage } from "../usage/logUsage";
+
 export interface CallScoreResult {
   score: number; // 0-100
   temperature: "hot" | "warm" | "cold";
@@ -18,7 +20,7 @@ const FALLBACK: CallScoreResult = {
   reason: "Couldn't analyze the call transcript automatically — review manually.",
 };
 
-export async function scoreLeadFromCall(transcript: string, leadName: string): Promise<CallScoreResult> {
+export async function scoreLeadFromCall(transcript: string, leadName: string, logContext?: { supabase: any; dealershipId: string }): Promise<CallScoreResult> {
   if (!transcript || transcript.trim().length < 10) {
     return { score: 10, temperature: "cold", reason: "Call had no meaningful conversation (no answer, hang-up, or voicemail)." };
   }
@@ -44,6 +46,7 @@ ${transcript.slice(0, 8000)}`,
     });
 
     const data = await response.json();
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "call_scoring", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data?.content?.[0]?.text ?? "";
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
