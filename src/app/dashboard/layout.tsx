@@ -16,16 +16,20 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/auth/login");
 
-  // Restricted roles (Designer, Content Writer, Sales, Viewer) never
-  // see the full dashboard shell — their entire product experience is
-  // the Task Inbox at /team-tasks. Admin and Marketing Manager are the
-  // two roles the Team design always intended to get real, scoped
-  // dashboard access (migration 071 grants them RLS access to the
-  // tables they need), so they fall through to the normal dashboard
-  // below instead.
+  // Restricted roles AND Admin/Marketing Manager all land on
+  // /team-tasks — that page branches internally (see
+  // ManagerWorkspace.tsx) to give Admin/Marketing Manager a richer,
+  // read-focused view (team tasks, leads, roster) via a dedicated
+  // service-role-gated endpoint, while Designer/Content Writer/Sales/
+  // Viewer keep the single-card Task Inbox. This intentionally does
+  // NOT send them into the full owner dashboard — migration 071's RLS
+  // extension only covers leads + dealerships so far, and routing
+  // these roles into the full sidebar today would show ~20 empty
+  // pages rather than a complete experience. The RLS extension stays
+  // in place as a real foundation for when dashboard-page-by-page
+  // parity is built out, it's just not what decides routing yet.
   const { data: teamMembership } = await supabase.from("team_members").select("id, role").eq("user_id", user.id).eq("status", "active").maybeSingle();
-  const restrictedRoles = ["designer", "content_writer", "sales", "viewer"];
-  if (teamMembership && restrictedRoles.includes(teamMembership.role)) redirect("/team-tasks");
+  if (teamMembership) redirect("/team-tasks");
 
   const { data: profile } = await supabase
     .from("profiles")
