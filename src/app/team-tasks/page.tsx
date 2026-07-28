@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, Clock, Sparkles } from "lucide-react";
+import ManagerWorkspace from "@/components/team/ManagerWorkspace";
 
 interface Task {
   id: string;
@@ -46,6 +47,15 @@ export default function TeamTasksPage() {
   }
 
   if (loading) return <div className="flex items-center gap-2 text-sm text-slate-400 justify-center py-16"><Loader2 className="w-4 h-4 animate-spin" /> Loading your tasks...</div>;
+
+  if (["admin", "marketing_manager"].includes(role)) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-lg font-bold text-slate-900">{ROLE_GREETING[role] ?? "Your tasks"}</h1>
+        <ManagerWorkspace />
+      </div>
+    );
+  }
 
   const open = tasks.filter((t) => t.status !== "done");
   const done = tasks.filter((t) => t.status === "done").slice(0, 5);
