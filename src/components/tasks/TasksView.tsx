@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Bot, User, Clock, CheckCircle2 } from "lucide-react";
+import { Loader2, Bot, User, Clock, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 
 interface Task {
   id: string;
@@ -22,18 +22,47 @@ const TABS = [
   { key: "done", label: "Completed" },
 ];
 
+const EMPTY_MESSAGES: Record<string, string> = {
+  open: "Nothing pending — ask Hawlai for something in AI Employee.",
+  in_progress: "Nothing in progress right now.",
+  done: "Nothing completed yet — finished work will show up here.",
+};
+
 export default function TasksView() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"open" | "in_progress" | "done">("open");
 
-  useEffect(() => {
-    fetch("/api/owner-tasks").then((r) => r.json()).then((d) => setTasks(d.tasks ?? [])).finally(() => setLoading(false));
-  }, []);
+  function load() {
+    setLoading(true);
+    setError(null);
+    fetch("/api/owner-tasks")
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error ?? "Couldn't load tasks");
+        setTasks(d.tasks ?? []);
+      })
+      .catch((err) => setError(err.message ?? "Something went wrong loading your tasks"))
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => { load(); }, []);
 
   if (loading) return <div className="card p-8 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading tasks...</div>;
 
-  const filtered = tasks.filter((t) => t.status === tab);
+  if (error) {
+    return (
+      <div className="card p-8 text-center space-y-3">
+        <AlertCircle className="w-6 h-6 text-red-400 mx-auto" />
+        <p className="text-sm text-slate-600">{error}</p>
+        <button onClick={load} className="text-xs text-purple-600 flex items-center gap-1.5 mx-auto">
+          <RefreshCw className="w-3.5 h-3.5" /> Try again
+        </button>
+      </div>
+    );
+  }
+
+  const filtered = (tasks ?? []).filter((t) => t.status === tab);
 
   return (
     <div className="space-y-4">
@@ -44,15 +73,13 @@ export default function TasksView() {
             onClick={() => setTab(t.key as any)}
             className={`text-xs px-3 py-1.5 rounded-lg border ${tab === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}
           >
-            {t.label} ({tasks.filter((x) => x.status === t.key).length})
+            {t.label} ({(tasks ?? []).filter((x) => x.status === t.key).length})
           </button>
         ))}
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-sm text-slate-400">
-          {tab === "open" ? "Nothing pending — ask Hawlai for something in AI Employee." : "Nothing here yet."}
-        </div>
+        <div className="text-center py-12 text-sm text-slate-400">{EMPTY_MESSAGES[tab]}</div>
       )}
 
       <div className="space-y-2">
