@@ -24,6 +24,7 @@ import { generateBrandKit } from "./brandBuildingAgent";
 import { generateLogoConcept } from "./brandKitAgent";
 import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
 import { triggerVapiCall } from "./vapiCallAgent";
+import { sendDealerEmail } from "../email/sendDealerEmail";
 import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
@@ -296,6 +297,19 @@ const TOOLS = [
     name: "trigger_call",
     description: "Place a real, live AI phone call to a specific existing lead right now via the calling assistant. Only use this when the person explicitly names a lead and asks to call them (e.g. \"call Rahul\", \"ring up the lead from yesterday\") — this is a real phone call that costs money and reaches an actual person, so only trigger it on a clear, specific request, never proactively or for a lead that doesn't clearly match one in the CRM.",
     input_schema: { type: "object", properties: { leadName: { type: "string", description: "The lead's name, as close as possible to how the person referred to them." } }, required: ["leadName"] },
+  },
+  {
+    name: "send_email",
+    description: "Send a real email right now to a specific recipient — a team member (by name or email) or a customer/lead (by email). Only use this when the person clearly wants it actually SENT, not just drafted (e.g. \"email Priya about the launch\", \"send a follow-up to this lead\") — for drafting content to review first, use generate_email instead.",
+    input_schema: {
+      type: "object",
+      properties: {
+        recipient: { type: "string", description: "An email address, or a team member's name/email to look up." },
+        subject: { type: "string" },
+        body: { type: "string", description: "The full email body, in the business's tone of voice." },
+      },
+      required: ["recipient", "subject", "body"],
+    },
   },
   {
     name: "add_product",
@@ -644,6 +658,18 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const result = await triggerVapiCall(supabase, lead);
       if (!result.success) return { error: result.error };
       return { success: true, calledLead: lead.name, note: `Call placed to ${lead.name}. Tell the person the call is in progress — the transcript and an updated lead score will appear once it ends.` };
+    }
+    case "send_email": {
+      let toEmail = input.recipient.trim();
+      if (!toEmail.includes("@")) {
+        const { data: matches } = await supabase.from("team_members").select("email").eq("dealership_id", ctx.id).eq("status", "active").ilike("email", `%${toEmail}%`).limit(5);
+        if (!matches || matches.length === 0) return { error: `No team member or email found matching "${input.recipient}".` };
+        if (matches.length > 1) return { error: `Multiple matches for "${input.recipient}" — ask the person to be more specific or give the exact email.` };
+        toEmail = matches[0].email;
+      }
+      const result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
+      if (!result.success) return { error: result.error };
+      return { success: true, sentTo: toEmail, note: `Email sent to ${toEmail}.` };
     }
     case "add_product": {
       const { data, error } = await supabase.from("products").insert({

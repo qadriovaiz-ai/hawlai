@@ -1,5 +1,5 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
-import { sendEmail } from "@/lib/agents/gmailAgent";
+import { sendDealerEmail } from "@/lib/email/sendDealerEmail";
 
 // Runs once per day per dealership as part of the existing autopilot
 // cron. Handles two REAL auto-send triggers (as opposed to the
@@ -20,7 +20,6 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
     .eq("id", dealershipId)
     .single();
 
-  if (!dealership?.gmail_email) return { welcomesSent: 0, followUpsSent: 0, skipped: "gmail not connected" };
   if (!dealership.welcome_email_auto_enabled && !dealership.follow_up_email_auto_enabled) {
     return { welcomesSent: 0, followUpsSent: 0, skipped: "automation off" };
   }
@@ -52,7 +51,7 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
         brandProfile
       );
       if (_fallback) continue; // don't send a placeholder email
-      const result = await sendEmail(supabase, dealershipId, lead.email, output.subject ?? "Welcome!", output.body ?? "");
+      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject ?? "Welcome!", output.body ?? "");
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "welcome",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,
@@ -87,7 +86,7 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
         brandProfile
       );
       if (_fallback) continue;
-      const result = await sendEmail(supabase, dealershipId, lead.email, output.subject ?? "Following up", output.body ?? "");
+      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject ?? "Following up", output.body ?? "");
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "follow_up",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,

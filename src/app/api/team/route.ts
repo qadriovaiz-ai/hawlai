@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { sendViaResend } from "@/lib/email/resendClient";
 
 async function requireOwner(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -52,5 +53,17 @@ export async function POST(request: Request) {
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
   const inviteUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.vercel.app"}/invite/${inviteToken}`;
-  return NextResponse.json({ success: true, member, inviteUrl });
+
+  // Best-effort — the invite is already created and the link is
+  // returned to the owner either way (the UI's copy-link flow stays
+  // as a fallback), so a failed send here never blocks the invite
+  // itself from existing.
+  const emailResult = await sendViaResend(
+    email.trim().toLowerCase(),
+    `You've been invited to join ${dealership!.dealership_name ?? "a team"} on Hawlai`,
+    `You've been invited to join ${dealership!.dealership_name ?? "a business"}'s team on Hawlai as a ${role.replace("_", " ")}.\n\nClick here to accept: ${inviteUrl}`,
+    dealership!.dealership_name ?? "Hawlai"
+  );
+
+  return NextResponse.json({ success: true, member, inviteUrl, emailSent: emailResult.success });
 }

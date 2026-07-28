@@ -37,6 +37,7 @@ export default function TeamView() {
   const [inviteForm, setInviteForm] = useState({ email: "", role: "designer" });
   const [inviting, setInviting] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +59,7 @@ export default function TeamView() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't send invite");
       setInviteLink(data.inviteUrl);
+      setEmailSent(Boolean(data.emailSent));
       load();
     } catch (err: any) {
       setError(err.message);
@@ -149,14 +151,16 @@ export default function TeamView() {
             </>
           ) : (
             <>
-              <p className="text-sm text-slate-700">Invite created. Share this link with them:</p>
+              <p className="text-sm text-slate-700">
+                {emailSent ? "Invite email sent! You can also share the link directly:" : "Invite created — email didn't go through, so share this link with them directly:"}
+              </p>
               <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
                 <p className="text-xs text-slate-600 truncate flex-1">{inviteLink}</p>
                 <button onClick={copyLink} className="text-slate-400 hover:text-purple-600 shrink-0">
                   {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
-              <button onClick={() => { setShowInvite(false); setInviteLink(null); setInviteForm({ email: "", role: "designer" }); }} className="text-sm text-purple-600">
+              <button onClick={() => { setShowInvite(false); setInviteLink(null); setEmailSent(false); setInviteForm({ email: "", role: "designer" }); }} className="text-sm text-purple-600">
                 Done
               </button>
             </>
