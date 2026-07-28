@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "@/lib/navGroups";
+import { Users2 } from "lucide-react";
 
-export default function Sidebar({ dealershipName }: { dealershipName: string }) {
+export default function Sidebar({ dealershipName, hasTeam }: { dealershipName: string; hasTeam?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -42,6 +43,18 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
             </div>
           </div>
         ))}
+
+        {hasTeam && (
+          <div>
+            <p className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Team</p>
+            <div className="space-y-0.5">
+              <Link href="/dashboard/team" className={cn("sidebar-link", pathname.startsWith("/dashboard/team") ? "sidebar-link-active" : "sidebar-link-inactive")}>
+                <Users2 className="w-4 h-4 shrink-0" />
+                <span className="flex-1">Team</span>
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       <div className="p-3 border-t border-slate-100">

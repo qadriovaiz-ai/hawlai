@@ -16,6 +16,14 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/auth/login");
 
+  // A team member (not the Owner) should never see the full dashboard
+  // shell — their entire product experience is the Task Inbox at
+  // /team-tasks. Checked here, before any of the owner-oriented
+  // profile/dealerships logic below, which wouldn't resolve correctly
+  // for them anyway (profiles.dealerships is owner_id-scoped RLS).
+  const { data: teamMembership } = await supabase.from("team_members").select("id").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  if (teamMembership) redirect("/team-tasks");
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("*, dealerships(*)")
@@ -24,6 +32,12 @@ export default async function DashboardLayout({
 
   const dealershipName = profile?.dealerships?.dealership_name ?? "My Dealership";
   const onboardingCompleted = profile?.dealerships?.onboarding_completed ?? true;
+
+  // "Team" only appears in the sidebar once the owner has actually
+  // invited someone — invisible for every solo-owner account, exactly
+  // as designed (a feature that doesn't exist until it's relevant).
+  const { count: teamCount } = await supabase.from("team_members").select("id", { count: "exact", head: true }).neq("status", "removed");
+  const hasTeam = (teamCount ?? 0) > 0;
 
   // No sidebar/nav clutter until the welcome step is done or skipped
   // — matches a clean, single-focus "describe your idea" first screen
@@ -46,7 +60,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <Sidebar dealershipName={dealershipName} />
+      <Sidebar dealershipName={dealershipName} hasTeam={hasTeam} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar user={user} profile={profile} />
         <main className="flex-1 overflow-y-auto p-6">

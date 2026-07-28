@@ -50,12 +50,14 @@ interface DealershipCtx {
   category: string;
   city: string | null;
   toneOfVoice: string | null;
+  team: { id: string; role: string; email: string }[];
 }
 
 async function getContext(supabase: any, dealershipId: string): Promise<DealershipCtx> {
-  const [{ data: d }, { data: bp }] = await Promise.all([
+  const [{ data: d }, { data: bp }, { data: team }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("team_members").select("id, role, email").eq("dealership_id", dealershipId).eq("status", "active"),
   ]);
   return {
     id: dealershipId,
@@ -63,6 +65,7 @@ async function getContext(supabase: any, dealershipId: string): Promise<Dealersh
     category: d?.business_category ?? "business",
     city: d?.city ?? null,
     toneOfVoice: bp?.tone_of_voice ?? null,
+    team: team ?? [],
   };
 }
 
@@ -256,6 +259,21 @@ const TOOLS = [
     name: "update_landing_page",
     description: "Update the live landing page's headline, subheadline, or offer/CTA text. Only change fields the person actually specifies.",
     input_schema: { type: "object", properties: { headline: { type: "string" }, subheadline: { type: "string" }, offerText: { type: "string" } }, required: [] },
+  },
+  {
+    name: "assign_task",
+    description: "Assign a piece of work to a specific team member instead of generating it yourself. Use this INSTEAD of generate_content/generate_graphic/generate_video/etc when a team member holds the matching role for this piece of work (check the team roster you were given). Never use this for approval-gated actions (publishing, ad launches) — those aren't delegated.",
+    input_schema: {
+      type: "object",
+      properties: {
+        role: { type: "string", description: "The role of the team member this is for, e.g. 'designer', 'content_writer', 'sales' — must match a role from the team roster you were given." },
+        title: { type: "string", description: "Short task title, e.g. 'Create Diwali sale banner'." },
+        brief: { type: "string", description: "The full plain-language instruction for the person doing this — include concrete context (brand colors, product names, deadline) so they don't have to ask." },
+        department: { type: "string", description: "Which department this task relates to, e.g. 'graphic_design', 'content_marketing', 'sales'." },
+        goalId: { type: "string", description: "If this task is part of a larger multi-task goal, reuse the same goalId string across all tasks in that goal so they're grouped together." },
+      },
+      required: ["role", "title", "brief"],
+    },
   },
   {
     name: "add_lead",
@@ -573,6 +591,23 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       if (error) return { error: error.message };
       return { success: true, updated: Object.keys(update) };
     }
+    case "assign_task": {
+      const match = ctx.team.find((t) => t.role === input.role);
+      if (!match) return { error: `No active team member holds the "${input.role}" role — do this piece yourself instead.` };
+      const { data, error } = await supabase.from("tasks").insert({
+        dealership_id: ctx.id,
+        goal_id: input.goalId ?? null,
+        title: input.title,
+        brief: input.brief,
+        department: input.department ?? null,
+        assigned_to: match.id,
+        assigned_role: input.role,
+        created_by: null,
+        status: "open",
+      }).select("id").single();
+      if (error) return { error: error.message };
+      return { success: true, taskId: data.id, assignedTo: match.email, note: `Assigned to ${match.email} (${input.role}) — they'll see it in their Task Inbox.` };
+    }
     case "add_lead": {
       const { data, error } = await supabase.from("leads").insert({ dealership_id: ctx.id, name: input.name, phone: input.phone, email: input.email ?? null, source: "manual_chat", qualification_reason: input.notes ?? null }).select().single();
       if (error) return { error: error.message };
@@ -643,7 +678,7 @@ export async function runMasterBrainChat(
   const ctx = await getContext(supabase, dealershipId);
   const toolsUsed: string[] = [];
 
-  const systemPrompt = `You are Hawlai's AI marketing assistant, having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.
+  const systemPrompt = `You are Hawlai's AI marketing assistant, having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}
 
 Guidelines:
 - When the person asks for something concrete, USE THE RELEVANT TOOL rather than just talking about it. For a broad request ("help me launch my skincare brand"), call multiple tools in sequence (e.g. brand kit, then a launch content piece, then SEO) and weave the results into one helpful reply.
