@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   if (!text || text.trim().length < 1) return NextResponse.json({ error: "Enter some text to read" }, { status: 400 });
 
   try {
-    const buffer = await generateVoiceover(text);
+    const buffer = await generateVoiceover(text, undefined, { supabase, dealershipId });
     const serviceClient = createServiceClient();
     const filePath = `voiceovers/${dealershipId}/${Date.now()}.mp3`;
     await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "audio/mpeg", upsert: true });

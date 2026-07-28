@@ -5,13 +5,19 @@
 // so no job-tracking needed — just call and get audio bytes back.
 // ------------------------------------------------------------------
 
+import { logElevenLabsUsage } from "../usage/logUsage";
+
 // A solid default multilingual voice suitable for Hindi/Hinglish —
 // dealers can't pick a custom voice yet (would need to list/preview
 // ElevenLabs' voice library, a nice follow-up), this ships with one
 // good default to start.
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // "Rachel" — widely available default voice
 
-export async function generateVoiceover(text: string, voiceId: string = DEFAULT_VOICE_ID): Promise<Buffer> {
+export async function generateVoiceover(
+  text: string,
+  voiceId: string = DEFAULT_VOICE_ID,
+  logContext?: { supabase: any; dealershipId: string }
+): Promise<Buffer> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
   if (!text || text.trim().length < 1) throw new Error("No text to read");
@@ -43,5 +49,6 @@ export async function generateVoiceover(text: string, voiceId: string = DEFAULT_
   }
 
   const arrayBuffer = await res.arrayBuffer();
+  if (logContext) await logElevenLabsUsage(logContext.supabase, logContext.dealershipId, "voiceover", text.trim().length);
   return Buffer.from(arrayBuffer);
 }

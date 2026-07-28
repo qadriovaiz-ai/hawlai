@@ -33,6 +33,13 @@ export const PRICING = {
     perSecondUsd: 0.4,
     defaultDurationSeconds: 8,
   },
+
+  // ElevenLabs text-to-speech, pay-as-you-go API pricing for the
+  // eleven_multilingual_v2 model — $0.10 per 1,000 characters, same
+  // rate across subscription tiers.
+  elevenlabs: {
+    perThousandCharsUsd: 0.1,
+  },
 };
 
 export function costOfClaudeCallInr(inputTokens: number, outputTokens: number): number {
@@ -53,5 +60,10 @@ export function costOfGeminiImageInr(imageCount: number = 1): number {
 
 export function costOfVeoVideoInr(durationSeconds: number = PRICING.veo.defaultDurationSeconds): number {
   const usd = durationSeconds * PRICING.veo.perSecondUsd;
+  return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
+}
+
+export function costOfElevenLabsInr(characterCount: number): number {
+  const usd = (characterCount / 1000) * PRICING.elevenlabs.perThousandCharsUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }
