@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, Clock, Sparkles } from "lucide-react";
 import ManagerWorkspace from "@/components/team/ManagerWorkspace";
+import SalesLeadsView from "@/components/team/SalesLeadsView";
 
 interface Task {
   id: string;
@@ -53,6 +54,15 @@ export default function TeamTasksPage() {
       <div className="space-y-6">
         <h1 className="text-lg font-bold text-slate-900">{ROLE_GREETING[role] ?? "Your tasks"}</h1>
         <ManagerWorkspace />
+      </div>
+    );
+  }
+
+  if (role === "sales") {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-lg font-bold text-slate-900">{ROLE_GREETING[role] ?? "Your leads"}</h1>
+        <SalesLeadsView />
       </div>
     );
   }

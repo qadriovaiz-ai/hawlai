@@ -276,6 +276,18 @@ const TOOLS = [
     },
   },
   {
+    name: "assign_lead",
+    description: "Assign a specific existing lead to a Sales team member so it shows up in their Task Inbox as one of their leads to follow up. Use when the person says something like \"give this lead to Anjali\" or \"assign Rahul to my sales rep\". Only meaningful if a Sales team member exists on the roster you were given.",
+    input_schema: {
+      type: "object",
+      properties: {
+        leadName: { type: "string", description: "The lead's name, as close as possible to how the person referred to them." },
+        salesRepEmail: { type: "string", description: "The team member's email, from the roster you were given — must be someone with the 'sales' role." },
+      },
+      required: ["leadName", "salesRepEmail"],
+    },
+  },
+  {
     name: "add_lead",
     description: "Manually add a new lead to the CRM. Use when the person gives you a name and phone number to add (e.g. someone they met offline).",
     input_schema: { type: "object", properties: { name: { type: "string" }, phone: { type: "string" }, email: { type: "string" }, notes: { type: "string" } }, required: ["name", "phone"] },
@@ -607,6 +619,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       }).select("id").single();
       if (error) return { error: error.message };
       return { success: true, taskId: data.id, assignedTo: match.email, note: `Assigned to ${match.email} (${input.role}) — they'll see it in their Task Inbox.` };
+    }
+    case "assign_lead": {
+      const salesRep = ctx.team.find((t) => t.email === input.salesRepEmail && t.role === "sales");
+      if (!salesRep) return { error: `No active Sales team member found with email "${input.salesRepEmail}" — check the team roster.` };
+      const { data: matches } = await supabase.from("leads").select("id, name").eq("dealership_id", ctx.id).ilike("name", `%${input.leadName}%`).limit(5);
+      if (!matches || matches.length === 0) return { error: `No lead found matching "${input.leadName}".` };
+      if (matches.length > 1) return { error: `Multiple leads match "${input.leadName}" (${matches.map((m: any) => m.name).join(", ")}) — ask the person to be more specific.` };
+      const { error } = await supabase.from("leads").update({ assigned_to: salesRep.id }).eq("id", matches[0].id);
+      if (error) return { error: error.message };
+      return { success: true, leadName: matches[0].name, assignedTo: salesRep.email, note: `${matches[0].name} is now assigned to ${salesRep.email} — it'll show up in their leads to follow up.` };
     }
     case "add_lead": {
       const { data, error } = await supabase.from("leads").insert({ dealership_id: ctx.id, name: input.name, phone: input.phone, email: input.email ?? null, source: "manual_chat", qualification_reason: input.notes ?? null }).select().single();
