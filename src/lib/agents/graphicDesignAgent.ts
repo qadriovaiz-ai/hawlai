@@ -27,6 +27,8 @@ export const GRAPHIC_TYPES: GraphicTypeMeta[] = [
   { key: "social_graphic", label: "Social Graphic", promptTemplate: (b, c, p) => `A square (1:1) social media graphic card for "${b}", a ${c}. ${p || "A quote, stat, or tip card"}. Modern card design, bold short text baked into the image, on-brand color use.` },
 ];
 
+import { logGeminiImageUsage } from "../usage/logUsage";
+
 interface BrandProfile {
   tone_of_voice?: string | null;
 }
@@ -36,7 +38,8 @@ export async function generateGraphic(
   dealershipName: string,
   businessCategory: string,
   userPrompt: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<Buffer> {
   const meta = GRAPHIC_TYPES.find((t) => t.key === designTypeKey);
   if (!meta) throw new Error("Unknown design type");
@@ -61,5 +64,6 @@ export async function generateGraphic(
   const imagePart = parts.find((p: any) => p.inlineData || p.inline_data);
   const inline = imagePart?.inlineData ?? imagePart?.inline_data;
   if (!inline?.data) throw new Error("Gemini did not return an image — try rephrasing or try again");
+  if (logContext) await logGeminiImageUsage(logContext.supabase, logContext.dealershipId, "graphic_design");
   return Buffer.from(inline.data, "base64");
 }

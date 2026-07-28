@@ -30,5 +30,5 @@ export interface VideoOperationStatus {
 
 export interface VideoModelAdapter {
   start(prompt: string, modelKey: string): Promise<string>; // returns a task id to poll
-  check(taskId: string, modelKey: string): Promise<VideoOperationStatus>;
+  check(taskId: string, modelKey: string, logContext?: { supabase: any; dealershipId: string }): Promise<VideoOperationStatus>;
 }

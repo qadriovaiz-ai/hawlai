@@ -28,7 +28,7 @@ export async function GET(
   if (!record.operation_name && !record.task_id) return NextResponse.json(record);
 
   const adapter = getVideoAdapter(record.model_key ?? "veo");
-  const result = await adapter.check(record.task_id ?? record.operation_name, record.model_key ?? "veo");
+  const result = await adapter.check(record.task_id ?? record.operation_name, record.model_key ?? "veo", { supabase, dealershipId });
 
   if (!result.done) return NextResponse.json(record);
 

@@ -320,7 +320,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "generate_logo": {
       try {
-        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category);
+        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category, { supabase, dealershipId: ctx.id });
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `logos/${ctx.id}/${Date.now()}.png`;
@@ -488,7 +488,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "generate_graphic": {
       try {
-        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice });
+        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `graphic-designs/${ctx.id}/${input.designType}-${Date.now()}.png`;

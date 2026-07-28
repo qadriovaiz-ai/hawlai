@@ -13,6 +13,8 @@
 // of blocking on a multi-minute operation.
 // ------------------------------------------------------------------
 
+import { logVeoVideoUsage } from "../usage/logUsage";
+
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const VEO_MODEL = "veo-3.1-generate-preview";
 
@@ -37,7 +39,7 @@ export interface VideoOperationStatus {
   error?: string;
 }
 
-export async function checkVideoOperation(operationName: string): Promise<VideoOperationStatus> {
+export async function checkVideoOperation(operationName: string, logContext?: { supabase: any; dealershipId: string }): Promise<VideoOperationStatus> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
@@ -58,5 +60,6 @@ export async function checkVideoOperation(operationName: string): Promise<VideoO
   const videoRes = await fetch(videoUri, { headers: { "x-goog-api-key": apiKey } });
   if (!videoRes.ok) return { done: true, error: "Video finished but couldn't be downloaded" };
   const arrayBuffer = await videoRes.arrayBuffer();
+  if (logContext) await logVeoVideoUsage(logContext.supabase, logContext.dealershipId, "video_generation");
   return { done: true, videoBuffer: Buffer.from(arrayBuffer) };
 }

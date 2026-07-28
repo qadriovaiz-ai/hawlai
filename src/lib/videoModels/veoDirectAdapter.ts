@@ -10,8 +10,8 @@ export const veoDirectAdapter: VideoModelAdapter = {
   async start(prompt: string): Promise<string> {
     return startVideoGeneration(prompt);
   },
-  async check(taskId: string) {
-    return checkVideoOperation(taskId);
+  async check(taskId: string, _modelKey: string, logContext?: { supabase: any; dealershipId: string }) {
+    return checkVideoOperation(taskId, logContext);
   },
 };
 

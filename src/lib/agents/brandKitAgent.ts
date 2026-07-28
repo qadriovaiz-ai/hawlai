@@ -7,6 +7,8 @@
 // based on an existing image).
 // ------------------------------------------------------------------
 
+import { logGeminiImageUsage } from "../usage/logUsage";
+
 interface BrandProfile {
   tone_of_voice?: string | null;
   messaging_pillars?: string[] | null;
@@ -15,7 +17,8 @@ interface BrandProfile {
 export async function generateLogoConcept(
   dealershipName: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership"
+  businessCategory: string = "car dealership",
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
@@ -42,5 +45,6 @@ export async function generateLogoConcept(
   const imagePart = parts.find((p: any) => p.inlineData || p.inline_data);
   const inline = imagePart?.inlineData ?? imagePart?.inline_data;
   if (!inline?.data) throw new Error("Gemini did not return an image — try rephrasing or try again");
+  if (logContext) await logGeminiImageUsage(logContext.supabase, logContext.dealershipId, "logo_generation");
   return Buffer.from(inline.data, "base64");
 }

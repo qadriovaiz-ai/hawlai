@@ -18,6 +18,21 @@ export const PRICING = {
   vapi: {
     perMinuteUsd: 0.09,
   },
+
+  // Gemini 2.5 Flash Image ("nano-banana") — standard tier. Google
+  // bills this per output image (1290 tokens at $30/million output
+  // tokens for images up to 1024x1024), published as a flat $0.039/image.
+  geminiImage: {
+    perImageUsd: 0.039,
+  },
+
+  // Veo 3.1, standard tier, 720p/1080p — $0.40/second. This app's Veo
+  // calls don't set an explicit duration, so Veo generates its default
+  // clip length (8s, same fixed length Runway's adapter requests too).
+  veo: {
+    perSecondUsd: 0.4,
+    defaultDurationSeconds: 8,
+  },
 };
 
 export function costOfClaudeCallInr(inputTokens: number, outputTokens: number): number {
@@ -28,5 +43,15 @@ export function costOfClaudeCallInr(inputTokens: number, outputTokens: number): 
 export function costOfVapiCallInr(durationSeconds: number): number {
   const minutes = durationSeconds / 60;
   const usd = minutes * PRICING.vapi.perMinuteUsd;
+  return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
+}
+
+export function costOfGeminiImageInr(imageCount: number = 1): number {
+  const usd = imageCount * PRICING.geminiImage.perImageUsd;
+  return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
+}
+
+export function costOfVeoVideoInr(durationSeconds: number = PRICING.veo.defaultDurationSeconds): number {
+  const usd = durationSeconds * PRICING.veo.perSecondUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }

@@ -1,4 +1,4 @@
-import { costOfClaudeCallInr, costOfVapiCallInr } from "./pricing";
+import { costOfClaudeCallInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeoVideoInr } from "./pricing";
 
 // Single place every real usage log gets written from — keeps the
 // cost-calculation logic in one spot rather than duplicated at every
@@ -29,6 +29,33 @@ export async function logVapiUsage(supabase: any, dealershipId: string, operatio
       operation,
       duration_seconds: durationSeconds,
       cost_inr: costOfVapiCallInr(durationSeconds),
+    });
+  } catch {
+    // Best-effort.
+  }
+}
+
+export async function logGeminiImageUsage(supabase: any, dealershipId: string, operation: string, imageCount: number = 1) {
+  try {
+    await supabase.from("api_usage_logs").insert({
+      dealership_id: dealershipId,
+      service: "gemini",
+      operation,
+      cost_inr: costOfGeminiImageInr(imageCount),
+    });
+  } catch {
+    // Best-effort.
+  }
+}
+
+export async function logVeoVideoUsage(supabase: any, dealershipId: string, operation: string, durationSeconds?: number) {
+  try {
+    await supabase.from("api_usage_logs").insert({
+      dealership_id: dealershipId,
+      service: "gemini",
+      operation,
+      duration_seconds: durationSeconds ?? null,
+      cost_inr: costOfVeoVideoInr(durationSeconds),
     });
   } catch {
     // Best-effort.

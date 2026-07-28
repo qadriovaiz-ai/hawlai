@@ -16,7 +16,7 @@ export async function POST() {
   const { data: brandProfile } = await supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle();
 
   try {
-    const buffer = await generateLogoConcept(dealership?.dealership_name ?? "Business", brandProfile, dealership?.business_category ?? "car dealership");
+    const buffer = await generateLogoConcept(dealership?.dealership_name ?? "Business", brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
     const serviceClient = createServiceClient();
     const filePath = `logos/${dealershipId}/${Date.now()}.png`;
     await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });

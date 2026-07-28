@@ -29,7 +29,8 @@ export async function POST(request: Request) {
       dealership?.dealership_name ?? "the business",
       dealership?.business_category ?? "car dealership",
       prompt ?? "",
-      brandProfile
+      brandProfile,
+      { supabase, dealershipId }
     );
     const serviceClient = createServiceClient();
     const filePath = `graphic-designs/${dealershipId}/${designType}-${Date.now()}.png`;
