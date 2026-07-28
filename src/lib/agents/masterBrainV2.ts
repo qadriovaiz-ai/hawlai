@@ -238,8 +238,8 @@ const TOOLS = [
   },
   {
     name: "set_automation_toggle",
-    description: "Turn a real automation ON or OFF. Only do this when the person explicitly asks to enable/disable/turn on/turn off a specific automation — never proactively. Valid toggle values: dm_auto_reply (auto-reply to Instagram/FB DMs), comment_auto_reply (auto-reply to post comments), welcome_email (auto welcome email for new leads), follow_up_email (auto follow-up for inactive leads), content_autopilot (auto-generate + auto-post to Facebook on a schedule).",
-    input_schema: { type: "object", properties: { toggle: { type: "string", enum: ["dm_auto_reply", "comment_auto_reply", "welcome_email", "follow_up_email", "content_autopilot"] }, enabled: { type: "boolean" } }, required: ["toggle", "enabled"] },
+    description: "Turn a real automation ON or OFF. Only do this when the person explicitly asks to enable/disable/turn on/turn off a specific automation — never proactively. Valid toggle values: dm_auto_reply (auto-reply to Instagram/FB DMs), comment_auto_reply (auto-reply to post comments), welcome_email (auto welcome email for new leads), follow_up_email (auto follow-up for inactive leads), content_autopilot (auto-generate + auto-post to Facebook on a schedule), auto_call_new_leads (real AI phone call placed automatically the moment a new lead comes in — this spends real money per call and reaches an actual person; make sure the person is knowingly turning this on, not just exploring).",
+    input_schema: { type: "object", properties: { toggle: { type: "string", enum: ["dm_auto_reply", "comment_auto_reply", "welcome_email", "follow_up_email", "content_autopilot", "auto_call_new_leads"] }, enabled: { type: "boolean" } }, required: ["toggle", "enabled"] },
   },
   {
     name: "get_follow_up_reminders",
@@ -574,7 +574,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const fieldMap: Record<string, string> = {
         dm_auto_reply: "dm_auto_reply_enabled", comment_auto_reply: "comment_auto_reply_enabled",
         welcome_email: "welcome_email_auto_enabled", follow_up_email: "follow_up_email_auto_enabled",
-        content_autopilot: "content_autopilot_enabled",
+        content_autopilot: "content_autopilot_enabled", auto_call_new_leads: "auto_call_new_leads",
       };
       const field = fieldMap[input.toggle];
       if (!field) return { error: "Unknown toggle" };
