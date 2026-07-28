@@ -16,13 +16,16 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/auth/login");
 
-  // A team member (not the Owner) should never see the full dashboard
-  // shell — their entire product experience is the Task Inbox at
-  // /team-tasks. Checked here, before any of the owner-oriented
-  // profile/dealerships logic below, which wouldn't resolve correctly
-  // for them anyway (profiles.dealerships is owner_id-scoped RLS).
-  const { data: teamMembership } = await supabase.from("team_members").select("id").eq("user_id", user.id).eq("status", "active").maybeSingle();
-  if (teamMembership) redirect("/team-tasks");
+  // Restricted roles (Designer, Content Writer, Sales, Viewer) never
+  // see the full dashboard shell — their entire product experience is
+  // the Task Inbox at /team-tasks. Admin and Marketing Manager are the
+  // two roles the Team design always intended to get real, scoped
+  // dashboard access (migration 071 grants them RLS access to the
+  // tables they need), so they fall through to the normal dashboard
+  // below instead.
+  const { data: teamMembership } = await supabase.from("team_members").select("id, role").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  const restrictedRoles = ["designer", "content_writer", "sales", "viewer"];
+  if (teamMembership && restrictedRoles.includes(teamMembership.role)) redirect("/team-tasks");
 
   const { data: profile } = await supabase
     .from("profiles")
