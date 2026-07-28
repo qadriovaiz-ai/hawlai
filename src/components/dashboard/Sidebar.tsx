@@ -26,9 +26,11 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
       <nav className="flex-1 overflow-y-auto p-3 space-y-4">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
-            <p className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              {group.label}
-            </p>
+            {group.label && (
+              <p className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                {group.label}
+              </p>
+            )}
             <div className="space-y-0.5">
               {group.items.map(({ href, label, icon: Icon }) => {
                 const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));

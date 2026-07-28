@@ -18,7 +18,7 @@ export default function MainMenuPanel({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="mb-4">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 mb-1.5">{group.label}</p>
+              {group.label && <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 mb-1.5">{group.label}</p>}
               <div className="space-y-0.5">
                 {group.items.map((item) => (
                   <Link
