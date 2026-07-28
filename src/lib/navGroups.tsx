@@ -64,6 +64,7 @@ export const NAV_GROUPS = [
   {
     label: "Settings",
     items: [
+      { href: "/dashboard/team", label: "Team", icon: Users2 },
       { href: "/dashboard/assets", label: "Assets", icon: FolderOpen },
       { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
       { href: "/dashboard/billing", label: "Billing", icon: CreditCard },

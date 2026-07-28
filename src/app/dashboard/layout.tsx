@@ -33,12 +33,6 @@ export default async function DashboardLayout({
   const dealershipName = profile?.dealerships?.dealership_name ?? "My Dealership";
   const onboardingCompleted = profile?.dealerships?.onboarding_completed ?? true;
 
-  // "Team" only appears in the sidebar once the owner has actually
-  // invited someone — invisible for every solo-owner account, exactly
-  // as designed (a feature that doesn't exist until it's relevant).
-  const { count: teamCount } = await supabase.from("team_members").select("id", { count: "exact", head: true }).neq("status", "removed");
-  const hasTeam = (teamCount ?? 0) > 0;
-
   // No sidebar/nav clutter until the welcome step is done or skipped
   // — matches a clean, single-focus "describe your idea" first screen
   // instead of dropping a new signup into a full app shell at once.
@@ -60,7 +54,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <Sidebar dealershipName={dealershipName} hasTeam={hasTeam} />
+      <Sidebar dealershipName={dealershipName} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar user={user} profile={profile} />
         <main className="flex-1 overflow-y-auto p-6">
