@@ -47,6 +47,9 @@ Hard technical requirements — the output must actually run without errors:
 - No external image/texture files — build everything from Three.js primitives (BoxGeometry, CylinderGeometry, SphereGeometry, TorusGeometry, ConeGeometry, etc.), MeshStandardMaterial/MeshPhysicalMaterial with color/metalness/roughness for visual richness instead of textures
 - All CSS and JS inline in the one HTML file — <style> and <script> tags, nothing external except the two Three.js CDN script tags above
 - body/html should have margin:0, overflow:hidden, and the canvas should fill the viewport
+- Do NOT add a large business-name/tagline text overlay covering the viewport — the 3D object described in the prompt is the entire point of this page and must be the dominant, clearly visible thing on screen. If any text is added at all, keep it small (under 24px), positioned in a corner, and never on top of or blocking the 3D object.
+- Position the camera and the main object so the object is actually centered and clearly framed in view on first load — never build a scene where the object is too small, too far away, positioned outside the camera's view, or hidden behind another element.
+- Wrap all Three.js setup and the render loop in try/catch. If anything throws, catch it and render a visible, readable error directly on the page (e.g. a fixed-position div with red text on a dark background showing the error message) instead of a blank or broken-looking page — a visible error is far more useful than a silent failure that looks identical to "nothing went wrong."
 
 Respond with ONLY the raw HTML — no markdown code fences, no explanation before or after, starting with <!DOCTYPE html> and nothing else.`,
         }],

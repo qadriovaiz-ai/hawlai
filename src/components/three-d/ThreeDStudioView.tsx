@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, AlertCircle, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Sparkles, AlertCircle, Clock, CheckCircle2, XCircle, Code2, Copy } from "lucide-react";
 
 interface Scene {
   id: string;
@@ -19,6 +19,7 @@ export default function ThreeDStudioView() {
   const [activeHtml, setActiveHtml] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loadingScene, setLoadingScene] = useState(false);
+  const [showCode, setShowCode] = useState(false);
 
   function loadScenes() {
     fetch("/api/3d-scenes").then((r) => r.json()).then((d) => setScenes(d.scenes ?? []));
@@ -91,12 +92,25 @@ export default function ThreeDStudioView() {
               <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
             </div>
           ) : activeHtml ? (
-            <iframe
-              srcDoc={activeHtml}
-              sandbox="allow-scripts"
-              className="w-full aspect-video rounded-lg border-0"
-              title="3D scene"
-            />
+            <>
+              <iframe
+                srcDoc={activeHtml}
+                sandbox="allow-scripts"
+                className="w-full aspect-video rounded-lg border-0"
+                title="3D scene"
+              />
+              <div className="flex items-center justify-between px-1">
+                <button onClick={() => setShowCode((s) => !s)} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                  <Code2 className="w-3.5 h-3.5" /> {showCode ? "Hide" : "View"} generated code
+                </button>
+                <button onClick={() => navigator.clipboard.writeText(activeHtml)} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                  <Copy className="w-3.5 h-3.5" /> Copy code
+                </button>
+              </div>
+              {showCode && (
+                <pre className="text-[10px] bg-slate-900 text-slate-300 p-3 rounded-lg overflow-auto max-h-64 whitespace-pre-wrap">{activeHtml}</pre>
+              )}
+            </>
           ) : (
             <div className="aspect-video flex items-center justify-center bg-slate-900 rounded-lg text-sm text-slate-400">
               This scene failed to generate — try regenerating with a different prompt.
