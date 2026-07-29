@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Type, Square, Circle as CircleIcon, Image as ImageIcon, Undo2, Redo2,
   Download, Save, Loader2, Trash2, BringToFront, SendToBack, Palette,
-  Check, ArrowLeft, Search, Triangle as TriangleIcon, Minus, Star, Sticker,
+  Check, ArrowLeft, Search, Triangle as TriangleIcon, Minus, Star, Sticker, Package,
 } from "lucide-react";
 
 const SIZE_PRESETS = [
@@ -40,6 +40,7 @@ export default function CanvasEditor({ designId }: Props) {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showStockPhotos, setShowStockPhotos] = useState(false);
+  const [showMyProducts, setShowMyProducts] = useState(false);
   const [showIconLibrary, setShowIconLibrary] = useState(false);
   const [customW, setCustomW] = useState(1080);
   const [customH, setCustomH] = useState(1080);
@@ -372,6 +373,9 @@ export default function CanvasEditor({ designId }: Props) {
                 <ImageIcon className="w-4 h-4" /> <span className="text-[11px]">Upload</span>
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+              <button onClick={() => setShowMyProducts(true)} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
+                <Package className="w-4 h-4" /> <span className="text-[11px]">My Products</span>
+              </button>
               <button onClick={() => setShowStockPhotos(true)} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
                 <Search className="w-4 h-4" /> <span className="text-[11px]">Stock Photo</span>
               </button>
@@ -528,6 +532,9 @@ export default function CanvasEditor({ designId }: Props) {
       {showStockPhotos && (
         <StockPhotoModal onClose={() => setShowStockPhotos(false)} onSelect={(url) => { addImageFromUrl(url); setShowStockPhotos(false); }} />
       )}
+      {showMyProducts && (
+        <MyProductsModal onClose={() => setShowMyProducts(false)} onSelect={(url) => { addImageFromUrl(url); setShowMyProducts(false); }} />
+      )}
       {showIconLibrary && (
         <IconLibraryModal onClose={() => setShowIconLibrary(false)} onSelect={(svg) => { addIconFromSvg(svg); setShowIconLibrary(false); }} />
       )}
@@ -648,6 +655,45 @@ function IconLibraryModal({ onClose, onSelect }: { onClose: () => void; onSelect
                 </button>
               ))}
               {names.length === 0 && <p className="col-span-6 text-center text-xs text-slate-400 py-8">No icons found — try a different search.</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MyProductsModal({ onClose, onSelect }: { onClose: () => void; onSelect: (url: string) => void }) {
+  const [products, setProducts] = useState<{ id: string; name: string; images: string[] }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((d) => setProducts((d.products ?? []).filter((p: any) => Array.isArray(p.images) && p.images.length > 0)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-200">
+          <p className="text-sm font-semibold text-slate-900">Your real product photos</p>
+          <p className="text-xs text-slate-400 mt-0.5">Already uploaded to your store — use them directly, no AI generation needed.</p>
+        </div>
+        <div className="p-4 overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+          ) : products.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-8">No products with photos yet — add one in Website & Products first.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {products.map((p) => (
+                <button key={p.id} onClick={() => onSelect(p.images[0])} className="rounded-lg overflow-hidden border border-slate-200 hover:border-purple-400 text-left">
+                  <img src={p.images[0]} alt={p.name} className="w-full h-24 object-cover" />
+                  <p className="text-[11px] text-slate-600 truncate p-1.5">{p.name}</p>
+                </button>
+              ))}
             </div>
           )}
         </div>
