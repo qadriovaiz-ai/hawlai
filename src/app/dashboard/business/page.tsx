@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Globe, Users2, CreditCard, Palette, FolderOpen, Link2, Zap, ChevronRight } from "lucide-react";
+import { Globe, Users2, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, ChevronRight } from "lucide-react";
 
 const ITEMS = [
   { href: "/dashboard/website-builder", label: "Website & Products", desc: "Site editor, products, orders, offers, shipping, payments, domain", icon: Globe },
+  { href: "/dashboard/leads-hub", label: "Leads & CRM", desc: "Pipeline, call history, appointments, retention", icon: Users2 },
+  { href: "/dashboard/graphic-design", label: "Design Studio", desc: "Advanced canvas editor, AI-generated graphics, your saved designs", icon: Wand2 },
   { href: "/dashboard/autopilot", label: "Autopilot", desc: "Turn on automatic calling, welcome & follow-up emails", icon: Zap },
   { href: "/dashboard/settings/automation", label: "Social Auto-Reply", desc: "Automatic DM & comment replies", icon: Zap },
   { href: "/dashboard/team", label: "Team", desc: "Invite people, manage roles", icon: Users2 },
