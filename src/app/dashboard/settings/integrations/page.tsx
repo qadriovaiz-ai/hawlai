@@ -27,13 +27,14 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title")
     .eq("id", dealershipId)
     .single();
 
   const isMetaConnected = !!dealership?.fb_page_id;
   const isGmailConnected = !!dealership?.gmail_email;
   const isGoogleAdsConnected = !!dealership?.google_ads_email;
+  const isYoutubeConnected = !!dealership?.youtube_channel_title;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -119,6 +120,26 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.google_ads_email})</span>
           ) : (
             <a href="/api/auth/google-ads/connect" className="btn-secondary text-xs w-full justify-center">
+              Connect <ArrowRight className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+
+        {/* YouTube */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-red-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Radio className="w-4 h-4 text-red-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">YouTube</p>
+              <p className="text-xs text-slate-400">Publish generated videos to your channel</p>
+            </div>
+          </div>
+          {isYoutubeConnected ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.youtube_channel_title})</span>
+          ) : (
+            <a href="/api/auth/youtube/connect" className="btn-secondary text-xs w-full justify-center">
               Connect <ArrowRight className="w-3 h-3" />
             </a>
           )}

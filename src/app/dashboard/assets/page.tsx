@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { redirect } from "next/navigation";
 import { FolderOpen, Image as ImageIcon, Video, Palette } from "lucide-react";
+import PublishToYoutubeButton from "@/components/assets/PublishToYoutubeButton";
 
 export default async function AssetsPage() {
   const supabase = await createClient();
@@ -22,7 +23,7 @@ export default async function AssetsPage() {
       .limit(30),
     supabase
       .from("video_generations")
-      .select("id, prompt, video_url, created_at")
+      .select("id, prompt, video_url, created_at, youtube_url")
       .eq("dealership_id", dealershipId)
       .eq("status", "ready")
       .order("created_at", { ascending: false })
@@ -91,7 +92,8 @@ export default async function AssetsPage() {
                 {videos.map((v) => (
                   <div key={v.id} className="rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
                     <video src={v.video_url!} controls className="w-full aspect-video" />
-                    <p className="text-xs text-slate-500 truncate p-2">{v.prompt}</p>
+                    <p className="text-xs text-slate-500 truncate p-2 pb-0">{v.prompt}</p>
+                    <PublishToYoutubeButton videoId={v.id} prompt={v.prompt} existingUrl={v.youtube_url} />
                   </div>
                 ))}
               </div>

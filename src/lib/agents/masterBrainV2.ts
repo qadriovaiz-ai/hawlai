@@ -24,6 +24,7 @@ import { generateBrandKit } from "./brandBuildingAgent";
 import { generateLogoConcept } from "./brandKitAgent";
 import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
 import { triggerVapiCall } from "./vapiCallAgent";
+import { getValidYoutubeAccessToken, uploadVideoToYouTube } from "./youtubeAgent";
 import { sendDealerEmail } from "../email/sendDealerEmail";
 import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
@@ -260,6 +261,17 @@ const TOOLS = [
     name: "update_landing_page",
     description: "Update the live landing page's headline, subheadline, or offer/CTA text. Only change fields the person actually specifies.",
     input_schema: { type: "object", properties: { headline: { type: "string" }, subheadline: { type: "string" }, offerText: { type: "string" } }, required: [] },
+  },
+  {
+    name: "publish_to_youtube",
+    description: "Publish a ready, already-generated video to the business's connected YouTube channel — this makes it publicly live on YouTube immediately. Only use this on a clear, explicit request (\"publish this to YouTube\", \"upload the candle video\"). If no video is specified, uses the most recently generated ready video.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "YouTube title. If omitted, uses the video's original generation prompt." },
+      },
+      required: [],
+    },
   },
   {
     name: "edit_canvas_design",
@@ -628,6 +640,28 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const { error } = await supabase.from("landing_pages").update(update).eq("dealership_id", ctx.id);
       if (error) return { error: error.message };
       return { success: true, updated: Object.keys(update) };
+    }
+    case "publish_to_youtube": {
+      try {
+        const { data: dealership } = await supabase.from("dealerships").select("youtube_access_token, youtube_refresh_token, youtube_token_expiry").eq("id", ctx.id).single();
+        if (!dealership?.youtube_refresh_token) return { error: "YouTube isn't connected yet — connect it from Business → Integrations first." };
+
+        const { data: video } = await supabase.from("video_generations").select("id, video_url, prompt").eq("dealership_id", ctx.id).eq("status", "ready").not("video_url", "is", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (!video) return { error: "No ready video found to publish — generate one first." };
+
+        const { accessToken, refreshed } = await getValidYoutubeAccessToken({
+          accessToken: dealership.youtube_access_token,
+          refreshToken: dealership.youtube_refresh_token,
+          tokenExpiry: dealership.youtube_token_expiry,
+        });
+        if (refreshed) await supabase.from("dealerships").update({ youtube_access_token: refreshed.accessToken, youtube_token_expiry: refreshed.expiry }).eq("id", ctx.id);
+
+        const result = await uploadVideoToYouTube(accessToken, video.video_url, input.title || video.prompt.slice(0, 90), video.prompt);
+        await supabase.from("video_generations").update({ youtube_video_id: result.videoId, youtube_url: result.url }).eq("id", video.id);
+        return { success: true, url: result.url, note: `Published to YouTube: ${result.url}` };
+      } catch (err: any) {
+        return { error: err.message };
+      }
     }
     case "edit_canvas_design": {
       try {
