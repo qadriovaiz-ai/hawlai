@@ -262,6 +262,18 @@ const TOOLS = [
     input_schema: { type: "object", properties: { headline: { type: "string" }, subheadline: { type: "string" }, offerText: { type: "string" } }, required: [] },
   },
   {
+    name: "edit_canvas_design",
+    description: "Make an edit to an existing canvas design (the advanced design editor with text/shapes/images) using a plain-language instruction — e.g. \"make the headline bigger\", \"change the background to navy blue\", \"move the logo to the top right\". Only works on designs that already exist. If the person doesn't name which design, this edits their most recently updated one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        designName: { type: "string", description: "The design's name, if the person mentioned one. Omit to use their most recently edited design." },
+        instruction: { type: "string", description: "What to change, in the person's own words." },
+      },
+      required: ["instruction"],
+    },
+  },
+  {
     name: "assign_task",
     description: "Assign a piece of work to a specific team member instead of generating it yourself. Use this INSTEAD of generate_content/generate_graphic/generate_video/etc when a team member holds the matching role for this piece of work (check the team roster you were given). Never use this for approval-gated actions (publishing, ad launches) — those aren't delegated.",
     input_schema: {
@@ -616,6 +628,49 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const { error } = await supabase.from("landing_pages").update(update).eq("dealership_id", ctx.id);
       if (error) return { error: error.message };
       return { success: true, updated: Object.keys(update) };
+    }
+    case "edit_canvas_design": {
+      try {
+        let query = supabase.from("canvas_designs").select("id, name, elements, canvas_width, canvas_height, background_color").eq("dealership_id", ctx.id);
+        if (input.designName) query = query.ilike("name", `%${input.designName}%`);
+        const { data: designs } = await query.order("updated_at", { ascending: false }).limit(1);
+        const design = designs?.[0];
+        if (!design) return { error: input.designName ? `No design found matching "${input.designName}".` : "No designs exist yet — create one first in the Advanced Editor." };
+
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 4000,
+            messages: [{
+              role: "user",
+              content: `You're editing a fabric.js canvas design. Canvas is ${design.canvas_width}x${design.canvas_height}, background color ${design.background_color}.
+
+Current elements (fabric.js object JSON array — each has at least "type", "left", "top", and type-specific fields like "text"/"fontSize"/"fontFamily" for text, "fill"/"width"/"height" for rects, "fill"/"radius" for circles, "src" for images):
+${JSON.stringify(design.elements)}
+
+Instruction: "${input.instruction}"
+
+Apply ONLY the change(s) implied by the instruction. Preserve every field you're not intentionally changing, and preserve every element not mentioned. Never invent new elements unless the instruction explicitly asks to add something. Respond with ONLY the complete updated elements array as valid JSON — no markdown, no explanation, no preamble.`,
+            }],
+          }),
+        });
+        if (!response.ok) return { error: "Couldn't reach the editing service — try again shortly." };
+        const data = await response.json();
+        if (data.usage) await logClaudeUsage(supabase, ctx.id, "canvas_edit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+        const text = data.content?.[0]?.text ?? "";
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) return { error: "Couldn't understand how to apply that edit — try rephrasing it." };
+        const newElements = JSON.parse(jsonMatch[0]);
+        if (!Array.isArray(newElements)) return { error: "Edit didn't produce a valid design — nothing was changed." };
+
+        const { error: updateError } = await supabase.from("canvas_designs").update({ elements: newElements }).eq("id", design.id);
+        if (updateError) return { error: updateError.message };
+        return { success: true, designName: design.name, designId: design.id, note: `Edited "${design.name}". Tell the person to open it in the Advanced Editor to review — link: /design-editor?id=${design.id}` };
+      } catch (err: any) {
+        return { error: err.message };
+      }
     }
     case "assign_task": {
       const match = ctx.team.find((t) => t.role === input.role);
