@@ -97,3 +97,49 @@ export async function postPhotoToPage(
   }
   return { id: data.post_id ?? data.id };
 }
+
+// Finds the Instagram Business Account connected to this Facebook
+// Page — Instagram posting always goes through a linked Page's own
+// access token, there's no separate Instagram-only auth needed if
+// the accounts are already connected (done once, in Meta's own
+// Business Suite, outside Hawlai).
+export async function getConnectedInstagramAccountId(pageId: string, pageAccessToken: string): Promise<string | null> {
+  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pageId}?fields=instagram_business_account&access_token=${pageAccessToken}`);
+  const data = await res.json();
+  return data?.instagram_business_account?.id ?? null;
+}
+
+// Instagram Graph API posting is two calls, not one: create a media
+// container, then publish it — unlike Facebook's single-call /photos
+// endpoint. Both calls use the same Page access token as Facebook
+// posting (Instagram Business accounts are authenticated through
+// their linked Page, not a separate Instagram login).
+export async function postPhotoToInstagram(
+  igUserId: string,
+  pageAccessToken: string,
+  imagePublicUrl: string,
+  caption: string
+): Promise<{ id: string }> {
+  const createRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${igUserId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image_url: imagePublicUrl, caption, access_token: pageAccessToken }),
+  });
+  const createData = await createRes.json();
+  if (!createRes.ok || createData.error) {
+    const e = createData.error ?? {};
+    throw new Error(`${e.message ?? "Instagram post creation failed"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}`);
+  }
+
+  const publishRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${igUserId}/media_publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ creation_id: createData.id, access_token: pageAccessToken }),
+  });
+  const publishData = await publishRes.json();
+  if (!publishRes.ok || publishData.error) {
+    const e = publishData.error ?? {};
+    throw new Error(`${e.message ?? "Instagram publish failed"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}`);
+  }
+  return { id: publishData.id };
+}

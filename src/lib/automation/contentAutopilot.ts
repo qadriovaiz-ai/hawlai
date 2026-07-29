@@ -1,6 +1,6 @@
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
-import { postPhotoToPage } from "@/lib/agents/socialMediaAgent";
+import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Runs daily as part of the autopilot cron. Fully automatic — no
@@ -38,6 +38,8 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   let postId: string | null = null;
   let success = true;
   let error: string | null = null;
+  let instagramPostId: string | null = null;
+  let instagramError: string | null = null;
 
   try {
     const [imageBuffer, contentResult] = await Promise.all([
@@ -58,6 +60,22 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     const result = await postPhotoToPage(dealership.fb_page_id, dealership.fb_page_access_token, imageUrl, caption);
     postId = result.id;
 
+    // Instagram is best-effort and independent of Facebook's outcome
+    // above — Facebook already succeeded by this point, so a failure
+    // here (no IG account connected, expired permission, etc.)
+    // shouldn't be reported as if the whole autopilot run failed.
+    try {
+      const igUserId = await getConnectedInstagramAccountId(dealership.fb_page_id, dealership.fb_page_access_token);
+      if (igUserId) {
+        const igResult = await postPhotoToInstagram(igUserId, dealership.fb_page_access_token, imageUrl, caption);
+        instagramPostId = igResult.id;
+      } else {
+        instagramError = "No Instagram Business account connected to this Facebook Page";
+      }
+    } catch (igErr: any) {
+      instagramError = igErr.message;
+    }
+
     await supabase.from("dealerships").update({ content_autopilot_last_posted_at: new Date().toISOString() }).eq("id", dealershipId);
   } catch (err: any) {
     success = false;
@@ -66,7 +84,8 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
 
   await supabase.from("content_autopilot_log").insert({
     dealership_id: dealershipId, caption, image_url: imageUrl, post_id: postId, success, error,
+    instagram_post_id: instagramPostId, instagram_error: instagramError,
   });
 
-  return { posted: success };
+  return { posted: success, postedToInstagram: Boolean(instagramPostId) };
 }

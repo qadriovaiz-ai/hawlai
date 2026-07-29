@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { postPhotoToPage } from "@/lib/agents/socialMediaAgent";
+import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { photo_base64, caption, scheduled_time } = await request.json();
+  const { photo_base64, caption, scheduled_time, post_to_instagram } = await request.json();
   if (!photo_base64) return NextResponse.json({ error: "photo_base64 required" }, { status: 400 });
   if (!caption || caption.trim().length < 1) return NextResponse.json({ error: "Caption is required" }, { status: 400 });
 
@@ -51,7 +51,29 @@ export async function POST(request: Request) {
   try {
     const scheduledPublishTime = scheduled_time ? Math.floor(new Date(scheduled_time).getTime() / 1000) : undefined;
     const result = await postPhotoToPage(pageId, pageAccessToken, publicUrlData.publicUrl, caption, scheduledPublishTime);
-    return NextResponse.json({ success: true, post_id: result.id, scheduled: !!scheduledPublishTime });
+
+    let instagramResult: { posted: boolean; id?: string; error?: string } = { posted: false };
+    if (post_to_instagram) {
+      // Instagram Graph API has no native "publish later" option the
+      // way Facebook's /photos endpoint does — only attempt this for
+      // immediate (non-scheduled) posts, and treat any failure as
+      // best-effort, not a reason to report the whole request as failed
+      // (the Facebook post above already succeeded by this point).
+      if (scheduledPublishTime) {
+        instagramResult.error = "Instagram doesn't support scheduled posts — post immediately instead, or post to Instagram separately when it's time.";
+      } else {
+        try {
+          const igUserId = await getConnectedInstagramAccountId(pageId, pageAccessToken);
+          if (!igUserId) throw new Error("No Instagram Business account connected to this Facebook Page");
+          const igRes = await postPhotoToInstagram(igUserId, pageAccessToken, publicUrlData.publicUrl, caption);
+          instagramResult = { posted: true, id: igRes.id };
+        } catch (igErr: any) {
+          instagramResult.error = igErr.message;
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, post_id: result.id, scheduled: !!scheduledPublishTime, instagram: instagramResult });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
