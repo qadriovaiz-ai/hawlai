@@ -25,6 +25,7 @@ import { generateLogoConcept } from "./brandKitAgent";
 import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
 import { triggerVapiCall } from "./vapiCallAgent";
 import { getValidYoutubeAccessToken, uploadVideoToYouTube } from "./youtubeAgent";
+import { generate3DScene } from "./threeDAgent";
 import { sendDealerEmail } from "../email/sendDealerEmail";
 import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
@@ -261,6 +262,15 @@ const TOOLS = [
     name: "update_landing_page",
     description: "Update the live landing page's headline, subheadline, or offer/CTA text. Only change fields the person actually specifies.",
     input_schema: { type: "object", properties: { headline: { type: "string" }, subheadline: { type: "string" }, offerText: { type: "string" } }, required: [] },
+  },
+  {
+    name: "generate_3d_scene",
+    description: "Generate a REAL, interactive 3D scene (actual WebGL/Three.js code the person can drag to rotate and zoom) from a description — not a video, not a flat image. Use when the person explicitly asks for 3D, an interactive product view, or something they can rotate/spin. This is genuinely generative code and can occasionally fail to render — tell the person it's saved to 3D Studio to view, and that regenerating with a rephrased prompt usually fixes a broken one.",
+    input_schema: {
+      type: "object",
+      properties: { prompt: { type: "string", description: "What the 3D scene should show, in visual detail." } },
+      required: ["prompt"],
+    },
   },
   {
     name: "publish_to_youtube",
@@ -640,6 +650,20 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const { error } = await supabase.from("landing_pages").update(update).eq("dealership_id", ctx.id);
       if (error) return { error: error.message };
       return { success: true, updated: Object.keys(update) };
+    }
+    case "generate_3d_scene": {
+      const { data: scene, error: insertError } = await supabase.from("three_d_scenes").insert({
+        dealership_id: ctx.id, name: input.prompt.slice(0, 60), prompt: input.prompt, status: "pending",
+      }).select("id").single();
+      if (insertError) return { error: insertError.message };
+
+      const result = await generate3DScene(input.prompt, ctx.name, ctx.category, { supabase, dealershipId: ctx.id });
+      if (result.error || !result.html) {
+        await supabase.from("three_d_scenes").update({ status: "failed", error_message: result.error }).eq("id", scene.id);
+        return { error: result.error ?? "3D scene generation failed" };
+      }
+      await supabase.from("three_d_scenes").update({ status: "ready", html_code: result.html }).eq("id", scene.id);
+      return { success: true, sceneId: scene.id, note: `3D scene ready — saved to 3D Studio (/dashboard/3d-studio) to view and interact with, you cannot show it inline in chat.` };
     }
     case "publish_to_youtube": {
       try {
