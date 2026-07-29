@@ -49,7 +49,11 @@ export async function generateAutoReply(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Haiku — a safe, single, auto-sent reply is a tightly
+        // constrained task (explicitly avoids prices/promises/
+        // complaint resolution per the prompt below), and this fires
+        // on every incoming DM/comment when the toggle is on.
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 300,
         messages: [{
           role: "user",

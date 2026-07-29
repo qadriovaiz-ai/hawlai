@@ -83,7 +83,12 @@ export async function generateDeepStrategy(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Opus — SWOT, positioning, pricing strategy, and multi-
+        // persona analysis benefit from deeper reasoning than most of
+        // this app's Sonnet-tier work, and this is generated
+        // infrequently (once per strategy refresh), so the extra cost
+        // per call is worth it for a business-defining document.
+        model: "claude-opus-4-8",
         max_tokens: 3000,
         messages: [
           {
@@ -120,7 +125,7 @@ Be specific and honest — a small local business's SWOT should not read like a 
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

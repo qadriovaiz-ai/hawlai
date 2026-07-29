@@ -60,7 +60,10 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          // Opus — this narrative interprets real financial forecast
+          // math for the business owner; a bad read on their own
+          // revenue trend is a bigger cost than the extra tokens.
+          model: "claude-opus-4-8",
           max_tokens: 400,
           messages: [{
             role: "user",
@@ -71,7 +74,7 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
       if (response.ok) {
         const bodyText = await response.text();
         const data = JSON.parse(bodyText);
-        if (data.usage) await logClaudeUsage(supabase, dealershipId, "growth_advisor", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+        if (data.usage) await logClaudeUsage(supabase, dealershipId, "growth_advisor", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
         const text = data.content?.[0]?.text ?? "";
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -90,7 +93,10 @@ async function callClaude(prompt: string, maxTokens = 1500): Promise<any | null>
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+      // Opus — shared by generateGrowthOpportunities, generateBudgetRecommendations,
+    // generateExpansionStrategy: high-stakes strategic/financial reasoning, called
+    // infrequently, same justification as the forecast narrative above.
+    body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
     });
     if (!response.ok) return null;
     const bodyText = await response.text();

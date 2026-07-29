@@ -86,7 +86,11 @@ export async function generateBrandKit(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Opus — this is the business's whole identity (colors,
+        // tagline, mission, story), generated once and rarely
+        // regenerated; worth the extra cost for something this
+        // foundational.
+        model: "claude-opus-4-8",
         max_tokens: 2500,
         messages: [
           {
@@ -119,7 +123,7 @@ Be specific to this business type and city — avoid generic startup-brand-kit f
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "brand_kit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "brand_kit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

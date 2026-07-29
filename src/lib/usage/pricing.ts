@@ -7,11 +7,16 @@
 export const PRICING = {
   usdToInr: 87,
 
-  // Claude Sonnet 4.6 — $3.00 input / $15.00 output per million tokens.
+  // Per-model Claude rates — three tiers now used across the app
+  // (Haiku for high-frequency/low-complexity work, Sonnet as the
+  // default, Opus for infrequent high-stakes reasoning). Keyed by the
+  // exact model string sent to the API, so cost is computed from
+  // whichever model actually ran, not a single assumed rate.
   anthropic: {
-    inputPerMillionUsd: 3.0,
-    outputPerMillionUsd: 15.0,
-  },
+    "claude-opus-4-8": { inputPerMillionUsd: 5.0, outputPerMillionUsd: 25.0 },
+    "claude-sonnet-4-6": { inputPerMillionUsd: 3.0, outputPerMillionUsd: 15.0 },
+    "claude-haiku-4-5-20251001": { inputPerMillionUsd: 1.0, outputPerMillionUsd: 5.0 },
+  } as Record<string, { inputPerMillionUsd: number; outputPerMillionUsd: number }>,
 
   // Vapi — ~$0.09/minute blended cost, as shown on the actual Vapi
   // dashboard for the assistant/voice/model combination in use.
@@ -42,8 +47,9 @@ export const PRICING = {
   },
 };
 
-export function costOfClaudeCallInr(inputTokens: number, outputTokens: number): number {
-  const usd = (inputTokens / 1_000_000) * PRICING.anthropic.inputPerMillionUsd + (outputTokens / 1_000_000) * PRICING.anthropic.outputPerMillionUsd;
+export function costOfClaudeCallInr(inputTokens: number, outputTokens: number, model: string = "claude-sonnet-4-6"): number {
+  const rate = PRICING.anthropic[model] ?? PRICING.anthropic["claude-sonnet-4-6"];
+  const usd = (inputTokens / 1_000_000) * rate.inputPerMillionUsd + (outputTokens / 1_000_000) * rate.outputPerMillionUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }
 

@@ -30,7 +30,11 @@ export async function scoreLeadFromCall(transcript: string, leadName: string, lo
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Haiku, not Sonnet — this runs after every single call, and
+        // classifying a transcript into hot/warm/cold + a one-line
+        // reason is a simpler task than the department-work this app
+        // mostly uses Sonnet for. Frequency is high, complexity isn't.
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 500,
         messages: [{
           role: "user",
@@ -46,7 +50,7 @@ ${transcript.slice(0, 8000)}`,
     });
 
     const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "call_scoring", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "call_scoring", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-haiku-4-5-20251001");
     const text = data?.content?.[0]?.text ?? "";
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);

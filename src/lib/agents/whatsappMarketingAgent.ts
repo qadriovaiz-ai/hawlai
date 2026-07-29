@@ -57,7 +57,10 @@ export async function generateWhatsappContent(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
+        // recovery) is a lower-complexity linguistic task than most
+        // of what this app uses Sonnet for.
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1600,
         messages: [{
           role: "user",
@@ -76,7 +79,7 @@ Return JSON only, no markdown, no preamble. WhatsApp messages should read like a
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "whatsapp_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "whatsapp_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-haiku-4-5-20251001");
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

@@ -318,7 +318,12 @@ async function generatePageBlocks(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Opus — this writes the actual page copy a visitor reads
+        // first; planWebsite's structural planning stays Sonnet
+        // (deciding a page list/theme is a lighter task), but the
+        // real content quality here is worth the extra cost, and it
+        // only runs once per page per generation, not on every visit.
+        model: "claude-opus-4-8",
         max_tokens: 2000,
         tools: [EMIT_PAGE_TOOL],
         tool_choice: { type: "tool", name: "emit_page" },
@@ -343,7 +348,7 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
       return { page: fallback, fellBack: true, reason: `API returned ${response.status}: ${errBody.slice(0, 300)}` };
     }
     const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_page_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_page_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
     const toolUse = (data.content ?? []).find((c: any) => c.type === "tool_use" && c.name === "emit_page");
     const input = toolUse?.input;
     if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) {

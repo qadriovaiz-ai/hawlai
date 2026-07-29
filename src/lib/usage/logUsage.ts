@@ -6,15 +6,16 @@ import { costOfClaudeCallInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeo
 // actual feature that triggered it, so errors are swallowed (best-
 // effort telemetry, not a critical path).
 
-export async function logClaudeUsage(supabase: any, dealershipId: string, operation: string, inputTokens: number, outputTokens: number) {
+export async function logClaudeUsage(supabase: any, dealershipId: string, operation: string, inputTokens: number, outputTokens: number, model: string = "claude-sonnet-4-6") {
   try {
     await supabase.from("api_usage_logs").insert({
       dealership_id: dealershipId,
       service: "anthropic",
       operation,
+      model,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      cost_inr: costOfClaudeCallInr(inputTokens, outputTokens),
+      cost_inr: costOfClaudeCallInr(inputTokens, outputTokens, model),
     });
   } catch {
     // Best-effort — never let telemetry logging break the real feature.
