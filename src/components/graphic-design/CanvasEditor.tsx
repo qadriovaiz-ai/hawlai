@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Canvas, IText, Rect, Circle, FabricImage, FabricObject } from "fabric";
+import { Canvas, IText, Rect, Circle, Triangle, Line, Polygon, Group, FabricImage, FabricObject, loadSVGFromString } from "fabric";
 import { useRouter } from "next/navigation";
 import {
   Type, Square, Circle as CircleIcon, Image as ImageIcon, Undo2, Redo2,
   Download, Save, Loader2, Trash2, BringToFront, SendToBack, Palette,
-  Check, ArrowLeft, Search,
+  Check, ArrowLeft, Search, Triangle as TriangleIcon, Minus, Star, Sticker,
 } from "lucide-react";
 
 const SIZE_PRESETS = [
@@ -40,6 +40,7 @@ export default function CanvasEditor({ designId }: Props) {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showStockPhotos, setShowStockPhotos] = useState(false);
+  const [showIconLibrary, setShowIconLibrary] = useState(false);
   const [customW, setCustomW] = useState(1080);
   const [customH, setCustomH] = useState(1080);
   const [, forceRerender] = useState(0);
@@ -157,6 +158,60 @@ export default function CanvasEditor({ designId }: Props) {
     canvas.add(circle);
     canvas.setActiveObject(circle);
     canvas.renderAll();
+  }
+
+  function addTriangleShape() {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const tri = new Triangle({ left: canvasSize.w / 2 - 60, top: canvasSize.h / 2 - 60, width: 120, height: 120, fill: "#10b981" });
+    canvas.add(tri);
+    canvas.setActiveObject(tri);
+    canvas.renderAll();
+  }
+
+  function addLineShape() {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const line = new Line([0, 0, 200, 0], { left: canvasSize.w / 2 - 100, top: canvasSize.h / 2, stroke: "#111111", strokeWidth: 4 });
+    canvas.add(line);
+    canvas.setActiveObject(line);
+    canvas.renderAll();
+  }
+
+  function addStarShape() {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const points: { x: number; y: number }[] = [];
+    const spikes = 5, outerR = 60, innerR = 26;
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? outerR : innerR;
+      const angle = (Math.PI / spikes) * i - Math.PI / 2;
+      points.push({ x: r * Math.cos(angle), y: r * Math.sin(angle) });
+    }
+    const star = new Polygon(points, { left: canvasSize.w / 2 - 60, top: canvasSize.h / 2 - 60, fill: "#ec4899" });
+    canvas.add(star);
+    canvas.setActiveObject(star);
+    canvas.renderAll();
+  }
+
+  function addIconFromSvg(svgString: string) {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    loadSVGFromString(svgString).then(({ objects }) => {
+      const valid = objects.filter((o): o is FabricObject => o !== null);
+      if (valid.length === 0) return;
+      const group = new Group(valid);
+      group.set({
+        left: canvasSize.w / 2 - 40, top: canvasSize.h / 2 - 40,
+        scaleX: 80 / (group.width || 24), scaleY: 80 / (group.height || 24),
+        fill: "#111111",
+      });
+      // lucide icons use stroke, not fill, by default — recolor every sub-path so it responds to the fill-color control
+      group.getObjects().forEach((o: any) => { o.set({ stroke: "#111111", fill: "" }); });
+      canvas.add(group);
+      canvas.setActiveObject(group);
+      canvas.renderAll();
+    });
   }
 
   async function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -304,12 +359,24 @@ export default function CanvasEditor({ designId }: Props) {
               <button onClick={addCircleShape} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
                 <CircleIcon className="w-4 h-4" /> <span className="text-[11px]">Circle</span>
               </button>
+              <button onClick={addTriangleShape} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
+                <TriangleIcon className="w-4 h-4" /> <span className="text-[11px]">Triangle</span>
+              </button>
+              <button onClick={addStarShape} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
+                <Star className="w-4 h-4" /> <span className="text-[11px]">Star</span>
+              </button>
+              <button onClick={addLineShape} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
+                <Minus className="w-4 h-4" /> <span className="text-[11px]">Line</span>
+              </button>
               <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
                 <ImageIcon className="w-4 h-4" /> <span className="text-[11px]">Upload</span>
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
               <button onClick={() => setShowStockPhotos(true)} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
                 <Search className="w-4 h-4" /> <span className="text-[11px]">Stock Photo</span>
+              </button>
+              <button onClick={() => setShowIconLibrary(true)} className="flex flex-col items-center gap-1 p-3 rounded-lg border border-slate-200 hover:border-purple-400 text-slate-600">
+                <Sticker className="w-4 h-4" /> <span className="text-[11px]">Icons (1750+)</span>
               </button>
             </div>
           </div>
@@ -406,6 +473,32 @@ export default function CanvasEditor({ designId }: Props) {
                     <button onClick={() => updateSelectedProp("fontStyle", selected.get("fontStyle") === "italic" ? "normal" : "italic")} className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 italic">I</button>
                     <button onClick={() => updateSelectedProp("underline", !selected.get("underline"))} className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 underline">U</button>
                   </div>
+                  <div>
+                    <label className="flex items-center gap-2 text-xs text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={!!selected.get("shadow")}
+                        onChange={(e) => updateSelectedProp("shadow", e.target.checked ? { color: "rgba(0,0,0,0.4)", blur: 8, offsetX: 3, offsetY: 3 } : null)}
+                        className="accent-purple-600"
+                      />
+                      Drop shadow
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={(selected.get("stroke") as string) ?? "#000000"}
+                      onChange={(e) => updateSelectedProp("stroke", e.target.value)}
+                      className="w-8 h-8 rounded border border-slate-200"
+                    />
+                    <input
+                      type="range" min={0} max={6}
+                      value={(selected.get("strokeWidth") as number) ?? 0}
+                      onChange={(e) => updateSelectedProp("strokeWidth", Number(e.target.value))}
+                      className="flex-1"
+                    />
+                    <span className="text-[11px] text-slate-400">Outline</span>
+                  </div>
                 </>
               )}
 
@@ -434,6 +527,9 @@ export default function CanvasEditor({ designId }: Props) {
 
       {showStockPhotos && (
         <StockPhotoModal onClose={() => setShowStockPhotos(false)} onSelect={(url) => { addImageFromUrl(url); setShowStockPhotos(false); }} />
+      )}
+      {showIconLibrary && (
+        <IconLibraryModal onClose={() => setShowIconLibrary(false)} onSelect={(svg) => { addIconFromSvg(svg); setShowIconLibrary(false); }} />
       )}
     </div>
   );
@@ -486,6 +582,74 @@ function StockPhotoModal({ onClose, onSelect }: { onClose: () => void; onSelect:
               </button>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IconLibraryModal({ onClose, onSelect }: { onClose: () => void; onSelect: (svg: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [names, setNames] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [picking, setPicking] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetch(`/api/icon-library?q=${encodeURIComponent(query)}`)
+        .then((r) => r.json())
+        .then((d) => setNames(d.icons ?? []))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  async function pick(name: string) {
+    setPicking(name);
+    try {
+      const res = await fetch(`/api/icon-library/${name}`);
+      const data = await res.json();
+      if (data.svg) onSelect(data.svg);
+    } finally {
+      setPicking(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-200">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search 1750+ free icons (e.g. heart, arrow, shopping-cart)..."
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+            autoFocus
+          />
+        </div>
+        <div className="p-4 overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+          ) : (
+            <div className="grid grid-cols-6 gap-2">
+              {names.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => pick(name)}
+                  disabled={picking === name}
+                  title={name}
+                  className="aspect-square flex items-center justify-center rounded-lg border border-slate-200 hover:border-purple-400 hover:bg-purple-50 p-2 disabled:opacity-50"
+                >
+                  {picking === name ? <Loader2 className="w-4 h-4 animate-spin text-purple-500" /> : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/icon-library/${name}?raw=1`} alt={name} className="w-6 h-6" />
+                  )}
+                </button>
+              ))}
+              {names.length === 0 && <p className="col-span-6 text-center text-xs text-slate-400 py-8">No icons found — try a different search.</p>}
+            </div>
+          )}
         </div>
       </div>
     </div>
