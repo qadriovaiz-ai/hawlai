@@ -2,6 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
 
+// Generating several pages (even with the per-page 8s internal
+// timeout below) across concurrent batches can still add up past
+// Vercel's default route timeout — this doesn't replace the per-page
+// safety net, it just gives the overall request room to actually
+// finish instead of getting cut off between batches.
+export const maxDuration = 300;
+
 async function withTimeout<T>(promiseLike: PromiseLike<T>, label: string, ms = 8000): Promise<T> {
   let timer: NodeJS.Timeout;
   const timeout = new Promise<never>((_, reject) => {

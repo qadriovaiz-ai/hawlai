@@ -2,6 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 
+// Vercel's default serverless timeout (as low as 10s on some plans)
+// is nowhere near enough for slow tool calls in Master Chat's
+// multi-step loop — Opus writing an 8000-token 3D scene, or even a
+// few Sonnet calls chained together, can genuinely take 30-90+
+// seconds. Without this, the request gets silently cut off mid-
+// generation with no useful error. Vercel caps this automatically to
+// whatever the actual plan allows if 300 exceeds it, so setting the
+// higher number here is safe regardless of plan.
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

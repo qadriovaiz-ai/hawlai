@@ -2,6 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { generate3DScene } from "@/lib/agents/threeDAgent";
 import { NextResponse } from "next/server";
 
+// Same reasoning as Master Chat's route — Opus writing a full 3D
+// scene can genuinely take 30-90+ seconds, well past Vercel's default
+// timeout.
+export const maxDuration = 300;
+
 async function getContext(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
