@@ -1,8 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Wand2, Image as ImageIcon, Download } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Wand2, Image as ImageIcon, Download, PenTool, Plus } from "lucide-react";
 import { GRAPHIC_TYPES } from "@/lib/agents/graphicDesignAgent";
+
+interface CanvasDesign {
+  id: string;
+  name: string;
+  thumbnail_url: string | null;
+  updated_at: string;
+}
 
 export default function GraphicDesignView() {
   const [selectedType, setSelectedType] = useState(GRAPHIC_TYPES[0].key);
@@ -10,6 +18,12 @@ export default function GraphicDesignView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [canvasDesigns, setCanvasDesigns] = useState<CanvasDesign[]>([]);
+
+  useEffect(() => {
+    fetch("/api/canvas-designs").then((r) => r.json()).then((d) => setCanvasDesigns(d.designs ?? []));
+  }, []);
+
   const [gallery, setGallery] = useState<any[]>([]);
 
   useEffect(() => {
@@ -41,6 +55,40 @@ export default function GraphicDesignView() {
 
   return (
     <div className="space-y-5">
+      {/* Advanced canvas editor entry point */}
+      <div className="card p-5 flex items-center justify-between bg-gradient-to-br from-purple-50 to-white">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+            <PenTool className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Advanced Editor</p>
+            <p className="text-xs text-slate-500">Full control — text, shapes, images, layers, stock photos</p>
+          </div>
+        </div>
+        <Link href="/design-editor" className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0">
+          <Plus className="w-3.5 h-3.5" /> New Design
+        </Link>
+      </div>
+
+      {canvasDesigns.length > 0 && (
+        <div className="card p-5 space-y-2">
+          <p className="text-sm font-semibold text-slate-700">Your saved designs</p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {canvasDesigns.map((d) => (
+              <Link key={d.id} href={`/design-editor?id=${d.id}`} className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
+                {d.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={d.thumbnail_url} alt={d.name} className="w-full h-full object-cover" />
+                ) : (
+                  <PenTool className="w-5 h-5 text-slate-300" />
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Type picker */}
       <div className="card p-5 space-y-2">
         <p className="text-xs font-semibold text-slate-400 mb-1">Design type</p>
