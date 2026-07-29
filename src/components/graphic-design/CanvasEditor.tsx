@@ -40,6 +40,8 @@ export default function CanvasEditor({ designId }: Props) {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showStockPhotos, setShowStockPhotos] = useState(false);
+  const [customW, setCustomW] = useState(1080);
+  const [customH, setCustomH] = useState(1080);
   const [, forceRerender] = useState(0);
 
   const pushHistory = useCallback(() => {
@@ -325,6 +327,25 @@ export default function CanvasEditor({ designId }: Props) {
                 </button>
               ))}
             </div>
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <p className="text-[11px] text-slate-400 mb-1.5">Custom size (px)</p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number" min={50} max={8000} value={customW}
+                  onChange={(e) => setCustomW(Number(e.target.value))}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+                />
+                <span className="text-slate-300 text-xs">×</span>
+                <input
+                  type="number" min={50} max={8000} value={customH}
+                  onChange={(e) => setCustomH(Number(e.target.value))}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+                />
+              </div>
+              <button onClick={() => applySizePreset({ w: customW, h: customH })} className="w-full mt-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 rounded-lg">
+                Apply custom size
+              </button>
+            </div>
           </div>
         </div>
 
@@ -360,14 +381,16 @@ export default function CanvasEditor({ designId }: Props) {
               {isText && (
                 <>
                   <div>
-                    <p className="text-xs text-slate-500 mb-1">Font</p>
-                    <select
+                    <p className="text-xs text-slate-500 mb-1">Font (type any font name)</p>
+                    <input
+                      list="font-suggestions"
                       value={(selected.get("fontFamily") as string) ?? "Arial"}
                       onChange={(e) => updateSelectedProp("fontFamily", e.target.value)}
                       className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
-                    >
-                      {FONT_FAMILIES.map((f) => <option key={f} value={f}>{f}</option>)}
-                    </select>
+                    />
+                    <datalist id="font-suggestions">
+                      {FONT_FAMILIES.map((f) => <option key={f} value={f} />)}
+                    </datalist>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 mb-1">Font size</p>
