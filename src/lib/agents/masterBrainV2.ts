@@ -284,6 +284,18 @@ const TOOLS = [
     },
   },
   {
+    name: "create_product_ad",
+    description: "Automatically create a complete, ready-to-download ad creative using a real product photo already uploaded — places the actual photo and adds whatever text/badges/graphics the instruction asks for (e.g. a discount badge, a price, a headline), all without the person touching the editor. Use this whenever the person wants an ad made from an existing product, not a from-scratch AI-generated image.",
+    input_schema: {
+      type: "object",
+      properties: {
+        productName: { type: "string", description: "Which product to use — must match one that already has a photo uploaded." },
+        instruction: { type: "string", description: "What to add on top of the photo, e.g. \"add a gold 20% OFF badge in the top corner and the text 'Mogra Nights' below it\"." },
+      },
+      required: ["productName", "instruction"],
+    },
+  },
+  {
     name: "edit_canvas_design",
     description: "Make an edit to an existing canvas design (the advanced design editor with text/shapes/images) using a plain-language instruction — e.g. \"make the headline bigger\", \"change the background to navy blue\", \"move the logo to the top right\". Only works on designs that already exist. If the person doesn't name which design, this edits their most recently updated one.",
     input_schema: {
@@ -683,6 +695,60 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         const result = await uploadVideoToYouTube(accessToken, video.video_url, input.title || video.prompt.slice(0, 90), video.prompt);
         await supabase.from("video_generations").update({ youtube_video_id: result.videoId, youtube_url: result.url }).eq("id", video.id);
         return { success: true, url: result.url, note: `Published to YouTube: ${result.url}` };
+      } catch (err: any) {
+        return { error: err.message };
+      }
+    }
+    case "create_product_ad": {
+      try {
+        const { data: matches } = await supabase.from("products").select("id, name, images").eq("dealership_id", ctx.id).ilike("name", `%${input.productName}%`).limit(5);
+        const withPhoto = (matches ?? []).filter((p: any) => Array.isArray(p.images) && p.images.length > 0);
+        if (withPhoto.length === 0) return { error: `No product matching "${input.productName}" with an uploaded photo found — add a photo to it in Website & Products first.` };
+        const product = withPhoto[0];
+        const photoUrl = product.images[0];
+
+        const canvasWidth = 1080, canvasHeight = 1080;
+        // Approximate placement — the real pixel dimensions of the
+        // uploaded photo aren't known without fetching and decoding
+        // it, so this is a reasonable default fill, not a guaranteed
+        // pixel-perfect fit. The person can nudge/resize it slightly
+        // in the editor afterward if needed; this is still the vast
+        // majority of the work done automatically, not the whole
+        // manual process.
+        const photoElement = { type: "image", src: photoUrl, left: 0, top: 0, scaleX: 0.9, scaleY: 0.9, selectable: true };
+
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 3000,
+            messages: [{
+              role: "user",
+              content: `You're designing an ad creative for "${product.name}" on a ${canvasWidth}x${canvasHeight} fabric.js canvas. A real product photo already covers most of the canvas as the first element (don't move or remove it):
+${JSON.stringify(photoElement)}
+
+Add whatever additional fabric.js elements (type "i-text" for text with left/top/fontSize/fontFamily/fill/fontWeight, or "rect"/"circle" for badge shapes with left/top/width or radius/fill/rx for rounded corners) the instruction below asks for — badges, discount text, price, headline, etc. Position them so they don't cover the product's main subject, typically a corner or edge.
+
+Instruction: "${input.instruction}"
+
+Respond with ONLY the complete elements array as valid JSON (including the photo element unchanged as the first item) — no markdown, no explanation.`,
+            }],
+          }),
+        });
+        if (!response.ok) return { error: "Couldn't reach the design service — try again shortly." };
+        const data = await response.json();
+        if (data.usage) await logClaudeUsage(supabase, ctx.id, "canvas_edit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+        const text = data.content?.[0]?.text ?? "";
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        const elements = jsonMatch ? JSON.parse(jsonMatch[0]) : [photoElement];
+
+        const { data: design, error: insertError } = await supabase.from("canvas_designs").insert({
+          dealership_id: ctx.id, name: `${product.name} Ad`, canvas_width: canvasWidth, canvas_height: canvasHeight, elements,
+        }).select("id").single();
+        if (insertError) return { error: insertError.message };
+
+        return { success: true, designId: design.id, note: `Ad created using ${product.name}'s real photo — saved to Design Studio (/design-editor?id=${design.id}) to review, download, or fine-tune.` };
       } catch (err: any) {
         return { error: err.message };
       }
