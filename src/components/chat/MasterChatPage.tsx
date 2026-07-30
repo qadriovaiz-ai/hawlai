@@ -144,6 +144,10 @@ export default function MasterChatPage({
                       a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">{children}</a>,
                       hr: () => <hr className="my-2.5 border-slate-200" />,
                       code: ({ children }) => <code className="bg-slate-200/70 px-1 py-0.5 rounded text-xs">{children}</code>,
+                      img: ({ src, alt }) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={src as string} alt={alt ?? ""} className="rounded-lg max-w-full my-2 border border-slate-200" />
+                      ),
                     }}
                   >
                     {msg.content}

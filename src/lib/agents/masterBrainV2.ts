@@ -82,7 +82,7 @@ const TOOLS = [
   },
   {
     name: "generate_logo",
-    description: "Generate an actual AI logo image for the business and save it to the Brand Voice / Brand Building page. Note: you cannot display the image inline in chat — tell the person it's saved and they can view/download it there.",
+    description: "Generate an actual AI logo image for the business and save it to the Brand Voice / Brand Building page. The image can and should be shown directly in your reply using markdown image syntax (![Logo](url)) — it renders inline in the chat.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -200,7 +200,7 @@ const TOOLS = [
   },
   {
     name: "generate_graphic",
-    description: `Generate an actual AI image (ad creative, social graphic, banner, poster, logo-style asset, product photo, etc) and save it to Graphic Design. Valid designType values: ${GRAPHIC_TYPES.map((t) => t.key).join(", ")}. Note: you cannot display the image inline in chat — tell the person it's saved and they can view/download it on the Graphic Design page.`,
+    description: `Generate an actual AI image (ad creative, social graphic, banner, poster, logo-style asset, product photo, etc) and save it to Graphic Design. Valid designType values: ${GRAPHIC_TYPES.map((t) => t.key).join(", ")}. The image can and should be shown directly in your reply using markdown image syntax (![description](url)) — it renders inline in the chat.`,
     input_schema: { type: "object", properties: { designType: { type: "string", enum: GRAPHIC_TYPES.map((t) => t.key) }, prompt: { type: "string", description: "What the image should depict" } }, required: ["designType"] },
   },
   {
@@ -417,7 +417,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
         const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
         await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, logo_url: publicUrlData.publicUrl, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
-        return { success: true, logoUrl: publicUrlData.publicUrl, note: "Saved to Brand Voice — the person can view/download it there, you cannot show the image inline." };
+        return { success: true, logoUrl: publicUrlData.publicUrl, note: `Saved to Brand Voice. Show it to the person directly in your reply using markdown image syntax: ![Logo](${publicUrlData.publicUrl}) — it will render inline in the chat, don't just tell them to go check another tab.` };
       } catch (err: any) {
         return { error: err.message };
       }
@@ -585,7 +585,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
         const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
         await supabase.from("graphic_designs").insert({ dealership_id: ctx.id, design_type: input.designType, prompt: input.prompt ?? "", image_url: publicUrlData.publicUrl });
-        return { success: true, imageUrl: publicUrlData.publicUrl, note: "Saved to Graphic Design — the person can view/download it there, you cannot show the image inline." };
+        return { success: true, imageUrl: publicUrlData.publicUrl, note: `Saved to Graphic Design. Show it to the person directly in your reply using markdown image syntax: ![Generated image](${publicUrlData.publicUrl}) — it will render inline in the chat, don't just tell them to go check another tab.` };
       } catch (err: any) {
         return { error: err.message };
       }
@@ -910,7 +910,7 @@ export async function runMasterBrainChat(
 Guidelines:
 - When the person asks for something concrete, USE THE RELEVANT TOOL rather than just talking about it. For a broad request ("help me launch my skincare brand"), call multiple tools in sequence (e.g. brand kit, then a launch content piece, then SEO) and weave the results into one helpful reply.
 - Everything you generate is automatically saved and also shows up on its normal dashboard page. ALWAYS end your reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard."
-- generate_graphic produces a real image but you cannot display it inline — tell the person it's ready on the Graphic Design page.
+- generate_graphic and generate_logo produce real images that render directly in this chat — use markdown image syntax ![description](url) with the returned URL so the person sees it immediately, in addition to confirming it's saved on its dashboard page.
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
 - You CANNOT launch real ads or spend money — that needs the person's explicit approval in Ads Manager. If asked, generate the plan/draft with your tools and clearly tell them where to go review and approve it.
