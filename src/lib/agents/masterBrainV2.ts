@@ -470,6 +470,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           success: true,
           pages: generatedPages.map((p) => p.title),
           theme: validTheme,
+          slug,
           note: `Website built as a DRAFT with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}) — it is NOT live yet. Tell the person to review it in Website Builder and hit Publish there when they're happy with it.${fallbackWarnings?.length ? ` Some pages fell back to placeholder content instead of real AI content (${fallbackWarnings.join("; ")}) — tell the person this happened and that they can hit Regenerate Website once it's resolved.` : ""}`,
         };
       } catch (err: any) {
@@ -894,6 +895,38 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
 export interface ChatTurnResult {
   reply: string;
   toolsUsed: string[];
+  artifacts: Artifact[];
+}
+
+export interface Artifact {
+  type: "image" | "website" | "3d_scene" | "canvas_design";
+  label: string;
+  url?: string; // direct viewable URL (image src, or a link)
+  html?: string; // for 3d_scene — the sandboxed iframe content, avoids a second fetch
+}
+
+// Turns a raw tool-execution result into something the workspace
+// panel can render live, without the frontend needing to know each
+// tool's individual response shape. Only tools that produce something
+// genuinely viewable get an entry — plain text/data tools (SEO
+// keywords, a lead score, a workflow) correctly produce nothing here.
+function extractArtifact(toolName: string, result: any): Artifact | null {
+  if (!result || result.error) return null;
+  switch (toolName) {
+    case "generate_logo":
+      return result.logoUrl ? { type: "image", label: "Logo", url: result.logoUrl } : null;
+    case "generate_graphic":
+      return result.imageUrl ? { type: "image", label: "Generated Image", url: result.imageUrl } : null;
+    case "build_website":
+      return { type: "website", label: "Website Draft", url: "/dashboard/website-builder" };
+    case "generate_3d_scene":
+      return result.sceneId ? { type: "3d_scene", label: "3D Scene", url: `/dashboard/3d-studio` } : null;
+    case "create_product_ad":
+    case "edit_canvas_design":
+      return result.designId ? { type: "canvas_design", label: "Design", url: `/design-editor?id=${result.designId}` } : null;
+    default:
+      return null;
+  }
 }
 
 export async function runMasterBrainChat(
@@ -904,6 +937,7 @@ export async function runMasterBrainChat(
 ): Promise<ChatTurnResult> {
   const ctx = await getContext(supabase, dealershipId);
   const toolsUsed: string[] = [];
+  const artifacts: Artifact[] = [];
 
   const systemPrompt = `You are Hawlai's AI marketing assistant, having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}
 
@@ -936,7 +970,7 @@ Guidelines:
 
     if (!response.ok) {
       if (totalInputTokens || totalOutputTokens) await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
-      return { reply: "Sorry, something went wrong on my end — try again in a moment.", toolsUsed };
+      return { reply: "Sorry, something went wrong on my end — try again in a moment.", toolsUsed, artifacts };
     }
     const data = await response.json();
     if (data.usage) {
@@ -949,7 +983,7 @@ Guidelines:
     if (toolUseBlocks.length === 0) {
       await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       const text = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
-      return { reply: text || "Done!", toolsUsed };
+      return { reply: text || "Done!", toolsUsed, artifacts };
     }
 
     messages.push({ role: "assistant", content: blocks });
@@ -963,11 +997,13 @@ Guidelines:
       } catch (err: any) {
         result = { error: err.message };
       }
+      const artifact = extractArtifact(block.name, result);
+      if (artifact) artifacts.push(artifact);
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result).slice(0, 4000) });
     }
     messages.push({ role: "user", content: toolResults });
   }
 
   await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
-  return { reply: "That took a lot of steps — here's what I've got so far, ask me to continue if you need more.", toolsUsed };
+  return { reply: "That took a lot of steps — here's what I've got so far, ask me to continue if you need more.", toolsUsed, artifacts };
 }
