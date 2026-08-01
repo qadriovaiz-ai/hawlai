@@ -7,6 +7,7 @@ import ShopifyConnect from "@/components/settings/ShopifyConnect";
 import WooCommerceConnect from "@/components/settings/WooCommerceConnect";
 import WebsiteConnect from "@/components/settings/WebsiteConnect";
 import WordPressConnect from "@/components/settings/WordPressConnect";
+import ConnectWhatsAppCard from "@/components/settings/ConnectWhatsAppCard";
 
 const PENDING_APPROVAL = [
   { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
@@ -27,7 +28,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified")
     .eq("id", dealershipId)
     .single();
 
@@ -144,6 +145,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </a>
           )}
         </div>
+
+        <ConnectWhatsAppCard initiallyConnected={!!dealership?.owner_whatsapp_verified} connectedNumber={dealership?.owner_whatsapp_number} />
 
         {/* Website (any platform) */}
         <div className="card p-5 space-y-3">
