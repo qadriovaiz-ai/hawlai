@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
+import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 
 // Vercel's default serverless timeout (as low as 10s on some plans)
 // is nowhere near enough for slow tool calls in Master Chat's
@@ -26,6 +27,17 @@ export async function POST(request: Request) {
   const { message, history, conversationId } = body;
   if (!message || message.trim().length < 1) {
     return NextResponse.json({ error: "Please type something" }, { status: 400 });
+  }
+
+  const limitCheck = await checkAndRecordMessageUsage(dealershipId);
+  if (!limitCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: `You've hit today's message limit (${limitCheck.messagesPerDay}/day) for your plan. Upgrade for more, or try again tomorrow.`,
+        limitReached: true,
+      },
+      { status: 429 }
+    );
   }
 
   // Auto-create a conversation on the first message if the caller

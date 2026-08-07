@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendWhatsAppText, sendWhatsAppImage, normalizePhoneNumber } from "@/lib/whatsapp/gupshupClient";
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
+import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -91,6 +92,12 @@ export async function POST(request: Request) {
     // stored history, and understands "yes" in context). Reinventing
     // a parallel confirmation system here would only risk diverging
     // from that already-correct behavior.
+    const limitCheck = await checkAndRecordMessageUsage(dealership.id);
+    if (!limitCheck.allowed) {
+      await sendWhatsAppText(phone, `You've hit today's message limit (${limitCheck.messagesPerDay}/day) for your plan. Upgrade from the Hawlai dashboard for more, or try again tomorrow.`);
+      return NextResponse.json({ ok: true });
+    }
+
     const { data: session } = await supabase.from("whatsapp_chat_sessions").select("id, history").eq("phone_number", phone).maybeSingle();
     const history = (session?.history ?? []).slice(-20);
     const result = await runMasterBrainChat(supabase, dealership.id, history, text);
