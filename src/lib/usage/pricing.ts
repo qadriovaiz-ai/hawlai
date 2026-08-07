@@ -59,6 +59,15 @@ export function costOfVapiCallInr(durationSeconds: number): number {
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }
 
+// What a business is billed for calling minutes beyond their plan's
+// free allowance — the real Vapi cost per minute plus plan_limits'
+// calling_margin_inr per minute (migration 079).
+export function costOfCallingOverageInr(extraMinutes: number, marginInrPerMinute: number): number {
+  const vapiCostInr = extraMinutes * PRICING.vapi.perMinuteUsd * PRICING.usdToInr;
+  const margin = extraMinutes * marginInrPerMinute;
+  return Math.round((vapiCostInr + margin) * 10000) / 10000;
+}
+
 export function costOfGeminiImageInr(imageCount: number = 1): number {
   const usd = imageCount * PRICING.geminiImage.perImageUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
