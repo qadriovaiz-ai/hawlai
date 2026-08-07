@@ -15,7 +15,7 @@ export interface CallingMinutesResult {
   extraChargeInr: number;
 }
 
-function currentBillingMonth(): string {
+export function currentBillingMonth(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }

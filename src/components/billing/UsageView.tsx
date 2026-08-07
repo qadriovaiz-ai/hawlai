@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Crown, CheckCircle2 } from "lucide-react";
+import { Loader2, Crown, CheckCircle2, MessageSquare, PhoneCall, Megaphone } from "lucide-react";
 
 interface PlanLimits {
   plan: string;
@@ -24,6 +24,9 @@ interface PlanLimits {
 
 interface UsageData {
   planLimits: PlanLimits;
+  messagesUsedToday: number;
+  calling: { minutesUsed: number; extraMinutesCharged: number; extraChargeInr: number };
+  activeAdCampaigns: number;
 }
 
 const FEATURE_ROWS: { key: keyof PlanLimits; label: string }[] = [
@@ -38,6 +41,26 @@ const FEATURE_ROWS: { key: keyof PlanLimits; label: string }[] = [
   { key: "multiBusiness", label: "Multi-Business" },
 ];
 
+function UsageBar({ icon: Icon, label, used, limit, suffix }: { icon: any; label: string; used: number; limit: number | null; suffix?: string }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const nearLimit = limit != null && pct >= 80;
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm mb-1">
+        <span className="flex items-center gap-1.5 text-slate-700"><Icon className="w-4 h-4 text-slate-400" /> {label}</span>
+        <span className={nearLimit ? "text-red-500 font-medium" : "text-slate-500"}>
+          {used}{suffix ?? ""} {limit != null ? `/ ${limit}${suffix ?? ""}` : "(unlimited)"}
+        </span>
+      </div>
+      {limit != null && (
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${nearLimit ? "bg-red-400" : "bg-purple-500"}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UsageView() {
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +72,7 @@ export default function UsageView() {
   if (loading) return <div className="card p-8 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading usage...</div>;
   if (!data) return <div className="card p-8 text-sm text-red-400">Couldn't load usage data.</div>;
 
-  const { planLimits } = data;
+  const { planLimits, messagesUsedToday, calling, activeAdCampaigns } = data;
 
   return (
     <div className="space-y-5">
@@ -66,6 +89,30 @@ export default function UsageView() {
             <button className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Upgrade</button>
           )}
         </div>
+      </div>
+
+      <div className="card p-5 space-y-4">
+        <p className="text-sm font-semibold text-slate-700">Usage</p>
+        <UsageBar icon={MessageSquare} label="Messages Today" used={messagesUsedToday} limit={planLimits.messagesPerDay} />
+        <UsageBar icon={Megaphone} label="Active Ad Campaigns" used={activeAdCampaigns} limit={planLimits.adCampaignsActive} />
+        <div>
+          <div className="flex items-center justify-between text-sm mb-1">
+            <span className="flex items-center gap-1.5 text-slate-700"><PhoneCall className="w-4 h-4 text-slate-400" /> Calling Minutes This Month</span>
+            <span className="text-slate-500">{calling.minutesUsed} / {planLimits.callingFreeMinutes} free</span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full ${calling.extraMinutesCharged > 0 ? "bg-red-400" : "bg-purple-500"}`}
+              style={{ width: `${planLimits.callingFreeMinutes ? Math.min(100, Math.round((calling.minutesUsed / planLimits.callingFreeMinutes) * 100)) : 0}%` }}
+            />
+          </div>
+          {calling.extraMinutesCharged > 0 && (
+            <p className="text-xs text-red-500 mt-1">
+              {calling.extraMinutesCharged} extra min this month — ₹{calling.extraChargeInr.toFixed(2)} extra charge
+            </p>
+          )}
+        </div>
+        <p className="text-xs text-slate-400">Messages reset daily, calling minutes reset on the 1st of each month.</p>
       </div>
 
       <div className="card p-5 space-y-2">
