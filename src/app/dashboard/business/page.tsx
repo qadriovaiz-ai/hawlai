@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Globe, Users2, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight } from "lucide-react";
+import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
+import BusinessSwitcherCard from "@/components/business/BusinessSwitcherCard";
 
 const ITEMS = [
   { href: "/dashboard/website-builder", label: "Website & Products", desc: "Site editor, products, orders, offers, shipping, payments, domain", icon: Globe },
@@ -22,12 +24,24 @@ export default async function BusinessPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const dealershipId = profile?.dealership_id;
+  if (!dealershipId) redirect("/dashboard");
+
+  const [limits, { data: ownedBusinesses }] = await Promise.all([
+    getDealershipPlanLimits(supabase, dealershipId),
+    supabase.from("dealerships").select("id, dealership_name, city, plan").eq("owner_id", user.id).order("created_at", { ascending: true }),
+  ]);
+  const businesses = (ownedBusinesses ?? []).map((b) => ({ ...b, active: b.id === dealershipId }));
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">Business</h1>
         <p className="text-sm text-slate-500">The administrative side — everything else, Hawlai handles for you in AI Employee.</p>
       </div>
+
+      <BusinessSwitcherCard initialBusinesses={businesses} multiBusinessAllowed={hasFeature(limits, "multiBusiness")} />
 
       <div className="space-y-2">
         {ITEMS.map((item) => (
