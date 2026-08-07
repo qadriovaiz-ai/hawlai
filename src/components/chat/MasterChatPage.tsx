@@ -92,8 +92,8 @@ export default function MasterChatPage({
   return (
     <div className="flex h-full">
     <div className="flex flex-col h-full flex-1 max-w-3xl mx-auto px-4 sm:px-6 min-w-0">
-      <div className="flex items-center gap-2.5 py-4 border-b border-slate-200 shrink-0">
-        <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shadow-sm shadow-brand-600/30">
+      <div className="flex items-center gap-2.5 py-4 pl-12 md:pl-0 border-b border-slate-200 shrink-0">
+        <div className="w-9 h-9 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center shadow-sm shadow-brand-600/30 shrink-0">
           <Brain className="w-4.5 h-4.5 text-white" />
         </div>
         <div className="flex-1">
