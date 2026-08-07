@@ -76,6 +76,18 @@
   animation: fade-in-up 0.25s ease-out;
 }
 
+/* Hides the scrollbar on horizontally-scrollable containers (e.g. the
+   mobile plan-card carousel) while keeping the element scrollable —
+   used deliberately, not globally, since hiding scrollbars everywhere
+   hurts discoverability/accessibility. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Storefront custom fonts (Site Editor "Font" preset) — body font is
    set directly via font-family on the .site-fonts wrapper (inherited
    by everything below it, including form elements, since Tailwind's
