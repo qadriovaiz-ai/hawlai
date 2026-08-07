@@ -157,7 +157,7 @@ export const GATED_FEATURE_MIN_PLAN: Record<GatedFeatureKey, PlanKey> = {
   growthAdvisor: "pro",
   cro: "pro",
   influencerMarketing: "pro",
-  threeDStudio: "pro",
+  threeDStudio: "max",
   multiBusiness: "max",
 };
 

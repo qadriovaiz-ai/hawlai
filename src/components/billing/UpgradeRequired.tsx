@@ -16,7 +16,7 @@ export default function UpgradeRequired({ feature }: { feature: GatedFeatureKey 
         <p className="text-sm text-slate-500">
           Upgrade your plan to unlock {label.toLowerCase()} for your business.
         </p>
-        <Link href="/dashboard/billing" className="btn-primary inline-flex justify-center mt-2">
+        <Link href="/dashboard/billing/plans" className="btn-primary inline-flex justify-center mt-2">
           View plans
         </Link>
       </div>

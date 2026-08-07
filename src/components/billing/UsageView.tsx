@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Loader2, Crown, CheckCircle2, MessageSquare, PhoneCall, Megaphone } from "lucide-react";
 
 interface PlanLimits {
@@ -86,7 +87,7 @@ export default function UsageView() {
             </div>
           </div>
           {planLimits.plan !== "max" && (
-            <button className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Upgrade</button>
+            <Link href="/dashboard/billing/plans" className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Upgrade</Link>
           )}
         </div>
       </div>
