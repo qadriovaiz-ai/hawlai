@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { requireFeature } from "@/lib/featureGate";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -24,6 +25,9 @@ export async function POST(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
+  const gate = await requireFeature(supabase, dealershipId, "influencerMarketing");
+  if (!gate.allowed) return gate.response;
+
   const body = await request.json();
   if (!body.name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
@@ -45,6 +49,9 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const gate = await requireFeature(supabase, dealershipId, "influencerMarketing");
+  if (!gate.allowed) return gate.response;
 
   const { id, ...fields } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -70,6 +77,9 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const gate = await requireFeature(supabase, dealershipId, "influencerMarketing");
+  if (!gate.allowed) return gate.response;
 
   const { id } = await request.json();
   const { error } = await supabase.from("influencers").delete().eq("id", id).eq("dealership_id", dealershipId);

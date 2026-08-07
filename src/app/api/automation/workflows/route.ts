@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { requireFeature } from "@/lib/featureGate";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -45,6 +46,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const gate = await requireFeature(supabase, dealershipId, "marketingAutomationWorkflows");
+  if (!gate.allowed) return gate.response;
 
   const { name, triggerType, statusFilter, steps } = await request.json();
   if (!name || !triggerType || !Array.isArray(steps) || steps.length === 0) {

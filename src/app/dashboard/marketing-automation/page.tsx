@@ -4,11 +4,20 @@ import Link from "next/link";
 import { Workflow, ArrowRight, Users2, MessageCircle, Mail, MessageSquareOff, Clock } from "lucide-react";
 import WorkflowBuilder from "@/components/automation/WorkflowBuilder";
 import CalendarSyncCard from "@/components/automation/CalendarSyncCard";
+import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
+import UpgradeRequired from "@/components/billing/UpgradeRequired";
 
 export default async function MarketingAutomationPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const dealershipId = profile?.dealership_id;
+  if (!dealershipId) redirect("/dashboard");
+
+  const limits = await getDealershipPlanLimits(supabase, dealershipId);
+  if (!hasFeature(limits, "marketingAutomationWorkflows")) return <UpgradeRequired feature="marketingAutomationWorkflows" />;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

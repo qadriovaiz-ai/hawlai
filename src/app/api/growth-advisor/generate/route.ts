@@ -8,6 +8,7 @@ import {
   generateBudgetRecommendations,
   generateExpansionStrategy,
 } from "@/lib/agents/growthAdvisorV2";
+import { requireFeature } from "@/lib/featureGate";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -20,6 +21,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const gate = await requireFeature(supabase, dealershipId, "growthAdvisor");
+  if (!gate.allowed) return gate.response;
 
   const { taskType } = await request.json();
   if (!taskType) return NextResponse.json({ error: "taskType required" }, { status: 400 });

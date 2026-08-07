@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { analyzeCro } from "@/lib/agents/croAgent";
+import { requireFeature } from "@/lib/featureGate";
 
 export async function GET() {
   const supabase = await createClient();
@@ -10,6 +11,9 @@ export async function GET() {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const gate = await requireFeature(supabase, dealershipId, "cro");
+  if (!gate.allowed) return gate.response;
 
   const { data: dealership } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).single();
   const report = await analyzeCro(supabase, dealershipId, dealership?.business_category ?? "car dealership");

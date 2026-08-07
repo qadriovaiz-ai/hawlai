@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateInfluencerPlan } from "@/lib/agents/influencerAgent";
+import { requireFeature } from "@/lib/featureGate";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -10,6 +11,9 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const gate = await requireFeature(supabase, dealershipId, "influencerMarketing");
+  if (!gate.allowed) return gate.response;
 
   const { product } = await request.json();
   if (!product || product.trim().length < 2) return NextResponse.json({ error: "Describe what you want promoted" }, { status: 400 });

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { normalizePhoneNumber } from "@/lib/whatsapp/gupshupClient";
+import { requireFeature } from "@/lib/featureGate";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -9,6 +10,9 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).maybeSingle();
   if (!dealership) return NextResponse.json({ error: "Only the owner can connect their own WhatsApp here" }, { status: 403 });
+
+  const gate = await requireFeature(supabase, dealership.id, "whatsappAutomation");
+  if (!gate.allowed) return gate.response;
 
   const { phoneNumber } = await request.json();
   if (!phoneNumber) return NextResponse.json({ error: "Phone number required" }, { status: 400 });

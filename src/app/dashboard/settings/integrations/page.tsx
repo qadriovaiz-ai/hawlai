@@ -8,6 +8,7 @@ import WooCommerceConnect from "@/components/settings/WooCommerceConnect";
 import WebsiteConnect from "@/components/settings/WebsiteConnect";
 import WordPressConnect from "@/components/settings/WordPressConnect";
 import ConnectWhatsAppCard from "@/components/settings/ConnectWhatsAppCard";
+import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 
 const PENDING_APPROVAL = [
   { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
@@ -36,6 +37,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const isGmailConnected = !!dealership?.gmail_email;
   const isGoogleAdsConnected = !!dealership?.google_ads_email;
   const isYoutubeConnected = !!dealership?.youtube_channel_title;
+
+  const limits = await getDealershipPlanLimits(supabase, dealershipId);
+  const whatsappAutomationAllowed = hasFeature(limits, "whatsappAutomation");
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -146,7 +150,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           )}
         </div>
 
-        <ConnectWhatsAppCard initiallyConnected={!!dealership?.owner_whatsapp_verified} connectedNumber={dealership?.owner_whatsapp_number} />
+        <ConnectWhatsAppCard initiallyConnected={!!dealership?.owner_whatsapp_verified} connectedNumber={dealership?.owner_whatsapp_number} allowed={whatsappAutomationAllowed} />
 
         {/* Website (any platform) */}
         <div className="card p-5 space-y-3">

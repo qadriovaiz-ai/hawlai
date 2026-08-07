@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendWhatsAppText, sendWhatsAppImage, normalizePhoneNumber } from "@/lib/whatsapp/gupshupClient";
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
+import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -66,6 +67,17 @@ export async function POST(request: Request) {
 
     // ---------- Identify who's messaging ----------
     const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name").eq("owner_whatsapp_number", phone).eq("owner_whatsapp_verified", true).maybeSingle();
+
+    // A dealership can connect WhatsApp automation while on a plan that
+    // includes it, then later downgrade — re-check on every inbound
+    // message rather than only at connect time.
+    if (dealership) {
+      const limits = await getDealershipPlanLimits(supabase, dealership.id);
+      if (!hasFeature(limits, "whatsappAutomation")) {
+        await sendWhatsAppText(phone, "WhatsApp automation isn't included in your current plan anymore — upgrade from the Hawlai dashboard to keep controlling Hawlai from WhatsApp.");
+        return NextResponse.json({ ok: true });
+      }
+    }
 
     if (!dealership) {
       // Not the owner — check if it's a verified team member (restricted, task-only access).

@@ -45,7 +45,25 @@ import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
 import { generateSeoIdeas } from "./seoAgent";
 import { generateGraphic, GRAPHIC_TYPES } from "./graphicDesignAgent";
+import { getDealershipPlanLimits, hasFeature, type GatedFeatureKey } from "../plans";
+import { upgradeMessage } from "../featureGate";
 import { randomBytes } from "crypto";
+
+// Tools that map to one of the 7 plan-gated features (migration 079's
+// plan_limits) — checked once at the top of executeTool so a Free/Basic
+// dealership asking Master Chat for a Pro-only capability gets a clear
+// "upgrade to X" reply instead of the tool silently running. manage_watch
+// is special-cased below since it also covers Market Research's ungated
+// topic watches, not just Competitor Intel's competitor watches.
+const TOOL_FEATURE_MAP: Partial<Record<string, GatedFeatureKey>> = {
+  research_competitor: "competitorIntel",
+  generate_cro_suggestions: "cro",
+  get_growth_advice: "growthAdvisor",
+  generate_influencer_outreach: "influencerMarketing",
+  generate_3d_scene: "threeDStudio",
+  create_workflow: "marketingAutomationWorkflows",
+  set_automation_toggle: "marketingAutomationWorkflows",
+};
 
 interface DealershipCtx {
   id: string;
@@ -402,6 +420,15 @@ async function saveGenerated(supabase: any, dealershipId: string, table: string,
 }
 
 async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any): Promise<any> {
+  const gatedFeature: GatedFeatureKey | undefined =
+    toolName === "manage_watch" && input?.kind === "competitor" ? "competitorIntel" : TOOL_FEATURE_MAP[toolName];
+  if (gatedFeature) {
+    const limits = await getDealershipPlanLimits(supabase, ctx.id);
+    if (!hasFeature(limits, gatedFeature)) {
+      return { error: upgradeMessage(gatedFeature), upgradeRequired: true };
+    }
+  }
+
   switch (toolName) {
     case "generate_brand_kit": {
       const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });

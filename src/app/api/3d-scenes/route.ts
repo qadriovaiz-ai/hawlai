@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { generate3DScene } from "@/lib/agents/threeDAgent";
+import { requireFeature } from "@/lib/featureGate";
 import { NextResponse } from "next/server";
 
 // Same reasoning as Master Chat's route — Opus writing a full 3D
@@ -35,6 +36,9 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const ctx = await getContext(supabase);
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const gate = await requireFeature(supabase, ctx.dealershipId, "threeDStudio");
+  if (!gate.allowed) return gate.response;
 
   const { prompt } = await request.json();
   if (!prompt || !prompt.trim()) return NextResponse.json({ error: "Describe what you want to see in 3D" }, { status: 400 });

@@ -2,11 +2,20 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Radar } from "lucide-react";
 import CompetitorIntelView from "@/components/competitor/CompetitorIntelView";
+import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
+import UpgradeRequired from "@/components/billing/UpgradeRequired";
 
 export default async function CompetitorIntelPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const dealershipId = profile?.dealership_id;
+  if (!dealershipId) redirect("/dashboard");
+
+  const limits = await getDealershipPlanLimits(supabase, dealershipId);
+  if (!hasFeature(limits, "competitorIntel")) return <UpgradeRequired feature="competitorIntel" />;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, CheckCircle, MessageCircle } from "lucide-react";
+import Link from "next/link";
+import { Loader2, CheckCircle, MessageCircle, Lock } from "lucide-react";
 
-export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumber }: { initiallyConnected: boolean; connectedNumber?: string | null }) {
+export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumber, allowed }: { initiallyConnected: boolean; connectedNumber?: string | null; allowed: boolean }) {
   const [connected, setConnected] = useState(initiallyConnected);
   const [step, setStep] = useState<"idle" | "waiting_code">("idle");
   const [phone, setPhone] = useState("");
@@ -63,7 +64,12 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
         </div>
       </div>
 
-      {connected ? (
+      {!allowed ? (
+        <div className="flex items-center justify-between gap-2 bg-slate-100 rounded-lg p-2.5">
+          <span className="flex items-center gap-1.5 text-xs text-slate-500"><Lock className="w-3.5 h-3.5" /> Needs the Basic plan or higher</span>
+          <Link href="/dashboard/billing" className="text-xs text-brand-400 hover:underline shrink-0">Upgrade</Link>
+        </div>
+      ) : connected ? (
         <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({connectedNumber})</span>
       ) : step === "idle" ? (
         <div className="space-y-2">
