@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import TeamView from "@/components/team/TeamView";
+import ApprovalThresholdCard from "@/components/team/ApprovalThresholdCard";
 
 export default async function TeamPage() {
   const supabase = await createClient();
@@ -13,6 +14,7 @@ export default async function TeamPage() {
         <h1 className="text-xl font-bold text-slate-900">Team</h1>
         <p className="text-sm text-slate-500">Invite people into scoped roles — Hawlai assigns them work automatically when it fits.</p>
       </div>
+      <ApprovalThresholdCard />
       <TeamView />
     </div>
   );

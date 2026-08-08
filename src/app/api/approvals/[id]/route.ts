@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
+import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -20,11 +21,30 @@ export async function PATCH(
     return NextResponse.json({ error: "status must be 'approved' or 'rejected'" }, { status: 400 });
   }
 
+  const { data: approval } = await supabase.from("pending_approvals").select("*").eq("id", id).single();
+  if (!approval) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+
+  // Rejecting never needs elevated authority — anyone who can see the
+  // queue can say no. Only APPROVING (releasing money/publishing)
+  // needs the calibrated check.
+  if (status === "approved") {
+    const { data: dealership } = await supabase.from("dealerships").select("owner_id, approval_threshold").eq("id", approval.dealership_id).single();
+    const isOwner = dealership?.owner_id === user.id;
+    let role: ApprovalRole = "owner";
+    if (!isOwner) {
+      const { data: teamMember } = await supabase.from("team_members").select("role").eq("dealership_id", approval.dealership_id).eq("user_id", user.id).eq("status", "active").maybeSingle();
+      role = (teamMember?.role as ApprovalRole) ?? "viewer"; // not found on the team at all = no authority, same as viewer
+    }
+
+    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, approval.amount ?? null);
+    if (!authority.canApprove) {
+      return NextResponse.json({ error: authority.reason ?? "You don't have authority to approve this." }, { status: 403 });
+    }
+  }
+
   // If this is approving a budget change, actually apply it on Meta —
   // approving a request should mean it happens, not just change a label.
   if (status === "approved") {
-    const { data: approval } = await supabase.from("pending_approvals").select("*").eq("id", id).single();
-
     if (approval?.action_type === "change_campaign_budget") {
       const details = approval.action_details as any;
       const { data: dealership } = await supabase

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ShieldCheck, Bot, Clock } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ApprovalActions from "@/components/approvals/ApprovalActions";
+import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-300 border border-amber-700/50",
@@ -18,6 +19,15 @@ export default async function ApprovalsPage() {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
+
+  const { data: dealership } = await supabase.from("dealerships").select("owner_id, approval_threshold").eq("id", dealershipId).single();
+  const isOwner = dealership?.owner_id === user.id;
+  let viewerRole: ApprovalRole = "owner";
+  if (!isOwner) {
+    const { data: teamMember } = await supabase.from("team_members").select("role").eq("dealership_id", dealershipId).eq("user_id", user.id).eq("status", "active").maybeSingle();
+    viewerRole = (teamMember?.role as ApprovalRole) ?? "viewer";
+  }
+  const approvalThreshold = dealership?.approval_threshold ?? 50000;
 
   const { data: approvals } = await supabase
     .from("pending_approvals")
@@ -95,7 +105,7 @@ export default async function ApprovalsPage() {
                       )}
                     </div>
                   </div>
-                  <ApprovalActions approvalId={approval.id} />
+                  <ApprovalActions approvalId={approval.id} authority={checkApprovalAuthority(viewerRole, approvalThreshold, approval.amount ?? null)} />
                 </div>
               </div>
             );
