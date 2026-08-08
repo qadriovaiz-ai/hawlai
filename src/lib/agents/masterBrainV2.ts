@@ -564,27 +564,36 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return output;
     }
     case "get_growth_advice": {
+      // revenue_forecast is deliberately never saved here either — it's
+      // computed live from current lead/deal data (same as the standalone
+      // /dashboard/growth-advisor page), not a Claude-generated artifact
+      // with an id to persist.
       if (input.kind === "forecast") return computeRevenueForecast(supabase, ctx.id, ctx.name, ctx.category);
       if (input.kind === "opportunities") {
         const { data: leads } = await supabase.from("leads").select("status, source").eq("dealership_id", ctx.id).limit(300);
         const all = leads ?? [];
         const byStatus: Record<string, number> = {};
         for (const l of all) byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
-        const { output } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`);
+        const { output, _fallback } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`) as { output: any; _fallback?: boolean };
+        if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "growth_opportunities", output });
         return output;
       }
       if (input.kind === "budget") {
         const performance = await getCampaignPerformance(supabase, ctx.id);
         const context = performance.campaigns.length > 0 ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n") : "No campaign data yet.";
-        const { output } = await generateBudgetRecommendations(ctx.name, ctx.category, context);
+        const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context) as { output: any; _fallback?: boolean };
+        if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "budget_recommendations", output });
         return output;
       }
       const growth = await generateGrowthReport(supabase, ctx.id, ctx.category);
-      const { output } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`);
+      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`) as { output: any; _fallback?: boolean };
+      if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "expansion_strategy", output });
       return output;
     }
     case "generate_influencer_outreach": {
-      return generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });
+      const output = await generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });
+      await saveGenerated(supabase, ctx.id, "influencer_outreach_plans", { product: input.productOrService, output });
+      return output;
     }
     case "get_analytics_summary": {
       const performance = await getCampaignPerformance(supabase, ctx.id);
