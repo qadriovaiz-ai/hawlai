@@ -99,6 +99,62 @@ async function detectCandidates(supabase: any, dealershipId: string): Promise<Ca
     // Optimization data not ready yet — not fatal, just skip this batch.
   }
 
+  // 5. Open Collabs — real applications waiting for review, easy to
+  // forget about since they arrive without a notification elsewhere.
+  const { data: pendingApplications } = await supabase
+    .from("collab_applications")
+    .select("id")
+    .eq("dealership_id", dealershipId)
+    .eq("status", "new");
+  if ((pendingApplications?.length ?? 0) > 0) {
+    candidates.push({
+      type: "collab_applications_waiting",
+      title: `${pendingApplications!.length} creator${pendingApplications!.length > 1 ? "s" : ""} applied to your Open Collabs — review and respond`,
+      priority: "medium",
+      action_href: "/dashboard/influencer-marketing",
+    });
+  }
+
+  // 6. Cart abandonment building up — a real, actionable retargeting
+  // opportunity, not just a number sitting unused. Threshold of 3
+  // avoids flagging noise from a single stray cart.
+  const { data: uncontactedCarts } = await supabase
+    .from("abandoned_carts")
+    .select("id")
+    .eq("dealership_id", dealershipId)
+    .eq("contacted", false);
+  if ((uncontactedCarts?.length ?? 0) >= 3) {
+    candidates.push({
+      type: "cart_abandonment_buildup",
+      title: `${uncontactedCarts!.length} abandoned carts building up — a real retargeting audience is ready`,
+      priority: "medium",
+      action_href: "/dashboard/retargeting",
+    });
+  }
+
+  // 7. Affiliate commission owed — a relationship-maintenance signal;
+  // unpaid commission sitting too long risks the affiliate losing
+  // trust and stopping promotion.
+  const { data: affiliates } = await supabase.from("affiliates").select("id, discount_code, commission_type, commission_rate, total_paid").eq("dealership_id", dealershipId).eq("status", "active").not("discount_code", "is", null);
+  if ((affiliates?.length ?? 0) > 0) {
+    const codes = affiliates!.map((a: any) => a.discount_code);
+    const { data: affiliateOrders } = await supabase.from("orders").select("discount_code, total").eq("dealership_id", dealershipId).in("discount_code", codes).neq("status", "cancelled");
+    let anyOwed = false;
+    for (const a of affiliates!) {
+      const revenue = (affiliateOrders ?? []).filter((o: any) => o.discount_code === a.discount_code).reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
+      const earned = a.commission_type === "percentage" ? (revenue * Number(a.commission_rate)) / 100 : 0;
+      if (earned - Number(a.total_paid) > 0) anyOwed = true;
+    }
+    if (anyOwed) {
+      candidates.push({
+        type: "affiliate_commission_owed",
+        title: "One or more affiliates are owed commission — review and pay to keep the relationship healthy",
+        priority: "low",
+        action_href: "/dashboard/affiliate-marketing",
+      });
+    }
+  }
+
   return candidates;
 }
 
