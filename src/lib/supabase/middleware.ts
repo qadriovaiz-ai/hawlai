@@ -29,11 +29,29 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthRoute =
-    request.nextUrl.pathname.startsWith("/auth") ||
-    request.nextUrl.pathname === "/";
+  // Paths that must stay reachable WITHOUT a Hawlai login — real
+  // customers/influencers/affiliates visiting these are never
+  // expected to have an account. Previously only "/" and "/auth/*"
+  // were exempted, which meant the storefront (/p/*), the public
+  // Open Collabs board, the affiliate apply/track pages, and their
+  // API routes were silently redirecting every real, logged-out
+  // visitor to /auth/login — invisible while testing logged-in as
+  // the business owner, but broken for the actual public audience
+  // these pages exist for.
+  const PUBLIC_PATH_PREFIXES = [
+    "/auth",
+    "/p/", // storefront product pages
+    "/collabs",
+    "/affiliates",
+    "/admin-seed-knowledge", // protected by its own secret header, not user auth
+    "/api/public/",
+  ];
+  const isPublicPath =
+    request.nextUrl.pathname === "/" ||
+    PUBLIC_PATH_PREFIXES.some((prefix) => request.nextUrl.pathname.startsWith(prefix));
+  const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);
