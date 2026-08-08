@@ -4,14 +4,18 @@ import { useState, useEffect } from "react";
 import {
   Loader2, Package, IndianRupee, Crosshair, Star, TrendingUp, TrendingDown,
   Lightbulb, ShieldAlert, Users2, CalendarRange, ChevronDown, ChevronUp, RefreshCw,
-  Building2, Swords, Target,
+  Building2, Swords, Target, Pencil, Save, X,
 } from "lucide-react";
+import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 export default function DeepStrategyPanel() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [strategy, setStrategy] = useState<any>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open && !loaded) {
@@ -28,6 +32,7 @@ export default function DeepStrategyPanel() {
 
   function handleRegenerate() {
     setLoading(true);
+    setEditing(false);
     fetch("/api/strategy/deep?regenerate=true")
       .then((res) => res.json())
       .then((data) => {
@@ -37,6 +42,28 @@ export default function DeepStrategyPanel() {
       .finally(() => setLoading(false));
   }
 
+  function startEditing() {
+    const { _cached, ...clean } = strategy;
+    setDraft(JSON.parse(JSON.stringify(clean)));
+    setEditing(true);
+  }
+
+  async function saveEdits() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/strategy/deep", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ strategy: draft }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setStrategy({ ...draft, _cached: true });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="card p-5 space-y-3">
       <div className="flex items-center justify-between">
@@ -44,10 +71,28 @@ export default function DeepStrategyPanel() {
           <span className="text-sm font-semibold text-slate-700">Full Strategic Analysis</span>
           {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </button>
-        {open && loaded && (
-          <button onClick={handleRegenerate} disabled={loading} className="ml-3 text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 shrink-0 disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate
-          </button>
+        {open && loaded && strategy && (
+          <div className="ml-3 flex items-center gap-3 shrink-0">
+            {editing ? (
+              <>
+                <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" /> Cancel
+                </button>
+                <button onClick={saveEdits} disabled={saving} className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button onClick={handleRegenerate} disabled={loading} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 disabled:opacity-50">
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate
+                </button>
+              </>
+            )}
+          </div>
         )}
       </div>
       <p className="text-xs text-slate-400">
@@ -60,6 +105,8 @@ export default function DeepStrategyPanel() {
             <div className="flex items-center gap-2 text-sm text-slate-400 py-8 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" /> Analyzing your business...
             </div>
+          ) : editing ? (
+            <EditableOutput output={draft} onChange={setDraft} />
           ) : strategy ? (
             <>
               <div className="grid sm:grid-cols-2 gap-3">
