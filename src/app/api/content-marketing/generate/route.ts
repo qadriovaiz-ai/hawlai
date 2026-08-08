@@ -62,3 +62,28 @@ export async function GET() {
 
   return NextResponse.json({ items: data ?? [] });
 }
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const dealershipId = await getDealership(supabase, user.id);
+  if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const { id, output } = await request.json();
+  if (!id || !output) return NextResponse.json({ error: "id and output required" }, { status: 400 });
+
+  // Scoped to dealership_id in the update itself (not just checked
+  // beforehand) so a mismatched id silently updates zero rows instead
+  // of ever touching another business's content.
+  const { data, error } = await supabase
+    .from("content_pieces")
+    .update({ output })
+    .eq("id", id)
+    .eq("dealership_id", dealershipId)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ item: data });
+}
