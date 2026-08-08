@@ -1,15 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, Copy, Check, Clock, MessageCircle, Users } from "lucide-react";
+import { Loader2, Sparkles, Copy, Check, Clock, MessageCircle, Users, Pencil, Save, X } from "lucide-react";
 import { WHATSAPP_TASKS } from "@/lib/agents/whatsappMarketingAgent";
 import { toWhatsAppLink } from "@/lib/utils";
+import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 export default function WhatsappMarketingTools() {
   const [selectedTask, setSelectedTask] = useState(WHATSAPP_TASKS[0].key);
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [output, setOutput] = useState<any>(null);
+  const [outputId, setOutputId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
@@ -22,6 +27,8 @@ export default function WhatsappMarketingTools() {
   async function handleGenerate() {
     setLoading(true);
     setOutput(null);
+    setOutputId(null);
+    setEditing(false);
     setShowContacts(false);
     try {
       const res = await fetch("/api/whatsapp/generate", {
@@ -31,9 +38,33 @@ export default function WhatsappMarketingTools() {
       });
       const data = await res.json();
       setOutput(data.output);
+      setOutputId(data.id);
       fetch("/api/whatsapp/generate").then((r) => r.json()).then((d) => setHistory(d.items ?? []));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function startEditing() {
+    setDraft(JSON.parse(JSON.stringify(output)));
+    setEditing(true);
+  }
+
+  async function saveEdits() {
+    if (!outputId) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/whatsapp/generate", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: outputId, output: draft }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setOutput(draft);
+      setEditing(false);
+      fetch("/api/whatsapp/generate").then((r) => r.json()).then((d) => setHistory(d.items ?? []));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -86,10 +117,33 @@ export default function WhatsappMarketingTools() {
 
       {output && (
         <div className="card p-5 space-y-3">
-          <p className="text-sm font-semibold text-slate-700">Result</p>
-          <OutputRenderer output={output} onCopy={copyMessage} copied={copied} />
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Result</p>
+            {editing ? (
+              <div className="flex items-center gap-3">
+                <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" /> Cancel
+                </button>
+                <button
+                  onClick={saveEdits}
+                  disabled={saving || !outputId}
+                  className="text-xs text-white bg-green-600 hover:bg-green-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+                </button>
+              </div>
+            ) : (
+              outputId && (
+                <button onClick={startEditing} className="text-xs text-green-600 hover:text-green-500 flex items-center gap-1">
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
+              )
+            )}
+          </div>
 
-          {isBroadcast && output.message && (
+          {editing ? <EditableOutput output={draft} onChange={setDraft} /> : <OutputRenderer output={output} onCopy={copyMessage} copied={copied} />}
+
+          {!editing && isBroadcast && output.message && (
             <div className="pt-3 border-t border-slate-200 space-y-2">
               <button onClick={loadContacts} className="text-xs text-green-600 hover:text-green-500 flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5" /> Show my contacts to send this to
@@ -122,7 +176,11 @@ export default function WhatsappMarketingTools() {
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Recent</p>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {history.map((h) => (
-              <button key={h.id} onClick={() => { setOutput(h.output); setSelectedTask(h.task_type); }} className="w-full text-left text-xs bg-slate-100 hover:bg-slate-200 rounded-lg p-2.5">
+              <button
+                key={h.id}
+                onClick={() => { setOutput(h.output); setOutputId(h.id); setEditing(false); setSelectedTask(h.task_type); }}
+                className="w-full text-left text-xs bg-slate-100 hover:bg-slate-200 rounded-lg p-2.5"
+              >
                 <span className="font-medium text-slate-700">{WHATSAPP_TASKS.find((t) => t.key === h.task_type)?.label ?? h.task_type}</span>
               </button>
             ))}
