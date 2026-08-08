@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import MarketingHome from "@/components/marketing/MarketingHome";
 
 export default function Home() {
-  redirect("/auth/login");
+  return <MarketingHome />;
 }

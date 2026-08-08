@@ -38,9 +38,22 @@ const config: Config = {
           800: "#dcdce1",
           900: "#f2f2f4",
         },
+        // Marketing-site-only tokens (used on the public landing page,
+        // src/components/marketing/*). Deliberately a warm light theme,
+        // separate from the dashboard's inverted dark slate scale above —
+        // the product itself is dark, the public site selling it is light.
+        paper: "#FBF9F6",
+        ink: "#171331",
+        marigold: "#F2A93B",
+        stamp: "#B4232A",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
+        // Marketing-page-only type roles — distinct key names so they don't
+        // collide with the existing global `font-mono` utility already used
+        // elsewhere in the dashboard (SeoToolkit, OffersPanel, public site).
+        heading: ["var(--font-display)", "sans-serif"],
+        code: ["var(--font-mono)", "monospace"],
       },
     },
   },
