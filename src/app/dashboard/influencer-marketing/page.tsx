@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Star } from "lucide-react";
 import InfluencerCrmView from "@/components/influencer/InfluencerCrmView";
+import CollabBoardManager from "@/components/influencer/CollabBoardManager";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import UpgradeRequired from "@/components/billing/UpgradeRequired";
 
@@ -28,6 +29,7 @@ export default async function InfluencerMarketingPage() {
           <p className="text-sm text-slate-500">Track every collaboration from first contact to ROI — cost, leads, and revenue you log yourself, real numbers.</p>
         </div>
       </div>
+      <CollabBoardManager />
       <InfluencerCrmView />
     </div>
   );
