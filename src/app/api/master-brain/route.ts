@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     if (activeConversationId) {
       await supabase.from("chat_messages").insert({
-        conversation_id: activeConversationId, role: "assistant", content: result.reply, tools_used: result.toolsUsed ?? [],
+        conversation_id: activeConversationId, role: "assistant", content: result.reply, tools_used: result.toolsUsed ?? [], artifacts: result.artifacts ?? [],
       });
       // Touch updated_at so the sidebar re-sorts this conversation to the top.
       await supabase.from("chat_conversations").update({ updated_at: new Date().toISOString() }).eq("id", activeConversationId);
