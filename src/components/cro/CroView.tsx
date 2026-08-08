@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, AlertCircle, CheckCircle2, TrendingUp, FlaskConical, Sparkles } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, TrendingUp, FlaskConical, Sparkles, Pencil, Save, X } from "lucide-react";
+import { OutputRenderer, EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 const CRO_TASKS = [
   { key: "landing_page", label: "Landing Page Copy" },
@@ -18,6 +19,10 @@ export default function CroView() {
 
   const [taskKey, setTaskKey] = useState("landing_page");
   const [taskOutput, setTaskOutput] = useState<any>(null);
+  const [taskOutputId, setTaskOutputId] = useState<string | null>(null);
+  const [taskEditing, setTaskEditing] = useState(false);
+  const [taskDraft, setTaskDraft] = useState<any>(null);
+  const [taskSaving, setTaskSaving] = useState(false);
   const [taskLoading, setTaskLoading] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
 
@@ -41,15 +46,40 @@ export default function CroView() {
     setTaskLoading(true);
     setTaskError(null);
     setTaskOutput(null);
+    setTaskOutputId(null);
+    setTaskEditing(false);
     try {
       const res = await fetch("/api/cro/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskType: taskKey }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setTaskOutput(data.output);
+      setTaskOutputId(data.id);
     } catch (err: any) {
       setTaskError(err.message);
     } finally {
       setTaskLoading(false);
+    }
+  }
+
+  function startEditingTask() {
+    setTaskDraft(JSON.parse(JSON.stringify(taskOutput)));
+    setTaskEditing(true);
+  }
+
+  async function saveTaskEdits() {
+    if (!taskOutputId) return;
+    setTaskSaving(true);
+    try {
+      const res = await fetch("/api/cro/generate", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: taskOutputId, output: taskDraft }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setTaskOutput(taskDraft);
+      setTaskEditing(false);
+    } finally {
+      setTaskSaving(false);
     }
   }
 
@@ -102,7 +132,31 @@ export default function CroView() {
 
       {/* AI suggestions by task */}
       <div className="card p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Sparkles className="w-4 h-4 text-slate-400" /> AI Suggestions</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Sparkles className="w-4 h-4 text-slate-400" /> AI Suggestions</p>
+          {taskOutput && (
+            taskEditing ? (
+              <div className="flex items-center gap-3">
+                <button onClick={() => setTaskEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" /> Cancel
+                </button>
+                <button
+                  onClick={saveTaskEdits}
+                  disabled={taskSaving || !taskOutputId}
+                  className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1"
+                >
+                  {taskSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+                </button>
+              </div>
+            ) : (
+              taskOutputId && (
+                <button onClick={startEditingTask} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
+              )
+            )
+          )}
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {CRO_TASKS.map((t) => (
             <button key={t.key} onClick={() => { setTaskKey(t.key); setTaskOutput(null); }} className={`text-xs px-3 py-1.5 rounded-lg border ${taskKey === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
@@ -116,30 +170,7 @@ export default function CroView() {
 
         {taskError && <p className="text-xs text-red-400">{taskError}</p>}
 
-        {taskOutput?.text && <p className="text-sm text-slate-500">{taskOutput.text}</p>}
-
-        {taskOutput?.suggestions && (
-          <div className="space-y-2">
-            {taskOutput.suggestions.map((s: any, i: number) => (
-              <div key={i} className="p-3 rounded-lg bg-slate-100">
-                <p className="text-sm font-medium text-slate-700">{s.issue}</p>
-                <p className="text-xs text-slate-500 mt-1">{s.fix}</p>
-                {s.reasoning && <p className="text-xs text-slate-400 mt-1 italic">{s.reasoning}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {taskOutput?.ctaOptions && (
-          <div className="grid sm:grid-cols-2 gap-2">
-            {taskOutput.ctaOptions.map((c: any, i: number) => (
-              <div key={i} className="p-3 rounded-lg bg-slate-100">
-                <p className="text-sm font-semibold text-slate-700">"{c.text}"</p>
-                <p className="text-xs text-slate-500 mt-1">{c.angle}</p>
-              </div>
-            ))}
-          </div>
-        )}
+        {taskOutput && (taskEditing ? <EditableOutput output={taskDraft} onChange={setTaskDraft} /> : <OutputRenderer output={taskOutput} />)}
       </div>
 
       {/* A/B testing */}
