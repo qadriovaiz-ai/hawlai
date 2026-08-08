@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const EXAMPLES = [
   "Build my brand kit — logo colors, tagline, brand story",
@@ -169,6 +170,7 @@ export default function MasterChatPage({
               >
                 {msg.role === "assistant" ? (
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                       h1: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1.5 first:mt-0">{children}</h3>,
@@ -185,6 +187,16 @@ export default function MasterChatPage({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={src as string} alt={alt ?? ""} className="rounded-lg max-w-full my-2 border border-slate-200" />
                       ),
+                      table: ({ children }) => (
+                        <div className="my-2.5 overflow-x-auto rounded-lg border border-slate-200">
+                          <table className="w-full text-xs border-collapse">{children}</table>
+                        </div>
+                      ),
+                      thead: ({ children }) => <thead className="bg-slate-100">{children}</thead>,
+                      tbody: ({ children }) => <tbody className="divide-y divide-slate-200">{children}</tbody>,
+                      tr: ({ children }) => <tr>{children}</tr>,
+                      th: ({ children }) => <th className="text-left font-semibold text-slate-700 px-2.5 py-1.5 whitespace-nowrap">{children}</th>,
+                      td: ({ children }) => <td className="px-2.5 py-1.5 text-slate-600 whitespace-nowrap">{children}</td>,
                     }}
                   >
                     {msg.content}
