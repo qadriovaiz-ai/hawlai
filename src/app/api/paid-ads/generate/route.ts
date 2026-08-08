@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/agents/paidAdsAgent";
+import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -22,13 +23,19 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
+  const performance = await getCampaignPerformance(supabase, dealershipId);
+  const performanceContext = performance.campaigns.length > 0
+    ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}, cost/lead ${c.cost_per_lead ?? "—"}`).join("\n")
+    : null;
+
   const { output, _fallback } = await generateAdPlan(
     platform,
     taskType,
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "car dealership",
     brandProfile,
-    { supabase, dealershipId }
+    { supabase, dealershipId },
+    performanceContext
   );
 
   let saved = null;

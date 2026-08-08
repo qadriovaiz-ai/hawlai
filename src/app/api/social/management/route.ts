@@ -17,10 +17,14 @@ export async function POST(request: Request) {
   const { taskType, inputText } = await request.json();
   if (!taskType) return NextResponse.json({ error: "taskType required" }, { status: 400 });
 
-  const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
+  const [{ data: dealership }, { data: brandProfile }, { data: recentPosts }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("content_autopilot_log").select("caption").eq("dealership_id", dealershipId).eq("success", true).order("created_at", { ascending: false }).limit(10),
   ]);
+  const recentPostsContext = (recentPosts ?? []).length > 0
+    ? (recentPosts ?? []).map((p: any) => `- ${(p.caption ?? "").slice(0, 120)}`).join("\n")
+    : null;
 
   const { output, _fallback } = await generateSocialTask(
     taskType,
@@ -28,7 +32,8 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "car dealership",
     inputText ?? "",
     brandProfile,
-    { supabase, dealershipId }
+    { supabase, dealershipId },
+    recentPostsContext
   );
 
   let saved = null;

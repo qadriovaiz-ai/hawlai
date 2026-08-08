@@ -19,6 +19,7 @@ export default function WhatsappMarketingTools() {
   const [history, setHistory] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [showContacts, setShowContacts] = useState(false);
+  const [temperatureFilter, setTemperatureFilter] = useState<"all" | "hot" | "warm" | "cold">("all");
 
   useEffect(() => {
     fetch("/api/whatsapp/generate").then((r) => r.json()).then((d) => setHistory(d.items ?? []));
@@ -149,21 +150,40 @@ export default function WhatsappMarketingTools() {
                 <Users className="w-3.5 h-3.5" /> Show my contacts to send this to
               </button>
               {showContacts && (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {contacts.length === 0 && <p className="text-xs text-slate-400">Loading contacts...</p>}
-                  {contacts.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5">
-                      <span className="text-sm text-slate-700">{c.name} <span className="text-xs text-slate-400">— {c.phone}</span></span>
-                      <a
-                        href={toWhatsAppLink(c.phone, output.message)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs bg-green-600 hover:bg-green-500 text-white px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+                <div className="space-y-2">
+                  <div className="flex gap-1.5">
+                    {(["all", "hot", "warm", "cold"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setTemperatureFilter(t)}
+                        className={`text-xs px-2 py-1 rounded-full border capitalize ${
+                          temperatureFilter === t ? "bg-green-600 border-green-600 text-white" : "bg-slate-100 border-slate-200 text-slate-500"
+                        }`}
                       >
-                        <MessageCircle className="w-3 h-3" /> Send
-                      </a>
-                    </div>
-                  ))}
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {contacts.length === 0 && <p className="text-xs text-slate-400">Loading contacts...</p>}
+                    {contacts
+                      .filter((c) => temperatureFilter === "all" || c.lead_temperature === temperatureFilter)
+                      .map((c) => (
+                        <div key={c.id} className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5">
+                          <span className="text-sm text-slate-700">
+                            {c.name} <span className="text-xs text-slate-400">— {c.phone}{c.lead_temperature ? ` · ${c.lead_temperature}` : ""}</span>
+                          </span>
+                          <a
+                            href={toWhatsAppLink(c.phone, output.message)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs bg-green-600 hover:bg-green-500 text-white px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+                          >
+                            <MessageCircle className="w-3 h-3" /> Send
+                          </a>
+                        </div>
+                      ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -101,16 +101,8 @@ export default function EmailMarketingTools() {
         )}
       </div>
 
-      {/* Analytics — honest guidance, not fake numbers */}
-      <div className="card p-5 space-y-2">
-        <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><BarChart3 className="w-4 h-4" /> Analytics</p>
-        <div className="bg-slate-100 rounded-lg p-3 flex items-start gap-2">
-          <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-slate-500">
-            Hawlai sends email through your own Gmail with send-only access — there's no open/click tracking yet, so real open rates or click rates aren't available here. To track opens and clicks, a dedicated email service (with tracking pixels/link wrapping) would need to be connected. For now, replies and lead status changes in your Leads page are the most reliable signal that an email worked.
-          </p>
-        </div>
-      </div>
+      {/* Analytics — real numbers where they're real, honest about the gap where they're not */}
+      <EmailAnalyticsCard />
 
       {/* Content generator for the other 7 tasks */}
       <div className="card p-5 space-y-2">
@@ -231,6 +223,49 @@ function OutputRenderer({ output }: { output: any }) {
       {!output.subject && !output.body && Object.entries(output).map(([key, val]: [string, any]) => (
         <p key={key} className="whitespace-pre-wrap">{typeof val === "string" ? val : JSON.stringify(val)}</p>
       ))}
+    </div>
+  );
+}
+
+function EmailAnalyticsCard() {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    fetch("/api/email/stats").then((r) => r.json()).then(setStats);
+  }, []);
+
+  return (
+    <div className="card p-5 space-y-3">
+      <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><BarChart3 className="w-4 h-4" /> Analytics (last 30 days)</p>
+      {!stats ? (
+        <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...</p>
+      ) : stats.totalSent === 0 ? (
+        <p className="text-xs text-slate-400">No emails sent yet — numbers will show up here once you do.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-slate-100 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-slate-800">{stats.totalSent}</p>
+              <p className="text-xs text-slate-400">Sent</p>
+            </div>
+            <div className="bg-slate-100 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-slate-800">{stats.openRate !== null ? `${stats.openRate}%` : "—"}</p>
+              <p className="text-xs text-slate-400">Open rate</p>
+            </div>
+            <div className="bg-slate-100 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-slate-800">{stats.clickRate !== null ? `${stats.clickRate}%` : "—"}</p>
+              <p className="text-xs text-slate-400">Click rate</p>
+            </div>
+          </div>
+          {stats.gmailSentCount > 0 && (
+            <div className="bg-slate-100 rounded-lg p-3 flex items-start gap-2">
+              <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-500">
+                {stats.gmailSentCount} of these were sent through your connected Gmail — open/click tracking only works for the {stats.resendSentCount} sent through Hawlai's own sender, since Gmail's API doesn't give a tracking webhook. Open/click rates above are based only on the Resend-sent ones.
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

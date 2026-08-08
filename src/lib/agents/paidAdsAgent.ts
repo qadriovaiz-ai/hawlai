@@ -50,7 +50,8 @@ export async function generateAdPlan(
   dealershipName: string,
   businessCategory: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  performanceContext?: string | null
 ): Promise<{ output: any; _fallback?: boolean }> {
   const platform = AD_PLATFORMS.find((p) => p.key === platformKey);
   const task = AD_TASKS.find((t) => t.key === taskKey);
@@ -72,6 +73,7 @@ export async function generateAdPlan(
           role: "user",
           content: `You are a paid advertising strategist helping an Indian ${businessCategory} business called "${dealershipName}" plan for ${platform.label}. This platform isn't connected to any ad account yet — this is planning content the dealer will use manually or hand to whoever sets up the account.
 ${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}
+${performanceContext ? `\nReal performance from campaigns already run (use this to ground budget/targeting advice in what's actually working, not generic guesses):\n${performanceContext}` : ""}
 
 Task: ${task.label}
 Requirements: ${task.instructions(platform.label)}

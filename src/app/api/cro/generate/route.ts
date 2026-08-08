@@ -27,8 +27,20 @@ export async function POST(request: Request) {
   ]);
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: events } = await supabase.from("page_events").select("event_type").eq("dealership_id", dealershipId).gte("created_at", thirtyDaysAgo);
+  const [{ data: events }, { data: orders }, { data: carts }] = await Promise.all([
+    supabase.from("page_events").select("event_type").eq("dealership_id", dealershipId).gte("created_at", thirtyDaysAgo),
+    supabase.from("orders").select("id, status").eq("dealership_id", dealershipId).gte("created_at", thirtyDaysAgo).neq("status", "cancelled"),
+    supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", thirtyDaysAgo),
+  ]);
   const all = events ?? [];
+  const orderCount = (orders ?? []).length;
+  const cartCount = (carts ?? []).length;
+  const views = all.filter((e) => e.event_type === "view").length;
+  // Real rates, not estimates — undefined (not 0) when there's too
+  // little data to make the rate meaningful, so the AI isn't fed a
+  // misleading "0% conversion" from e.g. 2 total visits.
+  const conversionRate = views >= 10 ? Math.round((orderCount / views) * 1000) / 10 : null;
+  const cartAbandonmentRate = orderCount + cartCount >= 5 ? Math.round((cartCount / (orderCount + cartCount)) * 1000) / 10 : null;
 
   const { output, _fallback } = await generateCroSuggestions(
     taskType,
@@ -38,9 +50,12 @@ export async function POST(request: Request) {
       headline: page?.headline,
       subheadline: page?.subheadline,
       offerText: page?.offer_text,
-      views: all.filter((e) => e.event_type === "view").length,
+      views,
       chatOpens: all.filter((e) => e.event_type === "chat_open").length,
       formSubmits: all.filter((e) => e.event_type === "form_submit").length,
+      orders: orderCount,
+      conversionRate,
+      cartAbandonmentRate,
     },
     { supabase, dealershipId }
   );

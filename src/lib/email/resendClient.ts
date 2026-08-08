@@ -21,7 +21,7 @@ export async function sendViaResend(
   subject: string,
   body: string,
   dealershipName: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; resendMessageId?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { success: false, error: "Email sending isn't configured yet (RESEND_API_KEY missing)." };
 
@@ -32,7 +32,7 @@ export async function sendViaResend(
       .map((para) => `<p style="margin:0 0 16px;line-height:1.6;">${para.replace(/\n/g, "<br/>")}</p>`)
       .join("");
 
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: `${dealershipName} via Hawlai <${FROM_ADDRESS}>`,
       to,
       subject,
@@ -41,7 +41,7 @@ export async function sendViaResend(
     });
 
     if (error) return { success: false, error: error.message };
-    return { success: true };
+    return { success: true, resendMessageId: data?.id };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

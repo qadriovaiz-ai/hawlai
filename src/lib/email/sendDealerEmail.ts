@@ -18,9 +18,18 @@ export async function sendDealerEmail(
 
   if (dealership?.gmail_email) {
     const result = await sendViaGmail(supabase, dealershipId, to, subject, body);
+    if (result.success) {
+      // Logged for real send-volume tracking, even though Gmail sends
+      // can't be enriched with opens/clicks the way Resend sends can —
+      // Gmail's API doesn't give Hawlai a webhook for that.
+      await supabase.from("email_sends").insert({ dealership_id: dealershipId, to_email: to, subject, via: "gmail" });
+    }
     return { ...result, via: "gmail" };
   }
 
   const result = await sendViaResend(to, subject, body, dealership?.dealership_name ?? "Hawlai");
+  if (result.success) {
+    await supabase.from("email_sends").insert({ dealership_id: dealershipId, to_email: to, subject, via: "resend", resend_message_id: result.resendMessageId ?? null });
+  }
   return { ...result, via: "resend" };
 }

@@ -26,6 +26,9 @@ interface PageContext {
   views: number;
   chatOpens: number;
   formSubmits: number;
+  orders?: number;
+  conversionRate?: number | null; // orders / views, only computed with enough traffic to be meaningful
+  cartAbandonmentRate?: number | null; // abandoned carts / (abandoned carts + orders)
 }
 
 export async function generateCroSuggestions(
@@ -43,12 +46,24 @@ export async function generateCroSuggestions(
   const conversionRate = page.views > 0 ? ((page.formSubmits / page.views) * 100).toFixed(1) : null;
   const engagementRate = page.views > 0 ? (((page.chatOpens + page.formSubmits) / page.views) * 100).toFixed(1) : null;
 
+  const realCommerceContext = (page.orders !== undefined)
+    ? `\nReal purchase data (last 30 days): ${page.orders} orders. ${
+        page.conversionRate !== null && page.conversionRate !== undefined
+          ? `View-to-order conversion: ${page.conversionRate}%.`
+          : "(Not enough traffic yet to compute a reliable view-to-order conversion rate.)"
+      } ${
+        page.cartAbandonmentRate !== null && page.cartAbandonmentRate !== undefined
+          ? `Cart abandonment rate: ${page.cartAbandonmentRate}% — this is the real signal for whether the issue is getting people to add to cart, or getting them through checkout.`
+          : ""
+      }`
+    : "";
+
   const pageContext = `Current landing page:
 Headline: ${page.headline ?? "(not set)"}
 Subheadline: ${page.subheadline ?? "(not set)"}
 Offer text: ${page.offerText ?? "(not set)"}
 
-Real visitor data (last 30 days): ${page.views} views, ${page.chatOpens} chat opens, ${page.formSubmits} leads captured.
+Real visitor data (last 30 days): ${page.views} views, ${page.chatOpens} chat opens, ${page.formSubmits} leads captured.${realCommerceContext}
 ${conversionRate ? `Conversion rate (view → lead): ${conversionRate}%` : "Not enough traffic yet to calculate a conversion rate."}
 ${engagementRate ? `Engagement rate (view → any interaction): ${engagementRate}%` : ""}`;
 

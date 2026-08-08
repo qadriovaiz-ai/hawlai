@@ -82,6 +82,8 @@ export default function SocialManagement() {
         <ArrowRight className="w-4 h-4 text-slate-400" />
       </Link>
 
+      <AutopilotStatsCard />
+
       <div className="card p-5 space-y-3">
         <div className="flex flex-wrap gap-1.5">
           {SOCIAL_TASKS.map((t) => (
@@ -164,6 +166,25 @@ export default function SocialManagement() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AutopilotStatsCard() {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    fetch("/api/social/stats").then((r) => r.json()).then(setStats);
+  }, []);
+
+  if (!stats || stats.totalAttempted === 0) return null;
+
+  return (
+    <div className="card p-4">
+      <p className="text-xs text-slate-400 mb-2">Auto-posting (last 30 days) — real numbers, not estimates</p>
+      <div className="flex items-center gap-4 text-sm">
+        <span className="text-slate-700"><span className="font-semibold">{stats.succeeded}</span> posted</span>
+        {stats.failed > 0 && <span className="text-red-400"><span className="font-semibold">{stats.failed}</span> failed</span>}
+      </div>
     </div>
   );
 }

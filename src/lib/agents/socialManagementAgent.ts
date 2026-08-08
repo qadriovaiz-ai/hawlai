@@ -92,7 +92,8 @@ export async function generateSocialTask(
   businessCategory: string,
   inputText: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  recentPostsContext?: string | null
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = SOCIAL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -113,6 +114,7 @@ export async function generateSocialTask(
         role: "user",
         content: `You are a social media manager for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}
+${recentPostsContext ? `\nActually posted recently (last 10, real — don't repeat these angles/hooks, find fresh ones):\n${recentPostsContext}` : ""}
 ${meta.needsInput ? `Incoming message to respond to: "${inputText || "(no message provided — write generic examples)"}"` : ""}
 
 Task: ${meta.label}
