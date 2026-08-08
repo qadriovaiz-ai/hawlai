@@ -40,11 +40,16 @@ export async function updateSession(request: NextRequest) {
   // these pages exist for.
   const PUBLIC_PATH_PREFIXES = [
     "/auth",
-    "/p/", // storefront product pages
+    "/p/", // legacy storefront route (landing_pages table)
+    "/site/", // current storefront route (websites/website_pages tables) — the one the Website Builder actually generates and publishes
     "/collabs",
     "/affiliates",
     "/admin-seed-knowledge", // protected by its own secret header, not user auth
     "/api/public/",
+    "/book/", // customer appointment booking, no account needed
+    "/report/", // shareable client report links (get_report_links tool) — the client viewing it never has a Hawlai account
+    "/invite/", // team invite acceptance — the invitee doesn't have an account yet when they click this
+    "/seo/", // published SEO content pages, meant to be publicly indexed by Google
   ];
   const isPublicPath =
     request.nextUrl.pathname === "/" ||
