@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, Download, ShoppingCart, UserX, RotateCcw, Pencil, Save, X, Copy, Check } from "lucide-react";
+import { Loader2, Sparkles, Download, ShoppingCart, UserX, RotateCcw, Pencil, Save, X, Copy, Check, Lock } from "lucide-react";
 import { OutputRenderer, EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 const SEGMENTS = [
@@ -151,6 +151,9 @@ export default function RetargetingView() {
           <li>Use the generated ad copy for a new campaign targeted at that Custom Audience.</li>
         </ol>
         <p className="text-xs text-slate-400">Hawlai doesn't auto-launch retargeting ads yet — that needs a live Meta Ads connection, same as other ad campaigns. This gets you a real, ready-to-use audience list and copy in the meantime.</p>
+        <button disabled className="w-full mt-1 text-xs bg-slate-200 text-slate-400 py-2 rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5">
+          <Lock className="w-3.5 h-3.5" /> Auto-sync to Meta Custom Audience — available once Meta Ads is connected
+        </button>
       </div>
     </div>
   );

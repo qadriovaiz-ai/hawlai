@@ -5,8 +5,9 @@ import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Ch
 import SeoToolkit from "@/components/seo/SeoToolkit";
 
 export default function SeoPage() {
-  const [audit, setAudit] = useState<{ score: number; checks: { label: string; passed: boolean; detail: string }[] } | null>(null);
+  const [audit, setAudit] = useState<{ score: number; published: boolean; siteUrl: string | null; pages: { pageSlug: string; pageTitle: string; score: number; checks: { label: string; passed: boolean; detail: string }[] }[] } | null>(null);
   const [auditLoading, setAuditLoading] = useState(true);
+  const [expandedPage, setExpandedPage] = useState<string | null>(null);
 
   const [cro, setCro] = useState<{ conversionRate: number | null; suggestions: { issue: string; fix: string; impact: string }[] } | null>(null);
   const [croLoading, setCroLoading] = useState(true);
@@ -117,18 +118,37 @@ export default function SeoPage() {
                 />
               </div>
             </div>
+            {!audit.published && (
+              <p className="text-xs text-amber-500">Site isn't published yet — none of this is visible to Google until you publish.</p>
+            )}
+            <p className="text-xs text-slate-400">Across {audit.pages.length} page{audit.pages.length !== 1 ? "s" : ""} on your live website:</p>
             <div className="space-y-2">
-              {audit.checks.map((c, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  {c.passed ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              {audit.pages.map((p) => (
+                <div key={p.pageSlug} className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedPage(expandedPage === p.pageSlug ? null : p.pageSlug)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50"
+                  >
+                    <span className="text-sm font-medium text-slate-800">{p.pageTitle}</span>
+                    <span className={`text-xs font-semibold ${p.score >= 75 ? "text-green-500" : p.score >= 50 ? "text-amber-500" : "text-red-400"}`}>{p.score}/100</span>
+                  </button>
+                  {expandedPage === p.pageSlug && (
+                    <div className="px-3 pb-3 space-y-2 border-t border-slate-100 pt-2">
+                      {p.checks.map((c, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          {c.passed ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <p className="text-sm font-medium text-slate-800">{c.label}</p>
+                            <p className="text-xs text-slate-400">{c.detail}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{c.label}</p>
-                    <p className="text-xs text-slate-400">{c.detail}</p>
-                  </div>
                 </div>
               ))}
             </div>

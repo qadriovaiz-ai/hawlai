@@ -147,10 +147,16 @@ export default function GrowthAdvisorView() {
 
 function ForecastRenderer({ output }: { output: any }) {
   const max = Math.max(...output.weeklyLeadCounts, 1);
+  const trendColor = output.trendDirection === "growing" ? "text-green-500 bg-green-500/10" : output.trendDirection === "declining" ? "text-red-400 bg-red-500/10" : "text-slate-500 bg-slate-200";
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> Weekly leads (last 8 weeks)</p>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-xs font-semibold text-slate-400 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> Weekly leads (last 8 weeks)</p>
+          {output.trendDirection && (
+            <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${trendColor}`}>{output.trendDirection}</span>
+          )}
+        </div>
         <div className="flex items-end gap-1.5 h-20">
           {output.weeklyLeadCounts.map((c: number, i: number) => (
             <div key={i} className="flex-1 bg-purple-500/30 rounded-t" style={{ height: `${(c / max) * 100}%`, minHeight: c > 0 ? 4 : 0 }} title={`${c} leads`} />

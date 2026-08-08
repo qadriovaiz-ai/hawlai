@@ -148,6 +148,103 @@ export interface SeoAudit {
   checks: SeoCheck[];
 }
 
+export interface PageAuditResult {
+  pageSlug: string;
+  pageTitle: string;
+  score: number;
+  checks: SeoCheck[];
+}
+
+export interface WebsiteAudit {
+  score: number; // average across all pages
+  published: boolean;
+  siteUrl: string | null;
+  pages: PageAuditResult[];
+}
+
+// Real audit against the CURRENT website builder tables (websites +
+// website_pages) — the ones actually used across every business type
+// today, not the legacy single-page car-dealership `landing_pages`
+// table auditLandingPage below still covers for its one remaining
+// consumer (croAgent.ts).
+export function auditWebsite(
+  website: { published?: boolean; slug?: string | null } | null,
+  pages: { slug: string; title?: string | null; meta_description?: string | null; sections?: any[] | null }[]
+): WebsiteAudit {
+  if (!website) {
+    return { score: 0, published: false, siteUrl: null, pages: [] };
+  }
+  if (pages.length === 0) {
+    return {
+      score: 0,
+      published: !!website.published,
+      siteUrl: website.slug ? `/p/${website.slug}` : null,
+      pages: [{ pageSlug: "—", pageTitle: "No pages yet", score: 0, checks: [{ label: "Website has pages", passed: false, detail: "Add pages in the Website Builder before there's anything to audit." }] }],
+    };
+  }
+
+  const pageResults: PageAuditResult[] = pages.map((page) => {
+    const checks: SeoCheck[] = [];
+
+    const titleLen = page.title?.length ?? 0;
+    checks.push({
+      label: "Title length",
+      passed: titleLen >= 15 && titleLen <= 60,
+      detail: titleLen === 0 ? "No title set." : titleLen < 15 ? `Only ${titleLen} characters — likely too thin for search results.` : titleLen > 60 ? `${titleLen} characters — Google may truncate this.` : `${titleLen} characters — good length.`,
+    });
+
+    const descLen = page.meta_description?.length ?? 0;
+    checks.push({
+      label: "Meta description",
+      passed: descLen >= 50 && descLen <= 160,
+      detail: descLen === 0 ? "No meta description set for this page." : descLen > 160 ? `${descLen} characters — Google will truncate this in search results.` : descLen < 50 ? `Only ${descLen} characters — could say more.` : `${descLen} characters — good length.`,
+    });
+
+    // Real content-depth check — walks every section's string fields
+    // (sections is a flexible jsonb array, shape varies by section
+    // type) rather than assuming a fixed schema, since this needs to
+    // work across every site_type Hawlai supports, not just one.
+    const sections = page.sections ?? [];
+    let totalTextLength = 0;
+    let hasImage = false;
+    for (const section of sections) {
+      for (const [key, value] of Object.entries(section ?? {})) {
+        if (typeof value === "string") totalTextLength += value.length;
+        if (key.toLowerCase().includes("image") && value) hasImage = true;
+      }
+    }
+    checks.push({
+      label: "Content depth",
+      passed: sections.length >= 2 && totalTextLength >= 150,
+      detail: sections.length === 0 ? "No sections added — an empty page has nothing for Google to index." : `${sections.length} section(s), ~${totalTextLength} characters of real content.`,
+    });
+
+    checks.push({
+      label: "Has a visual",
+      passed: hasImage,
+      detail: hasImage ? "At least one image found — helps engagement and social share previews." : "No image found on this page yet.",
+    });
+
+    checks.push({
+      label: "URL is descriptive",
+      passed: !!page.slug && page.slug.length >= 3 && /[a-z]/.test(page.slug),
+      detail: `/${page.slug}`,
+    });
+
+    const score = Math.round((checks.filter((c) => c.passed).length / checks.length) * 100);
+    return { pageSlug: page.slug, pageTitle: page.title ?? page.slug, score, checks };
+  });
+
+  const overallScore = Math.round(pageResults.reduce((sum, p) => sum + p.score, 0) / pageResults.length);
+
+  return {
+    score: overallScore,
+    published: !!website.published,
+    siteUrl: website.slug ? `/p/${website.slug}` : null,
+    pages: pageResults,
+  };
+}
+
 export function auditLandingPage(page: {
   published?: boolean;
   slug?: string | null;

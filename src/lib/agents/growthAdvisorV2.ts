@@ -14,8 +14,38 @@ interface RevenueForecast {
   weeklyLeadCounts: number[]; // last 8 weeks, oldest first
   conversionRate: number | null;
   avgDealValue: number | null;
+  trendDirection: "growing" | "declining" | "flat" | null;
   forecast30Days: { low: number; mid: number; high: number } | null;
   narrative: string;
+}
+
+// Simple linear regression (least squares) over the 8 weekly points.
+// Honest scope: this is real statistics on real historical data — a
+// genuine trend line, not a guess — but it's a small-sample (8-point)
+// linear fit, not a trained ML model. With only 8 data points, a more
+// complex model would be overfitting, not more accurate; this is the
+// right-sized tool for the amount of real data actually available.
+function linearRegression(y: number[]): { slope: number; intercept: number; residualStdDev: number } {
+  const n = y.length;
+  const xMean = (n - 1) / 2;
+  const yMean = y.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - xMean) * (y[i] - yMean);
+    den += (i - xMean) ** 2;
+  }
+  const slope = den === 0 ? 0 : num / den;
+  const intercept = yMean - slope * xMean;
+
+  let sumSquaredResiduals = 0;
+  for (let i = 0; i < n; i++) {
+    const predicted = slope * i + intercept;
+    sumSquaredResiduals += (y[i] - predicted) ** 2;
+  }
+  const residualStdDev = Math.sqrt(sumSquaredResiduals / n);
+
+  return { slope, intercept, residualStdDev };
 }
 
 export async function computeRevenueForecast(supabase: any, dealershipId: string, dealershipName: string, businessCategory: string): Promise<RevenueForecast> {
@@ -41,15 +71,33 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
   const avgDealValue = dealValues.length > 0 ? dealValues.reduce((a: number, b: number) => a + b, 0) / dealValues.length : null;
 
   let forecast30Days: RevenueForecast["forecast30Days"] = null;
+  let trendDirection: RevenueForecast["trendDirection"] = null;
+
   if (conversionRate !== null && avgDealValue !== null && weeklyLeadCounts.some((c) => c > 0)) {
+    const { slope, intercept, residualStdDev } = linearRegression(weeklyLeadCounts);
     const avgWeekly = weeklyLeadCounts.reduce((a, b) => a + b, 0) / 8;
-    const minWeekly = Math.min(...weeklyLeadCounts);
-    const maxWeekly = Math.max(...weeklyLeadCounts);
+
+    // Direction only called "growing"/"declining" when the trend is
+    // large enough relative to the average to not just be noise —
+    // otherwise a business with genuinely flat volume shouldn't get
+    // told it's "growing" off a single lucky week.
+    const relativeSlope = avgWeekly > 0 ? (slope * 7) / avgWeekly : 0; // change over the full window, relative to average level
+    trendDirection = relativeSlope > 0.15 ? "growing" : relativeSlope < -0.15 ? "declining" : "flat";
+
+    // Project forward from the trend line to the midpoint of the next
+    // 30-day window (≈4.3 weeks out from the last data point), rather
+    // than just repeating the historical average — this is what makes
+    // it an actual forecast instead of a backward-looking summary.
     const weeksIn30Days = 30 / 7;
+    const midpointX = 7 + weeksIn30Days / 2;
+    const projectedWeekly = Math.max(0, slope * midpointX + intercept);
+    const lowWeekly = Math.max(0, projectedWeekly - residualStdDev);
+    const highWeekly = projectedWeekly + residualStdDev;
+
     forecast30Days = {
-      low: Math.round(minWeekly * weeksIn30Days * conversionRate * avgDealValue),
-      mid: Math.round(avgWeekly * weeksIn30Days * conversionRate * avgDealValue),
-      high: Math.round(maxWeekly * weeksIn30Days * conversionRate * avgDealValue),
+      low: Math.round(lowWeekly * weeksIn30Days * conversionRate * avgDealValue),
+      mid: Math.round(projectedWeekly * weeksIn30Days * conversionRate * avgDealValue),
+      high: Math.round(highWeekly * weeksIn30Days * conversionRate * avgDealValue),
     };
   }
 
@@ -67,7 +115,7 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
           max_tokens: 400,
           messages: [{
             role: "user",
-            content: `${dealershipName}, a ${businessCategory} business, has this REAL data: weekly lead counts over the last 8 weeks: [${weeklyLeadCounts.join(", ")}]. Conversion rate: ${(conversionRate! * 100).toFixed(1)}%. Average deal value: ₹${avgDealValue}. Computed 30-day revenue forecast range: ₹${forecast30Days.low} to ₹${forecast30Days.high} (mid ₹${forecast30Days.mid}).\n\nWrite a 2-3 sentence plain-English interpretation of this trend and forecast — is lead volume growing/shrinking/flat, what does that mean for the forecast, any caveat worth noting. Return JSON only: {"narrative": "..."}`,
+            content: `${dealershipName}, a ${businessCategory} business, has this REAL data: weekly lead counts over the last 8 weeks: [${weeklyLeadCounts.join(", ")}]. A linear trend fit on this data shows the business is ${trendDirection}. Conversion rate: ${(conversionRate! * 100).toFixed(1)}%. Average deal value: ₹${avgDealValue}. Trend-projected 30-day revenue forecast range: ₹${forecast30Days.low} to ₹${forecast30Days.high} (mid ₹${forecast30Days.mid}).\n\nWrite a 2-3 sentence plain-English interpretation of this trend and forecast — reference the ${trendDirection} direction explicitly, what it means for the forecast, and any caveat worth noting (e.g. small sample size if lead volume is low). Return JSON only: {"narrative": "..."}`,
           }],
         }),
       });
@@ -85,7 +133,7 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
     }
   }
 
-  return { weeklyLeadCounts, conversionRate, avgDealValue, forecast30Days, narrative };
+  return { weeklyLeadCounts, conversionRate, avgDealValue, trendDirection, forecast30Days, narrative };
 }
 
 async function callClaude(prompt: string, maxTokens = 1500): Promise<any | null> {
