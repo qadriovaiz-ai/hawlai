@@ -1,0 +1,46 @@
+import { createServiceClient } from "@/lib/supabase/service";
+import { NextResponse } from "next/server";
+import { embedText } from "@/lib/knowledge/voyageClient";
+import { MARKETING_KNOWLEDGE_SEED } from "@/lib/knowledge/marketingKnowledgeSeed";
+
+// One-time (or re-run-safe) seeding of the marketing knowledge base.
+// Protected by a secret rather than normal user auth, since this has
+// nothing to do with any dealership — it's a platform-level admin
+// operation. Call once after VOYAGE_API_KEY is set:
+//
+//   curl -X POST https://hawlai.online/api/admin/seed-knowledge \
+//     -H "x-seed-secret: <ADMIN_SEED_SECRET value>"
+//
+// Safe to re-run — clears and re-inserts rather than duplicating.
+export async function POST(request: Request) {
+  const secret = request.headers.get("x-seed-secret");
+  const expected = process.env.ADMIN_SEED_SECRET;
+  if (!expected) return NextResponse.json({ error: "ADMIN_SEED_SECRET not configured in environment" }, { status: 500 });
+  if (secret !== expected) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!process.env.VOYAGE_API_KEY) {
+    return NextResponse.json({ error: "VOYAGE_API_KEY not configured yet — add it in Vercel env vars first" }, { status: 500 });
+  }
+
+  const supabase = createServiceClient();
+  await supabase.from("marketing_knowledge").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // clear existing so re-runs don't duplicate
+
+  const results: { title: string; success: boolean; error?: string }[] = [];
+  for (const entry of MARKETING_KNOWLEDGE_SEED) {
+    const embedding = await embedText(`${entry.title}\n\n${entry.content}`, "document");
+    if (!embedding) {
+      results.push({ title: entry.title, success: false, error: "Embedding failed" });
+      continue;
+    }
+    const { error } = await supabase.from("marketing_knowledge").insert({
+      category: entry.category,
+      title: entry.title,
+      content: entry.content,
+      embedding,
+    });
+    results.push({ title: entry.title, success: !error, error: error?.message });
+  }
+
+  const succeeded = results.filter((r) => r.success).length;
+  return NextResponse.json({ seeded: succeeded, total: MARKETING_KNOWLEDGE_SEED.length, results });
+}
