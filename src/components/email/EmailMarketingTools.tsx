@@ -1,14 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, Copy, Check, Clock, Users, BarChart3, Info } from "lucide-react";
+import { Loader2, Sparkles, Copy, Check, Clock, Users, BarChart3, Info, Pencil, Save, X } from "lucide-react";
 import { EMAIL_TASKS } from "@/lib/agents/emailMarketingAgent";
+import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 export default function EmailMarketingTools() {
   const [selectedTask, setSelectedTask] = useState(EMAIL_TASKS[0].key);
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [output, setOutput] = useState<any>(null);
+  const [outputId, setOutputId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [segments, setSegments] = useState<any>(null);
@@ -21,6 +26,8 @@ export default function EmailMarketingTools() {
   async function handleGenerate() {
     setLoading(true);
     setOutput(null);
+    setOutputId(null);
+    setEditing(false);
     try {
       const res = await fetch("/api/email/generate", {
         method: "POST",
@@ -29,9 +36,33 @@ export default function EmailMarketingTools() {
       });
       const data = await res.json();
       setOutput(data.output);
+      setOutputId(data.id);
       fetch("/api/email/generate").then((r) => r.json()).then((d) => setHistory(d.items ?? []));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function startEditing() {
+    setDraft(JSON.parse(JSON.stringify(output)));
+    setEditing(true);
+  }
+
+  async function saveEdits() {
+    if (!outputId) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/email/generate", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: outputId, output: draft }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setOutput(draft);
+      setEditing(false);
+      fetch("/api/email/generate").then((r) => r.json()).then((d) => setHistory(d.items ?? []));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -113,11 +144,35 @@ export default function EmailMarketingTools() {
         <div className="card p-5 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-700">Result</p>
-            <button onClick={copyOutput} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} Copy
-            </button>
+            <div className="flex items-center gap-3">
+              {editing ? (
+                <>
+                  <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                    <X className="w-3.5 h-3.5" /> Cancel
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    disabled={saving || !outputId}
+                    className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1"
+                  >
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+                  </button>
+                </>
+              ) : (
+                <>
+                  {outputId && (
+                    <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  )}
+                  <button onClick={copyOutput} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} Copy
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <OutputRenderer output={output} />
+          {editing ? <EditableOutput output={draft} onChange={setDraft} /> : <OutputRenderer output={output} />}
         </div>
       )}
 
@@ -126,7 +181,11 @@ export default function EmailMarketingTools() {
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Recent</p>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {history.map((h) => (
-              <button key={h.id} onClick={() => setOutput(h.output)} className="w-full text-left text-xs bg-slate-100 hover:bg-slate-200 rounded-lg p-2.5">
+              <button
+                key={h.id}
+                onClick={() => { setOutput(h.output); setOutputId(h.id); setEditing(false); }}
+                className="w-full text-left text-xs bg-slate-100 hover:bg-slate-200 rounded-lg p-2.5"
+              >
                 <span className="font-medium text-slate-700">{EMAIL_TASKS.find((t) => t.key === h.task_type)?.label ?? h.task_type}</span>
               </button>
             ))}
