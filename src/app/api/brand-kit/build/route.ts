@@ -50,3 +50,28 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ ...kit, logoUrl: existing?.logo_url ?? null, _cached: false });
 }
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const dealershipId = profile?.dealership_id;
+  if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const { kit } = await request.json();
+  if (!kit) return NextResponse.json({ error: "kit required" }, { status: 400 });
+
+  // Single row per dealership (upsert-keyed on dealership_id) — same
+  // "PATCH only updates an already-generated row" rule as Strategy.
+  // logo_url lives on the same row but is managed separately by
+  // /api/brand-kit/logo, so this never touches it.
+  const { error } = await supabase
+    .from("brand_kits")
+    .update({ kit, updated_at: new Date().toISOString() })
+    .eq("dealership_id", dealershipId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}

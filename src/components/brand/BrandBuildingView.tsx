@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import {
   Loader2, RefreshCw, Palette, Type, Sparkles, Target, Compass, BookOpen,
-  Share2, UserCircle2, ListChecks, Wand2, Image as ImageIcon, Copy, Check,
+  Share2, UserCircle2, ListChecks, Wand2, Image as ImageIcon, Copy, Check, Pencil, Save, X,
 } from "lucide-react";
+import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 export default function BrandBuildingView() {
   const [loading, setLoading] = useState(true);
@@ -13,6 +14,9 @@ export default function BrandBuildingView() {
   const [logoLoading, setLogoLoading] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/brand-kit/build")
@@ -26,6 +30,7 @@ export default function BrandBuildingView() {
 
   function handleRegenerate() {
     setLoading(true);
+    setEditing(false);
     fetch("/api/brand-kit/build?regenerate=true")
       .then((res) => res.json())
       .then((data) => {
@@ -33,6 +38,28 @@ export default function BrandBuildingView() {
         setLogoUrl(data.logoUrl ?? logoUrl);
       })
       .finally(() => setLoading(false));
+  }
+
+  function startEditing() {
+    const { logoUrl: _logoUrl, _cached, ...clean } = kit;
+    setDraft(JSON.parse(JSON.stringify(clean)));
+    setEditing(true);
+  }
+
+  async function saveEdits() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/brand-kit/build", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kit: draft }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setKit({ ...draft, logoUrl, _cached: true });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleGenerateLogo() {
@@ -68,16 +95,40 @@ export default function BrandBuildingView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
-        <button
-          onClick={handleRegenerate}
-          disabled={loading}
-          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate kit
-        </button>
+      <div className="flex items-center justify-end gap-3">
+        {editing ? (
+          <>
+            <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+              <X className="w-3.5 h-3.5" /> Cancel
+            </button>
+            <button onClick={saveEdits} disabled={saving} className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+              <Pencil className="w-3.5 h-3.5" /> Edit
+            </button>
+            <button
+              onClick={handleRegenerate}
+              disabled={loading}
+              className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate kit
+            </button>
+          </>
+        )}
       </div>
 
+      {editing && (
+        <div className="card p-5">
+          <EditableOutput output={draft} onChange={setDraft} />
+        </div>
+      )}
+
+      {!editing && (
+      <>
       {/* Logo */}
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> Logo</p>
@@ -212,6 +263,8 @@ export default function BrandBuildingView() {
           ))}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
