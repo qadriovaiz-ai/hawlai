@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Trash2, ArrowRight, TrendingUp, Users } from "lucide-react";
+import { Loader2, Plus, Trash2, ArrowRight, TrendingUp, Users, Tag, Copy, Check } from "lucide-react";
 
 const STATUSES = ["identified", "contacted", "negotiating", "agreed", "active", "completed", "declined"];
 
@@ -31,8 +31,20 @@ export default function InfluencerCrmView() {
     await fetch("/api/influencer-crm", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, [field]: value }) });
   }
   function fieldToDb(field: string) {
-    const map: Record<string, string> = { agreedAmount: "agreed_amount", leadsGenerated: "leads_generated", revenueGenerated: "revenue_generated", campaignName: "campaign_name" };
+    const map: Record<string, string> = { agreedAmount: "agreed_amount", leadsGenerated: "leads_generated", revenueGenerated: "revenue_generated", campaignName: "campaign_name", discountCode: "discount_code" };
     return map[field] ?? field;
+  }
+
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
+  async function generateCode(id: string) {
+    setGeneratingFor(id);
+    try {
+      const res = await fetch("/api/influencer-crm", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, generateCode: true }) });
+      const data = await res.json();
+      if (data.discountCode) setInfluencers((prev) => prev.map((i) => (i.id === id ? { ...i, discount_code: data.discountCode, real_orders_count: 0, real_revenue: 0 } : i)));
+    } finally {
+      setGeneratingFor(null);
+    }
   }
 
   async function remove(id: string) {
@@ -41,7 +53,7 @@ export default function InfluencerCrmView() {
   }
 
   const totalCost = influencers.reduce((s, i) => s + (Number(i.agreed_amount) || 0), 0);
-  const totalRevenue = influencers.reduce((s, i) => s + (Number(i.revenue_generated) || 0), 0);
+  const totalRevenue = influencers.reduce((s, i) => s + (i.discount_code ? Number(i.real_revenue) || 0 : Number(i.revenue_generated) || 0), 0);
   const overallRoi = totalCost > 0 ? ((totalRevenue - totalCost) / totalCost) * 100 : null;
 
   return (
@@ -68,7 +80,7 @@ export default function InfluencerCrmView() {
             <p className="text-xs text-slate-400">ROI</p>
           </div>
         </div>
-        <p className="text-xs text-slate-400 mt-2">Based on cost and revenue numbers you log per collaboration below — no automated attribution pixel is connected to individual influencers.</p>
+        <p className="text-xs text-slate-400 mt-2">Revenue is pulled automatically from real orders for any influencer with a tracking code below — manual cost/leads/revenue fields are for collaborations without one (e.g. WhatsApp-only orders).</p>
       </div>
 
       {/* Add influencer */}
@@ -98,7 +110,8 @@ export default function InfluencerCrmView() {
         ) : (
           <div className="space-y-2">
             {influencers.map((inf) => {
-              const roi = inf.agreed_amount > 0 ? ((inf.revenue_generated - inf.agreed_amount) / inf.agreed_amount) * 100 : null;
+              const revenueForRoi = inf.discount_code ? Number(inf.real_revenue) || 0 : Number(inf.revenue_generated) || 0;
+              const roi = inf.agreed_amount > 0 ? ((revenueForRoi - inf.agreed_amount) / inf.agreed_amount) * 100 : null;
               return (
                 <div key={inf.id} className="bg-slate-100 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
@@ -110,14 +123,40 @@ export default function InfluencerCrmView() {
                   <select value={inf.status} onChange={(e) => updateField(inf.id, "status", e.target.value)} className="text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5">
                     {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                   </select>
+
+                  {/* Real, automatic attribution via a discount code — replaces
+                      guesswork with actual order data once a code exists. */}
+                  {inf.discount_code ? (
+                    <div className="bg-emerald-500/10 border border-emerald-400/20 rounded-lg p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                          <Tag className="w-3.5 h-3.5" /> Tracking code: {inf.discount_code}
+                        </span>
+                        <CopyCodeButton code={inf.discount_code} />
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        <span className="font-semibold">{inf.real_orders_count ?? 0} real orders</span> · ₹{(Number(inf.real_revenue) || 0).toLocaleString("en-IN")} revenue — pulled automatically from orders that used this code.
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => generateCode(inf.id)}
+                      disabled={generatingFor === inf.id}
+                      className="w-full text-xs flex items-center justify-center gap-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg py-2 disabled:opacity-50"
+                    >
+                      {generatingFor === inf.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
+                      Give this influencer a tracking code (10% off, auto-tracks real orders)
+                    </button>
+                  )}
+
                   <div className="grid grid-cols-3 gap-2">
                     <label className="text-xs text-slate-500">Cost (₹)
                       <input type="number" defaultValue={inf.agreed_amount} onBlur={(e) => updateField(inf.id, "agreedAmount", Number(e.target.value))} className="w-full text-xs bg-slate-200 border border-slate-200 rounded px-2 py-1 mt-0.5" />
                     </label>
-                    <label className="text-xs text-slate-500">Leads
+                    <label className="text-xs text-slate-500">{inf.discount_code ? "Leads (manual, if any offline)" : "Leads"}
                       <input type="number" defaultValue={inf.leads_generated} onBlur={(e) => updateField(inf.id, "leadsGenerated", Number(e.target.value))} className="w-full text-xs bg-slate-200 border border-slate-200 rounded px-2 py-1 mt-0.5" />
                     </label>
-                    <label className="text-xs text-slate-500">Revenue (₹)
+                    <label className="text-xs text-slate-500">{inf.discount_code ? "Revenue (manual, if any offline)" : "Revenue (₹)"}
                       <input type="number" defaultValue={inf.revenue_generated} onBlur={(e) => updateField(inf.id, "revenueGenerated", Number(e.target.value))} className="w-full text-xs bg-slate-200 border border-slate-200 rounded px-2 py-1 mt-0.5" />
                     </label>
                   </div>
@@ -129,5 +168,18 @@ export default function InfluencerCrmView() {
         )}
       </div>
     </div>
+  );
+}
+
+function CopyCodeButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+      className="text-emerald-600 hover:text-emerald-500"
+      title="Copy code"
+    >
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
   );
 }
