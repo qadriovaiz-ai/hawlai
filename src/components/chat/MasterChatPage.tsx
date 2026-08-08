@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X } from "lucide-react";
+import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 
@@ -15,9 +15,14 @@ const EXAMPLES = [
 ];
 
 interface Artifact {
-  type: "image" | "website" | "3d_scene" | "canvas_design";
+  kind: "visual" | "document" | "record" | "metric" | "link";
+  type?: "image" | "website" | "3d_scene" | "canvas_design";
   label: string;
+  summary?: string;
   url?: string;
+  html?: string;
+  fields?: { label: string; value: string }[];
+  departmentHref?: string;
 }
 
 interface ChatMessage {
@@ -69,8 +74,9 @@ export default function MasterChatPage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setThread((prev) => [...prev, { role: "assistant", content: data.reply, toolsUsed: data.toolsUsed, artifacts: data.artifacts }]);
-      if (Array.isArray(data.artifacts) && data.artifacts.length > 0) {
-        setActiveArtifact(data.artifacts[data.artifacts.length - 1]);
+      const lastVisual = Array.isArray(data.artifacts) ? [...data.artifacts].reverse().find((a: Artifact) => a.kind === "visual") : null;
+      if (lastVisual) {
+        setActiveArtifact(lastVisual);
         setPanelClosed(false);
       }
 
@@ -137,12 +143,21 @@ export default function MasterChatPage({
                 </span>
               )}
               {msg.role === "assistant" && msg.artifacts && msg.artifacts.length > 0 && (
-                <button
-                  onClick={() => { setActiveArtifact(msg.artifacts![msg.artifacts!.length - 1]); setPanelClosed(false); }}
-                  className="lg:hidden text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30 flex items-center gap-1"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" /> View {msg.artifacts[msg.artifacts.length - 1].label}
-                </button>
+                <div className="w-full space-y-1.5">
+                  {msg.artifacts.map((artifact, ai) =>
+                    artifact.kind === "visual" ? (
+                      <button
+                        key={ai}
+                        onClick={() => { setActiveArtifact(artifact); setPanelClosed(false); }}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30 flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" /> View {artifact.label}
+                      </button>
+                    ) : (
+                      <ArtifactCard key={ai} artifact={artifact} />
+                    )
+                  )}
+                </div>
               )}
               <div
                 className={cn(
@@ -232,6 +247,51 @@ export default function MasterChatPage({
         <WorkspacePanel artifact={activeArtifact} onClose={() => setPanelClosed(true)} />
       </div>
     )}
+    </div>
+  );
+}
+
+function ArtifactCard({ artifact }: { artifact: Artifact }) {
+  const iconMap = { document: FileText, record: CheckCircle2, metric: BarChart3, link: Link2 } as const;
+  const Icon = iconMap[artifact.kind as keyof typeof iconMap] ?? FileText;
+  const colorMap = {
+    document: "text-blue-500 bg-blue-500/10 border-blue-400/20",
+    record: "text-emerald-600 bg-emerald-500/10 border-emerald-400/20",
+    metric: "text-amber-600 bg-amber-500/10 border-amber-400/20",
+    link: "text-brand-600 bg-brand-500/10 border-brand-400/20",
+  } as const;
+
+  return (
+    <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white overflow-hidden">
+      <div className="flex items-start gap-2.5 px-3 py-2.5">
+        <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0 border", colorMap[artifact.kind as keyof typeof colorMap])}>
+          <Icon className="w-3.5 h-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-slate-800 capitalize truncate">{artifact.label}</p>
+          {artifact.summary && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{artifact.summary}</p>}
+          {artifact.fields && artifact.fields.length > 0 && (
+            <dl className="mt-1.5 space-y-0.5">
+              {artifact.fields.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                  <dt className="text-slate-400">{f.label}:</dt>
+                  <dd className="text-slate-700 font-medium truncate">{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </div>
+      {(artifact.kind === "link" && artifact.url) || artifact.departmentHref ? (
+        <a
+          href={artifact.kind === "link" && artifact.url ? artifact.url : artifact.departmentHref}
+          target={artifact.kind === "link" ? "_blank" : undefined}
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium text-brand-600 bg-brand-500/5 border-t border-slate-100 hover:bg-brand-500/10 transition-colors"
+        >
+          {artifact.kind === "link" ? "Open link" : "Open in department"} <ExternalLink className="w-2.5 h-2.5" />
+        </a>
+      ) : null}
     </div>
   );
 }

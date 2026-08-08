@@ -926,33 +926,174 @@ export interface ChatTurnResult {
 }
 
 export interface Artifact {
-  type: "image" | "website" | "3d_scene" | "canvas_design";
+  // "visual" = renders in the side workspace panel (image/website/3d/canvas,
+  // unchanged from before). Everything else renders as an inline summary
+  // card directly under the assistant's message in the chat feed — the
+  // whole point being the person can see what happened without leaving
+  // the conversation to go check a department page manually.
+  kind: "visual" | "document" | "record" | "metric" | "link";
+  type?: "image" | "website" | "3d_scene" | "canvas_design"; // only set when kind === "visual"
   label: string;
-  url?: string; // direct viewable URL (image src, or a link)
-  html?: string; // for 3d_scene — the sandboxed iframe content, avoids a second fetch
+  summary?: string; // one or two lines of what actually happened/was produced
+  url?: string; // visual: direct viewable src. link: the URL to open.
+  html?: string; // 3d_scene inline content, avoids a second fetch
+  fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
+  departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
 }
 
-// Turns a raw tool-execution result into something the workspace
-// panel can render live, without the frontend needing to know each
-// tool's individual response shape. Only tools that produce something
-// genuinely viewable get an entry — plain text/data tools (SEO
-// keywords, a lead score, a workflow) correctly produce nothing here.
+// Where each tool's result actually lives, so a person can jump straight
+// there instead of hunting through the Business hub. Kept as one lookup
+// table (rather than repeating a path string in every case below) so
+// there's a single place to fix if a route ever moves.
+const DEPARTMENT_HREF: Record<string, string> = {
+  generate_brand_kit: "/dashboard/brand-building",
+  generate_logo: "/dashboard/brand-building",
+  build_website: "/dashboard/website-builder",
+  generate_content: "/dashboard/content-marketing",
+  generate_seo: "/dashboard/seo",
+  generate_social_management: "/dashboard/social",
+  generate_email: "/dashboard/email",
+  generate_whatsapp: "/dashboard/whatsapp",
+  generate_ad_plan: "/dashboard/paid-ads",
+  generate_video_task: "/dashboard/video-marketing",
+  research_competitor: "/dashboard/competitor-intel",
+  research_market: "/dashboard/research",
+  generate_cro_suggestions: "/dashboard/cro",
+  get_growth_advice: "/dashboard/growth-advisor",
+  generate_influencer_outreach: "/dashboard/influencer-marketing",
+  get_analytics_summary: "/dashboard/analytics",
+  generate_marketing_strategy: "/dashboard/strategy",
+  generate_seo_keywords: "/dashboard/seo",
+  generate_graphic: "/dashboard/graphic-design",
+  get_customer_sentiment: "/dashboard/insights",
+  create_workflow: "/dashboard/marketing-automation",
+  manage_watch: "/dashboard/competitor-intel",
+  set_automation_toggle: "/dashboard/settings",
+  get_follow_up_reminders: "/dashboard/leads-hub",
+  get_booking_link: "/dashboard/appointments",
+  get_website_analytics: "/dashboard/analytics",
+  update_landing_page: "/dashboard/website-builder",
+  generate_3d_scene: "/dashboard/3d-studio",
+  publish_to_youtube: "/dashboard/video-marketing",
+  create_product_ad: "/design-editor",
+  edit_canvas_design: "/design-editor",
+  assign_task: "/dashboard/tasks",
+  assign_lead: "/dashboard/leads-hub",
+  add_lead: "/dashboard/leads-hub",
+  trigger_call: "/dashboard/calls",
+  send_email: "/dashboard/email",
+  add_product: "/dashboard/website-builder",
+  create_discount_code: "/dashboard/website-builder",
+  get_report_links: "/dashboard/reports",
+};
+
+// Generic fallback for tools whose result shape isn't hand-mapped below
+// (mostly the ~14 "generate_X" content tools, whose exact field names
+// live inside their individual agent functions rather than here). Rather
+// than reading and hand-mapping every one of those agent files' return
+// shapes, this pulls a reasonable one-line summary using common field
+// names first, then falls back to any short-ish string field, so every
+// tool produces SOMETHING visible instead of only the ones worth the
+// bespoke handling below. This is a deliberate quality/coverage
+// trade-off — worth revisiting per-tool later if a summary reads oddly.
+function genericSummary(result: any): string {
+  if (typeof result?.note === "string") return result.note;
+  const titleish = result?.headline ?? result?.title ?? result?.subject ?? result?.name;
+  if (typeof titleish === "string") return titleish;
+  for (const key of Object.keys(result ?? {})) {
+    const v = result[key];
+    if (typeof v === "string" && v.length > 15 && v.length < 280) return v;
+  }
+  return "Done — view the full result.";
+}
+
+// Turns a raw tool-execution result into something the chat feed can
+// show inline (or the workspace panel, for visual kinds), without the
+// frontend needing to know each tool's individual response shape.
 function extractArtifact(toolName: string, result: any): Artifact | null {
   if (!result || result.error) return null;
+  const departmentHref = DEPARTMENT_HREF[toolName];
+
   switch (toolName) {
+    // ---- Visual: unchanged from before, renders in the side panel ----
     case "generate_logo":
-      return result.logoUrl ? { type: "image", label: "Logo", url: result.logoUrl } : null;
+      return result.logoUrl ? { kind: "visual", type: "image", label: "Logo", url: result.logoUrl, departmentHref } : null;
     case "generate_graphic":
-      return result.imageUrl ? { type: "image", label: "Generated Image", url: result.imageUrl } : null;
+      return result.imageUrl ? { kind: "visual", type: "image", label: "Generated Image", url: result.imageUrl, departmentHref } : null;
     case "build_website":
-      return { type: "website", label: "Website Draft", url: "/dashboard/website-builder" };
+      return { kind: "visual", type: "website", label: "Website Draft", url: departmentHref, summary: result.note, departmentHref };
     case "generate_3d_scene":
-      return result.sceneId ? { type: "3d_scene", label: "3D Scene", url: `/dashboard/3d-studio` } : null;
+      return result.sceneId ? { kind: "visual", type: "3d_scene", label: "3D Scene", url: departmentHref, departmentHref } : null;
     case "create_product_ad":
     case "edit_canvas_design":
-      return result.designId ? { type: "canvas_design", label: "Design", url: `/design-editor?id=${result.designId}` } : null;
+      return result.designId ? { kind: "visual", type: "canvas_design", label: "Design", url: `/design-editor?id=${result.designId}`, departmentHref: `/design-editor?id=${result.designId}` } : null;
+
+    // ---- Record: something concrete got created/changed — show the
+    // key facts, not just a text sentence ----
+    case "create_discount_code":
+      return { kind: "record", label: "Discount code created", fields: [{ label: "Code", value: result.code }], departmentHref };
+    case "assign_task":
+      return { kind: "record", label: "Task assigned", fields: [{ label: "Assigned to", value: result.assignedTo }], departmentHref };
+    case "assign_lead":
+      return { kind: "record", label: "Lead reassigned", fields: [{ label: "Lead", value: result.leadName }, { label: "Now with", value: result.assignedTo }], departmentHref };
+    case "add_lead":
+      return { kind: "record", label: "Lead added", departmentHref };
+    case "add_product":
+      return { kind: "record", label: "Product added", summary: result.note, departmentHref };
+    case "trigger_call":
+      return { kind: "record", label: "Call placed", fields: [{ label: "To", value: result.calledLead }], departmentHref };
+    case "send_email":
+      return { kind: "record", label: "Email sent", fields: [{ label: "To", value: result.sentTo }], departmentHref };
+    case "create_workflow":
+      return { kind: "record", label: "Automation workflow created", fields: [{ label: "Status", value: result.enabled ? "Enabled" : "Created, not enabled yet" }], departmentHref };
+    case "set_automation_toggle":
+      return { kind: "record", label: "Automation setting changed", fields: [{ label: result.toggle.replace(/_/g, " "), value: result.enabled ? "Turned on" : "Turned off" }], departmentHref };
+    case "manage_watch":
+      return { kind: "record", label: "Watch added", departmentHref };
+    case "update_landing_page":
+      return { kind: "record", label: "Landing page updated", fields: (result.updated ?? []).map((f: string) => ({ label: f, value: "Updated" })), departmentHref };
+    case "publish_to_youtube":
+      return { kind: "link", label: "Published to YouTube", url: result.url, departmentHref };
+
+    // ---- Link: an actual URL to open ----
+    case "get_booking_link":
+      return { kind: "link", label: "Booking link", url: result.bookingUrl, departmentHref };
+    case "get_report_links":
+      return { kind: "link", label: "Client report", url: result.clientShareUrl, departmentHref };
+
+    // ---- Metric: numbers worth surfacing as a quick glance ----
+    case "get_follow_up_reminders":
+      return {
+        kind: "metric", label: "Follow-up check",
+        fields: [
+          { label: "Stale leads", value: String((result.staleLeads ?? []).length) },
+          { label: "Today's appointments", value: String((result.todaysAppointments ?? []).length) },
+        ],
+        departmentHref,
+      };
+    case "get_website_analytics":
+      return {
+        kind: "metric", label: "Website analytics (30 days)",
+        fields: [
+          { label: "Views", value: String(result.views ?? 0) },
+          { label: "Form submits", value: String(result.formSubmits ?? 0) },
+          { label: "Conversion", value: result.conversionRate != null ? `${result.conversionRate.toFixed(1)}%` : "—" },
+        ],
+        departmentHref,
+      };
+    case "get_analytics_summary":
+      return { kind: "metric", label: "Campaign performance", summary: genericSummary(result), departmentHref };
+
     default:
-      return null;
+      // Every remaining tool (generate_content, generate_seo,
+      // generate_marketing_strategy, research_*, get_growth_advice,
+      // get_customer_sentiment, generate_seo_keywords,
+      // generate_influencer_outreach, generate_cro_suggestions, etc.)
+      // produces long-form generated content saved to its own
+      // department page — show it as a document card with a best-
+      // effort summary rather than nothing at all.
+      if (!departmentHref) return null; // truly unmapped/unknown tool — nothing sensible to show
+      return { kind: "document", label: toolName.replace(/^generate_|^research_|^get_/, "").replace(/_/g, " "), summary: genericSummary(result), departmentHref };
   }
 }
 
