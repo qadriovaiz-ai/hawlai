@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Zap } from "lucide-react";
 import AutopilotCommandCenter from "@/components/autopilot/AutopilotCommandCenter";
+import ContentQueueView from "@/components/autopilot/ContentQueueView";
 
 export default async function AutopilotPage() {
   const supabase = await createClient();
@@ -20,6 +21,7 @@ export default async function AutopilotPage() {
         </div>
       </div>
       <AutopilotCommandCenter />
+      <ContentQueueView />
     </div>
   );
 }

@@ -18,6 +18,27 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   if (!dealership?.content_autopilot_enabled) return { skipped: "disabled" };
   if (!dealership.fb_page_id || !dealership.fb_page_access_token) return { skipped: "facebook not connected" };
 
+  // A pre-approved queued post takes priority over fresh generation —
+  // this is what lets a business say "here's my week, post exactly
+  // this" instead of autopilot always improvising new content each
+  // cycle. Falls through to the existing fresh-generation behavior
+  // below when nothing's queued for today, so this never changes
+  // behavior for a business that's never used the queue feature.
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: queuedPost } = await supabase
+    .from("social_post_queue")
+    .select("*")
+    .eq("dealership_id", dealershipId)
+    .eq("scheduled_for", today)
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (queuedPost) {
+    return postQueuedItem(supabase, dealershipId, dealership, queuedPost);
+  }
+
   const frequencyDays = dealership.content_autopilot_frequency_days ?? 3;
   if (dealership.content_autopilot_last_posted_at) {
     const daysSince = (Date.now() - new Date(dealership.content_autopilot_last_posted_at).getTime()) / (24 * 60 * 60 * 1000);
@@ -88,4 +109,51 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   });
 
   return { posted: success, postedToInstagram: Boolean(instagramPostId) };
+}
+
+async function postQueuedItem(supabase: any, dealershipId: string, dealership: any, queuedPost: any) {
+  let facebookPostId: string | null = null;
+  let instagramPostId: string | null = null;
+  let instagramError: string | null = null;
+  let success = true;
+  let error: string | null = null;
+
+  try {
+    const result = await postPhotoToPage(dealership.fb_page_id, dealership.fb_page_access_token, queuedPost.image_url, queuedPost.caption);
+    facebookPostId = result.id;
+
+    try {
+      const igUserId = await getConnectedInstagramAccountId(dealership.fb_page_id, dealership.fb_page_access_token);
+      if (igUserId) {
+        const igResult = await postPhotoToInstagram(igUserId, dealership.fb_page_access_token, queuedPost.image_url, queuedPost.caption);
+        instagramPostId = igResult.id;
+      } else {
+        instagramError = "No Instagram Business account connected to this Facebook Page";
+      }
+    } catch (igErr: any) {
+      instagramError = igErr.message;
+    }
+  } catch (err: any) {
+    success = false;
+    error = err.message;
+  }
+
+  await supabase.from("social_post_queue").update({
+    status: success ? "posted" : "failed",
+    facebook_post_id: facebookPostId,
+    instagram_post_id: instagramPostId,
+    error,
+    posted_at: new Date().toISOString(),
+  }).eq("id", queuedPost.id);
+
+  // Also logged into the same content_autopilot_log the fresh-
+  // generation path uses, so "Recent" activity and the posting
+  // success/fail stats card (built earlier tonight) show both kinds
+  // of posts together, not as two separate untracked systems.
+  await supabase.from("content_autopilot_log").insert({
+    dealership_id: dealershipId, caption: queuedPost.caption, image_url: queuedPost.image_url, post_id: facebookPostId, success, error,
+    instagram_post_id: instagramPostId, instagram_error: instagramError,
+  });
+
+  return { posted: success, postedToInstagram: Boolean(instagramPostId), fromQueue: true };
 }
