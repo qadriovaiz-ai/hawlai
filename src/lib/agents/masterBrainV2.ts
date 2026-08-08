@@ -74,13 +74,19 @@ interface DealershipCtx {
   city: string | null;
   toneOfVoice: string | null;
   team: { id: string; role: string; email: string }[];
+  memories: { id: string; category: string; insight: string }[];
 }
 
 async function getContext(supabase: any, dealershipId: string): Promise<DealershipCtx> {
-  const [{ data: d }, { data: bp }, { data: team }] = await Promise.all([
+  const [{ data: d }, { data: bp }, { data: team }, { data: memories }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("team_members").select("id, role, email").eq("dealership_id", dealershipId).eq("status", "active"),
+    // Most recent 20 — an old, stale memory naturally falls out of
+    // context rather than the list growing unbounded forever. If this
+    // ever needs smarter pruning (e.g. relevance-based), that's a
+    // real future upgrade, not something guessed at here.
+    supabase.from("business_memory").select("id, category, insight").eq("dealership_id", dealershipId).order("created_at", { ascending: false }).limit(20),
   ]);
   return {
     id: dealershipId,
@@ -88,6 +94,7 @@ async function getContext(supabase: any, dealershipId: string): Promise<Dealersh
     category: d?.business_category ?? "business",
     city: d?.city ?? null,
     toneOfVoice: bp?.tone_of_voice ?? null,
+    memories: memories ?? [],
     team: team ?? [],
   };
 }
@@ -188,6 +195,18 @@ const TOOLS = [
     name: "generate_cro_suggestions",
     description: `Suggestions to improve the landing page's conversion rate, grounded in its real content and real visitor analytics. Valid taskType values: ${CRO_TASKS.map((t) => t.key).join(", ")}.`,
     input_schema: { type: "object", properties: { taskType: { type: "string", enum: CRO_TASKS.map((t) => t.key) } }, required: ["taskType"] },
+  },
+  {
+    name: "remember_insight",
+    description: "Save a durable, reusable observation about this business for future conversations — a real pattern worth remembering long-term (e.g. 'Diwali-themed campaigns get noticeably more leads than generic promos', 'this audience responds better to Hinglish than pure English', 'weekday evening posts outperform mornings'). Only call this for genuinely durable, specific learnings grounded in something real the person said or a real result you saw — never for routine facts already covered elsewhere (brand tone, team members), never for one-off details, and never invent a pattern that wasn't actually observed. Most conversations won't need this tool at all.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", enum: ["campaign_performance", "audience_insight", "content_preference", "timing", "general"] },
+        insight: { type: "string", description: "One clear, specific sentence stating the learning." },
+      },
+      required: ["category", "insight"],
+    },
   },
   {
     name: "get_growth_advice",
@@ -619,6 +638,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       await saveGenerated(supabase, ctx.id, "retargeting_campaigns", { segment_type: segmentType, output });
       return output;
     }
+    case "remember_insight": {
+      const { data, error } = await supabase.from("business_memory").insert({
+        dealership_id: ctx.id,
+        category: input.category ?? "general",
+        insight: input.insight,
+        source: "chat",
+      }).select().single();
+      if (error) return { error: error.message };
+      return { success: true, note: "Noted — I'll remember this going forward." };
+    }
     case "get_analytics_summary": {
       const performance = await getCampaignPerformance(supabase, ctx.id);
       return performance;
@@ -995,6 +1024,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   get_growth_advice: "/dashboard/growth-advisor",
   generate_influencer_outreach: "/dashboard/influencer-marketing",
   generate_retargeting_copy: "/dashboard/retargeting",
+  remember_insight: "/dashboard/business-memory",
   get_analytics_summary: "/dashboard/analytics",
   generate_marketing_strategy: "/dashboard/strategy",
   generate_seo_keywords: "/dashboard/seo",
@@ -1084,6 +1114,8 @@ function extractArtifact(toolName: string, result: any): Artifact | null {
       return { kind: "record", label: "Automation setting changed", fields: [{ label: result.toggle.replace(/_/g, " "), value: result.enabled ? "Turned on" : "Turned off" }], departmentHref };
     case "manage_watch":
       return { kind: "record", label: "Watch added", departmentHref };
+    case "remember_insight":
+      return { kind: "record", label: "Remembered for next time", summary: result.note, departmentHref };
     case "update_landing_page":
       return { kind: "record", label: "Landing page updated", fields: (result.updated ?? []).map((f: string) => ({ label: f, value: "Updated" })), departmentHref };
     case "publish_to_youtube":
@@ -1141,7 +1173,11 @@ export async function runMasterBrainChat(
   const toolsUsed: string[] = [];
   const artifacts: Artifact[] = [];
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}
+  const memorySection = ctx.memories.length > 0
+    ? `\n\n## What you've learned about this business over time\nThese are real, durable observations from past conversations and results — apply them naturally, the way a CMO who's worked here for months would, without announcing "per my memory" or listing them back:\n${ctx.memories.map((m) => `- [${m.category.replace(/_/g, " ")}] ${m.insight}`).join("\n")}`
+    : "";
+
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${memorySection}
 
 ## How you think, not just what you generate
 
