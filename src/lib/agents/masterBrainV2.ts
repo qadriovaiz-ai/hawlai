@@ -40,6 +40,7 @@ import { generateResearch, RESEARCH_TASKS, generateSentimentFromLeads } from "./
 import { generateCroSuggestions, CRO_TASKS } from "./croAgentV2";
 import { generateGrowthOpportunities, generateBudgetRecommendations, generateExpansionStrategy, computeRevenueForecast } from "./growthAdvisorV2";
 import { generateInfluencerPlan } from "./influencerAgent";
+import { generateRetargetingCopy } from "./retargetingAgent";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -60,6 +61,7 @@ const TOOL_FEATURE_MAP: Partial<Record<string, GatedFeatureKey>> = {
   generate_cro_suggestions: "cro",
   get_growth_advice: "growthAdvisor",
   generate_influencer_outreach: "influencerMarketing",
+  generate_retargeting_copy: "retargeting",
   generate_3d_scene: "threeDStudio",
   create_workflow: "marketingAutomationWorkflows",
   set_automation_toggle: "marketingAutomationWorkflows",
@@ -196,6 +198,11 @@ const TOOLS = [
     name: "generate_influencer_outreach",
     description: "Find influencer search terms and draft an outreach DM + email for a product/service/collaboration idea.",
     input_schema: { type: "object", properties: { productOrService: { type: "string" } }, required: ["productOrService"] },
+  },
+  {
+    name: "generate_retargeting_copy",
+    description: "Write retargeting/win-back ad copy for a real audience segment — people who abandoned their cart, went cold as a lead, or bought once and haven't returned. Use when the person wants to re-engage past visitors or bring back lapsed customers.",
+    input_schema: { type: "object", properties: { segmentType: { type: "string", enum: ["abandoned_cart", "cold_lead", "lapsed_buyer"] } }, required: ["segmentType"] },
   },
   {
     name: "get_analytics_summary",
@@ -595,6 +602,23 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       await saveGenerated(supabase, ctx.id, "influencer_outreach_plans", { product: input.productOrService, output });
       return output;
     }
+    case "generate_retargeting_copy": {
+      const segmentType = input.segmentType as "abandoned_cart" | "cold_lead" | "lapsed_buyer";
+      let context = "General re-engagement audience.";
+      if (segmentType === "abandoned_cart") {
+        const { data: carts } = await supabase.from("abandoned_carts").select("items").eq("dealership_id", ctx.id).eq("contacted", false).limit(5);
+        const items = (carts ?? []).flatMap((c: any) => (c.items ?? []).map((i: any) => i.name));
+        context = items.length > 0 ? `Recently abandoned items include: ${items.slice(0, 8).join(", ")}.` : "No specific item data available — write generically.";
+      } else if (segmentType === "cold_lead") {
+        const { count } = await supabase.from("leads").select("id", { count: "exact", head: true }).eq("dealership_id", ctx.id).neq("status", "converted");
+        context = `Approximately ${count ?? 0} leads have gone cold.`;
+      } else {
+        context = "One-time customers who haven't returned to buy again.";
+      }
+      const output = await generateRetargetingCopy(segmentType, ctx.name, ctx.category, context, { supabase, dealershipId: ctx.id });
+      await saveGenerated(supabase, ctx.id, "retargeting_campaigns", { segment_type: segmentType, output });
+      return output;
+    }
     case "get_analytics_summary": {
       const performance = await getCampaignPerformance(supabase, ctx.id);
       return performance;
@@ -970,6 +994,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   generate_cro_suggestions: "/dashboard/cro",
   get_growth_advice: "/dashboard/growth-advisor",
   generate_influencer_outreach: "/dashboard/influencer-marketing",
+  generate_retargeting_copy: "/dashboard/retargeting",
   get_analytics_summary: "/dashboard/analytics",
   generate_marketing_strategy: "/dashboard/strategy",
   generate_seo_keywords: "/dashboard/seo",

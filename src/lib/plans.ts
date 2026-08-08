@@ -27,6 +27,8 @@ export interface PlanLimits {
   growthAdvisor: boolean;
   cro: boolean;
   influencerMarketing: boolean;
+  affiliateMarketing: boolean;
+  retargeting: boolean;
   threeDStudio: boolean;
   multiBusiness: boolean;
 }
@@ -62,6 +64,8 @@ const FREE_FALLBACK: PlanLimits = {
   growthAdvisor: false,
   cro: false,
   influencerMarketing: false,
+  affiliateMarketing: false,
+  retargeting: false,
   threeDStudio: false,
   multiBusiness: false,
 };
@@ -82,6 +86,8 @@ interface PlanLimitsRow {
   growth_advisor: boolean;
   cro: boolean;
   influencer_marketing: boolean;
+  affiliate_marketing: boolean;
+  retargeting: boolean;
   three_d_studio: boolean;
   multi_business: boolean;
 }
@@ -106,6 +112,8 @@ function mapRow(row: PlanLimitsRow): PlanLimits {
     growthAdvisor: row.growth_advisor,
     cro: row.cro,
     influencerMarketing: row.influencer_marketing,
+    affiliateMarketing: row.affiliate_marketing,
+    retargeting: row.retargeting,
     threeDStudio: row.three_d_studio,
     multiBusiness: row.multi_business,
   };
@@ -134,6 +142,8 @@ export type GatedFeatureKey =
   | "growthAdvisor"
   | "cro"
   | "influencerMarketing"
+  | "affiliateMarketing"
+  | "retargeting"
   | "threeDStudio"
   | "multiBusiness";
 
@@ -144,6 +154,8 @@ export const GATED_FEATURE_LABELS: Record<GatedFeatureKey, string> = {
   growthAdvisor: "Growth Advisor",
   cro: "CRO",
   influencerMarketing: "Influencer Marketing",
+  affiliateMarketing: "Affiliate Marketing",
+  retargeting: "Retargeting",
   threeDStudio: "3D Studio",
   multiBusiness: "Multi-Business",
 };
@@ -157,6 +169,8 @@ export const GATED_FEATURE_MIN_PLAN: Record<GatedFeatureKey, PlanKey> = {
   growthAdvisor: "pro",
   cro: "pro",
   influencerMarketing: "pro",
+  affiliateMarketing: "pro",
+  retargeting: "pro",
   threeDStudio: "max",
   multiBusiness: "max",
 };
