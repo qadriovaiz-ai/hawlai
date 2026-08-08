@@ -44,6 +44,28 @@ export async function POST(request: Request) {
   return NextResponse.json({ output, _fallback, id: saved?.id ?? null });
 }
 
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const dealershipId = await getDealership(supabase, user.id);
+  if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const { id, output } = await request.json();
+  if (!id || output === undefined) return NextResponse.json({ error: "id and output required" }, { status: 400 });
+
+  const { data, error } = await supabase
+    .from("social_management_items")
+    .update({ output })
+    .eq("id", id)
+    .eq("dealership_id", dealershipId)
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true, item: data });
+}
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
