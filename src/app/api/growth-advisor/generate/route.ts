@@ -35,10 +35,8 @@ export async function POST(request: Request) {
   let result: { output: any; _fallback?: boolean };
   if (taskType === "revenue_forecast") {
     const forecast = await computeRevenueForecast(supabase, dealershipId, name, category);
-    return NextResponse.json({ output: forecast, _fallback: false });
-  }
-
-  if (taskType === "growth_opportunities") {
+    result = { output: forecast, _fallback: false };
+  } else if (taskType === "growth_opportunities") {
     const { data: leads } = await supabase.from("leads").select("status, lead_temperature, source").eq("dealership_id", dealershipId).limit(300);
     const all = leads ?? [];
     const byStatus: Record<string, number> = {};

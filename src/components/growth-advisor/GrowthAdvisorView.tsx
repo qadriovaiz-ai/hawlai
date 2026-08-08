@@ -36,7 +36,7 @@ export default function GrowthAdvisorView() {
       const res = await fetch("/api/growth-advisor/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskType: selectedTask }) });
       const data = await res.json();
       setOutput(data.output);
-      setOutputId(data.id ?? null); // revenue_forecast never gets an id (computed, not saved) — Edit stays hidden for it
+      setOutputId(data.id ?? null);
       fetch("/api/growth-advisor/generate").then((r) => r.json()).then((d) => setHistory(d.items ?? []));
     } finally {
       setLoading(false);
@@ -94,33 +94,31 @@ export default function GrowthAdvisorView() {
         <div className="card p-5 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-700">Result</p>
-            {!isForecast && (
-              editing ? (
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
-                    <X className="w-3.5 h-3.5" /> Cancel
-                  </button>
-                  <button
-                    onClick={saveEdits}
-                    disabled={saving || !outputId}
-                    className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1"
-                  >
-                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
-                  </button>
-                </div>
-              ) : (
-                outputId && (
-                  <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-                    <Pencil className="w-3.5 h-3.5" /> Edit
-                  </button>
-                )
+            {editing ? (
+              <div className="flex items-center gap-3">
+                <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" /> Cancel
+                </button>
+                <button
+                  onClick={saveEdits}
+                  disabled={saving || !outputId}
+                  className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+                </button>
+              </div>
+            ) : (
+              outputId && (
+                <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
               )
             )}
           </div>
-          {isForecast ? (
-            <ForecastRenderer output={output} />
-          ) : editing ? (
+          {editing ? (
             <EditableOutput output={draft} onChange={setDraft} />
+          ) : isForecast ? (
+            <ForecastRenderer output={output} />
           ) : (
             <OutputRenderer output={output} />
           )}
