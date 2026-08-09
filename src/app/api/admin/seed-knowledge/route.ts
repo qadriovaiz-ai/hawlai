@@ -6,8 +6,9 @@ import { MARKETING_KNOWLEDGE_SEED_2 } from "@/lib/knowledge/marketingKnowledgeSe
 import { MARKETING_KNOWLEDGE_SEED_3 } from "@/lib/knowledge/marketingKnowledgeSeed3";
 import { MARKETING_KNOWLEDGE_SEED_4 } from "@/lib/knowledge/marketingKnowledgeSeed4";
 import { MARKETING_KNOWLEDGE_SEED_5 } from "@/lib/knowledge/marketingKnowledgeSeed5";
+import { MARKETING_KNOWLEDGE_SEED_6 } from "@/lib/knowledge/marketingKnowledgeSeed6";
 
-const ALL_SEED_ENTRIES = [...MARKETING_KNOWLEDGE_SEED, ...MARKETING_KNOWLEDGE_SEED_2, ...MARKETING_KNOWLEDGE_SEED_3, ...MARKETING_KNOWLEDGE_SEED_4, ...MARKETING_KNOWLEDGE_SEED_5];
+const ALL_SEED_ENTRIES = [...MARKETING_KNOWLEDGE_SEED, ...MARKETING_KNOWLEDGE_SEED_2, ...MARKETING_KNOWLEDGE_SEED_3, ...MARKETING_KNOWLEDGE_SEED_4, ...MARKETING_KNOWLEDGE_SEED_5, ...MARKETING_KNOWLEDGE_SEED_6];
 
 // 60s is the maximum Vercel allows on the Hobby plan regardless of
 // what's set here — without this, the platform default (much
