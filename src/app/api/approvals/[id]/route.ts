@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
@@ -21,21 +22,31 @@ export async function PATCH(
     return NextResponse.json({ error: "status must be 'approved' or 'rejected'" }, { status: 400 });
   }
 
-  const { data: approval } = await supabase.from("pending_approvals").select("*").eq("id", id).single();
+  // pending_approvals RLS is owner-only by design — reading it here
+  // with the service client, but only after real authorization is
+  // established below (owner check, or the RLS-protected
+  // team_members_self_read policy confirming genuine active
+  // membership) before any dealership-scoped data is touched.
+  const service = createServiceClient();
+  const { data: approval } = await service.from("pending_approvals").select("*").eq("id", id).single();
   if (!approval) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+
+  const { data: dealership } = await service.from("dealerships").select("owner_id, approval_threshold").eq("id", approval.dealership_id).single();
+  const isOwner = dealership?.owner_id === user.id;
+  let role: ApprovalRole = "owner";
+  if (!isOwner) {
+    // Confirms real membership via the user's own RLS-protected
+    // session (team_members_self_read: user_id = auth.uid()) — not
+    // bypassed, genuinely checked against their own identity.
+    const { data: teamMember } = await supabase.from("team_members").select("role, dealership_id").eq("user_id", user.id).eq("status", "active").maybeSingle();
+    const belongsToThisDealership = teamMember?.dealership_id === approval.dealership_id;
+    role = belongsToThisDealership ? (teamMember!.role as ApprovalRole) : "viewer"; // not a member of THIS dealership at all = no authority, same as viewer
+  }
 
   // Rejecting never needs elevated authority — anyone who can see the
   // queue can say no. Only APPROVING (releasing money/publishing)
   // needs the calibrated check.
   if (status === "approved") {
-    const { data: dealership } = await supabase.from("dealerships").select("owner_id, approval_threshold").eq("id", approval.dealership_id).single();
-    const isOwner = dealership?.owner_id === user.id;
-    let role: ApprovalRole = "owner";
-    if (!isOwner) {
-      const { data: teamMember } = await supabase.from("team_members").select("role").eq("dealership_id", approval.dealership_id).eq("user_id", user.id).eq("status", "active").maybeSingle();
-      role = (teamMember?.role as ApprovalRole) ?? "viewer"; // not found on the team at all = no authority, same as viewer
-    }
-
     const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, approval.amount ?? null);
     if (!authority.canApprove) {
       return NextResponse.json({ error: authority.reason ?? "You don't have authority to approve this." }, { status: 403 });
@@ -47,11 +58,11 @@ export async function PATCH(
   if (status === "approved") {
     if (approval?.action_type === "change_campaign_budget") {
       const details = approval.action_details as any;
-      const { data: dealership } = await supabase
+      const { data: dealership } = await service
         .from("dealerships").select("fb_page_access_token").eq("id", approval.dealership_id).single();
       const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
 
-      const { data: campaign } = await supabase
+      const { data: campaign } = await service
         .from("ad_creatives").select("meta_adset_id").eq("id", details.campaign_id).single();
 
       if (!token || !campaign?.meta_adset_id) {
@@ -68,12 +79,12 @@ export async function PATCH(
         return NextResponse.json({ error: metaData.error?.message ?? "Meta API error while updating budget" }, { status: 500 });
       }
 
-      await supabase.from("ad_creatives").update({ daily_budget: details.new_budget }).eq("id", details.campaign_id);
+      await service.from("ad_creatives").update({ daily_budget: details.new_budget }).eq("id", details.campaign_id);
     }
 
     if (approval?.action_type === "change_campaign_targeting") {
       const details = approval.action_details as any;
-      const outcome = await applyTargetingChange(supabase, approval.dealership_id, details.campaign_id, {
+      const outcome = await applyTargetingChange(service, approval.dealership_id, details.campaign_id, {
         age_min: details.age_min,
         age_max: details.age_max,
         genders: details.genders ?? [],
@@ -84,7 +95,7 @@ export async function PATCH(
     }
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await service
     .from("pending_approvals")
     .update({
       status,
