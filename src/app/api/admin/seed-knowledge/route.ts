@@ -2,6 +2,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { embedText } from "@/lib/knowledge/voyageClient";
 import { MARKETING_KNOWLEDGE_SEED } from "@/lib/knowledge/marketingKnowledgeSeed";
+import { MARKETING_KNOWLEDGE_SEED_2 } from "@/lib/knowledge/marketingKnowledgeSeed2";
+
+const ALL_SEED_ENTRIES = [...MARKETING_KNOWLEDGE_SEED, ...MARKETING_KNOWLEDGE_SEED_2];
 
 // One-time (or re-run-safe) seeding of the marketing knowledge base.
 // Protected by a secret rather than normal user auth, since this has
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
   await supabase.from("marketing_knowledge").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // clear existing so re-runs don't duplicate
 
   const results: { title: string; success: boolean; error?: string }[] = [];
-  for (const entry of MARKETING_KNOWLEDGE_SEED) {
+  for (const entry of ALL_SEED_ENTRIES) {
     const embedding = await embedText(`${entry.title}\n\n${entry.content}`, "document");
     if (!embedding) {
       results.push({ title: entry.title, success: false, error: "Embedding failed" });
@@ -42,5 +45,5 @@ export async function POST(request: Request) {
   }
 
   const succeeded = results.filter((r) => r.success).length;
-  return NextResponse.json({ seeded: succeeded, total: MARKETING_KNOWLEDGE_SEED.length, results });
+  return NextResponse.json({ seeded: succeeded, total: ALL_SEED_ENTRIES.length, results });
 }

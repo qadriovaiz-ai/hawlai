@@ -15,9 +15,9 @@ export default async function ChatConversationPage({ params }: { params: Promise
   const { data: conversation } = await supabase.from("chat_conversations").select("id").eq("id", id).eq("dealership_id", dealershipId).maybeSingle();
   if (!conversation) notFound();
 
-  const { data: messages } = await supabase.from("chat_messages").select("role, content, tools_used, artifacts").eq("conversation_id", id).order("created_at", { ascending: true });
+  const { data: messages } = await supabase.from("chat_messages").select("id, role, content, tools_used, artifacts, feedback").eq("conversation_id", id).order("created_at", { ascending: true });
 
-  const initialMessages = (messages ?? []).map((m) => ({ role: m.role as "user" | "assistant", content: m.content, toolsUsed: m.tools_used ?? [], artifacts: m.artifacts ?? [] }));
+  const initialMessages = (messages ?? []).map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content, toolsUsed: m.tools_used ?? [], artifacts: m.artifacts ?? [], feedback: m.feedback ?? null }));
 
   return <MasterChatPage conversationId={id} initialMessages={initialMessages} />;
 }

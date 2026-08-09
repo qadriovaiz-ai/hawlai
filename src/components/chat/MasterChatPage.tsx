@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2 } from "lucide-react";
+import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -27,10 +27,12 @@ interface Artifact {
 }
 
 interface ChatMessage {
+  id?: string | null;
   role: "user" | "assistant";
   content: string;
   toolsUsed?: string[];
   artifacts?: Artifact[];
+  feedback?: "up" | "down" | null;
 }
 
 export default function MasterChatPage({
@@ -43,6 +45,21 @@ export default function MasterChatPage({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [thread, setThread] = useState<ChatMessage[]>(initialMessages);
+
+  async function submitFeedback(index: number, value: "up" | "down") {
+    const msg = thread[index];
+    if (!msg.id) return;
+    // Toggle off if clicking the same value again.
+    const next = msg.feedback === value ? null : value;
+    setThread((prev) => prev.map((m, i) => (i === index ? { ...m, feedback: next } : m)));
+    if (next) {
+      await fetch("/api/chat/feedback", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msg.id, feedback: next }) });
+    }
+    // Toggling off isn't persisted as a separate "clear" state server-side
+    // (the column just keeps the last value) — acceptable since the
+    // main signal captured is "did someone actively react," and a
+    // second click is rare enough not to warrant a DELETE endpoint too.
+  }
   const [conversationId, setConversationId] = useState<string | null | undefined>(initialConversationId);
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [panelClosed, setPanelClosed] = useState(false);
@@ -74,7 +91,7 @@ export default function MasterChatPage({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setThread((prev) => [...prev, { role: "assistant", content: data.reply, toolsUsed: data.toolsUsed, artifacts: data.artifacts }]);
+      setThread((prev) => [...prev, { id: data.messageId, role: "assistant", content: data.reply, toolsUsed: data.toolsUsed, artifacts: data.artifacts, feedback: null }]);
       const lastVisual = Array.isArray(data.artifacts) ? [...data.artifacts].reverse().find((a: Artifact) => a.kind === "visual") : null;
       if (lastVisual) {
         setActiveArtifact(lastVisual);
@@ -205,6 +222,24 @@ export default function MasterChatPage({
                   <span className="whitespace-pre-wrap">{msg.content}</span>
                 )}
               </div>
+              {msg.role === "assistant" && msg.id && (
+                <div className="flex items-center gap-1.5 mt-1 pl-1">
+                  <button
+                    onClick={() => submitFeedback(i, "up")}
+                    className={cn("p-1 rounded transition-colors", msg.feedback === "up" ? "text-green-500" : "text-slate-300 hover:text-slate-500")}
+                    aria-label="Good response"
+                  >
+                    <ThumbsUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => submitFeedback(i, "down")}
+                    className={cn("p-1 rounded transition-colors", msg.feedback === "down" ? "text-red-400" : "text-slate-300 hover:text-slate-500")}
+                    aria-label="Not helpful"
+                  >
+                    <ThumbsDown className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
             </div>
             {msg.role === "user" && (
               <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">

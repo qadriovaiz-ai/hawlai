@@ -59,15 +59,17 @@ export async function POST(request: Request) {
   try {
     const result = await runMasterBrainChat(supabase, dealershipId, Array.isArray(history) ? history : [], message);
 
+    let savedMessageId: string | null = null;
     if (activeConversationId) {
-      await supabase.from("chat_messages").insert({
+      const { data: saved } = await supabase.from("chat_messages").insert({
         conversation_id: activeConversationId, role: "assistant", content: result.reply, tools_used: result.toolsUsed ?? [], artifacts: result.artifacts ?? [],
-      });
+      }).select("id").single();
+      savedMessageId = saved?.id ?? null;
       // Touch updated_at so the sidebar re-sorts this conversation to the top.
       await supabase.from("chat_conversations").update({ updated_at: new Date().toISOString() }).eq("id", activeConversationId);
     }
 
-    return NextResponse.json({ ...result, conversationId: activeConversationId });
+    return NextResponse.json({ ...result, conversationId: activeConversationId, messageId: savedMessageId });
   } catch (err: any) {
     console.error("[master-brain] error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
