@@ -44,7 +44,8 @@ export async function updateSession(request: NextRequest) {
     "/site/", // current storefront route (websites/website_pages tables) — the one the Website Builder actually generates and publishes
     "/collabs",
     "/affiliates",
-    "/admin-seed-knowledge", // protected by its own secret header, not user auth
+    "/admin-seed-knowledge", // page itself, protected by its own secret header, not user auth
+    "/api/admin/", // API routes for the above (and similar) — also secret-header protected, not user-session protected
     "/api/public/",
     "/book/", // customer appointment booking, no account needed
     "/report/", // shareable client report links (get_report_links tool) — the client viewing it never has a Hawlai account
