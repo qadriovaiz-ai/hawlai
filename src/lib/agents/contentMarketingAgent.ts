@@ -36,7 +36,7 @@ export const CONTENT_TYPES: ContentTypeMeta[] = [
   { key: "reel_ideas", label: "Reel Ideas", group: "Quick Wins", instructions: "5 distinct reel/short-form video concept ideas, each with a one-line concept and a one-line hook." },
   { key: "hooks", label: "Hook Generation", group: "Quick Wins", instructions: "8 scroll-stopping opening hooks (first-line only) for social posts or videos, varied in style (question, bold claim, stat, story-opener)." },
   { key: "ctas", label: "CTA Generation", group: "Quick Wins", instructions: "10 varied call-to-action lines, mixing urgency, curiosity, and direct-offer styles, suitable for ads, posts and emails." },
-  { key: "content_calendar", label: "Content Calendar", group: "Quick Wins", instructions: "A 7-day content calendar. Return an array of 7 items, each with day, contentType (pick from Instagram/LinkedIn/Reel/Blog/Email etc.), topic, and a 1-line angle." },
+  { key: "content_calendar", label: "Content Calendar", group: "Quick Wins", instructions: "A 7-day content calendar — but this must be real, ready-to-post content for each day, not just a topic list. Return an array of 7 items, each with day, contentType (pick from Instagram/LinkedIn/Reel/Blog/Email etc.), topic, angle (1 line), AND caption — the full, actual, ready-to-copy-paste caption/post text for that day (write it exactly as it should be posted, including a hook and a natural close — for a Reel/video format, write the actual on-screen hook line and caption, not just a scene description). The person should be able to copy each day's caption straight into the app and post it, not have to write it themselves from the topic/angle." },
 ];
 
 interface BrandProfile {

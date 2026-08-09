@@ -41,10 +41,11 @@ export function OutputRenderer({ output }: { output: any }) {
     return (
       <div className="space-y-2">
         {output.days.map((d: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3">
+          <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-1">
             <p className="text-xs font-semibold text-purple-500">{d.day} · {d.contentType}</p>
-            <p className="text-sm text-slate-700">{d.topic}</p>
+            <p className="text-sm font-medium text-slate-700">{d.topic}</p>
             <p className="text-xs text-slate-400">{d.angle}</p>
+            {d.caption && <p className="text-sm text-slate-600 whitespace-pre-wrap border-t border-slate-200 pt-1.5 mt-1.5">{d.caption}</p>}
           </div>
         ))}
       </div>
@@ -149,13 +150,21 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
               className="w-full text-sm bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
               placeholder="Topic"
             />
-            <textarea
+            <input
               value={d.angle ?? ""}
               onChange={(e) => setPath(["days", i, "angle"], e.target.value)}
               className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-500"
-              rows={2}
               placeholder="Angle"
             />
+            {d.caption !== undefined && (
+              <textarea
+                value={d.caption ?? ""}
+                onChange={(e) => setPath(["days", i, "caption"], e.target.value)}
+                className="w-full text-sm bg-white border border-purple-200 rounded-md px-2 py-1.5 text-slate-700"
+                rows={3}
+                placeholder="Ready-to-post caption"
+              />
+            )}
           </div>
         ))}
       </div>
