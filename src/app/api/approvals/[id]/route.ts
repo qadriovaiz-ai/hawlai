@@ -37,10 +37,12 @@ export async function PATCH(
   if (!isOwner) {
     // Confirms real membership via the user's own RLS-protected
     // session (team_members_self_read: user_id = auth.uid()) — not
-    // bypassed, genuinely checked against their own identity.
-    const { data: teamMember } = await supabase.from("team_members").select("role, dealership_id").eq("user_id", user.id).eq("status", "active").maybeSingle();
-    const belongsToThisDealership = teamMember?.dealership_id === approval.dealership_id;
-    role = belongsToThisDealership ? (teamMember!.role as ApprovalRole) : "viewer"; // not a member of THIS dealership at all = no authority, same as viewer
+    // bypassed, genuinely checked against their own identity. Scoped
+    // directly to this approval's dealership, not "any" active
+    // membership, since an agency team member can be on multiple
+    // teams at once.
+    const { data: teamMember } = await supabase.from("team_members").select("role").eq("user_id", user.id).eq("dealership_id", approval.dealership_id).eq("status", "active").maybeSingle();
+    role = (teamMember?.role as ApprovalRole) ?? "viewer"; // not a member of THIS dealership at all = no authority, same as viewer
   }
 
   // Rejecting never needs elevated authority — anyone who can see the

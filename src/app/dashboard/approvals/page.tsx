@@ -33,11 +33,13 @@ export default async function ApprovalsPage() {
     dealershipId = ownedDealership.id;
     approvalThreshold = ownedDealership.approval_threshold ?? 50000;
   } else {
-    // Not an owner — the RLS-readable team_members_self_read policy
-    // lets a user confirm their own active membership through the
-    // normal client before switching to the service client for the
-    // actual data.
-    const { data: membership } = await supabase.from("team_members").select("dealership_id, role").eq("user_id", user.id).eq("status", "active").maybeSingle();
+    // Scoped to the SPECIFIC dealership currently active for this
+    // person (set via /api/agency/switch) — not just "any" active
+    // membership, since an agency team member can genuinely be on
+    // multiple teams at once.
+    const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+    if (!profile?.dealership_id) redirect("/dashboard");
+    const { data: membership } = await supabase.from("team_members").select("dealership_id, role").eq("user_id", user.id).eq("dealership_id", profile.dealership_id).eq("status", "active").maybeSingle();
     if (!membership) redirect("/dashboard");
     dealershipId = membership.dealership_id;
     viewerRole = membership.role as ApprovalRole;
