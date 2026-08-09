@@ -21,7 +21,12 @@ export interface RetrievedKnowledge {
 // Reranker unavailable → falls back to the vector-search similarity
 // order rather than failing the whole request. Master Chat must never
 // break because a knowledge-retrieval enhancement had a hiccup.
-export async function retrieveRelevantKnowledge(supabase: any, query: string, matchCount = 3): Promise<RetrievedKnowledge[]> {
+export async function retrieveRelevantKnowledge(
+  supabase: any,
+  query: string,
+  matchCount = 5,
+  categories?: string[]
+): Promise<RetrievedKnowledge[]> {
   const embedResult = await embedText(query, "query");
   if ("error" in embedResult) {
     console.error("[knowledge-retrieval] query embedding failed:", embedResult.error);
@@ -32,10 +37,16 @@ export async function retrieveRelevantKnowledge(supabase: any, query: string, ma
   let vectorResults: any[] = [];
   let keywordResults: any[] = [];
 
+  // Wider pre-rerank net (12, up from 8) now that the knowledge base
+  // has grown to 120+ entries — more candidates per method gives the
+  // reranker a genuinely representative pool to choose the final
+  // top-N from, rather than risking the right answer never making it
+  // past the first-stage cut.
   try {
     const { data, error } = await supabase.rpc("match_marketing_knowledge", {
       query_embedding: queryEmbedding,
-      match_count: 8, // wider net than before — reranking narrows it back down to matchCount
+      match_count: 12,
+      filter_categories: categories && categories.length > 0 ? categories : null,
     });
     if (!error) vectorResults = (data ?? []).filter((r: any) => r.similarity > 0.4); // slightly relaxed threshold since reranking will filter more precisely afterward
   } catch (err: any) {
@@ -45,7 +56,8 @@ export async function retrieveRelevantKnowledge(supabase: any, query: string, ma
   try {
     const { data, error } = await supabase.rpc("keyword_search_marketing_knowledge", {
       search_query: query,
-      match_count: 8,
+      match_count: 12,
+      filter_categories: categories && categories.length > 0 ? categories : null,
     });
     if (!error) keywordResults = data ?? [];
   } catch (err: any) {
