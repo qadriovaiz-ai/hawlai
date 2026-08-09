@@ -6,6 +6,11 @@
 -- Master Chat messages — a real signal-capture step, even without a
 -- full feedback-driven retraining loop built yet.
 
+-- Building the GIN index below needs slightly more working memory
+-- than Supabase's default for this session — bumped temporarily,
+-- scoped only to this session, not a permanent database setting.
+set maintenance_work_mem = '128MB';
+
 alter table marketing_knowledge add column if not exists search_vector tsvector
   generated always as (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))) stored;
 
