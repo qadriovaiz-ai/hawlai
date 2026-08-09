@@ -1,5 +1,5 @@
 export interface KnowledgeSeedEntry {
-  category: "framework" | "case_study" | "channel_playbook" | "psychology" | "metrics";
+  category: "framework" | "case_study" | "channel_playbook" | "psychology" | "metrics" | "objection_handling" | "indian_market";
   title: string;
   content: string;
 }

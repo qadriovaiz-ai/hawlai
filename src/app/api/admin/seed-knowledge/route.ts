@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { embedText } from "@/lib/knowledge/voyageClient";
 import { MARKETING_KNOWLEDGE_SEED } from "@/lib/knowledge/marketingKnowledgeSeed";
 import { MARKETING_KNOWLEDGE_SEED_2 } from "@/lib/knowledge/marketingKnowledgeSeed2";
+import { MARKETING_KNOWLEDGE_SEED_3 } from "@/lib/knowledge/marketingKnowledgeSeed3";
 
-const ALL_SEED_ENTRIES = [...MARKETING_KNOWLEDGE_SEED, ...MARKETING_KNOWLEDGE_SEED_2];
+const ALL_SEED_ENTRIES = [...MARKETING_KNOWLEDGE_SEED, ...MARKETING_KNOWLEDGE_SEED_2, ...MARKETING_KNOWLEDGE_SEED_3];
 
 // 60s is the maximum Vercel allows on the Hobby plan regardless of
 // what's set here — without this, the platform default (much
