@@ -51,14 +51,14 @@ export async function POST(request: Request) {
   // well within the 60s limit for 53 entries, while staying well
   // under any reasonable Voyage rate limit.
   const results = await mapWithConcurrency(ALL_SEED_ENTRIES, 8, async (entry) => {
-    const embedding = await embedText(`${entry.title}\n\n${entry.content}`, "document");
-    if (!embedding) return { title: entry.title, success: false, error: "Embedding failed" };
+    const result = await embedText(`${entry.title}\n\n${entry.content}`, "document");
+    if ("error" in result) return { title: entry.title, success: false, error: result.error };
 
     const { error } = await supabase.from("marketing_knowledge").insert({
       category: entry.category,
       title: entry.title,
       content: entry.content,
-      embedding,
+      embedding: result.embedding,
     });
     return { title: entry.title, success: !error, error: error?.message };
   });

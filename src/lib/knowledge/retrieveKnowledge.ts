@@ -22,8 +22,12 @@ export interface RetrievedKnowledge {
 // order rather than failing the whole request. Master Chat must never
 // break because a knowledge-retrieval enhancement had a hiccup.
 export async function retrieveRelevantKnowledge(supabase: any, query: string, matchCount = 3): Promise<RetrievedKnowledge[]> {
-  const queryEmbedding = await embedText(query, "query");
-  if (!queryEmbedding) return [];
+  const embedResult = await embedText(query, "query");
+  if ("error" in embedResult) {
+    console.error("[knowledge-retrieval] query embedding failed:", embedResult.error);
+    return [];
+  }
+  const queryEmbedding = embedResult.embedding;
 
   let vectorResults: any[] = [];
   let keywordResults: any[] = [];

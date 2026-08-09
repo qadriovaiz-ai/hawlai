@@ -15,9 +15,9 @@ const VOYAGE_ENDPOINT = "https://ai.mongodb.com/v1/embeddings";
 const VOYAGE_MODEL = "voyage-4-lite";
 const VOYAGE_DIMENSION = 1024; // must match the `embedding vector(1024)` column in migration 090
 
-export async function embedText(text: string, inputType: "document" | "query"): Promise<number[] | null> {
+export async function embedText(text: string, inputType: "document" | "query"): Promise<{ embedding: number[] } | { error: string }> {
   const apiKey = process.env.VOYAGE_API_KEY;
-  if (!apiKey) return null; // not configured yet — callers must handle this gracefully, not throw
+  if (!apiKey) return { error: "VOYAGE_API_KEY not set" };
 
   try {
     const response = await fetch(VOYAGE_ENDPOINT, {
@@ -34,13 +34,16 @@ export async function embedText(text: string, inputType: "document" | "query"): 
       }),
     });
     if (!response.ok) {
-      console.error("[voyage] embedding request failed:", response.status, await response.text());
-      return null;
+      const bodyText = await response.text();
+      console.error("[voyage] embedding request failed:", response.status, bodyText);
+      return { error: `Voyage API returned ${response.status}: ${bodyText.slice(0, 300)}` };
     }
     const data = await response.json();
-    return data?.data?.[0]?.embedding ?? null;
+    const embedding = data?.data?.[0]?.embedding;
+    if (!embedding) return { error: "Voyage response had no embedding in it" };
+    return { embedding };
   } catch (err: any) {
     console.error("[voyage] embedding error:", err.message);
-    return null;
+    return { error: err.message };
   }
 }
