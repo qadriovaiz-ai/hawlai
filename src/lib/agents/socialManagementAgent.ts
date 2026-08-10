@@ -37,12 +37,22 @@ export async function generateAutoReply(
   incomingText: string,
   dealershipName: string,
   businessCategory: string,
-  brandProfile?: BrandProfile | null
+  brandProfile?: BrandProfile | null,
+  productCatalog?: { name: string; price: number; description?: string | null; inventoryCount?: number | null }[]
 ): Promise<string | null> {
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.";
+
+  // Real catalog, when available — this is what turns "I'll get back
+  // to you" into an actual instant answer for the very common "how
+  // much is this / is this available" DM, without ever inventing a
+  // price for something not genuinely in the catalog.
+  const catalogContext = productCatalog && productCatalog.length > 0
+    ? `\nReal current product catalog (use this for any question about a specific product — price, availability):\n${productCatalog.map((p) => `- ${p.name}: ₹${p.price}${p.inventoryCount !== undefined && p.inventoryCount !== null ? (p.inventoryCount > 0 ? ` (in stock)` : ` (out of stock)`) : ""}${p.description ? ` — ${p.description.slice(0, 80)}` : ""}`).join("\n")}`
+    : "";
+
   const safety = channel === "comment"
-    ? "This reply is PUBLIC on a comment thread — keep it brief, warm, and generic. Never share prices, personal details, or specific commitments publicly; if the comment needs specifics, invite them to DM instead."
-    : "This is a private DM auto-reply sent with NO human review before sending. If the message is a complaint, a complex question, or anything you're not confident about, reply with acknowledgement + 'our team will get back to you shortly' rather than guessing or promising something specific.";
+    ? "This reply is PUBLIC on a comment thread — keep it brief, warm, and generic. Never share prices, personal details, or specific commitments publicly, even if the catalog above has the answer; if the comment needs specifics, invite them to DM instead."
+    : `This is a private DM auto-reply sent with NO human review before sending. If the question is about a specific product's price/availability AND it's genuinely in the catalog above, answer it directly and confidently — that's a normal, safe question to answer instantly. For anything else (a complaint, a custom request, a product genuinely not in the catalog, or anything you're not confident about), reply with acknowledgement + "our team will get back to you shortly" rather than guessing or promising something specific. Never invent a price or availability for a product not actually listed above.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -58,7 +68,7 @@ export async function generateAutoReply(
         messages: [{
           role: "user",
           content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}
+${brandContext}${catalogContext}
 ${safety}
 Incoming message: "${incomingText}"
 

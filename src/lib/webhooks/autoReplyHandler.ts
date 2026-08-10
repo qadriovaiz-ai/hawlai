@@ -46,6 +46,18 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
     .eq("dealership_id", dealership.id)
     .maybeSingle();
 
+  // Real catalog — capped at 40 products to keep the prompt a
+  // reasonable size; a seller with more than that is a genuine edge
+  // case worth revisiting, not the common Insta-seller scenario this
+  // is built for.
+  const { data: products } = await supabase
+    .from("products")
+    .select("name, price, description, inventory_count")
+    .eq("dealership_id", dealership.id)
+    .eq("is_active", true)
+    .limit(40);
+  const productCatalog = (products ?? []).map((p: any) => ({ name: p.name, price: p.price, description: p.description, inventoryCount: p.inventory_count }));
+
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {
       const senderId = msgEvent?.sender?.id;
@@ -56,7 +68,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile);
+        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog);
         if (replyText) {
           await sendDmReply(dealership.fb_page_access_token, senderId, replyText);
         } else {
@@ -89,7 +101,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile);
+        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog);
         if (replyText) {
           await sendCommentReply(dealership.fb_page_access_token, commentId, replyText);
         } else {
