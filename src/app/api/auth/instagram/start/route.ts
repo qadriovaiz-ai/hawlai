@@ -20,7 +20,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "INSTAGRAM_APP_ID not configured yet" }, { status: 500 });
   }
 
-  const redirectUri = `${process.env.NEXT_PUBLIC_SITE_URL}/api/auth/instagram/callback`;
+  const redirectUri = `${(process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")}/api/auth/instagram/callback`;
+
+  // Debug helper — visit /api/auth/instagram/start?debug=1 (while
+  // logged in) to see the exact redirect_uri this generates, without
+  // actually redirecting. Useful for confirming it byte-for-byte
+  // matches what's whitelisted in Meta's Business Login settings,
+  // rather than guessing at NEXT_PUBLIC_SITE_URL's actual value.
+  const { searchParams } = new URL(request.url);
+  if (searchParams.get("debug") === "1") {
+    return NextResponse.json({ redirectUri, siteUrlEnvVar: process.env.NEXT_PUBLIC_SITE_URL ?? null });
+  }
+
   // dealershipId is passed as `state` — read back in the callback to
   // know which dealership to save the connection against. The real
   // security boundary here is Instagram's own login+consent screen

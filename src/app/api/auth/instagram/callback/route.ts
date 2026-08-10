@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const redirectUri = `${process.env.NEXT_PUBLIC_SITE_URL}/api/auth/instagram/callback`;
+    const redirectUri = `${(process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")}/api/auth/instagram/callback`;
 
     // Step 1: exchange the authorization code for a short-lived token.
     const tokenForm = new URLSearchParams();
