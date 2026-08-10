@@ -18,6 +18,7 @@ export async function GET() {
       dm_auto_reply_enabled, comment_auto_reply_enabled,
       welcome_email_auto_enabled, follow_up_email_auto_enabled, follow_up_inactive_days,
       content_autopilot_enabled, content_autopilot_frequency_days,
+      auto_call_new_leads,
       gmail_email, fb_page_id
     `).eq("id", dealershipId).single(),
     supabase.from("workflows").select("id, name, enabled").eq("dealership_id", dealershipId),
@@ -50,6 +51,7 @@ export async function PATCH(request: Request) {
     "dm_auto_reply_enabled", "comment_auto_reply_enabled",
     "welcome_email_auto_enabled", "follow_up_email_auto_enabled", "follow_up_inactive_days",
     "content_autopilot_enabled", "content_autopilot_frequency_days",
+    "auto_call_new_leads",
   ];
   const update: any = {};
   for (const key of allowed) {

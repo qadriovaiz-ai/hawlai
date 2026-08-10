@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck } from "lucide-react";
+import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck, Phone, Sparkles } from "lucide-react";
 
 export default function AutopilotCommandCenter() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [enablingAll, setEnablingAll] = useState(false);
 
   function load() {
     fetch("/api/autopilot/settings").then((r) => r.json()).then(setData).finally(() => setLoading(false));
@@ -29,6 +30,24 @@ export default function AutopilotCommandCenter() {
     await fetch("/api/autopilot/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [field]: value }) });
   }
 
+  // Turns on every toggle here in one go — deliberately still scoped
+  // to only what this whole page already covers (never touches ads/
+  // budget, which live entirely outside this settings object and
+  // always require a manual Launch click regardless).
+  async function enableAll() {
+    setEnablingAll(true);
+    const fields = ["dm_auto_reply_enabled", "comment_auto_reply_enabled", "welcome_email_auto_enabled", "follow_up_email_auto_enabled", "auto_call_new_leads"];
+    if (data.dealership.fb_page_id) fields.push("content_autopilot_enabled"); // only if Facebook's actually connected — turning this on without it does nothing
+    const update: any = {};
+    for (const f of fields) update[f] = true;
+    setData((prev: any) => ({ ...prev, dealership: { ...prev.dealership, ...update } }));
+    try {
+      await fetch("/api/autopilot/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(update) });
+    } finally {
+      setEnablingAll(false);
+    }
+  }
+
   if (loading || !data) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading autopilot settings...</div>;
 
   const d = data.dealership;
@@ -41,6 +60,25 @@ export default function AutopilotCommandCenter() {
         <p className="text-xs text-amber-800">
           Everything here posts, sends, or replies live with no review step. Turning any of these ON is your approval for everything it does from then on. <strong>Ads and budget spend are never included here</strong> — those always require you to manually launch/approve in Ads Manager, no matter what.
         </p>
+      </div>
+
+      <button
+        onClick={enableAll}
+        disabled={enablingAll}
+        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        {enablingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        Enable everything below (except ads/budget — that's never auto)
+      </button>
+
+      {/* AI Calling */}
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Phone className="w-4 h-4 text-amber-500" /> AI Calling</p>
+        <p className="text-xs text-slate-400">The moment a new lead comes in (website form, Meta Lead Ad), Hawlai calls them automatically with a script built for your business — no waiting for a team member to pick up the list.</p>
+        <label className="flex items-center justify-between">
+          <span className="text-sm text-slate-700">Auto-call new leads</span>
+          <input type="checkbox" checked={d.auto_call_new_leads} disabled={saving} onChange={(e) => toggle("auto_call_new_leads", e.target.checked)} className="w-5 h-5 accent-purple-600" />
+        </label>
       </div>
 
       {/* Content Autopilot — new, full auto posting */}
