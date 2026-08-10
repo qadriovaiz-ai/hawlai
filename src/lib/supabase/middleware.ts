@@ -51,6 +51,7 @@ export async function updateSession(request: NextRequest) {
     "/report/", // shareable client report links (get_report_links tool) — the client viewing it never has a Hawlai account
     "/invite/", // team invite acceptance — the invitee doesn't have an account yet when they click this
     "/seo/", // published SEO content pages, meant to be publicly indexed by Google
+    "/api/auth/instagram/callback", // Instagram's OAuth redirect target — the browser lands here straight from instagram.com, same reasoning as every other public callback/redirect route above
   ];
   const isPublicPath =
     request.nextUrl.pathname === "/" ||
