@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
-import { Oswald } from "next/font/google";
 import { ShieldCheck, Phone, MapPin, IndianRupee } from "lucide-react";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ChatWidget from "@/components/website/ChatWidget";
@@ -8,9 +7,14 @@ import PageTracker from "@/components/website/PageTracker";
 import Popup from "@/components/website/Popup";
 import TrackingScripts from "@/components/website/TrackingScripts";
 import { getTheme } from "@/lib/landingThemes";
+import { buildGoogleFontsUrl } from "@/lib/googleFontsUrl";
 import type { Metadata } from "next";
 
-const oswald = Oswald({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-display" });
+// Previously next/font/google's Oswald — its build-time font fetch
+// failing (fonts.gstatic.com hiccup) took down the whole Vercel build.
+// Loaded as a runtime stylesheet <link> instead (see googleFontsUrl.ts);
+// a fetch failure there just falls back to the CSS fallback font.
+const oswaldStylesheetUrl = buildGoogleFontsUrl([{ name: "Oswald", weights: ["500", "600", "700"] }]);
 
 // Dynamic per-dealer SEO metadata — without this, every dealer's page
 // inherited Hawlai's own generic title/description (invisible bug:
@@ -96,7 +100,8 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
     : (page.offer_text ?? "Book a Free Test Drive");
 
   return (
-    <div className={`${oswald.variable} font-sans`} style={{ backgroundColor: theme.bg, color: "#1C1917" }}>
+    <div className="font-sans" style={{ backgroundColor: theme.bg, color: "#1C1917", ["--font-display" as string]: "'Oswald', sans-serif" } as React.CSSProperties}>
+      <link rel="stylesheet" href={oswaldStylesheetUrl} />
       {/* Hero */}
       <section className="relative text-white overflow-hidden" style={{ backgroundColor: theme.dark }}>
         {page.hero_image_url && (

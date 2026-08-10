@@ -1,10 +1,19 @@
 import Link from "next/link";
-import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import ApprovalSlip from "@/components/marketing/ApprovalSlip";
 import { Check } from "lucide-react";
+import { buildGoogleFontsUrl } from "@/lib/googleFontsUrl";
 
-const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "700"], variable: "--font-heading" });
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-code" });
+// Previously next/font/google's Space Grotesk + IBM Plex Mono — their
+// build-time font fetch failing (fonts.gstatic.com hiccup) took down the
+// whole Vercel build. Loaded as a runtime stylesheet <link> instead (see
+// googleFontsUrl.ts). Also fixes a pre-existing mismatch: tailwind.config.ts's
+// `heading`/`code` fontFamily keys read var(--font-display)/var(--font-mono),
+// but this previously set --font-heading/--font-code — those Tailwind
+// classes were silently falling back to generic sans-serif/monospace.
+const fontStylesheetUrl = buildGoogleFontsUrl([
+  { name: "Space Grotesk", weights: ["500", "700"] },
+  { name: "IBM Plex Mono", weights: ["400", "500"] },
+]);
 
 const DEPARTMENT_GROUPS = [
   {
@@ -67,7 +76,11 @@ const PLANS = [
 
 export default function MarketingHome() {
   return (
-    <div className={`${display.variable} ${mono.variable} min-h-screen bg-paper text-ink`}>
+    <div
+      className="min-h-screen bg-paper text-ink"
+      style={{ ["--font-display" as string]: "'Space Grotesk', sans-serif", ["--font-mono" as string]: "'IBM Plex Mono', monospace" } as React.CSSProperties}
+    >
+      <link rel="stylesheet" href={fontStylesheetUrl} />
 
       {/* ===== NAV ===== */}
       <header className="sticky top-0 z-40 border-b border-ink/10 bg-paper/90 backdrop-blur">

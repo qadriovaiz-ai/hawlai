@@ -1,34 +1,57 @@
-import { Playfair_Display, Poppins, Merriweather, Montserrat, Oswald, Inter, Lato, Nunito, Roboto } from "next/font/google";
+// Storefront custom fonts (Site Editor "Font" preset) — used exclusively
+// by src/app/site/[slug]/layout.tsx. Previously loaded via
+// next/font/google, whose build-time font fetch failing (e.g. a
+// fonts.gstatic.com hiccup) took down the entire Vercel build. Switched
+// to literal CSS font-family strings + a Google Fonts stylesheet <link>
+// loaded at runtime in the browser (see googleFontsUrl.ts) — a fetch
+// failure there just falls back to the CSS fallback font instead of
+// failing the build.
+
+import { buildGoogleFontsUrl } from "./googleFontsUrl";
 import { DEFAULT_FONT_KEY } from "./fontPresets";
 
-// Server-only — used exclusively by src/app/site/[slug]/layout.tsx.
-// next/font/google fonts must be statically declared (the subsetting
-// happens at build time), so runtime "pick a Google Font by name"
-// isn't possible — instead every preset's fonts are pre-loaded here
-// once, and the layout just selects which pre-loaded family to apply
-// based on the website's font_key. Kept out of src/lib/fontPresets.ts
-// (which the client-side Design panel picker also imports) so that
-// picker doesn't pull nine font loaders into the dashboard bundle just
-// to show preset labels.
+interface FontSpec {
+  name: string;
+  weights: string[];
+  fallback: string;
+}
 
-const playfair = Playfair_Display({ subsets: ["latin"], weight: ["600", "700"] });
-const poppins = Poppins({ subsets: ["latin"], weight: ["600", "700"] });
-const merriweather = Merriweather({ subsets: ["latin"], weight: ["700"] });
-const montserrat = Montserrat({ subsets: ["latin"], weight: ["600", "700"] });
-const oswald = Oswald({ subsets: ["latin"], weight: ["500", "600", "700"] });
-const inter = Inter({ subsets: ["latin"] });
-const lato = Lato({ subsets: ["latin"], weight: ["400", "700"] });
-const nunito = Nunito({ subsets: ["latin"] });
-const roboto = Roboto({ subsets: ["latin"], weight: ["400", "700"] });
-
-const FONT_FAMILIES: Record<string, { heading: string; body: string }> = {
-  modern: { heading: poppins.style.fontFamily, body: inter.style.fontFamily },
-  classic: { heading: playfair.style.fontFamily, body: inter.style.fontFamily },
-  editorial: { heading: merriweather.style.fontFamily, body: lato.style.fontFamily },
-  minimal: { heading: montserrat.style.fontFamily, body: nunito.style.fontFamily },
-  bold: { heading: oswald.style.fontFamily, body: roboto.style.fontFamily },
+const FONT_SPECS: Record<string, FontSpec> = {
+  playfair: { name: "Playfair Display", weights: ["600", "700"], fallback: "Georgia, serif" },
+  poppins: { name: "Poppins", weights: ["600", "700"], fallback: "sans-serif" },
+  merriweather: { name: "Merriweather", weights: ["700"], fallback: "Georgia, serif" },
+  montserrat: { name: "Montserrat", weights: ["600", "700"], fallback: "sans-serif" },
+  oswald: { name: "Oswald", weights: ["500", "600", "700"], fallback: "sans-serif" },
+  inter: { name: "Inter", weights: ["400", "700"], fallback: "sans-serif" },
+  lato: { name: "Lato", weights: ["400", "700"], fallback: "sans-serif" },
+  nunito: { name: "Nunito", weights: ["400", "700"], fallback: "sans-serif" },
+  roboto: { name: "Roboto", weights: ["400", "700"], fallback: "sans-serif" },
 };
 
+const PRESETS: Record<string, { heading: string; body: string }> = {
+  modern: { heading: "poppins", body: "inter" },
+  classic: { heading: "playfair", body: "inter" },
+  editorial: { heading: "merriweather", body: "lato" },
+  minimal: { heading: "montserrat", body: "nunito" },
+  bold: { heading: "oswald", body: "roboto" },
+};
+
+function cssFamily(key: string): string {
+  const spec = FONT_SPECS[key];
+  return `'${spec.name}', ${spec.fallback}`;
+}
+
+function resolvePreset(fontKey: string | null | undefined) {
+  return PRESETS[fontKey ?? ""] ?? PRESETS[DEFAULT_FONT_KEY];
+}
+
 export function getSiteFontFamilies(fontKey: string | null | undefined): { heading: string; body: string } {
-  return FONT_FAMILIES[fontKey ?? ""] ?? FONT_FAMILIES[DEFAULT_FONT_KEY];
+  const preset = resolvePreset(fontKey);
+  return { heading: cssFamily(preset.heading), body: cssFamily(preset.body) };
+}
+
+/** The Google Fonts stylesheet URL for a site's chosen preset — render as <link rel="stylesheet" href={...} /> in the layout. */
+export function getSiteFontStylesheetUrl(fontKey: string | null | undefined): string {
+  const preset = resolvePreset(fontKey);
+  return buildGoogleFontsUrl([FONT_SPECS[preset.heading], FONT_SPECS[preset.body]]);
 }
