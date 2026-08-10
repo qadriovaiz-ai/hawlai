@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText, Radio } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
+import InstagramBusinessLoginConnect from "@/components/settings/InstagramBusinessLoginConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
 import WooCommerceConnect from "@/components/settings/WooCommerceConnect";
 import WebsiteConnect from "@/components/settings/WebsiteConnect";
@@ -192,6 +193,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           <SlackConnect />
+          <InstagramBusinessLoginConnect />
         </div>
 
         {/* Shopify */}

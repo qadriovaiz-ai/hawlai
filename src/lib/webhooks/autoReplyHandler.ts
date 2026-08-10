@@ -12,6 +12,22 @@ async function sendDmReply(pageAccessToken: string, recipientId: string, text: s
   if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send DM reply");
 }
 
+// Instagram Business Login uses a genuinely different API surface —
+// graph.instagram.com (not graph.facebook.com), Bearer auth header
+// (not an access_token query param), and the IG_ID/Instagram-scoped
+// IDs from that login flow, not Facebook Page IDs. Confirmed against
+// Meta's current Instagram Platform docs rather than assumed, since
+// getting this wrong fails silently (a 401 that just gets logged).
+async function sendInstagramDmReply(accessToken: string, igBusinessId: string, recipientId: string, text: string) {
+  const res = await fetch(`https://graph.instagram.com/v26.0/${igBusinessId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send Instagram DM reply");
+}
+
 async function sendCommentReply(pageAccessToken: string, commentId: string, text: string) {
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${commentId}/comments?access_token=${pageAccessToken}`, {
     method: "POST",
@@ -28,16 +44,41 @@ async function sendCommentReply(pageAccessToken: string, commentId: string, text
 // relevant toggle is off. Meta only allows a single Callback URL per
 // Page product, so this needs to live alongside leadgen processing on
 // the same URL rather than a separate endpoint.
+//
+// Handles TWO separate connection types sharing this one entry point:
+// Facebook Page-linked accounts (entry.id = Facebook Page ID, sends
+// via graph.facebook.com) and Instagram Business Login accounts
+// (entry.id = Instagram Business Account ID, sends via
+// graph.instagram.com with different auth) — these are genuinely
+// different Meta connections, not two names for the same thing, so a
+// dealership matches on exactly one of the two lookups below, never
+// both.
 export async function handleAutoReplyEntry(entry: any, supabase: any) {
-  const pageId: string | undefined = entry?.id;
-  if (!pageId) return;
+  const entryId: string | undefined = entry?.id;
+  if (!entryId) return;
 
-  const { data: dealership } = await supabase
+  let dealership = (await supabase
     .from("dealerships")
     .select("id, dealership_name, business_category, fb_page_access_token, dm_auto_reply_enabled, comment_auto_reply_enabled")
-    .eq("fb_page_id", pageId)
-    .maybeSingle();
-  if (!dealership || !dealership.fb_page_access_token) return;
+    .eq("fb_page_id", entryId)
+    .maybeSingle()).data;
+
+  let channel: "facebook" | "instagram" = "facebook";
+  if (!dealership) {
+    const igResult = await supabase
+      .from("dealerships")
+      .select("id, dealership_name, business_category, instagram_access_token, dm_auto_reply_enabled, comment_auto_reply_enabled")
+      .eq("instagram_business_id", entryId)
+      .maybeSingle();
+    if (igResult.data) {
+      dealership = igResult.data;
+      channel = "instagram";
+    }
+  }
+
+  if (!dealership) return;
+  const replyToken = channel === "instagram" ? dealership.instagram_access_token : dealership.fb_page_access_token;
+  if (!replyToken) return;
   if (!dealership.dm_auto_reply_enabled && !dealership.comment_auto_reply_enabled) return;
 
   const { data: brandProfile } = await supabase
@@ -70,7 +111,11 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       try {
         replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog);
         if (replyText) {
-          await sendDmReply(dealership.fb_page_access_token, senderId, replyText);
+          if (channel === "instagram") {
+            await sendInstagramDmReply(replyToken, entryId, senderId, replyText);
+          } else {
+            await sendDmReply(replyToken, senderId, replyText);
+          }
         } else {
           success = false;
           errorMsg = "No reply generated";
@@ -80,18 +125,22 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
         errorMsg = err.message;
       }
       await supabase.from("auto_reply_log").insert({
-        dealership_id: dealership.id, channel: "dm", source_id: senderId,
+        dealership_id: dealership.id, channel: `dm_${channel}`, source_id: senderId,
         incoming_text: text, reply_text: replyText, success, error: errorMsg,
       });
     }
   }
 
-  if (dealership.comment_auto_reply_enabled) {
+  // Comment replies stay Facebook-only for now — Instagram comment
+  // replies use yet another endpoint shape not built here yet; the
+  // DM path above is the one that matters for the Insta-seller
+  // product-question use case this was built for.
+  if (dealership.comment_auto_reply_enabled && channel === "facebook") {
     for (const change of entry?.changes ?? []) {
       if (change?.field !== "feed") continue;
       const value = change?.value;
       if (value?.item !== "comment" || value?.verb !== "add") continue;
-      if (value?.from?.id === pageId) continue;
+      if (value?.from?.id === entryId) continue;
 
       const commentId = value?.comment_id;
       const text = value?.message;
@@ -103,7 +152,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       try {
         replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog);
         if (replyText) {
-          await sendCommentReply(dealership.fb_page_access_token, commentId, replyText);
+          await sendCommentReply(replyToken, commentId, replyText);
         } else {
           success = false;
           errorMsg = "No reply generated";
