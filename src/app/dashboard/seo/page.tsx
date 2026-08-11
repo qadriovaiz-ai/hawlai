@@ -1,25 +1,42 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target } from "lucide-react";
+import Link from "next/link";
+import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target, Lock } from "lucide-react";
 import SeoToolkit from "@/components/seo/SeoToolkit";
 
 export default function SeoPage() {
   const [audit, setAudit] = useState<{ score: number; published: boolean; siteUrl: string | null; pages: { pageSlug: string; pageTitle: string; score: number; checks: { label: string; passed: boolean; detail: string }[] }[] } | null>(null);
   const [auditLoading, setAuditLoading] = useState(true);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [expandedPage, setExpandedPage] = useState<string | null>(null);
 
   const [cro, setCro] = useState<{ conversionRate: number | null; suggestions: { issue: string; fix: string; impact: string }[] } | null>(null);
   const [croLoading, setCroLoading] = useState(true);
+  const [croLocked, setCroLocked] = useState(false);
+  const [croError, setCroError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/seo/audit")
-      .then((res) => res.json())
-      .then(setAudit)
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) { setAuditError("Couldn't load your website health check."); return; }
+        setAudit(data);
+      })
+      .catch(() => setAuditError("Couldn't load your website health check."))
       .finally(() => setAuditLoading(false));
+
+    // /api/cro is gated to the Pro plan — a 403 here is expected for
+    // Free/Basic dealerships, not a bug, so it needs its own locked
+    // state rather than being treated like a generic fetch failure.
     fetch("/api/cro")
-      .then((res) => res.json())
-      .then(setCro)
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (res.status === 403) { setCroLocked(true); return; }
+        if (!res.ok || !data) { setCroError("Couldn't load conversion suggestions."); return; }
+        setCro(data);
+      })
+      .catch(() => setCroError("Couldn't load conversion suggestions."))
       .finally(() => setCroLoading(false));
   }, []);
 
@@ -101,6 +118,8 @@ export default function SeoPage() {
           <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
             <Loader2 className="w-4 h-4 animate-spin" /> Checking...
           </div>
+        ) : auditError ? (
+          <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> {auditError}</p>
         ) : audit ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
@@ -121,9 +140,9 @@ export default function SeoPage() {
             {!audit.published && (
               <p className="text-xs text-amber-500">Site isn't published yet — none of this is visible to Google until you publish.</p>
             )}
-            <p className="text-xs text-slate-400">Across {audit.pages.length} page{audit.pages.length !== 1 ? "s" : ""} on your live website:</p>
+            <p className="text-xs text-slate-400">Across {(audit.pages ?? []).length} page{(audit.pages ?? []).length !== 1 ? "s" : ""} on your live website:</p>
             <div className="space-y-2">
-              {audit.pages.map((p) => (
+              {(audit.pages ?? []).map((p) => (
                 <div key={p.pageSlug} className="border border-slate-200 rounded-lg overflow-hidden">
                   <button
                     onClick={() => setExpandedPage(expandedPage === p.pageSlug ? null : p.pageSlug)}
@@ -164,16 +183,23 @@ export default function SeoPage() {
           <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
             <Loader2 className="w-4 h-4 animate-spin" /> Checking...
           </div>
+        ) : croLocked ? (
+          <div className="flex items-center justify-between gap-2 bg-slate-100 rounded-lg p-3">
+            <span className="text-xs text-slate-500 flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Conversion Optimization needs the Pro plan or higher</span>
+            <Link href="/dashboard/billing/plans" className="text-xs text-brand-400 hover:underline shrink-0">Upgrade</Link>
+          </div>
+        ) : croError ? (
+          <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> {croError}</p>
         ) : cro ? (
           <div className="space-y-3">
             {cro.conversionRate !== null && (
               <p className="text-xs text-slate-500">Roughly {cro.conversionRate} leads per launched campaign</p>
             )}
-            {cro.suggestions.length === 0 ? (
+            {(cro.suggestions ?? []).length === 0 ? (
               <p className="text-sm text-green-400">No obvious conversion issues found right now.</p>
             ) : (
               <div className="space-y-2.5">
-                {cro.suggestions.map((s, i) => (
+                {(cro.suggestions ?? []).map((s, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <span
                       className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${
