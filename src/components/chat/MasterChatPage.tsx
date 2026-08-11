@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown, Copy, Check, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -24,6 +24,7 @@ interface Artifact {
   html?: string;
   fields?: { label: string; value: string }[];
   groups?: { heading: string; items: { label: string; note?: string }[] }[];
+  draft?: { heading: string; subheading?: string; body: string; wordCount: number };
   departmentHref?: string;
 }
 
@@ -300,6 +301,7 @@ export default function MasterChatPage({
 }
 
 function ArtifactCard({ artifact }: { artifact: Artifact }) {
+  const [copied, setCopied] = useState(false);
   const iconMap = { document: FileText, record: CheckCircle2, metric: BarChart3, link: Link2 } as const;
   const Icon = iconMap[artifact.kind as keyof typeof iconMap] ?? FileText;
   const colorMap = {
@@ -308,6 +310,20 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
     metric: "text-amber-600 bg-amber-500/10 border-amber-400/20",
     link: "text-brand-600 bg-brand-500/10 border-brand-400/20",
   } as const;
+
+  function copyDraft() {
+    if (!artifact.draft) return;
+    navigator.clipboard.writeText(artifact.draft.body);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  // extractDraft falls back to the artifact's own label as the heading
+  // when the result has no title-ish field of its own — showing that
+  // same text twice (once as the card title, once as a "heading" inside
+  // the body) would just be noise, so only show it as a distinct line
+  // when it actually differs.
+  const draftHeadingDiffers = artifact.draft && artifact.draft.heading.trim().toLowerCase() !== artifact.label.trim().toLowerCase();
 
   return (
     <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white overflow-hidden">
@@ -343,6 +359,33 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {artifact.draft && (
+            <div className="mt-1.5">
+              <span className="inline-block text-[9.5px] font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-600">
+                {artifact.draft.wordCount} word{artifact.draft.wordCount === 1 ? "" : "s"}
+              </span>
+              {draftHeadingDiffers && <p className="text-xs font-bold text-slate-800 mt-1.5">{artifact.draft.heading}</p>}
+              <p className="text-[11px] text-slate-600 leading-relaxed mt-1 whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:6] overflow-hidden">
+                {artifact.draft.body}
+              </p>
+              <div className="flex items-center gap-1.5 mt-2">
+                <button
+                  onClick={copyDraft}
+                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-brand-500/10 text-brand-600 hover:bg-brand-500/20 transition-colors flex items-center gap-1"
+                >
+                  {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {copied ? "Copied" : "Copy"}
+                </button>
+                {artifact.departmentHref && (
+                  <a
+                    href={artifact.departmentHref}
+                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-1"
+                  >
+                    <Pencil className="w-3 h-3" /> Edit
+                  </a>
+                )}
+              </div>
             </div>
           )}
         </div>

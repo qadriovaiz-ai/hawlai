@@ -1002,6 +1002,7 @@ export interface Artifact {
   html?: string; // 3d_scene inline content, avoids a second fetch
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
   groups?: { heading: string; items: { label: string; note?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
+  draft?: { heading: string; subheading?: string; body: string; wordCount: number }; // a single piece of generated long-form content — caption, email, script, blog post
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
 }
 
@@ -1053,15 +1054,6 @@ const DEPARTMENT_HREF: Record<string, string> = {
   get_report_links: "/dashboard/reports",
 };
 
-// Generic fallback for tools whose result shape isn't hand-mapped below
-// (mostly the ~14 "generate_X" content tools, whose exact field names
-// live inside their individual agent functions rather than here). Rather
-// than reading and hand-mapping every one of those agent files' return
-// shapes, this pulls a reasonable one-line summary using common field
-// names first, then falls back to any short-ish string field, so every
-// tool produces SOMETHING visible instead of only the ones worth the
-// bespoke handling below. This is a deliberate quality/coverage
-// trade-off — worth revisiting per-tool later if a summary reads oddly.
 // Groups a keyword-research-style result into sections by search intent,
 // for a proper "Informational" / "Transactional" card instead of a flat
 // dump. Anything without a recognized intent lands in "Other" rather
@@ -1083,6 +1075,10 @@ function groupKeywordsByIntent(keywords: { keyword?: string; intent?: string; no
   return groups;
 }
 
+// Generic fallback for tools whose result shape isn't hand-mapped below.
+// Pulls a reasonable one-line summary using common field names first,
+// then falls back to any short-ish string field, so every tool produces
+// SOMETHING visible instead of nothing.
 function genericSummary(result: any): string {
   if (typeof result?.note === "string") return result.note;
   const titleish = result?.headline ?? result?.title ?? result?.subject ?? result?.name;
@@ -1092,6 +1088,69 @@ function genericSummary(result: any): string {
     if (typeof v === "string" && v.length > 15 && v.length < 280) return v;
   }
   return "Done — view the full result.";
+}
+
+// The content-generation tools (generate_content, generate_email,
+// generate_whatsapp, generate_social_management, generate_video_task,
+// and the full-blog-post path of generate_seo_keywords) each have their
+// own agent file with its own free-form Claude-defined JSON shape —
+// contentMarketingAgent.ts alone has ~20 different content-type shapes.
+// Rather than hand-map every one, this dispatcher recognizes the two
+// shape FAMILIES they actually fall into: a list of short items
+// (slides/hooks/ctas/days/flow/messages/etc — reuses the same grouped-
+// list card as keyword research) or a single piece of long-form text
+// (caption/script/email body/etc — flattened into one readable draft).
+const LIST_SHAPE_KEYS = ["slides", "days", "hooks", "ctas", "ideas", "sections", "tips", "emails", "messages", "flow", "guidelines", "escalateToDm"];
+
+function deriveContentArtifact(label: string, result: any, departmentHref: string | undefined): Artifact {
+  if (!result || typeof result !== "object") {
+    return { kind: "document", label, summary: genericSummary(result), departmentHref };
+  }
+
+  const listKey = LIST_SHAPE_KEYS.find((k) => Array.isArray(result[k]) && result[k].length > 0);
+  if (listKey) {
+    const items: any[] = result[listKey];
+    const groupItems = items.map((item) => {
+      if (typeof item === "string") return { label: item };
+      const label = item.headline ?? item.topic ?? item.trigger ?? item.subject ?? item.concept ?? item.text ?? item.day ?? item.title ?? "Item";
+      const note = item.supporting ?? item.body ?? item.angle ?? item.response ?? item.message ?? item.hook ?? item.description ?? item.caption ?? undefined;
+      return { label: String(label), note: note !== undefined ? String(note) : undefined };
+    });
+    const heading = listKey.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+    return { kind: "document", label, groups: [{ heading, items: groupItems }], departmentHref };
+  }
+
+  const draft = extractDraft(result, label);
+  if (draft) return { kind: "document", label, draft, departmentHref };
+
+  return { kind: "document", label, summary: genericSummary(result), departmentHref };
+}
+
+// Flattens a single-piece-of-content object (caption+hashtags, subject+
+// body, headline+subheadline+bullets+cta, etc.) into one readable draft
+// — a heading pulled from whichever title-ish field exists, and a body
+// made of every other string field joined with spacing, in insertion
+// order (which for Claude's JSON output tends to already read sensibly
+// top to bottom: hook before body before CTA, subject before body, etc).
+function extractDraft(result: Record<string, any>, fallbackHeading: string): { heading: string; subheading?: string; body: string; wordCount: number } | null {
+  const headingKeys = ["headline", "title", "subject", "heroHeadline", "hook"];
+  const headingField = headingKeys.find((k) => typeof result[k] === "string");
+  const heading = headingField ? result[headingField] : fallbackHeading;
+  const skip = new Set([headingField, "note", "_fallback", "hashtags"].filter(Boolean));
+
+  const bodyParts: string[] = [];
+  for (const [key, val] of Object.entries(result)) {
+    if (skip.has(key)) continue;
+    if (typeof val === "string" && val.trim()) bodyParts.push(val.trim());
+    else if (Array.isArray(val) && val.every((v) => typeof v === "string") && val.length > 0) bodyParts.push(val.join(", "));
+  }
+  const hashtags = Array.isArray(result.hashtags) ? result.hashtags.map((h: string) => (h.startsWith("#") ? h : `#${h}`)).join(" ") : null;
+  if (hashtags) bodyParts.push(hashtags);
+
+  const body = bodyParts.join("\n\n");
+  if (!body) return null;
+  const wordCount = body.split(/\s+/).filter(Boolean).length;
+  return { heading, body, wordCount };
 }
 
 // Turns a raw tool-execution result into something the chat feed can
@@ -1178,6 +1237,26 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
         return { kind: "document", label: "Competitor Keyword Research", groups: groupKeywordsByIntent(result.keywords), departmentHref };
       }
       return { kind: "document", label: "SEO", summary: genericSummary(result), departmentHref };
+    }
+
+    // ---- Content generation: each has ~5-20 shapes depending on task
+    // type, so these all route through deriveContentArtifact rather
+    // than being hand-mapped one by one ----
+    case "generate_content":
+      return deriveContentArtifact(input?.contentType ? String(input.contentType).replace(/_/g, " ") : "Content", result, departmentHref);
+    case "generate_email":
+      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Email", result, departmentHref);
+    case "generate_whatsapp":
+      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "WhatsApp message", result, departmentHref);
+    case "generate_social_management":
+      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Social content", result, departmentHref);
+    case "generate_video_task":
+      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Video content", result, departmentHref);
+    case "generate_seo_keywords": {
+      if (input?.writeFullBlogPost && typeof result?.content === "string") {
+        return { kind: "document", label: "Blog Post", draft: { heading: result.title ?? "Blog Post", body: result.content, wordCount: result.content.split(/\s+/).filter(Boolean).length }, departmentHref };
+      }
+      return { kind: "document", label: "SEO Keywords", summary: genericSummary(result), departmentHref };
     }
 
     default:
