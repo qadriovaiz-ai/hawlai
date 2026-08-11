@@ -328,6 +328,31 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
   // when it actually differs.
   const draftHeadingDiffers = artifact.draft && artifact.draft.heading.trim().toLowerCase() !== artifact.label.trim().toLowerCase();
 
+  // Action confirmations that already have a natural-language sentence
+  // (create_discount_code, assign_task, trigger_call, etc.) read better
+  // as a single checkmark + sentence than the generic icon-box + small
+  // label + separate fields list used for every other artifact kind.
+  if (artifact.kind === "record" && artifact.summary) {
+    return (
+      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white overflow-hidden">
+        <div className="flex items-start gap-2 px-3 py-3">
+          <div className="w-[18px] h-[18px] rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 mt-0.5">
+            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+          </div>
+          <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
+        </div>
+        {artifact.departmentHref && (
+          <a
+            href={artifact.departmentHref}
+            className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium text-brand-600 bg-brand-500/5 border-t border-slate-100 hover:bg-brand-500/10 transition-colors"
+          >
+            Open in department <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white overflow-hidden">
       <div className="flex items-start gap-2.5 px-3 py-2.5">

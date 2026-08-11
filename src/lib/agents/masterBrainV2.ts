@@ -1186,22 +1186,24 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
     case "edit_canvas_design":
       return result.designId ? { kind: "visual", type: "canvas_design", label: "Design", url: `/design-editor?id=${result.designId}`, departmentHref: `/design-editor?id=${result.designId}` } : null;
 
-    // ---- Record: something concrete got created/changed — show the
-    // key facts, not just a text sentence ----
+    // ---- Record: something concrete got created/changed. Every one of
+    // these tools already writes a natural-language `note` for the
+    // model to relay — reused here as the card's sentence instead of a
+    // separate fields list repeating the same facts in a colder shape.
     case "create_discount_code":
-      return { kind: "record", label: "Discount code created", fields: [{ label: "Code", value: result.code }], departmentHref };
+      return { kind: "record", label: "Discount code created", summary: result.note, departmentHref };
     case "assign_task":
-      return { kind: "record", label: "Task assigned", fields: [{ label: "Assigned to", value: result.assignedTo }], departmentHref };
+      return { kind: "record", label: "Task assigned", summary: result.note, departmentHref };
     case "assign_lead":
-      return { kind: "record", label: "Lead reassigned", fields: [{ label: "Lead", value: result.leadName }, { label: "Now with", value: result.assignedTo }], departmentHref };
+      return { kind: "record", label: "Lead reassigned", summary: result.note, departmentHref };
     case "add_lead":
       return { kind: "record", label: "Lead added", departmentHref };
     case "add_product":
       return { kind: "record", label: "Product added", summary: result.note, departmentHref };
     case "trigger_call":
-      return { kind: "record", label: "Call placed", fields: [{ label: "To", value: result.calledLead }], departmentHref };
+      return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
     case "send_email":
-      return { kind: "record", label: "Email sent", fields: [{ label: "To", value: result.sentTo }], departmentHref };
+      return { kind: "record", label: "Email sent", summary: result.note, departmentHref };
     case "create_workflow":
       return { kind: "record", label: "Automation workflow created", fields: [{ label: "Status", value: result.enabled ? "Enabled" : "Created, not enabled yet" }], departmentHref };
     case "set_automation_toggle":
