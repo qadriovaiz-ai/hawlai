@@ -147,7 +147,7 @@ export default async function DashboardOverviewPage() {
       <OpportunityFeed initial={opportunities} />
 
       <Link
-        href="/dashboard/marketing"
+        href="/dashboard/marketing?tab=launch"
         className="flex items-center gap-3 bg-brand-500/10 border border-brand-700/40 rounded-xl p-4 hover:bg-brand-500/15 transition-colors"
       >
         <div className="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center shrink-0">

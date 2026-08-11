@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDateTime, getAppointmentStatusColor } from "@/lib/utils";
 import UpdateAppointmentStatus from "@/components/appointments/UpdateAppointmentStatus";
+import BookingLinkCard from "@/components/appointments/BookingLinkCard";
 
 export default async function AppointmentsPage() {
   const supabase = await createClient();
@@ -29,6 +30,8 @@ export default async function AppointmentsPage() {
         <h1 className="text-2xl font-bold text-slate-900">Appointments</h1>
         <p className="text-slate-500 text-sm mt-0.5">Scheduled test rides and showroom visits</p>
       </div>
+
+      <BookingLinkCard />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

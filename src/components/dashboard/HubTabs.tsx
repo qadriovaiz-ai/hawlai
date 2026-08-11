@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { Suspense, useState, ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Tab {
@@ -10,19 +11,40 @@ interface Tab {
   content: ReactNode;
 }
 
-export default function HubTabs({ title, description, icon, tabs }: {
+interface HubTabsProps {
   title: string;
   description: string;
   icon: ReactNode;
   tabs: Tab[];
-}) {
-  const [activeKey, setActiveKey] = useState(tabs[0]?.key);
+}
+
+// useSearchParams() requires a Suspense ancestor — split into an outer
+// shell + inner component rather than pushing that requirement onto
+// every caller (marketing/insights/leads-hub pages).
+export default function HubTabs(props: HubTabsProps) {
+  return (
+    <Suspense fallback={null}>
+      <HubTabsInner {...props} />
+    </Suspense>
+  );
+}
+
+function HubTabsInner({ title, description, icon, tabs }: HubTabsProps) {
+  // Lets a link deep-link straight to a specific tab (e.g.
+  // /dashboard/marketing?tab=launch) instead of always landing on
+  // tabs[0] — used by Home's "Launch New Ad" CTA and the retired
+  // crm-marketing redirect, so the destination actually matches what
+  // the link promised.
+  const requestedTab = useSearchParams().get("tab");
+  const [activeKey, setActiveKey] = useState(
+    tabs.some((t) => t.key === requestedTab) ? (requestedTab as string) : tabs[0]?.key
+  );
   const active = tabs.find((t) => t.key === activeKey) ?? tabs[0];
 
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+        <div className="w-10 h-10 bg-brand-500/20 rounded-xl flex items-center justify-center">
           {icon}
         </div>
         <div>
