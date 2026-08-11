@@ -1001,6 +1001,7 @@ export interface Artifact {
   url?: string; // visual: direct viewable src. link: the URL to open.
   html?: string; // 3d_scene inline content, avoids a second fetch
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
+  groups?: { heading: string; items: { label: string; note?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
 }
 
@@ -1061,6 +1062,27 @@ const DEPARTMENT_HREF: Record<string, string> = {
 // tool produces SOMETHING visible instead of only the ones worth the
 // bespoke handling below. This is a deliberate quality/coverage
 // trade-off — worth revisiting per-tool later if a summary reads oddly.
+// Groups a keyword-research-style result into sections by search intent,
+// for a proper "Informational" / "Transactional" card instead of a flat
+// dump. Anything without a recognized intent lands in "Other" rather
+// than being silently dropped.
+function groupKeywordsByIntent(keywords: { keyword?: string; intent?: string; note?: string }[]): { heading: string; items: { label: string; note?: string }[] }[] {
+  const buckets: Record<"informational" | "transactional" | "other", { label: string; note?: string }[]> = {
+    informational: [], transactional: [], other: [],
+  };
+  for (const k of keywords) {
+    if (!k?.keyword) continue;
+    const intent = (k.intent ?? "").toLowerCase();
+    const bucket = intent.startsWith("info") ? "informational" : intent.startsWith("trans") ? "transactional" : "other";
+    buckets[bucket].push({ label: k.keyword, note: k.note });
+  }
+  const groups: { heading: string; items: { label: string; note?: string }[] }[] = [];
+  if (buckets.informational.length) groups.push({ heading: "Informational", items: buckets.informational });
+  if (buckets.transactional.length) groups.push({ heading: "Transactional", items: buckets.transactional });
+  if (buckets.other.length) groups.push({ heading: "Other", items: buckets.other });
+  return groups;
+}
+
 function genericSummary(result: any): string {
   if (typeof result?.note === "string") return result.note;
   const titleish = result?.headline ?? result?.title ?? result?.subject ?? result?.name;
@@ -1075,7 +1097,7 @@ function genericSummary(result: any): string {
 // Turns a raw tool-execution result into something the chat feed can
 // show inline (or the workspace panel, for visual kinds), without the
 // frontend needing to know each tool's individual response shape.
-function extractArtifact(toolName: string, result: any): Artifact | null {
+function extractArtifact(toolName: string, input: any, result: any): Artifact | null {
   if (!result || result.error) return null;
   const departmentHref = DEPARTMENT_HREF[toolName];
 
@@ -1151,6 +1173,13 @@ function extractArtifact(toolName: string, result: any): Artifact | null {
     case "get_analytics_summary":
       return { kind: "metric", label: "Campaign performance", summary: genericSummary(result), departmentHref };
 
+    case "generate_seo": {
+      if (input?.taskType === "competitor_keywords" && Array.isArray(result?.keywords)) {
+        return { kind: "document", label: "Competitor Keyword Research", groups: groupKeywordsByIntent(result.keywords), departmentHref };
+      }
+      return { kind: "document", label: "SEO", summary: genericSummary(result), departmentHref };
+    }
+
     default:
       // Every remaining tool (generate_content, generate_seo,
       // generate_marketing_strategy, research_*, get_growth_advice,
@@ -1209,7 +1238,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
 - You CANNOT launch real ads or spend money — that needs the person's explicit approval in Ads Manager. If asked, generate the plan/draft with your tools and clearly tell them where to go review and approve it.
-- Be conversational and concise — you're texting with a business owner, not writing a report. Don't dump raw JSON at them; summarize the useful parts in plain language. Concise doesn't mean shallow — a sharp two-sentence read of the situation beats a bland five-paragraph one.
+- Be conversational and concise — you're texting with a business owner, not writing a report. Don't dump raw JSON at them, and don't enumerate a tool's list/array results (keywords, suggestions, checklist items, etc.) in your text either — those already render as a proper card right under your reply. Just say how many you found and the one-line takeaway (e.g. "Found 10 competitor keywords, split evenly between research and buy-intent — see the card below"), never spell out each item's fields as key: value text. Concise doesn't mean shallow — a sharp two-sentence read of the situation beats a bland five-paragraph one.
 - If a request is ambiguous, ask ONE clarifying question rather than guessing wildly, unless a reasonable default is obvious.`;
 
   const messages: any[] = [...history.slice(-10), { role: "user", content: message }];
@@ -1258,7 +1287,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       } catch (err: any) {
         result = { error: err.message };
       }
-      const artifact = extractArtifact(block.name, result);
+      const artifact = extractArtifact(block.name, block.input, result);
       if (artifact) artifacts.push(artifact);
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result).slice(0, 4000) });
     }

@@ -23,6 +23,7 @@ interface Artifact {
   url?: string;
   html?: string;
   fields?: { label: string; value: string }[];
+  groups?: { heading: string; items: { label: string; note?: string }[] }[];
   departmentHref?: string;
 }
 
@@ -326,6 +327,23 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
                 </div>
               ))}
             </dl>
+          )}
+          {artifact.groups && artifact.groups.length > 0 && (
+            <div className="mt-2 space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+              {artifact.groups.map((g, gi) => (
+                <div key={gi}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">{g.heading}</p>
+                  <div className="space-y-1">
+                    {g.items.map((item, ii) => (
+                      <div key={ii} className="text-[11px] bg-slate-50 rounded-md px-2 py-1.5">
+                        <p className="font-medium text-slate-700">{item.label}</p>
+                        {item.note && <p className="text-slate-500 mt-0.5">{item.note}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
