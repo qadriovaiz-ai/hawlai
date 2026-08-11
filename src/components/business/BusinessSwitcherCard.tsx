@@ -69,8 +69,8 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
   return (
     <div className="card p-5 space-y-3">
       <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 bg-purple-500/20 rounded-lg flex items-center justify-center shrink-0">
-          <Building2 className="w-4 h-4 text-purple-400" />
+        <div className="w-9 h-9 bg-brand-500/20 rounded-lg flex items-center justify-center shrink-0">
+          <Building2 className="w-4 h-4 text-brand-400" />
         </div>
         <div>
           <p className="text-sm font-semibold text-slate-800">Your Businesses</p>
@@ -80,7 +80,7 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
 
       <div className="space-y-1.5">
         {businesses.map((b) => (
-          <div key={b.id} className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5 gap-2">
+          <div key={b.id} className="flex items-center justify-between bg-slate-200 rounded-lg p-2.5 gap-2">
             <div className="min-w-0">
               <p className="text-sm text-slate-700 truncate">{b.dealership_name}</p>
               <p className="text-xs text-slate-400 truncate">{b.city ?? "—"} · {b.plan}</p>
@@ -99,7 +99,7 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
       {error && <p className="text-xs text-red-500">{error}</p>}
 
       {!multiBusinessAllowed ? (
-        <div className="flex items-center justify-between gap-2 bg-slate-100 rounded-lg p-2.5">
+        <div className="flex items-center justify-between gap-2 bg-slate-200 rounded-lg p-2.5">
           <span className="flex items-center gap-1.5 text-xs text-slate-500"><Lock className="w-3.5 h-3.5" /> Adding another business needs the Max plan</span>
           <Link href="/dashboard/billing" className="text-xs text-brand-400 hover:underline shrink-0">Upgrade</Link>
         </div>
@@ -110,14 +110,14 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
             placeholder="Business name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
+            className="input"
           />
           <input
             type="text"
             placeholder="City"
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
+            className="input"
           />
           <div className="flex gap-2">
             <button type="submit" disabled={adding || !name.trim()} className="btn-primary text-xs flex-1 justify-center">
