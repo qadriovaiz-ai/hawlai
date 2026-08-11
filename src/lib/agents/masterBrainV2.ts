@@ -1094,34 +1094,41 @@ function genericSummary(result: any): string {
   return "Done — view the full result.";
 }
 
-// The content-generation tools (generate_content, generate_email,
-// generate_whatsapp, generate_social_management, generate_video_task,
-// and the full-blog-post path of generate_seo_keywords) each have their
-// own agent file with its own free-form Claude-defined JSON shape —
-// contentMarketingAgent.ts alone has ~20 different content-type shapes.
-// Rather than hand-map every one, this dispatcher recognizes the two
-// shape FAMILIES they actually fall into: a list of short items
-// (slides/hooks/ctas/days/flow/messages/etc — reuses the same grouped-
-// list card as keyword research) or a single piece of long-form text
-// (caption/script/email body/etc — flattened into one readable draft).
-const LIST_SHAPE_KEYS = ["slides", "days", "hooks", "ctas", "ideas", "sections", "tips", "emails", "messages", "flow", "guidelines", "escalateToDm"];
-
+// The content-generation AND research/list tools (generate_content,
+// generate_email, generate_whatsapp, generate_social_management,
+// generate_video_task, generate_seo_keywords, research_competitor,
+// research_market, get_growth_advice, generate_cro_suggestions) each
+// have their own agent file with its own free-form Claude-defined JSON
+// shape — contentMarketingAgent.ts alone has ~20 different content-type
+// shapes. Rather than hand-map every one, this dispatcher recognizes
+// the two shape FAMILIES they actually fall into: one or more lists of
+// short items (slides/hooks/gapsFound/opportunities/whatever the array
+// field is actually called — reuses the same grouped-list card as
+// keyword research, one group per array field found, not just the
+// first) or a single piece of long-form text with no lists at all
+// (caption/script/email body/research narrative — flattened into one
+// readable draft).
 function deriveContentArtifact(label: string, result: any, departmentHref: string | undefined): Artifact {
   if (!result || typeof result !== "object") {
     return { kind: "document", label, summary: genericSummary(result), departmentHref };
   }
 
-  const listKey = LIST_SHAPE_KEYS.find((k) => Array.isArray(result[k]) && result[k].length > 0);
-  if (listKey) {
-    const items: any[] = result[listKey];
-    const groupItems = items.map((item) => {
-      if (typeof item === "string") return { label: item };
-      const label = item.headline ?? item.topic ?? item.trigger ?? item.subject ?? item.concept ?? item.text ?? item.day ?? item.title ?? "Item";
-      const note = item.supporting ?? item.body ?? item.angle ?? item.response ?? item.message ?? item.hook ?? item.description ?? item.caption ?? undefined;
-      return { label: String(label), note: note !== undefined ? String(note) : undefined };
+  const listKeys = Object.keys(result).filter((k) => Array.isArray(result[k]) && result[k].length > 0);
+  if (listKeys.length > 0) {
+    const groups = listKeys.map((key) => {
+      const items: any[] = result[key];
+      const groupItems = items.map((item) => {
+        if (typeof item !== "object" || item === null) return { label: String(item) };
+        const itemLabel = item.headline ?? item.topic ?? item.trigger ?? item.subject ?? item.concept ?? item.text ?? item.day ?? item.title
+          ?? item.opportunity ?? item.tactic ?? item.issue ?? item.item ?? item.action ?? item.suggestion ?? "Item";
+        const note = item.supporting ?? item.body ?? item.angle ?? item.response ?? item.message ?? item.hook ?? item.description ?? item.caption
+          ?? item.why ?? item.fix ?? item.howTo ?? item.reasoning ?? undefined;
+        return { label: String(itemLabel), note: note !== undefined ? String(note) : undefined };
+      });
+      const heading = key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+      return { heading, items: groupItems };
     });
-    const heading = listKey.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
-    return { kind: "document", label, groups: [{ heading, items: groupItems }], departmentHref };
+    return { kind: "document", label, groups, departmentHref };
   }
 
   const draft = extractDraft(result, label);
@@ -1136,6 +1143,8 @@ function deriveContentArtifact(label: string, result: any, departmentHref: strin
 // made of every other string field joined with spacing, in insertion
 // order (which for Claude's JSON output tends to already read sensibly
 // top to bottom: hook before body before CTA, subject before body, etc).
+// Only reached when the result has no array fields — deriveContentArtifact
+// routes those through the groups path above instead.
 function extractDraft(result: Record<string, any>, fallbackHeading: string): { heading: string; subheading?: string; body: string; wordCount: number } | null {
   const headingKeys = ["headline", "title", "subject", "heroHeadline", "hook"];
   const headingField = headingKeys.find((k) => typeof result[k] === "string");
@@ -1146,7 +1155,6 @@ function extractDraft(result: Record<string, any>, fallbackHeading: string): { h
   for (const [key, val] of Object.entries(result)) {
     if (skip.has(key)) continue;
     if (typeof val === "string" && val.trim()) bodyParts.push(val.trim());
-    else if (Array.isArray(val) && val.every((v) => typeof v === "string") && val.length > 0) bodyParts.push(val.join(", "));
   }
   const hashtags = Array.isArray(result.hashtags) ? result.hashtags.map((h: string) => (h.startsWith("#") ? h : `#${h}`)).join(" ") : null;
   if (hashtags) bodyParts.push(hashtags);
@@ -1259,8 +1267,11 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
 
     case "get_growth_advice": {
       // Only the forecast kind is a metric — opportunities/budget/
-      // expansion are item lists, handled separately (task 27).
-      if (input?.kind !== "forecast") return { kind: "document", label: "Growth Advice", summary: genericSummary(result), departmentHref };
+      // expansion are item lists.
+      if (input?.kind !== "forecast") {
+        const label = input?.kind === "opportunities" ? "Growth Opportunities" : input?.kind === "budget" ? "Budget Recommendations" : "Expansion Strategy";
+        return deriveContentArtifact(label, result, departmentHref);
+      }
       const trendMap: Record<string, "up" | "down" | "flat"> = { growing: "up", declining: "down", flat: "flat" };
       return {
         kind: "metric", label: "Revenue Forecast",
@@ -1305,8 +1316,14 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       if (input?.writeFullBlogPost && typeof result?.content === "string") {
         return { kind: "document", label: "Blog Post", draft: { heading: result.title ?? "Blog Post", body: result.content, wordCount: result.content.split(/\s+/).filter(Boolean).length }, departmentHref };
       }
-      return { kind: "document", label: "SEO Keywords", summary: genericSummary(result), departmentHref };
+      return deriveContentArtifact("SEO Keyword Ideas", result, departmentHref);
     }
+    case "research_competitor":
+      return deriveContentArtifact(`Competitor Research${input?.competitorName ? `: ${input.competitorName}` : ""}`, result, departmentHref);
+    case "research_market":
+      return deriveContentArtifact("Market Research", result, departmentHref);
+    case "generate_cro_suggestions":
+      return deriveContentArtifact("CRO Suggestions", result, departmentHref);
 
     // ---- Ad copy: multiple candidate variants worth comparing side by
     // side rather than reading as one blob ----
