@@ -46,24 +46,43 @@ export async function triggerVapiCall(
   if (!lead.phone) return { success: false, error: "Lead has no phone number" };
 
   const apiKey = process.env.VAPI_API_KEY;
-  const assistantId = process.env.VAPI_ASSISTANT_ID;
-  const phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID;
-  if (!apiKey || !assistantId || !phoneNumberId) {
-    return { success: false, error: "Vapi not fully configured yet — VAPI_ASSISTANT_ID/VAPI_PHONE_NUMBER_ID not set." };
+  if (!apiKey) {
+    return { success: false, error: "Vapi not configured yet — VAPI_API_KEY not set." };
   }
 
   // Real business context for the script — not fabricated. Pulls the
   // same dealership_name/business_category/tone_of_voice fields every
   // other department already uses, plus the lead's own real
-  // qualification_reason from a prior interaction if one exists.
-  let callBody: Record<string, any> = { assistantId };
+  // qualification_reason from a prior interaction if one exists. Also
+  // carries this dealership's dedicated vapi_phone_number_id/
+  // vapi_assistant_id, if an admin has assigned one (see migration
+  // 096_dedicated_phone_number.sql) — null on both is the normal case
+  // today (every business shares the platform default) until real
+  // numbers can be provisioned.
+  let dealership: { dealership_name: string; business_category: string | null; vapi_phone_number_id: string | null; vapi_assistant_id: string | null } | null = null;
+  let brandProfile: { tone_of_voice: string | null } | null = null;
+  let leadRecord: { qualification_reason: string | null } | null = null;
   try {
-    const [{ data: dealership }, { data: brandProfile }, { data: leadRecord }] = await Promise.all([
-      serviceClient.from("dealerships").select("dealership_name, business_category").eq("id", lead.dealership_id).single(),
+    const [dealershipRes, brandProfileRes, leadRecordRes] = await Promise.all([
+      serviceClient.from("dealerships").select("dealership_name, business_category, vapi_phone_number_id, vapi_assistant_id").eq("id", lead.dealership_id).single(),
       serviceClient.from("brand_profiles").select("tone_of_voice").eq("dealership_id", lead.dealership_id).maybeSingle(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
     ]);
+    dealership = dealershipRes.data;
+    brandProfile = brandProfileRes.data;
+    leadRecord = leadRecordRes.data;
+  } catch (err: any) {
+    console.error("[vapi-call] failed loading dealership context, falling back to platform defaults:", err.message);
+  }
 
+  const assistantId = dealership?.vapi_assistant_id || process.env.VAPI_ASSISTANT_ID;
+  const phoneNumberId = dealership?.vapi_phone_number_id || process.env.VAPI_PHONE_NUMBER_ID;
+  if (!assistantId || !phoneNumberId) {
+    return { success: false, error: "Vapi not fully configured yet — VAPI_ASSISTANT_ID/VAPI_PHONE_NUMBER_ID not set." };
+  }
+
+  let callBody: Record<string, any> = { assistantId };
+  try {
     const baseAssistant = await fetchBaseAssistantConfig(apiKey, assistantId);
     if (baseAssistant && dealership) {
       const systemPrompt = buildDynamicSystemPrompt({

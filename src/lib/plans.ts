@@ -31,6 +31,7 @@ export interface PlanLimits {
   retargeting: boolean;
   threeDStudio: boolean;
   multiBusiness: boolean;
+  dedicatedPhoneNumber: boolean;
 }
 
 export const PLAN_LABELS: Record<PlanKey, string> = {
@@ -68,6 +69,7 @@ const FREE_FALLBACK: PlanLimits = {
   retargeting: false,
   threeDStudio: false,
   multiBusiness: false,
+  dedicatedPhoneNumber: false,
 };
 
 interface PlanLimitsRow {
@@ -90,6 +92,7 @@ interface PlanLimitsRow {
   retargeting: boolean;
   three_d_studio: boolean;
   multi_business: boolean;
+  dedicated_phone_number: boolean;
 }
 
 function mapRow(row: PlanLimitsRow): PlanLimits {
@@ -116,6 +119,7 @@ function mapRow(row: PlanLimitsRow): PlanLimits {
     retargeting: row.retargeting,
     threeDStudio: row.three_d_studio,
     multiBusiness: row.multi_business,
+    dedicatedPhoneNumber: row.dedicated_phone_number,
   };
 }
 
@@ -145,7 +149,8 @@ export type GatedFeatureKey =
   | "affiliateMarketing"
   | "retargeting"
   | "threeDStudio"
-  | "multiBusiness";
+  | "multiBusiness"
+  | "dedicatedPhoneNumber";
 
 export const GATED_FEATURE_LABELS: Record<GatedFeatureKey, string> = {
   whatsappAutomation: "WhatsApp Automation",
@@ -158,6 +163,7 @@ export const GATED_FEATURE_LABELS: Record<GatedFeatureKey, string> = {
   retargeting: "Retargeting",
   threeDStudio: "3D Studio",
   multiBusiness: "Multi-Business",
+  dedicatedPhoneNumber: "Dedicated Phone Number",
 };
 
 // The lowest plan that unlocks each feature — must stay in sync with the
@@ -173,6 +179,14 @@ export const GATED_FEATURE_MIN_PLAN: Record<GatedFeatureKey, PlanKey> = {
   retargeting: "pro",
   threeDStudio: "max",
   multiBusiness: "max",
+  // Data/gating structure only — not enforced anywhere yet (no route
+  // calls requireFeature() for this key). Real per-business Vapi
+  // numbers are admin-assigned once DLT telecom registration clears;
+  // until then every dealership shares the platform default number
+  // regardless of plan. Flip enforcement on later by adding a
+  // requireFeature(supabase, dealershipId, "dedicatedPhoneNumber")
+  // check wherever a number gets assigned.
+  dedicatedPhoneNumber: "pro",
 };
 
 export function hasFeature(limits: PlanLimits, feature: GatedFeatureKey): boolean {

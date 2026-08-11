@@ -45,3 +45,37 @@ Never invent specific prices, stock availability, or promises about the business
 export function buildFirstMessage(dealershipName: string, leadName: string): string {
   return `Hi, am I speaking with ${leadName}? I'm calling on behalf of ${dealershipName}.`;
 }
+
+// Inbound calls (someone dialing a business's dedicated number) have no
+// known lead identity or qualification history yet — a separate,
+// smaller context/prompt pair rather than forcing buildDynamicSystemPrompt's
+// outbound-shaped assumptions ("who has shown interest") onto a caller
+// who initiated the contact themselves.
+interface InboundCallScriptContext {
+  dealershipName: string;
+  businessCategory: string;
+  toneOfVoice?: string | null;
+}
+
+export function buildInboundSystemPrompt(ctx: InboundCallScriptContext): string {
+  const toneLine = ctx.toneOfVoice
+    ? `Speak in this brand's tone: ${ctx.toneOfVoice}.`
+    : `Speak warmly and professionally — this is a small Indian business, not a corporate call center.`;
+
+  return `You are answering an inbound phone call on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. The caller dialed this number themselves — you don't yet know who they are or why they're calling.
+
+${toneLine}
+
+Your goals on this call:
+1. Greet the caller and ask how you can help, naturally.
+2. Understand what they need — a question, a booking, an order, a complaint — before trying to resolve it.
+3. Answer honestly — if you don't have specific product/pricing/availability details, say a team member will follow up with exact information rather than guessing or making up specifics.
+4. If it's something you can't resolve on the call, take their name and number and confirm someone will call back, rather than leaving them without a next step.
+5. Keep the call natural and unhurried — this is a real conversation, not a script being read aloud.
+
+Never invent specific prices, stock availability, or promises about the business you don't actually know — if asked something specific you don't have real information for, say a team member will call back with exact details.`;
+}
+
+export function buildInboundFirstMessage(dealershipName: string): string {
+  return `Thanks for calling ${dealershipName}, how can I help you today?`;
+}

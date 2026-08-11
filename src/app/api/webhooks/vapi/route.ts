@@ -3,15 +3,23 @@ import { NextResponse } from "next/server";
 import { scoreLeadFromCall } from "@/lib/agents/callScoringAgent";
 import { logVapiUsage } from "@/lib/usage/logUsage";
 import { recordCallingMinutes } from "@/lib/usage/callingMinutes";
+import { buildInboundSystemPrompt, buildInboundFirstMessage } from "@/lib/agents/callScriptAgent";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
-// event types during a call; the only one this app acts on is
-// end-of-call-report, which carries the full transcript.
+// event types during a call; this app acts on two of them:
+// end-of-call-report (the full transcript, once a call ends) and
+// assistant-request (fired the instant an INBOUND call arrives at a
+// number whose Server URL is this endpoint, before the call connects —
+// Vapi expects an assistant config back in the response so it knows who
+// should answer).
 export async function POST(request: Request) {
   const body = await request.json();
   const message = body?.message;
-  if (!message || message.type !== "end-of-call-report") return NextResponse.json({ received: true });
+  if (!message) return NextResponse.json({ received: true });
+
+  if (message.type === "assistant-request") return handleAssistantRequest(message);
+  if (message.type !== "end-of-call-report") return NextResponse.json({ received: true });
 
   const vapiCallId = message.call?.id;
   const leadId = message.call?.metadata?.leadId;
@@ -60,4 +68,71 @@ export async function POST(request: Request) {
     .eq("id", lead.id);
 
   return NextResponse.json({ received: true });
+}
+
+// Resolves which dealership owns the dialed number (by
+// dealerships.vapi_phone_number_id, admin-assigned — see migration
+// 096_dedicated_phone_number.sql) and returns a dynamically-built
+// assistant config for it, mirroring what triggerVapiCall() already does
+// for outbound calls. This only fires once a business actually has a
+// dedicated number wired up in Vapi's dashboard with this route as its
+// Server URL — no real numbers are provisioned yet (DLT registration
+// pending), so in practice this path is dormant infrastructure until then.
+async function handleAssistantRequest(message: any): Promise<NextResponse> {
+  const phoneNumberId: string | undefined = message.phoneNumber?.id ?? message.call?.phoneNumberId;
+  const apiKey = process.env.VAPI_API_KEY;
+  const fallbackAssistantId = process.env.VAPI_ASSISTANT_ID;
+
+  if (!phoneNumberId) {
+    return NextResponse.json(fallbackAssistantId ? { assistantId: fallbackAssistantId } : { error: "No assistant configured" });
+  }
+
+  const supabase = createServiceClient();
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select("id, dealership_name, business_category, vapi_assistant_id")
+    .eq("vapi_phone_number_id", phoneNumberId)
+    .maybeSingle();
+
+  // Unrecognized number (or no business assigned to it yet) — fall back
+  // to the shared platform assistant rather than failing the call.
+  if (!dealership) {
+    return NextResponse.json(fallbackAssistantId ? { assistantId: fallbackAssistantId } : { error: "No business assigned to this number" });
+  }
+
+  const assistantId = dealership.vapi_assistant_id || fallbackAssistantId;
+  if (!assistantId || !apiKey) {
+    return NextResponse.json(assistantId ? { assistantId } : { error: "Vapi not fully configured" });
+  }
+
+  try {
+    const [assistantRes, brandProfileRes] = await Promise.all([
+      fetch(`https://api.vapi.ai/assistant/${assistantId}`, { headers: { Authorization: `Bearer ${apiKey}` } }),
+      supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealership.id).maybeSingle(),
+    ]);
+    const baseAssistant = assistantRes.ok ? await assistantRes.json() : null;
+    if (!baseAssistant) return NextResponse.json({ assistantId });
+
+    const systemPrompt = buildInboundSystemPrompt({
+      dealershipName: dealership.dealership_name,
+      businessCategory: dealership.business_category ?? "business",
+      toneOfVoice: brandProfileRes.data?.tone_of_voice,
+    });
+    const firstMessage = buildInboundFirstMessage(dealership.dealership_name);
+
+    return NextResponse.json({
+      assistant: {
+        ...baseAssistant,
+        id: undefined,
+        firstMessage,
+        model: {
+          ...baseAssistant.model,
+          messages: [{ role: "system", content: systemPrompt }],
+        },
+      },
+    });
+  } catch (err: any) {
+    console.error("[vapi-webhook] assistant-request dynamic build failed, falling back to static assistant:", err.message);
+    return NextResponse.json({ assistantId });
+  }
 }
