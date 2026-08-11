@@ -25,7 +25,7 @@ export default function MainMenuPanel({ onClose }: { onClose: () => void }) {
                     key={item.href}
                     href={item.href}
                     onClick={onClose}
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 transition-colors"
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-200 transition-colors"
                   >
                     <item.icon className="w-4 h-4 text-slate-400 shrink-0" />
                     {item.label}

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown, Copy, Check, Pencil, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, titleCaseFromSnake } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
@@ -72,11 +72,24 @@ export default function MasterChatPage({
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [panelClosed, setPanelClosed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread, loading]);
+
+  // Auto-grow the composer up to a capped height (then it scrolls
+  // internally) — a real gap the single-line <input> it replaced had no
+  // way to address: a genuine business brief runs to a few sentences,
+  // and this is meant to be used the way Claude/ChatGPT's own composer
+  // is, per this screen's own layout comment.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [message]);
 
   async function handleSend(text?: string) {
     const toSend = (text ?? message).trim();
@@ -164,8 +177,8 @@ export default function MasterChatPage({
             )}
             <div className={cn("max-w-[80%] space-y-1", msg.role === "user" && "flex flex-col items-end")}>
               {msg.role === "assistant" && msg.toolsUsed && msg.toolsUsed.length > 0 && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-700/30">
-                  Used: {msg.toolsUsed.join(", ").replace(/_/g, " ")}
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30">
+                  Used: {msg.toolsUsed.map(titleCaseFromSnake).join(", ")}
                 </span>
               )}
               {msg.role === "assistant" && msg.artifacts && msg.artifacts.length > 0 && (
@@ -205,7 +218,7 @@ export default function MasterChatPage({
                       ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 last:mb-0">{children}</ol>,
                       li: ({ children }) => <li>{children}</li>,
                       strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
-                      a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">{children}</a>,
+                      a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">{children}</a>,
                       hr: () => <hr className="my-2.5 border-slate-200" />,
                       code: ({ children }) => <code className="bg-slate-200/70 px-1 py-0.5 rounded text-xs">{children}</code>,
                       img: ({ src, alt }) => (
@@ -271,14 +284,22 @@ export default function MasterChatPage({
       </div>
 
       <div className="pt-3 pb-4 border-t border-slate-200 shrink-0">
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-400 transition-all">
-          <input
+        <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-400 transition-all">
+          <textarea
+            ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !loading && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (!loading) handleSend();
+              }
+            }}
             placeholder="Ask me to build, write, research, or plan anything..."
             disabled={loading}
-            className="flex-1 px-3 py-2 text-sm bg-transparent focus:outline-none disabled:opacity-50"
+            autoFocus
+            rows={1}
+            className="flex-1 px-3 py-2 text-sm bg-transparent focus:outline-none disabled:opacity-50 resize-none max-h-40 overflow-y-auto"
           />
           <button
             onClick={() => handleSend()}
@@ -288,6 +309,7 @@ export default function MasterChatPage({
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
+        <p className="text-[10px] text-slate-400 mt-1.5 px-1">Enter to send, Shift+Enter for a new line</p>
       </div>
     </div>
 
@@ -669,10 +691,10 @@ function WorkspacePanel({ artifact, onClose }: { artifact: Artifact; onClose: ()
     <>
       <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-          {artifact.type === "image" && <Sparkles className="w-4 h-4 text-purple-500" />}
-          {artifact.type === "website" && <Globe className="w-4 h-4 text-purple-500" />}
-          {artifact.type === "3d_scene" && <Box className="w-4 h-4 text-purple-500" />}
-          {artifact.type === "canvas_design" && <PenTool className="w-4 h-4 text-purple-500" />}
+          {artifact.type === "image" && <Sparkles className="w-4 h-4 text-brand-500" />}
+          {artifact.type === "website" && <Globe className="w-4 h-4 text-brand-500" />}
+          {artifact.type === "3d_scene" && <Box className="w-4 h-4 text-brand-500" />}
+          {artifact.type === "canvas_design" && <PenTool className="w-4 h-4 text-brand-500" />}
           {artifact.label}
         </div>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
@@ -694,7 +716,7 @@ function WorkspacePanel({ artifact, onClose }: { artifact: Artifact; onClose: ()
         {(artifact.type === "website" || artifact.type === "canvas_design") && (
           <div className="text-center py-8 space-y-3">
             <p className="text-sm text-slate-500">This needs the full editor to view and edit.</p>
-            <a href={artifact.url} className="inline-flex items-center gap-1.5 text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg">
+            <a href={artifact.url} className="inline-flex items-center gap-1.5 text-sm bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg">
               Open {artifact.label} <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>

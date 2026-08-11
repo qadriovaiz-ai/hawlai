@@ -63,7 +63,7 @@
   }
 
   .sidebar-link-inactive {
-    @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+    @apply text-slate-600 hover:bg-slate-200 hover:text-slate-900;
   }
 }
 
