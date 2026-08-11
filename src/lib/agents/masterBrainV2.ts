@@ -1007,6 +1007,8 @@ export interface Artifact {
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
   variants?: { label: string; heading?: string; body?: string; cta?: string }[]; // side-by-side ad copy variants
   columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[]; // two-column comparisons — SWOT, sentiment (positive themes vs. objections), etc.
+  brandKit?: { colors: { name: string; hex: string; role: string }[]; tagline: string; typography: { headingFont: string; bodyFont: string }; mission?: string }; // bespoke — BrandKit mixes scalars (tagline/mission) with arrays (colors/guidelines) in one result, doesn't fit the generic array-or-draft dispatcher
+  influencerPlan?: { searchTerms: string[]; message: string; collabIdeas: string[] }; // bespoke — same mixed-shape reason as brandKit
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
 }
 
@@ -1377,6 +1379,42 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
           { heading: "Weaknesses & Threats", tone: "negative", items: [...(result.swot.weaknesses ?? []), ...(result.swot.threats ?? [])] },
         ],
         summary: result.positioningStatement,
+        departmentHref,
+      };
+    }
+
+    // ---- Bespoke: BrandKit and InfluencerOutreachPlan both mix scalar
+    // fields (tagline/mission, outreachMessage/emailSubject) with array
+    // fields (colors/guidelines, searchTerms/collabIdeas) in the SAME
+    // result — the generic array-or-draft dispatcher only picks one
+    // family and would silently drop the other, so these get their own
+    // small mapping instead ----
+    case "generate_brand_kit": {
+      if (!Array.isArray(result?.colors) || typeof result?.tagline !== "string") {
+        return { kind: "document", label: "Brand Kit", summary: genericSummary(result), departmentHref };
+      }
+      return {
+        kind: "document", label: "Brand Kit",
+        brandKit: {
+          colors: result.colors,
+          tagline: result.tagline,
+          typography: { headingFont: result.typography?.headingFont ?? "—", bodyFont: result.typography?.bodyFont ?? "—" },
+          mission: result.mission,
+        },
+        departmentHref,
+      };
+    }
+    case "generate_influencer_outreach": {
+      if (typeof result?.outreachMessage !== "string") {
+        return { kind: "document", label: "Influencer Outreach", summary: genericSummary(result), departmentHref };
+      }
+      return {
+        kind: "document", label: "Influencer Outreach",
+        influencerPlan: {
+          searchTerms: result.searchTerms ?? [],
+          message: result.outreachMessage,
+          collabIdeas: result.collabIdeas ?? [],
+        },
         departmentHref,
       };
     }

@@ -28,6 +28,8 @@ interface Artifact {
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
   variants?: { label: string; heading?: string; body?: string; cta?: string }[];
   columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[];
+  brandKit?: { colors: { name: string; hex: string; role: string }[]; tagline: string; typography: { headingFont: string; bodyFont: string }; mission?: string };
+  influencerPlan?: { searchTerms: string[]; message: string; collabIdeas: string[] };
   departmentHref?: string;
 }
 
@@ -492,6 +494,39 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
                 ))}
               </div>
               {artifact.summary && <p className="text-[10.5px] text-slate-500 italic leading-snug mt-2 pt-2 border-t border-slate-100">{artifact.summary}</p>}
+            </div>
+          )}
+          {artifact.brandKit && (
+            <div className="mt-2">
+              <div className="flex items-center gap-1.5">
+                {artifact.brandKit.colors.slice(0, 6).map((c, i) => (
+                  <div key={i} className="w-5 h-5 rounded-full border border-black/10 shrink-0" style={{ backgroundColor: c.hex }} title={`${c.name} · ${c.hex} · ${c.role}`} />
+                ))}
+              </div>
+              <p className="text-sm font-bold text-slate-800 italic mt-2 leading-snug">&ldquo;{artifact.brandKit.tagline}&rdquo;</p>
+              <p className="text-[10px] text-slate-400 mt-1">{artifact.brandKit.typography.headingFont} + {artifact.brandKit.typography.bodyFont}</p>
+              {artifact.brandKit.mission && <p className="text-[10.5px] text-slate-500 leading-snug mt-1.5 line-clamp-2">{artifact.brandKit.mission}</p>}
+            </div>
+          )}
+          {artifact.influencerPlan && (
+            <div className="mt-2 space-y-2">
+              {artifact.influencerPlan.searchTerms.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {artifact.influencerPlan.searchTerms.slice(0, 4).map((t, i) => (
+                    <span key={i} className="text-[9.5px] font-medium px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-600">{t}</span>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-slate-600 leading-relaxed bg-slate-50 rounded-md px-2 py-1.5 line-clamp-3">{artifact.influencerPlan.message}</p>
+              {artifact.influencerPlan.collabIdeas.length > 0 && (
+                <div className="space-y-0.5">
+                  {artifact.influencerPlan.collabIdeas.slice(0, 2).map((idea, i) => (
+                    <p key={i} className="text-[10.5px] text-slate-500 leading-snug flex items-start gap-1">
+                      <span className="text-brand-400 mt-px">&bull;</span> {idea}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
