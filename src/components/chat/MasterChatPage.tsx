@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown, Copy, Check, Pencil } from "lucide-react";
+import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown, Copy, Check, Pencil, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -25,6 +25,7 @@ interface Artifact {
   fields?: { label: string; value: string }[];
   groups?: { heading: string; items: { label: string; note?: string }[] }[];
   draft?: { heading: string; subheading?: string; body: string; wordCount: number };
+  metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
   departmentHref?: string;
 }
 
@@ -386,6 +387,45 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
                   </a>
                 )}
               </div>
+            </div>
+          )}
+          {artifact.metric && (
+            <div className="mt-1.5">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">{artifact.metric.heroValue}</span>
+                {artifact.metric.trend && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize",
+                      artifact.metric.trend.direction === "up" && "bg-emerald-500/10 text-emerald-600",
+                      artifact.metric.trend.direction === "down" && "bg-red-500/10 text-red-500",
+                      artifact.metric.trend.direction === "flat" && "bg-slate-100 text-slate-500"
+                    )}
+                  >
+                    {artifact.metric.trend.direction === "up" ? <TrendingUp className="w-2.5 h-2.5" /> : artifact.metric.trend.direction === "down" ? <TrendingDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+                    {artifact.metric.trend.label}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">{artifact.metric.heroLabel}</p>
+              {artifact.metric.sparkline && artifact.metric.sparkline.length > 1 && (
+                <div className="flex items-end gap-[3px] h-8 mt-2.5">
+                  {artifact.metric.sparkline.map((v, i) => {
+                    const max = Math.max(...artifact.metric!.sparkline!, 1);
+                    return <div key={i} className="flex-1 rounded-t-sm bg-brand-400/70" style={{ height: `${Math.max((v / max) * 100, v > 0 ? 8 : 2)}%` }} />;
+                  })}
+                </div>
+              )}
+              {artifact.metric.cells && artifact.metric.cells.length > 0 && (
+                <div className="grid gap-1.5 mt-2.5" style={{ gridTemplateColumns: `repeat(${artifact.metric.cells.length}, minmax(0, 1fr))` }}>
+                  {artifact.metric.cells.map((c, i) => (
+                    <div key={i} className="bg-slate-50 rounded-md px-2 py-1.5 text-center">
+                      <p className="text-xs font-bold text-slate-800 tabular-nums">{c.value}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">{c.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

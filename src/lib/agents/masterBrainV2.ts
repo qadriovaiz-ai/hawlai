@@ -49,6 +49,7 @@ import { generateSeoIdeas } from "./seoAgent";
 import { generateGraphic, GRAPHIC_TYPES } from "./graphicDesignAgent";
 import { getDealershipPlanLimits, hasFeature, type GatedFeatureKey } from "../plans";
 import { upgradeMessage } from "../featureGate";
+import { formatCurrency } from "../utils";
 import { randomBytes } from "crypto";
 
 // Tools that map to one of the 7 plan-gated features (migration 079's
@@ -1003,6 +1004,7 @@ export interface Artifact {
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
   groups?: { heading: string; items: { label: string; note?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
   draft?: { heading: string; subheading?: string; body: string; wordCount: number }; // a single piece of generated long-form content — caption, email, script, blog post
+  metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
 }
 
@@ -1210,27 +1212,72 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       return { kind: "link", label: "Client report", url: result.clientShareUrl, departmentHref };
 
     // ---- Metric: numbers worth surfacing as a quick glance ----
-    case "get_follow_up_reminders":
+    case "get_follow_up_reminders": {
+      const staleCount = (result.staleLeads ?? []).length;
+      const apptCount = (result.todaysAppointments ?? []).length;
       return {
         kind: "metric", label: "Follow-up check",
-        fields: [
-          { label: "Stale leads", value: String((result.staleLeads ?? []).length) },
-          { label: "Today's appointments", value: String((result.todaysAppointments ?? []).length) },
-        ],
+        metric: {
+          heroValue: String(staleCount + apptCount),
+          heroLabel: "Need attention today",
+          cells: [
+            { label: "Stale leads", value: String(staleCount) },
+            { label: "Today's appts", value: String(apptCount) },
+          ],
+        },
         departmentHref,
       };
+    }
     case "get_website_analytics":
       return {
         kind: "metric", label: "Website analytics (30 days)",
-        fields: [
-          { label: "Views", value: String(result.views ?? 0) },
-          { label: "Form submits", value: String(result.formSubmits ?? 0) },
-          { label: "Conversion", value: result.conversionRate != null ? `${result.conversionRate.toFixed(1)}%` : "—" },
-        ],
+        metric: {
+          heroValue: result.conversionRate != null ? `${result.conversionRate.toFixed(1)}%` : "—",
+          heroLabel: "Conversion rate",
+          cells: [
+            { label: "Views", value: String(result.views ?? 0) },
+            { label: "Form submits", value: String(result.formSubmits ?? 0) },
+          ],
+        },
         departmentHref,
       };
     case "get_analytics_summary":
-      return { kind: "metric", label: "Campaign performance", summary: genericSummary(result), departmentHref };
+      return {
+        kind: "metric", label: "Campaign performance",
+        metric: {
+          heroValue: formatCurrency(result.totals?.spend ?? 0),
+          heroLabel: `Total spend across ${(result.campaigns ?? []).length} campaign${(result.campaigns ?? []).length === 1 ? "" : "s"}`,
+          cells: [
+            { label: "Leads", value: String(result.totals?.leads ?? 0) },
+            { label: "Cost/lead", value: result.totals?.cost_per_lead != null ? formatCurrency(result.totals.cost_per_lead) : "—" },
+          ],
+        },
+        departmentHref,
+      };
+
+    case "get_growth_advice": {
+      // Only the forecast kind is a metric — opportunities/budget/
+      // expansion are item lists, handled separately (task 27).
+      if (input?.kind !== "forecast") return { kind: "document", label: "Growth Advice", summary: genericSummary(result), departmentHref };
+      const trendMap: Record<string, "up" | "down" | "flat"> = { growing: "up", declining: "down", flat: "flat" };
+      return {
+        kind: "metric", label: "Revenue Forecast",
+        metric: {
+          heroValue: result.forecast30Days ? formatCurrency(result.forecast30Days.mid) : "Not enough data",
+          heroLabel: result.forecast30Days ? "Expected revenue, next 30 days" : "Need more lead history to forecast",
+          trend: result.trendDirection ? { direction: trendMap[result.trendDirection] ?? "flat", label: result.trendDirection } : undefined,
+          sparkline: Array.isArray(result.weeklyLeadCounts) ? result.weeklyLeadCounts : undefined,
+          cells: result.forecast30Days
+            ? [
+                { label: "Low", value: formatCurrency(result.forecast30Days.low) },
+                { label: "Mid", value: formatCurrency(result.forecast30Days.mid) },
+                { label: "High", value: formatCurrency(result.forecast30Days.high) },
+              ]
+            : undefined,
+        },
+        departmentHref,
+      };
+    }
 
     case "generate_seo": {
       if (input?.taskType === "competitor_keywords" && Array.isArray(result?.keywords)) {
