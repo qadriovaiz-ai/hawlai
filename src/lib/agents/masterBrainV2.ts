@@ -439,11 +439,13 @@ const TOOLS = [
   },
 ];
 
-async function saveGenerated(supabase: any, dealershipId: string, table: string, extra: Record<string, any>) {
+async function saveGenerated(supabase: any, dealershipId: string, table: string, extra: Record<string, any>): Promise<string | null> {
   try {
-    await supabase.from(table).insert({ dealership_id: dealershipId, ...extra });
+    const { data } = await supabase.from(table).insert({ dealership_id: dealershipId, ...extra }).select("id").single();
+    return data?.id ?? null;
   } catch (err: any) {
     console.error(`[master-brain-v2] failed saving to ${table}:`, err.message);
+    return null;
   }
 }
 
@@ -534,8 +536,8 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "generate_content": {
       const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id });
-      if (!_fallback) await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
-      return output;
+      const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
+      return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_seo": {
       const { output, _fallback } = await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
@@ -544,18 +546,18 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "generate_social_management": {
       const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
-      if (!_fallback) await saveGenerated(supabase, ctx.id, "social_management_items", { task_type: input.taskType, input_text: input.inputText ?? "", output });
-      return output;
+      const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "social_management_items", { task_type: input.taskType, input_text: input.inputText ?? "", output });
+      return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_email": {
       const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
-      if (!_fallback) await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
-      return output;
+      const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
+      return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_whatsapp": {
       const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
-      if (!_fallback) await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
-      return output;
+      const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
+      return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_ad_plan": {
       const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
@@ -564,8 +566,8 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "generate_video_task": {
       const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
-      if (!_fallback) await saveGenerated(supabase, ctx.id, "video_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
-      return output;
+      const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "video_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
+      return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "research_competitor": {
       const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id });
@@ -1003,7 +1005,7 @@ export interface Artifact {
   html?: string; // 3d_scene inline content, avoids a second fetch
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
   groups?: { heading: string; items: { label: string; note?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
-  draft?: { heading: string; subheading?: string; body: string; wordCount: number }; // a single piece of generated long-form content — caption, email, script, blog post
+  draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string }; // a single piece of generated long-form content — caption, email, script, blog post. id/raw/patchUrl present only when the row was actually saved — lets the chat card edit and PATCH it in place instead of only linking to the department page
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
   variants?: { label: string; heading?: string; body?: string; cta?: string }[]; // side-by-side ad copy variants
   columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[]; // two-column comparisons — SWOT, sentiment (positive themes vs. objections), etc.
@@ -1096,6 +1098,21 @@ function genericSummary(result: any): string {
   return "Done — view the full result.";
 }
 
+// The 5 tools whose generated row can be PATCHed back in place, matching
+// the department page's own PATCH endpoint exactly (see the Edit+Save
+// pattern rollout) — lets the chat card's inline editor save to the
+// same place "Edit" on the department page would. Not every content
+// tool has one: generate_seo_keywords' blog-post path was never wired
+// to a saveGenerated() call at all (a real gap, tracked separately),
+// so it stays read-only in chat.
+const PATCH_ENDPOINT: Partial<Record<string, string>> = {
+  generate_content: "/api/content-marketing/generate",
+  generate_email: "/api/email/generate",
+  generate_whatsapp: "/api/whatsapp/generate",
+  generate_social_management: "/api/social/management",
+  generate_video_task: "/api/video-marketing/generate",
+};
+
 // The content-generation AND research/list tools (generate_content,
 // generate_email, generate_whatsapp, generate_social_management,
 // generate_video_task, generate_seo_keywords, research_competitor,
@@ -1109,8 +1126,9 @@ function genericSummary(result: any): string {
 // keyword research, one group per array field found, not just the
 // first) or a single piece of long-form text with no lists at all
 // (caption/script/email body/research narrative — flattened into one
-// readable draft).
-function deriveContentArtifact(label: string, result: any, departmentHref: string | undefined): Artifact {
+// readable draft, editable in place when the tool has a PATCH_ENDPOINT
+// and the row actually saved).
+function deriveContentArtifact(toolName: string, label: string, result: any, departmentHref: string | undefined): Artifact {
   if (!result || typeof result !== "object") {
     return { kind: "document", label, summary: genericSummary(result), departmentHref };
   }
@@ -1134,7 +1152,15 @@ function deriveContentArtifact(label: string, result: any, departmentHref: strin
   }
 
   const draft = extractDraft(result, label);
-  if (draft) return { kind: "document", label, draft, departmentHref };
+  if (draft) {
+    const savedId = typeof result._savedId === "string" ? result._savedId : undefined;
+    const patchUrl = PATCH_ENDPOINT[toolName];
+    if (savedId && patchUrl) {
+      const { _savedId, ...raw } = result;
+      return { kind: "document", label, draft: { ...draft, id: savedId, raw, patchUrl }, departmentHref };
+    }
+    return { kind: "document", label, draft, departmentHref };
+  }
 
   return { kind: "document", label, summary: genericSummary(result), departmentHref };
 }
@@ -1151,7 +1177,7 @@ function extractDraft(result: Record<string, any>, fallbackHeading: string): { h
   const headingKeys = ["headline", "title", "subject", "heroHeadline", "hook"];
   const headingField = headingKeys.find((k) => typeof result[k] === "string");
   const heading = headingField ? result[headingField] : fallbackHeading;
-  const skip = new Set([headingField, "note", "_fallback", "hashtags"].filter(Boolean));
+  const skip = new Set([headingField, "note", "_fallback", "hashtags", "_savedId"].filter(Boolean));
 
   const bodyParts: string[] = [];
   for (const [key, val] of Object.entries(result)) {
@@ -1274,7 +1300,7 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       // expansion are item lists.
       if (input?.kind !== "forecast") {
         const label = input?.kind === "opportunities" ? "Growth Opportunities" : input?.kind === "budget" ? "Budget Recommendations" : "Expansion Strategy";
-        return deriveContentArtifact(label, result, departmentHref);
+        return deriveContentArtifact(toolName, label, result, departmentHref);
       }
       const trendMap: Record<string, "up" | "down" | "flat"> = { growing: "up", declining: "down", flat: "flat" };
       return {
@@ -1307,27 +1333,27 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
     // type, so these all route through deriveContentArtifact rather
     // than being hand-mapped one by one ----
     case "generate_content":
-      return deriveContentArtifact(input?.contentType ? String(input.contentType).replace(/_/g, " ") : "Content", result, departmentHref);
+      return deriveContentArtifact(toolName, input?.contentType ? String(input.contentType).replace(/_/g, " ") : "Content", result, departmentHref);
     case "generate_email":
-      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Email", result, departmentHref);
+      return deriveContentArtifact(toolName, input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Email", result, departmentHref);
     case "generate_whatsapp":
-      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "WhatsApp message", result, departmentHref);
+      return deriveContentArtifact(toolName, input?.taskType ? String(input.taskType).replace(/_/g, " ") : "WhatsApp message", result, departmentHref);
     case "generate_social_management":
-      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Social content", result, departmentHref);
+      return deriveContentArtifact(toolName, input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Social content", result, departmentHref);
     case "generate_video_task":
-      return deriveContentArtifact(input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Video content", result, departmentHref);
+      return deriveContentArtifact(toolName, input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Video content", result, departmentHref);
     case "generate_seo_keywords": {
       if (input?.writeFullBlogPost && typeof result?.content === "string") {
         return { kind: "document", label: "Blog Post", draft: { heading: result.title ?? "Blog Post", body: result.content, wordCount: result.content.split(/\s+/).filter(Boolean).length }, departmentHref };
       }
-      return deriveContentArtifact("SEO Keyword Ideas", result, departmentHref);
+      return deriveContentArtifact(toolName, "SEO Keyword Ideas", result, departmentHref);
     }
     case "research_competitor":
-      return deriveContentArtifact(`Competitor Research${input?.competitorName ? `: ${input.competitorName}` : ""}`, result, departmentHref);
+      return deriveContentArtifact(toolName, `Competitor Research${input?.competitorName ? `: ${input.competitorName}` : ""}`, result, departmentHref);
     case "research_market":
-      return deriveContentArtifact("Market Research", result, departmentHref);
+      return deriveContentArtifact(toolName, "Market Research", result, departmentHref);
     case "generate_cro_suggestions":
-      return deriveContentArtifact("CRO Suggestions", result, departmentHref);
+      return deriveContentArtifact(toolName, "CRO Suggestions", result, departmentHref);
 
     // ---- Ad copy: multiple candidate variants worth comparing side by
     // side rather than reading as one blob ----

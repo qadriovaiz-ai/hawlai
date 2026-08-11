@@ -6,6 +6,7 @@ import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
 const EXAMPLES = [
   "Build my brand kit — logo colors, tagline, brand story",
@@ -24,7 +25,7 @@ interface Artifact {
   html?: string;
   fields?: { label: string; value: string }[];
   groups?: { heading: string; items: { label: string; note?: string }[] }[];
-  draft?: { heading: string; subheading?: string; body: string; wordCount: number };
+  draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string };
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
   variants?: { label: string; heading?: string; body?: string; cta?: string }[];
   columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[];
@@ -305,8 +306,39 @@ export default function MasterChatPage({
   );
 }
 
+// Mirrors masterBrainV2.ts's extractDraft() closely enough to re-derive
+// the compact preview after an inline edit, without a round-trip fetch
+// — same heading-field priority, same "join every other string field"
+// body, same hashtags handling.
+function flattenDraftBody(raw: Record<string, any>): { heading: string | null; body: string } {
+  const headingKeys = ["headline", "title", "subject", "heroHeadline", "hook"];
+  const headingField = headingKeys.find((k) => typeof raw[k] === "string");
+  const skip = new Set([headingField, "note", "_fallback", "hashtags"].filter(Boolean) as string[]);
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(raw)) {
+    if (skip.has(k)) continue;
+    if (typeof v === "string" && v.trim()) parts.push(v.trim());
+  }
+  if (Array.isArray(raw.hashtags)) {
+    const tags = raw.hashtags.map((h: string) => (h.startsWith("#") ? h : `#${h}`)).join(" ");
+    if (tags) parts.push(tags);
+  }
+  return { heading: headingField ? raw[headingField] : null, body: parts.join("\n\n") };
+}
+
 function ArtifactCard({ artifact }: { artifact: Artifact }) {
   const [copied, setCopied] = useState(false);
+  const [editingDraft, setEditingDraft] = useState(false);
+  const [draftEdit, setDraftEdit] = useState<any>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Live overrides after a successful inline save — the artifact prop
+  // itself never changes (it's the historical message's data). liveRaw
+  // is the full structured object (source of truth for the next edit
+  // pass); liveDraft is just its flattened heading/body for display.
+  const [liveRaw, setLiveRaw] = useState<any>(null);
+  const [liveDraft, setLiveDraft] = useState<{ heading: string; body: string } | null>(null);
+
   const iconMap = { document: FileText, record: CheckCircle2, metric: BarChart3, link: Link2 } as const;
   const Icon = iconMap[artifact.kind as keyof typeof iconMap] ?? FileText;
   const colorMap = {
@@ -316,11 +348,44 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
     link: "text-brand-600 bg-brand-500/10 border-brand-400/20",
   } as const;
 
+  const displayHeading = liveDraft?.heading ?? artifact.draft?.heading;
+  const displayBody = liveDraft?.body ?? artifact.draft?.body;
+  const canEditInline = !!(artifact.draft?.id && artifact.draft?.patchUrl && artifact.draft?.raw);
+
   function copyDraft() {
-    if (!artifact.draft) return;
-    navigator.clipboard.writeText(artifact.draft.body);
+    if (!displayBody) return;
+    navigator.clipboard.writeText(displayBody);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function startEditingDraft() {
+    if (!artifact.draft?.raw) return;
+    setDraftEdit(JSON.parse(JSON.stringify(liveRaw ?? artifact.draft.raw)));
+    setSaveError(null);
+    setEditingDraft(true);
+  }
+
+  async function saveDraftEdits() {
+    if (!artifact.draft?.id || !artifact.draft?.patchUrl) return;
+    setSavingDraft(true);
+    setSaveError(null);
+    try {
+      const res = await fetch(artifact.draft.patchUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: artifact.draft.id, output: draftEdit }),
+      });
+      if (!res.ok) throw new Error("Save failed — try again");
+      const { heading, body } = flattenDraftBody(draftEdit);
+      setLiveRaw(draftEdit);
+      setLiveDraft({ heading: heading ?? artifact.draft.heading, body });
+      setEditingDraft(false);
+    } catch (err: any) {
+      setSaveError(err.message);
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   // extractDraft falls back to the artifact's own label as the heading
@@ -328,7 +393,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
   // same text twice (once as the card title, once as a "heading" inside
   // the body) would just be noise, so only show it as a distinct line
   // when it actually differs.
-  const draftHeadingDiffers = artifact.draft && artifact.draft.heading.trim().toLowerCase() !== artifact.label.trim().toLowerCase();
+  const draftHeadingDiffers = displayHeading && displayHeading.trim().toLowerCase() !== artifact.label.trim().toLowerCase();
 
   // Action confirmations that already have a natural-language sentence
   // (create_discount_code, assign_task, trigger_call, etc.) read better
@@ -393,29 +458,63 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
           )}
           {artifact.draft && (
             <div className="mt-1.5">
-              <span className="inline-block text-[9.5px] font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-600">
-                {artifact.draft.wordCount} word{artifact.draft.wordCount === 1 ? "" : "s"}
-              </span>
-              {draftHeadingDiffers && <p className="text-xs font-bold text-slate-800 mt-1.5">{artifact.draft.heading}</p>}
-              <p className="text-[11px] text-slate-600 leading-relaxed mt-1 whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:6] overflow-hidden">
-                {artifact.draft.body}
-              </p>
-              <div className="flex items-center gap-1.5 mt-2">
-                <button
-                  onClick={copyDraft}
-                  className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-brand-500/10 text-brand-600 hover:bg-brand-500/20 transition-colors flex items-center gap-1"
-                >
-                  {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {copied ? "Copied" : "Copy"}
-                </button>
-                {artifact.departmentHref && (
-                  <a
-                    href={artifact.departmentHref}
-                    className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-1"
-                  >
-                    <Pencil className="w-3 h-3" /> Edit
-                  </a>
-                )}
-              </div>
+              {editingDraft ? (
+                <div className="mt-1">
+                  <EditableOutput output={draftEdit} onChange={setDraftEdit} />
+                  {saveError && <p className="text-[10.5px] text-red-500 mt-1.5">{saveError}</p>}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <button
+                      onClick={saveDraftEdits}
+                      disabled={savingDraft}
+                      className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-brand-600 text-white hover:bg-brand-500 disabled:opacity-50 transition-colors flex items-center gap-1"
+                    >
+                      {savingDraft ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+                    </button>
+                    <button
+                      onClick={() => setEditingDraft(false)}
+                      disabled={savingDraft}
+                      className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <span className="inline-block text-[9.5px] font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-600">
+                    {(displayBody ?? "").split(/\s+/).filter(Boolean).length} word{(displayBody ?? "").split(/\s+/).filter(Boolean).length === 1 ? "" : "s"}
+                  </span>
+                  {draftHeadingDiffers && <p className="text-xs font-bold text-slate-800 mt-1.5">{displayHeading}</p>}
+                  <p className="text-[11px] text-slate-600 leading-relaxed mt-1 whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:6] overflow-hidden">
+                    {displayBody}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <button
+                      onClick={copyDraft}
+                      className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-brand-500/10 text-brand-600 hover:bg-brand-500/20 transition-colors flex items-center gap-1"
+                    >
+                      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {copied ? "Copied" : "Copy"}
+                    </button>
+                    {canEditInline ? (
+                      <button
+                        onClick={startEditingDraft}
+                        className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-1"
+                      >
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                    ) : (
+                      artifact.departmentHref && (
+                        <a
+                          href={artifact.departmentHref}
+                          className="text-[10.5px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-1"
+                        >
+                          <Pencil className="w-3 h-3" /> Edit
+                        </a>
+                      )
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
           {artifact.metric && (
