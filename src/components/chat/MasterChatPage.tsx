@@ -26,6 +26,8 @@ interface Artifact {
   groups?: { heading: string; items: { label: string; note?: string }[] }[];
   draft?: { heading: string; subheading?: string; body: string; wordCount: number };
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
+  variants?: { label: string; heading?: string; body?: string; cta?: string }[];
+  columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[];
   departmentHref?: string;
 }
 
@@ -334,7 +336,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-slate-800 capitalize truncate">{artifact.label}</p>
-          {artifact.summary && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{artifact.summary}</p>}
+          {artifact.summary && !artifact.columns && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{artifact.summary}</p>}
           {artifact.fields && artifact.fields.length > 0 && (
             <dl className="mt-1.5 space-y-0.5">
               {artifact.fields.map((f, i) => (
@@ -426,6 +428,45 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {artifact.variants && artifact.variants.length > 0 && (
+            <div className="grid grid-cols-2 gap-1.5 mt-2">
+              {artifact.variants.map((v, i) => (
+                <div key={i} className="bg-slate-50 border border-slate-100 rounded-md p-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 mb-1">{v.label}</p>
+                  {v.heading && <p className="text-[11px] font-bold text-slate-800 leading-snug mb-0.5">{v.heading}</p>}
+                  {v.body && <p className="text-[10px] text-slate-500 leading-snug line-clamp-3">{v.body}</p>}
+                  {v.cta && <span className="inline-block mt-1.5 text-[9.5px] font-semibold px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-600">{v.cta}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {artifact.columns && artifact.columns.length > 0 && (
+            <div className="mt-2">
+              <div className="grid grid-cols-2 gap-2">
+                {artifact.columns.map((col, ci) => (
+                  <div key={ci}>
+                    <p
+                      className={cn(
+                        "flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide mb-1",
+                        col.tone === "positive" && "text-emerald-600",
+                        col.tone === "negative" && "text-orange-500",
+                        col.tone === "neutral" && "text-slate-400"
+                      )}
+                    >
+                      <span className={cn("w-1.5 h-1.5 rounded-full", col.tone === "positive" && "bg-emerald-500", col.tone === "negative" && "bg-orange-500", col.tone === "neutral" && "bg-slate-400")} />
+                      {col.heading}
+                    </p>
+                    <div className="space-y-1">
+                      {col.items.slice(0, 4).map((item, ii) => (
+                        <p key={ii} className="text-[10.5px] text-slate-600 leading-snug pb-1 border-b border-dashed border-slate-100 last:border-b-0">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {artifact.summary && <p className="text-[10.5px] text-slate-500 italic leading-snug mt-2 pt-2 border-t border-slate-100">{artifact.summary}</p>}
             </div>
           )}
         </div>

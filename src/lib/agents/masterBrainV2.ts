@@ -1005,6 +1005,8 @@ export interface Artifact {
   groups?: { heading: string; items: { label: string; note?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
   draft?: { heading: string; subheading?: string; body: string; wordCount: number }; // a single piece of generated long-form content — caption, email, script, blog post
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
+  variants?: { label: string; heading?: string; body?: string; cta?: string }[]; // side-by-side ad copy variants
+  columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[]; // two-column comparisons — SWOT, sentiment (positive themes vs. objections), etc.
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
 }
 
@@ -1304,6 +1306,60 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
         return { kind: "document", label: "Blog Post", draft: { heading: result.title ?? "Blog Post", body: result.content, wordCount: result.content.split(/\s+/).filter(Boolean).length }, departmentHref };
       }
       return { kind: "document", label: "SEO Keywords", summary: genericSummary(result), departmentHref };
+    }
+
+    // ---- Ad copy: multiple candidate variants worth comparing side by
+    // side rather than reading as one blob ----
+    case "generate_retargeting_copy": {
+      if (!result?.headline) return { kind: "document", label: "Retargeting Copy", summary: genericSummary(result), departmentHref };
+      return {
+        kind: "document", label: "Retargeting Copy",
+        variants: [
+          { label: "Variant A", heading: result.headline, body: result.primaryText, cta: result.cta },
+          { label: "Variant B", heading: result.variant2Headline, body: result.variant2PrimaryText, cta: result.cta },
+        ],
+        departmentHref,
+      };
+    }
+    case "generate_ad_plan": {
+      if (input?.taskType === "ad_copy" && Array.isArray(result?.headlines)) {
+        const count = Math.max(result.headlines?.length ?? 0, result.primaryText?.length ?? 0, result.descriptions?.length ?? 0);
+        const variants = Array.from({ length: Math.min(count, 4) }, (_, i) => ({
+          label: `Variant ${i + 1}`,
+          heading: result.headlines?.[i],
+          body: [result.primaryText?.[i], result.descriptions?.[i]].filter(Boolean).join(" — "),
+        }));
+        return { kind: "document", label: "Ad Copy", variants, departmentHref };
+      }
+      return { kind: "document", label: "Paid Ads", summary: genericSummary(result), departmentHref };
+    }
+
+    // ---- Two-column comparisons ----
+    case "get_customer_sentiment": {
+      if (!Array.isArray(result?.positiveThemes) && !Array.isArray(result?.concernsOrObjections)) {
+        return { kind: "document", label: "Customer Sentiment", summary: genericSummary(result), departmentHref };
+      }
+      return {
+        kind: "document", label: "Customer Sentiment",
+        columns: [
+          { heading: "What's working", tone: "positive", items: result.positiveThemes ?? [] },
+          { heading: "Objections", tone: "negative", items: result.concernsOrObjections ?? [] },
+        ],
+        summary: result.summary,
+        departmentHref,
+      };
+    }
+    case "generate_marketing_strategy": {
+      if (!result?.swot) return { kind: "document", label: "Marketing Strategy", summary: genericSummary(result), departmentHref };
+      return {
+        kind: "document", label: "Marketing Strategy — SWOT",
+        columns: [
+          { heading: "Strengths & Opportunities", tone: "positive", items: [...(result.swot.strengths ?? []), ...(result.swot.opportunities ?? [])] },
+          { heading: "Weaknesses & Threats", tone: "negative", items: [...(result.swot.weaknesses ?? []), ...(result.swot.threats ?? [])] },
+        ],
+        summary: result.positioningStatement,
+        departmentHref,
+      };
     }
 
     default:
