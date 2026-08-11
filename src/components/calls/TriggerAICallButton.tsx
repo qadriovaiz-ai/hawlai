@@ -31,7 +31,7 @@ export default function TriggerAICallButton({ leadId }: { leadId: string }) {
   return (
     <div className="relative">
       <button onClick={handleTrigger} disabled={loading} className="btn-secondary" title="Automatically call with AI">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4 text-purple-500" />}
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4 text-brand-500" />}
         AI Call
       </button>
       {error && (

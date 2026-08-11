@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, Car, Calendar, DollarSign, Zap } from "lucide-react";
-import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon, getStatusColor, getStatusLabel, getCallStatusColor, titleCaseFromSnake } from "@/lib/utils";
 import AddToQueueButton from "@/components/leads/AddToQueueButton";
 import CreateAppointmentModal from "@/components/appointments/CreateAppointmentModal";
 import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
@@ -153,7 +153,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <div key={call.id} className="bg-slate-50 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-slate-700">{formatDate(call.created_at)}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-300">{call.status}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${getCallStatusColor(call.status)}`}>{titleCaseFromSnake(call.status)}</span>
                 </div>
                 {call.summary && <p className="text-sm text-slate-600">{call.summary}</p>}
               </div>

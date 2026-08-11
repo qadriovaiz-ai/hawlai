@@ -40,7 +40,7 @@ export default function AutoCallSettings() {
           <p className="text-sm font-medium text-slate-700">Auto-call on new lead</p>
           <p className="text-xs text-slate-400">Applies to leads from Meta Ads and your website's lead forms</p>
         </div>
-        <input type="checkbox" checked={enabled} disabled={saving} onChange={(e) => toggle(e.target.checked)} className="w-5 h-5 accent-purple-600" />
+        <input type="checkbox" checked={enabled} disabled={saving} onChange={(e) => toggle(e.target.checked)} className="w-5 h-5 accent-brand-600" />
       </label>
     </div>
   );

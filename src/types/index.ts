@@ -6,7 +6,11 @@ export type LeadStatus =
   | "appointment_set"
   | "converted"
   | "not_interested";
-export type CallStatus = "completed" | "no_answer" | "busy" | "failed" | "voicemail";
+// "initiated" is a real, common state — triggerVapiCall() inserts every
+// call row with this status, before the Vapi webhook reports back with
+// the final outcome. getCallStatusColor()/getCallStatusLabel() must
+// handle it or every in-flight call renders an unstyled/blank badge.
+export type CallStatus = "initiated" | "completed" | "no_answer" | "busy" | "failed" | "voicemail";
 export type AppointmentType = "test_ride" | "showroom_visit";
 export type AppointmentStatus = "scheduled" | "completed" | "cancelled";
 

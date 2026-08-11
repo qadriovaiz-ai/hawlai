@@ -104,6 +104,8 @@ export function getStatusLabel(status: LeadStatus) {
 
 export function getCallStatusColor(status: CallStatus) {
   switch (status) {
+    case "initiated":
+      return "bg-slate-200 text-slate-600";
     case "completed":
       return "bg-green-100 text-green-700";
     case "no_answer":

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Phone, Eye, ArrowRight } from "lucide-react";
 import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import MarkCalledButton from "@/components/calls/MarkCalledButton";
+import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DraftMessagePreview from "@/components/leads/DraftMessagePreview";
 
 export default async function QueuePage() {
@@ -31,8 +32,8 @@ export default async function QueuePage() {
 
       {!leads || leads.length === 0 ? (
         <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Phone className="w-7 h-7 text-purple-400" />
+          <div className="w-16 h-16 bg-brand-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Phone className="w-7 h-7 text-brand-400" />
           </div>
           <p className="text-slate-700 font-medium">No leads in the queue</p>
           <p className="text-slate-400 text-sm mt-1 mb-4">Add leads to the queue from the Leads page</p>
@@ -46,7 +47,7 @@ export default async function QueuePage() {
           {leads.map((lead, i) => (
             <div key={lead.id} className="card p-4 space-y-2">
               <div className="flex items-center gap-4">
-                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">
+                <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">
                   {i + 1}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -71,6 +72,7 @@ export default async function QueuePage() {
                   >
                     <Phone className="w-4 h-4" /> Call {lead.phone}
                   </a>
+                  <TriggerAICallButton leadId={lead.id} />
                   <MarkCalledButton leadId={lead.id} dealershipId={dealershipId} />
                   <Link href={`/dashboard/leads/${lead.id}`} className="btn-secondary px-2 py-2">
                     <Eye className="w-4 h-4" />
