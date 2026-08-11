@@ -11,7 +11,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
   const pathname = usePathname();
 
   return (
-    <div className="w-64 bg-slate-100 border-r border-slate-200 flex flex-col h-full shrink-0">
+    <div className="hidden md:flex w-64 bg-slate-100 border-r border-slate-200 flex-col h-full shrink-0">
       <div className="p-5 border-b border-slate-100 space-y-3">
         <Link href="/chat" className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 shadow-sm shadow-brand-600/30">

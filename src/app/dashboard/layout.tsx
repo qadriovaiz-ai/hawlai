@@ -5,6 +5,7 @@ import Image from "next/image";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopBar from "@/components/dashboard/TopBar";
 import MasterBrainWidget from "@/components/dashboard/MasterBrainWidget";
+import MobileTabBar from "@/components/dashboard/MobileTabBar";
 
 export default async function DashboardLayout({
   children,
@@ -59,16 +60,29 @@ export default async function DashboardLayout({
     );
   }
 
+  // Team members are redirected to /team-tasks above, so anyone
+  // reaching here is genuinely the owner of profile.dealership_id (or
+  // their currently-active business via BusinessSwitcher) — same
+  // ownership context pending_approvals' owner-only RLS expects, no
+  // extra check needed. Only used for the mobile tab bar's Approvals
+  // dot; cheap head-count query, not fetching any rows.
+  const { count: pendingApprovalsCount } = await supabase
+    .from("pending_approvals")
+    .select("id", { count: "exact", head: true })
+    .eq("dealership_id", profile?.dealership_id)
+    .eq("status", "pending");
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       <Sidebar dealershipName={dealershipName} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar user={user} profile={profile} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
           {children}
         </main>
       </div>
       <MasterBrainWidget />
+      <MobileTabBar pendingApprovalsCount={pendingApprovalsCount ?? 0} />
     </div>
   );
 }

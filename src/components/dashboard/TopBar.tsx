@@ -39,7 +39,7 @@ export default function TopBar({ user, profile }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+        <button className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors">
           <Bell className="w-5 h-5" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
         </button>
@@ -47,7 +47,7 @@ export default function TopBar({ user, profile }: Props) {
         <div className="relative">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2.5 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+            className="flex items-center gap-2.5 p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <div className="w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center">
               <span className="text-xs font-semibold text-white">{initials}</span>
