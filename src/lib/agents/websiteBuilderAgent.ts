@@ -332,7 +332,13 @@ async function generatePageBlocks(
         // real content quality here is worth the extra cost, and it
         // only runs once per page per generation, not on every visit.
         model: "claude-opus-4-8",
-        max_tokens: 2000,
+        // Was 2000 — too tight for a forced tool_use call that has to
+        // emit an entire multi-section block tree as one JSON payload,
+        // especially legal pages (real boilerplate text) and any page
+        // with 3-4 sections. Confirmed root cause of live pages stuck
+        // as fallback content: `stop_reason: "max_tokens"` with no
+        // complete tool_use block at all, not a content-quality issue.
+        max_tokens: 4096,
         tools: [EMIT_PAGE_TOOL],
         tool_choice: { type: "tool", name: "emit_page" },
         messages: [{
@@ -345,7 +351,9 @@ ${blockVocabularyNote()}
 
 Compose the page as a small tree: every top-level item must be type "section" (2-4 of them). A "section" typically contains one "stack" (direction "column" for simple stacked content, or "row" with 2-3 child "stack"s each given a widthFraction like 0.33 or 0.5 for side-by-side columns/cards). Put actual content — heading/text/image/button — inside those stacks, not directly inside "section".
 
-${page.pageType === "legal" ? `This is a legal page ("${page.slug}") — one section with a heading and genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly, not a generic disclaimer.` : `Include a "button" or "form" block near the end to drive leads, unless this is the contact page itself.`}
+Keep every text field genuinely concise — this is a website page, not an essay. Body/paragraph text blocks: 2-4 sentences each, not longer. You have a limited output budget for this whole page (structure + all text combined), so prioritize a complete, well-structured page over exhaustive text in any one block.
+
+${page.pageType === "legal" ? `This is a legal page ("${page.slug}") — one section with a heading and genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly, not a generic disclaimer. Cover the essential clauses a small business actually needs (not an exhaustive enterprise-grade document) — standard length for this category, not maximal.` : `Include a "button" or "form" block near the end to drive leads, unless this is the contact page itself.`}
 
 Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client names. Call emit_page with the result.`,
         }],
