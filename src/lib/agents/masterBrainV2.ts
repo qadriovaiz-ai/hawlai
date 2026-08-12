@@ -22,7 +22,7 @@
 
 import { generateBrandKit } from "./brandBuildingAgent";
 import { generateLogoConcept } from "./brandKitAgent";
-import { planWebsite, generateWebsite } from "./websiteBuilderAgent";
+import { planWebsite, generateWebsite, saveGeneratedWebsite } from "./websiteBuilderAgent";
 import { triggerVapiCall } from "./vapiCallAgent";
 import { getValidYoutubeAccessToken, uploadVideoToYouTube } from "./youtubeAgent";
 import { generate3DScene } from "./threeDAgent";
@@ -484,51 +484,33 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         const brandProfile = { tone_of_voice: ctx.toneOfVoice };
         const plan = await planWebsite(input.prompt, ctx.name, ctx.category, ctx.city, brandProfile, { supabase, dealershipId: ctx.id });
         const { pages: generatedPages, fallbackWarnings } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt, { supabase, dealershipId: ctx.id });
-
         const validTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(plan.themeKey) ? plan.themeKey : "navy_amber";
-        const base = ctx.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
 
-        const { data: existing } = await supabase.from("websites").select("id, slug").eq("dealership_id", ctx.id).maybeSingle();
-        let websiteId: string;
-        let slug: string;
-        if (existing) {
-          websiteId = existing.id;
-          slug = existing.slug;
-          await supabase.from("websites").update({
-            site_type: "custom", theme_key: validTheme, nav_order: generatedPages.map((p) => p.slug),
-            prompt: input.prompt, business_summary: plan.businessSummary,
-          }).eq("id", websiteId);
-          await supabase.from("website_pages").delete().eq("website_id", websiteId);
-        } else {
-          slug = base;
-          let attempt = 0;
-          while (attempt < 20) {
-            const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
-            const { data: taken } = await supabase.from("websites").select("id").eq("slug", candidate).maybeSingle();
-            if (!taken) { slug = candidate; break; }
-            attempt++;
-          }
-          const { data: newSite, error } = await supabase.from("websites").insert({
-            dealership_id: ctx.id, slug, site_type: "custom", theme_key: validTheme,
-            nav_order: generatedPages.map((p) => p.slug), prompt: input.prompt, business_summary: plan.businessSummary,
-          }).select("id").single();
-          if (error) return { error: error.message };
-          websiteId = newSite.id;
-        }
+        // saveGeneratedWebsite() is the one place both this tool and the
+        // Website Builder's own Regenerate button persist a generation
+        // result — a page whose generation fell back to placeholder
+        // content never overwrites a same-slug page that already holds
+        // real content, so a failed regeneration can't silently wreck an
+        // already-live site the way it used to.
+        const saveResult = await saveGeneratedWebsite(supabase, ctx.id, ctx.name, generatedPages, {
+          themeKey: validTheme,
+          prompt: input.prompt,
+          businessSummary: plan.businessSummary,
+        });
 
-        const pageRows = generatedPages.map((p, i) => ({
-          website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
-          meta_description: p.metaDescription, sections: p.sections, order_index: i,
-        }));
-        const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
-        if (pagesError) return { error: pagesError.message };
+        const protectedNote = saveResult.protectedSlugs.length
+          ? ` ${saveResult.protectedSlugs.length > 1 ? "These pages" : "This page"} failed to regenerate and kept their existing content instead of being overwritten: ${saveResult.protectedSlugs.join(", ")}.`
+          : "";
+        const draftNote = saveResult.published
+          ? " This site is already published/live — real changes were applied directly; tell the person to check it at its live URL."
+          : " It is NOT live yet — tell the person to review it in Website Builder and hit Publish there when they're happy with it.";
 
         return {
           success: true,
           pages: generatedPages.map((p) => p.title),
           theme: validTheme,
-          slug,
-          note: `Website built as a DRAFT with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}) — it is NOT live yet. Tell the person to review it in Website Builder and hit Publish there when they're happy with it.${fallbackWarnings?.length ? ` Some pages fell back to placeholder content instead of real AI content (${fallbackWarnings.join("; ")}) — tell the person this happened and that they can hit Regenerate Website once it's resolved.` : ""}`,
+          slug: saveResult.slug,
+          note: `Website ${saveResult.published ? "updated" : "built as a DRAFT"} with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}).${draftNote}${fallbackWarnings?.length ? ` Some pages fell back to placeholder content instead of real AI content (${fallbackWarnings.join("; ")}) — tell the person this happened and that they can hit Regenerate Website once it's resolved.` : ""}${protectedNote}`,
         };
       } catch (err: any) {
         return { error: err.message };

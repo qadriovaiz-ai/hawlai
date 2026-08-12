@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2, CreditCard } from "lucide-react";
+import { Loader2, Sparkles, ExternalLink, Save, Check, Plus, Trash2, ArrowLeft, Wand2, Package, ClipboardList, Globe, Globe2, Tag, Monitor, Smartphone, Truck, Undo2, Redo2, CreditCard, AlertTriangle } from "lucide-react";
 import ProductManager from "./ProductManager";
 import OrdersPanel from "./OrdersPanel";
 import DomainPanel from "./DomainPanel";
@@ -41,6 +41,7 @@ export default function WebsiteBuilderView() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -154,9 +155,18 @@ export default function WebsiteBuilderView() {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
-      if (d.fallbackWarnings?.length) {
-        setGenerateError(`Site built, but some pages used placeholder content instead of AI-generated content:\n${d.fallbackWarnings.join("\n")}`);
+      // protectedSlugs: regeneration failed for that page, but its
+      // existing real content was kept — nothing to worry about beyond
+      // knowing it's still the old copy. savedFallbackSlugs: placeholder
+      // content was actually saved (no prior real content to protect) —
+      // this genuinely needs review/regeneration before publishing, and
+      // the publish endpoint will now refuse to go live while it exists.
+      const messages: string[] = [];
+      if (d.savedFallbackSlugs?.length) {
+        messages.push(`These pages have placeholder content and need to be regenerated before you can publish: ${d.savedFallbackSlugs.join(", ")}.`);
       }
+      if (d.protectedNote) messages.push(d.protectedNote);
+      if (messages.length) setGenerateError(messages.join("\n"));
       setPlan(null);
       setPrompt("");
       load();
@@ -168,8 +178,21 @@ export default function WebsiteBuilderView() {
   }
 
   async function togglePublish(published: boolean) {
-    setWebsite((prev: any) => ({ ...prev, published }));
-    await fetch("/api/website-builder/publish", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ published }) });
+    setPublishError(null);
+    try {
+      const r = await fetch("/api/website-builder/publish", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ published }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        // Blocked server-side (e.g. a page still has placeholder
+        // content) — don't flip the checkbox at all, the site's actual
+        // published state on the server never changed.
+        setPublishError(d.error ?? "Couldn't update publish status.");
+        return;
+      }
+      setWebsite((prev: any) => ({ ...prev, published }));
+    } catch {
+      setPublishError("Couldn't update publish status — try again.");
+    }
   }
 
   async function saveLogo() {
@@ -470,16 +493,29 @@ export default function WebsiteBuilderView() {
           <button onClick={handleGenerate} disabled={generating} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {website ? "Regenerate Website" : "Build Website"}
           </button>
-          {generateError && <p className="text-xs text-red-400 mt-2">{generateError}</p>}
+          {generateError && <p className="text-xs text-red-400 mt-2 whitespace-pre-wrap">{generateError}</p>}
         </div>
       )}
 
       {website && (
         <>
+          {pages.some((p) => p.is_fallback) && (
+            <div className="card p-4 bg-amber-500/10 border-amber-700/40 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-700">Some pages have placeholder content</p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  {pages.filter((p) => p.is_fallback).map((p) => p.title).join(", ")} — generation failed for {pages.filter((p) => p.is_fallback).length > 1 ? "these pages" : "this page"} and they still show fallback text. Hit Regenerate Website to try again; publishing is blocked until they have real content.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="card p-5 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-700">Site: /site/{website.slug}</p>
               <p className="text-xs text-slate-400">{website.published ? "Live — visible to the public" : "Not published yet"}</p>
+              {publishError && <p className="text-xs text-red-400 mt-1 max-w-md">{publishError}</p>}
             </div>
             <div className="flex items-center gap-3">
               {website.published && (

@@ -93,6 +93,14 @@ export interface GeneratedPage {
   pageType: string;
   metaDescription: string;
   sections: any[];
+  // True when this page's sections are placeholder fallback content
+  // (the Anthropic call failed), not real generated content. Callers
+  // that persist this to website_pages MUST never let a fallback page
+  // silently overwrite a previously-real page for the same slug — see
+  // saveGeneratedWebsite() below, the one place both call sites
+  // (the Regenerate button and Master Chat's build_website tool) save
+  // through, specifically so this rule can't drift out of sync again.
+  _fallback?: boolean;
 }
 
 export interface PlannedPage {
@@ -426,12 +434,17 @@ export async function generateWebsite(
   // trying to locate/preserve pieces of whatever tree the model
   // returned, since a live product_grid was never something it could
   // have produced anyway (excluded from AI_BLOCK_TYPES above).
-  const resultPages: GeneratedPage[] = generated.map(({ page }, i) => {
+  const resultPages: GeneratedPage[] = generated.map(({ page, fellBack }, i) => {
     const p = pageList[i];
-    if (p.pageType !== "products") return page;
+    if (p.pageType !== "products") return { ...page, _fallback: fellBack };
+    // Product pages always end up with real, deterministic content
+    // (the owner's actual catalog via product_grid) regardless of
+    // whether the AI call for the surrounding copy succeeded — never
+    // fallback in the sense that matters here (no placeholder text
+    // ever reaches a product page).
     const hero = page.sections[0]?.type === "section" ? page.sections[0] : legacyToBlocks([{ type: "hero", headline: dealershipName, subheadline: p.title, ctaText: "Shop Now" }])[0];
     const productGrid = legacyToBlocks([{ type: "product_catalog", heading: `Our ${p.title}` }])[0];
-    return { ...page, sections: [hero, productGrid] };
+    return { ...page, sections: [hero, productGrid], _fallback: false };
   });
 
   const fallbackWarnings = generated
@@ -439,4 +452,115 @@ export async function generateWebsite(
     .filter((w): w is string => !!w);
 
   return { pages: resultPages, _fallback: generated.some((g) => g.fellBack) || undefined, fallbackWarnings };
+}
+
+export interface SaveWebsiteResult {
+  websiteId: string;
+  slug: string;
+  // Slugs whose fresh generation fell back to placeholder content, but
+  // which already had real content saved from a prior successful
+  // generation — those existing rows were left untouched rather than
+  // overwritten with placeholder text.
+  protectedSlugs: string[];
+  // Slugs actually saved WITH fallback content this time (no prior real
+  // content existed for that slug to protect — e.g. a brand-new site
+  // whose first generation attempt partly failed).
+  savedFallbackSlugs: string[];
+  // Whether this website is already published/live — callers must not
+  // claim "this is a draft, not live yet" when regenerating a site
+  // that's already public (saveGeneratedWebsite never touches the
+  // published flag itself; only the publish endpoint does).
+  published: boolean;
+}
+
+// The single place both callers (the Website Builder "Regenerate"
+// button's API route, and Master Chat's build_website tool) persist a
+// generateWebsite() result — previously each had its own copy of this
+// save logic, and both unconditionally deleted every existing page and
+// inserted whatever came back, including per-page placeholder fallback
+// content, with no check for whether the site was already published.
+// A transient Anthropic API failure during a "Regenerate" on an
+// already-live site silently replaced real, live content with
+// "Content coming soon..." — this is the fix: a page that falls back
+// NEVER overwrites a same-slug page that currently holds real content.
+export async function saveGeneratedWebsite(
+  supabase: any,
+  dealershipId: string,
+  dealershipName: string,
+  generatedPages: GeneratedPage[],
+  opts: { themeKey: string; prompt: string | null; businessSummary: string | null }
+): Promise<SaveWebsiteResult> {
+  const base = dealershipName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
+
+  const { data: existingWebsite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", dealershipId).maybeSingle();
+
+  let websiteId: string;
+  let slug: string;
+  const existingPagesBySlug: Record<string, { id: string; is_fallback: boolean }> = {};
+
+  if (existingWebsite) {
+    websiteId = existingWebsite.id;
+    slug = existingWebsite.slug;
+    const { data: existingPages } = await supabase.from("website_pages").select("id, slug, is_fallback").eq("website_id", websiteId);
+    for (const row of existingPages ?? []) existingPagesBySlug[row.slug] = { id: row.id, is_fallback: !!row.is_fallback };
+    await supabase.from("websites").update({
+      site_type: "custom",
+      theme_key: opts.themeKey,
+      nav_order: generatedPages.map((p) => p.slug),
+      prompt: opts.prompt,
+      business_summary: opts.businessSummary,
+    }).eq("id", websiteId);
+  } else {
+    slug = base;
+    let attempt = 0;
+    while (attempt < 20) {
+      const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
+      const { data: taken } = await supabase.from("websites").select("id").eq("slug", candidate).maybeSingle();
+      if (!taken) { slug = candidate; break; }
+      attempt++;
+    }
+    const { data: newSite, error } = await supabase.from("websites").insert({
+      dealership_id: dealershipId, slug, site_type: "custom", theme_key: opts.themeKey,
+      nav_order: generatedPages.map((p) => p.slug), prompt: opts.prompt, business_summary: opts.businessSummary,
+    }).select("id").single();
+    if (error) throw new Error(`Couldn't save the website: ${error.message}`);
+    if (!newSite) throw new Error("Couldn't save the website — no row returned after insert");
+    websiteId = newSite.id;
+  }
+
+  const protectedSlugs: string[] = [];
+  const savedFallbackSlugs: string[] = [];
+  const rowsToSave: any[] = [];
+
+  generatedPages.forEach((p, i) => {
+    const existing = existingPagesBySlug[p.slug];
+    if (p._fallback && existing && !existing.is_fallback) {
+      protectedSlugs.push(p.slug);
+      return;
+    }
+    if (p._fallback) savedFallbackSlugs.push(p.slug);
+    rowsToSave.push({
+      website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
+      meta_description: p.metaDescription, sections: p.sections, order_index: i,
+      is_fallback: !!p._fallback,
+    });
+  });
+
+  // Deletes every existing page except the protected ones — still
+  // removes pages the new plan dropped entirely (unchanged prior
+  // behavior), just via explicit id list rather than a blanket delete,
+  // so protected rows are never touched.
+  const idsToDelete = Object.entries(existingPagesBySlug)
+    .filter(([pageSlug]) => !protectedSlugs.includes(pageSlug))
+    .map(([, row]) => row.id);
+  if (idsToDelete.length > 0) {
+    await supabase.from("website_pages").delete().in("id", idsToDelete);
+  }
+
+  if (rowsToSave.length > 0) {
+    const { error: pagesError } = await supabase.from("website_pages").insert(rowsToSave);
+    if (pagesError) throw new Error(`Couldn't save the pages: ${pagesError.message}`);
+  }
+
+  return { websiteId, slug, protectedSlugs, savedFallbackSlugs, published: !!existingWebsite?.published };
 }

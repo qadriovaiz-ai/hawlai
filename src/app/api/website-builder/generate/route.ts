@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { generateWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
+import { generateWebsite, saveGeneratedWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
 
 // Generating several pages (even with the per-page 8s internal
 // timeout below) across concurrent batches can still add up past
@@ -121,52 +121,37 @@ export async function POST(request: Request) {
       { supabase, dealershipId }
     );
 
-    const base = (dealership?.dealership_name ?? "site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
     const resolvedTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(themeKey) ? themeKey : "navy_amber";
 
-    // Upsert the website row (one per dealership) — regenerating replaces its pages.
-    const { data: existing } = await supabase.from("websites").select("id, slug").eq("dealership_id", dealershipId).maybeSingle();
-    let websiteId: string;
-    let slug: string;
-    if (existing) {
-      websiteId = existing.id;
-      slug = existing.slug;
-      await supabase.from("websites").update({
-        site_type: "custom",
-        theme_key: resolvedTheme,
-        nav_order: generatedPages.map((p) => p.slug),
+    let saveResult;
+    try {
+      saveResult = await saveGeneratedWebsite(supabase, dealershipId, dealership?.dealership_name ?? "site", generatedPages, {
+        themeKey: resolvedTheme,
         prompt: prompt ?? null,
-        business_summary: businessSummary ?? null,
-      }).eq("id", websiteId);
-      await supabase.from("website_pages").delete().eq("website_id", websiteId);
-    } else {
-      slug = base;
-      let attempt = 0;
-      while (attempt < 20) {
-        const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
-        const { data: taken } = await supabase.from("websites").select("id").eq("slug", candidate).maybeSingle();
-        if (!taken) { slug = candidate; break; }
-        attempt++;
-      }
-      const { data: newSite, error } = await supabase.from("websites").insert({
-        dealership_id: dealershipId, slug, site_type: "custom", theme_key: resolvedTheme,
-        nav_order: generatedPages.map((p) => p.slug), prompt: prompt ?? null, business_summary: businessSummary ?? null,
-      }).select("id").single();
-      if (error) return NextResponse.json({ error: `Couldn't save the website: ${error.message}` }, { status: 500 });
-      if (!newSite) return NextResponse.json({ error: "Couldn't save the website — no row returned after insert" }, { status: 500 });
-      websiteId = newSite.id;
+        businessSummary: businessSummary ?? null,
+      });
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
     }
 
-    // generateWebsite() (websiteBuilderAgent.ts) emits block-shaped
-    // sections directly — no conversion needed here.
-    const pageRows = generatedPages.map((p, i) => ({
-      website_id: websiteId, slug: p.slug, title: p.title, page_type: p.pageType,
-      meta_description: p.metaDescription, sections: p.sections, order_index: i,
-    }));
-    const { error: pagesError } = await supabase.from("website_pages").insert(pageRows);
-    if (pagesError) return NextResponse.json({ error: `Couldn't save the pages: ${pagesError.message}` }, { status: 500 });
+    // Pages whose fresh generation failed but whose existing (real)
+    // content was protected need to be called out distinctly from
+    // pages that got saved WITH placeholder text — the first is "your
+    // live site is untouched, try regenerating that page again," the
+    // second is "review this page before publishing."
+    const protectedNote = saveResult.protectedSlugs.length
+      ? `Kept the existing content for: ${saveResult.protectedSlugs.join(", ")} — regeneration failed for ${saveResult.protectedSlugs.length > 1 ? "these pages" : "this page"} so nothing was overwritten.`
+      : undefined;
 
-    return NextResponse.json({ success: true, websiteId, slug, fallbackWarnings: fallbackWarnings?.length ? fallbackWarnings : undefined });
+    return NextResponse.json({
+      success: true,
+      websiteId: saveResult.websiteId,
+      slug: saveResult.slug,
+      fallbackWarnings: fallbackWarnings?.length ? fallbackWarnings : undefined,
+      protectedSlugs: saveResult.protectedSlugs.length ? saveResult.protectedSlugs : undefined,
+      savedFallbackSlugs: saveResult.savedFallbackSlugs.length ? saveResult.savedFallbackSlugs : undefined,
+      protectedNote,
+    });
   } catch (err: any) {
     console.error("[website-builder/generate POST] error:", err.message, err.stack);
     return NextResponse.json({ error: `Website generation failed: ${err.message}` }, { status: 500 });
