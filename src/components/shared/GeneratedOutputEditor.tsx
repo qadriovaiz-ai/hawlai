@@ -112,7 +112,7 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
   }
 
   if (typeof output === "string") {
-    return <textarea value={output} onChange={(e) => onChange(e.target.value)} className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800" rows={4} />;
+    return <textarea value={output} onChange={(e) => onChange(e.target.value)} className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800" rows={4} />;
   }
 
   if (output.slides) {
@@ -124,13 +124,13 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
             <input
               value={s.headline ?? ""}
               onChange={(e) => setPath(["slides", i, "headline"], e.target.value)}
-              className="w-full text-sm font-semibold bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
+              className="w-full text-sm font-semibold bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
               placeholder="Headline"
             />
             <textarea
               value={s.supporting ?? s.body ?? ""}
               onChange={(e) => setPath(["slides", i, s.supporting !== undefined ? "supporting" : "body"], e.target.value)}
-              className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-600"
+              className="w-full text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-600"
               rows={2}
             />
           </div>
@@ -147,20 +147,20 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
             <input
               value={d.topic ?? ""}
               onChange={(e) => setPath(["days", i, "topic"], e.target.value)}
-              className="w-full text-sm bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
+              className="w-full text-sm bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
               placeholder="Topic"
             />
             <input
               value={d.angle ?? ""}
               onChange={(e) => setPath(["days", i, "angle"], e.target.value)}
-              className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-500"
+              className="w-full text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-500"
               placeholder="Angle"
             />
             {d.caption !== undefined && (
               <textarea
                 value={d.caption ?? ""}
                 onChange={(e) => setPath(["days", i, "caption"], e.target.value)}
-                className="w-full text-sm bg-white border border-purple-200 rounded-md px-2 py-1.5 text-slate-700"
+                className="w-full text-sm bg-slate-100 border border-purple-200 rounded-md px-2 py-1.5 text-slate-700"
                 rows={3}
                 placeholder="Ready-to-post caption"
               />
@@ -193,7 +193,7 @@ function EditableStringList({ items, onChange }: { items: string[]; onChange: (n
           key={i}
           value={v}
           onChange={(e) => { const next = [...items]; next[i] = e.target.value; onChange(next); }}
-          className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+          className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
           rows={1}
         />
       ))}
@@ -204,7 +204,7 @@ function EditableStringList({ items, onChange }: { items: string[]; onChange: (n
 function EditableFieldValue({ value, onChange }: { value: any; onChange: (v: any) => void }) {
   if (value == null) return null;
   if (typeof value === "string") {
-    return <textarea value={value} onChange={(e) => onChange(e.target.value)} className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800" rows={value.length > 80 ? 4 : 2} />;
+    return <textarea value={value} onChange={(e) => onChange(e.target.value)} className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800" rows={value.length > 80 ? 4 : 2} />;
   }
   if (typeof value !== "object") {
     // Numbers/booleans — rare in generated content, and editing them as
@@ -231,7 +231,7 @@ function EditableFieldValue({ value, onChange }: { value: any; onChange: (v: any
                         const next = value.map((x: any, xi: number) => (xi === i ? { ...x, [k]: e.target.value } : x));
                         onChange(next);
                       }}
-                      className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-700"
+                      className="w-full text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-700"
                       rows={v.length > 80 ? 3 : 1}
                     />
                   </div>
@@ -258,7 +258,7 @@ function EditableFieldValue({ value, onChange }: { value: any; onChange: (v: any
             <textarea
               value={v}
               onChange={(e) => onChange({ ...value, [k]: e.target.value })}
-              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700"
+              className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700"
               rows={v.length > 80 ? 3 : 2}
             />
           </div>

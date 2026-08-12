@@ -76,10 +76,10 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {mode === "signup" && (
-            <input required placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
+            <input required placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
           )}
-          <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
-          <input required type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
+          <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
+          <input required type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 

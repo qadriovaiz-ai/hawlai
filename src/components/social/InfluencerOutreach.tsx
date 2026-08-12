@@ -139,7 +139,7 @@ export default function InfluencerOutreach() {
                     <textarea
                       value={draft.searchTerms.join("\n")}
                       onChange={(e) => setDraft({ ...draft, searchTerms: e.target.value.split("\n") })}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+                      className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
                       rows={2}
                     />
                   </div>
@@ -148,7 +148,7 @@ export default function InfluencerOutreach() {
                     <textarea
                       value={draft.outreachMessage}
                       onChange={(e) => setDraft({ ...draft, outreachMessage: e.target.value })}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+                      className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
                       rows={4}
                     />
                   </div>
@@ -157,7 +157,7 @@ export default function InfluencerOutreach() {
                     <input
                       value={draft.emailSubject}
                       onChange={(e) => setDraft({ ...draft, emailSubject: e.target.value })}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+                      className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
                     />
                   </div>
                   <div>
@@ -165,7 +165,7 @@ export default function InfluencerOutreach() {
                     <textarea
                       value={draft.emailBody}
                       onChange={(e) => setDraft({ ...draft, emailBody: e.target.value })}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+                      className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
                       rows={4}
                     />
                   </div>
@@ -174,7 +174,7 @@ export default function InfluencerOutreach() {
                     <textarea
                       value={draft.collabIdeas.join("\n")}
                       onChange={(e) => setDraft({ ...draft, collabIdeas: e.target.value.split("\n") })}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+                      className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
                       rows={3}
                     />
                   </div>

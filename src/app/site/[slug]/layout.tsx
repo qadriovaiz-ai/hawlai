@@ -32,7 +32,17 @@ export default async function SiteLayout({ children, params }: { children: React
 
   return (
     <div
-      style={{ backgroundColor: theme.bg, fontFamily: "var(--font-body)", ["--font-heading" as string]: fonts.heading, ["--font-body" as string]: fonts.body } as React.CSSProperties}
+      // color was missing here — nav links and the footer set it
+      // explicitly per-element (theme.dark), but <main> itself never
+      // did, so any page that doesn't set its own text color (cart,
+      // checkout, ProductReviews) fell through to the global dashboard
+      // body default (near-white, since this app's slate scale is
+      // inverted for the dark dashboard theme) against this light
+      // storefront background — invisible text. Setting it here once
+      // fixes every such page without touching each one individually;
+      // pages/blocks that already set their own explicit color are
+      // unaffected, since a more specific inline style always wins.
+      style={{ backgroundColor: theme.bg, color: theme.dark, fontFamily: "var(--font-body)", ["--font-heading" as string]: fonts.heading, ["--font-body" as string]: fonts.body } as React.CSSProperties}
       className="min-h-screen site-fonts"
     >
       <link rel="stylesheet" href={fontStylesheetUrl} />

@@ -98,16 +98,16 @@ export default function AffiliateManagerView() {
         {showForm && (
           <div className="space-y-2 bg-slate-200 rounded-lg p-3">
             <div className="flex gap-2">
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             </div>
             <div className="flex gap-2">
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
-              <select value={commissionType} onChange={(e) => setCommissionType(e.target.value)} className="text-sm bg-white border border-slate-200 rounded-lg px-2 py-2">
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+              <select value={commissionType} onChange={(e) => setCommissionType(e.target.value)} className="text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-2">
                 <option value="percentage">% of sale</option>
                 <option value="fixed">₹ per order</option>
               </select>
-              <input value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} type="number" className="w-20 text-sm bg-white border border-slate-200 rounded-lg px-2 py-2" />
+              <input value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} type="number" className="w-20 text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-2" />
             </div>
             <button onClick={addAffiliate} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg">Add & generate code</button>
           </div>

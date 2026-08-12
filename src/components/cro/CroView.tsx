@@ -202,12 +202,12 @@ export default function CroView() {
         ) : (
           <div className="space-y-2">
             <p className="text-xs text-slate-400">No active test. Compare two versions of your headline or CTA on real visitors.</p>
-            <select value={abForm.element} onChange={(e) => setAbForm({ ...abForm, element: e.target.value })} className="text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <select value={abForm.element} onChange={(e) => setAbForm({ ...abForm, element: e.target.value })} className="text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2 w-full">
               <option value="headline">Headline</option>
               <option value="cta">Call-to-Action</option>
             </select>
-            <input value={abForm.variantA} onChange={(e) => setAbForm({ ...abForm, variantA: e.target.value })} placeholder="Variant A text" className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
-            <input value={abForm.variantB} onChange={(e) => setAbForm({ ...abForm, variantB: e.target.value })} placeholder="Variant B text" className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
+            <input value={abForm.variantA} onChange={(e) => setAbForm({ ...abForm, variantA: e.target.value })} placeholder="Variant A text" className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
+            <input value={abForm.variantB} onChange={(e) => setAbForm({ ...abForm, variantB: e.target.value })} placeholder="Variant B text" className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
             <button onClick={startAbTest} disabled={abSaving} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg disabled:opacity-50">
               {abSaving ? "Starting..." : "Start Test"}
             </button>

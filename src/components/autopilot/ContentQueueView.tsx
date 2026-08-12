@@ -87,7 +87,7 @@ export default function ContentQueueView() {
                 <p className="text-xs font-semibold text-purple-500 mb-0.5">{new Date(item.scheduled_for + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</p>
                 {editingId === item.id ? (
                   <div className="space-y-1.5">
-                    <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5" />
+                    <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} className="w-full text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5" />
                     <div className="flex items-center gap-2">
                       <button onClick={() => saveEdit(item.id)} className="text-xs bg-purple-600 text-white px-2 py-1 rounded flex items-center gap-1"><Save className="w-3 h-3" /> Save</button>
                       <button onClick={() => setEditingId(null)} className="text-xs text-slate-400 flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>

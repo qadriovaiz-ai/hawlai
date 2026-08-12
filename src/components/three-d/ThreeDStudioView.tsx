@@ -76,7 +76,7 @@ export default function ThreeDStudioView() {
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g. A glass jar candle with a warm glowing flame, slowly rotating, dark elegant background"
           rows={3}
-          className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
+          className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
         />
         {error && <p className="text-xs text-red-500">{error}</p>}
         <button onClick={generate} disabled={generating || !prompt.trim()} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">

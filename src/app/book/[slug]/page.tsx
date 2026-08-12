@@ -109,9 +109,9 @@ export default function BookingPage() {
 
         {selectedSlot && (
           <div className="space-y-3 pt-4 border-t border-slate-100">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2" />
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="w-full text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2" />
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" className="w-full text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2" />
             {error && <p className="text-xs text-red-500">{error}</p>}
             <button
               onClick={handleSubmit}

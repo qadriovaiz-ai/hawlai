@@ -280,7 +280,7 @@ export default function PhotoEditor({
                   <input
                     value={selectedText.text}
                     onChange={(e) => updateSelectedText({ text: e.target.value })}
-                    className="w-full p-1.5 text-xs bg-white border border-slate-200 rounded-md"
+                    className="w-full p-1.5 text-xs bg-slate-100 border border-slate-200 rounded-md"
                   />
                   <div className="flex items-center gap-2">
                     <button onClick={() => updateSelectedText({ fontSize: Math.max(16, selectedText.fontSize - 4) })} className="btn-secondary px-1.5 py-1"><Minus className="w-3 h-3" /></button>

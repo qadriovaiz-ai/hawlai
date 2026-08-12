@@ -111,15 +111,15 @@ export default function CollabBoardManager() {
 
         {showForm && (
           <div className="space-y-2 bg-slate-200 rounded-lg p-3">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title — e.g. 'Diwali collection creators wanted'" className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What you're looking for (optional)" rows={2} className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title — e.g. 'Diwali collection creators wanted'" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What you're looking for (optional)" rows={2} className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             <div className="flex gap-2">
-              <select value={compensationType} onChange={(e) => setCompensationType(e.target.value)} className="text-sm bg-white border border-slate-200 rounded-lg px-2 py-2">
+              <select value={compensationType} onChange={(e) => setCompensationType(e.target.value)} className="text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-2">
                 <option value="product">Product only</option>
                 <option value="paid">Paid only</option>
                 <option value="both">Product + Paid</option>
               </select>
-              <input value={compensationDetails} onChange={(e) => setCompensationDetails(e.target.value)} placeholder="e.g. Free candle set + ₹500" className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
+              <input value={compensationDetails} onChange={(e) => setCompensationDetails(e.target.value)} placeholder="e.g. Free candle set + ₹500" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             </div>
             <button onClick={createListing} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg">Post to board</button>
           </div>

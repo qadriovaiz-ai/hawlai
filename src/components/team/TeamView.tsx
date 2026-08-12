@@ -133,9 +133,9 @@ export default function TeamView() {
                 placeholder="Email"
                 value={inviteForm.email}
                 onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
+                className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
               />
-              <select value={inviteForm.role} onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })} className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2">
+              <select value={inviteForm.role} onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })} className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2">
                 {Object.entries(ROLE_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}

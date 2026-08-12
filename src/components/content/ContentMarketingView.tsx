@@ -195,13 +195,13 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
             <input
               value={s.headline ?? ""}
               onChange={(e) => updateField(["slides", i, "headline"], e.target.value)}
-              className="w-full text-sm font-semibold bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
+              className="w-full text-sm font-semibold bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
               placeholder="Headline"
             />
             <textarea
               value={s.supporting ?? s.body ?? ""}
               onChange={(e) => updateField(["slides", i, s.supporting !== undefined ? "supporting" : "body"], e.target.value)}
-              className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-600"
+              className="w-full text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-600"
               rows={2}
             />
           </div>
@@ -218,13 +218,13 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
             <input
               value={d.topic ?? ""}
               onChange={(e) => updateField(["days", i, "topic"], e.target.value)}
-              className="w-full text-sm bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
+              className="w-full text-sm bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-800"
               placeholder="Topic"
             />
             <textarea
               value={d.angle ?? ""}
               onChange={(e) => updateField(["days", i, "angle"], e.target.value)}
-              className="w-full text-xs bg-white border border-slate-200 rounded-md px-2 py-1.5 text-slate-500"
+              className="w-full text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-1.5 text-slate-500"
               rows={2}
               placeholder="Angle"
             />
@@ -245,7 +245,7 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
               next.hooks[i] = e.target.value;
               onChange(next);
             }}
-            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+            className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
             rows={1}
           />
         ))}
@@ -264,7 +264,7 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
               next.ctas[i] = e.target.value;
               onChange(next);
             }}
-            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+            className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
             rows={1}
           />
         ))}
@@ -280,7 +280,7 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
           <textarea
             value={typeof val === "string" ? val : JSON.stringify(val)}
             onChange={(e) => updateField([key], e.target.value)}
-            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
+            className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800"
             rows={typeof val === "string" && val.length > 80 ? 4 : 2}
           />
         </div>

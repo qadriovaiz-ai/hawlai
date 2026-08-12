@@ -330,7 +330,7 @@ export default function CanvasEditor({ designId }: Props) {
           <button onClick={() => router.push("/dashboard/graphic-design")} className="text-slate-400 hover:text-slate-700">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <input value={designName} onChange={(e) => setDesignName(e.target.value)} className="text-sm font-semibold text-slate-900 bg-transparent border-none outline-none w-40" />
+          <input value={designName} onChange={(e) => setDesignName(e.target.value)} className="text-sm font-semibold text-slate-50 bg-transparent border-none outline-none w-40" />
         </div>
         <div className="flex items-center gap-2">
           <button onClick={undo} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg"><Undo2 className="w-4 h-4" /></button>
@@ -404,13 +404,13 @@ export default function CanvasEditor({ designId }: Props) {
                 <input
                   type="number" min={50} max={8000} value={customW}
                   onChange={(e) => setCustomW(Number(e.target.value))}
-                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+                  className="w-full text-xs bg-white text-slate-50 border border-slate-200 rounded-lg px-2 py-1.5"
                 />
                 <span className="text-slate-300 text-xs">×</span>
                 <input
                   type="number" min={50} max={8000} value={customH}
                   onChange={(e) => setCustomH(Number(e.target.value))}
-                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+                  className="w-full text-xs bg-white text-slate-50 border border-slate-200 rounded-lg px-2 py-1.5"
                 />
               </div>
               <button onClick={() => applySizePreset({ w: customW, h: customH })} className="w-full mt-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 rounded-lg">
@@ -457,7 +457,7 @@ export default function CanvasEditor({ designId }: Props) {
                       list="font-suggestions"
                       value={(selected.get("fontFamily") as string) ?? "Arial"}
                       onChange={(e) => updateSelectedProp("fontFamily", e.target.value)}
-                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+                      className="w-full text-xs bg-white text-slate-50 border border-slate-200 rounded-lg px-2 py-1.5"
                     />
                     <datalist id="font-suggestions">
                       {FONT_FAMILIES.map((f) => <option key={f} value={f} />)}
@@ -573,7 +573,7 @@ function StockPhotoModal({ onClose, onSelect }: { onClose: () => void; onSelect:
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && search()}
             placeholder="Search free stock photos..."
-            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2"
+            className="flex-1 text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2"
           />
           <button onClick={search} disabled={loading} className="text-sm bg-purple-600 text-white px-3 py-2 rounded-lg disabled:opacity-50">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
@@ -631,7 +631,7 @@ function IconLibraryModal({ onClose, onSelect }: { onClose: () => void; onSelect
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search 1750+ free icons (e.g. heart, arrow, shopping-cart)..."
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+            className="w-full text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2"
             autoFocus
           />
         </div>

@@ -78,7 +78,7 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
             placeholder="Your WhatsApp number, e.g. 9876543210"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
+            className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
           <button onClick={start} disabled={loading || !phone.trim()} className="btn-secondary text-xs w-full justify-center">
@@ -93,7 +93,7 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
             placeholder="6-digit code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            className="w-full text-sm bg-white text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
+            className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
           <button onClick={verify} disabled={loading || !code.trim()} className="btn-secondary text-xs w-full justify-center">
