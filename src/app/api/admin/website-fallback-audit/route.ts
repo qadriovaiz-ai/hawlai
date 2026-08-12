@@ -28,6 +28,20 @@ export async function GET(request: Request) {
   if (authError) return authError;
 
   const service = createServiceClient();
+
+  // Ground-truth debugging mode — ?websiteSlug=x returns every current
+  // page row for that site (not just fallback ones), straight from the
+  // DB via this Route Handler (never subject to the page-render fetch
+  // caching the public /site/[slug] pages can get from Next.js).
+  const url = new URL(request.url);
+  const debugSlug = url.searchParams.get("websiteSlug");
+  if (debugSlug) {
+    const { data: site } = await service.from("websites").select("id, slug, published, nav_order").eq("slug", debugSlug).maybeSingle();
+    if (!site) return NextResponse.json({ error: `No website found with slug "${debugSlug}"` }, { status: 404 });
+    const { data: pages } = await service.from("website_pages").select("slug, title, page_type, is_fallback, order_index, updated_at").eq("website_id", site.id).order("order_index", { ascending: true });
+    return NextResponse.json({ website: site, pages: pages ?? [] });
+  }
+
   const { data: fallbackPages, error } = await service
     .from("website_pages")
     .select("id, slug, title, page_type, updated_at, website_id, websites(slug, published, dealership_id, dealerships(dealership_name))")
