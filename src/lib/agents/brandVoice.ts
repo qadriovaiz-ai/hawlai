@@ -45,11 +45,20 @@ export function deriveBrandVoiceFallback(toneOfVoice: string | null | undefined)
   };
 }
 
+// Shared by the prompt formatter below and by Task 4's post-generation
+// validator — both need the same "real profile, or a safe generic one"
+// resolution so a legacy business without a brand_voice row still gets
+// consistent (never-violating, since the fallback has no avoid-words and
+// no "none"/"avoid"/"frequent" settings) behavior in both places.
+export function resolveBrandVoiceProfile(profile: BrandVoiceProfile | null | undefined, toneOfVoice: string | null | undefined): BrandVoiceProfile {
+  return profile ?? deriveBrandVoiceFallback(toneOfVoice);
+}
+
 // The full, explicit-instructions block for real text-generation
 // prompts — same "pre-formatted, ready to drop in" shape as
 // memorySection/knowledgeSection in masterBrainV2.ts.
 export function formatBrandVoiceSection(profile: BrandVoiceProfile | null | undefined, toneOfVoice: string | null | undefined): string {
-  const p = profile ?? deriveBrandVoiceFallback(toneOfVoice);
+  const p = resolveBrandVoiceProfile(profile, toneOfVoice);
   const lines: string[] = [];
   if (p.personality_traits.length > 0) lines.push(`Personality: ${p.personality_traits.join(", ")}.`);
   lines.push(`Formality: ${p.formality_level}.`);

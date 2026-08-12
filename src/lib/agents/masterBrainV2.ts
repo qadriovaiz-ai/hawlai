@@ -42,7 +42,8 @@ import { generateGrowthOpportunities, generateBudgetRecommendations, generateExp
 import { generateInfluencerPlan } from "./influencerAgent";
 import { generateRetargetingCopy } from "./retargetingAgent";
 import { retrieveRelevantKnowledge } from "../knowledge/retrieveKnowledge";
-import { type BrandVoiceProfile, formatBrandVoiceSection, formatBrandVoiceVisualHint } from "./brandVoice";
+import { type BrandVoiceProfile, formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceProfile } from "./brandVoice";
+import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -462,11 +463,17 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
   }
 
+  // Phase 3 Task 4 — same resolved profile (real row, or the
+  // never-violating generic fallback) used for the prompt itself, reused
+  // here so a legacy business without a brand_voice row can never get a
+  // spurious violation flag.
+  const resolvedBrandVoice = resolveBrandVoiceProfile(ctx.brandVoice, ctx.toneOfVoice);
+
   switch (toolName) {
     case "generate_brand_kit": {
       const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!(kit as any)._fallback) await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, kit, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
-      return kit;
+      return withBrandVoiceCheck(kit, resolvedBrandVoice);
     }
     case "generate_logo": {
       try {
@@ -510,13 +517,19 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           ? " This site is already published/live — real changes were applied directly; tell the person to check it at its live URL."
           : " It is NOT live yet — tell the person to review it in Website Builder and hit Publish there when they're happy with it.";
 
-        return {
+        // Validated against the real generated page content
+        // (generatedPages) — the returned object itself is just a
+        // confirmation note, not the actual marketing copy.
+        const websiteResult: any = {
           success: true,
           pages: generatedPages.map((p) => p.title),
           theme: validTheme,
           slug: saveResult.slug,
           note: `Website ${saveResult.published ? "updated" : "built as a DRAFT"} with ${generatedPages.length} pages (${generatedPages.map((p) => p.title).join(", ")}).${draftNote}${fallbackWarnings?.length ? ` Some pages fell back to placeholder content instead of real AI content (${fallbackWarnings.join("; ")}) — tell the person this happened and that they can hit Regenerate Website once it's resolved.` : ""}${protectedNote}`,
         };
+        const websiteBrandVoiceCheck = validateBrandVoiceCompliance(flattenResultText(generatedPages), resolvedBrandVoice);
+        if (!websiteBrandVoiceCheck.compliant) websiteResult._brandVoiceCheck = websiteBrandVoiceCheck;
+        return websiteResult;
       } catch (err: any) {
         return { error: err.message };
       }
@@ -524,12 +537,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_content": {
       const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
-      return savedId ? { ...output, _savedId: savedId } : output;
+      return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_seo": {
       const { output, _fallback } = await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
-      return output;
+      return withBrandVoiceCheck(output, resolvedBrandVoice);
     }
     case "generate_social_management": {
       const { data: recentPosts } = await supabase
@@ -543,17 +556,17 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         : null;
       const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, recentPostsContext, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "social_management_items", { task_type: input.taskType, input_text: input.inputText ?? "", output });
-      return savedId ? { ...output, _savedId: savedId } : output;
+      return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_email": {
       const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
-      return savedId ? { ...output, _savedId: savedId } : output;
+      return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_whatsapp": {
       const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
-      return savedId ? { ...output, _savedId: savedId } : output;
+      return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_ad_plan": {
       const performance = await getCampaignPerformance(supabase, ctx.id);
@@ -562,12 +575,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         : null;
       const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
-      return output;
+      return withBrandVoiceCheck(output, resolvedBrandVoice);
     }
     case "generate_video_task": {
       const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "video_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
-      return savedId ? { ...output, _savedId: savedId } : output;
+      return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "research_competitor": {
       const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
@@ -623,7 +636,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_influencer_outreach": {
       const output = await generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       await saveGenerated(supabase, ctx.id, "influencer_outreach_plans", { product: input.productOrService, output });
-      return output;
+      return withBrandVoiceCheck(output, resolvedBrandVoice);
     }
     case "generate_retargeting_copy": {
       const segmentType = input.segmentType as "abandoned_cart" | "cold_lead" | "lapsed_buyer";
@@ -661,7 +674,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const competitorContext = (competitorRows ?? []).length > 0 ? JSON.stringify(competitorRows) : null;
       const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!(strategy as any)._fallback) await supabase.from("deep_strategies").upsert({ dealership_id: ctx.id, strategy, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
-      return strategy;
+      return withBrandVoiceCheck(strategy, resolvedBrandVoice);
     }
     case "generate_seo_keywords": {
       if (input.writeFullBlogPost) {
@@ -1018,6 +1031,12 @@ export interface Artifact {
   brandKit?: { colors: { name: string; hex: string; role: string }[]; tagline: string; typography: { headingFont: string; bodyFont: string }; mission?: string }; // bespoke — BrandKit mixes scalars (tagline/mission) with arrays (colors/guidelines) in one result, doesn't fit the generic array-or-draft dispatcher
   influencerPlan?: { searchTerms: string[]; message: string; collabIdeas: string[] }; // bespoke — same mixed-shape reason as brandKit
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
+  // Phase 3 Task 4 — advisory only, never affects whether content was
+  // generated/saved. Populated only when validateBrandVoiceCompliance()
+  // found something; omitted (not an empty array) when clean. Data-layer
+  // only for now — no UI renders this yet, pending a follow-up design
+  // pass on how it should actually show up in the card.
+  brandVoiceFlags?: { rule: string; detail: string }[];
 }
 
 // Where each tool's result actually lives, so a person can jump straight
@@ -1579,6 +1598,13 @@ A junior marketer takes a request literally and produces the thing asked for. A 
         result = { error: err.message };
       }
       const artifact = extractArtifact(block.name, block.input, result);
+      // Phase 3 Task 4 — generic, applies regardless of which artifact
+      // shape the tool produced: _brandVoiceCheck is only ever present
+      // on results from the 11 text-generation tools wired in
+      // executeTool(), and only when there was something to flag.
+      if (artifact && result?._brandVoiceCheck?.violations?.length > 0) {
+        artifact.brandVoiceFlags = result._brandVoiceCheck.violations;
+      }
       if (artifact) artifacts.push(artifact);
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result).slice(0, 4000) });
     }
