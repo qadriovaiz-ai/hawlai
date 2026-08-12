@@ -69,6 +69,14 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const websiteSlug: string | undefined = body.websiteSlug;
   const all: boolean = !!body.all;
+  // Lets a single call both fix a business's page plan (e.g. add a
+  // missing "products" page) and regenerate through it — without this,
+  // fixing a plan gap would need a separate manual DB edit before this
+  // endpoint could pick it up. Only meaningful with websiteSlug (a
+  // single, deliberate target), not with `all`.
+  const addPages: PlannedPage[] = Array.isArray(body.addPages)
+    ? body.addPages.filter((p: any) => p?.slug && p?.title).map((p: any) => ({ slug: String(p.slug), title: String(p.title), pageType: String(p.pageType ?? "custom") }))
+    : [];
 
   if (!websiteSlug && !all) {
     return NextResponse.json({ error: "Provide either { websiteSlug } for one business or { all: true } for every currently-affected business" }, { status: 400 });
@@ -102,7 +110,12 @@ export async function POST(request: Request) {
 
       if (!existingPages || existingPages.length === 0) { results.push({ websiteId, slug: website.slug, error: "No existing pages to regenerate from" }); continue; }
 
-      const pagePlan: PlannedPage[] = existingPages.map((p: any) => ({ slug: p.slug, title: p.title, pageType: p.page_type }));
+      const currentSlugs = new Set(existingPages.map((p: any) => p.slug));
+      const newPages = addPages.filter((p) => !currentSlugs.has(p.slug));
+      const pagePlan: PlannedPage[] = [
+        ...existingPages.map((p: any) => ({ slug: p.slug, title: p.title, pageType: p.page_type })),
+        ...newPages,
+      ];
 
       const { pages: generatedPages, fallbackWarnings } = await generateWebsite(
         dealership?.dealership_name ?? "the business",
@@ -125,6 +138,7 @@ export async function POST(request: Request) {
         websiteId,
         slug: saveResult.slug,
         dealershipName: dealership?.dealership_name,
+        addedPages: newPages.length ? newPages.map((p) => p.slug) : undefined,
         stillFallback: saveResult.savedFallbackSlugs,
         recoveredPages: pagePlan.map((p) => p.slug).filter((s) => !saveResult.savedFallbackSlugs.includes(s) && !saveResult.protectedSlugs.includes(s)),
         fallbackWarnings: fallbackWarnings?.length ? fallbackWarnings : undefined,

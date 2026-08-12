@@ -36,13 +36,33 @@ function hiddenOnMobile(block: Block, visibleDisplay: string = "block"): string 
   return block.responsive?.mobile?.hidden ? `hidden @sm:${visibleDisplay}` : "";
 }
 
+// A button's href is authored (by the AI, or by hand in the editor) as
+// a bare page-slug reference — "/about", "/" for home, "shop" — never
+// the full site path, since the site's own slug isn't stable/known at
+// authoring time (it can change, and isn't even assigned yet for a
+// brand-new site being generated). This is the one place that
+// resolves a bare reference into the real "/site/{slug}/{page}" URL,
+// so every button on every page gets it right without needing to know
+// the site's URL structure itself. External links (http/https/mailto/
+// tel) and "#" pass through unchanged; anything already prefixed with
+// "/site/" (e.g. old data, or a hand-typed absolute link) also passes
+// through unchanged rather than being double-prefixed.
+function resolveInternalHref(href: string | undefined, slug: string): string {
+  const raw = (href ?? "").trim();
+  if (!raw || raw === "#") return "#";
+  if (/^(https?:|mailto:|tel:)/i.test(raw) || raw.startsWith("//") || raw.startsWith("/site/")) return raw;
+  const pageSlug = raw.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!pageSlug || pageSlug === "home") return `/site/${slug}`;
+  return `/site/${slug}/${pageSlug}`;
+}
+
 // Read-only recursive renderer — the public storefront's only consumer
 // of the Block tree. The editor canvas (later phases) wraps this same
 // component with selection/drag affordances rather than duplicating
 // this switch, so there's exactly one place that knows how each block
 // type looks.
 export default function BlockRenderer({ block, ctx }: { block: Block; ctx: BlockRenderContext }) {
-  const { theme } = ctx;
+  const { theme, slug } = ctx;
 
   switch (block.type) {
     case "section": {
@@ -114,7 +134,7 @@ export default function BlockRenderer({ block, ctx }: { block: Block; ctx: Block
       const white = block.props.style === "white";
       return (
         <a
-          href={block.props.href || "#"}
+          href={resolveInternalHref(block.props.href, slug)}
           className={`inline-block px-6 py-3 rounded-full font-semibold ${hiddenOnMobile(block, "inline-block")}`}
           style={white ? { backgroundColor: "#fff", color: theme.dark } : { backgroundColor: theme.accent, color: theme.accentText }}
         >

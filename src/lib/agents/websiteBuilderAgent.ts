@@ -294,6 +294,35 @@ function normalizeBlockInput(node: any): any {
   };
 }
 
+// Defense-in-depth beyond the prompt instruction in generatePageBlocks:
+// rewrites any button href that references a page slug NOT actually in
+// this site's plan to a safe fallback, instead of leaving a
+// guaranteed-dead link live (root cause of the candle-by-qaaf "Shop the
+// Collection" 404 — the model invented a page that was never planned).
+// Bare page-slug format only ("/about"), matching what the prompt asks
+// for and what BlockRenderer.tsx's resolveInternalHref() expects at
+// render time — external links, "#", and empty hrefs pass through.
+function sanitizeInternalLinks(nodes: any[], validSlugs: Set<string>, fallbackHref: string): any[] {
+  function walk(node: any): any {
+    let result = node;
+    if (node.type === "button" && typeof node.props?.href === "string") {
+      const href = node.props.href.trim();
+      const isExternal = !href || href === "#" || /^(https?:|mailto:|tel:)/i.test(href);
+      if (!isExternal) {
+        const pageSlug = href.replace(/^\/+/, "").replace(/\/+$/, "") || "home";
+        if (pageSlug !== "home" && !validSlugs.has(pageSlug)) {
+          result = { ...node, props: { ...node.props, href: fallbackHref } };
+        }
+      }
+    }
+    if (Array.isArray(result.children)) {
+      result = { ...result, children: result.children.map(walk) };
+    }
+    return result;
+  }
+  return nodes.map(walk);
+}
+
 // Limits how many page-generation calls run at once — high enough to
 // keep total latency reasonable for a multi-page site, low enough to
 // avoid hammering the API or letting one slow call block everything.
@@ -315,6 +344,7 @@ async function generatePageBlocks(
   businessCategory: string,
   city: string | null,
   page: PlannedPage,
+  allPages: PlannedPage[],
   businessSummary: string | null,
   brandContext: string,
   customInstructions: string | null,
@@ -351,6 +381,8 @@ ${blockVocabularyNote()}
 
 Compose the page as a small tree: every top-level item must be type "section" (2-4 of them). A "section" typically contains one "stack" (direction "column" for simple stacked content, or "row" with 2-3 child "stack"s each given a widthFraction like 0.33 or 0.5 for side-by-side columns/cards). Put actual content — heading/text/image/button — inside those stacks, not directly inside "section".
 
+This site's ONLY real pages are: ${allPages.map((p) => `"${p.slug}"`).join(", ")}. Any "button" block's href that links within this site MUST be one of these exact slugs, written as "/slug" (e.g. "/${allPages.find((p) => p.slug !== page.slug)?.slug ?? "contact"}"), or "/" for the home page — never invent a page/path that isn't in this exact list (no "/shop", "/products", "/menu", etc. unless that literal slug is listed above). If there's no genuinely relevant page in this list to link a CTA to, link to "/contact" if "contact" is in the list, otherwise omit the button entirely rather than guessing.
+
 Keep every text field genuinely concise — this is a website page, not an essay. Body/paragraph text blocks: 2-4 sentences each, not longer. You have a limited output budget for this whole page (structure + all text combined), so prioritize a complete, well-structured page over exhaustive text in any one block.
 
 ${page.pageType === "legal" ? `This is a legal page ("${page.slug}") — one section with a heading and genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly, not a generic disclaimer. Cover the essential clauses a small business actually needs (not an exhaustive enterprise-grade document) — standard length for this category, not maximal.` : `Include a "button" or "form" block near the end to drive leads, unless this is the contact page itself.`}
@@ -377,13 +409,17 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
       return { page: fallback, fellBack: true, reason: "One or more blocks failed registry validation (unknown type, bad props, or invalid children)" };
     }
 
+    const validSlugs = new Set(allPages.map((p) => p.slug));
+    const fallbackHref = allPages.some((p) => p.slug === "contact") ? "/contact" : "/";
+    const normalizedBlocks = input.blocks.map(normalizeBlockInput);
+
     return {
       page: {
         slug: page.slug,
         title: page.title,
         pageType: page.pageType,
         metaDescription: typeof input.metaDescription === "string" && input.metaDescription.trim() ? input.metaDescription.trim() : fallback.metaDescription,
-        sections: input.blocks.map(normalizeBlockInput),
+        sections: sanitizeInternalLinks(normalizedBlocks, validSlugs, fallbackHref),
       },
       fellBack: false,
     };
@@ -433,7 +469,7 @@ export async function generateWebsite(
     : "No brand voice set yet — keep it natural, honest, and specific to this business.";
 
   const generated = await mapWithConcurrency(pageList, 3, (page) =>
-    generatePageBlocks(dealershipName, businessCategory, city, page, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext)
+    generatePageBlocks(dealershipName, businessCategory, city, page, pageList, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext)
   );
 
   // Pages meant to list real products (shop/products/menu/listings)
