@@ -467,7 +467,9 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "generate_logo": {
       try {
-        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category, { supabase, dealershipId: ctx.id });
+        const { data: existingKit } = await supabase.from("brand_kits").select("kit").eq("dealership_id", ctx.id).maybeSingle();
+        const existingColors = existingKit?.kit?.colors ?? null;
+        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category, { supabase, dealershipId: ctx.id }, existingColors);
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `logos/${ctx.id}/${Date.now()}.png`;
@@ -661,13 +663,19 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_seo_keywords": {
       if (input.writeFullBlogPost) {
         const { generateBlogPost } = await import("./seoAgent");
-        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
+        const { data: website } = await supabase.from("websites").select("id").eq("dealership_id", ctx.id).maybeSingle();
+        const { data: pageRows } = website
+          ? await supabase.from("website_pages").select("slug, title").eq("website_id", website.id)
+          : { data: null };
+        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext, pageRows ?? null);
       }
       return generateSeoIdeas(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
     }
     case "generate_graphic": {
       try {
-        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+        const { data: existingKit } = await supabase.from("brand_kits").select("kit").eq("dealership_id", ctx.id).maybeSingle();
+        const existingColors = existingKit?.kit?.colors ?? null;
+        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors);
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `graphic-designs/${ctx.id}/${input.designType}-${Date.now()}.png`;
@@ -1058,22 +1066,23 @@ const DEPARTMENT_HREF: Record<string, string> = {
 };
 
 // Groups a keyword-research-style result into sections by search intent,
-// for a proper "Informational" / "Transactional" card instead of a flat
-// dump. Anything without a recognized intent lands in "Other" rather
-// than being silently dropped.
+// for a proper "Informational" / "Transactional" / "Navigational" card
+// instead of a flat dump. Anything without a recognized intent lands in
+// "Other" rather than being silently dropped.
 function groupKeywordsByIntent(keywords: { keyword?: string; intent?: string; note?: string }[]): { heading: string; items: { label: string; note?: string }[] }[] {
-  const buckets: Record<"informational" | "transactional" | "other", { label: string; note?: string }[]> = {
-    informational: [], transactional: [], other: [],
+  const buckets: Record<"informational" | "transactional" | "navigational" | "other", { label: string; note?: string }[]> = {
+    informational: [], transactional: [], navigational: [], other: [],
   };
   for (const k of keywords) {
     if (!k?.keyword) continue;
     const intent = (k.intent ?? "").toLowerCase();
-    const bucket = intent.startsWith("info") ? "informational" : intent.startsWith("trans") ? "transactional" : "other";
+    const bucket = intent.startsWith("info") ? "informational" : intent.startsWith("trans") ? "transactional" : intent.startsWith("nav") ? "navigational" : "other";
     buckets[bucket].push({ label: k.keyword, note: k.note });
   }
   const groups: { heading: string; items: { label: string; note?: string }[] }[] = [];
   if (buckets.informational.length) groups.push({ heading: "Informational", items: buckets.informational });
   if (buckets.transactional.length) groups.push({ heading: "Transactional", items: buckets.transactional });
+  if (buckets.navigational.length) groups.push({ heading: "Navigational", items: buckets.navigational });
   if (buckets.other.length) groups.push({ heading: "Other", items: buckets.other });
   return groups;
 }
@@ -1340,6 +1349,9 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
     case "generate_seo_keywords": {
       if (input?.writeFullBlogPost && typeof result?.content === "string") {
         return { kind: "document", label: "Blog Post", draft: { heading: result.title ?? "Blog Post", body: result.content, wordCount: result.content.split(/\s+/).filter(Boolean).length }, departmentHref };
+      }
+      if (Array.isArray(result?.keywordDetails) && result.keywordDetails.length > 0) {
+        return { kind: "document", label: "SEO Keyword Ideas", groups: groupKeywordsByIntent(result.keywordDetails), departmentHref };
       }
       return deriveContentArtifact(toolName, "SEO Keyword Ideas", result, departmentHref);
     }

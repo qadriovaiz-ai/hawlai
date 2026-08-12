@@ -11,26 +11,41 @@ export interface GraphicTypeMeta {
   promptTemplate: (business: string, category: string, prompt: string) => string;
 }
 
+// Each template now encodes three things beyond a style adjective: what
+// composition actually suits this format (where the eye enters the
+// frame, what real-world constraints apply — e.g. Story UI safe zones,
+// thumbnail scale), an explicit 1st/2nd/3rd visual hierarchy so the
+// image has one clear read instead of competing elements, and enough
+// context for the color guidance appended in generateGraphic() below
+// to land on top of a real compositional plan rather than a flat scene.
 export const GRAPHIC_TYPES: GraphicTypeMeta[] = [
-  { key: "ad_creative", label: "Ad Creative", promptTemplate: (b, c, p) => `A polished square (1:1) Meta/Instagram ad creative for "${b}", a ${c} in India. ${p || "Highlight the core offer clearly"}. Bold readable headline text baked into the image, high contrast, scroll-stopping, professional ad design — not a stock photo.` },
-  { key: "instagram_post", label: "Instagram Post", promptTemplate: (b, c, p) => `A square (1:1) Instagram feed post graphic for "${b}", a ${c}. ${p || "Warm, on-brand, visually clean"}. Minimal but eye-catching, no watermarks.` },
-  { key: "story", label: "Story", promptTemplate: (b, c, p) => `A vertical (9:16) Instagram/Facebook Story graphic for "${b}", a ${c}. ${p || "Bold, mobile-first design"}. Leave clear space near top/bottom for UI overlays, punchy short text baked in.` },
-  { key: "thumbnail", label: "Thumbnail", promptTemplate: (b, c, p) => `A widescreen (16:9) YouTube-style video thumbnail for "${b}", a ${c}. ${p || "High-energy, curiosity-driving"}. Bold large text, high contrast colors, expressive, clickable.` },
-  { key: "banner", label: "Banner", promptTemplate: (b, c, p) => `A wide horizontal web/social banner for "${b}", a ${c}. ${p || "Clean brand banner with headline"}. Professional, balanced composition, room for a logo corner.` },
-  { key: "poster", label: "Poster", promptTemplate: (b, c, p) => `A portrait promotional poster for "${b}", a ${c}, print-ready look. ${p || "Event or offer poster"}. Bold typography hierarchy, clear focal point.` },
-  { key: "flyer", label: "Flyer", promptTemplate: (b, c, p) => `A portrait A5 flyer design for "${b}", a ${c}. ${p || "Promotional flyer with offer details area"}. Clean layout with a clear headline, sub-text, and space implying contact info at the bottom.` },
-  { key: "brochure", label: "Brochure", promptTemplate: (b, c, p) => `The front cover panel of a professional trifold brochure for "${b}", a ${c}. ${p || "Corporate, trustworthy design"}. Elegant cover layout, room for a title and tagline.` },
-  { key: "pitch_deck", label: "Pitch Deck", promptTemplate: (b, c, p) => `A professional title slide for a pitch deck for "${b}", a ${c}. ${p || "Investor-grade, minimal, modern"}. Clean corporate design, plenty of negative space, looks like a real slide 1 of a deck.` },
-  { key: "mockup", label: "Mockup", promptTemplate: (b, c, p) => `A realistic product/branding mockup for "${b}", a ${c}. ${p || "Show the brand applied to a realistic real-world context (signage, packaging, or device screen)"}. Photorealistic mockup style, soft studio lighting.` },
-  { key: "ai_image", label: "AI Image", promptTemplate: (b, c, p) => `${p || `A relevant, high-quality image for "${b}", a ${c} in India`}. Photorealistic or clean illustration as best fits, professional quality, no watermarks or text artifacts.` },
-  { key: "product_photo", label: "Product Photo", promptTemplate: (b, c, p) => `A clean studio product photo for "${b}", a ${c}. ${p || "The main product/service, centered"}. Plain white or soft gradient background, professional e-commerce style lighting, sharp focus.` },
-  { key: "social_graphic", label: "Social Graphic", promptTemplate: (b, c, p) => `A square (1:1) social media graphic card for "${b}", a ${c}. ${p || "A quote, stat, or tip card"}. Modern card design, bold short text baked into the image, on-brand color use.` },
+  { key: "ad_creative", label: "Ad Creative", promptTemplate: (b, c, p) => `A polished square (1:1) Meta/Instagram ad creative for "${b}", a ${c} in India. ${p || "Highlight the core offer clearly"}. Composition: the product/offer visual is the dominant element, occupying roughly 60% of the frame — don't split attention with a busy background. Visual hierarchy: 1st the offer visual itself, 2nd a bold headline in the top or bottom third (never crossing the subject), 3rd a smaller supporting detail (price, deadline, or a soft CTA cue). Baked-in text stays short enough to read in under 2 seconds while scrolling.` },
+  { key: "instagram_post", label: "Instagram Post", promptTemplate: (b, c, p) => `A square (1:1) Instagram feed post graphic for "${b}", a ${c}. ${p || "Warm, on-brand, visually clean"}. Composition: rule-of-thirds placement of the main subject, generous breathing room — this should feel like a native post, not an ad. Visual hierarchy: 1st the subject/mood, 2nd any short caption text baked in (small, only if it adds real value), 3rd a small brand mark tucked in a corner, never dominant.` },
+  { key: "story", label: "Story", promptTemplate: (b, c, p) => `A vertical (9:16) Instagram/Facebook Story graphic for "${b}", a ${c}. ${p || "Bold, mobile-first design"}. Composition: keep the top ~15% and bottom ~20% of the frame clear of critical content — that's where the app's own reply bar and profile UI sit and will cover anything placed there. Visual hierarchy: 1st a bold, short hook line placed in the safe middle band, 2nd the supporting visual behind/around it, 3rd a subtle brand tag near (not at) the very bottom edge.` },
+  { key: "thumbnail", label: "Thumbnail", promptTemplate: (b, c, p) => `A widescreen (16:9) YouTube-style video thumbnail for "${b}", a ${c}. ${p || "High-energy, curiosity-driving"}. Composition: an expressive focal element (a face, reaction, or the core object) on one side of the frame, bold large text on the other — this has to read as a small thumbnail while someone scrolls, not just at full size. Visual hierarchy: 1st the expressive/emotional focal element, 2nd the headline text (3-5 words max, huge and bold), 3rd background context kept simple so it doesn't compete.` },
+  { key: "banner", label: "Banner", promptTemplate: (b, c, p) => `A wide horizontal web/social banner for "${b}", a ${c}. ${p || "Clean brand banner with headline"}. Composition: asymmetric layout — headline and supporting text anchored to one side, a reserved clear corner for a logo, generous negative space rather than filling the whole width. Visual hierarchy: 1st the headline, 2nd a visual/brand element balancing the composition, 3rd the logo corner.` },
+  { key: "poster", label: "Poster", promptTemplate: (b, c, p) => `A portrait promotional poster for "${b}", a ${c}, print-ready look. ${p || "Event or offer poster"}. Composition: a clear top-to-bottom vertical flow — bold headline anchoring the top, the main visual owning the middle, offer/event details anchored at the bottom. Visual hierarchy: 1st the headline/hook, 2nd the visual, 3rd the detail block (date, price, or contact), each zone distinct, not blended together.` },
+  { key: "flyer", label: "Flyer", promptTemplate: (b, c, p) => `A portrait A5 flyer design for "${b}", a ${c}. ${p || "Promotional flyer with offer details area"}. Composition: three distinct zones — a header band with the offer headline, a body area with one key selling detail, a footer strip implying contact info. Visual hierarchy: 1st the offer headline, 2nd the single strongest selling detail (not a laundry list), 3rd the footer contact strip — resist cramming in more than these three zones.` },
+  { key: "brochure", label: "Brochure", promptTemplate: (b, c, p) => `The front cover panel of a professional trifold brochure for "${b}", a ${c}. ${p || "Corporate, trustworthy design"}. Composition: restrained and mostly negative space, title and tagline anchored in the lower third or dead-center — a cover sells restraint, not density. Visual hierarchy: 1st the business name/mark, 2nd the tagline, 3rd a quiet supporting visual texture that doesn't compete with the title.` },
+  { key: "pitch_deck", label: "Pitch Deck", promptTemplate: (b, c, p) => `A professional title slide for a pitch deck for "${b}", a ${c}. ${p || "Investor-grade, minimal, modern"}. Composition: strict grid alignment, generous margins, a single strong title anchored left or center — this needs to look like slide 1 of a real deck an investor would sit through, not a poster. Visual hierarchy: 1st the deck title, 2nd the business name/subtitle beneath it, 3rd one minimal visual accent, never more.` },
+  { key: "mockup", label: "Mockup", promptTemplate: (b, c, p) => `A realistic product/branding mockup for "${b}", a ${c}. ${p || "Show the brand applied to a realistic real-world context (signage, packaging, or device screen)"}. Composition: correct real-world perspective and natural shadow/lighting — the brand asset must look physically placed in the scene, not pasted on. Visual hierarchy: 1st the branded object itself in sharp focus, 2nd the environment that grounds it as real (a storefront, a shelf, a hand holding a phone), 3rd incidental lighting/texture detail that sells the realism without distracting.` },
+  { key: "ai_image", label: "AI Image", promptTemplate: (b, c, p) => `${p || `A relevant, high-quality image for "${b}", a ${c} in India`}. Composition: one clear focal point — avoid a busy, cluttered frame with competing subjects. Visual hierarchy: 1st the described subject, 2nd supporting environment/context that reinforces it, 3rd background detail kept simple. Photorealistic or clean illustration as best fits, professional quality, no watermarks or text artifacts.` },
+  { key: "product_photo", label: "Product Photo", promptTemplate: (b, c, p) => `A clean studio product photo for "${b}", a ${c}. ${p || "The main product/service, centered"}. Composition: the product centered with even margin on all sides suited to e-commerce cropping, classic studio lighting setup (soft key light, gentle fill, subtle shadow beneath for grounding). Visual hierarchy: 1st the product in sharp focus, 2nd a subtle shadow/reflection that grounds it physically, 3rd a clean, non-distracting background — nothing else in frame.` },
+  { key: "social_graphic", label: "Social Graphic", promptTemplate: (b, c, p) => `A square (1:1) social media graphic card for "${b}", a ${c}. ${p || "A quote, stat, or tip card"}. Composition: text-forward layout with generous margin so type never touches the edges, one clear typographic hierarchy rather than several competing text sizes. Visual hierarchy: 1st the quote/stat itself (the largest type on the card), 2nd a smaller attribution or context line beneath it, 3rd a small brand mark, unobtrusive.` },
 ];
 
 import { logGeminiImageUsage } from "../usage/logUsage";
+import type { BrandColor } from "./brandBuildingAgent";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
+}
+
+function formatBrandColorsForGraphic(colors?: BrandColor[] | null): string {
+  if (!colors || colors.length === 0) {
+    return " Choose a color palette deliberately: pick colors with real contrast between the focal element/text and the background so the key message stays legible even shrunk to a scrolling thumbnail — not a low-contrast, generic 'make it pop' palette.";
+  }
+  return ` Use this business's actual brand colors, not invented ones: ${colors.map((c) => `${c.name} ${c.hex} (${c.role})`).join(", ")} — apply them with enough contrast between the focal element/text and the background that the key message stays legible at thumbnail size.`;
 }
 
 export async function generateGraphic(
@@ -39,7 +54,8 @@ export async function generateGraphic(
   businessCategory: string,
   userPrompt: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  existingBrandColors?: BrandColor[] | null
 ): Promise<Buffer> {
   const meta = GRAPHIC_TYPES.find((t) => t.key === designTypeKey);
   if (!meta) throw new Error("Unknown design type");
@@ -48,7 +64,8 @@ export async function generateGraphic(
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
   const toneHint = brandProfile?.tone_of_voice ? ` The brand feels: ${brandProfile.tone_of_voice}.` : "";
-  const fullPrompt = meta.promptTemplate(dealershipName, businessCategory, userPrompt) + toneHint;
+  const colorHint = formatBrandColorsForGraphic(existingBrandColors);
+  const fullPrompt = meta.promptTemplate(dealershipName, businessCategory, userPrompt) + toneHint + colorHint;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
