@@ -27,11 +27,31 @@ export interface BusinessIntelligenceResult {
   tone_of_voice: string;
   target_persona: { age_range?: string; income?: string; concerns?: string[] };
   messaging_pillars: string[];
+  // A DRAFT structured profile inferred purely from the source text —
+  // the onboarding flow overrides formality_level, hinglish_ok,
+  // personality_traits and vocabulary_preferences.avoid with the
+  // owner's own explicit answers to the 3 conversational questions
+  // where those were asked; this draft only fills in what wasn't
+  // (sentence_rhythm, vocabulary_preferences.favor, punctuation style)
+  // so nothing is left empty.
+  brand_voice_draft: BrandVoiceProfile;
 }
 
-const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Car Dealership', 'Real Estate', 'Restaurant', 'Coaching Institute'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"]},"messaging_pillars":["3-4 key selling points or values"]}`;
+const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Car Dealership', 'Real Estate', 'Restaurant', 'Coaching Institute'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"]},"messaging_pillars":["3-4 key selling points or values"],"brand_voice_draft":{"personality_traits":["3-4 adjectives capturing this brand's personality"],"vocabulary_preferences":{"favor":["2-3 words/phrases this business would naturally use"],"avoid":["1-2 words/phrases that would feel off-brand, or empty array if nothing obvious"]},"sentence_rhythm":"one sentence describing how this brand should sound written — short and punchy vs. flowing and detailed","formality_level":"casual|conversational|professional|formal","hinglish_ok":true,"punctuation_emoji_style":{"emoji_usage":"none|minimal|expressive","exclamation_marks":"avoid|occasional|frequent"}}}`;
 
 import { logClaudeUsage } from "../usage/logUsage";
+import type { BrandVoiceProfile } from "./brandVoice";
+
+const FALLBACK_BRAND_VOICE: BrandVoiceProfile = {
+  personality_traits: [],
+  vocabulary_preferences: { favor: [], avoid: [] },
+  sentence_rhythm: "Balanced — clear and natural, not overly short or overly long.",
+  formality_level: "conversational",
+  hinglish_ok: true,
+  regional_language_notes: null,
+  punctuation_emoji_style: { emoji_usage: "minimal", exclamation_marks: "occasional", notes: null },
+  source: "conversational_extraction",
+};
 
 async function extractProfile(sourceLabel: string, sourceText: string, logContext?: { supabase: any; dealershipId: string }): Promise<BusinessIntelligenceResult | null> {
   const fallback: BusinessIntelligenceResult = {
@@ -40,6 +60,7 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
     tone_of_voice: "Professional and trustworthy",
     target_persona: {},
     messaging_pillars: [],
+    brand_voice_draft: FALLBACK_BRAND_VOICE,
   };
 
   try {
@@ -52,7 +73,9 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 600,
+        // Was 600 — too tight once brand_voice_draft's nested fields ride
+        // alongside the original summary/persona/pillars in one payload.
+        max_tokens: 1100,
         messages: [
           {
             role: "user",
@@ -71,12 +94,30 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
+    const bv = parsed.brand_voice_draft ?? {};
     return {
       summary: parsed.summary ?? fallback.summary,
       business_category: parsed.business_category ?? fallback.business_category,
       tone_of_voice: parsed.tone_of_voice ?? fallback.tone_of_voice,
       target_persona: parsed.target_persona ?? {},
       messaging_pillars: Array.isArray(parsed.messaging_pillars) ? parsed.messaging_pillars : [],
+      brand_voice_draft: {
+        personality_traits: Array.isArray(bv.personality_traits) ? bv.personality_traits : FALLBACK_BRAND_VOICE.personality_traits,
+        vocabulary_preferences: {
+          favor: Array.isArray(bv.vocabulary_preferences?.favor) ? bv.vocabulary_preferences.favor : [],
+          avoid: Array.isArray(bv.vocabulary_preferences?.avoid) ? bv.vocabulary_preferences.avoid : [],
+        },
+        sentence_rhythm: typeof bv.sentence_rhythm === "string" && bv.sentence_rhythm.trim() ? bv.sentence_rhythm.trim() : FALLBACK_BRAND_VOICE.sentence_rhythm,
+        formality_level: ["casual", "conversational", "professional", "formal"].includes(bv.formality_level) ? bv.formality_level : FALLBACK_BRAND_VOICE.formality_level,
+        hinglish_ok: typeof bv.hinglish_ok === "boolean" ? bv.hinglish_ok : FALLBACK_BRAND_VOICE.hinglish_ok,
+        regional_language_notes: null,
+        punctuation_emoji_style: {
+          emoji_usage: ["none", "minimal", "expressive"].includes(bv.punctuation_emoji_style?.emoji_usage) ? bv.punctuation_emoji_style.emoji_usage : FALLBACK_BRAND_VOICE.punctuation_emoji_style.emoji_usage,
+          exclamation_marks: ["avoid", "occasional", "frequent"].includes(bv.punctuation_emoji_style?.exclamation_marks) ? bv.punctuation_emoji_style.exclamation_marks : FALLBACK_BRAND_VOICE.punctuation_emoji_style.exclamation_marks,
+          notes: null,
+        },
+        source: "conversational_extraction",
+      },
     };
   } catch (err: any) {
     console.error("[business-intelligence] extractProfile error:", err.message);

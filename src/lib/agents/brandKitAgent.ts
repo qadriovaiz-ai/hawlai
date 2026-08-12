@@ -9,6 +9,7 @@
 
 import { logGeminiImageUsage } from "../usage/logUsage";
 import type { BrandColor } from "./brandBuildingAgent";
+import { type BrandVoiceProfile, formatBrandVoiceVisualHint } from "./brandVoice";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -17,12 +18,14 @@ interface BrandProfile {
 
 // Deterministic tone -> mark-structure translation. Without this, every
 // logo defaults to the same "icon + wordmark, simple, memorable" template
-// regardless of what the business actually sounds like — this maps the
-// same tone_of_voice signal Brand Voice already collects onto a concrete
-// structural direction (wordmark vs. icon vs. combination mark, geometric
-// vs. organic, serif vs. sans) instead of leaving it to chance.
-function inferMarkStyle(tone: string | null | undefined): { structure: string; form: string; typeStyle: string } {
-  const t = (tone ?? "").toLowerCase();
+// regardless of what the business actually sounds like. When a structured
+// Brand Voice Profile is available, its personality_traits are a strictly
+// better signal than regex-matching the flat tone_of_voice string — they
+// go in as owner-chosen adjectives, not a whole free-text sentence to
+// pattern-match — so they're folded into the same matching text rather
+// than requiring separate formality-based branching logic.
+function inferMarkStyle(tone: string | null | undefined, brandVoice?: BrandVoiceProfile | null): { structure: string; form: string; typeStyle: string } {
+  const t = `${(brandVoice?.personality_traits ?? []).join(" ")} ${tone ?? ""}`.toLowerCase();
   if (/luxury|premium|elegant|upscale|refined|sophisticat/.test(t)) {
     return {
       structure: "a wordmark, or a restrained combination mark (a small icon paired with the wordmark — the icon should never be louder than the name)",
@@ -75,16 +78,18 @@ export async function generateLogoConcept(
   brandProfile?: BrandProfile | null,
   businessCategory: string = "car dealership",
   logContext?: { supabase: any; dealershipId: string },
-  existingBrandColors?: BrandColor[] | null
+  existingBrandColors?: BrandColor[] | null,
+  brandVoice?: BrandVoiceProfile | null
 ): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
   const toneHint = brandProfile?.tone_of_voice ? ` The brand feels: ${brandProfile.tone_of_voice}.` : "";
-  const style = inferMarkStyle(brandProfile?.tone_of_voice);
+  const personalityHint = formatBrandVoiceVisualHint(brandVoice);
+  const style = inferMarkStyle(brandProfile?.tone_of_voice, brandVoice);
   const colorHint = formatBrandColors(existingBrandColors);
 
-  const prompt = `Design a real, considered logo — not a generic template — for an Indian ${businessCategory} business named "${dealershipName}".${toneHint}
+  const prompt = `Design a real, considered logo — not a generic template — for an Indian ${businessCategory} business named "${dealershipName}".${toneHint}${personalityHint}
 
 Mark structure: ${style.structure}.
 Form language: ${style.form}.

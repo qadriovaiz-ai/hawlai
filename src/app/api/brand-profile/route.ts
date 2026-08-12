@@ -29,20 +29,25 @@ export async function PATCH(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
-  const { tone_of_voice, target_persona, messaging_pillars, preferred_language } = body;
+  const { tone_of_voice, target_persona, messaging_pillars, preferred_language, brand_voice } = body;
+
+  const upsertPayload: Record<string, any> = {
+    dealership_id: dealershipId,
+    tone_of_voice: tone_of_voice ?? null,
+    target_persona: target_persona ?? {},
+    messaging_pillars: messaging_pillars ?? [],
+    preferred_language: preferred_language ?? "hinglish",
+  };
+  // Only touch brand_voice when the caller explicitly sent it — omitting
+  // the key (not just sending null) is how BrandProfileForm.tsx's
+  // existing PATCH calls, which never send this field, leave a
+  // previously-set structured profile untouched on conflict instead of
+  // silently wiping it out every time the owner edits any other field.
+  if (brand_voice !== undefined) upsertPayload.brand_voice = brand_voice;
 
   const { data, error } = await supabase
     .from("brand_profiles")
-    .upsert(
-      {
-        dealership_id: dealershipId,
-        tone_of_voice: tone_of_voice ?? null,
-        target_persona: target_persona ?? {},
-        messaging_pillars: messaging_pillars ?? [],
-        preferred_language: preferred_language ?? "hinglish",
-      },
-      { onConflict: "dealership_id" }
-    )
+    .upsert(upsertPayload, { onConflict: "dealership_id" })
     .select()
     .single();
 

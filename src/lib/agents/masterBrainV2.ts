@@ -42,6 +42,7 @@ import { generateGrowthOpportunities, generateBudgetRecommendations, generateExp
 import { generateInfluencerPlan } from "./influencerAgent";
 import { generateRetargetingCopy } from "./retargetingAgent";
 import { retrieveRelevantKnowledge } from "../knowledge/retrieveKnowledge";
+import { type BrandVoiceProfile, formatBrandVoiceSection, formatBrandVoiceVisualHint } from "./brandVoice";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -75,6 +76,7 @@ interface DealershipCtx {
   category: string;
   city: string | null;
   toneOfVoice: string | null;
+  brandVoice: BrandVoiceProfile | null;
   team: { id: string; role: string; email: string }[];
   memories: { id: string; category: string; insight: string }[];
 }
@@ -82,7 +84,7 @@ interface DealershipCtx {
 async function getContext(supabase: any, dealershipId: string): Promise<DealershipCtx> {
   const [{ data: d }, { data: bp }, { data: team }, { data: memories }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
-    supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("brand_profiles").select("tone_of_voice, brand_voice").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("team_members").select("id, role, email").eq("dealership_id", dealershipId).eq("status", "active"),
     // Most recent 20 — an old, stale memory naturally falls out of
     // context rather than the list growing unbounded forever. If this
@@ -96,6 +98,7 @@ async function getContext(supabase: any, dealershipId: string): Promise<Dealersh
     category: d?.business_category ?? "business",
     city: d?.city ?? null,
     toneOfVoice: bp?.tone_of_voice ?? null,
+    brandVoice: bp?.brand_voice ?? null,
     memories: memories ?? [],
     team: team ?? [],
   };
@@ -469,7 +472,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       try {
         const { data: existingKit } = await supabase.from("brand_kits").select("kit").eq("dealership_id", ctx.id).maybeSingle();
         const existingColors = existingKit?.kit?.colors ?? null;
-        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category, { supabase, dealershipId: ctx.id }, existingColors);
+        const buffer = await generateLogoConcept(ctx.name, { tone_of_voice: ctx.toneOfVoice } as any, ctx.category, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice);
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `logos/${ctx.id}/${Date.now()}.png`;
@@ -675,7 +678,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       try {
         const { data: existingKit } = await supabase.from("brand_kits").select("kit").eq("dealership_id", ctx.id).maybeSingle();
         const existingColors = existingKit?.kit?.colors ?? null;
-        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors);
+        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice);
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `graphic-designs/${ctx.id}/${input.designType}-${Date.now()}.png`;
@@ -1475,6 +1478,12 @@ export async function runMasterBrainChat(
   const toolsUsed: string[] = [];
   const artifacts: Artifact[] = [];
 
+  // Structured Brand Voice (Phase 3) — replaces the flat tone_of_voice
+  // string's role in every generation prompt. Falls back to a profile
+  // derived from tone_of_voice for businesses that haven't gone through
+  // conversational extraction yet, so this is never empty.
+  const brandVoiceSection = formatBrandVoiceSection(ctx.brandVoice, ctx.toneOfVoice);
+
   const memorySection = ctx.memories.length > 0
     ? `\n\n## What you've learned about this business over time\nThese are real, durable observations from past conversations and results — apply them naturally, the way a CMO who's worked here for months would, without announcing "per my memory" or listing them back:\n${ctx.memories.map((m) => `- [${m.category.replace(/_/g, " ")}] ${m.insight}`).join("\n")}`
     : "";
@@ -1496,9 +1505,9 @@ export async function runMasterBrainChat(
   // fetched for this exact turn. Threaded into executeTool() below so
   // every real generation call gets the same grounding the orchestrator
   // itself reasons with.
-  const groundingContext = `${memorySection}${knowledgeSection}`;
+  const groundingContext = `${brandVoiceSection}${memorySection}${knowledgeSection}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${memorySection}${knowledgeSection}
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}
 
 ## How you think, not just what you generate
 

@@ -36,6 +36,7 @@ export const GRAPHIC_TYPES: GraphicTypeMeta[] = [
 
 import { logGeminiImageUsage } from "../usage/logUsage";
 import type { BrandColor } from "./brandBuildingAgent";
+import { type BrandVoiceProfile, formatBrandVoiceVisualHint } from "./brandVoice";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -55,7 +56,8 @@ export async function generateGraphic(
   userPrompt: string,
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
-  existingBrandColors?: BrandColor[] | null
+  existingBrandColors?: BrandColor[] | null,
+  brandVoice?: BrandVoiceProfile | null
 ): Promise<Buffer> {
   const meta = GRAPHIC_TYPES.find((t) => t.key === designTypeKey);
   if (!meta) throw new Error("Unknown design type");
@@ -64,8 +66,9 @@ export async function generateGraphic(
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
   const toneHint = brandProfile?.tone_of_voice ? ` The brand feels: ${brandProfile.tone_of_voice}.` : "";
+  const personalityHint = formatBrandVoiceVisualHint(brandVoice);
   const colorHint = formatBrandColorsForGraphic(existingBrandColors);
-  const fullPrompt = meta.promptTemplate(dealershipName, businessCategory, userPrompt) + toneHint + colorHint;
+  const fullPrompt = meta.promptTemplate(dealershipName, businessCategory, userPrompt) + toneHint + personalityHint + colorHint;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,

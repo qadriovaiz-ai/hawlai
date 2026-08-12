@@ -5,12 +5,53 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
 
+interface BrandVoiceDraft {
+  personality_traits: string[];
+  vocabulary_preferences: { favor: string[]; avoid: string[] };
+  sentence_rhythm: string;
+  formality_level: "casual" | "conversational" | "professional" | "formal";
+  hinglish_ok: boolean;
+  punctuation_emoji_style: { emoji_usage: string; exclamation_marks: string };
+}
+
+interface AnalyzeResult {
+  summary: string;
+  business_category: string;
+  tone_of_voice: string;
+  target_persona: any;
+  messaging_pillars: string[];
+  brand_voice_draft: BrandVoiceDraft;
+}
+
+// Multi-step conversational onboarding: the free-text business
+// description (unchanged) drafts a full brand profile including a
+// best-effort structured Brand Voice, then 3 short follow-up questions
+// let the owner's own words override the parts a description alone
+// can't reliably infer (formality, language mixing, personality words,
+// words to avoid) — all part of the SAME flow, one combined save at
+// the end, not a disconnected second form.
+type Step = "describe" | "formality" | "language" | "language_notes" | "personality" | "avoid_words" | "done";
+
+const FORMALITY_CHOICES: { label: string; value: BrandVoiceDraft["formality_level"] }[] = [
+  { label: "Formal", value: "formal" },
+  { label: "Somewhere in between", value: "conversational" },
+  { label: "Casual", value: "casual" },
+];
+
 export default function WelcomeChatCard({ dealershipName, ownerName }: { dealershipName: string; ownerName: string | null }) {
   const router = useRouter();
+  const [step, setStep] = useState<Step>("describe");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [draft, setDraft] = useState<AnalyzeResult | null>(null);
+
+  const [formality, setFormality] = useState<BrandVoiceDraft["formality_level"] | null>(null);
+  const [hinglishOk, setHinglishOk] = useState<boolean | null>(null);
+  const [regionalNotes, setRegionalNotes] = useState("");
+  const [personalityInput, setPersonalityInput] = useState("");
+  const [avoidWordsInput, setAvoidWordsInput] = useState("");
 
   async function handleDescribe() {
     setError(null);
@@ -24,23 +65,65 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setDraft(data);
+      setStep("formality");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function chooseFormality(value: BrandVoiceDraft["formality_level"]) {
+    setFormality(value);
+    setStep("language");
+  }
+
+  function chooseHinglish(value: boolean) {
+    setHinglishOk(value);
+    setStep(value ? "language_notes" : "personality");
+  }
+
+  async function finalizeAndSave() {
+    if (!draft) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const personality_traits = personalityInput.trim()
+        ? personalityInput.split(",").map((s) => s.trim()).filter(Boolean)
+        : draft.brand_voice_draft.personality_traits;
+      const avoid = avoidWordsInput.trim()
+        ? avoidWordsInput.split(",").map((s) => s.trim()).filter(Boolean)
+        : draft.brand_voice_draft.vocabulary_preferences.avoid;
+
+      const brand_voice = {
+        personality_traits,
+        vocabulary_preferences: { favor: draft.brand_voice_draft.vocabulary_preferences.favor, avoid },
+        sentence_rhythm: draft.brand_voice_draft.sentence_rhythm,
+        formality_level: formality ?? draft.brand_voice_draft.formality_level,
+        hinglish_ok: hinglishOk ?? draft.brand_voice_draft.hinglish_ok,
+        regional_language_notes: regionalNotes.trim() || null,
+        punctuation_emoji_style: { ...draft.brand_voice_draft.punctuation_emoji_style, notes: null },
+        source: "conversational_extraction" as const,
+      };
 
       await Promise.all([
         fetch("/api/brand-profile", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tone_of_voice: data.tone_of_voice,
-            target_persona: data.target_persona,
-            messaging_pillars: data.messaging_pillars,
+            tone_of_voice: draft.tone_of_voice,
+            target_persona: draft.target_persona,
+            messaging_pillars: draft.messaging_pillars,
             preferred_language: "hinglish",
+            brand_voice,
           }),
         }),
-        data.business_category
+        draft.business_category
           ? fetch("/api/dealership", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ business_category: data.business_category }),
+              body: JSON.stringify({ business_category: draft.business_category }),
             })
           : Promise.resolve(),
         fetch("/api/dealership", {
@@ -50,7 +133,8 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         }),
       ]);
 
-      setProfile(data);
+      setProfile({ ...draft, brand_voice });
+      setStep("done");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -71,7 +155,13 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
     router.refresh();
   }
 
-  if (profile) {
+  const SkipForNow = () => (
+    <button onClick={handleSkip} className="text-xs text-slate-400 hover:text-slate-600">
+      Skip for now
+    </button>
+  );
+
+  if (step === "done" && profile) {
     return (
       <div className="w-full max-w-xl animate-fade-in-up">
         <div className="w-14 h-14 bg-green-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -92,6 +182,22 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
           <div>
             <p className="text-xs text-slate-400">Tone of Voice</p>
             <p className="text-sm font-medium text-slate-800">{profile.tone_of_voice}</p>
+          </div>
+          {profile.brand_voice?.personality_traits?.length > 0 && (
+            <div>
+              <p className="text-xs text-slate-400">Personality</p>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {profile.brand_voice.personality_traits.map((p: string, i: number) => (
+                  <span key={i} className="text-xs bg-brand-500/10 text-brand-600 px-2 py-1 rounded-full">{p}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="text-xs text-slate-400">Formality &amp; Language</p>
+            <p className="text-sm font-medium text-slate-800 capitalize">
+              {profile.brand_voice?.formality_level} · {profile.brand_voice?.hinglish_ok ? "Hindi/English mixing okay" : "One language at a time"}
+            </p>
           </div>
           {profile.messaging_pillars?.length > 0 && (
             <div>
@@ -115,6 +221,135 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
     );
   }
 
+  if (step === "formality") {
+    return (
+      <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">How do you usually talk to customers?</h1>
+        <p className="text-slate-500 mt-2">Formal, casual, or somewhere in between?</p>
+        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          {FORMALITY_CHOICES.map((c) => (
+            <button
+              key={c.value}
+              onClick={() => chooseFormality(c.value)}
+              className="px-5 py-3 rounded-xl border border-slate-200 bg-slate-100 hover:border-brand-500 hover:bg-brand-500/5 text-sm font-medium text-slate-800 transition-colors"
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-6"><SkipForNow /></div>
+      </div>
+    );
+  }
+
+  if (step === "language") {
+    return (
+      <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Do you mix Hindi and English with customers?</h1>
+        <p className="text-slate-500 mt-2">Or do you keep it strictly one language?</p>
+        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => chooseHinglish(true)}
+            className="px-5 py-3 rounded-xl border border-slate-200 bg-slate-100 hover:border-brand-500 hover:bg-brand-500/5 text-sm font-medium text-slate-800 transition-colors"
+          >
+            Yes, we mix languages
+          </button>
+          <button
+            onClick={() => chooseHinglish(false)}
+            className="px-5 py-3 rounded-xl border border-slate-200 bg-slate-100 hover:border-brand-500 hover:bg-brand-500/5 text-sm font-medium text-slate-800 transition-colors"
+          >
+            No, one language
+          </button>
+        </div>
+        <div className="mt-6"><SkipForNow /></div>
+      </div>
+    );
+  }
+
+  if (step === "language_notes") {
+    return (
+      <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Anything else about language?</h1>
+        <p className="text-slate-500 mt-2 max-w-md mx-auto">Optional — e.g. a regional language your customers respond well to.</p>
+        <div className="mt-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left max-w-md mx-auto">
+          <textarea
+            value={regionalNotes}
+            onChange={(e) => setRegionalNotes(e.target.value)}
+            placeholder="e.g. Customers respond well to a Marathi greeting"
+            autoFocus
+            className="w-full h-20 p-4 text-sm bg-transparent text-slate-900 placeholder-slate-500 border-0 resize-none focus:outline-none rounded-2xl"
+          />
+        </div>
+        <div className="mt-6 flex items-center justify-center gap-4">
+          <button onClick={() => setStep("personality")} className="text-xs text-slate-400 hover:text-slate-600">Skip</button>
+          <button
+            onClick={() => setStep("personality")}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-b from-brand-600 to-brand-700 hover:brightness-110 text-white text-sm font-semibold transition-all"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "personality") {
+    return (
+      <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">3-4 words for your brand's personality?</h1>
+        <p className="text-slate-500 mt-2 max-w-md mx-auto">e.g. confident, warm, direct — separate with commas</p>
+        <div className="mt-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left max-w-md mx-auto">
+          <input
+            value={personalityInput}
+            onChange={(e) => setPersonalityInput(e.target.value)}
+            placeholder={draft?.brand_voice_draft.personality_traits.join(", ") || "confident, warm, direct"}
+            autoFocus
+            className="w-full p-4 text-sm bg-transparent text-slate-900 placeholder-slate-500 border-0 focus:outline-none rounded-2xl"
+          />
+        </div>
+        <div className="mt-6 flex items-center justify-center gap-4">
+          <button onClick={() => setStep("avoid_words")} className="text-xs text-slate-400 hover:text-slate-600">Skip — use what I inferred</button>
+          <button
+            onClick={() => setStep("avoid_words")}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-b from-brand-600 to-brand-700 hover:brightness-110 text-white text-sm font-semibold transition-all"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "avoid_words") {
+    return (
+      <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Any words you'd never want us to use?</h1>
+        <p className="text-slate-500 mt-2 max-w-md mx-auto">Optional — separate with commas. Last question, then you're set.</p>
+        <div className="mt-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left max-w-md mx-auto">
+          <input
+            value={avoidWordsInput}
+            onChange={(e) => setAvoidWordsInput(e.target.value)}
+            placeholder="e.g. cheap, discount, hurry"
+            autoFocus
+            disabled={loading}
+            className="w-full p-4 text-sm bg-transparent text-slate-900 placeholder-slate-500 border-0 focus:outline-none rounded-2xl disabled:opacity-60"
+          />
+        </div>
+        <div className="mt-6 flex items-center justify-center gap-4">
+          <button onClick={finalizeAndSave} disabled={loading} className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-40">Skip</button>
+          <button
+            onClick={finalizeAndSave}
+            disabled={loading}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-b from-brand-600 to-brand-700 hover:brightness-110 text-white text-sm font-semibold transition-all flex items-center gap-2 disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Finish"}
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-2xl text-center">
       <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-6 shadow-lg shadow-brand-600/30">
@@ -124,7 +359,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         {ownerName ? `Welcome, ${ownerName}. ` : "Welcome. "}Tell me about {dealershipName}.
       </h1>
       <p className="text-slate-500 mt-3 max-w-md mx-auto">
-        A couple of sentences is enough — what you sell, who your customers are, what makes you different. I'll set up your Brand Voice from it.
+        A couple of sentences is enough — what you sell, who your customers are, what makes you different. I'll set up your Brand Voice from it, then ask a couple of quick follow-ups.
       </p>
 
       <div className="mt-8 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left">
@@ -137,9 +372,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
           className="w-full h-28 p-5 text-sm bg-transparent text-slate-900 placeholder-slate-500 border-0 resize-none focus:outline-none disabled:opacity-60 rounded-t-2xl"
         />
         <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-          <button onClick={handleSkip} className="text-xs text-slate-400 hover:text-slate-600">
-            Skip for now
-          </button>
+          <SkipForNow />
           <button
             onClick={handleDescribe}
             disabled={loading || description.trim().length < 10}
