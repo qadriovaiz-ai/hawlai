@@ -27,15 +27,15 @@ export default function WebsiteAnalyticsCard() {
 
       {/* Funnel */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-slate-100 rounded-lg p-3 text-center">
+        <div className="bg-slate-200 rounded-lg p-3 text-center">
           <p className="text-lg font-bold text-slate-800">{data.views}</p>
           <p className="text-xs text-slate-400">Page Views</p>
         </div>
-        <div className="bg-slate-100 rounded-lg p-3 text-center">
+        <div className="bg-slate-200 rounded-lg p-3 text-center">
           <p className="text-lg font-bold text-slate-800">{data.chatOpens}</p>
           <p className="text-xs text-slate-400">Chat Opened</p>
         </div>
-        <div className="bg-slate-100 rounded-lg p-3 text-center">
+        <div className="bg-slate-200 rounded-lg p-3 text-center">
           <p className="text-lg font-bold text-slate-800">{data.formSubmits}</p>
           <p className="text-xs text-slate-400">Leads Captured</p>
         </div>
@@ -51,7 +51,7 @@ export default function WebsiteAnalyticsCard() {
         {data.heatmapPoints.length === 0 ? (
           <p className="text-xs text-slate-400">No clicks recorded yet.</p>
         ) : (
-          <div className="relative w-full aspect-[3/4] bg-slate-100 rounded-lg border border-slate-200 overflow-hidden">
+          <div className="relative w-full aspect-[3/4] bg-slate-200 rounded-lg border border-slate-300 overflow-hidden">
             {data.heatmapPoints.map((p: any, i: number) => (
               <div
                 key={i}

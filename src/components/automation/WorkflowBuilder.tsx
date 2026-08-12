@@ -93,7 +93,7 @@ export default function WorkflowBuilder() {
             <p className="text-xs font-semibold text-slate-400 mb-1">Trigger</p>
             <div className="flex gap-1.5">
               {TRIGGERS.map((t) => (
-                <button key={t.key} onClick={() => setTriggerType(t.key)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${triggerType === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
+                <button key={t.key} onClick={() => setTriggerType(t.key)} className={`text-xs px-2.5 py-1.5 rounded-lg border ${triggerType === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
                   {t.label}
                 </button>
               ))}
@@ -103,23 +103,23 @@ export default function WorkflowBuilder() {
           <div className="space-y-2">
             <p className="text-xs font-semibold text-slate-400">Steps (in order)</p>
             {steps.map((step, i) => (
-              <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-2">
+              <div key={i} className="bg-slate-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-purple-500">Step {i + 1} — send after</span>
                   <div className="flex items-center gap-1.5">
-                    <input type="number" min={0} value={step.delayDays} onChange={(e) => updateStep(i, "delayDays", Number(e.target.value))} className="w-14 text-xs bg-slate-200 border border-slate-200 rounded px-1.5 py-1 text-center" />
+                    <input type="number" min={0} value={step.delayDays} onChange={(e) => updateStep(i, "delayDays", Number(e.target.value))} className="w-14 text-xs bg-slate-200 border border-slate-300 rounded px-1.5 py-1 text-center" />
                     <span className="text-xs text-slate-500">days</span>
                     {steps.length > 1 && <button onClick={() => removeStep(i)} className="text-red-400 hover:text-red-500 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>}
                   </div>
                 </div>
-                <select value={step.emailTaskType} onChange={(e) => updateStep(i, "emailTaskType", e.target.value)} className="w-full text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5">
+                <select value={step.emailTaskType} onChange={(e) => updateStep(i, "emailTaskType", e.target.value)} className="w-full text-xs bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5">
                   {EMAIL_TASKS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                   <option value="custom">Custom message</option>
                 </select>
                 {step.emailTaskType === "custom" && (
                   <>
-                    <input value={step.customSubject} onChange={(e) => updateStep(i, "customSubject", e.target.value)} placeholder="Subject" className="w-full text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5" />
-                    <textarea value={step.customBody} onChange={(e) => updateStep(i, "customBody", e.target.value)} placeholder="Email body" rows={3} className="w-full text-xs bg-slate-200 border border-slate-200 rounded-lg px-2 py-1.5" />
+                    <input value={step.customSubject} onChange={(e) => updateStep(i, "customSubject", e.target.value)} placeholder="Subject" className="w-full text-xs bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" />
+                    <textarea value={step.customBody} onChange={(e) => updateStep(i, "customBody", e.target.value)} placeholder="Email body" rows={3} className="w-full text-xs bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5" />
                   </>
                 )}
               </div>
@@ -140,7 +140,7 @@ export default function WorkflowBuilder() {
           <p className="text-xs text-slate-400">No workflows yet — create one above.</p>
         ) : (
           workflows.map((w) => (
-            <div key={w.id} className="flex items-center justify-between bg-slate-100 rounded-lg p-3">
+            <div key={w.id} className="flex items-center justify-between bg-slate-200 rounded-lg p-3">
               <div>
                 <p className="text-sm font-medium text-slate-700">{w.name}</p>
                 <p className="text-xs text-slate-400">{TRIGGERS.find((t) => t.key === w.trigger_type)?.label} · {(w.workflow_steps ?? []).length} step(s) · {w.sentCount} sent</p>

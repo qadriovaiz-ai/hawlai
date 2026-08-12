@@ -57,15 +57,15 @@ export default function AffiliateManagerView() {
       <div className="card p-5">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3"><IndianRupee className="w-4 h-4" /> Affiliate Program Summary</p>
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-slate-100 rounded-lg p-3 text-center">
+          <div className="bg-slate-200 rounded-lg p-3 text-center">
             <p className="text-lg font-bold text-slate-800">{active.length}</p>
             <p className="text-xs text-slate-400">Active Affiliates</p>
           </div>
-          <div className="bg-slate-100 rounded-lg p-3 text-center">
+          <div className="bg-slate-200 rounded-lg p-3 text-center">
             <p className="text-lg font-bold text-slate-800">₹{totalRevenue.toLocaleString("en-IN")}</p>
             <p className="text-xs text-slate-400">Revenue Driven</p>
           </div>
-          <div className="bg-slate-100 rounded-lg p-3 text-center">
+          <div className="bg-slate-200 rounded-lg p-3 text-center">
             <p className="text-lg font-bold text-slate-800">₹{totalOwed.toLocaleString("en-IN")}</p>
             <p className="text-xs text-slate-400">Commission Owed</p>
           </div>
@@ -76,7 +76,7 @@ export default function AffiliateManagerView() {
         <div className="card p-5 space-y-2">
           <p className="text-sm font-semibold text-slate-700">Pending applications ({pending.length})</p>
           {pending.map((a) => (
-            <div key={a.id} className="bg-slate-100 rounded-lg p-3 flex items-center justify-between">
+            <div key={a.id} className="bg-slate-200 rounded-lg p-3 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-800">{a.name}</p>
                 <p className="text-xs text-slate-400">{a.email || a.phone}{a.notes ? ` · ${a.notes}` : ""}</p>
@@ -96,7 +96,7 @@ export default function AffiliateManagerView() {
         </div>
 
         {showForm && (
-          <div className="space-y-2 bg-slate-100 rounded-lg p-3">
+          <div className="space-y-2 bg-slate-200 rounded-lg p-3">
             <div className="flex gap-2">
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
               <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
@@ -118,7 +118,7 @@ export default function AffiliateManagerView() {
         ) : (
           <div className="space-y-2">
             {active.map((a) => (
-              <div key={a.id} className="bg-slate-100 rounded-lg p-3 space-y-2">
+              <div key={a.id} className="bg-slate-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-800">{a.name} <span className="text-xs text-slate-400 font-normal">{a.commission_type === "percentage" ? `${a.commission_rate}%` : `₹${a.commission_rate}/order`}</span></p>
                   {a.discount_code && (

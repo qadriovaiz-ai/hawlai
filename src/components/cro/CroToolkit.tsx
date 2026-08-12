@@ -72,12 +72,12 @@ export default function CroToolkit() {
           <div className="space-y-2">
             <p className="text-xs text-slate-500">Testing: <span className="font-semibold text-slate-700 capitalize">{abTest.element}</span></p>
             <div className="grid grid-cols-2 gap-2">
-              <div className="bg-slate-100 rounded-lg p-3">
+              <div className="bg-slate-200 rounded-lg p-3">
                 <p className="text-xs font-semibold text-purple-500 mb-1">Variant A</p>
                 <p className="text-sm text-slate-700 mb-2">{abTest.variant_a}</p>
                 <p className="text-xs text-slate-400">{abResults?.A.views ?? 0} views · {abResults?.A.submits ?? 0} leads · {abResults?.A.conversionRate !== null ? `${abResults?.A.conversionRate.toFixed(1)}%` : "—"}</p>
               </div>
-              <div className="bg-slate-100 rounded-lg p-3">
+              <div className="bg-slate-200 rounded-lg p-3">
                 <p className="text-xs font-semibold text-purple-500 mb-1">Variant B</p>
                 <p className="text-sm text-slate-700 mb-2">{abTest.variant_b}</p>
                 <p className="text-xs text-slate-400">{abResults?.B.views ?? 0} views · {abResults?.B.submits ?? 0} leads · {abResults?.B.conversionRate !== null ? `${abResults?.B.conversionRate.toFixed(1)}%` : "—"}</p>
@@ -87,8 +87,8 @@ export default function CroToolkit() {
         ) : showAbForm ? (
           <div className="space-y-2">
             <div className="flex gap-1.5">
-              <button onClick={() => setElement("headline")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${element === "headline" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>Headline</button>
-              <button onClick={() => setElement("cta")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${element === "cta" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>CTA</button>
+              <button onClick={() => setElement("headline")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${element === "headline" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>Headline</button>
+              <button onClick={() => setElement("cta")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${element === "cta" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>CTA</button>
             </div>
             <input value={variantA} onChange={(e) => setVariantA(e.target.value)} placeholder="Variant A text" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             <input value={variantB} onChange={(e) => setVariantB(e.target.value)} placeholder="Variant B text" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
@@ -109,7 +109,7 @@ export default function CroToolkit() {
       <div className="card p-5 space-y-3">
         <div className="flex flex-wrap gap-1.5">
           {CRO_TASKS.map((t) => (
-            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
+            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
               {t.label}
             </button>
           ))}
@@ -148,7 +148,7 @@ function OutputRenderer({ output }: { output: any }) {
     return (
       <div className="space-y-1.5">
         {output[arrayKey].map((item: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-2.5 text-sm text-slate-700">
+          <div key={i} className="bg-slate-200 rounded-lg p-2.5 text-sm text-slate-700">
             {typeof item === "string" ? item : (
               <>
                 {(item.issue || item.text) && <p className="font-semibold text-slate-800">{item.issue || item.text}</p>}

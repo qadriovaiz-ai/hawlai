@@ -18,7 +18,7 @@ const STATUS_META: Record<string, { label: string; color: string; icon: any }> =
   purchased: { label: "Purchased", color: "bg-purple-100 text-purple-600", icon: CheckCircle2 },
   connected: { label: "Connected — Live", color: "bg-green-100 text-green-600", icon: CheckCircle2 },
   unavailable: { label: "Unavailable", color: "bg-red-100 text-red-600", icon: XCircle },
-  cancelled: { label: "Cancelled", color: "bg-slate-100 text-slate-500", icon: XCircle },
+  cancelled: { label: "Cancelled", color: "bg-slate-200 text-slate-500", icon: XCircle },
 };
 
 export default function DomainPanel() {
@@ -121,7 +121,7 @@ export default function DomainPanel() {
           {registrarConnected ? (
             <span className="text-[10px] px-2 py-1 rounded-full bg-green-100 text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Registrar connected, ready to purchase</span>
           ) : (
-            <span className="text-[10px] px-2 py-1 rounded-full bg-slate-100 text-slate-500 flex items-center gap-1"><XCircle className="w-3 h-3" /> Registrar not connected</span>
+            <span className="text-[10px] px-2 py-1 rounded-full bg-slate-200 text-slate-500 flex items-center gap-1"><XCircle className="w-3 h-3" /> Registrar not connected</span>
           )}
         </div>
         {!registrarConnected && (
@@ -143,7 +143,7 @@ export default function DomainPanel() {
         {checkError && <p className="text-xs text-red-400">{checkError}</p>}
 
         {checkResult && checkResult.configured === false && (
-          <div className="bg-slate-100 rounded-lg p-3 flex items-center justify-between">
+          <div className="bg-slate-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-slate-600">Request "{query.trim()}" — team will confirm availability</p>
             <button onClick={handleRequest} disabled={requesting} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg disabled:opacity-50">
               {requesting ? "…" : "Request"}
@@ -152,7 +152,7 @@ export default function DomainPanel() {
         )}
 
         {checkResult && checkResult.configured && (
-          <div className="bg-slate-100 rounded-lg p-3 flex items-center justify-between">
+          <div className="bg-slate-200 rounded-lg p-3 flex items-center justify-between">
             {checkResult.available ? (
               <>
                 <p className="text-sm text-green-600">Available{checkResult.price ? ` — ${checkResult.currency} ${checkResult.price}/yr` : ""}</p>

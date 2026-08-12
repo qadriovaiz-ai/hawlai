@@ -29,7 +29,7 @@ export function OutputRenderer({ output }: { output: any }) {
     return (
       <div className="space-y-2">
         {output.slides.map((s: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3">
+          <div key={i} className="bg-slate-200 rounded-lg p-3">
             <p className="text-sm font-semibold text-slate-700">{i + 1}. {s.headline}</p>
             <p className="text-xs text-slate-500">{s.supporting || s.body}</p>
           </div>
@@ -41,7 +41,7 @@ export function OutputRenderer({ output }: { output: any }) {
     return (
       <div className="space-y-2">
         {output.days.map((d: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-1">
+          <div key={i} className="bg-slate-200 rounded-lg p-3 space-y-1">
             <p className="text-xs font-semibold text-purple-500">{d.day} · {d.contentType}</p>
             <p className="text-sm font-medium text-slate-700">{d.topic}</p>
             <p className="text-xs text-slate-400">{d.angle}</p>
@@ -51,8 +51,8 @@ export function OutputRenderer({ output }: { output: any }) {
       </div>
     );
   }
-  if (output.hooks) return <ul className="space-y-1.5">{output.hooks.map((h: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-100 rounded-lg p-2.5">{h}</li>)}</ul>;
-  if (output.ctas) return <ul className="space-y-1.5">{output.ctas.map((c: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-100 rounded-lg p-2.5">{c}</li>)}</ul>;
+  if (output.hooks) return <ul className="space-y-1.5">{output.hooks.map((h: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-200 rounded-lg p-2.5">{h}</li>)}</ul>;
+  if (output.ctas) return <ul className="space-y-1.5">{output.ctas.map((c: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-200 rounded-lg p-2.5">{c}</li>)}</ul>;
 
   return (
     <div className="space-y-3 text-sm text-slate-700">
@@ -78,7 +78,7 @@ function FieldValue({ value }: { value: any }) {
     return (
       <div className="space-y-1.5">
         {value.map((item, i) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-2.5 space-y-1">
+          <div key={i} className="bg-slate-200 rounded-lg p-2.5 space-y-1">
             {isPlainObject(item) ? (
               Object.entries(item).map(([k, v]) => (
                 <p key={k}><span className="text-[11px] font-medium text-slate-400 capitalize">{humanizeKey(k)}: </span>{typeof v === "string" ? v : JSON.stringify(v)}</p>
@@ -119,7 +119,7 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
     return (
       <div className="space-y-2">
         {output.slides.map((s: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-1.5">
+          <div key={i} className="bg-slate-200 rounded-lg p-3 space-y-1.5">
             <p className="text-xs font-semibold text-slate-400">{i + 1}.</p>
             <input
               value={s.headline ?? ""}
@@ -142,7 +142,7 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
     return (
       <div className="space-y-2">
         {output.days.map((d: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-1.5">
+          <div key={i} className="bg-slate-200 rounded-lg p-3 space-y-1.5">
             <p className="text-xs font-semibold text-purple-500">{d.day} · {d.contentType}</p>
             <input
               value={d.topic ?? ""}
@@ -219,7 +219,7 @@ function EditableFieldValue({ value, onChange }: { value: any; onChange: (v: any
     return (
       <div className="space-y-1.5">
         {value.map((item, i) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-2.5 space-y-1.5">
+          <div key={i} className="bg-slate-200 rounded-lg p-2.5 space-y-1.5">
             {isPlainObject(item) ? (
               Object.entries(item).map(([k, v]) =>
                 typeof v === "string" ? (

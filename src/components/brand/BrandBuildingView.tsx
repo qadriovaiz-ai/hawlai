@@ -133,7 +133,7 @@ export default function BrandBuildingView() {
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> Logo</p>
         <div className="flex items-center gap-4">
-          <div className="w-24 h-24 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+          <div className="w-24 h-24 rounded-xl bg-slate-200 border border-slate-300 flex items-center justify-center overflow-hidden shrink-0">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt="Generated logo" className="w-full h-full object-contain" />
@@ -182,11 +182,11 @@ export default function BrandBuildingView() {
       <div className="card p-5 space-y-2">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Type className="w-4 h-4" /> Typography</p>
         <div className="grid sm:grid-cols-2 gap-3">
-          <div className="bg-slate-100 rounded-lg p-3">
+          <div className="bg-slate-200 rounded-lg p-3">
             <p className="text-xs text-slate-400 mb-1">Headings</p>
             <p className="text-lg font-semibold text-slate-800">{kit.typography?.headingFont}</p>
           </div>
-          <div className="bg-slate-100 rounded-lg p-3">
+          <div className="bg-slate-200 rounded-lg p-3">
             <p className="text-xs text-slate-400 mb-1">Body</p>
             <p className="text-lg text-slate-800">{kit.typography?.bodyFont}</p>
           </div>
@@ -222,7 +222,7 @@ export default function BrandBuildingView() {
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Share2 className="w-4 h-4" /> Social Media Identity</p>
         <div className="space-y-2">
-          <div className="bg-slate-100 rounded-lg p-3 flex items-start justify-between gap-2">
+          <div className="bg-slate-200 rounded-lg p-3 flex items-start justify-between gap-2">
             <div>
               <p className="text-xs text-slate-400 mb-0.5">Instagram bio</p>
               <p className="text-sm text-slate-700">{kit.socialIdentity?.instagramBio}</p>
@@ -231,7 +231,7 @@ export default function BrandBuildingView() {
               {copied === "ig" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           </div>
-          <div className="bg-slate-100 rounded-lg p-3 flex items-start justify-between gap-2">
+          <div className="bg-slate-200 rounded-lg p-3 flex items-start justify-between gap-2">
             <div>
               <p className="text-xs text-slate-400 mb-0.5">Facebook bio</p>
               <p className="text-sm text-slate-700">{kit.socialIdentity?.facebookBio}</p>
@@ -259,7 +259,7 @@ export default function BrandBuildingView() {
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ListChecks className="w-4 h-4" /> Brand Guidelines</p>
         <div className="space-y-1.5">
           {kit.guidelines?.map((g: string, i: number) => (
-            <p key={i} className="text-sm text-slate-600 bg-slate-100 rounded-lg p-2.5">✓ {g}</p>
+            <p key={i} className="text-sm text-slate-600 bg-slate-200 rounded-lg p-2.5">✓ {g}</p>
           ))}
         </div>
       </div>

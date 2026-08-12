@@ -143,7 +143,7 @@ export default function AutopilotCommandCenter() {
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Clock className="w-4 h-4" /> Recent Autopilot Activity</p>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {data.activity.map((a: any) => (
-              <div key={a.id} className={`text-xs rounded-lg p-2 ${a.success ? "bg-slate-100" : "bg-red-500/10"}`}>
+              <div key={a.id} className={`text-xs rounded-lg p-2 ${a.success ? "bg-slate-200" : "bg-red-500/10"}`}>
                 <span className="font-medium text-slate-600">{a.type}</span> — {new Date(a.created_at).toLocaleString("en-IN")} {!a.success && <span className="text-red-400">(failed)</span>}
               </div>
             ))}

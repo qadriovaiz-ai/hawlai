@@ -93,7 +93,7 @@ export default function ResearchPage() {
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
                   <Building2 className="w-3.5 h-3.5 text-slate-400" /> {ad.page_name}
                 </div>
-                <span className={`badge ${ad.is_active ? "bg-green-500/10 text-green-300 border border-green-700/50" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>
+                <span className={`badge ${ad.is_active ? "bg-green-500/10 text-green-300 border border-green-700/50" : "bg-slate-200 text-slate-500 border border-slate-300"}`}>
                   {ad.is_active ? "Active" : "Ended"}
                 </span>
               </div>

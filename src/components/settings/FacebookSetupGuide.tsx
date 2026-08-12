@@ -49,7 +49,7 @@ export default function FacebookSetupGuide() {
             These 3 steps happen on Facebook's own site — no tool, including Hawlai, is allowed to create a Page, an Ad Account, or add a card on your behalf. It's a Meta security rule, not a Hawlai limitation. Takes about 5-10 minutes total.
           </p>
           {STEPS.map((step, i) => (
-            <div key={i} className="flex items-start gap-3 bg-slate-100 rounded-lg p-3">
+            <div key={i} className="flex items-start gap-3 bg-slate-200 rounded-lg p-3">
               <div className="w-7 h-7 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 text-xs font-bold text-blue-300">
                 {i + 1}
               </div>

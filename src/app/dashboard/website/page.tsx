@@ -319,7 +319,7 @@ export default function WebsitePage() {
         </div>
         {cars.length === 0 && <p className="text-xs text-slate-400">Add specific cars/offers to show in a gallery on the page.</p>}
         {cars.map((car, i) => (
-          <div key={i} className="bg-slate-100 text-slate-900 flex items-center gap-2 border border-slate-100 rounded-lg p-2.5">
+          <div key={i} className="bg-slate-200 text-slate-900 flex items-center gap-2 border border-slate-100 rounded-lg p-2.5">
             <input
               ref={i === 0 ? carFileInputRef : undefined}
               type="file"

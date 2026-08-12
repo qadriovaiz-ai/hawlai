@@ -57,7 +57,7 @@ export default function ApprovalThresholdCard() {
             type="number"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-32 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2"
+            className="w-32 text-sm bg-slate-200 border border-slate-300 rounded-lg px-3 py-2"
           />
           <button
             onClick={save}

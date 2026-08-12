@@ -130,7 +130,7 @@ export default function SeoPage() {
               >
                 {audit.score}/100
               </div>
-              <div className="flex-1 bg-slate-100 rounded-full h-2">
+              <div className="flex-1 bg-slate-200 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full ${audit.score >= 75 ? "bg-green-500" : audit.score >= 50 ? "bg-amber-500" : "bg-red-500"}`}
                   style={{ width: `${audit.score}%` }}
@@ -184,7 +184,7 @@ export default function SeoPage() {
             <Loader2 className="w-4 h-4 animate-spin" /> Checking...
           </div>
         ) : croLocked ? (
-          <div className="flex items-center justify-between gap-2 bg-slate-100 rounded-lg p-3">
+          <div className="flex items-center justify-between gap-2 bg-slate-200 rounded-lg p-3">
             <span className="text-xs text-slate-500 flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Conversion Optimization needs the Pro plan or higher</span>
             <Link href="/dashboard/billing/plans" className="text-xs text-brand-400 hover:underline shrink-0">Upgrade</Link>
           </div>

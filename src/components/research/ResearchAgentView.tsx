@@ -107,7 +107,7 @@ export default function ResearchAgentView() {
         {watches.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {watches.map((w) => (
-              <span key={w.id} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full flex items-center gap-1.5">
+              <span key={w.id} className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full flex items-center gap-1.5">
                 {w.topic}
                 <button onClick={() => removeWatch(w.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
               </span>
@@ -118,7 +118,7 @@ export default function ResearchAgentView() {
           <div className="pt-2 border-t border-slate-200 space-y-1.5">
             <p className="text-xs font-semibold text-slate-400">Recent stories</p>
             {alerts.map((a) => (
-              <div key={a.id} className="bg-slate-100 rounded-lg p-2.5">
+              <div key={a.id} className="bg-slate-200 rounded-lg p-2.5">
                 <p className="text-sm font-medium text-slate-700">{a.topic}: {a.title}</p>
                 {a.summary && <p className="text-xs text-slate-500">{a.summary}</p>}
                 {a.source_url && <a href={a.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-500 hover:underline">Source</a>}
@@ -132,7 +132,7 @@ export default function ResearchAgentView() {
       <div className="card p-5 space-y-3">
         <div className="flex flex-wrap gap-1.5">
           {RESEARCH_TASKS.map((t) => (
-            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
+            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
               {t.label}
             </button>
           ))}

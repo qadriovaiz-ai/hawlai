@@ -97,7 +97,7 @@ export default function WhatsappMarketingTools() {
               key={t.key}
               onClick={() => { setSelectedTask(t.key); setOutput(null); setShowContacts(false); }}
               className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-                selectedTask === t.key ? "bg-green-600 border-green-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-green-400"
+                selectedTask === t.key ? "bg-green-600 border-green-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600 hover:border-green-400"
               }`}
             >
               {t.label}
@@ -157,7 +157,7 @@ export default function WhatsappMarketingTools() {
                         key={t}
                         onClick={() => setTemperatureFilter(t)}
                         className={`text-xs px-2 py-1 rounded-full border capitalize ${
-                          temperatureFilter === t ? "bg-green-600 border-green-600 text-white" : "bg-slate-100 border-slate-200 text-slate-500"
+                          temperatureFilter === t ? "bg-green-600 border-green-600 text-white" : "bg-slate-200 border-slate-300 text-slate-500"
                         }`}
                       >
                         {t}
@@ -169,7 +169,7 @@ export default function WhatsappMarketingTools() {
                     {contacts
                       .filter((c) => temperatureFilter === "all" || c.lead_temperature === temperatureFilter)
                       .map((c) => (
-                        <div key={c.id} className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5">
+                        <div key={c.id} className="flex items-center justify-between bg-slate-200 rounded-lg p-2.5">
                           <span className="text-sm text-slate-700">
                             {c.name} <span className="text-xs text-slate-400">— {c.phone}{c.lead_temperature ? ` · ${c.lead_temperature}` : ""}</span>
                           </span>
@@ -214,7 +214,7 @@ export default function WhatsappMarketingTools() {
 function OutputRenderer({ output, onCopy, copied }: { output: any; onCopy: (m: string) => void; copied: boolean }) {
   if (output.flow) {
     return <div className="space-y-2">{output.flow.map((f: any, i: number) => (
-      <div key={i} className="bg-slate-100 rounded-lg p-2.5">
+      <div key={i} className="bg-slate-200 rounded-lg p-2.5">
         <p className="text-xs font-semibold text-green-600">Trigger: {f.trigger}</p>
         <p className="text-sm text-slate-700 mt-0.5">{f.response}</p>
       </div>
@@ -222,7 +222,7 @@ function OutputRenderer({ output, onCopy, copied }: { output: any; onCopy: (m: s
   }
   if (output.messages) {
     return <div className="space-y-2">{output.messages.map((m: any, i: number) => (
-      <div key={i} className="bg-slate-100 rounded-lg p-2.5 flex items-start justify-between gap-2">
+      <div key={i} className="bg-slate-200 rounded-lg p-2.5 flex items-start justify-between gap-2">
         <div>
           <p className="text-xs text-green-600 font-semibold">Step {m.step}</p>
           <p className="text-sm text-slate-700">{m.message}</p>
@@ -235,7 +235,7 @@ function OutputRenderer({ output, onCopy, copied }: { output: any; onCopy: (m: s
   }
   if (output.message) {
     return (
-      <div className="bg-slate-100 rounded-lg p-3 flex items-start justify-between gap-2">
+      <div className="bg-slate-200 rounded-lg p-3 flex items-start justify-between gap-2">
         <p className="text-sm text-slate-700 whitespace-pre-wrap">{output.message}</p>
         <button onClick={() => onCopy(output.message)} className="shrink-0 text-slate-400 hover:text-slate-600">
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}

@@ -76,7 +76,7 @@ export default function LeadCharts({ temperatureDistribution, monthlyGrowth, con
                   <span className="text-xs text-slate-600">{item.stage}</span>
                   <span className="text-xs font-semibold text-slate-900">{item.count}</span>
                 </div>
-                <div className="h-2 bg-slate-100 rounded-full">
+                <div className="h-2 bg-slate-200 rounded-full">
                   <div
                     className="h-2 rounded-full transition-all"
                     style={{

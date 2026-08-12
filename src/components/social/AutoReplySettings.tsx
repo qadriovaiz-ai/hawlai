@@ -73,7 +73,7 @@ export default function AutoReplySettings() {
           <p className="text-xs font-semibold text-slate-400">Recent auto-sent replies</p>
           <div className="space-y-1.5 max-h-56 overflow-y-auto">
             {log.map((l) => (
-              <div key={l.id} className={`text-xs rounded-lg p-2 ${l.success ? "bg-slate-100" : "bg-red-500/10"}`}>
+              <div key={l.id} className={`text-xs rounded-lg p-2 ${l.success ? "bg-slate-200" : "bg-red-500/10"}`}>
                 <span className="font-medium text-slate-600">{l.channel === "dm" ? "DM" : "Comment"}:</span>{" "}
                 {l.success ? <span className="text-slate-700">{l.reply_text}</span> : <span className="text-red-400">Failed — {l.error}</span>}
               </div>

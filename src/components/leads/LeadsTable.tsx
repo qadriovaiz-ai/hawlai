@@ -115,7 +115,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
       <div className="card overflow-hidden">
         {leads.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
               <Search className="w-7 h-7 text-slate-400" />
             </div>
             <p className="text-slate-500 font-medium">No leads found</p>
@@ -163,7 +163,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                     </td>
                     <td className="table-cell">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-16 h-1.5 bg-slate-100 rounded-full">
+                        <div className="w-16 h-1.5 bg-slate-200 rounded-full">
                           <div
                             className={cn(
                               "h-1.5 rounded-full",

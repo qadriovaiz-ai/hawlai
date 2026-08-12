@@ -29,15 +29,15 @@ export default function AiQualityView() {
           <p className="text-sm text-slate-400">No feedback yet — thumbs up/down on Master Chat responses will show up here.</p>
         ) : (
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-slate-100 rounded-lg p-3 text-center">
+            <div className="bg-slate-200 rounded-lg p-3 text-center">
               <p className="text-lg font-bold text-slate-800">{data.totalRated}</p>
               <p className="text-xs text-slate-400">Total rated</p>
             </div>
-            <div className="bg-slate-100 rounded-lg p-3 text-center">
+            <div className="bg-slate-200 rounded-lg p-3 text-center">
               <p className="text-lg font-bold text-green-500 flex items-center justify-center gap-1"><ThumbsUp className="w-4 h-4" /> {data.up}</p>
               <p className="text-xs text-slate-400">{data.upRate}% positive</p>
             </div>
-            <div className="bg-slate-100 rounded-lg p-3 text-center">
+            <div className="bg-slate-200 rounded-lg p-3 text-center">
               <p className="text-lg font-bold text-red-400 flex items-center justify-center gap-1"><ThumbsDown className="w-4 h-4" /> {data.down}</p>
               <p className="text-xs text-slate-400">Needs review</p>
             </div>
@@ -61,7 +61,7 @@ export default function AiQualityView() {
         <div className="card p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">Recent down-voted responses</p>
           {data.recentDownVoted.map((m: any) => (
-            <div key={m.id} className="bg-slate-100 rounded-lg p-3 space-y-1">
+            <div key={m.id} className="bg-slate-200 rounded-lg p-3 space-y-1">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>{m.dealershipName}</span>
                 <span>{new Date(m.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>

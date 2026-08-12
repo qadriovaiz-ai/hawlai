@@ -196,11 +196,11 @@ export default function InfluencerOutreach() {
                         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} {copied ? "Copied" : "Copy"}
                       </button>
                     </div>
-                    <p className="text-sm text-slate-700 bg-slate-100 rounded-lg p-3 whitespace-pre-wrap">{plan.outreachMessage}</p>
+                    <p className="text-sm text-slate-700 bg-slate-200 rounded-lg p-3 whitespace-pre-wrap">{plan.outreachMessage}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-slate-500 mb-1.5">Outreach email</p>
-                    <div className="bg-slate-100 rounded-lg p-3 space-y-1">
+                    <div className="bg-slate-200 rounded-lg p-3 space-y-1">
                       <p className="text-xs font-semibold text-slate-600">Subject: {plan.emailSubject}</p>
                       <p className="text-sm text-slate-700 whitespace-pre-wrap">{plan.emailBody}</p>
                     </div>

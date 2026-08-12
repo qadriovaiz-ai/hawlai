@@ -100,7 +100,7 @@ export default function TasksView() {
           <button
             key={t.key}
             onClick={() => setTab(t.key as any)}
-            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${tab === t.key ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"}`}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${tab === t.key ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200"}`}
           >
             {t.label} ({(tasks ?? []).filter((x) => x.status === t.key || (t.key === "done" && x.status === "cancelled")).length})
           </button>
@@ -124,14 +124,14 @@ export default function TasksView() {
 
           return (
             <div key={task.id} className={`card p-4 flex items-start gap-3 ${isCancelled ? "opacity-60" : ""}`}>
-              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
                 {task.team_members ? <User className="w-4 h-4 text-slate-500" /> : <Bot className="w-4 h-4 text-brand-500" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-slate-900">{task.title}</p>
                   {task.department && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200/80">
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500 border border-slate-300/80">
                       {titleCaseFromSnake(task.department)}
                     </span>
                   )}

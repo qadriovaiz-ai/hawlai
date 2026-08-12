@@ -82,7 +82,7 @@ export default function RetargetingView() {
                 <button
                   key={s.key}
                   onClick={() => { setSelected(s.key); setOutput(null); }}
-                  className={`text-left p-3 rounded-lg border transition-colors ${selected === s.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-purple-400"}`}
+                  className={`text-left p-3 rounded-lg border transition-colors ${selected === s.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600 hover:border-purple-400"}`}
                 >
                   <Icon className="w-4 h-4 mb-1.5" />
                   <p className="text-sm font-semibold">{count} people</p>

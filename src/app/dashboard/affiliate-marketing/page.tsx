@@ -33,7 +33,7 @@ export default async function AffiliateMarketingPage() {
       {website?.slug && (
         <div className="card p-4 flex items-center justify-between">
           <p className="text-sm text-slate-600">Share this with anyone who wants to apply:</p>
-          <code className="text-xs bg-slate-100 px-2 py-1 rounded text-purple-600">/affiliates?store={website.slug}</code>
+          <code className="text-xs bg-slate-200 px-2 py-1 rounded text-purple-600">/affiliates?store={website.slug}</code>
         </div>
       )}
       <AffiliateManagerView />

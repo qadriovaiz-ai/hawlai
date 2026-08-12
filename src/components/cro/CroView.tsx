@@ -11,7 +11,7 @@ const CRO_TASKS = [
   { key: "ux", label: "UX Suggestions" },
 ];
 
-const IMPACT_COLOR: Record<string, string> = { high: "bg-red-100 text-red-600", medium: "bg-amber-100 text-amber-600", low: "bg-slate-100 text-slate-500" };
+const IMPACT_COLOR: Record<string, string> = { high: "bg-red-100 text-red-600", medium: "bg-amber-100 text-amber-600", low: "bg-slate-200 text-slate-500" };
 
 export default function CroView() {
   const [report, setReport] = useState<any>(null);
@@ -159,7 +159,7 @@ export default function CroView() {
         </div>
         <div className="flex flex-wrap gap-1.5">
           {CRO_TASKS.map((t) => (
-            <button key={t.key} onClick={() => { setTaskKey(t.key); setTaskOutput(null); }} className={`text-xs px-3 py-1.5 rounded-lg border ${taskKey === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
+            <button key={t.key} onClick={() => { setTaskKey(t.key); setTaskOutput(null); }} className={`text-xs px-3 py-1.5 rounded-lg border ${taskKey === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
               {t.label}
             </button>
           ))}

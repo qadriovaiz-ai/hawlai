@@ -73,8 +73,8 @@ export default function PopupAndTrackingSettings() {
         {popupEnabled && (
           <div className="space-y-2">
             <div className="flex gap-1.5">
-              <button onClick={() => setPopupTrigger("exit_intent")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${popupTrigger === "exit_intent" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>Exit Intent</button>
-              <button onClick={() => setPopupTrigger("timed")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${popupTrigger === "timed" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>Timed</button>
+              <button onClick={() => setPopupTrigger("exit_intent")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${popupTrigger === "exit_intent" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>Exit Intent</button>
+              <button onClick={() => setPopupTrigger("timed")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${popupTrigger === "timed" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>Timed</button>
               {popupTrigger === "timed" && (
                 <div className="flex items-center gap-1 text-xs text-slate-500">
                   <input type="number" min={3} value={popupDelay} onChange={(e) => setPopupDelay(Number(e.target.value))} className="w-14 bg-slate-100 border border-slate-200 rounded px-1.5 py-1 text-center" /> sec

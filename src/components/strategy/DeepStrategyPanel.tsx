@@ -110,15 +110,15 @@ export default function DeepStrategyPanel() {
           ) : strategy ? (
             <>
               <div className="grid sm:grid-cols-2 gap-3">
-                <div className="bg-slate-100 rounded-lg p-3">
+                <div className="bg-slate-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Building2 className="w-3.5 h-3.5" /> Business Analysis</p>
                   <p className="text-sm text-slate-700">{strategy.businessAnalysis}</p>
                 </div>
-                <div className="bg-slate-100 rounded-lg p-3">
+                <div className="bg-slate-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Swords className="w-3.5 h-3.5" /> Competitor Analysis</p>
                   <p className="text-sm text-slate-700">{strategy.competitorAnalysis}</p>
                 </div>
-                <div className="bg-slate-100 rounded-lg p-3 sm:col-span-2">
+                <div className="bg-slate-200 rounded-lg p-3 sm:col-span-2">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Target className="w-3.5 h-3.5" /> Target Audience</p>
                   <p className="text-sm text-slate-700">{strategy.targetAudience?.description}</p>
                   <div className="flex items-center gap-3 mt-1.5">
@@ -129,15 +129,15 @@ export default function DeepStrategyPanel() {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-3">
-                <div className="bg-slate-100 rounded-lg p-3">
+                <div className="bg-slate-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Package className="w-3.5 h-3.5" /> Product Analysis</p>
                   <p className="text-sm text-slate-700">{strategy.productAnalysis}</p>
                 </div>
-                <div className="bg-slate-100 rounded-lg p-3">
+                <div className="bg-slate-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><IndianRupee className="w-3.5 h-3.5" /> Pricing Strategy</p>
                   <p className="text-sm text-slate-700">{strategy.pricingStrategy}</p>
                 </div>
-                <div className="bg-slate-100 rounded-lg p-3">
+                <div className="bg-slate-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Crosshair className="w-3.5 h-3.5" /> Positioning</p>
                   <p className="text-sm text-slate-700">{strategy.positioningStatement}</p>
                 </div>
@@ -173,7 +173,7 @@ export default function DeepStrategyPanel() {
                 <p className="text-xs font-semibold text-slate-500 mb-2">Market Gaps</p>
                 <div className="space-y-1">
                   {strategy.marketGaps?.map((g: string, i: number) => (
-                    <p key={i} className="text-sm text-slate-600 bg-slate-100 rounded-lg p-2.5">💡 {g}</p>
+                    <p key={i} className="text-sm text-slate-600 bg-slate-200 rounded-lg p-2.5">💡 {g}</p>
                   ))}
                 </div>
               </div>
@@ -182,7 +182,7 @@ export default function DeepStrategyPanel() {
                 <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5"><Users2 className="w-3.5 h-3.5" /> Customer Personas</p>
                 <div className="grid sm:grid-cols-3 gap-2">
                   {strategy.personas?.map((p: any, i: number) => (
-                    <div key={i} className="bg-slate-100 rounded-lg p-3">
+                    <div key={i} className="bg-slate-200 rounded-lg p-3">
                       <p className="text-sm font-semibold text-slate-800">{p.name}</p>
                       <p className="text-xs text-slate-500 mt-0.5">{p.description}</p>
                       <div className="flex flex-wrap gap-1 mt-1.5">
@@ -199,7 +199,7 @@ export default function DeepStrategyPanel() {
                 <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5"><CalendarRange className="w-3.5 h-3.5" /> Quarterly Plan</p>
                 <div className="grid sm:grid-cols-4 gap-2">
                   {strategy.quarterlyPlan?.map((q: any, i: number) => (
-                    <div key={i} className="bg-slate-100 rounded-lg p-3">
+                    <div key={i} className="bg-slate-200 rounded-lg p-3">
                       <p className="text-xs font-bold text-purple-400">{q.quarter}</p>
                       <p className="text-sm font-medium text-slate-800 mt-0.5">{q.focus}</p>
                       <ul className="mt-1.5 space-y-0.5">

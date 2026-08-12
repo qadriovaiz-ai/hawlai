@@ -75,7 +75,7 @@ export default function CollabBoardManager() {
           </p>
           <div className="space-y-2">
             {newApplications.map((a) => (
-              <div key={a.id} className="bg-slate-100 rounded-lg p-3 space-y-1.5">
+              <div key={a.id} className="bg-slate-200 rounded-lg p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-800">{a.influencer_name} <span className="text-xs text-slate-400 font-normal">{a.handle} · {a.platform}{a.followers_estimate ? ` · ~${a.followers_estimate.toLocaleString("en-IN")} followers` : ""}</span></p>
                 </div>
@@ -110,7 +110,7 @@ export default function CollabBoardManager() {
         <p className="text-xs text-slate-400">Public opportunities influencers can find and apply to directly, without you having to search for them first.</p>
 
         {showForm && (
-          <div className="space-y-2 bg-slate-100 rounded-lg p-3">
+          <div className="space-y-2 bg-slate-200 rounded-lg p-3">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title — e.g. 'Diwali collection creators wanted'" className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What you're looking for (optional)" rows={2} className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2" />
             <div className="flex gap-2">
@@ -130,7 +130,7 @@ export default function CollabBoardManager() {
         ) : (
           <div className="space-y-2">
             {listings.map((l) => (
-              <div key={l.id} className="bg-slate-100 rounded-lg p-3 flex items-center justify-between gap-3">
+              <div key={l.id} className="bg-slate-200 rounded-lg p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{l.title}</p>
                   <p className="text-xs text-slate-400">{l.status === "open" ? (l.is_public ? "Live on public board" : "Open, but hidden from board") : "Closed"}</p>

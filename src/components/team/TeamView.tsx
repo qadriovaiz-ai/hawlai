@@ -102,7 +102,7 @@ export default function TeamView() {
 
       {members.map((m) => (
         <div key={m.id} className="card p-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 text-sm">
+          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-sm">
             {m.email[0].toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">

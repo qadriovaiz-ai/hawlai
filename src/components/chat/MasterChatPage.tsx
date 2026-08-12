@@ -315,12 +315,12 @@ export default function MasterChatPage({
 
     {/* Desktop: persistent side panel. Mobile: full-screen overlay, opened via the "View X" chip on a message. */}
     {activeArtifact && !panelClosed && (
-      <div className="hidden lg:flex flex-col w-[420px] border-l border-slate-200 shrink-0 bg-white">
+      <div className="hidden lg:flex flex-col w-[420px] border-l border-slate-200 shrink-0 bg-slate-50">
         <WorkspacePanel artifact={activeArtifact} onClose={() => setPanelClosed(true)} />
       </div>
     )}
     {activeArtifact && !panelClosed && (
-      <div className="lg:hidden fixed inset-0 z-50 bg-white flex flex-col">
+      <div className="lg:hidden fixed inset-0 z-50 bg-slate-50 flex flex-col">
         <WorkspacePanel artifact={activeArtifact} onClose={() => setPanelClosed(true)} />
       </div>
     )}
@@ -423,7 +423,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
   // label + separate fields list used for every other artifact kind.
   if (artifact.kind === "record" && artifact.summary) {
     return (
-      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white overflow-hidden">
+      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
         <div className="flex items-start gap-2 px-3 py-3">
           <div className="w-[18px] h-[18px] rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 mt-0.5">
             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
@@ -443,7 +443,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white overflow-hidden">
+    <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
       <div className="flex items-start gap-2.5 px-3 py-2.5">
         <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0 border", colorMap[artifact.kind as keyof typeof colorMap])}>
           <Icon className="w-3.5 h-3.5" />

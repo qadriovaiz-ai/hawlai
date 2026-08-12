@@ -8,11 +8,11 @@ const CHANNEL_META: Record<string, { label: string; icon: any; className: string
   social: { label: "Social", icon: Share2, className: "bg-blue-500/10 text-blue-300 border-blue-700/50" },
   email_whatsapp: { label: "Email/WhatsApp", icon: Mail, className: "bg-green-500/10 text-green-300 border-green-700/50" },
   seo: { label: "SEO", icon: TrendingUp, className: "bg-amber-500/10 text-amber-300 border-amber-700/50" },
-  other: { label: "Other", icon: MoreHorizontal, className: "bg-slate-100 text-slate-600 border-slate-200" },
+  other: { label: "Other", icon: MoreHorizontal, className: "bg-slate-200 text-slate-600 border-slate-300" },
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  planned: "bg-slate-100 text-slate-600 border border-slate-200",
+  planned: "bg-slate-200 text-slate-600 border border-slate-300",
   in_progress: "bg-blue-500/10 text-blue-300 border border-blue-700/50",
   completed: "bg-green-500/10 text-green-300 border border-green-700/50",
   cancelled: "bg-red-500/10 text-red-500 border border-red-700/50 line-through",
@@ -111,7 +111,7 @@ export default function CalendarPage() {
           <select
             value={item.status}
             onChange={(e) => handleStatusChange(item.id, e.target.value)}
-            className="bg-slate-100 text-slate-900 text-xs border border-slate-200 rounded-md px-2 py-1.5"
+            className="bg-slate-200 text-slate-900 text-xs border border-slate-300 rounded-md px-2 py-1.5"
           >
             <option value="planned">Planned</option>
             <option value="in_progress">In Progress</option>

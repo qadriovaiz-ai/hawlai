@@ -322,7 +322,7 @@ export default function CreativeStudioPage() {
         {logos.length > 0 && (
           <div className="grid grid-cols-3 gap-3">
             {logos.map((url, i) => (
-              <img key={i} src={url} alt={`Logo concept ${i + 1}`} className="w-full aspect-square object-contain bg-slate-100 border border-slate-200 rounded-lg" />
+              <img key={i} src={url} alt={`Logo concept ${i + 1}`} className="w-full aspect-square object-contain bg-slate-200 border border-slate-300 rounded-lg" />
             ))}
           </div>
         )}
@@ -343,7 +343,7 @@ export default function CreativeStudioPage() {
                 disabled={!m.configured}
                 title={m.configured ? m.description : `${m.description} — not connected yet`}
                 className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${
-                  selectedModel === m.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"
+                  selectedModel === m.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"
                 } ${!m.configured ? "opacity-40 cursor-not-allowed" : ""}`}
               >
                 {m.label}
@@ -365,7 +365,7 @@ export default function CreativeStudioPage() {
         </button>
         {videoError && <p className="text-xs text-red-400">{videoError}</p>}
         {videoResult?.video_url && (
-          <video src={videoResult.video_url} controls className="bg-slate-100 text-slate-900 w-full rounded-lg border border-slate-200" />
+          <video src={videoResult.video_url} controls className="bg-slate-200 text-slate-900 w-full rounded-lg border border-slate-300" />
         )}
       </div>
 

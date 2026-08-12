@@ -51,7 +51,7 @@ export default function PaymentsPanel() {
     <div className="card p-5 space-y-4">
       <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><CreditCard className="w-4 h-4 text-slate-400" /> Online Payments (Razorpay)</p>
 
-      <div className="bg-slate-100 rounded-lg p-3 flex items-start gap-2">
+      <div className="bg-slate-200 rounded-lg p-3 flex items-start gap-2">
         <AlertCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
         <p className="text-xs text-slate-500">
           Connect your <strong>own</strong> Razorpay account here — this is what lets your customers pay online, with the money going straight to <strong>your</strong> bank account, not anywhere else. If you don't have one yet, sign up free at{" "}

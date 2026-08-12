@@ -17,15 +17,15 @@ export default function GrowthMetricsCard() {
     <div className="card p-5 space-y-3">
       <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><TrendingUp className="w-4 h-4" /> Growth Metrics</p>
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-slate-100 rounded-lg p-3 text-center">
+        <div className="bg-slate-200 rounded-lg p-3 text-center">
           <p className="text-lg font-bold text-slate-800">{data.cac !== null ? formatCurrency(data.cac) : "—"}</p>
           <p className="text-xs text-slate-400">CAC</p>
         </div>
-        <div className="bg-slate-100 rounded-lg p-3 text-center">
+        <div className="bg-slate-200 rounded-lg p-3 text-center">
           <p className="text-lg font-bold text-slate-800">{data.ltv !== null ? formatCurrency(data.ltv) : "—"}</p>
           <p className="text-xs text-slate-400">Avg. Deal Value</p>
         </div>
-        <div className="bg-slate-100 rounded-lg p-3 text-center">
+        <div className="bg-slate-200 rounded-lg p-3 text-center">
           <p className="text-lg font-bold text-slate-800">{data.conversionRate !== null ? `${data.conversionRate.toFixed(1)}%` : "—"}</p>
           <p className="text-xs text-slate-400">Conversion Rate</p>
         </div>

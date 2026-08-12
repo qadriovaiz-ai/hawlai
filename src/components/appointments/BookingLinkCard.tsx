@@ -46,7 +46,7 @@ export default function BookingLinkCard() {
         <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...</p>
       ) : slug ? (
         <div className="flex items-center gap-2">
-          <code className="flex-1 text-xs bg-slate-100 rounded-lg px-3 py-2 text-slate-600 truncate">/book/{slug}</code>
+          <code className="flex-1 text-xs bg-slate-200 rounded-lg px-3 py-2 text-slate-600 truncate">/book/{slug}</code>
           <button onClick={copyLink} className="btn-secondary text-xs px-3 py-2 shrink-0">
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} Copy link
           </button>

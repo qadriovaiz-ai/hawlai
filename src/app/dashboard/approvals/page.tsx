@@ -163,7 +163,7 @@ export default async function ApprovalsPage() {
                 {chips.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {chips.map((chip, i) => (
-                      <span key={i} className="badge bg-slate-100 text-slate-500 border-slate-200/80">{chip}</span>
+                      <span key={i} className="badge bg-slate-200 text-slate-500 border-slate-300/80">{chip}</span>
                     ))}
                   </div>
                 )}

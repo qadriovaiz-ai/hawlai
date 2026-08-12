@@ -62,7 +62,7 @@ export default function SeoPagesManager() {
       ) : (
         <div className="space-y-1.5">
           {pages.map((p) => (
-            <div key={p.id} className="flex items-center justify-between bg-slate-100 rounded-lg p-3">
+            <div key={p.id} className="flex items-center justify-between bg-slate-200 rounded-lg p-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-700 truncate">{p.title}</p>
                 <p className="text-xs text-slate-400">/seo/{p.slug} {p.published && <span className="text-green-500">· Live</span>}</p>

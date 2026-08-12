@@ -54,7 +54,7 @@ function UsageBar({ icon: Icon, label, used, limit, suffix }: { icon: any; label
         </span>
       </div>
       {limit != null && (
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
           <div className={`h-full rounded-full ${nearLimit ? "bg-red-400" : "bg-purple-500"}`} style={{ width: `${pct}%` }} />
         </div>
       )}
@@ -101,7 +101,7 @@ export default function UsageView() {
             <span className="flex items-center gap-1.5 text-slate-700"><PhoneCall className="w-4 h-4 text-slate-400" /> Calling Minutes This Month</span>
             <span className="text-slate-500">{calling.minutesUsed} / {planLimits.callingFreeMinutes} free</span>
           </div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full ${calling.extraMinutesCharged > 0 ? "bg-red-400" : "bg-purple-500"}`}
               style={{ width: `${planLimits.callingFreeMinutes ? Math.min(100, Math.round((calling.minutesUsed / planLimits.callingFreeMinutes) * 100)) : 0}%` }}

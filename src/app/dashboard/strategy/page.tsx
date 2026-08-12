@@ -105,7 +105,7 @@ export default function StrategyPage() {
                     <span className="font-medium text-slate-800">{b.channel}</span>
                     <span className="text-slate-500">{b.percent}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${b.percent}%` }} />
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">{b.reason}</p>

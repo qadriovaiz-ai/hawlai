@@ -96,7 +96,7 @@ export default function TeamTasksPage() {
             )}
             <div className="flex items-center gap-2 pt-1">
               {task.status === "open" && (
-                <button onClick={() => updateStatus(task.id, "in_progress")} disabled={updating === task.id} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg disabled:opacity-50">
+                <button onClick={() => updateStatus(task.id, "in_progress")} disabled={updating === task.id} className="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg disabled:opacity-50">
                   Start
                 </button>
               )}

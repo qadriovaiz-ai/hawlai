@@ -79,7 +79,7 @@ export default function GrowthAdvisorView() {
       <div className="card p-5 space-y-3">
         <div className="flex flex-wrap gap-1.5">
           {TASKS.map((t) => (
-            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
+            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
               {t.label}
             </button>
           ))}
@@ -165,9 +165,9 @@ function ForecastRenderer({ output }: { output: any }) {
       </div>
       {output.forecast30Days ? (
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-slate-100 rounded-lg p-2.5 text-center"><p className="text-sm font-bold text-slate-700">{formatCurrency(output.forecast30Days.low)}</p><p className="text-xs text-slate-400">Low</p></div>
+          <div className="bg-slate-200 rounded-lg p-2.5 text-center"><p className="text-sm font-bold text-slate-700">{formatCurrency(output.forecast30Days.low)}</p><p className="text-xs text-slate-400">Low</p></div>
           <div className="bg-purple-500/10 rounded-lg p-2.5 text-center"><p className="text-sm font-bold text-purple-600">{formatCurrency(output.forecast30Days.mid)}</p><p className="text-xs text-slate-400">Expected</p></div>
-          <div className="bg-slate-100 rounded-lg p-2.5 text-center"><p className="text-sm font-bold text-slate-700">{formatCurrency(output.forecast30Days.high)}</p><p className="text-xs text-slate-400">High</p></div>
+          <div className="bg-slate-200 rounded-lg p-2.5 text-center"><p className="text-sm font-bold text-slate-700">{formatCurrency(output.forecast30Days.high)}</p><p className="text-xs text-slate-400">High</p></div>
         </div>
       ) : (
         <p className="text-xs text-slate-400">Not enough conversion/deal-value data yet for a numeric forecast.</p>
@@ -186,7 +186,7 @@ function OutputRenderer({ output }: { output: any }) {
         {output.readiness && <p className="text-sm font-semibold text-purple-600 capitalize">Readiness: {output.readiness}</p>}
         {output.reasoning && <p className="text-sm text-slate-600">{output.reasoning}</p>}
         {output[arrayKey].map((item: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-2.5 text-sm text-slate-700">
+          <div key={i} className="bg-slate-200 rounded-lg p-2.5 text-sm text-slate-700">
             {typeof item === "string" ? item : (
               <>
                 {(item.opportunity || item.campaign) && <p className="font-semibold text-slate-800">{item.opportunity || item.campaign} {item.action && <span className="text-xs text-purple-500">({item.action})</span>}</p>}

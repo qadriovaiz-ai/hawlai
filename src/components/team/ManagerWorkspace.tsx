@@ -61,7 +61,7 @@ export default function ManagerWorkspace() {
                 <p className="text-sm font-medium text-slate-900">{t.title}</p>
                 <p className="text-xs text-slate-400">{t.team_members?.email ?? "AI"} · {t.department ?? "general"}</p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${t.status === "done" ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-500"}`}>{t.status}</span>
+              <span className={`text-xs px-2 py-1 rounded-full ${t.status === "done" ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-500"}`}>{t.status}</span>
             </div>
           ))}
         </div>

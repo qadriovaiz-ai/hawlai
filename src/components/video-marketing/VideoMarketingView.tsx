@@ -96,7 +96,7 @@ export default function VideoMarketingView() {
               key={t.key}
               onClick={() => { setSelectedTask(t.key); setOutput(null); }}
               className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-                selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-purple-400"
+                selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600 hover:border-purple-400"
               }`}
             >
               {t.label}

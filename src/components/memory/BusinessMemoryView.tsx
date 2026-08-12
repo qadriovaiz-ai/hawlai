@@ -63,7 +63,7 @@ export default function BusinessMemoryView() {
           <button onClick={() => setShowForm(!showForm)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add</button>
         </div>
         {showForm && (
-          <div className="space-y-2 bg-slate-100 rounded-lg p-3">
+          <div className="space-y-2 bg-slate-200 rounded-lg p-3">
             <textarea
               value={newInsight}
               onChange={(e) => setNewInsight(e.target.value)}
@@ -90,7 +90,7 @@ export default function BusinessMemoryView() {
           <div key={category} className="card p-5 space-y-2">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{CATEGORY_LABELS[category] ?? category}</p>
             {items.map((m) => (
-              <div key={m.id} className="bg-slate-100 rounded-lg p-3">
+              <div key={m.id} className="bg-slate-200 rounded-lg p-3">
                 {editingId === m.id ? (
                   <div className="space-y-2">
                     <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={2} className="w-full text-sm bg-white border border-slate-200 rounded-lg px-2 py-1.5" />

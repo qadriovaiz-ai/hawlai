@@ -81,7 +81,7 @@ export default function ContentQueueView() {
       ) : (
         <div className="space-y-2">
           {queued.map((item) => (
-            <div key={item.id} className="flex items-start gap-3 bg-slate-100 rounded-lg p-3">
+            <div key={item.id} className="flex items-start gap-3 bg-slate-200 rounded-lg p-3">
               <img src={item.image_url} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-purple-500 mb-0.5">{new Date(item.scheduled_for + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</p>

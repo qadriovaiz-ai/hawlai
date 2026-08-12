@@ -10,7 +10,7 @@ import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "bg-green-500/10 text-green-300 border border-green-700/50",
-  PAUSED: "bg-slate-100 text-slate-600 border border-slate-200",
+  PAUSED: "bg-slate-200 text-slate-600 border border-slate-300",
 };
 
 export default async function CampaignsPage() {
@@ -100,7 +100,7 @@ export default async function CampaignsPage() {
                   {c.generated_image_url ? (
                     <img src={c.generated_image_url} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
                   ) : (
-                    <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    <div className="w-16 h-16 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
                       <Megaphone className="w-6 h-6 text-slate-300" />
                     </div>
                   )}

@@ -66,7 +66,7 @@ export default function ShippingPanel() {
           <button
             key={m.key}
             onClick={() => setMode(m.key)}
-            className={`w-full text-left p-3 rounded-lg border ${mode === m.key ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-slate-100"}`}
+            className={`w-full text-left p-3 rounded-lg border ${mode === m.key ? "border-purple-500 bg-purple-50" : "border-slate-300 bg-slate-200"}`}
           >
             <p className="text-sm font-semibold text-slate-700">{m.label}</p>
             <p className="text-xs text-slate-400">{m.description}</p>

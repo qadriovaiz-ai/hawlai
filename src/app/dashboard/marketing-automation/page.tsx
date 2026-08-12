@@ -38,15 +38,15 @@ export default async function MarketingAutomationPage() {
       <div className="card p-5 space-y-2">
         <p className="text-sm font-semibold text-slate-700">Email + WhatsApp + SMS Orchestration</p>
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5">
+          <div className="flex items-center justify-between bg-slate-200 rounded-lg p-2.5">
             <span className="text-sm text-slate-700 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-purple-400" /> Email</span>
             <span className="text-xs text-green-500 font-medium">Automated — Workflow Builder above</span>
           </div>
-          <div className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5">
+          <div className="flex items-center justify-between bg-slate-200 rounded-lg p-2.5">
             <span className="text-sm text-slate-700 flex items-center gap-1.5"><MessageCircle className="w-3.5 h-3.5 text-green-500" /> WhatsApp</span>
             <span className="text-xs text-amber-500 font-medium">Tap-to-send only — no paid Business API</span>
           </div>
-          <div className="flex items-center justify-between bg-slate-100 rounded-lg p-2.5">
+          <div className="flex items-center justify-between bg-slate-200 rounded-lg p-2.5">
             <span className="text-sm text-slate-700 flex items-center gap-1.5"><MessageSquareOff className="w-3.5 h-3.5 text-slate-400" /> SMS</span>
             <span className="text-xs text-slate-400 font-medium">Not connected — needs a paid gateway</span>
           </div>

@@ -137,7 +137,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
         </button>
         {showAnalyzer && (
           <div className="space-y-2.5">
-            <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 border border-purple-700/40 w-fit">
+            <div className="flex items-center gap-1.5 bg-slate-200 rounded-lg p-1 border border-purple-700/40 w-fit">
               <button
                 onClick={() => setAnalyzeMode("describe")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -184,7 +184,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
             </button>
             {analyzeError && <p className="text-xs text-red-400">{analyzeError}</p>}
             {analysisSummary && (
-              <p className="text-xs text-purple-300 bg-slate-100 rounded-lg p-2.5 border border-purple-700/40">{analysisSummary}</p>
+              <p className="text-xs text-purple-300 bg-slate-200 rounded-lg p-2.5 border border-purple-700/40">{analysisSummary}</p>
             )}
           </div>
         )}

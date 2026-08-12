@@ -26,7 +26,7 @@ export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
       <div className="divide-y divide-slate-50">
         {leads.map((lead) => (
           <div key={lead.id} className="px-5 py-3.5 flex items-center gap-4 hover:bg-slate-200 transition-colors">
-            <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 bg-slate-200 rounded-full flex items-center justify-center shrink-0">
               <span className="text-sm font-semibold text-slate-600">
                 {lead.name?.charAt(0).toUpperCase()}
               </span>
@@ -39,7 +39,7 @@ export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
               <span className={`badge ${getTemperatureColor(lead.lead_temperature ?? "cold")}`}>
                 {getTemperatureIcon(lead.lead_temperature ?? "cold")} {lead.lead_temperature}
               </span>
-              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+              <span className="text-xs font-bold text-slate-700 bg-slate-200 px-2 py-1 rounded">
                 {lead.ai_score ?? 0}
               </span>
               <span className="text-xs text-slate-400">

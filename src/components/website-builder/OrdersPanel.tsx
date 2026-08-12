@@ -75,7 +75,7 @@ export default function OrdersPanel() {
             {!!o.shipping_amount && <p className="text-xs text-slate-400">Shipping: ₹{o.shipping_amount}</p>}
             <p className="text-xs text-slate-400">Deliver to: {o.shipping_address}</p>
             <div className="flex items-center gap-2 flex-wrap">
-              <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value)} className={`text-xs px-2 py-1 rounded-full border-0 ${STATUS_COLORS[o.status] ?? "bg-slate-100"}`}>
+              <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value)} className={`text-xs px-2 py-1 rounded-full border-0 ${STATUS_COLORS[o.status] ?? "bg-slate-200"}`}>
                 {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               <span className={`text-[10px] px-2 py-1 rounded-full ${o.payment_status === "paid" ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"}`}>

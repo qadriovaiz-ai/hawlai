@@ -88,7 +88,7 @@ export default function ContentMarketingView() {
                   className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
                     selectedType === t.key
                       ? "bg-purple-600 border-purple-600 text-white"
-                      : "bg-slate-100 border-slate-200 text-slate-600 hover:border-purple-400"
+                      : "bg-slate-200 border-slate-300 text-slate-600 hover:border-purple-400"
                   }`}
                 >
                   {t.label}
@@ -190,7 +190,7 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
     return (
       <div className="space-y-2">
         {output.slides.map((s: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-1.5">
+          <div key={i} className="bg-slate-200 rounded-lg p-3 space-y-1.5">
             <p className="text-xs font-semibold text-slate-400">{i + 1}.</p>
             <input
               value={s.headline ?? ""}
@@ -213,7 +213,7 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
     return (
       <div className="space-y-2">
         {output.days.map((d: any, i: number) => (
-          <div key={i} className="bg-slate-100 rounded-lg p-3 space-y-1.5">
+          <div key={i} className="bg-slate-200 rounded-lg p-3 space-y-1.5">
             <p className="text-xs font-semibold text-purple-500">{d.day} · {d.contentType}</p>
             <input
               value={d.topic ?? ""}
@@ -292,7 +292,7 @@ function EditableOutput({ output, onChange }: { output: any; onChange: (next: an
 function OutputRenderer({ output }: { output: any }) {
   if (output.slides) {
     return <div className="space-y-2">{output.slides.map((s: any, i: number) => (
-      <div key={i} className="bg-slate-100 rounded-lg p-3">
+      <div key={i} className="bg-slate-200 rounded-lg p-3">
         <p className="text-sm font-semibold text-slate-700">{i + 1}. {s.headline}</p>
         <p className="text-xs text-slate-500">{s.supporting || s.body}</p>
       </div>
@@ -300,15 +300,15 @@ function OutputRenderer({ output }: { output: any }) {
   }
   if (output.days) {
     return <div className="space-y-2">{output.days.map((d: any, i: number) => (
-      <div key={i} className="bg-slate-100 rounded-lg p-3">
+      <div key={i} className="bg-slate-200 rounded-lg p-3">
         <p className="text-xs font-semibold text-purple-500">{d.day} · {d.contentType}</p>
         <p className="text-sm text-slate-700">{d.topic}</p>
         <p className="text-xs text-slate-400">{d.angle}</p>
       </div>
     ))}</div>;
   }
-  if (output.hooks) return <ul className="space-y-1.5">{output.hooks.map((h: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-100 rounded-lg p-2.5">{h}</li>)}</ul>;
-  if (output.ctas) return <ul className="space-y-1.5">{output.ctas.map((c: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-100 rounded-lg p-2.5">{c}</li>)}</ul>;
+  if (output.hooks) return <ul className="space-y-1.5">{output.hooks.map((h: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-200 rounded-lg p-2.5">{h}</li>)}</ul>;
+  if (output.ctas) return <ul className="space-y-1.5">{output.ctas.map((c: string, i: number) => <li key={i} className="text-sm text-slate-700 bg-slate-200 rounded-lg p-2.5">{c}</li>)}</ul>;
   return (
     <div className="space-y-2 text-sm text-slate-700">
       {Object.entries(output).map(([key, val]: [string, any]) => (

@@ -438,13 +438,13 @@ export default function WebsiteBuilderView() {
             <p className="text-sm font-semibold text-slate-700">Review Your Plan</p>
             <button onClick={() => setPlan(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
           </div>
-          <p className="text-xs text-slate-500 bg-slate-100 rounded-lg p-2.5">{plan.businessSummary}</p>
+          <p className="text-xs text-slate-500 bg-slate-200 rounded-lg p-2.5">{plan.businessSummary}</p>
 
           <div>
             <p className="text-xs font-semibold text-slate-600 mb-1.5">Theme</p>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(THEME_PREVIEWS).map(([key, t]) => (
-                <button key={key} onClick={() => setPlan((prev) => (prev ? { ...prev, themeKey: key } : prev))} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border ${plan.themeKey === key ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-slate-100"}`}>
+                <button key={key} onClick={() => setPlan((prev) => (prev ? { ...prev, themeKey: key } : prev))} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border ${plan.themeKey === key ? "border-purple-500 bg-purple-50" : "border-slate-300 bg-slate-200"}`}>
                   <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: t.dark }} />
                   <span className="w-3 h-3 rounded-full inline-block -ml-2" style={{ backgroundColor: t.accent }} />
                   {t.label}
@@ -457,7 +457,7 @@ export default function WebsiteBuilderView() {
             <p className="text-xs font-semibold text-slate-600 mb-1.5">Pages</p>
             <div className="space-y-1.5">
               {plan.pages.map((p, i) => (
-                <div key={i} className="flex items-center gap-2 bg-slate-100 rounded-lg p-2">
+                <div key={i} className="flex items-center gap-2 bg-slate-200 rounded-lg p-2">
                   <input value={p.title} onChange={(e) => updatePlanPage(i, "title", e.target.value)} className="flex-1 text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1.5" placeholder="Page title" />
                   <span className="text-[10px] text-slate-400 uppercase w-16 shrink-0">{p.pageType}</span>
                   <button onClick={() => removePlanPage(i)} className="text-slate-400 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -507,7 +507,7 @@ export default function WebsiteBuilderView() {
               <p className="text-xs font-semibold text-slate-600 mb-1.5">Theme</p>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(THEME_PREVIEWS).map(([key, t]) => (
-                  <button key={key} onClick={() => saveTheme(key)} disabled={themeSaving} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50 ${website.theme_key === key ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-slate-100"}`}>
+                  <button key={key} onClick={() => saveTheme(key)} disabled={themeSaving} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50 ${website.theme_key === key ? "border-purple-500 bg-purple-50" : "border-slate-300 bg-slate-200"}`}>
                     <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: t.dark }} />
                     <span className="w-3 h-3 rounded-full inline-block -ml-2" style={{ backgroundColor: t.accent }} />
                     {t.label}
@@ -523,7 +523,7 @@ export default function WebsiteBuilderView() {
                     key={f.key}
                     onClick={() => saveFont(f.key)}
                     disabled={fontSaving}
-                    className={`text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50 text-left ${(website.font_key ?? "modern") === f.key ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-slate-100"}`}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-50 text-left ${(website.font_key ?? "modern") === f.key ? "border-purple-500 bg-purple-50" : "border-slate-300 bg-slate-200"}`}
                   >
                     <span className="font-semibold text-slate-700">{f.label}</span>
                     <span className="text-slate-400"> · {f.headingLabel} + {f.bodyLabel}</span>
@@ -545,7 +545,7 @@ export default function WebsiteBuilderView() {
                     onDrop={(e) => { e.preventDefault(); if (dragPageIndex !== null && dragPageIndex !== pi) reorderPages(dragPageIndex, pi); setDragPageIndex(null); setOverPageIndex(null); }}
                     onDragEnd={() => { setDragPageIndex(null); setOverPageIndex(null); }}
                     onClick={() => setActivePage(p.id)}
-                    className={`text-xs px-2.5 py-1.5 rounded-lg border cursor-grab active:cursor-grabbing ${activePage === p.id ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600"} ${overPageIndex === pi ? "ring-2 ring-purple-400" : ""} ${dragPageIndex === pi ? "opacity-40" : ""}`}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border cursor-grab active:cursor-grabbing ${activePage === p.id ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"} ${overPageIndex === pi ? "ring-2 ring-purple-400" : ""} ${dragPageIndex === pi ? "opacity-40" : ""}`}
                   >
                     {p.title}
                   </button>
@@ -609,7 +609,7 @@ export default function WebsiteBuilderView() {
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-slate-400">Drag blocks from the palette, click any block to edit or select it</p>
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                    <div className="flex items-center gap-1 bg-slate-200 rounded-lg p-1">
                       <button
                         onClick={() => undo(currentPage.id)}
                         disabled={!history[currentPage.id]?.past.length && !historyBufferRef.current[currentPage.id]}
@@ -627,7 +627,7 @@ export default function WebsiteBuilderView() {
                         <Redo2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                    <div className="flex items-center gap-1 bg-slate-200 rounded-lg p-1">
                       <button onClick={() => setPreviewMode("desktop")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "desktop" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Monitor className="w-3.5 h-3.5" /> Desktop</button>
                       <button onClick={() => setPreviewMode("mobile")} className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 ${previewMode === "mobile" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400"}`}><Smartphone className="w-3.5 h-3.5" /> Mobile</button>
                     </div>

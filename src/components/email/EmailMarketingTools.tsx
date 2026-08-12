@@ -84,7 +84,7 @@ export default function EmailMarketingTools() {
             <p className="text-xs text-slate-400">{segments.emailableLeads} of {segments.totalLeads} leads have an email address on file.</p>
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(segments.byTemperature ?? {}).map(([k, v]: [string, any]) => (
-                <div key={k} className="bg-slate-100 rounded-lg p-2.5 text-center">
+                <div key={k} className="bg-slate-200 rounded-lg p-2.5 text-center">
                   <p className="text-lg font-bold text-slate-800">{v}</p>
                   <p className="text-xs text-slate-400 capitalize">{k}</p>
                 </div>
@@ -113,7 +113,7 @@ export default function EmailMarketingTools() {
               key={t.key}
               onClick={() => { setSelectedTask(t.key); setOutput(null); }}
               className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-                selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-purple-400"
+                selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600 hover:border-purple-400"
               }`}
             >
               {t.label}
@@ -191,7 +191,7 @@ export default function EmailMarketingTools() {
 function OutputRenderer({ output }: { output: any }) {
   if (output.emails) {
     return <div className="space-y-3">{output.emails.map((e: any, i: number) => (
-      <div key={i} className="bg-slate-100 rounded-lg p-3">
+      <div key={i} className="bg-slate-200 rounded-lg p-3">
         <p className="text-xs text-purple-500 font-semibold">Step {e.step}</p>
         <p className="text-sm font-semibold text-slate-800">{e.subject}</p>
         <p className="text-xs text-slate-600 whitespace-pre-wrap mt-1">{e.body}</p>
@@ -202,7 +202,7 @@ function OutputRenderer({ output }: { output: any }) {
     return <div className="space-y-2">
       {output.subject && <p className="text-sm font-semibold text-slate-800">Subject: {output.subject}</p>}
       {output.sections.map((s: any, i: number) => (
-        <div key={i} className="bg-slate-100 rounded-lg p-3">
+        <div key={i} className="bg-slate-200 rounded-lg p-3">
           <p className="text-sm font-semibold text-slate-700">{s.heading}</p>
           <p className="text-xs text-slate-600 whitespace-pre-wrap mt-1">{s.body}</p>
         </div>
@@ -210,7 +210,7 @@ function OutputRenderer({ output }: { output: any }) {
     </div>;
   }
   if (output.tips) return <ul className="space-y-1.5">{output.tips.map((t: any, i: number) => (
-    <li key={i} className="text-sm text-slate-700 bg-slate-100 rounded-lg p-2.5">
+    <li key={i} className="text-sm text-slate-700 bg-slate-200 rounded-lg p-2.5">
       <span className="font-semibold">{t.tactic}</span>
       <p className="text-xs text-slate-500">{t.howTo}</p>
     </li>
@@ -243,21 +243,21 @@ function EmailAnalyticsCard() {
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-slate-100 rounded-lg p-3 text-center">
+            <div className="bg-slate-200 rounded-lg p-3 text-center">
               <p className="text-lg font-bold text-slate-800">{stats.totalSent}</p>
               <p className="text-xs text-slate-400">Sent</p>
             </div>
-            <div className="bg-slate-100 rounded-lg p-3 text-center">
+            <div className="bg-slate-200 rounded-lg p-3 text-center">
               <p className="text-lg font-bold text-slate-800">{stats.openRate !== null ? `${stats.openRate}%` : "—"}</p>
               <p className="text-xs text-slate-400">Open rate</p>
             </div>
-            <div className="bg-slate-100 rounded-lg p-3 text-center">
+            <div className="bg-slate-200 rounded-lg p-3 text-center">
               <p className="text-lg font-bold text-slate-800">{stats.clickRate !== null ? `${stats.clickRate}%` : "—"}</p>
               <p className="text-xs text-slate-400">Click rate</p>
             </div>
           </div>
           {stats.gmailSentCount > 0 && (
-            <div className="bg-slate-100 rounded-lg p-3 flex items-start gap-2">
+            <div className="bg-slate-200 rounded-lg p-3 flex items-start gap-2">
               <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
               <p className="text-xs text-slate-500">
                 {stats.gmailSentCount} of these were sent through your connected Gmail — open/click tracking only works for the {stats.resendSentCount} sent through Hawlai's own sender, since Gmail's API doesn't give a tracking webhook. Open/click rates above are based only on the Resend-sent ones.
