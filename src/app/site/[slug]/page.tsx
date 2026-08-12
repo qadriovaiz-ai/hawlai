@@ -7,6 +7,14 @@ import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import { blockTreeContainsType } from "@/lib/blocks/utils";
 import type { Metadata } from "next";
 
+// Without this, Next.js's default fetch caching can wrap the Supabase
+// calls below indefinitely — a real bug found live: a database fix
+// (regenerating this page's content) didn't show up on the public
+// site because a stale cached render kept being served. This is
+// public-facing marketing/storefront content (prices, pages, links) —
+// it must always reflect the current database, never a stale cache.
+export const revalidate = 0;
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   return buildPageMetadata(slug, "home");

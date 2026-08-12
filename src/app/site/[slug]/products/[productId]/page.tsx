@@ -6,6 +6,11 @@ import { ProductImageGallery } from "@/components/website/ProductCatalog";
 import ProductAddToCart from "@/components/website/ProductAddToCart";
 import ProductReviews from "@/components/website/ProductReviews";
 
+// Same stale-cache risk as the other public site routes (see
+// src/app/site/[slug]/page.tsx) — extra important here specifically
+// since this page shows live price/inventory, not just copy.
+export const revalidate = 0;
+
 export default async function ProductDetailPage({ params }: { params: Promise<{ slug: string; productId: string }> }) {
   const { slug, productId } = await params;
   const supabase = createServiceClient();

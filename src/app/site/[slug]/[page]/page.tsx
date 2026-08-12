@@ -7,6 +7,10 @@ import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import { blockTreeContainsType } from "@/lib/blocks/utils";
 import type { Metadata } from "next";
 
+// See src/app/site/[slug]/page.tsx for why — same stale-cache risk on
+// the same public storefront content.
+export const revalidate = 0;
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string; page: string }> }): Promise<Metadata> {
   const { slug, page } = await params;
   return buildPageMetadata(slug, page);
