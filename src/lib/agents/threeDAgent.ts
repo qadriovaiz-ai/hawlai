@@ -16,7 +16,8 @@ export async function generate3DScene(
   prompt: string,
   dealershipName: string,
   businessCategory: string,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<ThreeDResult> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -33,7 +34,7 @@ export async function generate3DScene(
           role: "user",
           content: `Write a single, complete, self-contained HTML file that renders an interactive 3D scene using Three.js, for "${dealershipName}" (a ${businessCategory} business).
 
-What to build: ${prompt}
+What to build: ${prompt}${groundingContext ?? ""}
 
 Hard technical requirements — the output must actually run without errors:
 - Load Three.js r160+ from a CDN: <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>

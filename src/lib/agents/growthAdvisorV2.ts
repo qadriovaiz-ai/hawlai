@@ -48,7 +48,7 @@ function linearRegression(y: number[]): { slope: number; intercept: number; resi
   return { slope, intercept, residualStdDev };
 }
 
-export async function computeRevenueForecast(supabase: any, dealershipId: string, dealershipName: string, businessCategory: string): Promise<RevenueForecast> {
+export async function computeRevenueForecast(supabase: any, dealershipId: string, dealershipName: string, businessCategory: string, groundingContext?: string): Promise<RevenueForecast> {
   const eightWeeksAgo = new Date(Date.now() - 56 * 24 * 60 * 60 * 1000).toISOString();
   const { data: leads } = await supabase
     .from("leads")
@@ -115,7 +115,7 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
           max_tokens: 400,
           messages: [{
             role: "user",
-            content: `${dealershipName}, a ${businessCategory} business, has this REAL data: weekly lead counts over the last 8 weeks: [${weeklyLeadCounts.join(", ")}]. A linear trend fit on this data shows the business is ${trendDirection}. Conversion rate: ${(conversionRate! * 100).toFixed(1)}%. Average deal value: ₹${avgDealValue}. Trend-projected 30-day revenue forecast range: ₹${forecast30Days.low} to ₹${forecast30Days.high} (mid ₹${forecast30Days.mid}).\n\nWrite a 2-3 sentence plain-English interpretation of this trend and forecast — reference the ${trendDirection} direction explicitly, what it means for the forecast, and any caveat worth noting (e.g. small sample size if lead volume is low). Return JSON only: {"narrative": "..."}`,
+            content: `${dealershipName}, a ${businessCategory} business, has this REAL data: weekly lead counts over the last 8 weeks: [${weeklyLeadCounts.join(", ")}]. A linear trend fit on this data shows the business is ${trendDirection}. Conversion rate: ${(conversionRate! * 100).toFixed(1)}%. Average deal value: ₹${avgDealValue}. Trend-projected 30-day revenue forecast range: ₹${forecast30Days.low} to ₹${forecast30Days.high} (mid ₹${forecast30Days.mid}).${groundingContext ?? ""}\n\nWrite a 2-3 sentence plain-English interpretation of this trend and forecast — reference the ${trendDirection} direction explicitly, what it means for the forecast, and any caveat worth noting (e.g. small sample size if lead volume is low). Return JSON only: {"narrative": "..."}`,
           }],
         }),
       });
@@ -161,20 +161,20 @@ async function callClaude(prompt: string, maxTokens = 1500): Promise<any | null>
   }
 }
 
-export async function generateGrowthOpportunities(dealershipName: string, businessCategory: string, dataContext: string) {
+export async function generateGrowthOpportunities(dealershipName: string, businessCategory: string, dataContext: string, groundingContext?: string) {
   const fallback = { output: { text: "Not enough data yet to identify specific opportunities." }, _fallback: true };
-  const parsed = await callClaude(`You are a growth advisor for "${dealershipName}", a ${businessCategory} business in India. Here's their real current data:\n${dataContext}\n\nBased ONLY on this real data (not general market advice), identify 3-5 specific growth opportunities — gaps in their own funnel, underused channels, patterns in what's converting vs not. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "grounded in the data above"}]}`);
+  const parsed = await callClaude(`You are a growth advisor for "${dealershipName}", a ${businessCategory} business in India. Here's their real current data:\n${dataContext}${groundingContext ?? ""}\n\nBased ONLY on this real data (not general market advice), identify 3-5 specific growth opportunities — gaps in their own funnel, underused channels, patterns in what's converting vs not. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "grounded in the data above"}]}`);
   return parsed ? { output: parsed } : fallback;
 }
 
-export async function generateBudgetRecommendations(dealershipName: string, businessCategory: string, campaignContext: string) {
+export async function generateBudgetRecommendations(dealershipName: string, businessCategory: string, campaignContext: string, groundingContext?: string) {
   const fallback = { output: { text: "No campaign spend data yet to base budget recommendations on." }, _fallback: true };
-  const parsed = await callClaude(`You are a media buyer advising "${dealershipName}", a ${businessCategory} business. Here's their REAL campaign performance data:\n${campaignContext}\n\nRecommend how to reallocate their marketing budget based on what's actually performing — which campaigns to scale, which to cut or fix, and why, using the real spend/leads/revenue numbers above. Return JSON only: {"recommendations": [{"campaign": "...", "action": "scale up | maintain | pause | fix", "reasoning": "..."}], "overallGuidance": "1-2 sentences"}`);
+  const parsed = await callClaude(`You are a media buyer advising "${dealershipName}", a ${businessCategory} business. Here's their REAL campaign performance data:\n${campaignContext}${groundingContext ?? ""}\n\nRecommend how to reallocate their marketing budget based on what's actually performing — which campaigns to scale, which to cut or fix, and why, using the real spend/leads/revenue numbers above. Return JSON only: {"recommendations": [{"campaign": "...", "action": "scale up | maintain | pause | fix", "reasoning": "..."}], "overallGuidance": "1-2 sentences"}`);
   return parsed ? { output: parsed } : fallback;
 }
 
-export async function generateExpansionStrategy(dealershipName: string, businessCategory: string, city: string | null, healthScore: number, dataContext: string) {
+export async function generateExpansionStrategy(dealershipName: string, businessCategory: string, city: string | null, healthScore: number, dataContext: string, groundingContext?: string) {
   const fallback = { output: { text: "Focus on stabilizing current operations before considering expansion." }, _fallback: true };
-  const parsed = await callClaude(`You are a growth strategist advising "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""} with a current health score of ${healthScore}/100. Real current data:\n${dataContext}\n\nGiven this business's actual current state (not hypothetical), give honest advice on expansion readiness — should they expand now (new location/service line/hours) or focus on strengthening the core first, and what would need to be true before expanding. Return JSON only: {"readiness": "not yet | cautiously | ready", "reasoning": "...", "considerations": ["3-4 concrete things to evaluate before expanding"]}`);
+  const parsed = await callClaude(`You are a growth strategist advising "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""} with a current health score of ${healthScore}/100. Real current data:\n${dataContext}${groundingContext ?? ""}\n\nGiven this business's actual current state (not hypothetical), give honest advice on expansion readiness — should they expand now (new location/service line/hours) or focus on strengthening the core first, and what would need to be true before expanding. Return JSON only: {"readiness": "not yet | cautiously | ready", "reasoning": "...", "considerations": ["3-4 concrete things to evaluate before expanding"]}`);
   return parsed ? { output: parsed } : fallback;
 }

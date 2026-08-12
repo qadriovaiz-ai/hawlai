@@ -52,16 +52,18 @@ export async function generateResearch(
   dealershipName: string,
   businessCategory: string,
   city: string | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const location = city ? ` in ${city}, India` : " in India";
   const fallback = { output: { text: "Couldn't complete this research right now — try again shortly." }, _fallback: true };
+  const grounding = groundingContext ?? "";
 
   if (taskKey === "industry_trends") {
     const parsed = await callClaude({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
-      messages: [{ role: "user", content: `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.` }],
+      messages: [{ role: "user", content: `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
     }, logContext);
     return parsed ? { output: parsed } : fallback;
@@ -71,7 +73,7 @@ export async function generateResearch(
     const parsed = await callClaude({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
-      messages: [{ role: "user", content: `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.` }],
+      messages: [{ role: "user", content: `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
     }, logContext);
     return parsed ? { output: parsed } : fallback;
@@ -81,7 +83,7 @@ export async function generateResearch(
     const parsed = await callClaude({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
-      messages: [{ role: "user", content: `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.` }],
+      messages: [{ role: "user", content: `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
     }, logContext);
     return parsed ? { output: parsed } : fallback;
@@ -96,7 +98,8 @@ export async function generateSentimentFromLeads(
   dealershipName: string,
   businessCategory: string,
   leadSignals: { qualificationReason: string | null; temperature: string; status: string }[],
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const fallback = { output: { text: "Not enough lead data yet to analyze sentiment — this improves as more leads come in with qualification notes." }, _fallback: true };
   const withReasons = leadSignals.filter((l) => l.qualificationReason);
@@ -113,7 +116,7 @@ export async function generateSentimentFromLeads(
 
 ${summaryInput}
 
-Identify recurring themes — common interests, hesitations, price sensitivity, what makes leads "hot" vs "cold". Return JSON only: {"positiveThemes": [], "concernsOrObjections": [], "summary": "2-3 sentence overall read"}. Base this ONLY on what's actually in the notes above — don't invent sentiment that isn't reflected in the data.`,
+Identify recurring themes — common interests, hesitations, price sensitivity, what makes leads "hot" vs "cold". Return JSON only: {"positiveThemes": [], "concernsOrObjections": [], "summary": "2-3 sentence overall read"}. Base this ONLY on what's actually in the notes above — don't invent sentiment that isn't reflected in the data.${groundingContext ?? ""}`,
     }],
   }, logContext);
   return parsed ? { output: parsed } : fallback;

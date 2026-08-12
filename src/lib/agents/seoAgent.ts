@@ -25,7 +25,8 @@ export async function generateBlogPost(
   topic: string,
   city?: string | null,
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<BlogPost> {
   const fallback: BlogPost = {
     title: `A Buyer's Guide to ${topic}`,
@@ -47,7 +48,7 @@ export async function generateBlogPost(
           {
             role: "user",
             content: `Write a helpful, SEO-friendly blog post for an Indian ${businessCategory} business.
-Topic: "${topic}"${city ? `, location: ${city}` : ""}
+Topic: "${topic}"${city ? `, location: ${city}` : ""}${groundingContext ?? ""}
 
 400-600 words, informative and genuinely useful (not just sales-y), plain language, a few short paragraphs with natural subheadings. Return JSON only:
 {"title":"SEO-friendly title, under 70 chars","content":"the full article body, plain text with \\n\\n between paragraphs and short subheadings on their own line where natural"}`,
@@ -76,7 +77,8 @@ export async function generateSeoIdeas(
   topic: string,
   city?: string | null,
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<SeoIdeas> {
   const fallback: SeoIdeas = {
     keywords: [`${topic} ${city ?? ""}`.trim(), `best ${topic} deals`, `${topic} price`],
@@ -98,7 +100,7 @@ export async function generateSeoIdeas(
           {
             role: "user",
             content: `You are an SEO researcher for an Indian ${businessCategory} business.
-Topic: "${topic}"${city ? `, location: ${city}` : ""}
+Topic: "${topic}"${city ? `, location: ${city}` : ""}${groundingContext ?? ""}
 
 Return JSON only:
 {"keywords":["8-10 realistic search keywords/phrases Indian customers would actually type into Google, mixing high-intent (e.g. 'X price on-road') and informational (e.g. 'X vs Y comparison') terms"],"contentIdeas":["4-5 short blog post or video content title ideas that would rank for these keywords and also help the dealership's brand"]}`,

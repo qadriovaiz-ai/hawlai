@@ -51,7 +51,8 @@ export async function generateContent(
   businessCategory: string,
   topic: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
@@ -82,7 +83,7 @@ export async function generateContent(
           {
             role: "user",
             content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}
+${brandContext}${groundingContext ?? ""}
 Topic/product/context: "${topic || "general brand content, use good judgement for this business type"}"
 
 Content type: ${meta.label}

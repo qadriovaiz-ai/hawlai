@@ -41,7 +41,8 @@ export async function generateBrandKit(
   city: string | null,
   brandProfile?: BrandProfile | null,
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<BrandKit & { _fallback?: boolean }> {
   const fallback: BrandKit & { _fallback?: boolean } = {
     _fallback: true,
@@ -96,7 +97,7 @@ export async function generateBrandKit(
           {
             role: "user",
             content: `You are a senior brand strategist and designer building a complete brand identity kit for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
-${brandContext}
+${brandContext}${groundingContext ?? ""}
 
 Return JSON only, no markdown:
 {

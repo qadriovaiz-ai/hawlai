@@ -44,7 +44,8 @@ export async function generateDeepStrategy(
   brandProfile?: BrandProfile | null,
   businessCategory: string = "car dealership",
   competitorContext?: string | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<DeepStrategy> {
   const fallback: DeepStrategy & { _fallback?: boolean } = {
     _fallback: true,
@@ -94,7 +95,7 @@ export async function generateDeepStrategy(
           {
             role: "user",
             content: `You are a senior marketing strategist doing a full strategic analysis for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
-${brandContext}
+${brandContext}${groundingContext ?? ""}
 ${competitorContext ? `Known competitor activity: ${competitorContext}` : "No competitor data available — note this honestly rather than inventing specifics."}
 
 Return JSON only, no markdown:

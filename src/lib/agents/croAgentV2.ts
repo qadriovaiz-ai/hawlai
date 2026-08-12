@@ -36,7 +36,8 @@ export async function generateCroSuggestions(
   dealershipName: string,
   businessCategory: string,
   page: PageContext,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = CRO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -83,7 +84,7 @@ ${engagementRate ? `Engagement rate (view → any interaction): ${engagementRate
         max_tokens: 1800,
         messages: [{
           role: "user",
-          content: `You are a conversion rate optimization specialist reviewing the real landing page for "${dealershipName}", a ${businessCategory} business in India.
+          content: `You are a conversion rate optimization specialist reviewing the real landing page for "${dealershipName}", a ${businessCategory} business in India.${groundingContext ?? ""}
 
 ${pageContext}
 

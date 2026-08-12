@@ -349,7 +349,8 @@ async function generatePageBlocks(
   brandContext: string,
   customInstructions: string | null,
   fallback: GeneratedPage,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ page: GeneratedPage; fellBack: boolean; reason?: string }> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -374,7 +375,7 @@ async function generatePageBlocks(
         messages: [{
           role: "user",
           content: `You are building the "${page.title}" page (slug: ${page.slug}, type: ${page.pageType}) for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed — the page must be genuinely about this business, never a different industry or an invented example.
-${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}
+${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}${groundingContext ?? ""}
 ${customInstructions?.trim() ? `\nThe owner's own description of what they want: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions.\n` : ""}
 Block vocabulary (use ONLY these types):
 ${blockVocabularyNote()}
@@ -437,7 +438,8 @@ export async function generateWebsite(
   businessSummary?: string | null,
   brandProfile?: BrandProfile | null,
   customInstructions?: string | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ pages: GeneratedPage[]; _fallback?: boolean; fallbackWarnings?: string[] }> {
   const pageList = pages && pages.length > 0 ? pages : DEFAULT_PLAN_PAGES;
 
@@ -469,7 +471,7 @@ export async function generateWebsite(
     : "No brand voice set yet — keep it natural, honest, and specific to this business.";
 
   const generated = await mapWithConcurrency(pageList, 3, (page) =>
-    generatePageBlocks(dealershipName, businessCategory, city, page, pageList, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext)
+    generatePageBlocks(dealershipName, businessCategory, city, page, pageList, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext, groundingContext)
   );
 
   // Pages meant to list real products (shop/products/menu/listings)

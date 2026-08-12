@@ -449,7 +449,7 @@ async function saveGenerated(supabase: any, dealershipId: string, table: string,
   }
 }
 
-async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any): Promise<any> {
+async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
   const gatedFeature: GatedFeatureKey | undefined =
     toolName === "manage_watch" && input?.kind === "competitor" ? "competitorIntel" : TOOL_FEATURE_MAP[toolName];
   if (gatedFeature) {
@@ -461,7 +461,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
 
   switch (toolName) {
     case "generate_brand_kit": {
-      const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });
+      const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!(kit as any)._fallback) await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, kit, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return kit;
     }
@@ -483,7 +483,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       try {
         const brandProfile = { tone_of_voice: ctx.toneOfVoice };
         const plan = await planWebsite(input.prompt, ctx.name, ctx.category, ctx.city, brandProfile, { supabase, dealershipId: ctx.id });
-        const { pages: generatedPages, fallbackWarnings } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt, { supabase, dealershipId: ctx.id });
+        const { pages: generatedPages, fallbackWarnings } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt, { supabase, dealershipId: ctx.id }, groundingContext);
         const validTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(plan.themeKey) ? plan.themeKey : "navy_amber";
 
         // saveGeneratedWebsite() is the one place both this tool and the
@@ -517,47 +517,60 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       }
     }
     case "generate_content": {
-      const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
       return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_seo": {
-      const { output, _fallback } = await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return output;
     }
     case "generate_social_management": {
-      const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+      const { data: recentPosts } = await supabase
+        .from("social_management_items")
+        .select("output")
+        .eq("dealership_id", ctx.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      const recentPostsContext = (recentPosts ?? []).length > 0
+        ? (recentPosts as any[]).map((r) => r.output?.caption || r.output?.hook || r.output?.headline || JSON.stringify(r.output).slice(0, 150)).filter(Boolean).join("\n")
+        : null;
+      const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, recentPostsContext, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "social_management_items", { task_type: input.taskType, input_text: input.inputText ?? "", output });
       return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_email": {
-      const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_whatsapp": {
-      const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "generate_ad_plan": {
-      const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+      const performance = await getCampaignPerformance(supabase, ctx.id);
+      const performanceContext = performance.campaigns.length > 0
+        ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n")
+        : null;
+      const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
       return output;
     }
     case "generate_video_task": {
-      const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "video_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return savedId ? { ...output, _savedId: savedId } : output;
     }
     case "research_competitor": {
-      const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "competitor_intel_items", { task_type: input.taskType, competitor_name: input.competitorName, output });
       return output;
     }
     case "research_market": {
-      const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city, { supabase, dealershipId: ctx.id });
+      const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "research_items", { task_type: input.taskType, output });
       return output;
     }
@@ -571,7 +584,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         views: all.filter((e: any) => e.event_type === "view").length,
         chatOpens: all.filter((e: any) => e.event_type === "chat_open").length,
         formSubmits: all.filter((e: any) => e.event_type === "form_submit").length,
-      }, { supabase, dealershipId: ctx.id });
+      }, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "cro_items", { task_type: input.taskType, output });
       return output;
     }
@@ -580,30 +593,30 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       // computed live from current lead/deal data (same as the standalone
       // /dashboard/growth-advisor page), not a Claude-generated artifact
       // with an id to persist.
-      if (input.kind === "forecast") return computeRevenueForecast(supabase, ctx.id, ctx.name, ctx.category);
+      if (input.kind === "forecast") return computeRevenueForecast(supabase, ctx.id, ctx.name, ctx.category, groundingContext);
       if (input.kind === "opportunities") {
         const { data: leads } = await supabase.from("leads").select("status, source").eq("dealership_id", ctx.id).limit(300);
         const all = leads ?? [];
         const byStatus: Record<string, number> = {};
         for (const l of all) byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
-        const { output, _fallback } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`) as { output: any; _fallback?: boolean };
+        const { output, _fallback } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`, groundingContext) as { output: any; _fallback?: boolean };
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "growth_opportunities", output });
         return output;
       }
       if (input.kind === "budget") {
         const performance = await getCampaignPerformance(supabase, ctx.id);
         const context = performance.campaigns.length > 0 ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n") : "No campaign data yet.";
-        const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context) as { output: any; _fallback?: boolean };
+        const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context, groundingContext) as { output: any; _fallback?: boolean };
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "budget_recommendations", output });
         return output;
       }
       const growth = await generateGrowthReport(supabase, ctx.id, ctx.category);
-      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`) as { output: any; _fallback?: boolean };
+      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`, groundingContext) as { output: any; _fallback?: boolean };
       if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "expansion_strategy", output });
       return output;
     }
     case "generate_influencer_outreach": {
-      const output = await generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id });
+      const output = await generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       await saveGenerated(supabase, ctx.id, "influencer_outreach_plans", { product: input.productOrService, output });
       return output;
     }
@@ -620,7 +633,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       } else {
         context = "One-time customers who haven't returned to buy again.";
       }
-      const output = await generateRetargetingCopy(segmentType, ctx.name, ctx.category, context, { supabase, dealershipId: ctx.id });
+      const output = await generateRetargetingCopy(segmentType, ctx.name, ctx.category, context, { supabase, dealershipId: ctx.id }, groundingContext);
       await saveGenerated(supabase, ctx.id, "retargeting_campaigns", { segment_type: segmentType, output });
       return output;
     }
@@ -641,16 +654,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_marketing_strategy": {
       const { data: competitorRows } = await supabase.from("competitor_intel_items").select("competitor_name, output").eq("dealership_id", ctx.id).limit(3);
       const competitorContext = (competitorRows ?? []).length > 0 ? JSON.stringify(competitorRows) : null;
-      const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext, { supabase, dealershipId: ctx.id });
+      const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!(strategy as any)._fallback) await supabase.from("deep_strategies").upsert({ dealership_id: ctx.id, strategy, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return strategy;
     }
     case "generate_seo_keywords": {
       if (input.writeFullBlogPost) {
         const { generateBlogPost } = await import("./seoAgent");
-        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id });
+        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       }
-      return generateSeoIdeas(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id });
+      return generateSeoIdeas(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
     }
     case "generate_graphic": {
       try {
@@ -668,7 +681,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "get_customer_sentiment": {
       const { data: leads } = await supabase.from("leads").select("qualification_reason, lead_temperature, status").eq("dealership_id", ctx.id).limit(200);
-      const { output } = await generateSentimentFromLeads(ctx.name, ctx.category, (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })), { supabase, dealershipId: ctx.id });
+      const { output } = await generateSentimentFromLeads(ctx.name, ctx.category, (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })), { supabase, dealershipId: ctx.id }, groundingContext);
       return output;
     }
     case "create_workflow": {
@@ -745,7 +758,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       }).select("id").single();
       if (insertError) return { error: insertError.message };
 
-      const result = await generate3DScene(input.prompt, ctx.name, ctx.category, { supabase, dealershipId: ctx.id });
+      const result = await generate3DScene(input.prompt, ctx.name, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
       if (result.error || !result.html) {
         await supabase.from("three_d_scenes").update({ status: "failed", error_message: result.error }).eq("id", scene.id);
         return { error: result.error ?? "3D scene generation failed" };
@@ -1463,6 +1476,16 @@ export async function runMasterBrainChat(
     ? `\n\n## Relevant marketing knowledge for this request\nDrawn from a curated knowledge base — use this to inform your thinking, don't just repeat it verbatim or cite it like a textbook:\n${relevantKnowledge.map((k) => `- **${k.title}**: ${k.content}`).join("\n")}`
     : "";
 
+  // Same memory/knowledge context injected into the orchestrator's own
+  // system prompt above — previously computed here and then discarded
+  // the moment a tool actually ran, so generation functions like
+  // generateContent had no access to the curated knowledge base or this
+  // business's own remembered facts even though both were already
+  // fetched for this exact turn. Threaded into executeTool() below so
+  // every real generation call gets the same grounding the orchestrator
+  // itself reasons with.
+  const groundingContext = `${memorySection}${knowledgeSection}`;
+
   const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${memorySection}${knowledgeSection}
 
 ## How you think, not just what you generate
@@ -1530,7 +1553,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       toolsUsed.push(block.name);
       let result;
       try {
-        result = await executeTool(supabase, ctx, block.name, block.input);
+        result = await executeTool(supabase, ctx, block.name, block.input, groundingContext);
       } catch (err: any) {
         result = { error: err.message };
       }

@@ -35,7 +35,8 @@ export async function generateSeoTask(
   city: string | null,
   businessCategory: string,
   brandProfile?: DealershipContext | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = SEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -55,7 +56,7 @@ export async function generateSeoTask(
         messages: [{
           role: "user",
           content: `You are an SEO specialist working on an Indian ${businessCategory} business called "${dealershipName}"${city ? `, based in ${city}` : ""}.
-${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}
+${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}
 
 Task: ${meta.label}
 Requirements: ${meta.instructions}

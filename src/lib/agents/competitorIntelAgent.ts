@@ -42,7 +42,8 @@ export async function generateCompetitorIntel(
   competitorName: string,
   dealershipName: string,
   businessCategory: string,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = COMPETITOR_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -61,7 +62,7 @@ export async function generateCompetitorIntel(
         max_tokens: 2500,
         messages: [{
           role: "user",
-          content: `You are a competitive intelligence analyst working for "${dealershipName}", a ${businessCategory} business in India, researching their competitor "${competitorName}".
+          content: `You are a competitive intelligence analyst working for "${dealershipName}", a ${businessCategory} business in India, researching their competitor "${competitorName}".${groundingContext ?? ""}
 
 Task: ${meta.label}
 ${meta.instructions(competitorName, dealershipName, businessCategory)}

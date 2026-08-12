@@ -36,7 +36,8 @@ export async function generateEmailContent(
   businessCategory: string,
   topic: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -58,7 +59,7 @@ export async function generateEmailContent(
         messages: [{
           role: "user",
           content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}
+${brandContext}${groundingContext ?? ""}
 Topic/context: "${topic || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}

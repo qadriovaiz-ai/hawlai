@@ -37,7 +37,8 @@ export async function generateVideoTask(
   businessCategory: string,
   topic: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = VIDEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -59,7 +60,7 @@ export async function generateVideoTask(
         messages: [{
           role: "user",
           content: `You are a short-form video strategist writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}
+${brandContext}${groundingContext ?? ""}
 Topic/context: "${topic || "general brand content, use good judgement for this business type"}"
 
 Task: ${meta.label}

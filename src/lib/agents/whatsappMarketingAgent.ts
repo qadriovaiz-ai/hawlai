@@ -40,7 +40,8 @@ export async function generateWhatsappContent(
   businessCategory: string,
   topic: string,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
@@ -65,7 +66,7 @@ export async function generateWhatsappContent(
         messages: [{
           role: "user",
           content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}
+${brandContext}${groundingContext ?? ""}
 Topic/context: "${topic || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}

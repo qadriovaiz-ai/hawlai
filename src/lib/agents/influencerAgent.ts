@@ -23,7 +23,8 @@ export async function generateInfluencerPlan(
   city: string | null,
   brandProfile: any,
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<InfluencerOutreachPlan> {
   const fallback: InfluencerOutreachPlan = {
     searchTerms: [`${businessCategory} ${city ?? "India"}`, `${businessCategory} reels`],
@@ -47,7 +48,7 @@ export async function generateInfluencerPlan(
         messages: [
           {
             role: "user",
-            content: `An Indian ${businessCategory} business wants to find local micro-influencers to promote: "${productOrService}"${city ? ` in ${city}` : ""}.
+            content: `An Indian ${businessCategory} business wants to find local micro-influencers to promote: "${productOrService}"${city ? ` in ${city}` : ""}.${groundingContext ?? ""}
 
 Return JSON only:
 {"searchTerms":["4-5 specific search phrases/hashtags to actually type into Instagram/YouTube search to find relevant local micro-influencers — be specific, not generic"],"outreachMessage":"a warm, specific DM template to send an influencer, in Hinglish, under 500 characters, with a placeholder like [Name] for personalization","emailSubject":"a short, specific email subject line for the same outreach, under 60 characters","emailBody":"a more formal outreach EMAIL version (not DM) — 4-6 sentences, English, with a [Name] placeholder, suitable for an influencer who prefers email contact — introduce the business, the collab idea, and a clear next step","collabIdeas":["3 concrete collaboration structure ideas appropriate for a small local business budget, e.g. barter/gifting vs paid, ranked cheapest first"]}`,

@@ -33,7 +33,8 @@ export async function generateRetargetingCopy(
   businessName: string,
   category: string,
   segmentContext: string,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  groundingContext?: string
 ): Promise<RetargetingCopy> {
   const fallback: RetargetingCopy = {
     headline: `Still thinking about ${businessName}?`,
@@ -58,7 +59,7 @@ export async function generateRetargetingCopy(
         messages: [
           {
             role: "user",
-            content: `${promptBuilder(segmentContext)}
+            content: `${promptBuilder(segmentContext)}${groundingContext ?? ""}
 
 Business: ${businessName} (${category})
 
