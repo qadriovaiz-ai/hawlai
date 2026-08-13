@@ -25,13 +25,13 @@ interface PlanRow {
   multi_business: boolean;
 }
 
-const PLAN_ORDER: PlanKey[] = ["free", "basic", "pro", "max"];
+const PLAN_ORDER: PlanKey[] = ["free", "basic", "pro", "agency"];
 
 const PLAN_COPY: Record<PlanKey, { label: string; tagline: string }> = {
   free: { label: "Free", tagline: "Try Hawlai with your real business, no card needed." },
   basic: { label: "Basic", tagline: "Everything a single-location business runs day to day." },
   pro: { label: "Pro", tagline: "Add the intelligence layer — automation, research, growth." },
-  max: { label: "Max", tagline: "For agencies and multi-business operators, fully unlocked." },
+  agency: { label: "Agency", tagline: "For agencies and multi-business operators, fully unlocked." },
 };
 
 function formatPrice(priceInr: number): { amount: string; period: string } {

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
   // Gated against the currently active business's plan, matching every
   // other feature gate in the app (plans are per-dealership, not
-  // per-owner-account) — a Max-plan business can add more businesses;
+  // per-owner-account) — an Agency-plan business can add more businesses;
   // those new businesses start on their own Free plan.
   const gate = await requireFeature(supabase, activeDealershipId, "multiBusiness");
   if (!gate.allowed) return gate.response;

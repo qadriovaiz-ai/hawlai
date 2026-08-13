@@ -64,8 +64,8 @@ const PLANS = [
     featured: true,
   },
   {
-    label: "Max",
-    price: "₹20,000",
+    label: "Agency",
+    price: "₹50,000",
     period: "/month",
     tagline: "For agencies and multi-business operators, fully unlocked.",
     features: ["Unlimited AI messages", "3D Studio & full Opus AI", "Multi-business management", "500 free calling min/mo"],

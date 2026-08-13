@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PlanKey = "free" | "basic" | "pro" | "max";
+export type PlanKey = "free" | "basic" | "pro" | "agency";
 export type OpusAccess = "none" | "limited" | "full";
 
 export interface PlanLimits {
@@ -32,13 +32,24 @@ export interface PlanLimits {
   threeDStudio: boolean;
   multiBusiness: boolean;
   dedicatedPhoneNumber: boolean;
+  // Per-month generation caps (migration 099) — null = unlimited, same
+  // convention as messagesPerDay/teamSeats/adCampaignsActive. These gate
+  // the handful of tools with no boolean on/off distinction per tier
+  // (every tier can generate images/video/voice/brand kits/websites —
+  // the difference is how many per month, not whether at all), so they
+  // live alongside the boolean flags rather than in GatedFeatureKey.
+  imagesPerMonth: number | null;
+  videosPerMonth: number | null;
+  voiceoverCharsPerMonth: number | null;
+  brandKitsPerMonth: number | null;
+  websiteBuildsPerMonth: number | null;
 }
 
 export const PLAN_LABELS: Record<PlanKey, string> = {
   free: "Free",
   basic: "Basic",
   pro: "Pro",
-  max: "Max",
+  agency: "Agency",
 };
 
 function formatPriceLabel(priceInr: number): string {
@@ -70,6 +81,11 @@ const FREE_FALLBACK: PlanLimits = {
   threeDStudio: false,
   multiBusiness: false,
   dedicatedPhoneNumber: false,
+  imagesPerMonth: 3,
+  videosPerMonth: 0,
+  voiceoverCharsPerMonth: 2000,
+  brandKitsPerMonth: 1,
+  websiteBuildsPerMonth: 1,
 };
 
 interface PlanLimitsRow {
@@ -93,6 +109,11 @@ interface PlanLimitsRow {
   three_d_studio: boolean;
   multi_business: boolean;
   dedicated_phone_number: boolean;
+  images_per_month: number | null;
+  videos_per_month: number | null;
+  voiceover_chars_per_month: number | null;
+  brand_kits_per_month: number | null;
+  website_builds_per_month: number | null;
 }
 
 function mapRow(row: PlanLimitsRow): PlanLimits {
@@ -120,6 +141,11 @@ function mapRow(row: PlanLimitsRow): PlanLimits {
     threeDStudio: row.three_d_studio,
     multiBusiness: row.multi_business,
     dedicatedPhoneNumber: row.dedicated_phone_number,
+    imagesPerMonth: row.images_per_month,
+    videosPerMonth: row.videos_per_month,
+    voiceoverCharsPerMonth: row.voiceover_chars_per_month,
+    brandKitsPerMonth: row.brand_kits_per_month,
+    websiteBuildsPerMonth: row.website_builds_per_month,
   };
 }
 
@@ -177,8 +203,8 @@ export const GATED_FEATURE_MIN_PLAN: Record<GatedFeatureKey, PlanKey> = {
   influencerMarketing: "pro",
   affiliateMarketing: "pro",
   retargeting: "pro",
-  threeDStudio: "max",
-  multiBusiness: "max",
+  threeDStudio: "agency",
+  multiBusiness: "agency",
   // Data/gating structure only — not enforced anywhere yet (no route
   // calls requireFeature() for this key). Real per-business Vapi
   // numbers are admin-assigned once DLT telecom registration clears;

@@ -86,7 +86,7 @@ export default function UsageView() {
               <p className="text-xs text-slate-400">{planLimits.priceLabel}</p>
             </div>
           </div>
-          {planLimits.plan !== "max" && (
+          {planLimits.plan !== "agency" && (
             <Link href="/dashboard/billing/plans" className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Upgrade</Link>
           )}
         </div>

@@ -48,7 +48,7 @@ export async function generateDeepStrategy(
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string,
   // Tier-based model selection (see plan_limits.opus_access, migration
-  // 079): Max plan gets Opus for this business-defining document, every
+  // 079): Agency plan gets Opus for this business-defining document, every
   // other tier gets Sonnet — still a strong result for this task, at a
   // fraction of the cost. Defaults to Sonnet so a caller that forgets
   // to pass this never silently pays for Opus.
@@ -92,7 +92,7 @@ export async function generateDeepStrategy(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // Opus (Max plan only) — SWOT, positioning, pricing strategy,
+        // Opus (Agency plan only) — SWOT, positioning, pricing strategy,
         // and multi-persona analysis benefit from deeper reasoning than
         // most of this app's Sonnet-tier work, and this is generated
         // infrequently (once per strategy refresh), so the extra cost

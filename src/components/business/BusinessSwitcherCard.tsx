@@ -100,7 +100,7 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
 
       {!multiBusinessAllowed ? (
         <div className="flex items-center justify-between gap-2 bg-slate-200 rounded-lg p-2.5">
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><Lock className="w-3.5 h-3.5" /> Adding another business needs the Max plan</span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500"><Lock className="w-3.5 h-3.5" /> Adding another business needs the Agency plan</span>
           <Link href="/dashboard/billing" className="text-xs text-brand-400 hover:underline shrink-0">Upgrade</Link>
         </div>
       ) : showAddForm ? (
