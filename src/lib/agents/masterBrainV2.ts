@@ -1487,6 +1487,43 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
   }
 }
 
+// Anthropic occasionally returns a transient error (rate limit, brief
+// overload, upstream 5xx) — most likely to surface right after a
+// heavy prior call in the same conversation (e.g. a long strategy
+// generation) pushes close to a rate limit. Previously any non-2xx
+// here was treated as final with zero retry and zero logging of the
+// actual status/body, making this class of failure undiagnosable and
+// needlessly user-visible. Retries only the specific statuses known
+// to be transient; a real 400 (bad request) fails fast on attempt 1.
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 529]);
+
+async function callClaudeWithRetry(
+  requestBody: Record<string, any>,
+  dealershipId: string,
+  maxAttempts = 3
+): Promise<{ ok: true; data: any } | { ok: false; status: number; errorText: string }> {
+  let status = 0;
+  let errorText = "";
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
+      body: JSON.stringify(requestBody),
+    });
+    if (response.ok) return { ok: true, data: await response.json() };
+
+    status = response.status;
+    errorText = await response.text().catch(() => "<no body>");
+    const willRetry = RETRYABLE_STATUSES.has(status) && attempt < maxAttempts - 1;
+    console.error(
+      `[master-brain] Anthropic API error for dealership ${dealershipId} (attempt ${attempt + 1}/${maxAttempts}${willRetry ? ", retrying" : ", giving up"}) — status ${status}: ${errorText.slice(0, 500)}`
+    );
+    if (!willRetry) break;
+    await new Promise((resolve) => setTimeout(resolve, 500 * 3 ** attempt)); // 500ms, then 1500ms
+  }
+  return { ok: false, status, errorText };
+}
+
 export async function runMasterBrainChat(
   supabase: any,
   dealershipId: string,
@@ -1556,23 +1593,16 @@ A junior marketer takes a request literally and produces the thing asked for. A 
   let totalOutputTokens = 0;
 
   for (let iteration = 0; iteration < 6; iteration++) {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools: TOOLS,
-        messages,
-      }),
-    });
+    const result = await callClaudeWithRetry(
+      { model: "claude-sonnet-4-6", max_tokens: 4096, system: systemPrompt, tools: TOOLS, messages },
+      ctx.id
+    );
 
-    if (!response.ok) {
+    if (!result.ok) {
       if (totalInputTokens || totalOutputTokens) await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       return { reply: "Sorry, something went wrong on my end — try again in a moment.", toolsUsed, artifacts };
     }
-    const data = await response.json();
+    const data = result.data;
     if (data.usage) {
       totalInputTokens += data.usage.input_tokens ?? 0;
       totalOutputTokens += data.usage.output_tokens ?? 0;

@@ -71,7 +71,18 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...result, conversationId: activeConversationId, messageId: savedMessageId });
   } catch (err: any) {
-    console.error("[master-brain] error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // Correlated by dealership + conversation + time so a production
+    // incident can actually be traced back to this request — the raw
+    // err.message alone (previous behavior) gave no way to tell which
+    // business or conversation hit it, or whether it was a one-off.
+    console.error(
+      `[master-brain] unhandled error — dealership ${dealershipId}, conversation ${activeConversationId ?? "new"}, at ${new Date().toISOString()}:`,
+      err
+    );
+    // Never surface a raw internal error (Supabase/JS message text)
+    // straight into the chat UI — same friendly message as the
+    // handled Anthropic-API-failure path in masterBrainV2.ts, so the
+    // person sees one consistent, non-leaky failure message either way.
+    return NextResponse.json({ error: "Sorry, something went wrong on my end — try again in a moment." }, { status: 500 });
   }
 }
