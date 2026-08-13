@@ -12,7 +12,7 @@
 // session to route through anyway.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { getDealershipPlanLimits, type PlanLimits } from "@/lib/plans";
+import { getDealershipPlanLimits, isPlanGatingBypassed, type PlanLimits } from "@/lib/plans";
 import { currentBillingMonth } from "@/lib/usage/callingMinutes";
 
 export type GenerationResource = "image" | "video" | "voiceover_chars" | "brand_kit" | "website_build";
@@ -56,6 +56,12 @@ export async function checkAndRecordGenerationUsage(
   resource: GenerationResource,
   units: number = 1
 ): Promise<GenerationLimitResult> {
+  // Same BYPASS_PLAN_GATING flag as hasFeature() in plans.ts — checked
+  // first and short-circuits before touching monthly_generation_usage
+  // at all, so testing traffic never inflates real usage counts that
+  // would need cleaning up once the flag goes back off.
+  if (isPlanGatingBypassed()) return { allowed: true, limit: null, used: 0, resource };
+
   const service = createServiceClient();
   const limits = await getDealershipPlanLimits(service, dealershipId);
   const limit = limits[RESOURCE_LIMIT_KEY[resource]] as number | null;

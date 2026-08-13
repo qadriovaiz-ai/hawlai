@@ -215,6 +215,26 @@ export const GATED_FEATURE_MIN_PLAN: Record<GatedFeatureKey, PlanKey> = {
   dedicatedPhoneNumber: "pro",
 };
 
+// Testing/demo bypass — set BYPASS_PLAN_GATING=true in the environment
+// (e.g. Vercel project env vars) to make every plan-gating check in the
+// app resolve as allowed, without changing what plan any account is
+// actually on. Defaults to off (real enforcement) unless explicitly set
+// to the exact string "true". Single choke point by design: every
+// boolean feature gate funnels through hasFeature() below — API routes
+// via requireFeature() (src/lib/featureGate.ts), which covers the "add
+// another business" Agency-plan lock too since that's just
+// requireFeature(..., "multiBusiness"); Master Chat's own tool gating
+// in masterBrainV2.ts calls hasFeature() directly, not through
+// requireFeature(), which is why the flag lives here and not there.
+// The per-month generation caps (images/video/voiceover/brand kit/
+// website) are a separate mechanism (quantity caps, not boolean flags)
+// and read this same flag independently — see isPlanGatingBypassed()'s
+// other call site in src/lib/usage/generationLimits.ts.
+export function isPlanGatingBypassed(): boolean {
+  return process.env.BYPASS_PLAN_GATING === "true";
+}
+
 export function hasFeature(limits: PlanLimits, feature: GatedFeatureKey): boolean {
+  if (isPlanGatingBypassed()) return true;
   return Boolean(limits[feature]);
 }
