@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateVoiceover } from "@/lib/agents/voiceoverAgent";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
 
   const { text } = await request.json();
   if (!text || text.trim().length < 1) return NextResponse.json({ error: "Enter some text to read" }, { status: 400 });
+
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "voiceover_chars", text.trim().length);
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
   try {
     const buffer = await generateVoiceover(text, undefined, { supabase, dealershipId });

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateBrandKit } from "@/lib/agents/brandBuildingAgent";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -23,6 +24,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ ...saved.kit, logoUrl: saved.logo_url ?? null, _cached: true });
     }
   }
+
+  // Only counts against the cap when it's actually about to generate —
+  // the cache-hit return above already handled the common "just viewing
+  // my existing kit" case for free.
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "brand_kit");
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
   const [{ data: dealership }, { data: brandProfile }, { data: existing }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, city, business_category").eq("id", dealershipId).single(),

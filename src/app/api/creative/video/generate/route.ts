@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getVideoAdapter, isModelConfigured } from "@/lib/videoModels";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -18,6 +19,11 @@ export async function POST(request: Request) {
   if (!isModelConfigured(modelKey)) {
     return NextResponse.json({ error: "This model isn't connected yet — pick a connected model or ask the team to add the API key." }, { status: 400 });
   }
+
+  // Applies to every video model, not just Veo — the plan's cap is "how
+  // many video generations this tier permits," not provider-specific.
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "video");
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
   const { data: draft, error: insertError } = await supabase
     .from("video_generations")

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWebsite, saveGeneratedWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 // Generating several pages (even with the per-page 8s internal
 // timeout below) across concurrent batches can still add up past
@@ -93,6 +94,9 @@ export async function POST(request: Request) {
     .filter((p: any) => p?.slug && p?.title)
     .map((p: any) => ({ slug: String(p.slug), title: String(p.title), pageType: String(p.pageType ?? "custom") }));
   if (cleanPages.length === 0) return NextResponse.json({ error: "No valid pages in plan" }, { status: 400 });
+
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "website_build");
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
   try {
     const [{ data: dealership }, { data: brandProfile }] = await Promise.all([

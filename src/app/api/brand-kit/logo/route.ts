@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateLogoConcept } from "@/lib/agents/brandKitAgent";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 export async function POST() {
   const supabase = await createClient();
@@ -11,6 +12,9 @@ export async function POST() {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "image");
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single();
   const { data: brandProfile } = await supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle();

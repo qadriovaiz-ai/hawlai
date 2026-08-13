@@ -51,6 +51,7 @@ import { generateSeoIdeas } from "./seoAgent";
 import { generateGraphic, GRAPHIC_TYPES } from "./graphicDesignAgent";
 import { getDealershipPlanLimits, hasFeature, type GatedFeatureKey } from "../plans";
 import { upgradeMessage } from "../featureGate";
+import { checkAndRecordGenerationUsage, generationLimitMessage, type GenerationResource } from "../usage/generationLimits";
 import { formatCurrency } from "../utils";
 import { randomBytes } from "crypto";
 
@@ -69,6 +70,23 @@ const TOOL_FEATURE_MAP: Partial<Record<string, GatedFeatureKey>> = {
   generate_3d_scene: "threeDStudio",
   create_workflow: "marketingAutomationWorkflows",
   set_automation_toggle: "marketingAutomationWorkflows",
+};
+
+// Tools with no boolean on/off distinction per tier — every plan can
+// generate logos/graphics/brand kits/websites, just a different number
+// per month (plan_limits.*_per_month, migration 099). Checked separately
+// from TOOL_FEATURE_MAP since hasFeature() only reads boolean columns.
+// generate_video_task is NOT here — it only writes scripts/ideas via
+// Claude (videoMarketingAgent.ts), it never touches Veo, so it isn't a
+// capped resource. Real Veo video and ElevenLabs voiceover generation
+// have no Master Chat tool at all (Creative Studio only) — their caps
+// are enforced at /api/creative/video/generate and /api/creative/voiceover
+// directly.
+const TOOL_GENERATION_RESOURCE_MAP: Partial<Record<string, GenerationResource>> = {
+  generate_logo: "image",
+  generate_graphic: "image",
+  generate_brand_kit: "brand_kit",
+  build_website: "website_build",
 };
 
 interface DealershipCtx {
@@ -460,6 +478,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     const limits = await getDealershipPlanLimits(supabase, ctx.id);
     if (!hasFeature(limits, gatedFeature)) {
       return { error: upgradeMessage(gatedFeature), upgradeRequired: true };
+    }
+  }
+
+  // Per-month generation cap — must run before the switch below actually
+  // calls the provider, not after (see generationLimits.ts).
+  const generationResource = TOOL_GENERATION_RESOURCE_MAP[toolName];
+  if (generationResource) {
+    const usage = await checkAndRecordGenerationUsage(ctx.id, generationResource);
+    if (!usage.allowed) {
+      return { error: generationLimitMessage(usage), upgradeRequired: true };
     }
   }
 

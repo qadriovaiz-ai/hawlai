@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
 
   const { designType, prompt } = await request.json();
   if (!designType) return NextResponse.json({ error: "designType required" }, { status: 400 });
+
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "image");
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
   const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
