@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, AlertCircle, Clock, CheckCircle2, XCircle, Code2, Copy } from "lucide-react";
+import { Sparkles, AlertCircle, Clock, CheckCircle2, XCircle, Code2, Copy, Loader2 } from "lucide-react";
+import { Button, Card, Textarea } from "@/components/ui";
 
 interface Scene {
   id: string;
@@ -70,23 +71,22 @@ export default function ThreeDStudioView() {
         </p>
       </div>
 
-      <div className="card p-5 space-y-3">
-        <textarea
+      <Card className="space-y-3">
+        <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g. A glass jar candle with a warm glowing flame, slowly rotating, dark elegant background"
           rows={3}
-          className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
         />
         {error && <p className="text-xs text-red-500">{error}</p>}
-        <button onClick={generate} disabled={generating || !prompt.trim()} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        <Button onClick={generate} loading={generating} disabled={!prompt.trim()}>
+          {!generating && <Sparkles className="w-4 h-4" />}
           {generating ? "Writing the 3D scene... (can take a minute)" : "Generate 3D Scene"}
-        </button>
-      </div>
+        </Button>
+      </Card>
 
       {(activeId || loadingScene) && (
-        <div className="card p-2 space-y-2">
+        <Card padding="sm" className="space-y-2">
           {loadingScene ? (
             <div className="aspect-video flex items-center justify-center bg-slate-900 rounded-lg">
               <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
@@ -116,18 +116,18 @@ export default function ThreeDStudioView() {
               This scene failed to generate — try regenerating with a different prompt.
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {scenes.length > 0 && (
-        <div className="card p-5 space-y-2">
+        <Card className="space-y-2">
           <p className="text-sm font-semibold text-slate-700">Your 3D Scenes</p>
           {scenes.map((s) => (
             <button
               key={s.id}
               onClick={() => s.status === "ready" && openScene(s.id)}
               disabled={s.status !== "ready"}
-              className={`w-full flex items-center gap-2 text-left p-2.5 rounded-lg border ${activeId === s.id ? "border-purple-400 bg-purple-50" : "border-slate-200"} ${s.status !== "ready" ? "opacity-60 cursor-default" : "hover:border-purple-300"}`}
+              className={`w-full flex items-center gap-2 text-left p-2.5 rounded-lg border ${activeId === s.id ? "border-brand-400 bg-brand-500/10" : "border-slate-200"} ${s.status !== "ready" ? "opacity-60 cursor-default" : "hover:border-brand-300"}`}
             >
               {s.status === "ready" && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
               {s.status === "pending" && <Clock className="w-4 h-4 text-amber-500 shrink-0" />}
@@ -135,7 +135,7 @@ export default function ThreeDStudioView() {
               <span className="text-xs text-slate-600 truncate flex-1">{s.name}</span>
             </button>
           ))}
-        </div>
+        </Card>
       )}
     </div>
   );
