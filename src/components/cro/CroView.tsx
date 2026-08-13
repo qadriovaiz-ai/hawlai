@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, AlertCircle, CheckCircle2, TrendingUp, FlaskConical, Sparkles, Pencil, Save, X } from "lucide-react";
-import { OutputRenderer, EditableOutput } from "@/components/shared/GeneratedOutputEditor";
+import { Loader2, AlertCircle, CheckCircle2, TrendingUp, FlaskConical, Sparkles } from "lucide-react";
+import { Badge, Button, Card, Input, Select } from "@/components/ui";
+import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
+import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";
+import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel";
+import type { BadgeTone } from "@/components/ui";
 
 const CRO_TASKS = [
   { key: "landing_page", label: "Landing Page Copy" },
@@ -11,19 +15,24 @@ const CRO_TASKS = [
   { key: "ux", label: "UX Suggestions" },
 ];
 
-const IMPACT_COLOR: Record<string, string> = { high: "bg-red-100 text-red-600", medium: "bg-amber-100 text-amber-600", low: "bg-slate-200 text-slate-500" };
+// Was a hardcoded solid light-mode map (bg-red-100 text-red-600) — the
+// exact "two design languages coexisting" example the design audit
+// flagged, sitting one field away from this same file's Badge-eligible
+// impact pill on a page reachable one click from SEO's own (correctly
+// dark-theme-translucent) version of the identical concept.
+const IMPACT_TONE: Record<string, BadgeTone> = { high: "negative", medium: "warning", low: "neutral" };
 
 export default function CroView() {
   const [report, setReport] = useState<any>(null);
   const [reportLoading, setReportLoading] = useState(true);
 
   const [taskKey, setTaskKey] = useState("landing_page");
-  const [taskOutput, setTaskOutput] = useState<any>(null);
-  const [taskOutputId, setTaskOutputId] = useState<string | null>(null);
-  const [taskEditing, setTaskEditing] = useState(false);
-  const [taskDraft, setTaskDraft] = useState<any>(null);
-  const [taskSaving, setTaskSaving] = useState(false);
-  const [taskLoading, setTaskLoading] = useState(false);
+  const {
+    loading: taskLoading, output: taskOutput, outputId: taskOutputId, editing: taskEditing, draft: taskDraft,
+    saving: taskSaving, copied: taskCopied, history: taskHistory,
+    generate: runTask, startEditing: startEditingTask, cancelEditing: cancelEditingTask, saveEdits: saveTaskEdits,
+    copyOutput: copyTaskOutput, selectFromHistory: selectTaskFromHistory, reset: resetTask, setDraft: setTaskDraft,
+  } = useGeneratedOutput({ endpoint: "/api/cro/generate" });
   const [taskError, setTaskError] = useState<string | null>(null);
 
   const [abTest, setAbTest] = useState<any>(null);
@@ -42,44 +51,12 @@ export default function CroView() {
   }
   useEffect(() => { loadReport(); loadAbTest(); }, []);
 
-  async function runTask() {
-    setTaskLoading(true);
+  async function handleRunTask() {
     setTaskError(null);
-    setTaskOutput(null);
-    setTaskOutputId(null);
-    setTaskEditing(false);
     try {
-      const res = await fetch("/api/cro/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskType: taskKey }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setTaskOutput(data.output);
-      setTaskOutputId(data.id);
+      await runTask({ taskType: taskKey });
     } catch (err: any) {
-      setTaskError(err.message);
-    } finally {
-      setTaskLoading(false);
-    }
-  }
-
-  function startEditingTask() {
-    setTaskDraft(JSON.parse(JSON.stringify(taskOutput)));
-    setTaskEditing(true);
-  }
-
-  async function saveTaskEdits() {
-    if (!taskOutputId) return;
-    setTaskSaving(true);
-    try {
-      const res = await fetch("/api/cro/generate", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: taskOutputId, output: taskDraft }),
-      });
-      if (!res.ok) throw new Error("Save failed");
-      setTaskOutput(taskDraft);
-      setTaskEditing(false);
-    } finally {
-      setTaskSaving(false);
+      setTaskError(err.message ?? "Something went wrong");
     }
   }
 
@@ -102,7 +79,7 @@ export default function CroView() {
   return (
     <div className="space-y-5">
       {/* Audit report */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-slate-400" /> Page Health Check</p>
         {reportLoading ? (
           <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Analyzing...</div>
@@ -119,7 +96,7 @@ export default function CroView() {
                     <p className="text-sm font-medium text-slate-700">{s.issue}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{s.fix}</p>
                   </div>
-                  <span className={`text-[10px] px-2 py-1 rounded-full shrink-0 ${IMPACT_COLOR[s.impact] ?? IMPACT_COLOR.low}`}>{s.impact}</span>
+                  <Badge tone={IMPACT_TONE[s.impact] ?? "neutral"} className="shrink-0">{s.impact}</Badge>
                 </div>
               ))}
               {report && (report.suggestions ?? []).length === 0 && (
@@ -128,53 +105,49 @@ export default function CroView() {
             </div>
           </>
         )}
-      </div>
+      </Card>
 
       {/* AI suggestions by task */}
-      <div className="card p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Sparkles className="w-4 h-4 text-slate-400" /> AI Suggestions</p>
-          {taskOutput && (
-            taskEditing ? (
-              <div className="flex items-center gap-3">
-                <button onClick={() => setTaskEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
-                  <X className="w-3.5 h-3.5" /> Cancel
-                </button>
-                <button
-                  onClick={saveTaskEdits}
-                  disabled={taskSaving || !taskOutputId}
-                  className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1"
-                >
-                  {taskSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
-                </button>
-              </div>
-            ) : (
-              taskOutputId && (
-                <button onClick={startEditingTask} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
-                  <Pencil className="w-3.5 h-3.5" /> Edit
-                </button>
-              )
-            )
-          )}
-        </div>
+      <Card className="space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Sparkles className="w-4 h-4 text-slate-400" /> AI Suggestions</p>
         <div className="flex flex-wrap gap-1.5">
           {CRO_TASKS.map((t) => (
-            <button key={t.key} onClick={() => { setTaskKey(t.key); setTaskOutput(null); }} className={`text-xs px-3 py-1.5 rounded-lg border ${taskKey === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
+            <button key={t.key} onClick={() => { setTaskKey(t.key); resetTask(); }} className={`text-xs px-3 py-1.5 rounded-lg border ${taskKey === t.key ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
               {t.label}
             </button>
           ))}
         </div>
-        <button onClick={runTask} disabled={taskLoading} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-          {taskLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Generate Suggestions
-        </button>
+        <Button onClick={handleRunTask} loading={taskLoading}>
+          {!taskLoading && <Sparkles className="w-4 h-4" />} Generate Suggestions
+        </Button>
 
         {taskError && <p className="text-xs text-red-400">{taskError}</p>}
+      </Card>
 
-        {taskOutput && (taskEditing ? <EditableOutput output={taskDraft} onChange={setTaskDraft} /> : <OutputRenderer output={taskOutput} />)}
-      </div>
+      <GeneratedOutputPanel
+        title="AI Suggestions Result"
+        output={taskOutput}
+        editing={taskEditing}
+        draft={taskDraft}
+        saving={taskSaving}
+        copied={taskCopied}
+        outputId={taskOutputId}
+        onStartEditing={startEditingTask}
+        onCancelEditing={cancelEditingTask}
+        onSaveEdits={saveTaskEdits}
+        onCopy={copyTaskOutput}
+        onDraftChange={setTaskDraft}
+      />
+
+      <GeneratedHistoryPanel
+        items={taskHistory}
+        onSelect={selectTaskFromHistory}
+        label={(h) => CRO_TASKS.find((t) => t.key === h.task_type)?.label ?? h.task_type}
+        title="Recent Suggestions"
+      />
 
       {/* A/B testing */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><FlaskConical className="w-4 h-4 text-slate-400" /> A/B Testing (Live)</p>
 
         {abLoading ? (
@@ -184,7 +157,7 @@ export default function CroView() {
             <div className="flex items-center justify-between">
               <p className="text-xs text-slate-500">Testing: <span className="font-medium text-slate-700 capitalize">{abTest.element}</span></p>
               <label className="flex items-center gap-2 text-xs text-slate-500">
-                <input type="checkbox" checked={abTest.active} onChange={(e) => toggleAbTest(e.target.checked)} className="w-4 h-4 accent-purple-600" /> Active
+                <input type="checkbox" checked={abTest.active} onChange={(e) => toggleAbTest(e.target.checked)} className="w-4 h-4 accent-brand-600" /> Active
               </label>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
@@ -193,7 +166,7 @@ export default function CroView() {
                   <p className="text-xs font-semibold text-slate-500 mb-1">Variant {v}</p>
                   <p className="text-sm text-slate-700 mb-2">{v === "A" ? abTest.variant_a : abTest.variant_b}</p>
                   <p className="text-xs text-slate-500">{abResults?.[v]?.views ?? 0} views · {abResults?.[v]?.submits ?? 0} leads</p>
-                  <p className="text-sm font-bold text-purple-600">{abResults?.[v]?.conversionRate != null ? `${abResults[v].conversionRate.toFixed(1)}%` : "—"}</p>
+                  <p className="text-sm font-bold text-brand-600">{abResults?.[v]?.conversionRate != null ? `${abResults[v].conversionRate.toFixed(1)}%` : "—"}</p>
                 </div>
               ))}
             </div>
@@ -202,18 +175,18 @@ export default function CroView() {
         ) : (
           <div className="space-y-2">
             <p className="text-xs text-slate-400">No active test. Compare two versions of your headline or CTA on real visitors.</p>
-            <select value={abForm.element} onChange={(e) => setAbForm({ ...abForm, element: e.target.value })} className="text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <Select value={abForm.element} onChange={(e) => setAbForm({ ...abForm, element: e.target.value })}>
               <option value="headline">Headline</option>
               <option value="cta">Call-to-Action</option>
-            </select>
-            <input value={abForm.variantA} onChange={(e) => setAbForm({ ...abForm, variantA: e.target.value })} placeholder="Variant A text" className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
-            <input value={abForm.variantB} onChange={(e) => setAbForm({ ...abForm, variantB: e.target.value })} placeholder="Variant B text" className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2" />
-            <button onClick={startAbTest} disabled={abSaving} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg disabled:opacity-50">
+            </Select>
+            <Input value={abForm.variantA} onChange={(e) => setAbForm({ ...abForm, variantA: e.target.value })} placeholder="Variant A text" />
+            <Input value={abForm.variantB} onChange={(e) => setAbForm({ ...abForm, variantB: e.target.value })} placeholder="Variant B text" />
+            <Button onClick={startAbTest} loading={abSaving}>
               {abSaving ? "Starting..." : "Start Test"}
-            </button>
+            </Button>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
