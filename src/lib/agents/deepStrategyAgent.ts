@@ -10,6 +10,7 @@
 // ------------------------------------------------------------------
 
 import { logClaudeUsage } from "../usage/logUsage";
+import type { OpusAccess } from "../plans";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -45,8 +46,15 @@ export async function generateDeepStrategy(
   businessCategory: string = "car dealership",
   competitorContext?: string | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  // Tier-based model selection (see plan_limits.opus_access, migration
+  // 079): Max plan gets Opus for this business-defining document, every
+  // other tier gets Sonnet — still a strong result for this task, at a
+  // fraction of the cost. Defaults to Sonnet so a caller that forgets
+  // to pass this never silently pays for Opus.
+  opusAccess: OpusAccess = "none"
 ): Promise<DeepStrategy> {
+  const model = opusAccess === "full" ? "claude-opus-4-8" : "claude-sonnet-4-6";
   const fallback: DeepStrategy & { _fallback?: boolean } = {
     _fallback: true,
     businessAnalysis: `${dealershipName} is a ${businessCategory} business${city ? ` based in ${city}` : ""}. Add a Brand Voice description for a sharper analysis.`,
@@ -84,12 +92,14 @@ export async function generateDeepStrategy(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // Opus — SWOT, positioning, pricing strategy, and multi-
-        // persona analysis benefit from deeper reasoning than most of
-        // this app's Sonnet-tier work, and this is generated
+        // Opus (Max plan only) — SWOT, positioning, pricing strategy,
+        // and multi-persona analysis benefit from deeper reasoning than
+        // most of this app's Sonnet-tier work, and this is generated
         // infrequently (once per strategy refresh), so the extra cost
-        // per call is worth it for a business-defining document.
-        model: "claude-opus-4-8",
+        // is worth it for a business-defining document on the tier
+        // that's priced for it. Basic/Pro get Sonnet — still strong on
+        // this task, at a fraction of the cost.
+        model,
         max_tokens: 3000,
         messages: [
           {
@@ -126,7 +136,7 @@ Be specific and honest — a small local business's SWOT should not read like a 
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, model);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

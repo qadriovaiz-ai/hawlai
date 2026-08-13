@@ -672,7 +672,13 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     case "generate_marketing_strategy": {
       const { data: competitorRows } = await supabase.from("competitor_intel_items").select("competitor_name, output").eq("dealership_id", ctx.id).limit(3);
       const competitorContext = (competitorRows ?? []).length > 0 ? JSON.stringify(competitorRows) : null;
-      const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext, { supabase, dealershipId: ctx.id }, groundingContext);
+      // Read-only tier lookup for model selection only — NOT a feature
+      // gate (this tool isn't in TOOL_FEATURE_MAP and stays available
+      // to every plan). getDealershipPlanLimits() just reads the row;
+      // hasFeature()/requireFeature() are never called here, so this
+      // can't trip the 403 upgrade-required path.
+      const { opusAccess } = await getDealershipPlanLimits(supabase, ctx.id);
+      const strategy = await generateDeepStrategy(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, competitorContext, { supabase, dealershipId: ctx.id }, groundingContext, opusAccess);
       if (!(strategy as any)._fallback) await supabase.from("deep_strategies").upsert({ dealership_id: ctx.id, strategy, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return withBrandVoiceCheck(strategy, resolvedBrandVoice);
     }
