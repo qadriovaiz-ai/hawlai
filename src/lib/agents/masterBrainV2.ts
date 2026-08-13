@@ -1493,14 +1493,29 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
 // generation) pushes close to a rate limit. Previously any non-2xx
 // here was treated as final with zero retry and zero logging of the
 // actual status/body, making this class of failure undiagnosable and
-// needlessly user-visible. Retries only the specific statuses known
-// to be transient; a real 400 (bad request) fails fast on attempt 1.
+// needlessly user-visible. Retries only the statuses known to be
+// transient; a real 400/401 (bad request / bad key) fails fast on
+// attempt 1, same as before.
+//
+// Deliberately capped to ONE retry, not several: a 429 tied to a
+// per-minute quota isn't fixed by hammering the same endpoint again a
+// few hundred ms later — that just spends more of an already-tight
+// budget, and across this function's own up-to-6-iteration tool loop,
+// every extra attempt here multiplies into several more calls per
+// single user message. An earlier version allowed 2 retries (3 total
+// attempts) with a fixed short backoff regardless of cause, and that
+// combination is what turned an intermittent failure into a
+// consistent one in production — more requests thrown at a limit that
+// a sub-2-second wait was never going to clear. Anthropic's own
+// Retry-After header (present on real 429s) is the authoritative
+// signal for how long a rate-limit window actually needs, so that's
+// honored here instead of guessing.
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 529]);
 
 async function callClaudeWithRetry(
   requestBody: Record<string, any>,
   dealershipId: string,
-  maxAttempts = 3
+  maxAttempts = 2
 ): Promise<{ ok: true; data: any } | { ok: false; status: number; errorText: string }> {
   let status = 0;
   let errorText = "";
@@ -1519,7 +1534,9 @@ async function callClaudeWithRetry(
       `[master-brain] Anthropic API error for dealership ${dealershipId} (attempt ${attempt + 1}/${maxAttempts}${willRetry ? ", retrying" : ", giving up"}) — status ${status}: ${errorText.slice(0, 500)}`
     );
     if (!willRetry) break;
-    await new Promise((resolve) => setTimeout(resolve, 500 * 3 ** attempt)); // 500ms, then 1500ms
+    const retryAfterHeader = Number(response.headers.get("retry-after"));
+    const waitMs = retryAfterHeader > 0 ? Math.min(retryAfterHeader * 1000, 10_000) : 1000;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
   return { ok: false, status, errorText };
 }
