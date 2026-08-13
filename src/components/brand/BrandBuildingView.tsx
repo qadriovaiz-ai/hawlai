@@ -6,6 +6,7 @@ import {
   Share2, UserCircle2, ListChecks, Wand2, Image as ImageIcon, Copy, Check, Pencil, Save, X,
 } from "lucide-react";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
+import { Badge, Button, Card } from "@/components/ui";
 
 export default function BrandBuildingView() {
   const [loading, setLoading] = useState(true);
@@ -98,22 +99,22 @@ export default function BrandBuildingView() {
       <div className="flex items-center justify-end gap-3">
         {editing ? (
           <>
-            <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
               <X className="w-3.5 h-3.5" /> Cancel
-            </button>
-            <button onClick={saveEdits} disabled={saving} className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1">
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
-            </button>
+            </Button>
+            <Button size="sm" onClick={saveEdits} loading={saving}>
+              {!saving && <Save className="w-3.5 h-3.5" />} Save
+            </Button>
           </>
         ) : (
           <>
-            <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+            <button onClick={startEditing} className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
               <Pencil className="w-3.5 h-3.5" /> Edit
             </button>
             <button
               onClick={handleRegenerate}
               disabled={loading}
-              className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 disabled:opacity-50"
+              className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate kit
             </button>
@@ -122,15 +123,15 @@ export default function BrandBuildingView() {
       </div>
 
       {editing && (
-        <div className="card p-5">
+        <Card>
           <EditableOutput output={draft} onChange={setDraft} />
-        </div>
+        </Card>
       )}
 
       {!editing && (
       <>
       {/* Logo */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> Logo</p>
         <div className="flex items-center gap-4">
           <div className="w-24 h-24 rounded-xl bg-slate-200 border border-slate-300 flex items-center justify-center overflow-hidden shrink-0">
@@ -143,21 +144,17 @@ export default function BrandBuildingView() {
           </div>
           <div className="flex-1 space-y-2">
             <p className="text-xs text-slate-400">AI-generated logo concept based on your business and brand voice. Regenerate as many times as you like — pick your favorite.</p>
-            <button
-              onClick={handleGenerateLogo}
-              disabled={logoLoading}
-              className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50 w-fit"
-            >
-              {logoLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+            <Button size="sm" onClick={handleGenerateLogo} loading={logoLoading} className="w-fit">
+              {!logoLoading && <Wand2 className="w-3.5 h-3.5" />}
               {logoUrl ? "Generate another" : "Generate logo"}
-            </button>
+            </Button>
             {logoError && <p className="text-xs text-red-400">{logoError}</p>}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Colors */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Palette className="w-4 h-4" /> Brand Colors</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {kit.colors?.map((c: any, i: number) => (
@@ -176,10 +173,10 @@ export default function BrandBuildingView() {
             </button>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Typography */}
-      <div className="card p-5 space-y-2">
+      <Card className="space-y-2">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Type className="w-4 h-4" /> Typography</p>
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="bg-slate-200 rounded-lg p-3">
@@ -192,12 +189,12 @@ export default function BrandBuildingView() {
           </div>
         </div>
         <p className="text-xs text-slate-400">{kit.typography?.rationale}</p>
-      </div>
+      </Card>
 
       {/* Tagline */}
-      <div className="bg-purple-500/10 border border-purple-700/40 rounded-xl p-5">
-        <p className="text-xs font-semibold text-purple-400 flex items-center gap-1.5 mb-1"><Sparkles className="w-3.5 h-3.5" /> Tagline</p>
-        <p className="text-lg font-semibold text-purple-100">{kit.tagline}</p>
+      <div className="bg-brand-500/10 border border-brand-700/40 rounded-xl p-5">
+        <p className="text-xs font-semibold text-brand-400 flex items-center gap-1.5 mb-1"><Sparkles className="w-3.5 h-3.5" /> Tagline</p>
+        <p className="text-lg font-semibold text-brand-100">{kit.tagline}</p>
       </div>
 
       {/* Mission & Vision */}
@@ -213,13 +210,13 @@ export default function BrandBuildingView() {
       </div>
 
       {/* Brand Story */}
-      <div className="card p-5 space-y-1">
+      <Card className="space-y-1">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><BookOpen className="w-4 h-4" /> Brand Story</p>
         <p className="text-sm text-slate-600">{kit.brandStory}</p>
-      </div>
+      </Card>
 
       {/* Social Identity */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Share2 className="w-4 h-4" /> Social Media Identity</p>
         <div className="space-y-2">
           <div className="bg-slate-200 rounded-lg p-3 flex items-start justify-between gap-2">
@@ -242,27 +239,27 @@ export default function BrandBuildingView() {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {kit.socialIdentity?.hashtags?.map((h: string, i: number) => (
-              <span key={i} className="text-xs bg-purple-500/10 text-purple-400 px-2 py-1 rounded-full">{h}</span>
+              <Badge key={i} tone="brand">{h}</Badge>
             ))}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Personal Branding */}
-      <div className="card p-5 space-y-1">
+      <Card className="space-y-1">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><UserCircle2 className="w-4 h-4" /> Personal Branding</p>
         <p className="text-sm text-slate-600">{kit.personalBranding}</p>
-      </div>
+      </Card>
 
       {/* Guidelines */}
-      <div className="card p-5 space-y-2">
+      <Card className="space-y-2">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ListChecks className="w-4 h-4" /> Brand Guidelines</p>
         <div className="space-y-1.5">
           {kit.guidelines?.map((g: string, i: number) => (
             <p key={i} className="text-sm text-slate-600 bg-slate-200 rounded-lg p-2.5">✓ {g}</p>
           ))}
         </div>
-      </div>
+      </Card>
       </>
       )}
     </div>

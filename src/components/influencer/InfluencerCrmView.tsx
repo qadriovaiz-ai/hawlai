@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Plus, Trash2, ArrowRight, TrendingUp, Users, Tag, Copy, Check } from "lucide-react";
+import { Badge, Button, Card, EmptyState, Input, Select } from "@/components/ui";
 
 const STATUSES = ["identified", "contacted", "negotiating", "agreed", "active", "completed", "declined"];
 
@@ -58,13 +59,13 @@ export default function InfluencerCrmView() {
 
   return (
     <div className="space-y-5">
-      <Link href="/dashboard/social" className="card p-4 flex items-center justify-between hover:border-purple-400 transition-colors">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Users className="w-4 h-4 text-purple-400" /> Find Influencers & Outreach Messages/Emails</span>
+      <Link href="/dashboard/social" className="card p-4 flex items-center justify-between hover:border-brand-400 transition-colors">
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Users className="w-4 h-4 text-brand-400" /> Find Influencers & Outreach Messages/Emails</span>
         <ArrowRight className="w-4 h-4 text-slate-400" />
       </Link>
 
       {/* ROI summary */}
-      <div className="card p-5">
+      <Card>
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3"><TrendingUp className="w-4 h-4" /> Overall ROI</p>
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-slate-200 rounded-lg p-3 text-center">
@@ -81,32 +82,32 @@ export default function InfluencerCrmView() {
           </div>
         </div>
         <p className="text-xs text-slate-400 mt-2">Revenue is pulled automatically from real orders for any influencer with a tracking code below — manual cost/leads/revenue fields are for collaborations without one (e.g. WhatsApp-only orders).</p>
-      </div>
+      </Card>
 
       {/* Add influencer */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700">Collaboration Pipeline</p>
-          <button onClick={() => setShowForm(!showForm)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add</button>
+          <Button size="sm" onClick={() => setShowForm(!showForm)}><Plus className="w-3.5 h-3.5" /> Add</Button>
         </div>
         {showForm && (
           <div className="flex flex-wrap gap-2">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Influencer name" className="flex-1 min-w-[140px] text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
-            <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle" className="flex-1 min-w-[100px] text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Influencer name" className="flex-1 min-w-[140px]" />
+            <Input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle" className="flex-1 min-w-[100px]" />
+            <Select value={platform} onChange={(e) => setPlatform(e.target.value)} className="w-auto">
               <option value="instagram">Instagram</option>
               <option value="youtube">YouTube</option>
               <option value="facebook">Facebook</option>
               <option value="other">Other</option>
-            </select>
-            <button onClick={addInfluencer} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg">Save</button>
+            </Select>
+            <Button onClick={addInfluencer}>Save</Button>
           </div>
         )}
 
         {loading ? (
           <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...</p>
         ) : influencers.length === 0 ? (
-          <p className="text-xs text-slate-400">No influencers added yet.</p>
+          <EmptyState title="No influencers added yet" />
         ) : (
           <div className="space-y-2">
             {influencers.map((inf) => {
@@ -120,18 +121,18 @@ export default function InfluencerCrmView() {
                     </div>
                     <button onClick={() => remove(inf.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                   </div>
-                  <select value={inf.status} onChange={(e) => updateField(inf.id, "status", e.target.value)} className="text-xs bg-slate-200 border border-slate-300 rounded-lg px-2 py-1.5">
+                  <Select value={inf.status} onChange={(e) => updateField(inf.id, "status", e.target.value)} className="w-auto text-xs">
                     {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                  </select>
+                  </Select>
 
                   {/* Real, automatic attribution via a discount code — replaces
                       guesswork with actual order data once a code exists. */}
                   {inf.discount_code ? (
                     <div className="bg-emerald-500/10 border border-emerald-400/20 rounded-lg p-2.5 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                        <Badge tone="positive" className="gap-1.5">
                           <Tag className="w-3.5 h-3.5" /> Tracking code: {inf.discount_code}
-                        </span>
+                        </Badge>
                         <CopyCodeButton code={inf.discount_code} />
                       </div>
                       <p className="text-xs text-slate-600">
@@ -166,7 +167,7 @@ export default function InfluencerCrmView() {
             })}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

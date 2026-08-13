@@ -7,6 +7,7 @@ import {
   Building2, Swords, Target, Pencil, Save, X,
 } from "lucide-react";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
+import { Button, Card } from "@/components/ui";
 
 export default function DeepStrategyPanel() {
   const [open, setOpen] = useState(false);
@@ -65,7 +66,7 @@ export default function DeepStrategyPanel() {
   }
 
   return (
-    <div className="card p-5 space-y-3">
+    <Card className="space-y-3">
       <div className="flex items-center justify-between">
         <button onClick={() => setOpen(!open)} className="flex-1 flex items-center justify-between text-left">
           <span className="text-sm font-semibold text-slate-700">Full Strategic Analysis</span>
@@ -75,19 +76,19 @@ export default function DeepStrategyPanel() {
           <div className="ml-3 flex items-center gap-3 shrink-0">
             {editing ? (
               <>
-                <button onClick={() => setEditing(false)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
                   <X className="w-3.5 h-3.5" /> Cancel
-                </button>
-                <button onClick={saveEdits} disabled={saving} className="text-xs text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-2.5 py-1 rounded-md flex items-center gap-1">
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
-                </button>
+                </Button>
+                <Button size="sm" onClick={saveEdits} loading={saving}>
+                  {!saving && <Save className="w-3.5 h-3.5" />} Save
+                </Button>
               </>
             ) : (
               <>
-                <button onClick={startEditing} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                <button onClick={startEditing} className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </button>
-                <button onClick={handleRegenerate} disabled={loading} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 disabled:opacity-50">
+                <button onClick={handleRegenerate} disabled={loading} className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1 disabled:opacity-50">
                   <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Regenerate
                 </button>
               </>
@@ -141,9 +142,9 @@ export default function DeepStrategyPanel() {
                   <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1"><Crosshair className="w-3.5 h-3.5" /> Positioning</p>
                   <p className="text-sm text-slate-700">{strategy.positioningStatement}</p>
                 </div>
-                <div className="bg-purple-500/10 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-purple-400 flex items-center gap-1.5 mb-1"><Star className="w-3.5 h-3.5" /> USP</p>
-                  <p className="text-sm text-purple-200">{strategy.usp}</p>
+                <div className="bg-brand-500/10 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-brand-400 flex items-center gap-1.5 mb-1"><Star className="w-3.5 h-3.5" /> USP</p>
+                  <p className="text-sm text-brand-200">{strategy.usp}</p>
                 </div>
               </div>
 
@@ -200,7 +201,7 @@ export default function DeepStrategyPanel() {
                 <div className="grid sm:grid-cols-4 gap-2">
                   {strategy.quarterlyPlan?.map((q: any, i: number) => (
                     <div key={i} className="bg-slate-200 rounded-lg p-3">
-                      <p className="text-xs font-bold text-purple-400">{q.quarter}</p>
+                      <p className="text-xs font-bold text-brand-400">{q.quarter}</p>
                       <p className="text-sm font-medium text-slate-800 mt-0.5">{q.focus}</p>
                       <ul className="mt-1.5 space-y-0.5">
                         {q.keyActions?.map((a: string, j: number) => (
@@ -220,6 +221,6 @@ export default function DeepStrategyPanel() {
           ) : null}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Wand2, Image as ImageIcon, Download, PenTool, Plus } from "lucide-react";
 import { GRAPHIC_TYPES } from "@/lib/agents/graphicDesignAgent";
+import { Button, Card, Input } from "@/components/ui";
 
 interface CanvasDesign {
   id: string;
@@ -55,24 +56,29 @@ export default function GraphicDesignView() {
 
   return (
     <div className="space-y-5">
-      {/* Advanced canvas editor entry point */}
-      <div className="card p-5 flex items-center justify-between bg-gradient-to-br from-purple-50 to-white">
+      {/* Advanced canvas editor entry point — was a light from-purple-50
+          to-white gradient with text-slate-900 on top, which in this
+          app's inverted dark scale is near-white text on a near-white
+          background (a second, gradient-based instance of the invisible
+          text bug fixed earlier, missed by that pass since it wasn't a
+          plain bg-white). Standard dark .card treatment instead. */}
+      <Card className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
-            <PenTool className="w-5 h-5 text-purple-600" />
+          <div className="w-10 h-10 rounded-lg bg-brand-500/10 flex items-center justify-center shrink-0">
+            <PenTool className="w-5 h-5 text-brand-400" />
           </div>
           <div>
             <p className="text-sm font-semibold text-slate-900">Advanced Editor</p>
             <p className="text-xs text-slate-500">Full control — text, shapes, images, layers, stock photos</p>
           </div>
         </div>
-        <Link href="/design-editor" className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0">
+        <Link href="/design-editor" className="text-xs bg-brand-600 hover:bg-brand-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0">
           <Plus className="w-3.5 h-3.5" /> New Design
         </Link>
-      </div>
+      </Card>
 
       {canvasDesigns.length > 0 && (
-        <div className="card p-5 space-y-2">
+        <Card className="space-y-2">
           <p className="text-sm font-semibold text-slate-700">Your saved designs</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {canvasDesigns.map((d) => (
@@ -86,11 +92,11 @@ export default function GraphicDesignView() {
               </Link>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Type picker */}
-      <div className="card p-5 space-y-2">
+      <Card className="space-y-2">
         <p className="text-xs font-semibold text-slate-400 mb-1">Design type</p>
         <div className="flex flex-wrap gap-1.5">
           {GRAPHIC_TYPES.map((t) => (
@@ -99,53 +105,48 @@ export default function GraphicDesignView() {
               onClick={() => { setSelectedType(t.key); setResult(null); setError(null); }}
               className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
                 selectedType === t.key
-                  ? "bg-purple-600 border-purple-600 text-white"
-                  : "bg-slate-200 border-slate-300 text-slate-600 hover:border-purple-400"
+                  ? "bg-brand-600 border-brand-600 text-white"
+                  : "bg-slate-200 border-slate-300 text-slate-600 hover:border-brand-400"
               }`}
             >
               {t.label}
             </button>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Generator */}
-      <div className="card p-5 space-y-3">
+      <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700">Generate: {currentMeta?.label}</p>
-        <input
+        <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Describe what you want (optional — leave blank for a general on-brand design)"
-          className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 placeholder:text-slate-400"
         />
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+        <Button onClick={handleGenerate} loading={loading}>
+          {!loading && <Wand2 className="w-4 h-4" />}
           Generate
-        </button>
+        </Button>
         {error && <p className="text-xs text-red-400">{error}</p>}
-      </div>
+      </Card>
 
       {/* Result */}
       {result && (
-        <div className="card p-5 space-y-2">
+        <Card className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-700">Result</p>
-            <a href={result} download target="_blank" rel="noopener noreferrer" className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+            <a href={result} download target="_blank" rel="noopener noreferrer" className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
               <Download className="w-3.5 h-3.5" /> Download
             </a>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={result} alt="Generated design" className="w-full rounded-lg border border-slate-200" />
-        </div>
+        </Card>
       )}
 
       {/* Gallery */}
       {gallery.length > 0 && (
-        <div className="card p-5 space-y-2">
+        <Card className="space-y-2">
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> Recent designs</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {gallery.map((g) => (
@@ -155,7 +156,7 @@ export default function GraphicDesignView() {
               </button>
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );
