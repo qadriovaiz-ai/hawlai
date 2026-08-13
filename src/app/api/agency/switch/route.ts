@@ -25,8 +25,14 @@ export async function POST(request: Request) {
   const { dealershipId } = await request.json();
   if (!dealershipId) return NextResponse.json({ error: "dealershipId required" }, { status: 400 });
 
-  const { data: ownedDealership } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).maybeSingle();
-  if (ownedDealership) {
+  // Existence check, not a row-resolution — .maybeSingle() here would
+  // silently return null (never erroring, since this destructure drops
+  // `error`) the moment this user owns 2+ dealerships, which would
+  // have let a multi-business owner slip past this block entirely with
+  // no error. A plain array select + length check is correct for
+  // "owns at least one" regardless of how many they actually own.
+  const { data: ownedDealerships } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).limit(1);
+  if (ownedDealerships && ownedDealerships.length > 0) {
     return NextResponse.json({ error: "Switching isn't available yet for accounts that own their own business — this is a planned upgrade." }, { status: 403 });
   }
 

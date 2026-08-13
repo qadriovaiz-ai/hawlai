@@ -8,7 +8,16 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: dealership } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).maybeSingle();
+  // Resolve via the active dealership, not an owner_id-only lookup —
+  // that silently breaks (returns null) once the owner has 2+
+  // businesses. See /api/team/route.ts for the full explanation. Using
+  // the active business is also the correct behavior here regardless:
+  // a multi-business owner connecting WhatsApp should connect it to
+  // whichever business they currently have open.
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const { data: dealership } = profile?.dealership_id
+    ? await supabase.from("dealerships").select("id").eq("id", profile.dealership_id).eq("owner_id", user.id).maybeSingle()
+    : { data: null };
   if (!dealership) return NextResponse.json({ error: "Only the owner can connect their own WhatsApp here" }, { status: 403 });
 
   const gate = await requireFeature(supabase, dealership.id, "whatsappAutomation");

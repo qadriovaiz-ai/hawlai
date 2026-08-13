@@ -10,7 +10,9 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: ownedDealership } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).maybeSingle();
+  // Existence check, not a row-resolution — see /api/agency/switch for
+  // why .maybeSingle() silently mis-evaluates this for a 2+ business owner.
+  const { data: ownedDealerships } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).limit(1);
 
   // team_members_self_read RLS (user_id = auth.uid()) makes this
   // genuinely safe on the normal client — no service client needed
@@ -29,7 +31,7 @@ export async function GET() {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
 
   return NextResponse.json({
-    ownsABusiness: !!ownedDealership,
+    ownsABusiness: !!(ownedDealerships && ownedDealerships.length > 0),
     dealerships, // every team the person is actively on
     currentDealershipId: profile?.dealership_id ?? null,
   });

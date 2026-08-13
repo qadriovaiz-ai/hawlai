@@ -6,7 +6,16 @@ import { sendViaResend } from "@/lib/email/resendClient";
 async function requireOwner(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name").eq("owner_id", user.id).maybeSingle();
+  // Resolve via the currently-active dealership (profiles.dealership_id),
+  // not a fresh owner_id-only lookup — an owner_id-only .maybeSingle()
+  // silently returns null (and 403s the real owner) the moment that
+  // owner has 2+ dealerships, which is exactly what Agency-tier
+  // multi-business ownership produces. .eq("id", ...) is scoped by
+  // primary key first, so this can never match more than one row.
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const { data: dealership } = profile?.dealership_id
+    ? await supabase.from("dealerships").select("id, dealership_name").eq("id", profile.dealership_id).eq("owner_id", user.id).maybeSingle()
+    : { data: null };
   if (!dealership) return { error: NextResponse.json({ error: "Only the owner can manage the team" }, { status: 403 }) };
   return { user, dealership };
 }

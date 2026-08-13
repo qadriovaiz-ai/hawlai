@@ -4,7 +4,12 @@ import { NextResponse } from "next/server";
 async function requireOwnerDealership(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const { data: dealership } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).maybeSingle();
+  // Same fix as /api/team's requireOwner() — resolve via the active
+  // dealership, not an owner_id-only lookup that breaks for 2+ businesses.
+  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const { data: dealership } = profile?.dealership_id
+    ? await supabase.from("dealerships").select("id").eq("id", profile.dealership_id).eq("owner_id", user.id).maybeSingle()
+    : { data: null };
   if (!dealership) return { error: NextResponse.json({ error: "Only the owner can manage the team" }, { status: 403 }) };
   return { dealership };
 }
