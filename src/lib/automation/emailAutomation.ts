@@ -40,6 +40,7 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       .eq("dealership_id", dealershipId)
       .is("welcome_email_sent_at", null)
       .not("email", "is", null)
+      .eq("dnd_opt_out", false) // master audit Part C1.3 — never auto-email an opted-out lead
       .limit(50); // safety cap per run
 
     for (const lead of newLeads ?? []) {
@@ -75,6 +76,7 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       .is("follow_up_email_sent_at", null)
       .lt("created_at", cutoff)
       .not("status", "in", "(converted,not_interested)")
+      .eq("dnd_opt_out", false) // master audit Part C1.3 — never auto-email an opted-out lead
       .limit(50);
 
     for (const lead of staleLeads ?? []) {

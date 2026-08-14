@@ -17,17 +17,22 @@ async function getTriggeredLeads(supabase: any, dealershipId: string, workflow: 
       .from("leads")
       .select("id, name, email, created_at, status")
       .eq("dealership_id", dealershipId)
-      .not("email", "is", null);
+      .not("email", "is", null)
+      .eq("dnd_opt_out", false); // master audit Part C1.3 — never auto-email an opted-out lead
     if (workflow.status_filter) query = query.eq("status", workflow.status_filter);
     const { data } = await query.limit(200);
     return (data ?? []).map((l: any) => ({ leadId: l.id, email: l.email, name: l.name, triggerDate: l.created_at }));
   }
 
   if (workflow.trigger_type === "appointment_booked") {
+    // !inner + dot-path filter so the DND check applies to the joined
+    // lead row, not the appointment itself — appointments has no
+    // dnd_opt_out column of its own.
     const { data } = await supabase
       .from("appointments")
-      .select("created_at, leads(id, name, email)")
+      .select("created_at, leads!inner(id, name, email, dnd_opt_out)")
       .eq("dealership_id", dealershipId)
+      .eq("leads.dnd_opt_out", false)
       .limit(200);
     return (data ?? [])
       .filter((a: any) => a.leads?.email)

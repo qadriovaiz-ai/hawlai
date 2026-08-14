@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   const { data: lead, error: leadError } = await serviceClient
     .from("leads")
-    .select("id, name, phone, dealership_id")
+    .select("id, name, phone, dealership_id, dnd_opt_out")
     .eq("id", lead_id)
     .eq("dealership_id", dealershipId)
     .single();

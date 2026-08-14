@@ -985,11 +985,12 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       return { success: true, leadId: data.id };
     }
     case "trigger_call": {
-      const { data: matches } = await supabase.from("leads").select("id, name, phone, dealership_id").eq("dealership_id", ctx.id).ilike("name", `%${input.leadName}%`).limit(5);
+      const { data: matches } = await supabase.from("leads").select("id, name, phone, dealership_id, dnd_opt_out").eq("dealership_id", ctx.id).ilike("name", `%${input.leadName}%`).limit(5);
       if (!matches || matches.length === 0) return { error: `No lead found matching "${input.leadName}" — check the CRM for the exact name.` };
       if (matches.length > 1) return { error: `Multiple leads match "${input.leadName}" (${matches.map((m: any) => m.name).join(", ")}) — ask the person to be more specific.` };
       const lead = matches[0];
       if (!lead.phone) return { error: `${lead.name} has no phone number on file, so a call can't be placed.` };
+      if (lead.dnd_opt_out) return { error: `${lead.name} has opted out of contact (DND) — a call can't be placed.` };
       const result = await triggerVapiCall(supabase, lead);
       if (!result.success) return { error: result.error };
       return { success: true, calledLead: lead.name, note: `Call placed to ${lead.name}. Tell the person the call is in progress — the transcript and an updated lead score will appear once it ends.` };

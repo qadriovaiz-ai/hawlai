@@ -47,6 +47,15 @@ export interface Lead {
   status: LeadStatus;
   qualification_reason: string | null;
   created_at: string;
+  // Master audit Part C1.2/C1.3 — DPDP consent tracking + DND/opt-out.
+  // dnd_opt_out is the only one enforced (blocks calls/auto-emails);
+  // consent_status is tracked/visible only for now.
+  dnd_opt_out: boolean;
+  dnd_opt_out_at: string | null;
+  dnd_opt_out_source: string | null;
+  consent_status: "unknown" | "granted" | "withdrawn";
+  consent_captured_at: string | null;
+  consent_source: string | null;
 }
 
 export interface Call {

@@ -8,6 +8,7 @@ import CreateAppointmentModal from "@/components/appointments/CreateAppointmentM
 import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
 import LeadCrmPanel from "@/components/leads/LeadCrmPanel";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
+import DndOptOutToggle from "@/components/leads/DndOptOutToggle";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -58,6 +59,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                 <span className={`badge ${getStatusColor(lead.status)}`}>
                   {getStatusLabel(lead.status)}
                 </span>
+                {lead.dnd_opt_out && (
+                  <span className="badge bg-red-500/15 text-red-600">Do-not-contact</span>
+                )}
               </div>
             </div>
           </div>
@@ -66,6 +70,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <TriggerAICallButton leadId={lead.id} />
             <CreateAppointmentModal leadId={lead.id} leadName={lead.name} dealershipId={lead.dealership_id} />
             <GenerateMessageButton leadId={lead.id} phone={lead.phone} email={lead.email} />
+            <DndOptOutToggle leadId={lead.id} optedOut={!!lead.dnd_opt_out} />
           </div>
         </div>
       </div>

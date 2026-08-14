@@ -41,9 +41,13 @@ async function fetchBaseAssistantConfig(apiKey: string, assistantId: string): Pr
 
 export async function triggerVapiCall(
   serviceClient: SupabaseClient,
-  lead: { id: string; name: string; phone: string | null; dealership_id: string }
+  lead: { id: string; name: string; phone: string | null; dealership_id: string; dnd_opt_out?: boolean | null }
 ): Promise<TriggerCallResult> {
   if (!lead.phone) return { success: false, error: "Lead has no phone number" };
+  // Master audit Part C1.3 — single choke point for every outbound
+  // call trigger (manual button, auto-call-new-lead, chat tool), so
+  // gating here covers all three at once.
+  if (lead.dnd_opt_out) return { success: false, error: "Lead has opted out of contact (DND)" };
 
   const apiKey = process.env.VAPI_API_KEY;
   if (!apiKey) {
