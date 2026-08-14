@@ -59,14 +59,21 @@ export function formatDuration(seconds: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+// Master audit / design system Step 4 — these four functions used to
+// return solid light-mode swatches (bg-red-100/text-red-700), the
+// exact "wrong shade family" mismatch Badge.tsx's own comment calls
+// out against its correct translucent dark-theme formula
+// (bg-{color}-500/10 text-{color}-400 border-{color}-700/30). Now
+// matched to that same formula, same hue-per-status, callers unchanged
+// (they consume these as plain className strings, not <Badge>).
 export function getTemperatureColor(temp: LeadTemperature) {
   switch (temp) {
     case "hot":
-      return "bg-red-100 text-red-700 border-red-200";
+      return "bg-red-500/10 text-red-400 border-red-700/30";
     case "warm":
-      return "bg-amber-100 text-amber-700 border-amber-200";
+      return "bg-amber-500/10 text-amber-400 border-amber-700/30";
     case "cold":
-      return "bg-blue-100 text-blue-700 border-blue-200";
+      return "bg-blue-500/10 text-blue-400 border-blue-700/30";
   }
 }
 
@@ -84,17 +91,17 @@ export function getTemperatureIcon(temp: LeadTemperature) {
 export function getStatusColor(status: LeadStatus) {
   switch (status) {
     case "new":
-      return "bg-slate-100 text-slate-700";
+      return "bg-slate-200 text-slate-500 border-slate-300";
     case "ready_to_call":
-      return "bg-purple-100 text-purple-700";
+      return "bg-brand-500/10 text-brand-400 border-brand-700/30";
     case "called":
-      return "bg-blue-100 text-blue-700";
+      return "bg-blue-500/10 text-blue-400 border-blue-700/30";
     case "appointment_set":
-      return "bg-green-100 text-green-700";
+      return "bg-green-500/10 text-green-400 border-green-700/30";
     case "converted":
-      return "bg-emerald-100 text-emerald-700";
+      return "bg-emerald-500/10 text-emerald-400 border-emerald-700/30";
     case "not_interested":
-      return "bg-gray-100 text-gray-500";
+      return "bg-slate-500/10 text-slate-400 border-slate-700/30";
   }
 }
 
@@ -105,28 +112,28 @@ export function getStatusLabel(status: LeadStatus) {
 export function getCallStatusColor(status: CallStatus) {
   switch (status) {
     case "initiated":
-      return "bg-slate-200 text-slate-600";
+      return "bg-slate-200 text-slate-500 border-slate-300";
     case "completed":
-      return "bg-green-100 text-green-700";
+      return "bg-green-500/10 text-green-400 border-green-700/30";
     case "no_answer":
-      return "bg-amber-100 text-amber-700";
+      return "bg-amber-500/10 text-amber-400 border-amber-700/30";
     case "busy":
-      return "bg-orange-100 text-orange-700";
+      return "bg-orange-500/10 text-orange-400 border-orange-700/30";
     case "failed":
-      return "bg-red-100 text-red-700";
+      return "bg-red-500/10 text-red-400 border-red-700/30";
     case "voicemail":
-      return "bg-blue-100 text-blue-700";
+      return "bg-blue-500/10 text-blue-400 border-blue-700/30";
   }
 }
 
 export function getAppointmentStatusColor(status: AppointmentStatus) {
   switch (status) {
     case "scheduled":
-      return "bg-blue-100 text-blue-700";
+      return "bg-blue-500/10 text-blue-400 border-blue-700/30";
     case "completed":
-      return "bg-green-100 text-green-700";
+      return "bg-green-500/10 text-green-400 border-green-700/30";
     case "cancelled":
-      return "bg-red-100 text-red-700";
+      return "bg-red-500/10 text-red-400 border-red-700/30";
   }
 }
 
