@@ -5,6 +5,7 @@ import { Briefcase, Flame, Users, ShieldCheck, PhoneCall, CalendarDays, IndianRu
 import { formatCurrency } from "@/lib/utils";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
 import { getPortfolioSummaries } from "@/lib/agents/portfolioAgent";
+import BulkAutomationPanel from "@/components/agency/BulkAutomationPanel";
 
 // Master audit Part E1 — the highest-value missing Agency-tier
 // feature per the audit: a single screen showing every managed
@@ -59,6 +60,8 @@ export default async function AgencyPortfolioPage() {
       {summaries.length === 0 ? (
         <p className="text-sm text-slate-400 text-center py-12">No businesses found.</p>
       ) : (
+        <>
+        <BulkAutomationPanel businesses={summaries.map((b) => ({ id: b.id, dealershipName: b.dealershipName }))} />
         <div className="grid sm:grid-cols-2 gap-4">
           {summaries.map((b) => (
             <Link key={b.id} href={`/dashboard/agency-portfolio/${b.id}`} className="card p-5 space-y-4 hover:border-brand-300 transition-colors">
@@ -87,6 +90,7 @@ export default async function AgencyPortfolioPage() {
             </Link>
           ))}
         </div>
+        </>
       )}
     </div>
   );
