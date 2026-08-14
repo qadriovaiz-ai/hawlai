@@ -21,6 +21,17 @@ export const SEO_TASKS: SeoTaskMeta[] = [
   { key: "backlink_strategy", label: "Backlink Strategy", instructions: "6 realistic backlink-building tactics for a small local Indian business in this category (e.g. local directories, industry partnerships, guest posts, press) — each with {tactic, howTo}, practical and not spammy." },
   { key: "local_seo", label: "Local SEO", instructions: "6 local SEO action items specific to this business and city — NAP consistency, local citations, location pages, local keyword targeting, review strategy etc, each with {action, why}." },
   { key: "gbp_optimization", label: "Google Business Profile", instructions: "A Google Business Profile optimization checklist for this business: suggested business description (under 750 chars), 5 relevant GBP categories/attributes to add, and 3 post ideas to publish on the profile. Return as {description, categories: [], postIdeas: []}." },
+  // Registered here so it's chat-reachable via generate_seo's taskType
+  // enum and appears in the SEO page's task picker with zero new tool
+  // registration and zero new navigation (see the approved AEO
+  // architecture proposal, Task 1) — but its `instructions` field is
+  // documentation only. Actual execution is NOT generateSeoTask()
+  // below (a single templated Claude call can't do this): it's
+  // dispatched to generateAeoCheck() in aeoAgent.ts, which needs live
+  // web search plus a structural read of the business's own site.
+  // Special-cased at both call sites — /api/seo/toolkit/route.ts and
+  // masterBrainV2.ts's "generate_seo" case.
+  { key: "aeo_check", label: "AEO Check", instructions: "Checks how this business shows up when someone asks an AI assistant (ChatGPT/Gemini/Perplexity-style) a buying question in its category — a different mechanism from Google ranking. Dispatched to generateAeoCheck(), not this generic task runner." },
 ];
 
 interface DealershipContext {

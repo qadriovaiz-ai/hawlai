@@ -17,7 +17,7 @@ const EXAMPLES = [
 ];
 
 interface Artifact {
-  kind: "visual" | "document" | "record" | "metric" | "link";
+  kind: "visual" | "document" | "record" | "metric" | "link" | "aeo_report";
   type?: "image" | "website" | "3d_scene" | "canvas_design";
   label: string;
   summary?: string;
@@ -31,6 +31,14 @@ interface Artifact {
   columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[];
   brandKit?: { colors: { name: string; hex: string; role: string }[]; tagline: string; typography: { headingFont: string; bodyFont: string }; mission?: string };
   influencerPlan?: { searchTerms: string[]; message: string; collabIdeas: string[] };
+  aeoReport?: {
+    visibilityScore: number;
+    scoreLabel: string;
+    scoreBreakdown: { label: string; value: string }[];
+    competitivePositioning: { promptTested: string; mentioned: boolean; competitorsMentioned: string[] }[];
+    recommendations: { title: string; detail: string }[];
+    disclosure: string;
+  };
   departmentHref?: string;
 }
 
@@ -429,6 +437,73 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
           </div>
           <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
+        </div>
+        {artifact.departmentHref && (
+          <a
+            href={artifact.departmentHref}
+            className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium text-brand-600 bg-brand-500/5 border-t border-slate-100 hover:bg-brand-500/10 transition-colors"
+          >
+            Open in department <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // AEO check — a hero citability score plus a per-prompt competitive
+  // read and grounded recommendations, none of which fit the generic
+  // fields/groups/metric card below without losing one of the three.
+  // The disclosure is always rendered here, never conditionally — see
+  // aeoAgent.ts's DISCLOSURE constant and the architecture proposal's
+  // verified-vs-simulated distinction (this is a policy requirement,
+  // not a nice-to-have).
+  if (artifact.kind === "aeo_report" && artifact.aeoReport) {
+    const r = artifact.aeoReport;
+    return (
+      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+        <div className="px-3 py-3 space-y-2.5">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-slate-900 tabular-nums">{r.visibilityScore}</span>
+            <span className="text-[11px] text-slate-400">/100 · {r.scoreLabel}</span>
+          </div>
+          {r.scoreBreakdown.length > 0 && (
+            <div className="space-y-1">
+              {r.scoreBreakdown.map((b, i) => (
+                <div key={i} className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500">{b.label}</span>
+                  <span className="text-slate-700 font-medium">{b.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {r.competitivePositioning.length > 0 && (
+            <div className="pt-2 border-t border-slate-200 space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Competitive positioning</p>
+              {r.competitivePositioning.map((p, i) => (
+                <div key={i} className="text-[11px]">
+                  <p className="text-slate-600 italic">&ldquo;{p.promptTested}&rdquo;</p>
+                  <p className={cn("mt-0.5", p.mentioned ? "text-emerald-600" : "text-orange-500")}>
+                    {p.mentioned ? "Mentioned" : "Not mentioned"}
+                    {p.competitorsMentioned.length > 0 && ` — ${p.competitorsMentioned.join(", ")} ${p.mentioned ? "also came up" : "did instead"}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          {r.recommendations.length > 0 && (
+            <div className="pt-2 border-t border-slate-200 space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Recommendations</p>
+              {r.recommendations.map((rec, i) => (
+                <div key={i} className="text-[11px]">
+                  <p className="font-medium text-slate-700">{rec.title}</p>
+                  <p className="text-slate-500 mt-0.5">{rec.detail}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {r.disclosure && (
+            <p className="pt-2 border-t border-slate-200 text-[10px] text-slate-400 italic leading-snug">{r.disclosure}</p>
+          )}
         </div>
         {artifact.departmentHref && (
           <a

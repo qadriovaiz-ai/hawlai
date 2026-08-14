@@ -30,6 +30,7 @@ import { sendDealerEmail } from "../email/sendDealerEmail";
 import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
+import { generateAeoCheck } from "./aeoAgent";
 import { generateSocialTask, SOCIAL_TASKS } from "./socialManagementAgent";
 import { generateEmailContent, EMAIL_TASKS } from "./emailMarketingAgent";
 import { generateWhatsappContent, WHATSAPP_TASKS } from "./whatsappMarketingAgent";
@@ -568,7 +569,14 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_seo": {
-      const { output, _fallback } = await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
+      // aeo_check is registered in SEO_TASKS (chat-reachable, appears in
+      // the SEO page picker) but needs live web search + a structural
+      // site read that generateSeoTask's single-templated-prompt runner
+      // can't do — dispatched to its own function instead. See
+      // seoToolkitAgent.ts's SEO_TASKS entry for the full explanation.
+      const { output, _fallback } = input.taskType === "aeo_check"
+        ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext)
+        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck(output, resolvedBrandVoice);
     }
@@ -1050,7 +1058,7 @@ export interface Artifact {
   // card directly under the assistant's message in the chat feed — the
   // whole point being the person can see what happened without leaving
   // the conversation to go check a department page manually.
-  kind: "visual" | "document" | "record" | "metric" | "link";
+  kind: "visual" | "document" | "record" | "metric" | "link" | "aeo_report";
   type?: "image" | "website" | "3d_scene" | "canvas_design"; // only set when kind === "visual"
   label: string;
   summary?: string; // one or two lines of what actually happened/was produced
@@ -1064,6 +1072,14 @@ export interface Artifact {
   columns?: { heading: string; tone: "positive" | "negative" | "neutral"; items: string[] }[]; // two-column comparisons — SWOT, sentiment (positive themes vs. objections), etc.
   brandKit?: { colors: { name: string; hex: string; role: string }[]; tagline: string; typography: { headingFont: string; bodyFont: string }; mission?: string }; // bespoke — BrandKit mixes scalars (tagline/mission) with arrays (colors/guidelines) in one result, doesn't fit the generic array-or-draft dispatcher
   influencerPlan?: { searchTerms: string[]; message: string; collabIdeas: string[] }; // bespoke — same mixed-shape reason as brandKit
+  aeoReport?: { // bespoke — AEO check combines a hero score, a per-prompt comparison, and recommendations; no existing kind holds all three without losing one
+    visibilityScore: number;
+    scoreLabel: string;
+    scoreBreakdown: { label: string; value: string }[];
+    competitivePositioning: { promptTested: string; mentioned: boolean; competitorsMentioned: string[] }[];
+    recommendations: { title: string; detail: string }[];
+    disclosure: string; // always rendered — the verified-vs-simulated distinction from the architecture proposal, not optional fine print
+  };
   departmentHref?: string; // "open in <department>" deep link, shown on every kind when known
   // Phase 3 Task 4 — advisory only, never affects whether content was
   // generated/saved. Populated only when validateBrandVoiceCompliance()
@@ -1385,6 +1401,21 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
     case "generate_seo": {
       if (input?.taskType === "competitor_keywords" && Array.isArray(result?.keywords)) {
         return { kind: "document", label: "Competitor Keyword Research", groups: groupKeywordsByIntent(result.keywords), departmentHref };
+      }
+      if (input?.taskType === "aeo_check" && typeof result?.visibilityScore === "number") {
+        return {
+          kind: "aeo_report",
+          label: "AEO Check",
+          departmentHref,
+          aeoReport: {
+            visibilityScore: result.visibilityScore,
+            scoreLabel: result.scoreLabel ?? "Content citability",
+            scoreBreakdown: Array.isArray(result.scoreBreakdown) ? result.scoreBreakdown : [],
+            competitivePositioning: Array.isArray(result.competitivePositioning) ? result.competitivePositioning : [],
+            recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
+            disclosure: result.disclosure ?? "",
+          },
+        };
       }
       return { kind: "document", label: "SEO", summary: genericSummary(result), departmentHref };
     }

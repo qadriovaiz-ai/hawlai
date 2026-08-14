@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeoTask } from "@/lib/agents/seoToolkitAgent";
+import { generateAeoCheck } from "@/lib/agents/aeoAgent";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -22,14 +23,22 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
-  const { output, _fallback } = await generateSeoTask(
-    taskType,
-    dealership?.dealership_name ?? "the business",
-    dealership?.city ?? null,
-    dealership?.business_category ?? "car dealership",
-    brandProfile,
-    { supabase, dealershipId }
-  );
+  const { output, _fallback } = taskType === "aeo_check"
+    ? await generateAeoCheck(
+        dealership?.dealership_name ?? "the business",
+        dealership?.city ?? null,
+        dealership?.business_category ?? "car dealership",
+        brandProfile,
+        { supabase, dealershipId }
+      )
+    : await generateSeoTask(
+        taskType,
+        dealership?.dealership_name ?? "the business",
+        dealership?.city ?? null,
+        dealership?.business_category ?? "car dealership",
+        brandProfile,
+        { supabase, dealershipId }
+      );
 
   let saved = null;
   if (!_fallback) {
