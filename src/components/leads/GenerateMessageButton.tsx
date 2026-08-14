@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageCircle, Mail, Loader2, Copy, Check, X, Send } from "lucide-react";
 import { toWhatsAppLink } from "@/lib/utils";
+import { Button, buttonClasses } from "@/components/ui";
 
 export default function GenerateMessageButton({ leadId, phone, email }: { leadId: string; phone?: string | null; email?: string | null }) {
   const [open, setOpen] = useState(false);
@@ -69,12 +70,12 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
   return (
     <>
       <div className="flex items-center gap-2">
-        <button onClick={() => generate("whatsapp")} className="btn-secondary text-sm">
+        <Button onClick={() => generate("whatsapp")} variant="secondary">
           <MessageCircle className="w-4 h-4" /> WhatsApp Message
-        </button>
-        <button onClick={() => generate("email")} className="btn-secondary text-sm">
+        </Button>
+        <Button onClick={() => generate("email")} variant="secondary">
           <Mail className="w-4 h-4" /> Email
-        </button>
+        </Button>
       </div>
 
       {open && (
@@ -113,25 +114,25 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={handleCopy} className="btn-secondary flex-1 text-sm justify-center">
+                  <Button onClick={handleCopy} variant="secondary" className="flex-1 justify-center">
                     {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {copied ? "Copied!" : "Copy"}
-                  </button>
+                  </Button>
                   {channel === "whatsapp" && phone && (
                     <a
                       href={toWhatsAppLink(phone, result.message)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn-primary bg-green-600 hover:bg-green-700 flex-1 text-sm justify-center"
+                      className={buttonClasses("primary", "md", "bg-green-600 hover:bg-green-700 flex-1 justify-center")}
                     >
                       <MessageCircle className="w-4 h-4" /> Send via WhatsApp
                     </a>
                   )}
                   {channel === "email" && email && !emailSent && (
-                    <button onClick={handleSendEmail} disabled={sendingEmail} className="btn-primary flex-1 text-sm justify-center">
-                      {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    <Button onClick={handleSendEmail} loading={sendingEmail} variant="primary" className="flex-1 justify-center">
+                      {!sendingEmail && <Send className="w-4 h-4" />}
                       {sendingEmail ? "Sending..." : "Send Email"}
-                    </button>
+                    </Button>
                   )}
                   {channel === "email" && emailSent && (
                     <span className="flex-1 text-sm text-green-400 flex items-center justify-center gap-1.5"><Check className="w-4 h-4" /> Sent!</span>

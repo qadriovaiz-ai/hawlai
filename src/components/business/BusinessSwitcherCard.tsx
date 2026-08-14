@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Building2, Check, Lock } from "lucide-react";
+import { Building2, Check, Lock } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 interface Business {
   id: string;
@@ -88,9 +89,9 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
             {b.active ? (
               <span className="flex items-center gap-1 text-xs text-green-500 font-medium shrink-0"><Check className="w-3.5 h-3.5" /> Active</span>
             ) : (
-              <button onClick={() => switchTo(b.id)} disabled={switching === b.id} className="btn-secondary text-xs shrink-0">
-                {switching === b.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Switch
-              </button>
+              <Button onClick={() => switchTo(b.id)} variant="secondary" size="sm" loading={switching === b.id} className="shrink-0">
+                Switch
+              </Button>
             )}
           </div>
         ))}
@@ -120,16 +121,16 @@ export default function BusinessSwitcherCard({ initialBusinesses, multiBusinessA
             className="input"
           />
           <div className="flex gap-2">
-            <button type="submit" disabled={adding || !name.trim()} className="btn-primary text-xs flex-1 justify-center">
-              {adding && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Create business
-            </button>
-            <button type="button" onClick={() => setShowAddForm(false)} className="btn-secondary text-xs">Cancel</button>
+            <Button type="submit" disabled={!name.trim()} loading={adding} size="sm" className="flex-1 justify-center">
+              Create business
+            </Button>
+            <Button type="button" onClick={() => setShowAddForm(false)} variant="secondary" size="sm">Cancel</Button>
           </div>
         </form>
       ) : (
-        <button onClick={() => setShowAddForm(true)} className="btn-secondary text-xs w-full justify-center">
+        <Button onClick={() => setShowAddForm(true)} variant="secondary" size="sm" className="w-full justify-center">
           + Add another business
-        </button>
+        </Button>
       )}
     </div>
   );

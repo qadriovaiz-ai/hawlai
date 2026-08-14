@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { X, RotateCw, FlipHorizontal, Type, Trash2, Check, Plus, Minus } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 interface TextLayer {
   id: string;
@@ -243,12 +244,12 @@ export default function PhotoEditor({
             <div>
               <p className="text-xs font-semibold text-slate-500 mb-2">Rotate & Flip</p>
               <div className="flex items-center gap-2">
-                <button onClick={() => setRotation((r) => (r + 90) % 360)} className="btn-secondary text-xs">
+                <Button onClick={() => setRotation((r) => (r + 90) % 360)} variant="secondary" size="sm">
                   <RotateCw className="w-3.5 h-3.5" /> Rotate
-                </button>
-                <button onClick={() => setFlipH((f) => !f)} className="btn-secondary text-xs">
+                </Button>
+                <Button onClick={() => setFlipH((f) => !f)} variant="secondary" size="sm">
                   <FlipHorizontal className="w-3.5 h-3.5" /> Flip
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -283,9 +284,9 @@ export default function PhotoEditor({
                     className="w-full p-1.5 text-xs bg-slate-100 border border-slate-200 rounded-md"
                   />
                   <div className="flex items-center gap-2">
-                    <button onClick={() => updateSelectedText({ fontSize: Math.max(16, selectedText.fontSize - 4) })} className="btn-secondary px-1.5 py-1"><Minus className="w-3 h-3" /></button>
+                    <Button onClick={() => updateSelectedText({ fontSize: Math.max(16, selectedText.fontSize - 4) })} variant="secondary" size="sm" className="px-1.5 py-1"><Minus className="w-3 h-3" /></Button>
                     <span className="text-xs text-slate-500">{selectedText.fontSize}px</span>
-                    <button onClick={() => updateSelectedText({ fontSize: Math.min(120, selectedText.fontSize + 4) })} className="btn-secondary px-1.5 py-1"><Plus className="w-3 h-3" /></button>
+                    <Button onClick={() => updateSelectedText({ fontSize: Math.min(120, selectedText.fontSize + 4) })} variant="secondary" size="sm" className="px-1.5 py-1"><Plus className="w-3 h-3" /></Button>
                     <input
                       type="color"
                       value={selectedText.color}
@@ -306,12 +307,12 @@ export default function PhotoEditor({
         </div>
 
         <div className="p-4 border-t border-slate-100 flex items-center gap-3 shrink-0">
-          <button onClick={onClose} className="btn-secondary flex-1 justify-center">
+          <Button onClick={onClose} variant="secondary" className="flex-1 justify-center">
             Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving || !loaded} className="btn-primary flex-1 justify-center">
+          </Button>
+          <Button onClick={handleSave} disabled={!loaded} loading={saving} variant="primary" className="flex-1 justify-center">
             {saving ? "Saving..." : <><Check className="w-4 h-4" /> Use This Photo</>}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

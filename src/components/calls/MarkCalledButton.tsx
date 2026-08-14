@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Loader2 } from "lucide-react";
+import { CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function MarkCalledButton({ leadId, dealershipId }: { leadId: string; dealershipId: string }) {
   const [loading, setLoading] = useState(false);
@@ -33,9 +34,9 @@ export default function MarkCalledButton({ leadId, dealershipId }: { leadId: str
   }
 
   return (
-    <button onClick={handleMarkCalled} disabled={loading} className="btn-secondary">
-      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4 text-green-500" />}
+    <Button onClick={handleMarkCalled} loading={loading} variant="secondary">
+      {!loading && <CheckCircle className="w-4 h-4 text-green-500" />}
       Mark Called
-    </button>
+    </Button>
   );
 }

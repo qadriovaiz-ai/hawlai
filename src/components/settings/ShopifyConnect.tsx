@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Check, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function ShopifyConnect() {
   const [loading, setLoading] = useState(true);
@@ -77,9 +78,9 @@ export default function ShopifyConnect() {
         className="w-full p-2 text-xs bg-slate-100 text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
-      <button onClick={handleConnect} disabled={saving} className="btn-secondary text-xs w-full justify-center">
-        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Connect"}
-      </button>
+      <Button variant="secondary" size="sm" onClick={handleConnect} loading={saving} className="w-full justify-center">
+        Connect
+      </Button>
     </div>
   );
 }

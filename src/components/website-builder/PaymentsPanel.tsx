@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, CreditCard, Check, ExternalLink, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function PaymentsPanel() {
   const [keyId, setKeyId] = useState("");
@@ -81,10 +82,10 @@ export default function PaymentsPanel() {
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      <button onClick={handleSave} disabled={saving} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+      <Button onClick={handleSave} disabled={saving} loading={saving}>
+        {!saving && saved && <Check className="w-4 h-4" />}
         {saved ? "Saved" : "Save"}
-      </button>
+      </Button>
 
       <p className="text-xs text-slate-400">
         {keyId && hasSecret ? "✅ Connected — \"Pay Online\" will appear at checkout." : "Not connected yet — checkout will only offer Cash on Delivery until both fields are saved."}

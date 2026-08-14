@@ -8,6 +8,7 @@ import {
   Download, Save, Loader2, Trash2, BringToFront, SendToBack, Palette,
   Check, ArrowLeft, Search, Triangle as TriangleIcon, Minus, Star, Sticker, Package,
 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 const SIZE_PRESETS = [
   { label: "Instagram Post", w: 1080, h: 1080 },
@@ -339,10 +340,10 @@ export default function CanvasEditor({ designId }: Props) {
           <button onClick={downloadPng} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
             <Download className="w-3.5 h-3.5" /> Download
           </button>
-          <button onClick={saveDesign} disabled={saving} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : savedAt ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+          <Button onClick={saveDesign} loading={saving} size="sm">
+            {!saving && (savedAt ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />)}
             {saving ? "Saving..." : savedAt ? "Saved" : "Save"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -575,9 +576,9 @@ function StockPhotoModal({ onClose, onSelect }: { onClose: () => void; onSelect:
             placeholder="Search free stock photos..."
             className="flex-1 text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2"
           />
-          <button onClick={search} disabled={loading} className="text-sm bg-purple-600 text-white px-3 py-2 rounded-lg disabled:opacity-50">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
-          </button>
+          <Button onClick={search} loading={loading} size="sm" className="px-3 py-2">
+            {!loading && "Search"}
+          </Button>
         </div>
         <div className="p-4 overflow-y-auto flex-1">
           {error && <p className="text-xs text-red-500 mb-2">{error}</p>}

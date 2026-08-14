@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Check, Bell, Code2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function PopupAndTrackingSettings() {
   const [loading, setLoading] = useState(true);
@@ -97,10 +98,10 @@ export default function PopupAndTrackingSettings() {
         <input value={gtmId} onChange={(e) => setGtmId(e.target.value)} placeholder="Google Tag Manager ID (e.g. GTM-XXXXXXX)" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
       </div>
 
-      <button onClick={handleSave} disabled={saving} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+      <Button onClick={handleSave} disabled={saving} loading={saving}>
+        {!saving && saved && <Check className="w-4 h-4" />}
         {saved ? "Saved" : "Save Popup & Tracking Settings"}
-      </button>
+      </Button>
     </div>
   );
 }

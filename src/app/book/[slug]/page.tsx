@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { Calendar, Loader2, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function BookingPage() {
   const params = useParams();
@@ -113,13 +114,14 @@ export default function BookingPage() {
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="w-full text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2" />
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" className="w-full text-sm bg-white text-slate-50 border border-slate-200 rounded-lg px-3 py-2" />
             {error && <p className="text-xs text-red-500">{error}</p>}
-            <button
+            <Button
               onClick={handleSubmit}
               disabled={submitting || !name || !phone}
-              className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-lg"
+              loading={submitting}
+              className="w-full text-sm font-semibold py-2.5"
             >
               {submitting ? "Booking..." : "Confirm booking"}
-            </button>
+            </Button>
           </div>
         )}
       </div>

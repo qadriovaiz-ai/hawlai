@@ -2,13 +2,14 @@ import Link from "next/link";
 import { formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import { ArrowRight } from "lucide-react";
 import type { Lead } from "@/types";
+import { buttonClasses } from "@/components/ui/Button";
 
 export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
   if (leads.length === 0) {
     return (
       <div className="card p-8 text-center">
         <p className="text-slate-400 text-sm">No leads yet. Upload your first CSV to get started.</p>
-        <Link href="/dashboard/leads" className="btn-primary mt-4 inline-flex">
+        <Link href="/dashboard/leads" className={buttonClasses("primary", "md", "mt-4 inline-flex")}>
           Upload Leads
         </Link>
       </div>

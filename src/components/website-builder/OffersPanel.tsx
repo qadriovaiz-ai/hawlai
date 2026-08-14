@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Tag, X, Check } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 interface DiscountCode {
   id: string;
@@ -82,7 +83,7 @@ export default function OffersPanel() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Tag className="w-4 h-4" /> Discount Codes ({codes.length})</p>
-          {!adding && <button onClick={() => setAdding(true)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> New Code</button>}
+          {!adding && <Button onClick={() => setAdding(true)} size="sm"><Plus className="w-3.5 h-3.5" /> New Code</Button>}
         </div>
 
         {adding && (
@@ -102,9 +103,9 @@ export default function OffersPanel() {
             <input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
             {error && <p className="text-xs text-red-400">{error}</p>}
             <div className="flex items-center gap-2">
-              <button onClick={handleSave} disabled={saving} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 disabled:opacity-50">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save
-              </button>
+              <Button onClick={handleSave} disabled={saving} loading={saving} size="sm">
+                {!saving && <Check className="w-3.5 h-3.5" />} Save
+              </Button>
               <button onClick={() => { setAdding(false); setForm(EMPTY_FORM); setError(null); }} className="text-xs text-slate-500 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Cancel</button>
             </div>
           </div>

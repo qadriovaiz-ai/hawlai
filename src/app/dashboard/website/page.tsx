@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Globe, Loader2, Sparkles, ImagePlus, Check, ExternalLink, AlertCircle, Plus, X, Link2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { LANDING_THEMES } from "@/lib/landingThemes";
 import CroToolkit from "@/components/cro/CroToolkit";
 import PopupAndTrackingSettings from "@/components/website/PopupAndTrackingSettings";
@@ -214,9 +215,9 @@ export default function WebsitePage() {
             placeholder="https://your-dealership-website.com"
             className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          <button onClick={handleSaveExternalUrl} disabled={savingExternal} className="btn-secondary text-sm">
-            {savingExternal ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-          </button>
+          <Button onClick={handleSaveExternalUrl} loading={savingExternal} variant="secondary">
+            {!savingExternal && "Save"}
+          </Button>
         </div>
       </div>
 
@@ -264,10 +265,10 @@ export default function WebsitePage() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <label className="text-sm font-semibold text-slate-700">Content</label>
-          <button onClick={handleGenerate} disabled={generating} className="btn-secondary text-xs">
-            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          <Button onClick={handleGenerate} loading={generating} variant="secondary" size="sm">
+            {!generating && <Sparkles className="w-3.5 h-3.5" />}
             Generate with AI
-          </button>
+          </Button>
         </div>
         <input
           value={headline}
@@ -313,9 +314,9 @@ export default function WebsitePage() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <label className="text-sm font-semibold text-slate-700">Featured Cars (optional)</label>
-          <button onClick={addCar} className="btn-secondary text-xs">
+          <Button onClick={addCar} variant="secondary" size="sm">
             <Plus className="w-3.5 h-3.5" /> Add car
-          </button>
+          </Button>
         </div>
         {cars.length === 0 && <p className="text-xs text-slate-400">Add specific cars/offers to show in a gallery on the page.</p>}
         {cars.map((car, i) => (
@@ -363,17 +364,18 @@ export default function WebsitePage() {
       )}
 
       <div className="flex items-center gap-3">
-        <button onClick={() => handleSave()} disabled={saving} className="btn-secondary flex-1 justify-center">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+        <Button onClick={() => handleSave()} loading={saving} variant="secondary" className="flex-1 justify-center">
+          {!saving && saved && <Check className="w-4 h-4" />}
           {saved ? "Saved" : "Save Draft"}
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => handleSave(!published)}
           disabled={saving || !slug}
-          className={published ? "btn-secondary flex-1 justify-center text-amber-400" : "btn-primary flex-1 justify-center"}
+          variant={published ? "secondary" : "primary"}
+          className={`flex-1 justify-center ${published ? "text-amber-400" : ""}`}
         >
           {published ? "Unpublish" : "Publish Page"}
-        </button>
+        </Button>
       </div>
       {published && <p className="text-xs text-green-400 text-center">✅ Live — accepting leads from the public</p>}
 

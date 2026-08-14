@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Share2, Loader2, AlertCircle, CheckCircle, ImagePlus, Sparkles, CalendarClock } from "lucide-react";
+import { Share2, AlertCircle, CheckCircle, ImagePlus, Sparkles, CalendarClock } from "lucide-react";
 import InfluencerOutreach from "@/components/social/InfluencerOutreach";
 import SocialManagement from "@/components/social/SocialManagement";
 import AutoReplySettings from "@/components/social/AutoReplySettings";
+import { Button } from "@/components/ui/Button";
 
 export default function SocialPostPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -109,10 +110,10 @@ export default function SocialPostPage() {
           placeholder="e.g. New Swift arrivals this week"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <button onClick={handleGenerateCaption} disabled={generating} className="btn-secondary text-sm">
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        <Button onClick={handleGenerateCaption} disabled={generating} loading={generating} variant="secondary">
+          {!generating && <Sparkles className="w-4 h-4" />}
           Generate Caption
-        </button>
+        </Button>
         {caption && (
           <textarea
             value={caption}
@@ -150,14 +151,15 @@ export default function SocialPostPage() {
         </div>
       )}
 
-      <button
+      <Button
         onClick={handlePost}
         disabled={posting}
-        className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
+        loading={posting}
+        className="w-full justify-center text-sm font-semibold py-2.5"
       >
-        {posting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+        {!posting && <Share2 className="w-4 h-4" />}
         {posting ? "Posting..." : scheduledTime ? "Schedule Post" : "Post to Facebook"}
-      </button>
+      </Button>
 
       <InfluencerOutreach />
       <AutoReplySettings />

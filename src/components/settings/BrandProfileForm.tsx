@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Loader2, AlertCircle, Plus, X, Wand2, ChevronDown, ChevronUp, MessageSquare, Globe } from "lucide-react";
+import { CheckCircle, AlertCircle, Plus, X, Wand2, ChevronDown, ChevronUp, MessageSquare, Globe } from "lucide-react";
+import { Button } from "@/components/ui";
 
 interface BrandProfileFormProps {
   initial: {
@@ -178,10 +179,10 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               </>
             )}
 
-            <button onClick={handleAnalyze} disabled={analyzing} className="btn-primary text-sm">
-              {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            <Button onClick={handleAnalyze} loading={analyzing}>
+              {!analyzing && <Wand2 className="w-4 h-4" />}
               Analyze
-            </button>
+            </Button>
             {analyzeError && <p className="text-xs text-red-400">{analyzeError}</p>}
             {analysisSummary && (
               <p className="text-xs text-purple-300 bg-slate-200 rounded-lg p-2.5 border border-purple-700/40">{analysisSummary}</p>
@@ -245,14 +246,14 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               placeholder="e.g. 0% down payment available"
               className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
-            <button onClick={() => removePillar(i)} className="btn-secondary px-2 py-2">
+            <Button variant="secondary" onClick={() => removePillar(i)} className="px-2 py-2">
               <X className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         ))}
-        <button onClick={addPillar} className="btn-secondary text-xs">
+        <Button variant="secondary" size="sm" onClick={addPillar}>
           <Plus className="w-3.5 h-3.5" /> Add another
-        </button>
+        </Button>
       </div>
 
       <div className="card p-5 space-y-3">
@@ -275,14 +276,10 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
         </div>
       )}
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
-      >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+      <Button onClick={handleSave} loading={saving} className="w-full">
+        {!saving && <CheckCircle className="w-4 h-4" />}
         {saving ? "Saving..." : saved ? "Saved!" : "Save Brand Profile"}
-      </button>
+      </Button>
     </div>
   );
 }

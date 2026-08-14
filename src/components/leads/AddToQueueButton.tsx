@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PhoneCall, Loader2 } from "lucide-react";
+import { PhoneCall } from "lucide-react";
 import type { LeadStatus } from "@/types";
+import { Button, buttonClasses } from "@/components/ui";
 
 export default function AddToQueueButton({ leadId, currentStatus }: { leadId: string; currentStatus: LeadStatus }) {
   const [loading, setLoading] = useState(false);
@@ -11,7 +12,7 @@ export default function AddToQueueButton({ leadId, currentStatus }: { leadId: st
 
   if (currentStatus === "ready_to_call") {
     return (
-      <span className="btn-secondary opacity-75 cursor-default">
+      <span className={buttonClasses("secondary", "md", "opacity-75 cursor-default")}>
         <PhoneCall className="w-4 h-4 text-purple-500" /> In Queue
       </span>
     );
@@ -31,9 +32,9 @@ export default function AddToQueueButton({ leadId, currentStatus }: { leadId: st
   }
 
   return (
-    <button onClick={handleClick} disabled={loading} className="btn-secondary">
-      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4" />}
+    <Button onClick={handleClick} loading={loading} variant="secondary">
+      {!loading && <PhoneCall className="w-4 h-4" />}
       Add to Call Queue
-    </button>
+    </Button>
   );
 }

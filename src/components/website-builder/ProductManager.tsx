@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Pencil, X, Check, Package, GripVertical, Star } from "lucide-react";
 import ImageUploader from "./ImageUploader";
 import RichTextArea from "./RichTextArea";
+import { Button } from "@/components/ui/Button";
 
 interface Product {
   id: string;
@@ -167,7 +168,7 @@ export default function ProductManager() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Package className="w-4 h-4" /> Products ({products.length})</p>
-          {!adding && <button onClick={startAdd} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Product</button>}
+          {!adding && <Button onClick={startAdd} size="sm"><Plus className="w-3.5 h-3.5" /> Add Product</Button>}
         </div>
 
         {adding && (
@@ -197,9 +198,9 @@ export default function ProductManager() {
             </div>
             {error && <p className="text-xs text-red-400">{error}</p>}
             <div className="flex items-center gap-2">
-              <button onClick={handleSave} disabled={saving} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 disabled:opacity-50">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save
-              </button>
+              <Button onClick={handleSave} disabled={saving} loading={saving} size="sm">
+                {!saving && <Check className="w-3.5 h-3.5" />} Save
+              </Button>
               <button onClick={() => { setAdding(false); setEditingId(null); }} className="text-xs text-slate-500 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Cancel</button>
             </div>
           </div>

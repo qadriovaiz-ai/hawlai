@@ -12,6 +12,7 @@ import PaymentsPanel from "./PaymentsPanel";
 import AbandonedCartsPanel from "./AbandonedCartsPanel";
 import BlockCanvas from "./blocks/BlockCanvas";
 import ImageUploader from "./ImageUploader";
+import { Button } from "@/components/ui/Button";
 import { getTheme } from "@/lib/landingThemes";
 import { FONT_PRESETS } from "@/lib/fontPresets";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
@@ -395,7 +396,7 @@ export default function WebsiteBuilderView() {
     return (
       <div className="card p-5 space-y-2">
         <p className="text-sm text-red-400">{loadError}</p>
-        <button onClick={load} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Try again</button>
+        <Button onClick={load} size="sm">Try again</Button>
       </div>
     );
   }
@@ -449,9 +450,9 @@ export default function WebsiteBuilderView() {
             className="w-full text-sm bg-slate-200 text-slate-900 border border-slate-300 rounded-lg px-3 py-2 placeholder:text-slate-500"
           />
           {planError && <p className="text-xs text-red-400">{planError}</p>}
-          <button onClick={handlePlan} disabled={planning || !prompt.trim()} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-            {planning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} Plan My Website
-          </button>
+          <Button onClick={handlePlan} disabled={planning || !prompt.trim()} loading={planning}>
+            {!planning && <Wand2 className="w-4 h-4" />} Plan My Website
+          </Button>
         </div>
       )}
 
@@ -490,9 +491,9 @@ export default function WebsiteBuilderView() {
             <button onClick={addPlanPage} className="text-xs text-purple-500 hover:text-purple-400 flex items-center gap-1 mt-1.5"><Plus className="w-3.5 h-3.5" /> Add page</button>
           </div>
 
-          <button onClick={handleGenerate} disabled={generating} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} {website ? "Regenerate Website" : "Build Website"}
-          </button>
+          <Button onClick={handleGenerate} disabled={generating} loading={generating}>
+            {!generating && <Sparkles className="w-4 h-4" />} {website ? "Regenerate Website" : "Build Website"}
+          </Button>
           {generateError && <p className="text-xs text-red-400 mt-2 whitespace-pre-wrap">{generateError}</p>}
         </div>
       )}
@@ -534,9 +535,9 @@ export default function WebsiteBuilderView() {
               <div className="flex items-center gap-2">
                 <ImageUploader kind="logo" currentUrl={logoUrl} onUploaded={(url) => { setLogoUrl(url); }} compact />
                 <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="Or paste an image URL" className="flex-1 text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
-                <button onClick={saveLogo} disabled={logoSaving} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg disabled:opacity-50">
-                  {logoSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
-                </button>
+                <Button onClick={saveLogo} loading={logoSaving} size="sm">
+                  {!logoSaving && "Save"}
+                </Button>
               </div>
             </div>
             <div>
@@ -592,7 +593,7 @@ export default function WebsiteBuilderView() {
                 {addPageOpen && (
                   <div className="absolute right-0 z-10 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-2 w-56 space-y-2">
                     <input value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} placeholder="Page title, e.g. Offers" className="w-full text-xs bg-white text-slate-50 border border-slate-300 rounded px-2 py-1.5" />
-                    <button onClick={handleAddPage} disabled={pageActionLoading || !newPageTitle.trim()} className="w-full text-xs bg-purple-600 hover:bg-purple-500 text-white px-2 py-1.5 rounded disabled:opacity-50">Add</button>
+                    <Button onClick={handleAddPage} disabled={pageActionLoading || !newPageTitle.trim()} loading={pageActionLoading} size="sm" className="w-full">Add</Button>
                   </div>
                 )}
               </div>
@@ -681,9 +682,9 @@ export default function WebsiteBuilderView() {
                 </div>
 
                 {saveError && <p className="text-xs text-red-500">{saveError}</p>}
-                <button onClick={() => savePage(currentPage.id)} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                <Button onClick={() => savePage(currentPage.id)}>
                   {saving === currentPage.id ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />} Save Page
-                </button>
+                </Button>
               </div>
             )}
           </div>

@@ -36,6 +36,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean;
 }
 
+// Button only ever renders a real <button> — for a Next <Link> or <a>
+// that needs to look like one (e.g. "Upgrade", "Go to My Campaigns"),
+// this exposes the exact same class composition so a link-styled-as-
+// button can never drift from Button itself, the way a hand-copied
+// className would.
+export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md", className?: string) {
+  return cn(
+    "inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
+    VARIANT_CLASSES[variant],
+    SIZE_CLASSES[size],
+    className
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", loading = false, disabled, className, children, ...props }, ref) => {
     return (

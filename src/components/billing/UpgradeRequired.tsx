@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { GATED_FEATURE_LABELS, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
+import { buttonClasses } from "@/components/ui/Button";
 
 export default function UpgradeRequired({ feature }: { feature: GatedFeatureKey }) {
   const label = GATED_FEATURE_LABELS[feature];
@@ -16,7 +17,7 @@ export default function UpgradeRequired({ feature }: { feature: GatedFeatureKey 
         <p className="text-sm text-slate-500">
           Upgrade your plan to unlock {label.toLowerCase()} for your business.
         </p>
-        <Link href="/dashboard/billing/plans" className="btn-primary inline-flex justify-center mt-2">
+        <Link href="/dashboard/billing/plans" className={buttonClasses("primary", "md", "inline-flex justify-center mt-2")}>
           View plans
         </Link>
       </div>

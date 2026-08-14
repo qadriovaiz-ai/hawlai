@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PhoneCall, Loader2 } from "lucide-react";
+import { PhoneCall } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function TriggerAICallButton({ leadId }: { leadId: string }) {
   const [loading, setLoading] = useState(false);
@@ -30,10 +31,10 @@ export default function TriggerAICallButton({ leadId }: { leadId: string }) {
 
   return (
     <div className="relative">
-      <button onClick={handleTrigger} disabled={loading} className="btn-secondary" title="Automatically call with AI">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4 text-brand-500" />}
+      <Button onClick={handleTrigger} loading={loading} variant="secondary" title="Automatically call with AI">
+        {!loading && <PhoneCall className="w-4 h-4 text-brand-500" />}
         AI Call
-      </button>
+      </Button>
       {error && (
         <p className="absolute top-full left-0 mt-1 text-xs text-red-400 bg-red-500/10 border border-red-700/50 rounded px-2 py-1 whitespace-nowrap z-10">
           {error}

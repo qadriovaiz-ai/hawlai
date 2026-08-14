@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, FlaskConical } from "lucide-react";
+import { FlaskConical } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function TestVariantButton({ campaignId }: { campaignId: string }) {
   const router = useRouter();
@@ -25,10 +26,10 @@ export default function TestVariantButton({ campaignId }: { campaignId: string }
 
   return (
     <div className="inline-flex flex-col items-start">
-      <button onClick={handleClick} disabled={loading} className="btn-secondary text-xs">
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+      <Button onClick={handleClick} loading={loading} variant="secondary" size="sm">
+        {!loading && <FlaskConical className="w-3.5 h-3.5" />}
         Test a variant
-      </button>
+      </Button>
       {error && <p className="text-[10.5px] text-red-500 mt-1">{error}</p>}
     </div>
   );

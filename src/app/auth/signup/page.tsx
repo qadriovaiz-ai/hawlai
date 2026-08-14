@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -131,9 +131,9 @@ export default function SignupPage() {
               <div className="p-3 bg-red-500/10 border border-red-700/50 rounded-lg text-sm text-red-400">{error}</div>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating account...</> : "Create account"}
-            </button>
+            <Button type="submit" disabled={loading} loading={loading} className="w-full justify-center py-2.5">
+              {loading ? "Creating account..." : "Create account"}
+            </Button>
           </form>
 
           <p className="text-center text-sm text-slate-500 mt-6">

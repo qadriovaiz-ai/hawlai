@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageCircle, Copy, Check, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { toWhatsAppLink } from "@/lib/utils";
+import { Button, buttonClasses } from "@/components/ui";
 
 export default function DraftMessagePreview({ message, phone }: { message: string; phone?: string | null }) {
   const [open, setOpen] = useState(false);
@@ -30,16 +31,16 @@ export default function DraftMessagePreview({ message, phone }: { message: strin
             {message}
           </p>
           <div className="flex items-center gap-2">
-            <button onClick={handleCopy} className="btn-secondary text-xs flex-1 justify-center">
+            <Button onClick={handleCopy} variant="secondary" size="sm" className="flex-1 justify-center">
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copied ? "Copied!" : "Copy"}
-            </button>
+            </Button>
             {phone && (
               <a
                 href={toWhatsAppLink(phone, message)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-primary bg-green-600 hover:bg-green-700 text-xs flex-1 justify-center"
+                className={buttonClasses("primary", "sm", "bg-green-600 hover:bg-green-700 flex-1 justify-center")}
               >
                 <MessageCircle className="w-3.5 h-3.5" /> Send via WhatsApp
               </a>

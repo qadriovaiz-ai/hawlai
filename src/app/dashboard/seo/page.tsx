@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target, Lock } from "lucide-react";
 import SeoToolkit from "@/components/seo/SeoToolkit";
+import { Button } from "@/components/ui/Button";
 
 export default function SeoPage() {
   const [audit, setAudit] = useState<{ score: number; published: boolean; siteUrl: string | null; pages: { pageSlug: string; pageTitle: string; score: number; checks: { label: string; passed: boolean; detail: string }[] }[] } | null>(null);
@@ -236,14 +237,14 @@ export default function SeoPage() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={handleGenerate} disabled={loading} className="btn-primary text-sm">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          <Button onClick={handleGenerate} disabled={loading} loading={loading}>
+            {!loading && <Search className="w-4 h-4" />}
             Generate Keyword Ideas
-          </button>
-          <button onClick={handleGenerateBlogPost} disabled={blogLoading} className="btn-secondary text-sm">
-            {blogLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          </Button>
+          <Button onClick={handleGenerateBlogPost} disabled={blogLoading} loading={blogLoading} variant="secondary">
+            {!blogLoading && <FileText className="w-4 h-4" />}
             Write Full Blog Post
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
 import { getPortfolioSummaries } from "@/lib/agents/portfolioAgent";
 import BulkAutomationPanel from "@/components/agency/BulkAutomationPanel";
+import { buttonClasses } from "@/components/ui/Button";
 
 // Master audit Part E1 — the highest-value missing Agency-tier
 // feature per the audit: a single screen showing every managed
@@ -37,7 +38,7 @@ export default async function AgencyPortfolioPage() {
           <p className="text-sm text-slate-500">
             See every business you manage in one screen — leads, pending approvals, calls, appointments, and ad spend, side by side. Needs the {PLAN_LABELS[GATED_FEATURE_MIN_PLAN.multiBusiness]} plan.
           </p>
-          <Link href="/dashboard/billing" className="btn-primary inline-flex text-sm">Upgrade</Link>
+          <Link href="/dashboard/billing" className={buttonClasses("primary", "md", "inline-flex")}>Upgrade</Link>
         </div>
       </div>
     );

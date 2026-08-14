@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck, Phone, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function AutopilotCommandCenter() {
   const [data, setData] = useState<any>(null);
@@ -62,14 +63,14 @@ export default function AutopilotCommandCenter() {
         </p>
       </div>
 
-      <button
+      <Button
         onClick={enableAll}
-        disabled={enablingAll}
-        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
+        loading={enablingAll}
+        className="w-full font-medium"
       >
-        {enablingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        {!enablingAll && <Sparkles className="w-4 h-4" />}
         Enable everything below (except ads/budget — that's never auto)
-      </button>
+      </Button>
 
       {/* AI Calling */}
       <div className="card p-5 space-y-3">

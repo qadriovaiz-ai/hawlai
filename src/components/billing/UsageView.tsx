@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Crown, CheckCircle2, MessageSquare, PhoneCall, Megaphone } from "lucide-react";
+import { buttonClasses } from "@/components/ui/Button";
 
 interface PlanLimits {
   plan: string;
@@ -87,7 +88,7 @@ export default function UsageView() {
             </div>
           </div>
           {planLimits.plan !== "agency" && (
-            <Link href="/dashboard/billing/plans" className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Upgrade</Link>
+            <Link href="/dashboard/billing/plans" className={buttonClasses("primary", "sm")}>Upgrade</Link>
           )}
         </div>
       </div>

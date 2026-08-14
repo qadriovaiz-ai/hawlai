@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { use } from "react";
+import { Button } from "@/components/ui/Button";
 
 export default function InviteAcceptPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -83,10 +84,9 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 
-          <button type="submit" disabled={loading} className="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50">
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+          <Button type="submit" disabled={loading} loading={loading} className="w-full text-sm font-semibold py-2.5">
             {mode === "signup" ? "Create account & join" : "Sign in & join"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-xs text-slate-500">

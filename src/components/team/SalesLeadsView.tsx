@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, PhoneCall, Clock } from "lucide-react";
+import { buttonClasses } from "@/components/ui/Button";
 
 interface Lead {
   id: string;
@@ -73,7 +74,7 @@ export default function SalesLeadsView() {
               {lead.qualification_reason && <p className="text-xs text-slate-500">{lead.qualification_reason}</p>}
               <div className="flex items-center gap-2 flex-wrap pt-1">
                 {lead.phone && (
-                  <a href={`tel:${lead.phone}`} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <a href={`tel:${lead.phone}`} className={buttonClasses("primary", "sm")}>
                     <PhoneCall className="w-3.5 h-3.5" /> Call
                   </a>
                 )}

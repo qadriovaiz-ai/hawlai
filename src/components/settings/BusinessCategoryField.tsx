@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Briefcase, Loader2, Check } from "lucide-react";
+import { Briefcase, Check } from "lucide-react";
+import { Button } from "@/components/ui";
 
 const SUGGESTIONS = ["Car Dealership", "Real Estate", "Restaurant", "Coaching Institute", "Salon / Spa", "Clinic", "Retail Store"];
 
@@ -49,10 +50,10 @@ export default function BusinessCategoryField({ initial }: { initial: string | n
           placeholder="e.g. Car Dealership, Real Estate, Restaurant"
           className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <button onClick={() => handleSave()} disabled={saving} className="btn-primary text-sm shrink-0">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+        <Button onClick={() => handleSave()} loading={saving} className="shrink-0">
+          {!saving && saved && <Check className="w-4 h-4" />}
           {saved ? "Saved" : "Save"}
-        </button>
+        </Button>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
       <div className="flex flex-wrap gap-1.5">

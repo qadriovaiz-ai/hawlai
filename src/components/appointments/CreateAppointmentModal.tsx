@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Loader2, X } from "lucide-react";
+import { Calendar, X } from "lucide-react";
+import { Button } from "@/components/ui";
 
 interface Props {
   leadId: string;
@@ -47,9 +48,9 @@ export default function CreateAppointmentModal({ leadId, leadName, dealershipId 
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="btn-primary">
+      <Button onClick={() => setOpen(true)} variant="primary">
         <Calendar className="w-4 h-4" /> Book Appointment
-      </button>
+      </Button>
     );
   }
 
@@ -111,12 +112,12 @@ export default function CreateAppointmentModal({ leadId, leadName, dealershipId 
             />
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1 justify-center">
+            <Button type="button" onClick={() => setOpen(false)} variant="secondary" className="flex-1 justify-center">
               Cancel
-            </button>
-            <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Booking...</> : "Book Appointment"}
-            </button>
+            </Button>
+            <Button type="submit" loading={loading} variant="primary" className="flex-1 justify-center">
+              {loading ? "Booking..." : "Book Appointment"}
+            </Button>
           </div>
         </form>
       </div>

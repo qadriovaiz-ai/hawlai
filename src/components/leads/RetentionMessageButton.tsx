@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Heart, Loader2, Copy, Check, X, MessageCircle } from "lucide-react";
 import { toWhatsAppLink } from "@/lib/utils";
+import { Button, buttonClasses } from "@/components/ui";
 
 const ANGLES = [
   { value: "service_reminder", label: "Service Reminder" },
@@ -50,9 +51,9 @@ export default function RetentionMessageButton({ leadId, phone }: { leadId: stri
     <>
       <div className="flex items-center gap-1.5 flex-wrap">
         {ANGLES.map((a) => (
-          <button key={a.value} onClick={() => generate(a.value)} className="btn-secondary text-xs">
+          <Button key={a.value} onClick={() => generate(a.value)} variant="secondary" size="sm">
             <Heart className="w-3.5 h-3.5" /> {a.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -82,16 +83,16 @@ export default function RetentionMessageButton({ leadId, phone }: { leadId: stri
                   {message}
                 </p>
                 <div className="flex items-center gap-2">
-                  <button onClick={handleCopy} className="btn-secondary flex-1 text-sm justify-center">
+                  <Button onClick={handleCopy} variant="secondary" className="flex-1 justify-center">
                     {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {copied ? "Copied!" : "Copy"}
-                  </button>
+                  </Button>
                   {phone && (
                     <a
                       href={toWhatsAppLink(phone, message)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn-primary bg-green-600 hover:bg-green-700 flex-1 text-sm justify-center"
+                      className={buttonClasses("primary", "md", "bg-green-600 hover:bg-green-700 flex-1 justify-center")}
                     >
                       <MessageCircle className="w-4 h-4" /> Send via WhatsApp
                     </a>

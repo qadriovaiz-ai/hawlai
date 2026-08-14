@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { buttonClasses } from "@/components/ui/Button";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -41,7 +42,7 @@ export default async function SeoContentPage({ params }: { params: Promise<{ slu
         </div>
         {landingPage?.slug && (
           <div className="mt-10 pt-8 border-t border-neutral-200">
-            <Link href={`/p/${landingPage.slug}`} className="inline-block bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-3 rounded-lg">
+            <Link href={`/p/${landingPage.slug}`} className={buttonClasses("primary", "md", "inline-block px-6 py-3")}>
               Get in touch with {dealershipName}
             </Link>
           </div>

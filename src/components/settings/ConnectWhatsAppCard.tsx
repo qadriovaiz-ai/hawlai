@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Loader2, CheckCircle, MessageCircle, Lock } from "lucide-react";
+import { CheckCircle, MessageCircle, Lock } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumber, allowed }: { initiallyConnected: boolean; connectedNumber?: string | null; allowed: boolean }) {
   const [connected, setConnected] = useState(initiallyConnected);
@@ -81,9 +82,9 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
             className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
-          <button onClick={start} disabled={loading || !phone.trim()} className="btn-secondary text-xs w-full justify-center">
-            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Start
-          </button>
+          <Button variant="secondary" size="sm" onClick={start} disabled={!phone.trim()} loading={loading} className="w-full justify-center">
+            Start
+          </Button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -96,9 +97,9 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
             className="w-full text-sm bg-slate-100 text-slate-900 border border-slate-300 rounded-lg px-3 py-2"
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
-          <button onClick={verify} disabled={loading || !code.trim()} className="btn-secondary text-xs w-full justify-center">
-            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Verify
-          </button>
+          <Button variant="secondary" size="sm" onClick={verify} disabled={!code.trim()} loading={loading} className="w-full justify-center">
+            Verify
+          </Button>
         </div>
       )}
     </div>

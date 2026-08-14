@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Copy, Check, CalendarDays, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function CalendarSyncCard() {
   const [token, setToken] = useState<string | null>(null);
@@ -41,17 +42,17 @@ export default function CalendarSyncCard() {
           <p className="text-xs text-slate-400">Subscribe to this link in Google Calendar, Outlook, or Apple Calendar ("Add calendar by URL") to see your booked appointments automatically — updates live, no manual export needed.</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 text-xs bg-slate-200 rounded-lg px-3 py-2 text-slate-600 truncate">/api/ics-feed/{token}</code>
-            <button onClick={copyUrl} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0">
+            <Button onClick={copyUrl} size="sm" className="shrink-0">
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} Copy link
-            </button>
+            </Button>
           </div>
         </>
       ) : (
         <>
           <p className="text-xs text-slate-400">Generate a private calendar feed of your appointments to subscribe to in your own calendar app.</p>
-          <button onClick={generate} disabled={generating} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
-            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Generate calendar link
-          </button>
+          <Button onClick={generate} loading={generating} size="sm">
+            {!generating && <Sparkles className="w-3.5 h-3.5" />} Generate calendar link
+          </Button>
         </>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Instagram, CheckCircle, Trash2, XCircle } from "lucide-react";
+import { buttonClasses } from "@/components/ui";
 
 export default function InstagramBusinessLoginConnect() {
   const [connected, setConnected] = useState(false);
@@ -44,7 +45,7 @@ export default function InstagramBusinessLoginConnect() {
         {connected ? (
           <span className="flex items-center gap-1 text-xs text-green-500"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
         ) : (
-          <a href="/api/auth/instagram/start" className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">Connect with Instagram</a>
+          <a href="/api/auth/instagram/start" className={buttonClasses("primary", "sm")}>Connect with Instagram</a>
         )}
       </div>
       <p className="text-xs text-slate-400">Log in with your Instagram account to let Hawlai auto-reply to DMs — separate from a Facebook Page connection, and no technical setup needed on your end.</p>

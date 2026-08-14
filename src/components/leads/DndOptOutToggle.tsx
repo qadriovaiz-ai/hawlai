@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldOff, ShieldCheck, Loader2 } from "lucide-react";
+import { ShieldOff, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui";
 
 // Master audit Part C1.3 — the only place dnd_opt_out actually gets
 // set today. Manual-only: no automated STOP-keyword detection on
@@ -28,14 +29,15 @@ export default function DndOptOutToggle({ leadId, optedOut }: { leadId: string; 
   }
 
   return (
-    <button
+    <Button
       onClick={handleClick}
-      disabled={loading}
-      className={optedOut ? "btn-secondary" : "btn-secondary text-red-600"}
+      loading={loading}
+      variant="secondary"
+      className={optedOut ? undefined : "text-red-600"}
       title={optedOut ? "Re-allow contacting this lead" : "Mark this lead as do-not-contact — blocks future calls and automated emails"}
     >
-      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : optedOut ? <ShieldCheck className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />}
+      {!loading && (optedOut ? <ShieldCheck className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />)}
       {optedOut ? "Opted out (DND)" : "Mark do-not-contact"}
-    </button>
+    </Button>
   );
 }

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Facebook, CheckCircle, AlertCircle, Mail } from "lucide-react";
 import ConnectFacebookForm from "@/components/settings/ConnectFacebookForm";
 import FacebookSetupGuide from "@/components/settings/FacebookSetupGuide";
+import { buttonClasses } from "@/components/ui";
 
 export default async function ConnectFacebookPage({
   searchParams,
@@ -65,7 +66,7 @@ export default async function ConnectFacebookPage({
             <p><span className="text-slate-400">Ad Account:</span> {dealership.fb_ad_account_id}</p>
             <p><span className="text-slate-400">Lead Form:</span> {dealership.fb_lead_form_name ?? "None"}</p>
           </div>
-          <a href="/api/auth/facebook/connect" className="btn-secondary inline-flex mt-2">
+          <a href="/api/auth/facebook/connect" className={buttonClasses("secondary", "md", "mt-2")}>
             Reconnect / Change Page
           </a>
         </div>
@@ -108,7 +109,7 @@ export default async function ConnectFacebookPage({
               <p className="text-sm font-semibold text-green-300">Connected</p>
             </div>
             <p className="text-sm text-slate-600">Sending as: {dealership?.gmail_email}</p>
-            <a href="/api/auth/gmail/connect" className="btn-secondary inline-flex mt-2">
+            <a href="/api/auth/gmail/connect" className={buttonClasses("secondary", "md", "mt-2")}>
               Reconnect
             </a>
           </div>

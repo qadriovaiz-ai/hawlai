@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, ShieldCheck, Save, Check } from "lucide-react";
+import { ShieldCheck, Save, Check } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function ApprovalThresholdCard() {
   const [threshold, setThreshold] = useState<number | null>(null);
@@ -59,14 +60,15 @@ export default function ApprovalThresholdCard() {
             onChange={(e) => setDraft(e.target.value)}
             className="w-32 text-sm bg-slate-200 border border-slate-300 rounded-lg px-3 py-2"
           />
-          <button
+          <Button
             onClick={save}
-            disabled={saving || Number(draft) === threshold}
-            className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+            disabled={Number(draft) === threshold}
+            loading={saving}
+            size="sm"
           >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+            {!saving && (saved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />)}
             {saved ? "Saved" : "Save"}
-          </button>
+          </Button>
         </div>
       ) : (
         <p className="text-sm text-slate-600">Current limit: ₹{threshold?.toLocaleString("en-IN")} <span className="text-xs text-slate-400">— only the owner can change this</span></p>

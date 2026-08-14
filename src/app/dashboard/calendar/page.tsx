@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { CalendarDays, Plus, Loader2, Trash2, X, Megaphone, Share2, Mail, TrendingUp, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 const CHANNEL_META: Record<string, { label: string; icon: any; className: string }> = {
   paid_ads: { label: "Paid Ads", icon: Megaphone, className: "bg-purple-500/10 text-purple-300 border-purple-700/50" },
@@ -140,9 +141,9 @@ export default function CalendarPage() {
             <p className="text-sm text-slate-500">Everything planned or launching, in one place</p>
           </div>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
+        <Button onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4" /> Add Item
-        </button>
+        </Button>
       </div>
 
       {showForm && (
@@ -184,10 +185,10 @@ export default function CalendarPage() {
               className="bg-slate-100 text-slate-900 w-full h-16 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             {error && <p className="text-xs text-red-400">{error}</p>}
-            <button onClick={handleAdd} disabled={saving} className="btn-primary w-full justify-center text-sm">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            <Button onClick={handleAdd} disabled={saving} loading={saving} className="w-full justify-center">
+              {!saving && <Plus className="w-4 h-4" />}
               Add
-            </button>
+            </Button>
           </div>
         </div>
       )}

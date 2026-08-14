@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, Loader2, AlertCircle } from "lucide-react";
+import { CheckCircle, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function ConnectFacebookForm({ pending }: { pending: any }) {
   const router = useRouter();
@@ -101,14 +102,10 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
         </div>
       )}
 
-      <button
-        onClick={handleSave}
-        disabled={loading || !adAccountId}
-        className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors"
-      >
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+      <Button onClick={handleSave} disabled={!adAccountId} loading={loading} className="w-full">
+        {!loading && <CheckCircle className="w-4 h-4" />}
         Save Connection
-      </button>
+      </Button>
     </div>
   );
 }

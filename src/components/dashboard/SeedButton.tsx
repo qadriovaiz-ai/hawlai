@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Database } from "lucide-react";
+import { Database } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function SeedButton({ dealershipId }: { dealershipId: string }) {
   const [loading, setLoading] = useState(false);
@@ -26,12 +27,8 @@ export default function SeedButton({ dealershipId }: { dealershipId: string }) {
   if (done) return null;
 
   return (
-    <button onClick={handleSeed} disabled={loading} className="btn-secondary">
-      {loading ? (
-        <><Loader2 className="w-4 h-4 animate-spin" /> Seeding...</>
-      ) : (
-        <><Database className="w-4 h-4" /> Load Demo Data</>
-      )}
-    </button>
+    <Button onClick={handleSeed} variant="secondary" loading={loading}>
+      {loading ? "Seeding..." : <><Database className="w-4 h-4" /> Load Demo Data</>}
+    </Button>
   );
 }

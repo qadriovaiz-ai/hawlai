@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Users, Check, Copy, Tag, IndianRupee } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function AffiliateManagerView() {
   const [affiliates, setAffiliates] = useState<any[]>([]);
@@ -92,7 +93,7 @@ export default function AffiliateManagerView() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Users className="w-4 h-4" /> Affiliates</p>
-          <button onClick={() => setShowForm(!showForm)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add</button>
+          <Button onClick={() => setShowForm(!showForm)} size="sm"><Plus className="w-3.5 h-3.5" /> Add</Button>
         </div>
 
         {showForm && (
@@ -109,7 +110,7 @@ export default function AffiliateManagerView() {
               </select>
               <input value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)} type="number" className="w-20 text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-2" />
             </div>
-            <button onClick={addAffiliate} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg">Add & generate code</button>
+            <Button onClick={addAffiliate}>Add & generate code</Button>
           </div>
         )}
 

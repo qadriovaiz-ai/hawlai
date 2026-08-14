@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb } from "lucide-react";
 import DeepStrategyPanel from "@/components/strategy/DeepStrategyPanel";
+import { Button } from "@/components/ui/Button";
 
 const GOALS = ["More leads", "More sales", "Brand awareness", "Website traffic"];
 
@@ -84,10 +85,10 @@ export default function StrategyPage() {
           </div>
         </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
-        <button onClick={handleGenerate} disabled={generating} className="btn-primary text-sm">
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        <Button onClick={handleGenerate} disabled={generating} loading={generating}>
+          {!generating && <Sparkles className="w-4 h-4" />}
           {strategy ? "Regenerate Plan" : "Generate Plan"}
-        </button>
+        </Button>
       </div>
 
       {plan && (

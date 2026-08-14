@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { Upload, Loader2, X, CheckCircle, AlertCircle } from "lucide-react";
 import { qualifyLead } from "@/lib/ai-engine";
+import { buttonClasses } from "@/components/ui";
 
 interface UploadResult {
   success: number;
@@ -98,7 +99,7 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
           />
           <label
             htmlFor="csv-upload"
-            className="btn-primary cursor-pointer"
+            className={buttonClasses("primary", "md", "cursor-pointer")}
           >
             {uploading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>

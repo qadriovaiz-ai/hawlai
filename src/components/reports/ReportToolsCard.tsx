@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Download, FileText, Presentation, Copy, Check, Sparkles, Clock } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function ReportToolsCard() {
   const [token, setToken] = useState<string | null>(null);
@@ -55,12 +56,12 @@ export default function ReportToolsCard() {
       <p className="text-sm font-semibold text-slate-700">Report Tools</p>
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => downloadFile("/api/reports/pdf", setDownloadingPdf)} disabled={downloadingPdf} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
-          {downloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Download PDF
-        </button>
-        <button onClick={() => downloadFile("/api/reports/presentation", setDownloadingPptx)} disabled={downloadingPptx} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
-          {downloadingPptx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Presentation className="w-3.5 h-3.5" />} Download Presentation
-        </button>
+        <Button onClick={() => downloadFile("/api/reports/pdf", setDownloadingPdf)} loading={downloadingPdf} size="sm">
+          {!downloadingPdf && <FileText className="w-3.5 h-3.5" />} Download PDF
+        </Button>
+        <Button onClick={() => downloadFile("/api/reports/presentation", setDownloadingPptx)} loading={downloadingPptx} size="sm">
+          {!downloadingPptx && <Presentation className="w-3.5 h-3.5" />} Download Presentation
+        </Button>
       </div>
 
       <div className="pt-3 border-t border-slate-200 space-y-2">

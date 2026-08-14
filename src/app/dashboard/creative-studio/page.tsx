@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Clapperboard, Loader2, AlertCircle, Film, Copy, Check, Layers, Tag, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
+import { Clapperboard, AlertCircle, Film, Copy, Check, Layers, Tag, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
+import { Button } from "@/components/ui/Button";
 
 export default function CreativeStudioPage() {
   const [topic, setTopic] = useState("");
@@ -210,14 +211,14 @@ export default function CreativeStudioPage() {
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <div className="flex flex-wrap gap-2">
-          <button onClick={handleGenerateScript} disabled={scriptLoading} className="btn-secondary text-sm">
-            {scriptLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+          <Button onClick={handleGenerateScript} loading={scriptLoading} variant="secondary">
+            {!scriptLoading && <Film className="w-4 h-4" />}
             Video Script
-          </button>
-          <button onClick={handleGenerateVariations} disabled={variationsLoading} className="btn-secondary text-sm">
-            {variationsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+          </Button>
+          <Button onClick={handleGenerateVariations} loading={variationsLoading} variant="secondary">
+            {!variationsLoading && <Layers className="w-4 h-4" />}
             Copy Variations
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -291,10 +292,10 @@ export default function CreativeStudioPage() {
           placeholder="Details — price, size, features (optional)"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <button onClick={handleGenerateListing} disabled={listingLoading} className="btn-secondary text-sm">
-          {listingLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+        <Button onClick={handleGenerateListing} loading={listingLoading} variant="secondary">
+          {!listingLoading && <Sparkles className="w-4 h-4" />}
           Generate Listing
-        </button>
+        </Button>
         {listingError && <p className="text-xs text-red-400">{listingError}</p>}
         {listing && (
           <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-1.5">
@@ -312,10 +313,10 @@ export default function CreativeStudioPage() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Palette className="w-4 h-4 text-slate-400" /> Logo Concepts</p>
-          <button onClick={handleGenerateLogo} disabled={logoLoading} className="btn-secondary text-sm">
-            {logoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          <Button onClick={handleGenerateLogo} loading={logoLoading} variant="secondary">
+            {!logoLoading && <Sparkles className="w-4 h-4" />}
             Generate
-          </button>
+          </Button>
         </div>
         <p className="text-xs text-slate-400">Uses your dealership name and brand tone. Generate a few and pick your favorite — treat these as starting concepts, not final production files.</p>
         {logoError && <p className="text-xs text-red-400">{logoError}</p>}
@@ -359,10 +360,10 @@ export default function CreativeStudioPage() {
           placeholder="e.g. A red Swift driving down a sunny highway, cinematic, upbeat"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <button onClick={handleGenerateVideo} disabled={videoStarting || videoPolling} className="btn-secondary text-sm">
-          {videoStarting || videoPolling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+        <Button onClick={handleGenerateVideo} loading={videoStarting || videoPolling} variant="secondary">
+          {!(videoStarting || videoPolling) && <Play className="w-4 h-4" />}
           {videoPolling ? "Rendering..." : "Generate Video"}
-        </button>
+        </Button>
         {videoError && <p className="text-xs text-red-400">{videoError}</p>}
         {videoResult?.video_url && (
           <video src={videoResult.video_url} controls className="bg-slate-200 text-slate-900 w-full rounded-lg border border-slate-300" />
@@ -377,10 +378,10 @@ export default function CreativeStudioPage() {
           placeholder="Paste the script you want read out loud..."
           className="bg-slate-100 text-slate-900 w-full h-20 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <button onClick={handleGenerateVoiceover} disabled={voiceoverLoading} className="btn-secondary text-sm">
-          {voiceoverLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+        <Button onClick={handleGenerateVoiceover} loading={voiceoverLoading} variant="secondary">
+          {!voiceoverLoading && <Mic className="w-4 h-4" />}
           Generate Voiceover
-        </button>
+        </Button>
         {voiceoverError && <p className="text-xs text-red-400">{voiceoverError}</p>}
         {voiceoverUrl && <audio src={voiceoverUrl} controls className="w-full" />}
       </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Loader2, Check, Upload } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function AgencyBrandingForm() {
   const [loading, setLoading] = useState(true);
@@ -86,9 +87,9 @@ export default function AgencyBrandingForm() {
         <label className="text-xs font-medium text-slate-600">Logo</label>
         <div className="flex items-center gap-3 mt-1">
           {previewLogo && <img src={previewLogo} alt="" className="h-10 object-contain" />}
-          <button onClick={() => fileRef.current?.click()} className="btn-secondary text-xs">
+          <Button onClick={() => fileRef.current?.click()} variant="secondary" size="sm">
             <Upload className="w-3.5 h-3.5" /> {previewLogo ? "Replace" : "Upload"}
-          </button>
+          </Button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg" onChange={handleFile} className="hidden" />
         </div>
       </div>
@@ -103,9 +104,9 @@ export default function AgencyBrandingForm() {
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
-      <button onClick={save} disabled={saving} className="btn-primary text-sm w-full justify-center">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><Check className="w-4 h-4" /> Saved</> : "Save"}
-      </button>
+      <Button onClick={save} loading={saving} variant="primary" className="w-full justify-center">
+        {!saving && (saved ? <><Check className="w-4 h-4" /> Saved</> : "Save")}
+      </Button>
     </div>
   );
 }

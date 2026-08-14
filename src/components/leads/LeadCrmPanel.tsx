@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { StickyNote, CheckSquare, Plus, Loader2, IndianRupee, Check } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: string; initialDealValue: number | null }) {
   const [notes, setNotes] = useState<any[]>([]);
@@ -108,9 +109,9 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
             placeholder="e.g. 850000"
             className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          <button onClick={saveDealValue} disabled={savingDeal} className="btn-secondary text-xs">
-            {savingDeal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dealSaved ? <Check className="w-3.5 h-3.5" /> : "Save"}
-          </button>
+          <Button onClick={saveDealValue} loading={savingDeal} variant="secondary" size="sm">
+            {!savingDeal && (dealSaved ? <Check className="w-3.5 h-3.5" /> : "Save")}
+          </Button>
         </div>
         <p className="text-xs text-slate-400 mt-1.5">Set this once the sale closes — used to calculate real ROAS.</p>
       </div>
@@ -127,9 +128,9 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
             placeholder="e.g. Call back tomorrow"
             className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          <button onClick={addTask} disabled={savingTask} className="btn-secondary text-xs">
-            {savingTask ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          </button>
+          <Button onClick={addTask} loading={savingTask} variant="secondary" size="sm">
+            {!savingTask && <Plus className="w-3.5 h-3.5" />}
+          </Button>
         </div>
         {loading ? (
           <Loader2 className="w-4 h-4 animate-spin text-slate-300 mx-auto" />
@@ -166,9 +167,9 @@ export default function LeadCrmPanel({ leadId, initialDealValue }: { leadId: str
             placeholder="Add a note..."
             className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          <button onClick={addNote} disabled={savingNote} className="btn-secondary text-xs">
-            {savingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          </button>
+          <Button onClick={addNote} loading={savingNote} variant="secondary" size="sm">
+            {!savingNote && <Plus className="w-3.5 h-3.5" />}
+          </Button>
         </div>
         {loading ? (
           <Loader2 className="w-4 h-4 animate-spin text-slate-300 mx-auto" />

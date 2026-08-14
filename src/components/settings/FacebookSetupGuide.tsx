@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Check, Facebook, Building2, CreditCard, Link2 } from "lucide-react";
+import { buttonClasses } from "@/components/ui";
 
 const STEPS = [
   {
@@ -64,7 +65,7 @@ export default function FacebookSetupGuide() {
                   href={step.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-secondary text-xs shrink-0"
+                  className={buttonClasses("secondary", "sm", "shrink-0")}
                 >
                   {step.linkLabel} <ExternalLink className="w-3 h-3" />
                 </a>

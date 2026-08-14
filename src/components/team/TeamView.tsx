@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, UserPlus, Check, Copy, X, Crown } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 interface Member {
   id: string;
@@ -143,9 +144,9 @@ export default function TeamView() {
               <p className="text-xs text-slate-400">{ROLE_DESCRIPTIONS[inviteForm.role]}</p>
               {error && <p className="text-xs text-red-500">{error}</p>}
               <div className="flex gap-2">
-                <button onClick={sendInvite} disabled={inviting || !inviteForm.email} className="flex-1 text-sm bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2">
-                  {inviting && <Loader2 className="w-4 h-4 animate-spin" />} Send Invite
-                </button>
+                <Button onClick={sendInvite} disabled={!inviteForm.email} loading={inviting} className="flex-1">
+                  Send Invite
+                </Button>
                 <button onClick={() => setShowInvite(false)} className="text-sm text-slate-500 px-3">Cancel</button>
               </div>
             </>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Calendar, Copy, Check, Loader2, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui";
 
 // Relocated from the retired crm-marketing hub — this was the one
 // genuinely unique piece of that page (a public self-serve booking
@@ -47,16 +48,16 @@ export default function BookingLinkCard() {
       ) : slug ? (
         <div className="flex items-center gap-2">
           <code className="flex-1 text-xs bg-slate-200 rounded-lg px-3 py-2 text-slate-600 truncate">/book/{slug}</code>
-          <button onClick={copyLink} className="btn-secondary text-xs px-3 py-2 shrink-0">
+          <Button onClick={copyLink} variant="secondary" size="sm" className="px-3 py-2 shrink-0">
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} Copy link
-          </button>
+          </Button>
         </div>
       ) : (
         <>
           <p className="text-xs text-slate-400">Share a link where leads can pick a free slot and book a meeting themselves — no login needed for them.</p>
-          <button onClick={handleGenerateLink} disabled={generating} className="btn-primary text-xs px-3 py-2 disabled:opacity-50">
-            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Create booking link
-          </button>
+          <Button onClick={handleGenerateLink} loading={generating} variant="primary" size="sm" className="px-3 py-2">
+            {!generating && <Sparkles className="w-3.5 h-3.5" />} Create booking link
+          </Button>
         </>
       )}
     </div>

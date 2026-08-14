@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown, FlaskConical } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { buttonClasses } from "@/components/ui/Button";
 import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
 import ExplainCampaignButton from "@/components/ads/ExplainCampaignButton";
 import TestVariantButton from "@/components/ads/TestVariantButton";
@@ -73,7 +74,7 @@ export default async function CampaignsPage() {
             <p className="text-sm text-slate-500">Activate, pause, or launch a new ad</p>
           </div>
         </div>
-        <Link href="/dashboard/ads/full-launch" className="btn-primary">
+        <Link href="/dashboard/ads/full-launch" className={buttonClasses("primary")}>
           Launch New Ad
         </Link>
       </div>
@@ -110,7 +111,7 @@ export default async function CampaignsPage() {
           </div>
           <p className="text-slate-700 font-medium">No campaigns launched yet</p>
           <p className="text-slate-400 text-sm mt-1 mb-4">Launch your first ad, then manage it from here</p>
-          <Link href="/dashboard/ads/full-launch" className="btn-primary inline-flex">
+          <Link href="/dashboard/ads/full-launch" className={buttonClasses("primary", "md", "inline-flex")}>
             Launch Ad <ArrowRight className="w-4 h-4" />
           </Link>
         </div>

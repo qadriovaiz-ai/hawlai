@@ -11,6 +11,7 @@ import WordPressConnect from "@/components/settings/WordPressConnect";
 import ConnectWhatsAppCard from "@/components/settings/ConnectWhatsAppCard";
 import GoogleReviewsConnect from "@/components/settings/GoogleReviewsConnect";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
+import { buttonClasses } from "@/components/ui";
 
 const PENDING_APPROVAL = [
   { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
@@ -81,7 +82,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           {isMetaConnected ? (
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
           ) : (
-            <Link href="/dashboard/settings/connect-facebook" className="btn-secondary text-xs w-full justify-center">
+            <Link href="/dashboard/settings/connect-facebook" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </Link>
           )}
@@ -106,7 +107,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           {isGmailConnected ? (
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
           ) : (
-            <Link href="/dashboard/settings/connect-facebook" className="btn-secondary text-xs w-full justify-center">
+            <Link href="/dashboard/settings/connect-facebook" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </Link>
           )}
@@ -126,7 +127,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           {isGoogleAdsConnected ? (
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.google_ads_email})</span>
           ) : (
-            <a href="/api/auth/google-ads/connect" className="btn-secondary text-xs w-full justify-center">
+            <a href="/api/auth/google-ads/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </a>
           )}
@@ -146,7 +147,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           {isYoutubeConnected ? (
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.youtube_channel_title})</span>
           ) : (
-            <a href="/api/auth/youtube/connect" className="btn-secondary text-xs w-full justify-center">
+            <a href="/api/auth/youtube/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </a>
           )}

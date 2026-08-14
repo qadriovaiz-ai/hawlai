@@ -2,7 +2,8 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { ImagePlus, Sparkles, Palette, Loader2, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
+import { ImagePlus, Sparkles, Palette, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
+import { Button, buttonClasses } from "@/components/ui/Button";
 
 const BACKGROUND_STYLES = [
   { id: "studio_white", label: "Studio White" },
@@ -80,7 +81,7 @@ export default function AdCreativePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Link href="/dashboard/ads" className="btn-secondary px-2 py-2">
+        <Link href="/dashboard/ads" className={buttonClasses("secondary", "md", "px-2 py-2")}>
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
@@ -98,12 +99,14 @@ export default function AdCreativePage() {
         {photoPreview ? (
           <div className="relative">
             <img src={photoPreview} alt="Uploaded car" className="w-full h-56 object-cover rounded-lg" />
-            <button
+            <Button
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-2 right-2 btn-secondary text-xs"
+              variant="secondary"
+              size="sm"
+              className="absolute bottom-2 right-2"
             >
               Change Photo
-            </button>
+            </Button>
           </div>
         ) : (
           <button
@@ -200,21 +203,20 @@ export default function AdCreativePage() {
         />
       </div>
 
-      <button
+      <Button
         onClick={handleGenerate}
-        disabled={loading}
-        className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+        loading={loading}
+        variant="primary"
+        className="w-full justify-center"
       >
         {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" /> Creating the creative...
-          </>
+          "Creating the creative..."
         ) : (
           <>
             <Sparkles className="w-4 h-4" /> Create Ad Creative
           </>
         )}
-      </button>
+      </Button>
 
       {error && (
         <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
@@ -238,7 +240,7 @@ export default function AdCreativePage() {
           
             <a href={result.generated_image_url}
             download
-            className="btn-secondary w-full justify-center"
+            className={buttonClasses("secondary", "md", "w-full justify-center")}
           >
             Download Image
           </a>

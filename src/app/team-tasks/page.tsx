@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, Clock, Sparkles } from "lucide-react";
 import ManagerWorkspace from "@/components/team/ManagerWorkspace";
 import SalesLeadsView from "@/components/team/SalesLeadsView";
+import { Button } from "@/components/ui/Button";
 
 interface Task {
   id: string;
@@ -96,13 +97,13 @@ export default function TeamTasksPage() {
             )}
             <div className="flex items-center gap-2 pt-1">
               {task.status === "open" && (
-                <button onClick={() => updateStatus(task.id, "in_progress")} disabled={updating === task.id} className="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg disabled:opacity-50">
+                <Button onClick={() => updateStatus(task.id, "in_progress")} disabled={updating === task.id} variant="secondary" size="sm">
                   Start
-                </button>
+                </Button>
               )}
-              <button onClick={() => updateStatus(task.id, "done")} disabled={updating === task.id} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
-                {updating === task.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Mark Complete
-              </button>
+              <Button onClick={() => updateStatus(task.id, "done")} disabled={updating === task.id} loading={updating === task.id} size="sm">
+                {updating !== task.id && <CheckCircle2 className="w-3.5 h-3.5" />} Mark Complete
+              </Button>
             </div>
           </div>
         ))}

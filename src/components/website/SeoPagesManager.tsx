@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Sparkles, ExternalLink, Trash2, FileText } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function SeoPagesManager() {
   const [pages, setPages] = useState<any[]>([]);
@@ -49,9 +50,9 @@ export default function SeoPagesManager() {
 
       <div className="flex items-center gap-2">
         <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic, e.g. '2BHK flats in Andheri'" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
-        <button onClick={handleGenerate} disabled={generating || !topic.trim()} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 disabled:opacity-50 shrink-0">
-          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Generate
-        </button>
+        <Button onClick={handleGenerate} disabled={generating || !topic.trim()} loading={generating} size="sm" className="shrink-0">
+          {!generating && <Sparkles className="w-3.5 h-3.5" />} Generate
+        </Button>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
 

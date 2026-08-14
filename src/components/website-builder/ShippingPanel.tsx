@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Truck, Check } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 const MODES: { key: string; label: string; description: string }[] = [
   { key: "free", label: "Always Free", description: "No shipping charge, ever." },
@@ -90,9 +91,9 @@ export default function ShippingPanel() {
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      <button onClick={handleSave} disabled={saving} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null} {saved ? "Saved" : "Save"}
-      </button>
+      <Button onClick={handleSave} disabled={saving} loading={saving}>
+        {!saving && saved && <Check className="w-4 h-4" />} {saved ? "Saved" : "Save"}
+      </Button>
     </div>
   );
 }

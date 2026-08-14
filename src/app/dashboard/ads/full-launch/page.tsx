@@ -7,6 +7,7 @@ import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Se
 import ProductPicker from "@/components/ads/ProductPicker";
 import PhotoEditor from "@/components/ads/PhotoEditor";
 import ScoreBadge from "@/components/shared/ScoreBadge";
+import { Button, buttonClasses } from "@/components/ui/Button";
 
 const EXAMPLES = [
   "Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500",
@@ -199,15 +200,15 @@ function FullLaunchForm() {
             <div className="relative">
               <img src={photoPreview} alt="" className="w-full h-56 object-cover rounded-lg" />
               <div className="absolute bottom-2 right-2 flex items-center gap-2">
-                <button onClick={() => setShowPhotoEditor(true)} className="btn-secondary text-xs">
+                <Button onClick={() => setShowPhotoEditor(true)} variant="secondary" size="sm">
                   <Pencil className="w-3.5 h-3.5" /> Edit Photo
-                </button>
-                <button onClick={() => setShowProductPicker(true)} className="btn-secondary text-xs">
+                </Button>
+                <Button onClick={() => setShowProductPicker(true)} variant="secondary" size="sm">
                   <Store className="w-3.5 h-3.5" /> Pick from Store
-                </button>
-                <button onClick={() => fileInputRef.current?.click()} className="btn-secondary text-xs">
+                </Button>
+                <Button onClick={() => fileInputRef.current?.click()} variant="secondary" size="sm">
                   Change Photo
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -278,14 +279,17 @@ function FullLaunchForm() {
             ))}
           </div>
 
-          <button
+          <Button
             onClick={handleCheckCompetitors}
-            disabled={competitorLoading || prompt.trim().length < 3}
-            className="btn-secondary text-xs w-full justify-center"
+            disabled={prompt.trim().length < 3}
+            loading={competitorLoading}
+            variant="secondary"
+            size="sm"
+            className="w-full justify-center"
           >
-            {competitorLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+            {!competitorLoading && <Search className="w-3.5 h-3.5" />}
             Check what competitors are running for this
-          </button>
+          </Button>
 
           {competitorSearched && !competitorLoading && (
             <div className="space-y-2 pt-1">
@@ -348,12 +352,13 @@ function FullLaunchForm() {
           </div>
         </div>
 
-        <button
+        <Button
           onClick={handlePreview}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+          variant="primary"
+          className="w-full justify-center"
         >
           <Sparkles className="w-4 h-4" /> Preview Campaign
-        </button>
+        </Button>
 
         {error && (
           <div className="bg-red-500/10 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
@@ -434,12 +439,12 @@ function FullLaunchForm() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={handleModify} className="btn-secondary flex-1 justify-center">
+          <Button onClick={handleModify} variant="secondary" className="flex-1 justify-center">
             Modify
-          </button>
-          <button onClick={handleConfirmLaunch} className="btn-primary flex-1 justify-center">
+          </Button>
+          <Button onClick={handleConfirmLaunch} variant="primary" className="flex-1 justify-center">
             <Rocket className="w-4 h-4" /> Launch Campaign
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -489,8 +494,8 @@ function FullLaunchForm() {
           <p className="text-sm text-slate-500 mt-1">It's sitting Paused in Meta Ads Manager — activate it when you're ready from My Campaigns.</p>
         </div>
         <div className="flex items-center gap-3 justify-center">
-          <button onClick={handleStartOver} className="btn-secondary">Launch Another</button>
-          <Link href="/dashboard/ads/campaigns" className="btn-primary">Go to My Campaigns</Link>
+          <Button onClick={handleStartOver} variant="secondary">Launch Another</Button>
+          <Link href="/dashboard/ads/campaigns" className={buttonClasses("primary")}>Go to My Campaigns</Link>
         </div>
       </div>
     );
@@ -509,8 +514,8 @@ function FullLaunchForm() {
         <p className="text-sm text-red-400 mt-1">{error}</p>
       </div>
       <div className="flex items-center gap-3 justify-center">
-        <button onClick={handleModify} className="btn-secondary">Back to Edit</button>
-        <button onClick={handleConfirmLaunch} className="btn-primary">Try Again</button>
+        <Button onClick={handleModify} variant="secondary">Back to Edit</Button>
+        <Button onClick={handleConfirmLaunch} variant="primary">Try Again</Button>
       </div>
     </div>
   );

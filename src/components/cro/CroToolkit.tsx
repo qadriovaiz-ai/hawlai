@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, Clock, FlaskConical, ShoppingCart, Info } from "lucide-react";
+import { Sparkles, Clock, FlaskConical, ShoppingCart, Info } from "lucide-react";
 import { CRO_TASKS } from "@/lib/agents/croAgentV2";
+import { Button } from "@/components/ui/Button";
 
 export default function CroToolkit() {
   const [selectedTask, setSelectedTask] = useState(CRO_TASKS[0].key);
@@ -87,15 +88,15 @@ export default function CroToolkit() {
         ) : showAbForm ? (
           <div className="space-y-2">
             <div className="flex gap-1.5">
-              <button onClick={() => setElement("headline")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${element === "headline" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>Headline</button>
-              <button onClick={() => setElement("cta")} className={`text-xs px-2.5 py-1.5 rounded-lg border ${element === "cta" ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>CTA</button>
+              <Button onClick={() => setElement("headline")} variant={element === "headline" ? "primary" : "secondary"} size="sm">Headline</Button>
+              <Button onClick={() => setElement("cta")} variant={element === "cta" ? "primary" : "secondary"} size="sm">CTA</Button>
             </div>
             <input value={variantA} onChange={(e) => setVariantA(e.target.value)} placeholder="Variant A text" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             <input value={variantB} onChange={(e) => setVariantB(e.target.value)} placeholder="Variant B text" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
-            <button onClick={createAbTest} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg">Start Test</button>
+            <Button onClick={createAbTest}>Start Test</Button>
           </div>
         ) : (
-          <button onClick={() => setShowAbForm(true)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg">Create A/B Test</button>
+          <Button onClick={() => setShowAbForm(true)} size="sm">Create A/B Test</Button>
         )}
       </div>
 
@@ -109,14 +110,14 @@ export default function CroToolkit() {
       <div className="card p-5 space-y-3">
         <div className="flex flex-wrap gap-1.5">
           {CRO_TASKS.map((t) => (
-            <button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} className={`text-xs px-2.5 py-1.5 rounded-lg border ${selectedTask === t.key ? "bg-purple-600 border-purple-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
+            <Button key={t.key} onClick={() => { setSelectedTask(t.key); setOutput(null); }} variant={selectedTask === t.key ? "primary" : "secondary"} size="sm">
               {t.label}
-            </button>
+            </Button>
           ))}
         </div>
-        <button onClick={handleGenerate} disabled={loading} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Generate {currentMeta?.label}
-        </button>
+        <Button onClick={handleGenerate} loading={loading}>
+          {!loading && <Sparkles className="w-4 h-4" />} Generate {currentMeta?.label}
+        </Button>
       </div>
 
       {output && (

@@ -12,6 +12,7 @@ import {
   cn, formatCurrency, getTemperatureColor, getTemperatureIcon,
   getStatusColor, getStatusLabel
 } from "@/lib/utils";
+import { Button } from "@/components/ui";
 
 interface Props {
   leads: Lead[];
@@ -81,7 +82,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
               className="input pl-9"
             />
           </div>
-          <button type="submit" className="btn-secondary px-3">Search</button>
+          <Button type="submit" variant="secondary" className="px-3">Search</Button>
         </form>
 
         <select
@@ -228,23 +229,25 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
               Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} of {total}
             </p>
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 onClick={() => updateUrl({ page: String(page - 1) })}
                 disabled={page <= 1}
-                className="btn-secondary px-2 py-1.5 disabled:opacity-40"
+                variant="secondary"
+                className="px-2 py-1.5 disabled:opacity-40"
               >
                 <ChevronLeft className="w-4 h-4" />
-              </button>
+              </Button>
               <span className="text-sm text-slate-700 font-medium">
                 {page} / {totalPages}
               </span>
-              <button
+              <Button
                 onClick={() => updateUrl({ page: String(page + 1) })}
                 disabled={page >= totalPages}
-                className="btn-secondary px-2 py-1.5 disabled:opacity-40"
+                variant="secondary"
+                className="px-2 py-1.5 disabled:opacity-40"
               >
                 <ChevronRight className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         )}

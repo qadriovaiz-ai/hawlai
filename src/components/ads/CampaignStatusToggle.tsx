@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Pause, Loader2 } from "lucide-react";
+import { Play, Pause } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function CampaignStatusToggle({
   creativeId,
@@ -39,20 +40,15 @@ export default function CampaignStatusToggle({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
+      <Button
         onClick={toggle}
-        disabled={loading}
-        className={isActive ? "btn-secondary text-amber-400 border-amber-700/50 hover:bg-amber-500/10" : "btn-primary"}
+        loading={loading}
+        variant={isActive ? "secondary" : "primary"}
+        className={isActive ? "text-amber-400 border-amber-700/50 hover:bg-amber-500/10" : undefined}
       >
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : isActive ? (
-          <Pause className="w-4 h-4" />
-        ) : (
-          <Play className="w-4 h-4" />
-        )}
+        {!loading && (isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />)}
         {isActive ? "Pause" : "Activate"}
-      </button>
+      </Button>
       {error && <p className="text-xs text-red-500 max-w-[200px] text-right">{error}</p>}
     </div>
   );

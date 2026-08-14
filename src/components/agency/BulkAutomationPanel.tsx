@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Check, Zap } from "lucide-react";
+import { Check, Zap } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 const FIELDS = [
   { value: "welcome_email_auto_enabled", label: "Welcome Email Automation" },
@@ -86,10 +87,9 @@ export default function BulkAutomationPanel({ businesses }: { businesses: Busine
       {error && <p className="text-xs text-red-500">{error}</p>}
       {result && <p className="text-xs text-green-600 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> {result}</p>}
 
-      <button onClick={apply} disabled={saving || selected.size === 0} className="btn-secondary text-xs">
-        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+      <Button onClick={apply} disabled={selected.size === 0} loading={saving} variant="secondary" size="sm">
         Apply to {selected.size} business{selected.size === 1 ? "" : "es"}
-      </button>
+      </Button>
     </div>
   );
 }

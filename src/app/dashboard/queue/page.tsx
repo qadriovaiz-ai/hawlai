@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon } f
 import MarkCalledButton from "@/components/calls/MarkCalledButton";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DraftMessagePreview from "@/components/leads/DraftMessagePreview";
+import { buttonClasses } from "@/components/ui/Button";
 
 export default async function QueuePage() {
   const supabase = await createClient();
@@ -37,7 +38,7 @@ export default async function QueuePage() {
           </div>
           <p className="text-slate-700 font-medium">No leads in the queue</p>
           <p className="text-slate-400 text-sm mt-1 mb-4">Add leads to the queue from the Leads page</p>
-          <Link href="/dashboard/leads" className="btn-primary inline-flex">
+          <Link href="/dashboard/leads" className={buttonClasses("primary")}>
             Go to Leads <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
@@ -68,13 +69,13 @@ export default async function QueuePage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <a
                     href={`tel:${lead.phone}`}
-                    className="btn-primary"
+                    className={buttonClasses("primary")}
                   >
                     <Phone className="w-4 h-4" /> Call {lead.phone}
                   </a>
                   <TriggerAICallButton leadId={lead.id} />
                   <MarkCalledButton leadId={lead.id} dealershipId={dealershipId} />
-                  <Link href={`/dashboard/leads/${lead.id}`} className="btn-secondary px-2 py-2">
+                  <Link href={`/dashboard/leads/${lead.id}`} className={buttonClasses("secondary", "md", "px-2 py-2")}>
                     <Eye className="w-4 h-4" />
                   </Link>
                 </div>

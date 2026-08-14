@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Megaphone, Inbox, ArrowDownToLine, X, Check } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 export default function CollabBoardManager() {
   const [listings, setListings] = useState<any[]>([]);
@@ -104,7 +105,7 @@ export default function CollabBoardManager() {
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Megaphone className="w-4 h-4" /> Open Collabs board</p>
           <div className="flex items-center gap-3">
             <a href="/collabs" target="_blank" rel="noopener noreferrer" className="text-xs text-purple-400 hover:text-purple-300">View public board ↗</a>
-            <button onClick={() => setShowForm(!showForm)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Post</button>
+            <Button onClick={() => setShowForm(!showForm)} size="sm"><Plus className="w-3.5 h-3.5" /> Post</Button>
           </div>
         </div>
         <p className="text-xs text-slate-400">Public opportunities influencers can find and apply to directly, without you having to search for them first.</p>
@@ -121,7 +122,7 @@ export default function CollabBoardManager() {
               </select>
               <input value={compensationDetails} onChange={(e) => setCompensationDetails(e.target.value)} placeholder="e.g. Free candle set + ₹500" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             </div>
-            <button onClick={createListing} className="text-sm bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg">Post to board</button>
+            <Button onClick={createListing}>Post to board</Button>
           </div>
         )}
 
