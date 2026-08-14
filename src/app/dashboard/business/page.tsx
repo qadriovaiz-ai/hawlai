@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock } from "lucide-react";
+import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
 import BusinessSwitcherCard from "@/components/business/BusinessSwitcherCard";
 
@@ -52,6 +52,7 @@ const SECTIONS: { label: string; items: HubItem[] }[] = [
   {
     label: "Account",
     items: [
+      { href: "/dashboard/agency-portfolio", label: "Portfolio", desc: "Every business you manage, at a glance", icon: Briefcase, feature: "multiBusiness" },
       { href: "/dashboard/team", label: "Team", desc: "Invite people, manage roles", icon: Users2 },
       { href: "/dashboard/billing", label: "Billing & Usage", desc: "Plan, usage this month", icon: CreditCard },
       { href: "/dashboard/settings/brand", label: "Brand", desc: "Brand voice, colors, logo, tagline", icon: Palette },
