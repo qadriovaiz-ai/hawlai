@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateExecutiveReport } from "@/lib/agents/reportingAgent";
 import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
+import { getAgencyBranding, reportFooterText, reportAccentColor, reportLogoUrl, fetchLogoBuffer } from "@/lib/agents/agencyBrandingAgent";
 import { formatCurrency } from "@/lib/utils";
 import PptxGenJS from "pptxgenjs";
 
@@ -14,16 +15,18 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single();
-  const [report, growth] = await Promise.all([
+  const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category, owner_id").eq("id", dealershipId).single();
+  const [report, growth, branding] = await Promise.all([
     generateExecutiveReport(supabase, dealershipId),
     generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "business"),
+    getAgencyBranding(supabase, dealership?.owner_id),
   ]);
   const { stats } = report;
   const name = dealership?.dealership_name ?? "Business";
+  const logo = await fetchLogoBuffer(reportLogoUrl(branding));
 
   const pptx = new PptxGenJS();
-  const PURPLE = "7C3AED";
+  const PURPLE = reportAccentColor(branding).replace("#", "").toUpperCase();
   const DARK = "1E293B";
 
   // Title slide
@@ -32,6 +35,9 @@ export async function GET() {
   slide1.addText(`${name}`, { x: 0.5, y: 2.2, w: 9, h: 1, fontSize: 36, bold: true, color: "FFFFFF" });
   slide1.addText("Performance Report", { x: 0.5, y: 3.1, w: 9, h: 0.6, fontSize: 20, color: PURPLE });
   slide1.addText(new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }), { x: 0.5, y: 3.7, w: 9, h: 0.4, fontSize: 12, color: "94A3B8" });
+  if (logo) {
+    slide1.addImage({ data: `data:${logo.mimeType};base64,${logo.buffer.toString("base64")}`, x: 8.2, y: 0.4, w: 1.3, h: 0.5, sizing: { type: "contain", w: 1.3, h: 0.5 } });
+  }
 
   // Health score slide
   const slide2 = pptx.addSlide();

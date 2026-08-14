@@ -53,6 +53,7 @@ const SECTIONS: { label: string; items: HubItem[] }[] = [
     label: "Account",
     items: [
       { href: "/dashboard/agency-portfolio", label: "Portfolio", desc: "Every business you manage, at a glance", icon: Briefcase, feature: "multiBusiness" },
+      { href: "/dashboard/agency-branding", label: "Agency Branding", desc: "White-label client reports with your own logo and colors", icon: Palette, feature: "multiBusiness" },
       { href: "/dashboard/team", label: "Team", desc: "Invite people, manage roles", icon: Users2 },
       { href: "/dashboard/billing", label: "Billing & Usage", desc: "Plan, usage this month", icon: CreditCard },
       { href: "/dashboard/settings/brand", label: "Brand", desc: "Brand voice, colors, logo, tagline", icon: Palette },
