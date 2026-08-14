@@ -57,7 +57,28 @@ export async function PATCH(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { active } = await request.json();
+  const { active, winner } = await request.json();
+
+  // Master audit Part B3 — closes the "suggests but doesn't execute"
+  // gap for A/B testing: writes the winning variant's text into the
+  // real landing_pages field it was tested against, then ends the
+  // test. Without this the only way to act on a result was to
+  // manually retype the winning copy elsewhere and separately flip
+  // the test off.
+  if (winner === "A" || winner === "B") {
+    const { data: test } = await supabase.from("ab_tests").select("*").eq("dealership_id", dealershipId).maybeSingle();
+    if (!test) return NextResponse.json({ error: "No A/B test found" }, { status: 404 });
+
+    const winningText = winner === "A" ? test.variant_a : test.variant_b;
+    const field = test.element === "headline" ? "headline" : "offer_text";
+    const { error: pageError } = await supabase.from("landing_pages").update({ [field]: winningText }).eq("dealership_id", dealershipId);
+    if (pageError) return NextResponse.json({ error: pageError.message }, { status: 500 });
+
+    const { error } = await supabase.from("ab_tests").update({ active: false }).eq("dealership_id", dealershipId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, applied: field, winningText });
+  }
+
   const { error } = await supabase.from("ab_tests").update({ active: !!active }).eq("dealership_id", dealershipId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });

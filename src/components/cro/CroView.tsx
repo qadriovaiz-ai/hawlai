@@ -40,6 +40,8 @@ export default function CroView() {
   const [abLoading, setAbLoading] = useState(true);
   const [abForm, setAbForm] = useState({ element: "headline", variantA: "", variantB: "" });
   const [abSaving, setAbSaving] = useState(false);
+  const [applyingWinner, setApplyingWinner] = useState<"A" | "B" | null>(null);
+  const [appliedMessage, setAppliedMessage] = useState<string | null>(null);
 
   function loadReport() {
     setReportLoading(true);
@@ -74,6 +76,24 @@ export default function CroView() {
   async function toggleAbTest(active: boolean) {
     setAbTest((prev: any) => ({ ...prev, active }));
     await fetch("/api/cro/ab-test", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }) });
+  }
+
+  // Master audit Part B3 — the step that actually closes the loop:
+  // writes the winning variant into the live landing page and ends
+  // the test, instead of leaving the result as something to act on
+  // manually elsewhere.
+  async function applyWinner(variant: "A" | "B") {
+    setApplyingWinner(variant);
+    setAppliedMessage(null);
+    try {
+      const res = await fetch("/api/cro/ab-test", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ winner: variant }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to apply winner");
+      setAppliedMessage(`Variant ${variant} is now live as your ${abTest.element === "headline" ? "headline" : "CTA"}.`);
+      loadAbTest();
+    } finally {
+      setApplyingWinner(null);
+    }
   }
 
   return (
@@ -166,11 +186,21 @@ export default function CroView() {
                   <p className="text-xs font-semibold text-slate-500 mb-1">Variant {v}</p>
                   <p className="text-sm text-slate-700 mb-2">{v === "A" ? abTest.variant_a : abTest.variant_b}</p>
                   <p className="text-xs text-slate-500">{abResults?.[v]?.views ?? 0} views · {abResults?.[v]?.submits ?? 0} leads</p>
-                  <p className="text-sm font-bold text-brand-600">{abResults?.[v]?.conversionRate != null ? `${abResults[v].conversionRate.toFixed(1)}%` : "—"}</p>
+                  <p className="text-sm font-bold text-brand-600 mb-2">{abResults?.[v]?.conversionRate != null ? `${abResults[v].conversionRate.toFixed(1)}%` : "—"}</p>
+                  <Button
+                    onClick={() => applyWinner(v)}
+                    loading={applyingWinner === v}
+                    disabled={!abResults?.[v]?.views}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Apply as winner
+                  </Button>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-slate-400">Visitors are randomly assigned a variant on your live landing page. Results update automatically as traffic comes in.</p>
+            {appliedMessage && <div className="flex items-center gap-2 text-sm text-green-600"><CheckCircle2 className="w-4 h-4" /> {appliedMessage}</div>}
+            <p className="text-xs text-slate-400">Visitors are randomly assigned a variant on your live landing page. Results update automatically as traffic comes in. Applying a winner writes it in as the permanent {abTest.element === "headline" ? "headline" : "CTA"} and ends the test.</p>
           </div>
         ) : (
           <div className="space-y-2">
