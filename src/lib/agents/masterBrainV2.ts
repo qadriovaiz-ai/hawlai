@@ -45,6 +45,7 @@ import { generateRetargetingCopy } from "./retargetingAgent";
 import { retrieveRelevantKnowledge } from "../knowledge/retrieveKnowledge";
 import { type BrandVoiceProfile, formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceProfile } from "./brandVoice";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
+import { validateAdvertisingClaimCompliance } from "./complianceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -1087,6 +1088,12 @@ export interface Artifact {
   // only for now — no UI renders this yet, pending a follow-up design
   // pass on how it should actually show up in the card.
   brandVoiceFlags?: { rule: string; detail: string }[];
+  // Master audit Part C1.1 — advertising-claim compliance flags
+  // (unverifiable superlatives, unsubstantiated medical/scientific
+  // claims, etc.). Unlike brandVoiceFlags, this IS rendered in the UI
+  // — see MasterChatPage.tsx — since the whole point is pre-publish
+  // visibility of real legal-exposure risk, not a silent data-layer flag.
+  complianceFlags?: { rule: string; detail: string }[];
 }
 
 // Where each tool's result actually lives, so a person can jump straight
@@ -1716,6 +1723,19 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       // executeTool(), and only when there was something to flag.
       if (artifact && result?._brandVoiceCheck?.violations?.length > 0) {
         artifact.brandVoiceFlags = result._brandVoiceCheck.violations;
+      }
+      // Master audit Part C1.1 — advertising-claim compliance check,
+      // applied here rather than inside each of the ~10 individual
+      // withBrandVoiceCheck() call sites in executeTool(): this is a
+      // universal cross-cutting check on whatever text a tool actually
+      // produced, so it covers every text-generation tool uniformly
+      // (not just the ones that happen to call withBrandVoiceCheck
+      // internally), with zero changes needed to executeTool() itself.
+      if (artifact) {
+        const complianceCheck = validateAdvertisingClaimCompliance(flattenResultText(result));
+        if (complianceCheck.violations.length > 0) {
+          artifact.complianceFlags = complianceCheck.violations;
+        }
       }
       if (artifact) artifacts.push(artifact);
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result).slice(0, 4000) });

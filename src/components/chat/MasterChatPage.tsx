@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown, Copy, Check, Pencil, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Brain, Loader2, Send, User, Sparkles, ExternalLink, Globe, Box, PenTool, X, FileText, CheckCircle2, BarChart3, Link2, ThumbsUp, ThumbsDown, Copy, Check, Pencil, TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
 import { cn, titleCaseFromSnake } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -39,6 +39,11 @@ interface Artifact {
     recommendations: { title: string; detail: string }[];
     disclosure: string;
   };
+  // Master audit Part C1.1 — advertising-claim compliance flags,
+  // rendered as a visible warning on the card (unlike brandVoiceFlags,
+  // which is data-layer only) since pre-publish visibility of real
+  // legal-exposure risk is the entire point of this check.
+  complianceFlags?: { rule: string; detail: string }[];
   departmentHref?: string;
 }
 
@@ -425,6 +430,23 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
   // when it actually differs.
   const draftHeadingDiffers = displayHeading && displayHeading.trim().toLowerCase() !== artifact.label.trim().toLowerCase();
 
+  // Master audit Part C1.1 — shown on every card kind that has a flag,
+  // not just document/generic cards, since a compliance risk can turn
+  // up on any generated text (a record confirmation, an AEO
+  // recommendation, anything). Deliberately visible, unlike
+  // brandVoiceFlags (data-layer only) — pre-publish visibility of real
+  // legal-exposure risk is the whole point of this check.
+  const complianceWarning = artifact.complianceFlags && artifact.complianceFlags.length > 0 ? (
+    <div className="px-3 py-2 bg-red-500/10 border-t border-red-400/20 space-y-1">
+      <p className="text-[10px] font-semibold text-red-500 flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3" /> Review before publishing
+      </p>
+      {artifact.complianceFlags.map((f, i) => (
+        <p key={i} className="text-[10.5px] text-red-600/90 leading-snug">{f.detail}</p>
+      ))}
+    </div>
+  ) : null;
+
   // Action confirmations that already have a natural-language sentence
   // (create_discount_code, assign_task, trigger_call, etc.) read better
   // as a single checkmark + sentence than the generic icon-box + small
@@ -438,6 +460,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
           </div>
           <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
         </div>
+        {complianceWarning}
         {artifact.departmentHref && (
           <a
             href={artifact.departmentHref}
@@ -505,6 +528,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
             <p className="pt-2 border-t border-slate-200 text-[10px] text-slate-400 italic leading-snug">{r.disclosure}</p>
           )}
         </div>
+        {complianceWarning}
         {artifact.departmentHref && (
           <a
             href={artifact.departmentHref}
@@ -727,6 +751,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
           )}
         </div>
       </div>
+      {complianceWarning}
       {(artifact.kind === "link" && artifact.url) || artifact.departmentHref ? (
         <a
           href={artifact.kind === "link" && artifact.url ? artifact.url : artifact.departmentHref}
