@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { recordLeadOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,7 +28,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data: lead } = await service.from("leads").select("id, assigned_to").eq("id", id).maybeSingle();
   if (!lead || lead.assigned_to !== membership.id) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
 
-  const { error } = await service.from("leads").update(update).eq("id", id);
+  const { data, error } = await service.from("leads").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (update.status) await recordLeadOutcomeInsight(service, data);
   return NextResponse.json({ success: true });
 }

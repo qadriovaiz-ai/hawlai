@@ -4,6 +4,7 @@ import { scoreLeadFromCall } from "@/lib/agents/callScoringAgent";
 import { logVapiUsage } from "@/lib/usage/logUsage";
 import { recordCallingMinutes } from "@/lib/usage/callingMinutes";
 import { buildInboundSystemPrompt, buildInboundFirstMessage } from "@/lib/agents/callScriptAgent";
+import { recordCallOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
@@ -53,10 +54,11 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: lead } = await supabase.from("leads").select("id, name").eq("id", resolvedLeadId).maybeSingle();
+  const { data: lead } = await supabase.from("leads").select("id, name, dealership_id").eq("id", resolvedLeadId).maybeSingle();
   if (!lead) return NextResponse.json({ received: true });
 
-  const result = await scoreLeadFromCall(transcript, lead.name, callRecord ? { supabase, dealershipId: callRecord.dealership_id } : undefined);
+  const dealershipId = callRecord?.dealership_id ?? lead.dealership_id;
+  const result = await scoreLeadFromCall(transcript, lead.name, callRecord ? { supabase, dealershipId } : undefined);
   await supabase
     .from("leads")
     .update({
@@ -66,6 +68,10 @@ export async function POST(request: Request) {
       status: "called",
     })
     .eq("id", lead.id);
+
+  if (callRecord) {
+    await recordCallOutcomeInsight(supabase, { id: callRecord.id, dealershipId, leadName: lead.name, temperature: result.temperature, reason: result.reason });
+  }
 
   return NextResponse.json({ received: true });
 }

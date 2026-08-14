@@ -20,6 +20,7 @@ import { generateFollowUpMessage } from "./contentAgent";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { setCampaignStatus } from "./campaignEditAgent";
 import { snapshotCampaignPerformance } from "./analyticsAgent";
+import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 
@@ -102,6 +103,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
         status: "approved",
         reviewed_at: new Date().toISOString(),
       });
+      await recordCampaignPauseInsight(supabase, dealershipId, { id: campaign.id, headline: campaign.headline, reason: rec.reason });
     }
   }
   return pausedCount;

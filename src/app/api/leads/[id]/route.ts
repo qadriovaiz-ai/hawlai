@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { recordLeadOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 
 export async function PATCH(
   request: Request,
@@ -20,6 +21,7 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (body.status) await recordLeadOutcomeInsight(supabase, data);
   return NextResponse.json(data);
 }
 
