@@ -12,11 +12,11 @@ export async function GET() {
 
   const { data } = await supabase
     .from("dealerships")
-    .select("auto_pause_low_performers, auto_budget_reallocate_percent")
+    .select("auto_pause_low_performers, auto_budget_reallocate_percent, seasonal_campaigns_enabled")
     .eq("id", dealershipId)
     .single();
 
-  return NextResponse.json(data ?? { auto_pause_low_performers: false, auto_budget_reallocate_percent: 0 });
+  return NextResponse.json(data ?? { auto_pause_low_performers: false, auto_budget_reallocate_percent: 0, seasonal_campaigns_enabled: false });
 }
 
 export async function PATCH(request: Request) {
@@ -28,13 +28,14 @@ export async function PATCH(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { auto_pause_low_performers, auto_budget_reallocate_percent } = await request.json();
+  const { auto_pause_low_performers, auto_budget_reallocate_percent, seasonal_campaigns_enabled } = await request.json();
 
   const { data, error } = await supabase
     .from("dealerships")
     .update({
       ...(auto_pause_low_performers !== undefined && { auto_pause_low_performers }),
       ...(auto_budget_reallocate_percent !== undefined && { auto_budget_reallocate_percent }),
+      ...(seasonal_campaigns_enabled !== undefined && { seasonal_campaigns_enabled }),
     })
     .eq("id", dealershipId)
     .select()

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Zap, Loader2, Check, ShieldCheck, PauseCircle, PieChart } from "lucide-react";
+import { Zap, Loader2, Check, ShieldCheck, PauseCircle, PieChart, PartyPopper } from "lucide-react";
 
 export default function AutomationSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -9,6 +9,7 @@ export default function AutomationSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [autoPause, setAutoPause] = useState(false);
   const [reallocatePercent, setReallocatePercent] = useState(0);
+  const [seasonalEnabled, setSeasonalEnabled] = useState(false);
 
   useEffect(() => {
     fetch("/api/dealership/permissions")
@@ -16,11 +17,12 @@ export default function AutomationSettingsPage() {
       .then((data) => {
         setAutoPause(data.auto_pause_low_performers ?? false);
         setReallocatePercent(data.auto_budget_reallocate_percent ?? 0);
+        setSeasonalEnabled(data.seasonal_campaigns_enabled ?? false);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleSave(overrides?: { auto_pause_low_performers?: boolean; auto_budget_reallocate_percent?: number }) {
+  async function handleSave(overrides?: { auto_pause_low_performers?: boolean; auto_budget_reallocate_percent?: number; seasonal_campaigns_enabled?: boolean }) {
     setSaving(true);
     setSaved(false);
     try {
@@ -30,6 +32,7 @@ export default function AutomationSettingsPage() {
         body: JSON.stringify({
           auto_pause_low_performers: overrides?.auto_pause_low_performers ?? autoPause,
           auto_budget_reallocate_percent: overrides?.auto_budget_reallocate_percent ?? reallocatePercent,
+          seasonal_campaigns_enabled: overrides?.seasonal_campaigns_enabled ?? seasonalEnabled,
         }),
       });
       if (res.ok) {
@@ -45,6 +48,12 @@ export default function AutomationSettingsPage() {
     const next = !autoPause;
     setAutoPause(next);
     handleSave({ auto_pause_low_performers: next });
+  }
+
+  function toggleSeasonal() {
+    const next = !seasonalEnabled;
+    setSeasonalEnabled(next);
+    handleSave({ seasonal_campaigns_enabled: next });
   }
 
   if (loading) {
@@ -111,6 +120,24 @@ export default function AutomationSettingsPage() {
           />
           <span className="text-sm font-semibold text-slate-700 w-12 text-right">{reallocatePercent}%</span>
         </div>
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <PartyPopper className="w-4 h-4 text-slate-400" />
+            <p className="text-sm font-semibold text-slate-700">Seasonal campaign prep</p>
+          </div>
+          <button
+            onClick={toggleSeasonal}
+            className={`w-11 h-6 rounded-full transition-colors relative ${seasonalEnabled ? "bg-purple-600" : "bg-slate-200"}`}
+          >
+            <span className={`absolute top-0.5 w-5 h-5 bg-slate-100 rounded-full shadow-sm transition-transform ${seasonalEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+        <p className="text-xs text-slate-400">
+          When an Indian festival or seasonal moment is coming up within its lead time, add a planning entry to your Content Calendar automatically — nothing gets generated or sent on its own, it just makes sure you don't miss the window to prep.
+        </p>
       </div>
 
       {saving && <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Saving...</p>}
