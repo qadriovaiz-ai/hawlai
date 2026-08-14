@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Gauge, IndianRupee, TrendingUp, Megaphone, Flame, ArrowRight, Rocket, ShieldCheck } from "lucide-react";
+import { Gauge, IndianRupee, TrendingUp, Megaphone, Flame, ArrowRight, Rocket, ShieldCheck, Palette } from "lucide-react";
 import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
@@ -42,12 +42,13 @@ export default async function DashboardOverviewPage() {
   // LLM-generated growth report, pending approvals). One of them being
   // slow or failing — the growth report calls Claude — shouldn't take
   // the whole Home screen down; each section degrades on its own.
-  const [leadsRes, performanceRes, opportunitiesRes, growthRes, approvalsRes] = await Promise.allSettled([
+  const [leadsRes, performanceRes, opportunitiesRes, growthRes, approvalsRes, brandProfileRes] = await Promise.allSettled([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
     getCampaignPerformance(supabase, dealershipId),
     getOpenOpportunities(supabase, dealershipId),
     generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "car dealership"),
     supabase.from("pending_approvals").select("id").eq("dealership_id", dealershipId).eq("status", "pending"),
+    supabase.from("brand_profiles").select("id").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
   const leads = leadsRes.status === "fulfilled" ? leadsRes.value.data : null;
@@ -55,6 +56,17 @@ export default async function DashboardOverviewPage() {
   const opportunities = opportunitiesRes.status === "fulfilled" ? opportunitiesRes.value : [];
   const growth: GrowthReport | null = growthRes.status === "fulfilled" ? growthRes.value : null;
   const pendingApprovals = approvalsRes.status === "fulfilled" ? (approvalsRes.value.data?.length ?? 0) : 0;
+
+  // Master audit Part B — onboarding consistency. WelcomeChatCard's
+  // "Skip for now" marks onboarding_completed = true while writing no
+  // brand_profiles row, so every downstream agent silently falls back
+  // to generic tone and nothing ever re-prompts. onboarding_completed
+  // alone therefore isn't a reliable completeness signal; the presence
+  // of a brand profile is. Surfaced as a dismissible-by-completion
+  // prompt rather than by re-blocking the app — skipping was a
+  // deliberate choice, this just makes it recoverable.
+  const brandProfileMissing =
+    brandProfileRes.status === "fulfilled" && !brandProfileRes.value.data;
 
   const leadsToday = leads?.filter((l) => new Date(l.created_at) >= todayStart).length ?? 0;
   const activeCampaigns = performance?.campaigns.filter((c) => c.meta_status === "ACTIVE").length ?? 0;
@@ -97,6 +109,24 @@ export default async function DashboardOverviewPage() {
         <h1 className="text-2xl font-bold text-slate-900">Welcome, {profile?.full_name ?? "there"}</h1>
         {growth && <p className="text-slate-500 text-sm mt-0.5">{growth.headline}</p>}
       </div>
+
+      {brandProfileMissing && (
+        <Link
+          href="/dashboard/settings/brand"
+          className="flex items-center gap-3 bg-brand-500/10 border border-brand-700/40 rounded-xl p-4 hover:bg-brand-500/15 transition-colors"
+        >
+          <div className="w-9 h-9 bg-brand-500/20 rounded-lg flex items-center justify-center shrink-0">
+            <Palette className="w-4 h-4 text-brand-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-brand-300">Finish setting up your brand</p>
+            <p className="text-xs text-brand-500">
+              Onboarding was skipped, so everything generated for you uses a generic tone. Takes a minute to fix.
+            </p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-brand-400" />
+        </Link>
+      )}
 
       {pendingApprovals > 0 && (
         <Link
