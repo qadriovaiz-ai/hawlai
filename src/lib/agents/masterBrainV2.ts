@@ -857,10 +857,20 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "create_product_ad": {
       try {
-        const { data: matches } = await supabase.from("products").select("id, name, images").eq("dealership_id", ctx.id).ilike("name", `%${input.productName}%`).limit(5);
+        const { data: matches } = await supabase.from("products").select("id, name, images, inventory_count, is_active").eq("dealership_id", ctx.id).ilike("name", `%${input.productName}%`).limit(5);
         const withPhoto = (matches ?? []).filter((p: any) => Array.isArray(p.images) && p.images.length > 0);
         if (withPhoto.length === 0) return { error: `No product matching "${input.productName}" with an uploaded photo found — add a photo to it in Website & Products first.` };
-        const product = withPhoto[0];
+        // Master audit Part C1.4 — don't spend ad budget/effort promoting
+        // a product nobody can actually buy. inventory_count === 0 means
+        // explicitly tracked and depleted; null means untracked/
+        // unlimited, so that case is left alone.
+        const available = withPhoto.filter((p: any) => p.is_active !== false && p.inventory_count !== 0);
+        if (available.length === 0) {
+          const p = withPhoto[0];
+          const reason = p.is_active === false ? "unpublished" : "out of stock";
+          return { error: `"${p.name}" is currently ${reason} — an ad can't be made promoting it until that's fixed in Website & Products.` };
+        }
+        const product = available[0];
         const photoUrl = product.images[0];
 
         const canvasWidth = 1080, canvasHeight = 1080;
