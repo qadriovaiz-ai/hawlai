@@ -46,12 +46,32 @@ export default async function AnalyticsPage() {
     count: leads?.filter((l) => l.ai_score >= min && l.ai_score <= max).length ?? 0,
   }));
 
-  // Source breakdown
-  const sources = ["csv_upload", "website", "referral", "walk_in", "social_media"];
-  const sourceData = sources.map((source) => ({
-    source: source.replace(/_/g, " "),
-    count: leads?.filter((l) => l.source === source).length ?? 0,
-  })).filter((s) => s.count > 0);
+  // Source breakdown — derived from the data rather than a hardcoded
+  // list. The old fixed list (csv_upload/website/referral/walk_in/
+  // social_media) silently dropped every lead whose source wasn't on
+  // it, most notably "meta_ads_paid" — the value the Meta lead webhook
+  // actually writes — so paid-social leads were invisible here.
+  //
+  // Revenue per source closes the audit's channel-attribution gap:
+  // campaign ROAS only ever counted leads carrying a meta_campaign_id,
+  // so revenue from organic, referral, walk-in and email leads existed
+  // in the CRM but appeared nowhere in any performance view. This is
+  // still single-touch (one source stamped per lead) — real multi-touch
+  // would need a touchpoint table and UTM capture that don't exist yet.
+  const sourceTotals = new Map<string, { count: number; revenue: number; conversions: number }>();
+  for (const lead of leads ?? []) {
+    const key = lead.source || "unknown";
+    const entry = sourceTotals.get(key) ?? { count: 0, revenue: 0, conversions: 0 };
+    entry.count += 1;
+    if (lead.status === "converted" && lead.deal_value != null) {
+      entry.revenue += Number(lead.deal_value);
+      entry.conversions += 1;
+    }
+    sourceTotals.set(key, entry);
+  }
+  const sourceData = Array.from(sourceTotals.entries())
+    .map(([source, v]) => ({ source: source.replace(/_/g, " "), ...v }))
+    .sort((a, b) => b.count - a.count);
 
   // Monthly trend
   const months = Array.from({ length: 6 }, (_, i) => {
