@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil, FlaskConical } from "lucide-react";
 import ProductPicker from "@/components/ads/ProductPicker";
 import PhotoEditor from "@/components/ads/PhotoEditor";
 import ScoreBadge from "@/components/shared/ScoreBadge";
@@ -24,7 +25,18 @@ const EXECUTION_STEPS = [
 type Stage = "form" | "previewing" | "preview" | "launching" | "success" | "error";
 
 export default function FullLaunchPage() {
+  return (
+    <Suspense fallback={null}>
+      <FullLaunchForm />
+    </Suspense>
+  );
+}
+
+function FullLaunchForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
+  const variantGroupId = searchParams.get("variantGroupId");
+  const variantLabel = searchParams.get("variantLabel");
   const [stage, setStage] = useState<Stage>("form");
 
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -121,6 +133,7 @@ export default function FullLaunchPage() {
           scheduled_start: scheduledStart || null,
           destination,
           product_destination_url: productDestinationUrl,
+          ...(variantGroupId && { variant_group_id: variantGroupId, variant_label: variantLabel }),
         }),
       });
       const data = await res.json();
@@ -169,6 +182,15 @@ export default function FullLaunchPage() {
             <p className="text-sm text-slate-500">Give a photo + requirement, the full ad gets ready</p>
           </div>
         </div>
+
+        {variantGroupId && (
+          <div className="flex items-center gap-2.5 bg-brand-500/10 border border-brand-400/30 rounded-lg px-4 py-2.5">
+            <FlaskConical className="w-4 h-4 text-brand-500 shrink-0" />
+            <p className="text-xs text-brand-600">
+              Launching as <span className="font-semibold">Variant {variantLabel}</span> — this will be compared against the campaign it's testing on the Campaigns page.
+            </p>
+          </div>
+        )}
 
         <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm font-semibold text-slate-700">1. Photo</p>

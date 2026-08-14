@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url, variant_group_id, variant_label } = body;
   const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
 
   if (adDestination === "instant_form" && !leadFormId) {
@@ -252,6 +252,11 @@ export async function POST(request: Request) {
         daily_budget: plan.daily_budget ?? 500,
         targeting_city: plan.targeting_city ?? null,
         scheduled_start: scheduled_start ? new Date(scheduled_start).toISOString() : null,
+        // Creative variant testing — master audit Part D. Both fields
+        // are optional and null for every ordinary single-ad launch;
+        // only set when this launch was started as a test against an
+        // existing campaign (see /api/ads/campaigns/[id]/variant-group).
+        ...(variant_group_id && { variant_group_id, variant_label: variant_label ?? null }),
       })
       .eq("id", draft.id)
       .select()

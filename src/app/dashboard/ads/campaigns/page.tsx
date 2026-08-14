@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown } from "lucide-react";
+import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown, FlaskConical } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
 import ExplainCampaignButton from "@/components/ads/ExplainCampaignButton";
+import TestVariantButton from "@/components/ads/TestVariantButton";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
@@ -33,6 +34,32 @@ export default async function CampaignsPage() {
   ]);
 
   const perfById = new Map(performance.campaigns.map((p) => [p.id, p]));
+
+  // Group launched creatives that share a variant_group_id (started
+  // via "Test a variant") so they render as one side-by-side
+  // comparison instead of two unrelated cards — a group id assigned
+  // but with only one member so far (no second variant launched yet)
+  // stays a normal single card until there's actually something to
+  // compare it against.
+  const byGroup = new Map<string, any[]>();
+  const singles: any[] = [];
+  for (const c of campaigns ?? []) {
+    if (c.variant_group_id) {
+      const arr = byGroup.get(c.variant_group_id) ?? [];
+      arr.push(c);
+      byGroup.set(c.variant_group_id, arr);
+    } else {
+      singles.push(c);
+    }
+  }
+  const variantGroups: { groupId: string; members: any[] }[] = [];
+  for (const [groupId, members] of byGroup) {
+    if (members.length >= 2) {
+      variantGroups.push({ groupId, members: members.sort((a: any, b: any) => (a.variant_label ?? "").localeCompare(b.variant_label ?? "")) });
+    } else {
+      singles.push(...members);
+    }
+  }
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -90,7 +117,63 @@ export default async function CampaignsPage() {
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-slate-500">{campaigns.length} campaign{campaigns.length > 1 ? "s" : ""}</p>
-          {campaigns.map((c) => {
+
+          {/* Creative variant tests — master audit Part D. Comparison
+              reads the same per-campaign performance the single-card
+              view already has; nothing new is fetched for this. */}
+          {variantGroups.map(({ groupId, members }) => (
+            <div key={groupId} className="card p-4 space-y-3">
+              <p className="text-xs font-semibold text-brand-600 flex items-center gap-1.5">
+                <FlaskConical className="w-3.5 h-3.5" /> Variant test — {members.length} versions
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {members.map((c: any) => {
+                  const status = c.meta_status ?? "PAUSED";
+                  const perf = perfById.get(c.id);
+                  return (
+                    <div key={c.id} className="border border-slate-200 rounded-lg p-3 space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        {c.generated_image_url ? (
+                          <img src={c.generated_image_url} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
+                            <Megaphone className="w-5 h-5 text-slate-300" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-brand-600 bg-brand-500/10 rounded px-1.5 py-0.5">
+                              {c.variant_label ?? "—"}
+                            </span>
+                            <span className={`badge ${STATUS_BADGE[status] ?? STATUS_BADGE.PAUSED}`}>{status}</span>
+                          </div>
+                          <p className="text-sm font-medium text-slate-900 truncate mt-0.5">{c.headline}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-slate-400">Spend</p>
+                          <p className="text-xs font-semibold text-slate-800">{perf ? formatCurrency(perf.spend) : "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400">Leads</p>
+                          <p className="text-xs font-semibold text-slate-800">{perf?.leads ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400">ROAS</p>
+                          <p className="text-xs font-semibold text-slate-800">{perf?.roas != null ? `${perf.roas.toFixed(1)}x` : "—"}</p>
+                        </div>
+                      </div>
+                      <CampaignStatusToggle creativeId={c.id} currentStatus={status} />
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10.5px] text-slate-400">Pause whichever version is underperforming from its own toggle above — there's no separate "declare winner" step.</p>
+            </div>
+          ))}
+
+          {singles.map((c: any) => {
             const status = c.meta_status ?? "PAUSED";
             const isScheduledFuture = c.scheduled_start && new Date(c.scheduled_start) > new Date();
             const perf = perfById.get(c.id);
@@ -162,7 +245,10 @@ export default async function CampaignsPage() {
                     </div>
                   </div>
                 )}
-                <ExplainCampaignButton campaignId={c.id} />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ExplainCampaignButton campaignId={c.id} />
+                  <TestVariantButton campaignId={c.id} />
+                </div>
               </div>
             );
           })}
