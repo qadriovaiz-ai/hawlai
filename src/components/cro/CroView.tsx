@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, AlertCircle, CheckCircle2, TrendingUp, FlaskConical, Sparkles } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, TrendingUp, FlaskConical, Sparkles, Star } from "lucide-react";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";
@@ -38,6 +38,8 @@ export default function CroView() {
   const [abTest, setAbTest] = useState<any>(null);
   const [abResults, setAbResults] = useState<any>(null);
   const [abLoading, setAbLoading] = useState(true);
+  const [reviews, setReviews] = useState<any>(null);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [abForm, setAbForm] = useState({ element: "headline", variantA: "", variantB: "" });
   const [abSaving, setAbSaving] = useState(false);
   const [applyingWinner, setApplyingWinner] = useState<"A" | "B" | null>(null);
@@ -51,7 +53,11 @@ export default function CroView() {
     setAbLoading(true);
     fetch("/api/cro/ab-test").then((r) => r.json()).then((d) => { setAbTest(d.test); setAbResults(d.results); }).finally(() => setAbLoading(false));
   }
-  useEffect(() => { loadReport(); loadAbTest(); }, []);
+  useEffect(() => {
+    loadReport();
+    loadAbTest();
+    fetch("/api/integrations/google-reviews").then((r) => r.json()).then((d) => setReviews(d)).finally(() => setReviewsLoading(false));
+  }, []);
 
   async function handleRunTask() {
     setTaskError(null);
@@ -126,6 +132,32 @@ export default function CroView() {
           </>
         )}
       </Card>
+
+      {/* Reputation — master audit Part D2: public review signals,
+          distinct from get_customer_sentiment's internal lead-notes
+          analysis. Only ever shows once a Google Place ID is
+          connected in Settings → Integrations. */}
+      {!reviewsLoading && reviews?.placeId && (
+        <Card className="space-y-3">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Star className="w-4 h-4 text-amber-500" /> Reputation (Google)</p>
+          {reviews.snapshot ? (
+            <>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-slate-900">{reviews.snapshot.rating ?? "—"}</span>
+                <span className="text-xs text-slate-500">★ · {reviews.snapshot.review_count ?? 0} reviews</span>
+              </div>
+              {(reviews.snapshot.recent_reviews ?? []).slice(0, 3).map((r: any, i: number) => (
+                <div key={i} className="p-2.5 rounded-lg border border-slate-200">
+                  <p className="text-xs font-medium text-slate-600">{r.authorName ?? "Anonymous"} {r.rating ? `· ${r.rating}★` : ""}</p>
+                  {r.text && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{r.text}</p>}
+                </div>
+              ))}
+            </>
+          ) : (
+            <p className="text-xs text-slate-400">Not fetched yet — this updates once a day automatically.</p>
+          )}
+        </Card>
+      )}
 
       {/* AI suggestions by task */}
       <Card className="space-y-3">

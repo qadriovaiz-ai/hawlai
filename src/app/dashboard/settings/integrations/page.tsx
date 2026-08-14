@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText, Radio } from "lucide-react";
+import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText, Radio, Star } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import InstagramBusinessLoginConnect from "@/components/settings/InstagramBusinessLoginConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
@@ -9,6 +9,7 @@ import WooCommerceConnect from "@/components/settings/WooCommerceConnect";
 import WebsiteConnect from "@/components/settings/WebsiteConnect";
 import WordPressConnect from "@/components/settings/WordPressConnect";
 import ConnectWhatsAppCard from "@/components/settings/ConnectWhatsAppCard";
+import GoogleReviewsConnect from "@/components/settings/GoogleReviewsConnect";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 
 const PENDING_APPROVAL = [
@@ -208,6 +209,20 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           <ShopifyConnect />
+        </div>
+
+        {/* Google Reviews */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-amber-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Star className="w-4 h-4 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Google Reviews</p>
+              <p className="text-xs text-slate-400">Surface your public rating in CRO</p>
+            </div>
+          </div>
+          <GoogleReviewsConnect />
         </div>
 
         {/* WooCommerce */}
