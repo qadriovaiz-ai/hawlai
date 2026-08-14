@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
+import { emitNotification } from "@/lib/notifications/emit";
 
 async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
@@ -163,6 +164,21 @@ export async function POST(request: Request) {
             dealershipInfo.slack_webhook_url,
             `🔥 New *Hot* lead for ${dealershipInfo.dealership_name}: *${name}* (${phone})${vehicle ? ` — interested in ${vehicle}` : ""}. Check it out in Hawlai's Call Queue.`
           );
+        }
+
+        // In-app record of the same signal. Previously the hot-lead
+        // alert existed only as a Slack ping, so a business without
+        // Slack connected got no notification at all — and even with
+        // it, nothing was visible inside the product.
+        if (data && qualification.temperature === "hot") {
+          await emitNotification(supabase, {
+            dealershipId,
+            kind: "hot_lead",
+            title: `New hot lead: ${name}`,
+            body: vehicle ? `Interested in ${vehicle}` : (phone ?? null),
+            href: `/dashboard/leads/${data.id}`,
+            dedupeKey: `hot_lead:${data.id}`,
+          });
         }
 
         // Opt-in automatic AI calling — off by default. Best-effort:

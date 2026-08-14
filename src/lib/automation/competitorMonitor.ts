@@ -7,6 +7,7 @@
 // output, not fabricated "there's a new product" claims.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { emitNotification } from "../notifications/emit";
 
 export async function checkCompetitorAlerts(supabase: any, dealershipId: string) {
   const { data: watches } = await supabase
@@ -66,6 +67,16 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
           title: item.title,
           summary: item.summary ?? null,
           source_url: item.sourceUrl ?? null,
+        });
+        // Only reached for genuinely new alerts — the title dedupe
+        // above already skipped anything seen before.
+        await emitNotification(supabase, {
+          dealershipId,
+          kind: "competitor_alert",
+          title: `${watch.competitor_name}: ${item.title}`,
+          body: item.summary ?? null,
+          href: "/dashboard/competitor-intel",
+          dedupeKey: `competitor:${watch.competitor_name}:${item.title}`,
         });
         newAlerts++;
       }

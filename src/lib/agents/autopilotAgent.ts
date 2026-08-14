@@ -21,6 +21,7 @@ import { analyzeCampaigns } from "./optimizationAgent";
 import { setCampaignStatus } from "./campaignEditAgent";
 import { snapshotCampaignPerformance } from "./analyticsAgent";
 import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights";
+import { emitNotification } from "@/lib/notifications/emit";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 
@@ -104,6 +105,17 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
         reviewed_at: new Date().toISOString(),
       });
       await recordCampaignPauseInsight(supabase, dealershipId, { id: campaign.id, headline: campaign.headline, reason: rec.reason });
+      // Money was just stopped without a human in the loop — that
+      // belongs in the notification centre, not only in the approvals
+      // log where it had to be gone looking for.
+      await emitNotification(supabase, {
+        dealershipId,
+        kind: "campaign_auto_paused",
+        title: `Auto-paused "${campaign.headline}"`,
+        body: rec.reason,
+        href: "/dashboard/ads/campaigns",
+        dedupeKey: `auto_pause:${campaign.id}`,
+      });
     }
   }
   return pausedCount;

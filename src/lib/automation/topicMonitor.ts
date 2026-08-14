@@ -6,6 +6,7 @@
 // for that topic) so the feed doesn't repeat the same story daily.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { emitNotification } from "../notifications/emit";
 
 export async function checkTopicAlerts(supabase: any, dealershipId: string) {
   const { data: watches } = await supabase
@@ -59,6 +60,16 @@ export async function checkTopicAlerts(supabase: any, dealershipId: string) {
           title: item.title,
           summary: item.summary ?? null,
           source_url: item.sourceUrl ?? null,
+        });
+        // Only reached for genuinely new alerts — the title dedupe
+        // above already skipped anything seen before.
+        await emitNotification(supabase, {
+          dealershipId,
+          kind: "topic_alert",
+          title: `${watch.topic}: ${item.title}`,
+          body: item.summary ?? null,
+          href: "/dashboard/research-agent",
+          dedupeKey: `topic:${watch.topic}:${item.title}`,
         });
         newAlerts++;
       }
