@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { resolveActiveMembership } from "@/lib/teamMembership";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,7 +9,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase.from("team_members").select("id").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  const membership = await resolveActiveMembership(supabase, user.id);
   if (!membership) return NextResponse.json({ error: "Not an active team member" }, { status: 403 });
 
   const { status } = await request.json();

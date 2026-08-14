@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
 async function requireOwnerDealership(supabase: any) {
@@ -37,7 +38,27 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   // Soft-remove — keeps task history intact rather than cascading a
   // hard delete through everything they were ever assigned.
-  const { error: updateError } = await supabase.from("team_members").update({ status: "removed" }).eq("id", id).eq("dealership_id", dealership!.id);
+  const { data: removed, error: updateError } = await supabase
+    .from("team_members")
+    .update({ status: "removed" })
+    .eq("id", id)
+    .eq("dealership_id", dealership!.id)
+    .select("user_id")
+    .maybeSingle();
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  // Clear the removed member's active-business pointer. /api/team/accept
+  // sets profiles.dealership_id on invite acceptance, and a few tables
+  // (ad_creatives, the two usage tables) key their RLS off that field
+  // rather than dealerships.owner_id — so leaving it set kept a removed
+  // member's access alive indefinitely. Migration 105 repoints those
+  // policies onto live owner/team-membership checks; this clears the
+  // stale pointer too, so neither layer alone is load-bearing.
+  // Service client because profiles RLS only lets a user write their
+  // own row — the owner is removing somebody else.
+  if (removed?.user_id) {
+    const service = createServiceClient();
+    await service.from("profiles").update({ dealership_id: null }).eq("id", removed.user_id);
+  }
   return NextResponse.json({ success: true });
 }

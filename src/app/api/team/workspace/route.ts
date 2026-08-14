@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { resolveActiveMembership } from "@/lib/teamMembership";
 
 // Admin/Marketing Manager get a richer view than the plain Task Inbox
 // (Designer/Content Writer/Sales/Viewer) — per the frozen UX design,
@@ -16,7 +17,7 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase.from("team_members").select("id, dealership_id, role, status").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  const membership = await resolveActiveMembership(supabase, user.id);
   if (!membership) return NextResponse.json({ error: "Not an active team member" }, { status: 403 });
   if (!["admin", "marketing_manager"].includes(membership.role)) {
     return NextResponse.json({ error: "This view is only for Admin/Marketing Manager roles" }, { status: 403 });

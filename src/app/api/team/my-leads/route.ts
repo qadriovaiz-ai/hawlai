@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { resolveActiveMembership } from "@/lib/teamMembership";
 
 // Same safety pattern as /api/team/my-tasks: service client, but only
 // after confirming — via the caller's own auth.uid() and the
@@ -9,8 +10,7 @@ import { NextResponse } from "next/server";
 // team_members.id only. A Sales rep can never see a lead assigned to
 // a different rep, even by guessing an id.
 async function getActiveSalesMembership(supabase: any, userId: string) {
-  const { data } = await supabase.from("team_members").select("id, dealership_id, role, status").eq("user_id", userId).eq("status", "active").eq("role", "sales").maybeSingle();
-  return data;
+  return resolveActiveMembership(supabase, userId, { role: "sales" });
 }
 
 export async function GET() {

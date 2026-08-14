@@ -2,13 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import SignOutButton from "@/components/team/SignOutButton";
+import { resolveActiveMembership } from "@/lib/teamMembership";
 
 export default async function TeamTasksLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: membership } = await supabase.from("team_members").select("id, status").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  const membership = await resolveActiveMembership(supabase, user.id);
   // Not an active team member (e.g. the Owner navigated here by
   // accident, or a since-removed member) — send them to the real
   // dashboard / login rather than showing an empty inbox.

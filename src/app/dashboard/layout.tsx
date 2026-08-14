@@ -6,6 +6,7 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import TopBar from "@/components/dashboard/TopBar";
 import MasterBrainWidget from "@/components/dashboard/MasterBrainWidget";
 import MobileTabBar from "@/components/dashboard/MobileTabBar";
+import { resolveActiveMembership } from "@/lib/teamMembership";
 
 export default async function DashboardLayout({
   children,
@@ -29,7 +30,12 @@ export default async function DashboardLayout({
   // pages rather than a complete experience. The RLS extension stays
   // in place as a real foundation for when dashboard-page-by-page
   // parity is built out, it's just not what decides routing yet.
-  const { data: teamMembership } = await supabase.from("team_members").select("id, role").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  // Resolved through the shared helper rather than .maybeSingle():
+  // an agency staffer on 2+ client teams used to resolve to null here,
+  // so this guard failed OPEN and dropped them into the full owner
+  // dashboard — where ~20 pages sit behind owner-only RLS and render
+  // empty. See src/lib/teamMembership.ts.
+  const teamMembership = await resolveActiveMembership(supabase, user.id);
   if (teamMembership) redirect("/team-tasks");
 
   const { data: profile } = await supabase

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { resolveActiveMembership } from "@/lib/teamMembership";
 
 // A team member's own client has no RLS access to the tasks table
 // (tasks RLS is owner-only, by design — see migration 070's comment).
@@ -11,9 +12,10 @@ import { NextResponse } from "next/server";
 // team_members.id. This is real access control enforced in
 // application code for one narrow, well-understood surface, not a
 // bypass.
+// Membership resolution lives in the shared helper so the multi-team
+// case is handled identically everywhere — see src/lib/teamMembership.ts.
 async function getActiveMembership(supabase: any, userId: string) {
-  const { data } = await supabase.from("team_members").select("id, dealership_id, role, status").eq("user_id", userId).eq("status", "active").maybeSingle();
-  return data;
+  return resolveActiveMembership(supabase, userId);
 }
 
 export async function GET() {
