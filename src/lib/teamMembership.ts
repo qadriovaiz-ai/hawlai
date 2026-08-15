@@ -29,6 +29,9 @@ export interface TeamMembership {
   dealership_id: string;
   role: string;
   status: string;
+  // null = no member-level override, use the role's default scope
+  // (see src/lib/teamPermissions.ts) — non-null narrows it further.
+  feature_scope: string[] | null;
 }
 
 export async function resolveActiveMembership(
@@ -38,7 +41,7 @@ export async function resolveActiveMembership(
 ): Promise<TeamMembership | null> {
   const { data } = await supabase
     .from("team_members")
-    .select("id, dealership_id, role, status")
+    .select("id, dealership_id, role, status, feature_scope")
     .eq("user_id", userId)
     .eq("status", "active");
 

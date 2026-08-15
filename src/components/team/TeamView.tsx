@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, UserPlus, Check, Copy, X, Crown } from "lucide-react";
+import { Loader2, UserPlus, Check, Copy, X, Crown, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { FEATURE_AREAS, FEATURE_AREA_LABELS, resolveFeatureScope, type FeatureArea } from "@/lib/teamPermissions";
 
 interface Member {
   id: string;
@@ -11,7 +12,13 @@ interface Member {
   status: "invited" | "active" | "removed";
   invited_at: string;
   joined_at: string | null;
+  feature_scope: string[] | null;
 }
+
+// Only admin/marketing_manager reach ManagerWorkspace at all today —
+// showing the scope editor for other roles would offer a control that
+// visibly does nothing, which is worse than not showing it.
+const SCOPABLE_ROLES = ["admin", "marketing_manager"];
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -41,6 +48,7 @@ export default function TeamView() {
   const [emailSent, setEmailSent] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedScope, setExpandedScope] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -74,6 +82,18 @@ export default function TeamView() {
     await fetch(`/api/team/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) });
   }
 
+  async function toggleScopeArea(member: Member, area: FeatureArea) {
+    const current = resolveFeatureScope(member.role, member.feature_scope);
+    const next = current.includes(area) ? current.filter((a) => a !== area) : [...current, area];
+    setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, feature_scope: next } : m)));
+    await fetch(`/api/team/${member.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ featureScope: next }) });
+  }
+
+  async function resetScopeToDefault(member: Member) {
+    setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, feature_scope: null } : m)));
+    await fetch(`/api/team/${member.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ featureScope: null }) });
+  }
+
   async function removeMember(id: string) {
     if (!confirm("Remove this person from the team?")) return;
     await fetch(`/api/team/${id}`, { method: "DELETE" });
@@ -101,25 +121,60 @@ export default function TeamView() {
         </div>
       </div>
 
-      {members.map((m) => (
-        <div key={m.id} className="card p-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-sm">
-            {m.email[0].toUpperCase()}
+      {members.map((m) => {
+        const scopable = SCOPABLE_ROLES.includes(m.role);
+        const resolvedScope = resolveFeatureScope(m.role, m.feature_scope);
+        const hasOverride = m.feature_scope != null;
+        return (
+          <div key={m.id} className="card p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-sm">
+                {m.email[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900 truncate">{m.email}</p>
+                <p className="text-xs text-slate-400">{m.status === "invited" ? "Invite pending" : "Active"}</p>
+              </div>
+              <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700">
+                {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+              {scopable && (
+                <button
+                  onClick={() => setExpandedScope(expandedScope === m.id ? null : m.id)}
+                  className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-0.5 shrink-0"
+                >
+                  Access {hasOverride && <span className="w-1.5 h-1.5 rounded-full bg-brand-500 inline-block" />}
+                  {expandedScope === m.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
+              <button onClick={() => removeMember(m.id)} className="text-slate-400 hover:text-red-500 shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {scopable && expandedScope === m.id && (
+              <div className="pl-11 space-y-2 border-t border-slate-100 pt-3">
+                <p className="text-xs text-slate-400">Which parts of the team workspace {m.email} can see. Unchecked areas are hidden entirely, not just read-only.</p>
+                <div className="flex flex-wrap gap-3">
+                  {FEATURE_AREAS.map((area) => (
+                    <label key={area} className="flex items-center gap-1.5 text-xs text-slate-600">
+                      <input type="checkbox" checked={resolvedScope.includes(area)} onChange={() => toggleScopeArea(m, area)} className="w-3.5 h-3.5 accent-brand-600" />
+                      {FEATURE_AREA_LABELS[area]}
+                    </label>
+                  ))}
+                </div>
+                {hasOverride && (
+                  <button onClick={() => resetScopeToDefault(m)} className="text-xs text-brand-500 hover:underline">
+                    Reset to {ROLE_LABELS[m.role]} default
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-900 truncate">{m.email}</p>
-            <p className="text-xs text-slate-400">{m.status === "invited" ? "Invite pending" : "Active"}</p>
-          </div>
-          <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700">
-            {Object.entries(ROLE_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-          <button onClick={() => removeMember(m.id)} className="text-slate-400 hover:text-red-500">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
+        );
+      })}
 
       {!showInvite ? (
         <button onClick={() => setShowInvite(true)} className="w-full text-sm border border-dashed border-slate-300 hover:border-purple-400 text-slate-500 hover:text-purple-600 rounded-lg py-3 flex items-center justify-center gap-2">

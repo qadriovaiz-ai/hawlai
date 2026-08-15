@@ -21,11 +21,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { error, dealership } = await requireOwnerDealership(supabase);
   if (error) return error;
 
-  const { role } = await request.json();
-  const validRoles = ["admin", "marketing_manager", "designer", "content_writer", "sales", "viewer"];
-  if (!validRoles.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+  const { role, featureScope } = await request.json();
+  const update: Record<string, any> = {};
 
-  const { error: updateError } = await supabase.from("team_members").update({ role }).eq("id", id).eq("dealership_id", dealership!.id);
+  if (role !== undefined) {
+    const validRoles = ["admin", "marketing_manager", "designer", "content_writer", "sales", "viewer"];
+    if (!validRoles.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    update.role = role;
+  }
+
+  if (featureScope !== undefined) {
+    // null clears the override (back to the role default); an array
+    // — including an empty one — sets an explicit allow-list. See
+    // resolveFeatureScope() in teamPermissions.ts for how these two
+    // cases differ.
+    if (featureScope !== null && !Array.isArray(featureScope)) {
+      return NextResponse.json({ error: "featureScope must be an array or null" }, { status: 400 });
+    }
+    update.feature_scope = featureScope;
+  }
+
+  if (Object.keys(update).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+
+  const { error: updateError } = await supabase.from("team_members").update(update).eq("id", id).eq("dealership_id", dealership!.id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

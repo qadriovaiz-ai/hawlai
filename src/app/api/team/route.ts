@@ -27,7 +27,7 @@ export async function GET() {
 
   const { data: members } = await supabase
     .from("team_members")
-    .select("id, email, role, status, invited_at, joined_at")
+    .select("id, email, role, status, invited_at, joined_at, feature_scope")
     .eq("dealership_id", dealership!.id)
     .neq("status", "removed")
     .order("invited_at", { ascending: false });

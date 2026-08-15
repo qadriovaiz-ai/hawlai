@@ -26,27 +26,39 @@ interface Member {
 
 const TEMP_COLOR: Record<string, string> = { hot: "text-red-500", warm: "text-amber-500", cold: "text-slate-400" };
 
+const TABS = [
+  { key: "tasks", label: "Team Tasks", icon: ClipboardList },
+  { key: "leads", label: "Leads", icon: PhoneCall },
+  { key: "team", label: "Team", icon: Users2 },
+] as const;
+
 export default function ManagerWorkspace() {
-  const [tab, setTab] = useState<"tasks" | "leads" | "team">("tasks");
-  const [data, setData] = useState<{ tasks: Task[]; leads: Lead[]; leadCounts: Record<string, number>; teamMembers: Member[] } | null>(null);
+  const [tab, setTab] = useState<"tasks" | "leads" | "team" | null>(null);
+  const [data, setData] = useState<{ scope: string[]; tasks: Task[]; leads: Lead[]; leadCounts: Record<string, number>; teamMembers: Member[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/team/workspace").then((r) => r.json()).then(setData).finally(() => setLoading(false));
+    fetch("/api/team/workspace").then((r) => r.json()).then((d) => {
+      setData(d);
+      setTab(d.scope?.[0] ?? null);
+    }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center gap-2 text-sm text-slate-400 justify-center py-16"><Loader2 className="w-4 h-4 animate-spin" /> Loading workspace...</div>;
   if (!data) return null;
 
+  // A member-level scope override (set by the owner) can narrow this
+  // down to fewer tabs than the role default, or none at all.
+  const visibleTabs = TABS.filter((t) => data.scope?.includes(t.key));
+  if (visibleTabs.length === 0) {
+    return <p className="text-sm text-slate-400 text-center py-16">Your access to this workspace has been limited — ask the business owner if you think this is wrong.</p>;
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex gap-1.5">
-        {[
-          { key: "tasks", label: "Team Tasks", icon: ClipboardList },
-          { key: "leads", label: "Leads", icon: PhoneCall },
-          { key: "team", label: "Team", icon: Users2 },
-        ].map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key as any)} className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${tab === t.key ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+        {visibleTabs.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${tab === t.key ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"}`}>
             <t.icon className="w-3.5 h-3.5" /> {t.label}
           </button>
         ))}
