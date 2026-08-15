@@ -36,13 +36,24 @@ export default async function DashboardLayout({
   // dashboard — where ~20 pages sit behind owner-only RLS and render
   // empty. See src/lib/teamMembership.ts.
   const teamMembership = await resolveActiveMembership(supabase, user.id);
+  // TEMP DEBUG — remove once the /dashboard/approvals onboarding-loop
+  // root cause is confirmed. Logs to the server console (Vercel
+  // Function Logs if deployed, terminal if local dev).
+  console.error("[TEMP DEBUG layout]", { userId: user.id, teamMembership });
   if (teamMembership) redirect("/team-tasks");
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("*, dealerships(*)")
     .eq("id", user.id)
     .single();
+
+  console.error("[TEMP DEBUG layout]", {
+    profileError: profileError?.message ?? null,
+    profileDealershipId: profile?.dealership_id ?? null,
+    resolvedOnboardingCompleted: profile?.dealerships?.onboarding_completed,
+    resolvedDealershipName: profile?.dealerships?.dealership_name,
+  });
 
   const dealershipName = profile?.dealerships?.dealership_name ?? "My Dealership";
   const onboardingCompleted = profile?.dealerships?.onboarding_completed ?? true;
