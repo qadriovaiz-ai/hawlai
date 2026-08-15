@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { runSalesAgentTurn } from "@/lib/agents/chatbotAgent";
+import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
 
 // Public, unauthenticated — the landing page AI Sales Agent widget
 // posts here.
@@ -63,14 +64,17 @@ export async function POST(request: Request) {
         qualification_reason: leadCapture.interest ?? undefined,
       }).eq("id", existing.id);
     } else {
-      await supabase.from("leads").insert({
+      const { data: newLead } = await supabase.from("leads").insert({
         dealership_id: page.dealership_id,
         name: leadCapture.name,
         phone: leadCapture.phone,
         email: leadCapture.email ?? null,
         source: "ai_sales_agent",
         qualification_reason: leadCapture.interest ?? null,
-      });
+      }).select("id").single();
+      if (newLead) {
+        await recordFirstTouchpoint(supabase, { leadId: newLead.id, dealershipId: page.dealership_id, source: "ai_sales_agent" });
+      }
     }
     leadCaptured = true;
   }

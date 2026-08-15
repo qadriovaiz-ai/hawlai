@@ -2,12 +2,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { qualifyLead } from "@/lib/ai-engine";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
+import { recordFirstTouchpoint, bridgeVisitorTouchpoints } from "@/lib/agents/touchpointAgent";
 
 // Public, unauthenticated endpoint — the landing page's lead capture
 // form posts here directly, no login involved.
 export async function POST(request: Request) {
   const body = await request.json();
-  const { slug, name, phone, vehicle, budget, honeypot } = body;
+  const { slug, name, phone, vehicle, budget, honeypot, visitorId } = body;
 
   // Simple bot trap: real visitors never fill a hidden field.
   if (honeypot) return NextResponse.json({ success: true });
@@ -73,6 +74,13 @@ export async function POST(request: Request) {
   }).select("id").single();
 
   if (error) return NextResponse.json({ error: "Something went wrong, please try again" }, { status: 500 });
+
+  if (newLead) {
+    await recordFirstTouchpoint(supabase, { leadId: newLead.id, dealershipId, source });
+    // visitorId is only ever sent from /p/[slug] today (LandingLeadForm) —
+    // /site/[slug] doesn't wire tracking yet, so this is a no-op there.
+    await bridgeVisitorTouchpoints(supabase, { leadId: newLead.id, dealershipId, visitorId: typeof visitorId === "string" ? visitorId : null });
+  }
 
   // Opt-in automatic AI calling — off by default, same as the Meta
   // leads path. Best-effort: never lets a call-trigger failure affect

@@ -147,6 +147,29 @@ export function toWhatsAppLink(phone: string | null | undefined, message: string
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
+const VISITOR_ID_KEY = "hawlai_visitor_id";
+
+// Anonymous, first-party, per-browser id — lets a pre-conversion touch
+// (WhatsApp click, chat open) recorded here get matched back to the
+// lead once they submit the form. No TTL: localStorage already caps
+// its own lifetime to "until the visitor clears it"; the 30-day
+// matching window is enforced server-side at read time instead.
+// Never a name/phone/email, never sent anywhere but our own backend.
+export function getOrCreateVisitorId(): string | null {
+  try {
+    let id = localStorage.getItem(VISITOR_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(VISITOR_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    // localStorage blocked (private browsing, disabled cookies, etc.)
+    // — tracking just degrades to no visitor-id bridge for this visit.
+    return null;
+  }
+}
+
 // Fires a public analytics event for a landing page (view, click,
 // chat_open, form_submit). Never throws — tracking must never break
 // the page for a real visitor.
@@ -155,7 +178,7 @@ export function trackEvent(slug: string, eventType: string, coords?: { xPct: num
     fetch("/api/public/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct, variant }),
+      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct, variant, visitorId: getOrCreateVisitorId() }),
       keepalive: true,
     }).catch(() => {});
   } catch {

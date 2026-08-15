@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Loader2, CheckCircle, Send } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
-import { trackEvent } from "@/lib/utils";
+import { trackEvent, getOrCreateVisitorId } from "@/lib/utils";
 
 const DEFAULT_THEME: LandingTheme = { key: "navy_amber", label: "Navy & Amber", bg: "#FAF8F5", dark: "#122744", accent: "#D9A441", accentText: "#122744" };
 
@@ -27,7 +27,7 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME, variant }
       const res = await fetch("/api/public/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, name, phone, vehicle, honeypot }),
+        body: JSON.stringify({ slug, name, phone, vehicle, honeypot, visitorId: getOrCreateVisitorId() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");

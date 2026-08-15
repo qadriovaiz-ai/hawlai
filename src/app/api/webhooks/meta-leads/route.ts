@@ -5,6 +5,7 @@ import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
 import { emitNotification } from "@/lib/notifications/emit";
+import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
 
 async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
@@ -148,6 +149,10 @@ export async function POST(request: Request) {
         if (error) {
           console.error("[meta-leads] Supabase error:", error.message);
           continue;
+        }
+
+        if (data) {
+          await recordFirstTouchpoint(supabase, { leadId: data.id, dealershipId, source: "meta_ads_paid" });
         }
 
         // Notify Slack for hot leads only — not every lead, to avoid

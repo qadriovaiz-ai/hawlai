@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -35,6 +36,12 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase.from("leads").insert(leads).select();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await Promise.all(
+    data.map((lead: { id: string; dealership_id: string; source: string | null }) =>
+      recordFirstTouchpoint(supabase, { leadId: lead.id, dealershipId: lead.dealership_id, source: lead.source })
+    )
+  );
 
   return NextResponse.json({ count: data.length, leads: data });
 }

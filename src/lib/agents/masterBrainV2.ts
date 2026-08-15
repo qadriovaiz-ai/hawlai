@@ -26,6 +26,7 @@ import { planWebsite, generateWebsite, saveGeneratedWebsite } from "./websiteBui
 import { triggerVapiCall } from "./vapiCallAgent";
 import { getValidYoutubeAccessToken, uploadVideoToYouTube } from "./youtubeAgent";
 import { generate3DScene } from "./threeDAgent";
+import { recordFirstTouchpoint } from "./touchpointAgent";
 import { sendDealerEmail } from "../email/sendDealerEmail";
 import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
@@ -992,6 +993,7 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
     case "add_lead": {
       const { data, error } = await supabase.from("leads").insert({ dealership_id: ctx.id, name: input.name, phone: input.phone, email: input.email ?? null, source: "manual_chat", qualification_reason: input.notes ?? null }).select().single();
       if (error) return { error: error.message };
+      await recordFirstTouchpoint(supabase, { leadId: data.id, dealershipId: ctx.id, source: "manual_chat" });
       return { success: true, leadId: data.id };
     }
     case "trigger_call": {
