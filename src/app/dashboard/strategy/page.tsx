@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb } from "lucide-react";
+import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb, TrendingUp, Layers, Check } from "lucide-react";
 import DeepStrategyPanel from "@/components/strategy/DeepStrategyPanel";
 import { Button } from "@/components/ui/Button";
 
@@ -12,8 +12,11 @@ export default function StrategyPage() {
   const [generating, setGenerating] = useState(false);
   const [budget, setBudget] = useState("");
   const [goal, setGoal] = useState(GOALS[0]);
+  const [targetLeads, setTargetLeads] = useState("");
   const [strategy, setStrategy] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupCreated, setGroupCreated] = useState(false);
 
   useEffect(() => {
     fetch("/api/strategy")
@@ -36,15 +39,31 @@ export default function StrategyPage() {
       const res = await fetch("/api/strategy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monthly_budget: Number(budget), goal }),
+        body: JSON.stringify({ monthly_budget: Number(budget), goal, target_leads: targetLeads ? Number(targetLeads) : undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setStrategy(data);
+      setGroupCreated(false);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleCreateCampaignGroup() {
+    setCreatingGroup(true);
+    try {
+      const name = `${goal} — ₹${Number(budget).toLocaleString("en-IN")}/mo`;
+      const res = await fetch("/api/campaign-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) setGroupCreated(true);
+    } finally {
+      setCreatingGroup(false);
     }
   }
 
@@ -69,7 +88,7 @@ export default function StrategyPage() {
       <DeepStrategyPanel />
 
       <div className="card p-5 space-y-3">
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-slate-500 block mb-1">Monthly budget (₹)</label>
             <div className="bg-slate-100 text-slate-900 flex items-center gap-2 border border-slate-200 rounded-lg p-2.5">
@@ -83,6 +102,13 @@ export default function StrategyPage() {
               {GOALS.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
+          <div>
+            <label className="text-xs text-slate-500 block mb-1">Target leads (optional)</label>
+            <div className="bg-slate-100 text-slate-900 flex items-center gap-2 border border-slate-200 rounded-lg p-2.5">
+              <TrendingUp className="w-4 h-4 text-slate-400 shrink-0" />
+              <input value={targetLeads} onChange={(e) => setTargetLeads(e.target.value.replace(/\D/g, ""))} placeholder="e.g. 100" className="flex-1 text-sm focus:outline-none" />
+            </div>
+          </div>
         </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
         <Button onClick={handleGenerate} disabled={generating} loading={generating}>
@@ -93,8 +119,25 @@ export default function StrategyPage() {
 
       {plan && (
         <div className="space-y-4">
-          <div className="card p-5 bg-purple-500/10 border-purple-700/40">
+          <div className="card p-5 bg-purple-500/10 border-purple-700/40 space-y-3">
             <p className="text-sm text-purple-200 leading-relaxed">{plan.overview}</p>
+            {plan.estimated_leads != null && (
+              <p className="text-xs text-purple-300 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" /> Estimated ~{plan.estimated_leads} leads this month at this budget
+              </p>
+            )}
+            <div>
+              <Button onClick={handleCreateCampaignGroup} loading={creatingGroup} variant="secondary" size="sm" disabled={groupCreated}>
+                {groupCreated ? <Check className="w-3.5 h-3.5" /> : <Layers className="w-3.5 h-3.5" />}
+                {groupCreated ? "Campaign group created" : "Create Campaign Group from this strategy"}
+              </Button>
+              {groupCreated && (
+                <p className="text-xs text-purple-300 mt-1.5">
+                  Empty for now — attach the ads, workflows, and posts you launch for this plan from{" "}
+                  <a href="/dashboard/marketing?tab=campaign-groups" className="underline">Campaign Groups</a>.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="card p-5">
