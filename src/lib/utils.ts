@@ -170,6 +170,23 @@ export function getOrCreateVisitorId(): string | null {
   }
 }
 
+// Read directly from the current URL rather than threading utm_*
+// through every component that calls trackEvent — as long as the
+// visitor hasn't navigated to a different URL since page load, the
+// params set by whatever link they clicked are still right there.
+function getUtmParams(): { utm_source: string | null; utm_medium: string | null; utm_campaign: string | null } {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      utm_source: params.get("utm_source"),
+      utm_medium: params.get("utm_medium"),
+      utm_campaign: params.get("utm_campaign"),
+    };
+  } catch {
+    return { utm_source: null, utm_medium: null, utm_campaign: null };
+  }
+}
+
 // Fires a public analytics event for a landing page (view, click,
 // chat_open, form_submit). Never throws — tracking must never break
 // the page for a real visitor.
@@ -178,7 +195,7 @@ export function trackEvent(slug: string, eventType: string, coords?: { xPct: num
     fetch("/api/public/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct, variant, visitorId: getOrCreateVisitorId() }),
+      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct, variant, visitorId: getOrCreateVisitorId(), ...getUtmParams() }),
       keepalive: true,
     }).catch(() => {});
   } catch {

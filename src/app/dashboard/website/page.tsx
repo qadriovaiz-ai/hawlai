@@ -9,6 +9,7 @@ import { LANDING_THEMES } from "@/lib/landingThemes";
 import CroToolkit from "@/components/cro/CroToolkit";
 import PopupAndTrackingSettings from "@/components/website/PopupAndTrackingSettings";
 import SeoPagesManager from "@/components/website/SeoPagesManager";
+import UtmLinkGenerator from "@/components/website/UtmLinkGenerator";
 
 interface CarListing {
   name: string;
@@ -238,6 +239,8 @@ export default function WebsitePage() {
           </a>
         )}
       </div>
+
+      <UtmLinkGenerator slug={slug} externalUrl={externalUrl} />
 
       <div className="card p-5 space-y-3">
         <label className="text-sm font-semibold text-slate-700 block">Theme</label>

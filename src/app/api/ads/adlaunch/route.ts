@@ -154,6 +154,17 @@ export async function POST(request: Request) {
     draft = newDraft;
   }
 
+  // UTM-tag the destination URL now that draft.id exists — it's the
+  // one stable per-ad identifier available before Meta hands back its
+  // own campaign/ad ids (those only exist after step 5-7 below, too
+  // late — the link is already sent to Meta in step 4). Skipped if the
+  // dealer's own URL is already tagged, so we never override a link
+  // they've deliberately set up themselves.
+  if (adDestination === "website" && destinationUrl && !destinationUrl.includes("utm_source=")) {
+    const separator = destinationUrl.includes("?") ? "&" : "?";
+    destinationUrl = `${destinationUrl}${separator}utm_source=facebook&utm_medium=paid_social&utm_campaign=${draft.id}`;
+  }
+
   try {
     // Step 2: build the image — unless launching from an already-
     // previewed draft, in which case reuse that exact image (fetched
