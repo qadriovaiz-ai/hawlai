@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sparkles, Clock, FlaskConical, ShoppingCart, Info } from "lucide-react";
+import { Sparkles, Clock, FlaskConical, ShoppingCart, Info, CheckCircle2 } from "lucide-react";
 import { CRO_TASKS } from "@/lib/agents/croAgentV2";
 import { Button } from "@/components/ui/Button";
 
@@ -17,6 +17,8 @@ export default function CroToolkit() {
   const [element, setElement] = useState("headline");
   const [variantA, setVariantA] = useState("");
   const [variantB, setVariantB] = useState("");
+  const [applyingWinner, setApplyingWinner] = useState<"A" | "B" | null>(null);
+  const [appliedMessage, setAppliedMessage] = useState<string | null>(null);
 
   function loadAbTest() {
     fetch("/api/cro/ab-test").then((r) => r.json()).then((d) => { setAbTest(d.test); setAbResults(d.results); });
@@ -52,6 +54,25 @@ export default function CroToolkit() {
     loadAbTest();
   }
 
+  // Master audit Part B3 — mirrors CroView.tsx's applyWinner exactly,
+  // reusing the same /api/cro/ab-test PATCH { winner } contract. Two
+  // surfaces hit this endpoint (this toolkit, embedded on the Website
+  // page, and CroView on the dedicated CRO page); both need the same
+  // execute action, not just one of them.
+  async function applyWinner(variant: "A" | "B") {
+    setApplyingWinner(variant);
+    setAppliedMessage(null);
+    try {
+      const res = await fetch("/api/cro/ab-test", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ winner: variant }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to apply winner");
+      setAppliedMessage(`Variant ${variant} is now live as your ${abTest.element === "headline" ? "headline" : "CTA"}.`);
+      loadAbTest();
+    } finally {
+      setApplyingWinner(null);
+    }
+  }
+
   const currentMeta = CRO_TASKS.find((t) => t.key === selectedTask);
 
   return (
@@ -73,17 +94,24 @@ export default function CroToolkit() {
           <div className="space-y-2">
             <p className="text-xs text-slate-500">Testing: <span className="font-semibold text-slate-700 capitalize">{abTest.element}</span></p>
             <div className="grid grid-cols-2 gap-2">
-              <div className="bg-slate-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-purple-500 mb-1">Variant A</p>
-                <p className="text-sm text-slate-700 mb-2">{abTest.variant_a}</p>
-                <p className="text-xs text-slate-400">{abResults?.A.views ?? 0} views · {abResults?.A.submits ?? 0} leads · {abResults?.A.conversionRate !== null ? `${abResults?.A.conversionRate.toFixed(1)}%` : "—"}</p>
-              </div>
-              <div className="bg-slate-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-purple-500 mb-1">Variant B</p>
-                <p className="text-sm text-slate-700 mb-2">{abTest.variant_b}</p>
-                <p className="text-xs text-slate-400">{abResults?.B.views ?? 0} views · {abResults?.B.submits ?? 0} leads · {abResults?.B.conversionRate !== null ? `${abResults?.B.conversionRate.toFixed(1)}%` : "—"}</p>
-              </div>
+              {(["A", "B"] as const).map((v) => (
+                <div key={v} className="bg-slate-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-purple-500 mb-1">Variant {v}</p>
+                  <p className="text-sm text-slate-700 mb-2">{v === "A" ? abTest.variant_a : abTest.variant_b}</p>
+                  <p className="text-xs text-slate-400 mb-2">{abResults?.[v]?.views ?? 0} views · {abResults?.[v]?.submits ?? 0} leads · {abResults?.[v]?.conversionRate != null ? `${abResults[v].conversionRate.toFixed(1)}%` : "—"}</p>
+                  <Button
+                    onClick={() => applyWinner(v)}
+                    loading={applyingWinner === v}
+                    disabled={!abResults?.[v]?.views}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Apply as winner
+                  </Button>
+                </div>
+              ))}
             </div>
+            {appliedMessage && <div className="flex items-center gap-2 text-sm text-green-600"><CheckCircle2 className="w-4 h-4" /> {appliedMessage}</div>}
           </div>
         ) : showAbForm ? (
           <div className="space-y-2">
