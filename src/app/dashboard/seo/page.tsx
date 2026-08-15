@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target, Lock } from "lucide-react";
 import SeoToolkit from "@/components/seo/SeoToolkit";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export default function SeoPage() {
   const [audit, setAudit] = useState<{ score: number; published: boolean; siteUrl: string | null; pages: { pageSlug: string; pageTitle: string; score: number; checks: { label: string; passed: boolean; detail: string }[] }[] } | null>(null);
@@ -223,17 +224,15 @@ export default function SeoPage() {
 
       <div className="card p-5 space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <input
+          <Input
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g. a product, service, or topic"
-            className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          <input
+          <Input
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder="City (optional)"
-            className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
         <div className="flex flex-wrap gap-2">

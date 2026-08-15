@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { Select } from "@/components/ui/Select";
 
 const STAGES = [
   { value: "new", label: "New" },
@@ -34,19 +35,19 @@ export default function LeadStageSelect({ leadId, currentStatus }: { leadId: str
 
   return (
     <div className="relative">
-      <select
+      <Select
         value={currentStatus}
         onChange={(e) => handleChange(e.target.value)}
         disabled={loading}
-        className="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+        className="text-xs px-2 py-1.5"
       >
         {STAGES.map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
           </option>
         ))}
-      </select>
-      {loading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2 text-slate-400" />}
+      </Select>
+      {loading && <Loader2 className="w-3 h-3 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />}
     </div>
   );
 }

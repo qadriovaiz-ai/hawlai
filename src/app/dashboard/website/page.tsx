@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Globe, Loader2, Sparkles, ImagePlus, Check, ExternalLink, AlertCircle, Plus, X, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { LANDING_THEMES } from "@/lib/landingThemes";
 import CroToolkit from "@/components/cro/CroToolkit";
 import PopupAndTrackingSettings from "@/components/website/PopupAndTrackingSettings";
@@ -181,11 +183,7 @@ export default function WebsitePage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-slate-400 gap-2 text-sm">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading...
-      </div>
-    );
+    return <LoadingState className="justify-center py-20" />;
   }
 
   const publicUrl = slug ? `/p/${slug}` : null;
@@ -209,11 +207,11 @@ export default function WebsitePage() {
         </label>
         <p className="text-xs text-slate-400">If you set this, ads can point here instead of the built-in page below.</p>
         <div className="flex items-center gap-2">
-          <input
+          <Input
             value={externalUrl}
             onChange={(e) => setExternalUrl(e.target.value)}
             placeholder="https://your-dealership-website.com"
-            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="flex-1"
           />
           <Button onClick={handleSaveExternalUrl} loading={savingExternal} variant="secondary">
             {!savingExternal && "Save"}
@@ -227,11 +225,11 @@ export default function WebsitePage() {
         <label className="text-sm font-semibold text-slate-700 block">Page URL</label>
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-400 shrink-0">/p/</span>
-          <input
+          <Input
             value={slug}
             onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
             placeholder="your-dealership-name"
-            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="flex-1"
           />
         </div>
         {publicUrl && (
@@ -270,23 +268,20 @@ export default function WebsitePage() {
             Generate with AI
           </Button>
         </div>
-        <input
+        <Input
           value={headline}
           onChange={(e) => setHeadline(e.target.value)}
           placeholder="Headline"
-          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <input
+        <Input
           value={subheadline}
           onChange={(e) => setSubheadline(e.target.value)}
           placeholder="Subheadline"
-          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        <input
+        <Input
           value={offerText}
           onChange={(e) => setOfferText(e.target.value)}
           placeholder="Offer / call to action"
-          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
       </div>
 
@@ -338,17 +333,17 @@ export default function WebsitePage() {
                 <ImagePlus className="w-4 h-4 text-slate-400" />
               )}
             </label>
-            <input
+            <Input
               value={car.name}
               onChange={(e) => updateCar(i, "name", e.target.value)}
               placeholder="Car name"
-              className="bg-slate-100 text-slate-900 flex-1 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="flex-1 p-2"
             />
-            <input
+            <Input
               value={car.price ?? ""}
               onChange={(e) => updateCar(i, "price", e.target.value)}
               placeholder="Price"
-              className="bg-slate-100 text-slate-900 w-28 p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-28 p-2"
             />
             <button onClick={() => removeCar(i)} className="text-slate-300 hover:text-red-500 shrink-0">
               <X className="w-4 h-4" />

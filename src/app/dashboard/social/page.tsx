@@ -6,6 +6,8 @@ import InfluencerOutreach from "@/components/social/InfluencerOutreach";
 import SocialManagement from "@/components/social/SocialManagement";
 import AutoReplySettings from "@/components/social/AutoReplySettings";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 export default function SocialPostPage() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -104,21 +106,20 @@ export default function SocialPostPage() {
 
       <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700">2. What's the post about?</p>
-        <input
+        <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g. New Swift arrivals this week"
-          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <Button onClick={handleGenerateCaption} disabled={generating} loading={generating} variant="secondary">
           {!generating && <Sparkles className="w-4 h-4" />}
           Generate Caption
         </Button>
         {caption && (
-          <textarea
+          <Textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
-            className="bg-slate-100 text-slate-900 w-full h-24 p-3 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="h-24"
           />
         )}
       </div>
@@ -128,11 +129,11 @@ export default function SocialPostPage() {
         <p className="text-xs text-slate-400">Leave blank to post now. Facebook needs at least 10 minutes and at most 6 months notice for scheduled posts.</p>
         <div className="flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-slate-400 shrink-0" />
-          <input
+          <Input
             type="datetime-local"
             value={scheduledTime}
             onChange={(e) => setScheduledTime(e.target.value)}
-            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="flex-1"
           />
         </div>
       </div>

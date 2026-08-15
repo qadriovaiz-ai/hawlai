@@ -12,7 +12,7 @@ import {
   cn, formatCurrency, getTemperatureColor, getTemperatureIcon,
   getStatusColor, getStatusLabel
 } from "@/lib/utils";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 
 interface Props {
   leads: Lead[];
@@ -85,21 +85,21 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
           <Button type="submit" variant="secondary" className="px-3">Search</Button>
         </form>
 
-        <select
+        <Select
           value={filters.temp ?? "all"}
           onChange={(e) => updateUrl({ temp: e.target.value === "all" ? "" : e.target.value })}
-          className="input w-auto"
+          className="w-auto"
         >
           <option value="all">All Temperatures</option>
           <option value="hot">🔥 Hot</option>
           <option value="warm">⚡ Warm</option>
           <option value="cold">❄️ Cold</option>
-        </select>
+        </Select>
 
-        <select
+        <Select
           value={filters.status ?? "all"}
           onChange={(e) => updateUrl({ status: e.target.value === "all" ? "" : e.target.value })}
-          className="input w-auto"
+          className="w-auto"
         >
           <option value="all">All Statuses</option>
           <option value="new">New</option>
@@ -107,7 +107,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
           <option value="called">Called</option>
           <option value="appointment_set">Appointment Set</option>
           <option value="converted">Converted</option>
-        </select>
+        </Select>
 
         <span className="text-sm text-slate-500">{total} leads</span>
       </div>

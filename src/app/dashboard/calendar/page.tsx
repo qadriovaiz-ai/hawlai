@@ -1,9 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CalendarDays, Plus, Loader2, Trash2, X, Megaphone, Share2, Mail, TrendingUp, MoreHorizontal } from "lucide-react";
+import { CalendarDays, Plus, Trash2, X, Megaphone, Share2, Mail, TrendingUp, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 const CHANNEL_META: Record<string, { label: string; icon: any; className: string }> = {
   paid_ads: { label: "Paid Ads", icon: Megaphone, className: "bg-purple-500/10 text-purple-300 border-purple-700/50" },
@@ -110,16 +114,16 @@ export default function CalendarPage() {
         {item.is_auto ? (
           <span className={`badge ${STATUS_BADGE[item.status]}`}>{item.status.replaceAll("_", " ")}</span>
         ) : (
-          <select
+          <Select
             value={item.status}
             onChange={(e) => handleStatusChange(item.id, e.target.value)}
-            className="bg-slate-200 text-slate-900 text-xs border border-slate-300 rounded-md px-2 py-1.5"
+            className="w-auto text-xs px-2 py-1.5 pr-7"
           >
             <option value="planned">Planned</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
-          </select>
+          </Select>
         )}
         {!item.is_auto && (
           <button onClick={() => handleDelete(item.id)} className="text-slate-300 hover:text-red-500">
@@ -156,34 +160,28 @@ export default function CalendarPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <input
+            <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Diwali sale social post"
-              className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <div className="grid grid-cols-2 gap-3">
-              <select
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-                className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
+              <Select value={channel} onChange={(e) => setChannel(e.target.value)}>
                 {Object.entries(CHANNEL_META).map(([value, meta]) => (
                   <option key={value} value={value}>{meta.label}</option>
                 ))}
-              </select>
-              <input
+              </Select>
+              <Input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="bg-slate-100 text-slate-900 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
-            <textarea
+            <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Notes (optional)"
-              className="bg-slate-100 text-slate-900 w-full h-16 p-2.5 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="h-16"
             />
             {error && <p className="text-xs text-red-400">{error}</p>}
             <Button onClick={handleAdd} disabled={saving} loading={saving} className="w-full justify-center">
@@ -195,9 +193,7 @@ export default function CalendarPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400 gap-2 text-sm">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading...
-        </div>
+        <LoadingState className="justify-center py-16" />
       ) : items.length === 0 ? (
         <div className="card">
           <EmptyState icon={CalendarDays} title="Nothing planned yet" description="Add your first item, or schedule an ad launch from the Launch Ad page" />
