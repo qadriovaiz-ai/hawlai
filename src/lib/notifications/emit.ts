@@ -17,7 +17,9 @@ export type NotificationKind =
   | "topic_alert"
   | "campaign_auto_paused"
   | "hot_lead"
-  | "approval_pending";
+  | "approval_pending"
+  | "customer_at_risk"
+  | "lead_going_cold";
 
 export interface EmitNotificationInput {
   dealershipId: string;

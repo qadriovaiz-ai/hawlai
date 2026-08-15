@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { COLD_LEAD_DAYS, getColdLeads } from "@/lib/agents/coldLeadAgent";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
   return profile?.dealership_id as string | undefined;
 }
 
-const COLD_LEAD_DAYS = 14;
 const LAPSED_BUYER_DAYS = 60;
 
 export async function GET() {
@@ -16,12 +16,11 @@ export async function GET() {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const coldCutoff = new Date(Date.now() - COLD_LEAD_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const lapsedCutoff = new Date(Date.now() - LAPSED_BUYER_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [cartsRes, leadsRes, ordersRes] = await Promise.all([
+  const [cartsRes, coldLeads, ordersRes] = await Promise.all([
     supabase.from("abandoned_carts").select("id, customer_name, items, contacted").eq("dealership_id", dealershipId).eq("contacted", false),
-    supabase.from("leads").select("id, name, status, created_at").eq("dealership_id", dealershipId).neq("status", "converted").lt("created_at", coldCutoff),
+    getColdLeads(supabase, dealershipId),
     supabase.from("orders").select("customer_phone, customer_email, customer_name, created_at").eq("dealership_id", dealershipId).neq("status", "cancelled").order("created_at", { ascending: false }),
   ]);
 
@@ -42,7 +41,7 @@ export async function GET() {
   return NextResponse.json({
     segments: {
       abandoned_cart: { count: carts.length, sample: cartItemsSample },
-      cold_lead: { count: (leadsRes.data ?? []).length, cutoffDays: COLD_LEAD_DAYS },
+      cold_lead: { count: coldLeads.length, cutoffDays: COLD_LEAD_DAYS },
       lapsed_buyer: { count: lapsedBuyers.length, cutoffDays: LAPSED_BUYER_DAYS },
     },
   });

@@ -9,6 +9,8 @@ import { runReportSnapshots } from "@/lib/automation/reportSnapshot";
 import { runContentAutopilot } from "@/lib/automation/contentAutopilot";
 import { fetchGoogleReviewsSnapshot } from "@/lib/agents/reputationAgent";
 import { syncSeasonalCalendarEntries } from "@/lib/agents/seasonalityAgent";
+import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
+import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -79,6 +81,16 @@ export async function GET(request: Request) {
       results[dealership.id].seasonalCalendarEntries = await syncSeasonalCalendarEntries(supabase, dealership.id);
     } catch (err: any) {
       results[dealership.id].seasonalCalendarEntries = { error: err.message };
+    }
+    try {
+      results[dealership.id].atRiskNotifications = await notifyAtRiskCustomers(supabase, dealership.id);
+    } catch (err: any) {
+      results[dealership.id].atRiskNotifications = { error: err.message };
+    }
+    try {
+      results[dealership.id].coldLeadNotifications = await notifyColdLeads(supabase, dealership.id);
+    } catch (err: any) {
+      results[dealership.id].coldLeadNotifications = { error: err.message };
     }
   }
 
