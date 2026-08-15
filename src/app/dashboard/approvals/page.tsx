@@ -32,14 +32,7 @@ export default async function ApprovalsPage() {
   // null for a pure invited team member with no business of their
   // own), not necessarily the dealership they're viewing here. Check
   // ownership first, then active team membership.
-  const { data: ownedDealership, error: ownedDealershipError } = await supabase.from("dealerships").select("id, approval_threshold").eq("owner_id", user.id).maybeSingle();
-
-  // TEMP DEBUG — remove once root cause is confirmed.
-  console.error("[TEMP DEBUG approvals]", {
-    userId: user.id,
-    ownedDealership,
-    ownedDealershipError: ownedDealershipError ? { message: ownedDealershipError.message, code: ownedDealershipError.code, details: ownedDealershipError.details, hint: ownedDealershipError.hint } : null,
-  });
+  const { data: ownedDealership } = await supabase.from("dealerships").select("id, approval_threshold").eq("owner_id", user.id).maybeSingle();
 
   let dealershipId: string | undefined;
   let approvalThreshold = 50000;
@@ -55,12 +48,8 @@ export default async function ApprovalsPage() {
     // membership, since an agency team member can genuinely be on
     // multiple teams at once.
     const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
-    // TEMP DEBUG — remove once root cause is confirmed.
-    console.error("[TEMP DEBUG approvals]", { fallbackProfileDealershipId: profile?.dealership_id ?? null });
     if (!profile?.dealership_id) redirect("/dashboard");
     const { data: membership } = await supabase.from("team_members").select("dealership_id, role").eq("user_id", user.id).eq("dealership_id", profile.dealership_id).eq("status", "active").maybeSingle();
-    // TEMP DEBUG — remove once root cause is confirmed.
-    console.error("[TEMP DEBUG approvals]", { fallbackMembership: membership });
     if (!membership) redirect("/dashboard");
     dealershipId = membership.dealership_id;
     viewerRole = membership.role as ApprovalRole;
