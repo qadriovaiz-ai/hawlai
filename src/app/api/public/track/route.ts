@@ -11,10 +11,20 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
   const { data: page } = await supabase.from("landing_pages").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
-  if (!page) return NextResponse.json({ ok: true }); // fail silently — tracking should never break the page
+
+  // Not a quick-launch landing page — check if it's a Website Builder
+  // site instead (different slug namespace, same tracking contract).
+  // Same fallback /api/public/leads/route.ts already uses.
+  let dealershipId = page?.dealership_id;
+  if (!dealershipId) {
+    const { data: website } = await supabase.from("websites").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
+    dealershipId = website?.dealership_id;
+  }
+
+  if (!dealershipId) return NextResponse.json({ ok: true }); // fail silently — tracking should never break the page
 
   await supabase.from("page_events").insert({
-    dealership_id: page.dealership_id,
+    dealership_id: dealershipId,
     event_type: eventType,
     x_pct: typeof xPct === "number" ? xPct : null,
     y_pct: typeof yPct === "number" ? yPct : null,

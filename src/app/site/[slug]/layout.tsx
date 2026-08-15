@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getTheme } from "@/lib/landingThemes";
 import { getSiteFontFamilies, getSiteFontStylesheetUrl } from "@/lib/siteFonts";
 import CartIcon from "@/components/website/CartIcon";
+import PageTracker from "@/components/website/PageTracker";
 
 // Same stale-cache risk as the page routes under this layout (see
 // src/app/site/[slug]/page.tsx) — this specifically renders the nav
@@ -64,6 +65,7 @@ export default async function SiteLayout({ children, params }: { children: React
       <footer className="text-center text-xs py-8 opacity-50" style={{ color: theme.dark }}>
         © {new Date().getFullYear()} {dealershipName}
       </footer>
+      <PageTracker slug={slug} />
     </div>
   );
 }
