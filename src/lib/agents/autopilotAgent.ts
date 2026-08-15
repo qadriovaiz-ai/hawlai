@@ -19,9 +19,10 @@ import { syncOpportunities } from "./opportunityAgent";
 import { generateFollowUpMessage } from "./contentAgent";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { setCampaignStatus } from "./campaignEditAgent";
-import { snapshotCampaignPerformance } from "./analyticsAgent";
+import { snapshotCampaignPerformance, getCampaignPerformance } from "./analyticsAgent";
 import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights";
 import { emitNotification } from "@/lib/notifications/emit";
+import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 
@@ -74,7 +75,7 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
 // ------------------------------------------------------------------
 async function applyAutoPause(supabase: any, dealershipId: string): Promise<number> {
   const { data: dealership } = await supabase
-    .from("dealerships").select("auto_pause_low_performers").eq("id", dealershipId).single();
+    .from("dealerships").select("auto_pause_low_performers, business_category").eq("id", dealershipId).single();
   if (!dealership?.auto_pause_low_performers) return 0;
 
   const result = await analyzeCampaigns(supabase, dealershipId);
@@ -83,11 +84,16 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
 
   const { data: campaigns } = await supabase
     .from("ad_creatives")
-    .select("id, headline, meta_ad_id, meta_status")
+    .select("id, headline, body_copy, meta_ad_id, meta_status, daily_budget, targeting_city, creative_score, mode, background_style, scheduled_start, variant_group_id")
     .eq("dealership_id", dealershipId)
     .eq("status", "launched");
 
   let pausedCount = 0;
+  // Fetched at most once per cron run, not once per paused campaign —
+  // Meta's Insights API is a live call, no need to hit it repeatedly
+  // in the same pass.
+  let performanceCache: Awaited<ReturnType<typeof getCampaignPerformance>> | null = null;
+
   for (const rec of toPause) {
     const campaign = (campaigns ?? []).find((c: any) => c.id === rec.campaign_id && c.meta_status === "ACTIVE");
     if (!campaign) continue;
@@ -95,6 +101,20 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
     const outcome = await setCampaignStatus(supabase, dealershipId, campaign, "PAUSED");
     if (outcome.success) {
       pausedCount++;
+
+      // AI-Intelligence Pillar 1 — causal reasoning. A comparative
+      // explanation (why THIS one underperformed its siblings) is more
+      // useful to remember than optimizationAgent's flat per-campaign
+      // reason, so it's what reaches the business owner and gets
+      // written into business_memory. rec.reason stays untouched as
+      // the internal audit trail of what triggered the pause action.
+      if (!performanceCache) performanceCache = await getCampaignPerformance(supabase, dealershipId);
+      const comparisons = await getComparisonCampaigns(supabase, dealershipId, campaign, performanceCache.campaigns);
+      const thisPerf = performanceCache.campaigns.find((p) => p.id === campaign.id) ?? null;
+      const explainedReason = comparisons.length > 0
+        ? await explainCampaign(campaign, thisPerf, dealership.business_category ?? "car dealership", { supabase, dealershipId }, comparisons)
+        : rec.reason;
+
       // Transparent log — always explainable, never silent.
       await supabase.from("pending_approvals").insert({
         dealership_id: dealershipId,
@@ -104,7 +124,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
         status: "approved",
         reviewed_at: new Date().toISOString(),
       });
-      await recordCampaignPauseInsight(supabase, dealershipId, { id: campaign.id, headline: campaign.headline, reason: rec.reason });
+      await recordCampaignPauseInsight(supabase, dealershipId, { id: campaign.id, headline: campaign.headline, reason: explainedReason });
       // Money was just stopped without a human in the loop — that
       // belongs in the notification centre, not only in the approvals
       // log where it had to be gone looking for.
@@ -112,7 +132,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
         dealershipId,
         kind: "campaign_auto_paused",
         title: `Auto-paused "${campaign.headline}"`,
-        body: rec.reason,
+        body: explainedReason,
         href: "/dashboard/ads/campaigns",
         dedupeKey: `auto_pause:${campaign.id}`,
       });

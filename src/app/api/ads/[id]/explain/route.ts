@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { explainCampaign } from "@/lib/agents/reportingAgent";
+import { explainCampaign, getComparisonCampaigns } from "@/lib/agents/reportingAgent";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 export async function POST(
@@ -18,7 +18,7 @@ export async function POST(
 
   const { data: campaign } = await supabase
     .from("ad_creatives")
-    .select("headline, body_copy, daily_budget, targeting_city, creative_score")
+    .select("id, headline, body_copy, daily_budget, targeting_city, creative_score, mode, background_style, scheduled_start, variant_group_id")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();
@@ -28,7 +28,8 @@ export async function POST(
   const { data: dealership } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).single();
   const performance = await getCampaignPerformance(supabase, dealershipId);
   const thisPerf = performance.campaigns.find((c) => c.id === id) ?? null;
+  const comparisons = await getComparisonCampaigns(supabase, dealershipId, campaign, performance.campaigns);
 
-  const explanation = await explainCampaign(campaign, thisPerf, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+  const explanation = await explainCampaign(campaign, thisPerf, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, comparisons);
   return NextResponse.json({ explanation });
 }
