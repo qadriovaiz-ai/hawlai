@@ -11,6 +11,7 @@ import { fetchGoogleReviewsSnapshot } from "@/lib/agents/reputationAgent";
 import { syncSeasonalCalendarEntries } from "@/lib/agents/seasonalityAgent";
 import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
 import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
+import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -41,6 +42,13 @@ export async function GET(request: Request) {
       results[dealership.id] = await runDailyAutopilot(supabase, dealership.id);
     } catch (err: any) {
       results[dealership.id] = { error: err.message };
+    }
+    try {
+      // Reads the snapshot runDailyAutopilot just wrote (via
+      // snapshotCampaignPerformance) — must run after it, not before.
+      results[dealership.id].budgetAlerts = await checkCampaignBudgets(supabase, dealership.id);
+    } catch (err: any) {
+      results[dealership.id].budgetAlerts = { error: err.message };
     }
     try {
       results[dealership.id].emailAutomation = await runEmailAutomation(supabase, dealership.id);
