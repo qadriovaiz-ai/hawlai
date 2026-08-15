@@ -23,8 +23,10 @@ import { snapshotCampaignPerformance, getCampaignPerformance } from "./analytics
 import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights";
 import { emitNotification } from "@/lib/notifications/emit";
 import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
+import { generateAdPlan } from "../adEngine";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
+const VARIANT_GROUP_LABELS = ["A", "B", "C", "D", "E"]; // same cap as variant-group/route.ts
 
 async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Promise<number> {
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
@@ -136,9 +138,90 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
         href: "/dashboard/ads/campaigns",
         dedupeKey: `auto_pause:${campaign.id}`,
       });
+
+      // AI-Intelligence Pillar 2 — auto-iteration. Draft-only: this
+      // never launches anything or spends money by itself.
+      await maybeGenerateVariantOnPause(supabase, dealershipId, dealership.business_category ?? "car dealership", campaign);
     }
   }
   return pausedCount;
+}
+
+// ------------------------------------------------------------------
+// AI-Intelligence Pillar 2 — auto-iteration on creative A/B tests.
+// Fires only when auto_generate_variant_on_pause is explicitly opted
+// into (separate from auto_pause_low_performers) AND the pause just
+// applied left exactly one active member of the variant group
+// standing — that's the clearest "the test has a winner" signal
+// available without a dedicated declare-winner flow. Only ever
+// creates a draft (status: 'draft', same as a manually-started ad
+// preview) — never launches it, never spends money.
+// ------------------------------------------------------------------
+async function maybeGenerateVariantOnPause(
+  supabase: any,
+  dealershipId: string,
+  businessCategory: string,
+  pausedCampaign: { id: string; variant_group_id?: string | null }
+) {
+  if (!pausedCampaign.variant_group_id) return;
+
+  const { data: dealership } = await supabase
+    .from("dealerships").select("auto_generate_variant_on_pause").eq("id", dealershipId).single();
+  if (!dealership?.auto_generate_variant_on_pause) return;
+
+  const { data: members } = await supabase
+    .from("ad_creatives")
+    .select("id, variant_label, meta_status, headline, body_copy, prompt, targeting_city, daily_budget")
+    .eq("variant_group_id", pausedCampaign.variant_group_id);
+  if (!members || members.length >= VARIANT_GROUP_LABELS.length) return; // cap reached
+
+  const activeMembers = members.filter((m: any) => m.meta_status === "ACTIVE");
+  if (activeMembers.length !== 1) return; // no clear winner yet, or test still has multiple live members
+
+  const winner = activeMembers[0];
+  const loser = members.find((m: any) => m.id === pausedCampaign.id);
+  const usedLabels = new Set(members.map((m: any) => m.variant_label).filter(Boolean));
+  const nextLabel = VARIANT_GROUP_LABELS.find((l) => !usedLabels.has(l));
+  if (!nextLabel) return;
+
+  try {
+    const { data: brandProfile } = await supabase
+      .from("brand_profiles")
+      .select("tone_of_voice, target_persona, messaging_pillars, preferred_language")
+      .eq("dealership_id", dealershipId)
+      .maybeSingle();
+
+    const variantPrompt = `This ad is winning an A/B test: "${winner.headline}" — ${winner.body_copy ?? ""}. This one lost: "${loser?.headline ?? "an earlier variant"}" — ${loser?.body_copy ?? ""}. Targeting ${winner.targeting_city ?? "the same city"}, budget ₹${winner.daily_budget ?? 500}/day. Create a genuinely different new creative angle (different headline hook and/or background style) to test as variant ${nextLabel} against the winner — it needs to be meaningfully different from both of the above, not a small rewording of either.`;
+
+    const plan = await generateAdPlan(variantPrompt, brandProfile, businessCategory, { supabase, dealershipId });
+
+    const { data: newDraft, error } = await supabase.from("ad_creatives").insert({
+      dealership_id: dealershipId,
+      mode: "ai_generate",
+      prompt: variantPrompt,
+      background_style: plan.background_style,
+      headline: plan.headline,
+      body_copy: plan.body,
+      creative_score: plan.confidence_score ?? null,
+      score_reasoning: plan.score_reasoning ?? null,
+      plan_json: plan,
+      status: "draft",
+      variant_group_id: pausedCampaign.variant_group_id,
+      variant_label: nextLabel,
+    }).select("id, headline").single();
+    if (error || !newDraft) return;
+
+    await emitNotification(supabase, {
+      dealershipId,
+      kind: "variant_draft_generated",
+      title: `New ad variant ready to review: "${newDraft.headline}"`,
+      body: `Generated as variant ${nextLabel} to test against your current winner — review and launch it from Campaigns whenever you're ready.`,
+      href: "/dashboard/ads/campaigns",
+      dedupeKey: `variant_draft:${newDraft.id}`,
+    });
+  } catch (err: any) {
+    console.error("[autopilot] maybeGenerateVariantOnPause failed:", err.message);
+  }
 }
 
 export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number; snapshotted: number }> {

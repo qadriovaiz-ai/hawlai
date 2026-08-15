@@ -21,7 +21,8 @@ export type NotificationKind =
   | "customer_at_risk"
   | "lead_going_cold"
   | "campaign_budget_warning"
-  | "campaign_budget_overrun";
+  | "campaign_budget_overrun"
+  | "variant_draft_generated";
 
 export interface EmitNotificationInput {
   dealershipId: string;
