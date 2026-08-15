@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { humanizeActionType, humanizeAgentName } from "@/lib/approvalLabels";
 import ApprovalActions from "@/components/approvals/ApprovalActions";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-300 border border-amber-700/50",
@@ -90,22 +91,22 @@ export default async function ApprovalsPage() {
       </div>
 
       {fetchError ? (
-        <div className="card p-8 text-center border-red-700/40">
-          <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-            <AlertTriangle className="w-6 h-6 text-red-400" />
-          </div>
-          <p className="text-slate-700 font-medium">Couldn't load approvals</p>
-          <p className="text-slate-400 text-sm mt-1">This is a connection issue, not an empty queue — refresh to try again.</p>
+        <div className="card border-red-700/40">
+          <EmptyState
+            icon={AlertTriangle}
+            tone="negative"
+            title="Couldn't load approvals"
+            description="This is a connection issue, not an empty queue — refresh to try again."
+          />
         </div>
       ) : pending.length === 0 ? (
-        <div className="card p-10 text-center">
-          <div className="w-14 h-14 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck className="w-6 h-6 text-green-400" />
-          </div>
-          <p className="text-slate-700 font-medium">All caught up</p>
-          <p className="text-slate-400 text-sm mt-1.5 max-w-sm mx-auto">
-            Nothing needs your approval right now. Anything over ₹{approvalThreshold.toLocaleString("en-IN")}, or outside an agent's own authority, will show up here.
-          </p>
+        <div className="card">
+          <EmptyState
+            icon={ShieldCheck}
+            tone="positive"
+            title="All caught up"
+            description={`Nothing needs your approval right now. Anything over ${formatCurrency(approvalThreshold)}, or outside an agent's own authority, will show up here.`}
+          />
         </div>
       ) : (
         <div className="space-y-3">

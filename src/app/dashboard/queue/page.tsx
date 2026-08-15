@@ -7,6 +7,7 @@ import MarkCalledButton from "@/components/calls/MarkCalledButton";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DraftMessagePreview from "@/components/leads/DraftMessagePreview";
 import { buttonClasses } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export default async function QueuePage() {
   const supabase = await createClient();
@@ -32,13 +33,9 @@ export default async function QueuePage() {
       </div>
 
       {!leads || leads.length === 0 ? (
-        <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-brand-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Phone className="w-7 h-7 text-brand-400" />
-          </div>
-          <p className="text-slate-700 font-medium">No leads in the queue</p>
-          <p className="text-slate-400 text-sm mt-1 mb-4">Add leads to the queue from the Leads page</p>
-          <Link href="/dashboard/leads" className={buttonClasses("primary")}>
+        <div className="card text-center">
+          <EmptyState icon={Phone} title="No leads in the queue" description="Add leads to the queue from the Leads page" className="pb-4" />
+          <Link href="/dashboard/leads" className={buttonClasses("primary", "md", "inline-flex mb-8")}>
             Go to Leads <ArrowRight className="w-4 h-4" />
           </Link>
         </div>

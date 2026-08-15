@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CalendarDays, Plus, Loader2, Trash2, X, Megaphone, Share2, Mail, TrendingUp, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const CHANNEL_META: Record<string, { label: string; icon: any; className: string }> = {
   paid_ads: { label: "Paid Ads", icon: Megaphone, className: "bg-purple-500/10 text-purple-300 border-purple-700/50" },
@@ -198,10 +199,8 @@ export default function CalendarPage() {
           <Loader2 className="w-4 h-4 animate-spin" /> Loading...
         </div>
       ) : items.length === 0 ? (
-        <div className="card p-12 text-center">
-          <CalendarDays className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-700 font-medium">Nothing planned yet</p>
-          <p className="text-slate-400 text-sm mt-1">Add your first item, or schedule an ad launch from the Launch Ad page</p>
+        <div className="card">
+          <EmptyState icon={CalendarDays} title="Nothing planned yet" description="Add your first item, or schedule an ad launch from the Launch Ad page" />
         </div>
       ) : (
         <div className="space-y-6">

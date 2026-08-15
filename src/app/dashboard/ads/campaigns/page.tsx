@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown, FlaskConical } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { buttonClasses } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
 import ExplainCampaignButton from "@/components/ads/ExplainCampaignButton";
 import TestVariantButton from "@/components/ads/TestVariantButton";
@@ -105,13 +106,9 @@ export default async function CampaignsPage() {
       )}
 
       {!campaigns || campaigns.length === 0 ? (
-        <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Megaphone className="w-7 h-7 text-purple-400" />
-          </div>
-          <p className="text-slate-700 font-medium">No campaigns launched yet</p>
-          <p className="text-slate-400 text-sm mt-1 mb-4">Launch your first ad, then manage it from here</p>
-          <Link href="/dashboard/ads/full-launch" className={buttonClasses("primary", "md", "inline-flex")}>
+        <div className="card text-center">
+          <EmptyState icon={Megaphone} title="No campaigns launched yet" description="Launch your first ad, then manage it from here" className="pb-4" />
+          <Link href="/dashboard/ads/full-launch" className={buttonClasses("primary", "md", "inline-flex mb-8")}>
             Launch Ad <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
