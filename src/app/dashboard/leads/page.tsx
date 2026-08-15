@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import LeadsTable from "@/components/leads/LeadsTable";
 import LeadsHeader from "@/components/leads/LeadsHeader";
 
+const SORTABLE_COLUMNS = ["created_at", "ai_score", "predicted_conversion_score"];
+
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; temp?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; temp?: string; status?: string; page?: string; sort?: string; dir?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -27,11 +29,17 @@ export default async function LeadsPage({
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
+  const sortColumn = SORTABLE_COLUMNS.includes(params.sort ?? "") ? params.sort! : "created_at";
+  const sortAscending = params.dir === "asc";
+
   let query = supabase
     .from("leads")
     .select("*", { count: "exact" })
     .eq("dealership_id", dealershipId)
-    .order("created_at", { ascending: false })
+    // nullsFirst: false — predicted_conversion_score is null until the
+    // first daily cron scores it; unscored leads sorting to the bottom
+    // reads better than them jumping to the top of a descending sort.
+    .order(sortColumn, { ascending: sortAscending, nullsFirst: false })
     .range(from, to);
 
   if (params.q) query = query.ilike("name", `%${params.q}%`);
@@ -65,6 +73,8 @@ export default async function LeadsPage({
         pageSize={pageSize}
         campaignMap={campaignMap}
         filters={{ q: params.q, temp: params.temp, status: params.status }}
+        sort={sortColumn}
+        dir={sortAscending ? "asc" : "desc"}
       />
     </div>
   );

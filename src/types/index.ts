@@ -56,6 +56,9 @@ export interface Lead {
   consent_status: "unknown" | "granted" | "withdrawn";
   consent_captured_at: string | null;
   consent_source: string | null;
+  // AI-Intelligence Pillar 3 — behavioral score, recomputed daily.
+  // Null until the first cron run scores this lead.
+  predicted_conversion_score: number | null;
 }
 
 export interface Call {

@@ -21,9 +21,11 @@ interface Props {
   pageSize: number;
   filters: { q?: string; temp?: string; status?: string };
   campaignMap?: Record<string, string>;
+  sort?: string;
+  dir?: string;
 }
 
-export default function LeadsTable({ leads, total, page, pageSize, filters, campaignMap = {} }: Props) {
+export default function LeadsTable({ leads, total, page, pageSize, filters, campaignMap = {}, sort = "created_at", dir = "desc" }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -36,11 +38,18 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
     if (filters.q) params.set("q", filters.q);
     if (filters.temp) params.set("temp", filters.temp);
     if (filters.status) params.set("status", filters.status);
+    if (sort !== "created_at") params.set("sort", sort);
+    if (dir !== "desc") params.set("dir", dir);
     params.set("page", "1");
     Object.entries(updates).forEach(([k, v]) => {
       if (v) params.set(k, v); else params.delete(k);
     });
     router.push(`${pathname}?${params.toString()}`);
+  }
+
+  function toggleSort(column: string) {
+    const nextDir = sort === column && dir === "desc" ? "asc" : "desc";
+    updateUrl({ sort: column === "created_at" ? "" : column, dir: nextDir === "desc" ? "" : nextDir });
   }
 
   async function handleDelete(id: string) {
@@ -134,9 +143,14 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                   <th className="table-header">Year</th>
                   <th className="table-header">Budget</th>
                   <th className="table-header">
-                    <span className="flex items-center gap-1">
-                      AI Score <ArrowUpDown className="w-3 h-3" />
-                    </span>
+                    <button onClick={() => toggleSort("ai_score")} className="flex items-center gap-1 hover:text-slate-700">
+                      AI Score <ArrowUpDown className={cn("w-3 h-3", sort === "ai_score" && "text-brand-400")} />
+                    </button>
+                  </th>
+                  <th className="table-header">
+                    <button onClick={() => toggleSort("predicted_conversion_score")} className="flex items-center gap-1 hover:text-slate-700" title="Predicted likelihood to convert, based on response time, engagement, and call outcomes">
+                      Conversion Odds <ArrowUpDown className={cn("w-3 h-3", sort === "predicted_conversion_score" && "text-brand-400")} />
+                    </button>
                   </th>
                   <th className="table-header">Temperature</th>
                   <th className="table-header">Status</th>
@@ -175,6 +189,24 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                         </div>
                         <span className="text-xs font-semibold text-slate-700">{lead.ai_score}</span>
                       </div>
+                    </td>
+                    <td className="table-cell">
+                      {lead.predicted_conversion_score == null ? (
+                        <span className="text-xs text-slate-400">—</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-1.5 bg-slate-200 rounded-full">
+                            <div
+                              className={cn(
+                                "h-1.5 rounded-full",
+                                lead.predicted_conversion_score >= 70 ? "bg-green-500" : lead.predicted_conversion_score >= 40 ? "bg-amber-500" : "bg-slate-400"
+                              )}
+                              style={{ width: `${lead.predicted_conversion_score}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold text-slate-700">{lead.predicted_conversion_score}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="table-cell">
                       <span className={`badge ${getTemperatureColor(lead.lead_temperature)}`}>
