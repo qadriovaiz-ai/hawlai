@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildDynamicSystemPrompt, buildFirstMessage, type KnowledgeFact } from "./callScriptAgent";
+import { buildDynamicSystemPrompt, buildFirstMessage } from "./callScriptAgent";
+import { getBusinessContext } from "../businessBrain";
 
 // Shared core of "trigger an AI call for this lead" — used by both the
 // manual "AI Call" button (via /api/calls/trigger, user-authenticated)
@@ -54,36 +55,35 @@ export async function triggerVapiCall(
     return { success: false, error: "Vapi not configured yet — VAPI_API_KEY not set." };
   }
 
-  // Real business context for the script — not fabricated. Pulls the
-  // same dealership_name/business_category/tone_of_voice fields every
-  // other department already uses, plus the lead's own real
-  // qualification_reason from a prior interaction if one exists. Also
-  // carries this dealership's dedicated vapi_phone_number_id/
-  // vapi_assistant_id, if an admin has assigned one (see migration
-  // 096_dedicated_phone_number.sql) — null on both is the normal case
-  // today (every business shares the platform default) until real
-  // numbers can be provisioned.
-  let dealership: { dealership_name: string; business_category: string | null; vapi_phone_number_id: string | null; vapi_assistant_id: string | null; custom_call_instructions: string | null; custom_first_message: string | null } | null = null;
-  let brandProfile: { tone_of_voice: string | null } | null = null;
+  // Real business context for the script — not fabricated. Name/
+  // category/tone/knowledge facts come from the shared, channel-
+  // agnostic Business Brain module (also used by the inbound call
+  // webhook, and eventually chat/WhatsApp). Call-specific config
+  // (Vapi IDs, owner-written overrides) isn't part of that shared
+  // context — it's fetched here directly, alongside the lead's own
+  // qualification_reason from a prior interaction if one exists. Null
+  // vapi_phone_number_id/vapi_assistant_id is the normal case today
+  // (every business shares the platform default, see migration
+  // 096_dedicated_phone_number.sql) until real numbers can be
+  // provisioned.
+  let dealershipCallConfig: { vapi_phone_number_id: string | null; vapi_assistant_id: string | null; custom_call_instructions: string | null; custom_first_message: string | null } | null = null;
   let leadRecord: { qualification_reason: string | null } | null = null;
-  let knowledgeFacts: KnowledgeFact[] = [];
+  let businessCtx: Awaited<ReturnType<typeof getBusinessContext>> | null = null;
   try {
-    const [dealershipRes, brandProfileRes, leadRecordRes, knowledgeRes] = await Promise.all([
-      serviceClient.from("dealerships").select("dealership_name, business_category, vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
-      serviceClient.from("brand_profiles").select("tone_of_voice").eq("dealership_id", lead.dealership_id).maybeSingle(),
+    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes] = await Promise.all([
+      getBusinessContext(serviceClient, lead.dealership_id),
+      serviceClient.from("dealerships").select("vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
-      serviceClient.from("business_knowledge").select("category, title, content").eq("dealership_id", lead.dealership_id).eq("is_active", true),
     ]);
-    dealership = dealershipRes.data;
-    brandProfile = brandProfileRes.data;
+    businessCtx = businessCtxRes;
+    dealershipCallConfig = dealershipCallConfigRes.data;
     leadRecord = leadRecordRes.data;
-    knowledgeFacts = knowledgeRes.data ?? [];
   } catch (err: any) {
     console.error("[vapi-call] failed loading dealership context, falling back to platform defaults:", err.message);
   }
 
-  const assistantId = dealership?.vapi_assistant_id || process.env.VAPI_ASSISTANT_ID;
-  const phoneNumberId = dealership?.vapi_phone_number_id || process.env.VAPI_PHONE_NUMBER_ID;
+  const assistantId = dealershipCallConfig?.vapi_assistant_id || process.env.VAPI_ASSISTANT_ID;
+  const phoneNumberId = dealershipCallConfig?.vapi_phone_number_id || process.env.VAPI_PHONE_NUMBER_ID;
   if (!assistantId || !phoneNumberId) {
     return { success: false, error: "Vapi not fully configured yet — VAPI_ASSISTANT_ID/VAPI_PHONE_NUMBER_ID not set." };
   }
@@ -91,17 +91,17 @@ export async function triggerVapiCall(
   let callBody: Record<string, any> = { assistantId };
   try {
     const baseAssistant = await fetchBaseAssistantConfig(apiKey, assistantId);
-    if (baseAssistant && dealership) {
+    if (baseAssistant && businessCtx) {
       const systemPrompt = buildDynamicSystemPrompt({
-        dealershipName: dealership.dealership_name,
-        businessCategory: dealership.business_category ?? "business",
-        toneOfVoice: brandProfile?.tone_of_voice,
+        dealershipName: businessCtx.name,
+        businessCategory: businessCtx.category,
+        toneOfVoice: businessCtx.toneOfVoice,
         leadName: lead.name,
         qualificationReason: leadRecord?.qualification_reason,
-        customInstructions: dealership.custom_call_instructions,
-        knowledgeFacts,
+        customInstructions: dealershipCallConfig?.custom_call_instructions,
+        knowledgeFacts: businessCtx.knowledgeFacts,
       });
-      const firstMessage = buildFirstMessage(dealership.dealership_name, lead.name, dealership.custom_first_message);
+      const firstMessage = buildFirstMessage(businessCtx.name, lead.name, dealershipCallConfig?.custom_first_message);
 
       // Keep everything already tuned (voice, transcriber, provider) —
       // only replace the actual script.

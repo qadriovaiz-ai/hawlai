@@ -8,11 +8,8 @@
 // Claude round-trip here risks real call-setup latency for no real
 // benefit, since a well-designed template covers this job reliably.
 
-export interface KnowledgeFact {
-  category: string;
-  title: string;
-  content: string;
-}
+import type { KnowledgeFact } from "../businessBrain";
+export type { KnowledgeFact };
 
 // Shared by both the outbound and inbound prompts — real, owner-entered
 // facts (business_knowledge table) are the one thing the AI is allowed

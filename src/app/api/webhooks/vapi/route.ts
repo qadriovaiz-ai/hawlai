@@ -4,6 +4,7 @@ import { scoreLeadFromCall } from "@/lib/agents/callScoringAgent";
 import { logVapiUsage } from "@/lib/usage/logUsage";
 import { recordCallingMinutes } from "@/lib/usage/callingMinutes";
 import { buildInboundSystemPrompt, buildInboundFirstMessage } from "@/lib/agents/callScriptAgent";
+import { getBusinessContext } from "@/lib/businessBrain";
 import { recordCallOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
@@ -96,7 +97,7 @@ async function handleAssistantRequest(message: any): Promise<NextResponse> {
   const supabase = createServiceClient();
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("id, dealership_name, business_category, vapi_assistant_id")
+    .select("id, vapi_assistant_id")
     .eq("vapi_phone_number_id", phoneNumberId)
     .maybeSingle();
 
@@ -112,21 +113,26 @@ async function handleAssistantRequest(message: any): Promise<NextResponse> {
   }
 
   try {
-    const [assistantRes, brandProfileRes, knowledgeRes] = await Promise.all([
+    // Business Brain's shared context (name/category/tone/knowledge
+    // facts) — the phone-number lookup above already found this
+    // dealership's row, so this re-fetches name/category once more,
+    // a negligible cost on a path that's dormant until real dedicated
+    // numbers are provisioned, traded for staying on the same shared
+    // module the outbound path uses (see vapiCallAgent.ts).
+    const [assistantRes, businessCtx] = await Promise.all([
       fetch(`https://api.vapi.ai/assistant/${assistantId}`, { headers: { Authorization: `Bearer ${apiKey}` } }),
-      supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealership.id).maybeSingle(),
-      supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", dealership.id).eq("is_active", true),
+      getBusinessContext(supabase, dealership.id),
     ]);
     const baseAssistant = assistantRes.ok ? await assistantRes.json() : null;
     if (!baseAssistant) return NextResponse.json({ assistantId });
 
     const systemPrompt = buildInboundSystemPrompt({
-      dealershipName: dealership.dealership_name,
-      businessCategory: dealership.business_category ?? "business",
-      toneOfVoice: brandProfileRes.data?.tone_of_voice,
-      knowledgeFacts: knowledgeRes.data ?? [],
+      dealershipName: businessCtx.name,
+      businessCategory: businessCtx.category,
+      toneOfVoice: businessCtx.toneOfVoice,
+      knowledgeFacts: businessCtx.knowledgeFacts,
     });
-    const firstMessage = buildInboundFirstMessage(dealership.dealership_name);
+    const firstMessage = buildInboundFirstMessage(businessCtx.name);
 
     return NextResponse.json({
       assistant: {
