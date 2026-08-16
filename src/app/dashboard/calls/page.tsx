@@ -105,13 +105,35 @@ export default async function CallsPage() {
           calls (see TriggerAICallButton, the AI Call column above)
           since earlier this session. The one still-accurate caveat is
           the shared number/DLT status, which is genuinely still
-          pending. */}
-      <div className="card p-4 bg-brand-500/5 border-brand-400/30">
-        <p className="text-sm font-semibold text-brand-500 mb-1">AI calling is live</p>
-        <p className="text-xs text-brand-600">
-          Calls placed with "AI Call" go out through Hawlai's shared number today. Dedicated per-business
-          numbers are ready to switch on once DLT telecom registration clears.
-        </p>
+          pending.
+          Master audit "looks advanced, delivers basic" finding —
+          neither of these was explained anywhere before now: the
+          script isn't fixed (buildDynamicSystemPrompt in
+          callScriptAgent.ts pulls real dealership name/category,
+          Brand Voice tone, and the specific lead's own context into
+          every call), and "shared" concretely means every business
+          today calls out through the same Vapi phone number AND the
+          same base assistant voice/settings — only the script content
+          differs per call. */}
+      <div className="card p-4 bg-brand-500/5 border-brand-400/30 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-brand-500 mb-1">AI calling is live</p>
+          <p className="text-xs text-brand-600">
+            Every call is scripted fresh, not read from a fixed script — the AI uses your business name and
+            category, your <a href="/dashboard/settings/brand" className="underline hover:no-underline">Brand Voice tone</a>,
+            and whatever's known about that specific lead. The opening line is the one part that's currently
+            fixed for everyone.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-brand-500 mb-1">What "shared number" means today</p>
+          <p className="text-xs text-brand-600">
+            Every business on Hawlai currently calls out through the same phone number and the same base
+            assistant voice — only the script content is personalized per call. Dedicated per-business numbers
+            (a different number, and your own assistant voice) are ready to switch on once DLT telecom
+            registration clears.
+          </p>
+        </div>
       </div>
     </div>
   );
