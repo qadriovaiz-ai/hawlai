@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase } from "lucide-react";
+import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase, BookOpen } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
 import BusinessSwitcherCard from "@/components/business/BusinessSwitcherCard";
 
@@ -57,6 +57,7 @@ const SECTIONS: { label: string; items: HubItem[] }[] = [
       { href: "/dashboard/team", label: "Team", desc: "Invite people, manage roles", icon: Users2 },
       { href: "/dashboard/billing", label: "Billing & Usage", desc: "Plan, usage this month", icon: CreditCard },
       { href: "/dashboard/settings/brand", label: "Brand", desc: "Brand voice, colors, logo, tagline", icon: Palette },
+      { href: "/dashboard/settings/knowledge-base", label: "Business Knowledge", desc: "Hours, pricing notes, policies, FAQs the AI can use on calls", icon: BookOpen },
       { href: "/dashboard/assets", label: "Assets", desc: "Generated content, images, videos", icon: FolderOpen },
       { href: "/dashboard/settings/integrations", label: "Integrations", desc: "Meta, Google, Razorpay, Vapi, and more", icon: Link2 },
     ],

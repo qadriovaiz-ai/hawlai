@@ -112,9 +112,10 @@ async function handleAssistantRequest(message: any): Promise<NextResponse> {
   }
 
   try {
-    const [assistantRes, brandProfileRes] = await Promise.all([
+    const [assistantRes, brandProfileRes, knowledgeRes] = await Promise.all([
       fetch(`https://api.vapi.ai/assistant/${assistantId}`, { headers: { Authorization: `Bearer ${apiKey}` } }),
       supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealership.id).maybeSingle(),
+      supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", dealership.id).eq("is_active", true),
     ]);
     const baseAssistant = assistantRes.ok ? await assistantRes.json() : null;
     if (!baseAssistant) return NextResponse.json({ assistantId });
@@ -123,6 +124,7 @@ async function handleAssistantRequest(message: any): Promise<NextResponse> {
       dealershipName: dealership.dealership_name,
       businessCategory: dealership.business_category ?? "business",
       toneOfVoice: brandProfileRes.data?.tone_of_voice,
+      knowledgeFacts: knowledgeRes.data ?? [],
     });
     const firstMessage = buildInboundFirstMessage(dealership.dealership_name);
 

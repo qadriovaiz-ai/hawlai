@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildDynamicSystemPrompt, buildFirstMessage } from "./callScriptAgent";
+import { buildDynamicSystemPrompt, buildFirstMessage, type KnowledgeFact } from "./callScriptAgent";
 
 // Shared core of "trigger an AI call for this lead" — used by both the
 // manual "AI Call" button (via /api/calls/trigger, user-authenticated)
@@ -66,15 +66,18 @@ export async function triggerVapiCall(
   let dealership: { dealership_name: string; business_category: string | null; vapi_phone_number_id: string | null; vapi_assistant_id: string | null; custom_call_instructions: string | null; custom_first_message: string | null } | null = null;
   let brandProfile: { tone_of_voice: string | null } | null = null;
   let leadRecord: { qualification_reason: string | null } | null = null;
+  let knowledgeFacts: KnowledgeFact[] = [];
   try {
-    const [dealershipRes, brandProfileRes, leadRecordRes] = await Promise.all([
+    const [dealershipRes, brandProfileRes, leadRecordRes, knowledgeRes] = await Promise.all([
       serviceClient.from("dealerships").select("dealership_name, business_category, vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
       serviceClient.from("brand_profiles").select("tone_of_voice").eq("dealership_id", lead.dealership_id).maybeSingle(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
+      serviceClient.from("business_knowledge").select("category, title, content").eq("dealership_id", lead.dealership_id).eq("is_active", true),
     ]);
     dealership = dealershipRes.data;
     brandProfile = brandProfileRes.data;
     leadRecord = leadRecordRes.data;
+    knowledgeFacts = knowledgeRes.data ?? [];
   } catch (err: any) {
     console.error("[vapi-call] failed loading dealership context, falling back to platform defaults:", err.message);
   }
@@ -96,6 +99,7 @@ export async function triggerVapiCall(
         leadName: lead.name,
         qualificationReason: leadRecord?.qualification_reason,
         customInstructions: dealership.custom_call_instructions,
+        knowledgeFacts,
       });
       const firstMessage = buildFirstMessage(dealership.dealership_name, lead.name, dealership.custom_first_message);
 

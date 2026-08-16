@@ -8,6 +8,22 @@
 // Claude round-trip here risks real call-setup latency for no real
 // benefit, since a well-designed template covers this job reliably.
 
+export interface KnowledgeFact {
+  category: string;
+  title: string;
+  content: string;
+}
+
+// Shared by both the outbound and inbound prompts — real, owner-entered
+// facts (business_knowledge table) are the one thing the AI is allowed
+// to state as certain; everything else stays hedged per the "never
+// invent" rule below.
+function formatKnowledgeFacts(facts?: KnowledgeFact[] | null): string {
+  if (!facts || facts.length === 0) return "";
+  const lines = facts.map((f) => `- ${f.title}: ${f.content}`).join("\n");
+  return `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${lines}\n`;
+}
+
 interface CallScriptContext {
   dealershipName: string;
   businessCategory: string;
@@ -15,6 +31,7 @@ interface CallScriptContext {
   leadName: string;
   qualificationReason?: string | null; // from a prior interaction, if any — real context, not invented
   customInstructions?: string | null; // dealerships.custom_call_instructions — owner-written, appended verbatim
+  knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
 }
 
 export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
@@ -33,12 +50,14 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
     ? `\nAdditional instructions from the business owner (follow these, but never contradict the safety rules below):\n${ctx.customInstructions.trim()}\n`
     : "";
 
+  const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
+
   return `You are calling on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. You are speaking with ${ctx.leadName}, who has shown interest in the business.
 
 ${toneLine}
 
 ${contextLine}
-${customLine}
+${customLine}${factsBlock}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.
@@ -69,6 +88,7 @@ interface InboundCallScriptContext {
   dealershipName: string;
   businessCategory: string;
   toneOfVoice?: string | null;
+  knowledgeFacts?: KnowledgeFact[] | null;
 }
 
 export function buildInboundSystemPrompt(ctx: InboundCallScriptContext): string {
@@ -76,10 +96,12 @@ export function buildInboundSystemPrompt(ctx: InboundCallScriptContext): string 
     ? `Speak in this brand's tone: ${ctx.toneOfVoice}.`
     : `Speak warmly and professionally — this is a small Indian business, not a corporate call center.`;
 
+  const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
+
   return `You are answering an inbound phone call on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. The caller dialed this number themselves — you don't yet know who they are or why they're calling.
 
 ${toneLine}
-
+${factsBlock}
 Your goals on this call:
 1. Greet the caller and ask how you can help, naturally.
 2. Understand what they need — a question, a booking, an order, a complaint — before trying to resolve it.

@@ -125,7 +125,9 @@ export default async function CallsPage() {
           <p className="text-xs text-brand-600">
             Every call is scripted fresh, not read from a fixed script — the AI uses your business name and
             category, your <a href="/dashboard/settings/brand" className="underline hover:no-underline">Brand Voice tone</a>,
-            and whatever's known about that specific lead. You can add your own instructions and override the
+            and whatever's known about that specific lead. Add real hours/pricing/policy facts in your{" "}
+            <a href="/dashboard/settings/knowledge-base" className="underline hover:no-underline">Business Knowledge</a> so
+            the AI can answer with them instead of guessing. You can add your own instructions and override the
             opening line below.
           </p>
         </div>
