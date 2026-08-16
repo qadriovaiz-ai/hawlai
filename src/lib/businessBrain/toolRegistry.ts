@@ -110,7 +110,7 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
       vehicle: { type: "string", description: "What the lead is interested in" },
       purchaseYear: { type: "number", description: "Year the lead wants to buy/purchase by" },
       dealValue: { type: "number", description: "Estimated deal value, if known" },
-      notes: { type: "string", description: "Free-text notes about what was discussed — saved as a CRM note, not overwritten on the next update" },
+      notes: { type: "string", description: "Free-text notes about what was discussed — saved as a CRM note, not overwritten on the next update. For an actual complaint (something went wrong), use log_complaint instead — not this." },
     },
     channels: ["call"],
     handlerRef: "toolDispatcher.ts:handleUpdateLead -> leads update (allowlisted fields) + lead_notes insert",

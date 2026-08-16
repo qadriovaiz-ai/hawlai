@@ -223,7 +223,20 @@ async function handleLogComplaint(args: Record<string, any>, ctx: ToolCallContex
   if (!description) {
     return "Describe the complaint in the caller's own specifics — what went wrong, when, any details given — before calling this tool again.";
   }
-  const relatedOrderId = typeof args?.relatedOrderId === "string" && args.relatedOrderId.trim() ? args.relatedOrderId.trim() : null;
+
+  // A wrong/hallucinated order id must never sink an otherwise-valid
+  // complaint — unlike request_refund (where an unresolved order is a
+  // hard stop, since there's nothing to refund), the complaint itself
+  // still has real value with no order attached. Re-validated against
+  // this dealership the same way request_refund validates its own
+  // orderId, but failure here degrades to order_id: null rather than
+  // rejecting the whole complaint.
+  const rawRelatedOrderId = typeof args?.relatedOrderId === "string" && args.relatedOrderId.trim() ? args.relatedOrderId.trim() : null;
+  let relatedOrderId: string | null = null;
+  if (rawRelatedOrderId) {
+    const { data: relatedOrder } = await ctx.supabase.from("orders").select("id").eq("id", rawRelatedOrderId).eq("dealership_id", ctx.dealershipId).maybeSingle();
+    relatedOrderId = relatedOrder?.id ?? null;
+  }
 
   let callId: string | null = null;
   if (ctx.vapiCallId) {
