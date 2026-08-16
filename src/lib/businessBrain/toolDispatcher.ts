@@ -250,6 +250,75 @@ async function handleLogComplaint(args: Record<string, any>, ctx: ToolCallContex
   return "Complaint logged and a team member has been alerted. Reassure the caller it's been recorded and will be looked into, then continue the call naturally — this doesn't need to end the call.";
 }
 
+// Real money never moves from this tool. It only ever inserts a
+// refund_requests row with status "requested" — the actual Razorpay
+// refund call lives in /api/refunds's PATCH handler (approve action
+// only, dashboard-only, human-triggered). The result string is
+// deliberately explicit that nothing is confirmed yet, since an AI
+// telling a caller "your refund is done" when it isn't would be a
+// real, damaging mistake — this is the one tool result in the whole
+// build where getting the wording exactly right matters most.
+async function handleRequestRefund(args: Record<string, any>, ctx: ToolCallContext): Promise<string> {
+  if (!ctx.leadId) {
+    return "Can't submit a refund request — no caller record exists for this call.";
+  }
+  const orderId = typeof args?.orderId === "string" ? args.orderId.trim() : "";
+  if (!orderId) {
+    return "You need the order's exact id from check_order_status before requesting a refund for it — look it up first.";
+  }
+  const reason = typeof args?.reason === "string" ? args.reason.trim() : "";
+  if (!reason) {
+    return "Explain why the caller wants a refund before calling this tool again.";
+  }
+
+  const { data: order } = await ctx.supabase
+    .from("orders")
+    .select("id, total, payment_status")
+    .eq("id", orderId)
+    .eq("dealership_id", ctx.dealershipId)
+    .maybeSingle();
+  if (!order) {
+    return "That order wasn't found for this business — double-check the order id from check_order_status.";
+  }
+  if (order.payment_status !== "paid") {
+    return "This order was never marked as paid online, so there's nothing to refund through this tool. Let the caller know a team member will look into it manually.";
+  }
+
+  const requestedAmount = typeof args?.amount === "number" && args.amount > 0 && args.amount <= order.total ? args.amount : order.total;
+
+  let callId: string | null = null;
+  if (ctx.vapiCallId) {
+    const { data: callRow } = await ctx.supabase.from("calls").select("id").eq("vapi_call_id", ctx.vapiCallId).maybeSingle();
+    callId = callRow?.id ?? null;
+  }
+
+  const { data: inserted, error } = await ctx.supabase
+    .from("refund_requests")
+    .insert({
+      dealership_id: ctx.dealershipId,
+      order_id: order.id,
+      lead_id: ctx.leadId,
+      call_id: callId,
+      reason,
+      requested_amount: requestedAmount,
+      requested_via: "call",
+    })
+    .select("id")
+    .single();
+  if (error) return `Couldn't submit the refund request: ${error.message}`;
+
+  await emitNotification(ctx.supabase, {
+    dealershipId: ctx.dealershipId,
+    kind: "refund_requested",
+    title: `Refund requested — ₹${requestedAmount}`,
+    body: reason,
+    href: "/dashboard/refunds",
+    dedupeKey: `refund_requested:${inserted.id}`,
+  });
+
+  return "Refund request submitted for a team member's review. This is NOT processed and no money has moved yet. Tell the caller their request has been logged and a team member will review and process it — never say the refund is done, confirmed, or that money has been sent.";
+}
+
 // Keyed by tool name, matching BUSINESS_BRAIN_TOOLS's `name` field in
 // toolRegistry.ts.
 const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
@@ -259,6 +328,7 @@ const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
   check_order_status: handleCheckOrderStatus,
   log_complaint: handleLogComplaint,
   escalate_to_human: handleEscalateToHuman,
+  request_refund: handleRequestRefund,
 };
 
 interface VapiToolCall {

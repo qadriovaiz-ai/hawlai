@@ -10,10 +10,10 @@
 // webhook's tool-calls branch) now exists, and real "call"-channel
 // tools below have grown across two phases: check_availability/
 // create_appointment/update_lead (Phase 2), check_order_status/
-// escalate_to_human/log_complaint (Phase 3) — vapiCallAgent.ts builds
-// a real model.tools array from whatever's channels-enabled here (see
-// toVapiFunctionDefinition/getCallEnabledVapiTools below) and sends it
-// with every outbound call.
+// escalate_to_human/log_complaint/request_refund (Phase 3) —
+// vapiCallAgent.ts builds a real model.tools array from whatever's
+// channels-enabled here (see toVapiFunctionDefinition/
+// getCallEnabledVapiTools below) and sends it with every outbound call.
 //
 // `channels` records where each action is reachable *today* — most
 // are chat-only. `handlerRef` points at the already-reusable function
@@ -155,6 +155,24 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     },
     channels: ["call"],
     handlerRef: "toolDispatcher.ts:handleLogComplaint -> complaints insert + emitNotification",
+    status: "live",
+  },
+  // Phase 3 piece 4 — real money never moves from this tool. It only
+  // ever creates a "requested" row; a human approving it via the
+  // dashboard is the sole path to an actual Razorpay refund (see
+  // /api/refunds and createRazorpayRefund in razorpay.ts). The
+  // description is deliberately explicit about this so the model
+  // never treats calling this tool as the refund having happened.
+  {
+    name: "request_refund",
+    description: "Submit a refund request for a specific paid order for a team member to review — this does NOT process the refund. No money moves until a human approves it on the dashboard.",
+    parameters: {
+      orderId: { type: "string", description: "The exact order id from check_order_status's result", required: true },
+      reason: { type: "string", description: "Why the caller wants a refund", required: true },
+      amount: { type: "number", description: "Requested refund amount in rupees, if less than the full order total — omit for a full refund" },
+    },
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleRequestRefund -> refund_requests insert + emitNotification (kind: refund_requested)",
     status: "live",
   },
   {

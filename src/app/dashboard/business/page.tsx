@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase, BookOpen, MessageSquareWarning } from "lucide-react";
+import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase, BookOpen, MessageSquareWarning, IndianRupee } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
 import BusinessSwitcherCard from "@/components/business/BusinessSwitcherCard";
 
@@ -33,6 +33,7 @@ const SECTIONS: { label: string; items: HubItem[] }[] = [
     items: [
       { href: "/dashboard/leads-hub", label: "Leads & CRM", desc: "Pipeline, call history, appointments, retention", icon: Users2 },
       { href: "/dashboard/complaints", label: "Complaints", desc: "Raised on calls, tracked through to resolution", icon: MessageSquareWarning },
+      { href: "/dashboard/refunds", label: "Refund Requests", desc: "Raised on calls — every one needs your approval before money moves", icon: IndianRupee },
       { href: "/dashboard/audience", label: "Audience", desc: "Who your customers are, based on brand voice and real lead data", icon: Users },
     ],
   },

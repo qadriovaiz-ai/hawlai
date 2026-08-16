@@ -52,3 +52,32 @@ export function verifyRazorpaySignature(orderId: string, paymentId: string, sign
   if (expectedBuf.length !== actualBuf.length) return false;
   return crypto.timingSafeEqual(expectedBuf, actualBuf);
 }
+
+interface RazorpayRefund {
+  id: string;
+  payment_id: string;
+  amount: number;
+  status: string;
+}
+
+// The one place real money moves for a refund. Deliberately has no
+// caller anywhere except the dashboard's human-approval action
+// (/api/refunds PATCH, action: "approve") — the live-call refund tool
+// only ever inserts a refund_requests row, never reaches this
+// function directly. amountInPaise, not rupees, matching
+// createRazorpayOrder's existing convention.
+export async function createRazorpayRefund(paymentId: string, amountInPaise: number, keyId: string, keySecret: string): Promise<RazorpayRefund> {
+  if (!keyId || !keySecret) throw new Error("Razorpay is not connected for this business yet");
+
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+  const res = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}/refund`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
+    body: JSON.stringify({ amount: amountInPaise }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Razorpay refund failed (${res.status}): ${detail}`);
+  }
+  return res.json();
+}

@@ -34,6 +34,7 @@ interface CallScriptContext {
   canCheckOrders?: boolean; // true only when the call's assistant config actually declares check_order_status
   canEscalate?: boolean; // true only when the call's assistant config actually declares escalate_to_human
   canLogComplaint?: boolean; // true only when the call's assistant config actually declares log_complaint
+  canRequestRefund?: boolean; // true only when the call's assistant config actually declares request_refund
 }
 
 export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
@@ -79,12 +80,21 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
     ? `\nIf the caller raises a complaint — something went wrong, they're unhappy with a product/service/order — use your log_complaint tool to record it in their own specifics, so it's tracked and a team member can follow up. This doesn't end the call; reassure them it's noted and keep going naturally (use escalate_to_human separately if the situation also needs a person right now).\n`
     : "";
 
+  // Money is involved here, so this is deliberately the most explicit
+  // and repetitive instruction in the whole prompt — request_refund
+  // only ever submits a request for human review, it never moves
+  // money. Saying otherwise to a caller would be a real, damaging
+  // mistake, not just an inaccuracy.
+  const refundLine = ctx.canRequestRefund
+    ? `\nIf the caller wants a refund for a specific order, first use check_order_status to find the exact order id, then call request_refund with that id and their reason. This ONLY submits a request for a team member to review — it does NOT process the refund and no money moves. Tell the caller their request has been logged and a team member will review and process it, typically within a few business days. NEVER tell the caller the refund is done, confirmed, approved, or that money has been sent — you have no way of knowing that, and saying it would be wrong.\n`
+    : "";
+
   return `You are calling on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. You are speaking with ${ctx.leadName}, who has shown interest in the business.
 
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}
+${customLine}${factsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}${refundLine}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.

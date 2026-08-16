@@ -115,6 +115,7 @@ export async function triggerVapiCall(
         canCheckOrders: callToolNames.includes("check_order_status"),
         canEscalate: callToolNames.includes("escalate_to_human"),
         canLogComplaint: callToolNames.includes("log_complaint"),
+        canRequestRefund: callToolNames.includes("request_refund"),
       });
       const firstMessage = buildFirstMessage(businessCtx.name, lead.name, dealershipCallConfig?.custom_first_message);
 
