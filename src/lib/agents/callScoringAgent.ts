@@ -8,21 +8,42 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 
+export type CallIntent = "interested" | "not_interested" | "requesting_info" | "ready_to_book" | "complaint" | "no_real_conversation" | "other";
+export type CallSentiment = "positive" | "neutral" | "negative";
+export type CallUrgency = "high" | "medium" | "low";
+
+const INTENTS: CallIntent[] = ["interested", "not_interested", "requesting_info", "ready_to_book", "complaint", "no_real_conversation", "other"];
+const SENTIMENTS: CallSentiment[] = ["positive", "neutral", "negative"];
+const URGENCIES: CallUrgency[] = ["high", "medium", "low"];
+
 export interface CallScoreResult {
   score: number; // 0-100
   temperature: "hot" | "warm" | "cold";
   reason: string;
+  intent: CallIntent;
+  sentiment: CallSentiment;
+  urgency: CallUrgency;
 }
 
 const FALLBACK: CallScoreResult = {
   score: 30,
   temperature: "cold",
   reason: "Couldn't analyze the call transcript automatically — review manually.",
+  intent: "other",
+  sentiment: "neutral",
+  urgency: "low",
 };
 
 export async function scoreLeadFromCall(transcript: string, leadName: string, logContext?: { supabase: any; dealershipId: string }): Promise<CallScoreResult> {
   if (!transcript || transcript.trim().length < 10) {
-    return { score: 10, temperature: "cold", reason: "Call had no meaningful conversation (no answer, hang-up, or voicemail)." };
+    return {
+      score: 10,
+      temperature: "cold",
+      reason: "Call had no meaningful conversation (no answer, hang-up, or voicemail).",
+      intent: "no_real_conversation",
+      sentiment: "neutral",
+      urgency: "low",
+    };
   }
 
   try {
@@ -41,7 +62,10 @@ export async function scoreLeadFromCall(transcript: string, leadName: string, lo
           content: `You just read the transcript of a sales follow-up phone call with a lead named ${leadName}. Score how promising this lead is based ONLY on what was actually said in the call — their interest level, urgency, objections, budget signals, and whether they agreed to a next step.
 
 Respond with ONLY a JSON object, no markdown, no preamble:
-{"score": <0-100 integer>, "temperature": "<hot|warm|cold>", "reason": "<one sentence, specific to what was said in this call>"}
+{"score": <0-100 integer>, "temperature": "<hot|warm|cold>", "reason": "<one sentence, specific to what was said in this call>", "intent": "<interested|not_interested|requesting_info|ready_to_book|complaint|other>", "sentiment": "<positive|neutral|negative>", "urgency": "<high|medium|low>"}
+
+intent guide: "interested" = engaged and positive but no concrete next step yet; "requesting_info" = asked questions without committing; "ready_to_book" = agreed to or asked for a specific next step (visit, callback, appointment); "not_interested" = declined or disengaged; "complaint" = raised a problem or grievance; "other" = none of these fit.
+urgency = how time-sensitive the lead's own need sounds from what they said, not how fast you think the business should follow up.
 
 Transcript:
 ${transcript.slice(0, 8000)}`,
@@ -57,7 +81,10 @@ ${transcript.slice(0, 8000)}`,
 
     const score = Math.max(0, Math.min(100, Number(parsed.score)));
     const temperature = ["hot", "warm", "cold"].includes(parsed.temperature) ? parsed.temperature : "cold";
-    return { score, temperature, reason: String(parsed.reason ?? FALLBACK.reason) };
+    const intent = INTENTS.includes(parsed.intent) ? parsed.intent : "other";
+    const sentiment = SENTIMENTS.includes(parsed.sentiment) ? parsed.sentiment : "neutral";
+    const urgency = URGENCIES.includes(parsed.urgency) ? parsed.urgency : "low";
+    return { score, temperature, reason: String(parsed.reason ?? FALLBACK.reason), intent, sentiment, urgency };
   } catch {
     return FALLBACK;
   }

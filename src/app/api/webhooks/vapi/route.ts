@@ -60,6 +60,11 @@ export async function POST(request: Request) {
 
   const dealershipId = callRecord?.dealership_id ?? lead.dealership_id;
   const result = await scoreLeadFromCall(transcript, lead.name, callRecord ? { supabase, dealershipId } : undefined);
+
+  if (callRecord) {
+    await supabase.from("calls").update({ intent: result.intent, sentiment: result.sentiment, urgency: result.urgency }).eq("id", callRecord.id);
+  }
+
   await supabase
     .from("leads")
     .update({
@@ -71,7 +76,7 @@ export async function POST(request: Request) {
     .eq("id", lead.id);
 
   if (callRecord) {
-    await recordCallOutcomeInsight(supabase, { id: callRecord.id, dealershipId, leadName: lead.name, temperature: result.temperature, reason: result.reason });
+    await recordCallOutcomeInsight(supabase, { id: callRecord.id, dealershipId, leadName: lead.name, temperature: result.temperature, reason: result.reason, urgency: result.urgency });
   }
 
   return NextResponse.json({ received: true });

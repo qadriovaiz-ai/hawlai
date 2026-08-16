@@ -60,14 +60,15 @@ export async function recordLeadOutcomeInsight(
 
 export async function recordCallOutcomeInsight(
   supabase: any,
-  call: { id: string; dealershipId: string; leadName: string; temperature: string; reason: string }
+  call: { id: string; dealershipId: string; leadName: string; temperature: string; reason: string; urgency?: string }
 ) {
   // Only worth remembering when the call produced a real signal —
   // not every routine "called" status update.
   if (call.temperature !== "hot" && call.temperature !== "cold") return;
   try {
+    const urgencyNote = call.urgency === "high" ? " — flagged as urgent" : "";
     const insight = call.temperature === "hot"
-      ? `Call with "${call.leadName}" went well — ${call.reason}`
+      ? `Call with "${call.leadName}" went well — ${call.reason}${urgencyNote}`
       : `Call with "${call.leadName}" didn't land — ${call.reason}`;
     await supabase.from("business_memory").insert({
       dealership_id: call.dealershipId,
