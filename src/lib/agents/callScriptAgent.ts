@@ -32,6 +32,7 @@ interface CallScriptContext {
   canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
   canUpdateLead?: boolean; // true only when the call's assistant config actually declares update_lead
   canCheckOrders?: boolean; // true only when the call's assistant config actually declares check_order_status
+  canEscalate?: boolean; // true only when the call's assistant config actually declares escalate_to_human
 }
 
 export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
@@ -69,12 +70,16 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
     ? `\nIf the caller asks about an order they placed, use check_order_status to look up the real status instead of guessing — it matches by their phone number automatically, you don't need to ask for an order number. If it finds nothing or there's no phone on file, say a team member will look into it.\n`
     : "";
 
+  const escalationLine = ctx.canEscalate
+    ? `\nIf you're genuinely confused, can't help with what the caller needs, or they explicitly ask to speak to a person, use your escalate_to_human tool — give it a clear, thorough reason so a team member has full context and the caller never has to repeat themselves. This is a callback promise, not a live transfer: after calling it, tell the caller warmly that someone will call them back shortly, thank them, and end the call naturally. Don't keep struggling with something you can't resolve.\n`
+    : "";
+
   return `You are calling on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. You are speaking with ${ctx.leadName}, who has shown interest in the business.
 
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}
+${customLine}${factsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.

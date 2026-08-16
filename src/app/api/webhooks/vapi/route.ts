@@ -122,7 +122,8 @@ async function handleToolCallsRequest(message: any): Promise<NextResponse> {
     const supabase = createServiceClient();
     const dealershipId = message.call?.metadata?.dealershipId ?? "";
     const leadId = message.call?.metadata?.leadId ?? null;
-    const response = await handleVapiToolCalls(message, { supabase, dealershipId, leadId });
+    const vapiCallId = message.call?.id ?? null;
+    const response = await handleVapiToolCalls(message, { supabase, dealershipId, leadId, vapiCallId });
     return NextResponse.json(response);
   } catch (err: any) {
     console.error("[vapi-webhook] tool-calls request failed entirely:", err.message);

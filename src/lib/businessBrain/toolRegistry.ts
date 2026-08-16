@@ -9,10 +9,11 @@
 // The live tool-calling framework itself (toolDispatcher.ts + the
 // webhook's tool-calls branch) now exists, and real "call"-channel
 // tools below have grown across two phases: check_availability/
-// create_appointment/update_lead (Phase 2), check_order_status
-// (Phase 3 piece 1) — vapiCallAgent.ts builds a real model.tools array
-// from whatever's channels-enabled here (see toVapiFunctionDefinition/
-// getCallEnabledVapiTools below) and sends it with every outbound call.
+// create_appointment/update_lead (Phase 2), check_order_status/
+// escalate_to_human (Phase 3) — vapiCallAgent.ts builds a real
+// model.tools array from whatever's channels-enabled here (see
+// toVapiFunctionDefinition/getCallEnabledVapiTools below) and sends it
+// with every outbound call.
 //
 // `channels` records where each action is reachable *today* — most
 // are chat-only. `handlerRef` points at the already-reusable function
@@ -124,6 +125,20 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     parameters: {},
     channels: ["call"],
     handlerRef: "toolDispatcher.ts:handleCheckOrderStatus -> orders table, matched by normalized phone",
+    status: "live",
+  },
+  // Phase 3 piece 2 — callback-promise escalation, not a live transfer
+  // (explicit decision, migration 122's header explains why: no phone
+  // number exists to transfer to, inbound is still dormant). Ends the
+  // call gracefully instead; a human gets alerted with full context.
+  {
+    name: "escalate_to_human",
+    description: "Flag this call for a team member to take over via callback — use when you're confused, can't help with what the caller needs, or they explicitly ask to speak to a person. This ends the call with a promised callback, not a live transfer.",
+    parameters: {
+      reason: { type: "string", description: "Why you're escalating and what the caller needs — as much relevant detail as possible, since a team member will act on this without having heard the call themselves", required: true },
+    },
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleEscalateToHuman -> emitNotification (kind: call_escalated)",
     status: "live",
   },
   {

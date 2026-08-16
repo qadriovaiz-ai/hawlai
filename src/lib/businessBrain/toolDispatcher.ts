@@ -1,8 +1,8 @@
 // Business Brain — live-call tool-calling dispatcher. Phase 1 built the
 // framework (empty by design, provably inert — see git history for
 // that commit's reasoning); Phase 2 activated check_availability/
-// create_appointment/update_lead; Phase 3 piece 1 adds
-// check_order_status below.
+// create_appointment/update_lead; Phase 3 piece 1 added
+// check_order_status; Phase 3 piece 2 adds escalate_to_human below.
 //
 // Safety contract for handleVapiToolCalls(): it NEVER throws and
 // ALWAYS resolves to a well-formed { results: [...] } response — one
@@ -17,11 +17,13 @@
 // UNAVAILABLE_RESULT.
 
 import { getAvailableSlots, createAppointmentForLead } from "../appointments/appointmentSlots";
+import { emitNotification } from "../notifications/emit";
 
 export interface ToolCallContext {
   supabase: any;
   dealershipId: string;
   leadId?: string | null;
+  vapiCallId?: string | null; // Vapi's own call id (message.call.id) — used only to build a stable dedupe key
 }
 
 type ToolHandler = (args: Record<string, any>, ctx: ToolCallContext) => Promise<string>;
@@ -163,6 +165,40 @@ async function handleCheckOrderStatus(_args: Record<string, any>, ctx: ToolCallC
   return `Found ${orders.length} recent order(s) for this caller: ${summary}. Share the relevant details naturally — don't read this back verbatim.`;
 }
 
+// Callback-promise escalation, not a live transfer (explicit decision
+// — true telephony transfer has no phone number to target and no live
+// inbound scenario yet, see migration 122's header). The only context
+// available at this point is whatever the model puts in `reason` —
+// the full transcript doesn't exist until end-of-call-report — so the
+// tool description instructs the model to be thorough. dedupeKey is
+// keyed on the Vapi call id, not Date.now(), so if the model calls
+// this more than once in the same call (e.g. retrying after a
+// transient failure) it collapses into one notification rather than
+// spamming the owner.
+async function handleEscalateToHuman(args: Record<string, any>, ctx: ToolCallContext): Promise<string> {
+  const reason = typeof args?.reason === "string" ? args.reason.trim() : "";
+  if (!reason) {
+    return "Explain why you're escalating before calling this tool — what the caller needs and what's been discussed so far.";
+  }
+
+  let leadName = "Unknown caller";
+  if (ctx.leadId) {
+    const { data: lead } = await ctx.supabase.from("leads").select("name").eq("id", ctx.leadId).maybeSingle();
+    if (lead?.name) leadName = lead.name;
+  }
+
+  await emitNotification(ctx.supabase, {
+    dealershipId: ctx.dealershipId,
+    kind: "call_escalated",
+    title: `Call needs a human: ${leadName}`,
+    body: reason,
+    href: ctx.leadId ? `/dashboard/leads/${ctx.leadId}` : null,
+    dedupeKey: `call_escalated:${ctx.vapiCallId ?? ctx.leadId ?? "unknown"}`,
+  });
+
+  return "Escalation logged — a team member has been alerted with this context. Tell the caller warmly that you're arranging for someone to call them back shortly with everything discussed, thank them, and end the call naturally. Don't keep trying to resolve it yourself past this point.";
+}
+
 // Keyed by tool name, matching BUSINESS_BRAIN_TOOLS's `name` field in
 // toolRegistry.ts.
 const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
@@ -170,6 +206,7 @@ const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
   create_appointment: handleCreateAppointment,
   update_lead: handleUpdateLead,
   check_order_status: handleCheckOrderStatus,
+  escalate_to_human: handleEscalateToHuman,
 };
 
 interface VapiToolCall {
