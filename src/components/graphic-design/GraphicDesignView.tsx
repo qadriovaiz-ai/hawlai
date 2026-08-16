@@ -117,7 +117,10 @@ export default function GraphicDesignView() {
 
       {/* Generator */}
       <Card className="space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Generate: {currentMeta?.label}</p>
+        <div>
+          <p className="text-sm font-semibold text-slate-700">Generate: {currentMeta?.label}</p>
+          {currentMeta?.description && <p className="text-xs text-slate-400 mt-0.5">{currentMeta.description}</p>}
+        </div>
         <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
