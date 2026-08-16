@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDate, formatDuration, getCallStatusColor, titleCaseFromSnake } from "@/lib/utils";
 import AutoCallSettings from "@/components/calls/AutoCallSettings";
+import CallScriptSettings from "@/components/calls/CallScriptSettings";
 
 export default async function CallsPage() {
   const supabase = await createClient();
@@ -36,6 +37,7 @@ export default async function CallsPage() {
       </div>
 
       <AutoCallSettings />
+      <CallScriptSettings />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -114,15 +116,17 @@ export default async function CallsPage() {
           every call), and "shared" concretely means every business
           today calls out through the same Vapi phone number AND the
           same base assistant voice/settings — only the script content
-          differs per call. */}
+          differs per call. The opening line used to be the one part
+          fixed for everyone; CallScriptSettings below now makes it
+          (and additional instructions) owner-editable per business. */}
       <div className="card p-4 bg-brand-500/5 border-brand-400/30 space-y-3">
         <div>
           <p className="text-sm font-semibold text-brand-500 mb-1">AI calling is live</p>
           <p className="text-xs text-brand-600">
             Every call is scripted fresh, not read from a fixed script — the AI uses your business name and
             category, your <a href="/dashboard/settings/brand" className="underline hover:no-underline">Brand Voice tone</a>,
-            and whatever's known about that specific lead. The opening line is the one part that's currently
-            fixed for everyone.
+            and whatever's known about that specific lead. You can add your own instructions and override the
+            opening line below.
           </p>
         </div>
         <div>

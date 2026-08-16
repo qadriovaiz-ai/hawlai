@@ -63,12 +63,12 @@ export async function triggerVapiCall(
   // 096_dedicated_phone_number.sql) — null on both is the normal case
   // today (every business shares the platform default) until real
   // numbers can be provisioned.
-  let dealership: { dealership_name: string; business_category: string | null; vapi_phone_number_id: string | null; vapi_assistant_id: string | null } | null = null;
+  let dealership: { dealership_name: string; business_category: string | null; vapi_phone_number_id: string | null; vapi_assistant_id: string | null; custom_call_instructions: string | null; custom_first_message: string | null } | null = null;
   let brandProfile: { tone_of_voice: string | null } | null = null;
   let leadRecord: { qualification_reason: string | null } | null = null;
   try {
     const [dealershipRes, brandProfileRes, leadRecordRes] = await Promise.all([
-      serviceClient.from("dealerships").select("dealership_name, business_category, vapi_phone_number_id, vapi_assistant_id").eq("id", lead.dealership_id).single(),
+      serviceClient.from("dealerships").select("dealership_name, business_category, vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
       serviceClient.from("brand_profiles").select("tone_of_voice").eq("dealership_id", lead.dealership_id).maybeSingle(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
     ]);
@@ -95,8 +95,9 @@ export async function triggerVapiCall(
         toneOfVoice: brandProfile?.tone_of_voice,
         leadName: lead.name,
         qualificationReason: leadRecord?.qualification_reason,
+        customInstructions: dealership.custom_call_instructions,
       });
-      const firstMessage = buildFirstMessage(dealership.dealership_name, lead.name);
+      const firstMessage = buildFirstMessage(dealership.dealership_name, lead.name, dealership.custom_first_message);
 
       // Keep everything already tuned (voice, transcriber, provider) —
       // only replace the actual script.
