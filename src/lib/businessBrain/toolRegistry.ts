@@ -10,8 +10,8 @@
 // webhook's tool-calls branch) now exists, and real "call"-channel
 // tools below have grown across two phases: check_availability/
 // create_appointment/update_lead (Phase 2), check_order_status/
-// escalate_to_human (Phase 3) — vapiCallAgent.ts builds a real
-// model.tools array from whatever's channels-enabled here (see
+// escalate_to_human/log_complaint (Phase 3) — vapiCallAgent.ts builds
+// a real model.tools array from whatever's channels-enabled here (see
 // toVapiFunctionDefinition/getCallEnabledVapiTools below) and sends it
 // with every outbound call.
 //
@@ -139,6 +139,22 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     },
     channels: ["call"],
     handlerRef: "toolDispatcher.ts:handleEscalateToHuman -> emitNotification (kind: call_escalated)",
+    status: "live",
+  },
+  // Phase 3 piece 3 — a real trackable record (complaints table),
+  // separate from escalate_to_human by design (a complaint doesn't
+  // end the call by itself). relatedOrderId takes the exact "order id"
+  // value check_order_status's result includes, same pattern as
+  // create_appointment's exact-slot-value requirement.
+  {
+    name: "log_complaint",
+    description: "Log a complaint from this caller with real specifics, so a team member can act on it and track it through to resolution. Doesn't end the call.",
+    parameters: {
+      description: { type: "string", description: "The complaint in the caller's own specifics — what went wrong, when, any details they gave", required: true },
+      relatedOrderId: { type: "string", description: "The exact order id from check_order_status's result, only if this complaint is about a specific order" },
+    },
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleLogComplaint -> complaints insert + emitNotification",
     status: "live",
   },
   {

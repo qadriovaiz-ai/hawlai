@@ -141,7 +141,7 @@ async function handleCheckOrderStatus(_args: Record<string, any>, ctx: ToolCallC
 
   const { data: candidates } = await ctx.supabase
     .from("orders")
-    .select("status, payment_status, total, items, customer_phone, created_at")
+    .select("id, status, payment_status, total, items, customer_phone, created_at")
     .eq("dealership_id", ctx.dealershipId)
     .order("created_at", { ascending: false })
     .limit(200);
@@ -154,15 +154,19 @@ async function handleCheckOrderStatus(_args: Record<string, any>, ctx: ToolCallC
     return "No orders found for this caller's phone number. Let them know a team member will look into it.";
   }
 
+  // Includes each order's real id — if the caller has a complaint
+  // about one of these, log_complaint's relatedOrderId takes this
+  // exact value, same "echo the exact value back" pattern used for
+  // create_appointment's time slots.
   const summary = orders
     .map((o: any) => {
       const itemNames = (o.items ?? []).map((it: any) => it.name).filter(Boolean).join(", ");
       const date = new Date(o.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-      return `${date}: ${itemNames || "order"}, total ₹${o.total}, status "${o.status}", payment "${o.payment_status}"`;
+      return `${date}: ${itemNames || "order"}, total ₹${o.total}, status "${o.status}", payment "${o.payment_status}" (order id: ${o.id})`;
     })
     .join("; ");
 
-  return `Found ${orders.length} recent order(s) for this caller: ${summary}. Share the relevant details naturally — don't read this back verbatim.`;
+  return `Found ${orders.length} recent order(s) for this caller: ${summary}. Share the relevant details naturally — don't read the order id aloud, just keep it in mind if the caller has a complaint about one of these.`;
 }
 
 // Callback-promise escalation, not a live transfer (explicit decision
@@ -199,6 +203,53 @@ async function handleEscalateToHuman(args: Record<string, any>, ctx: ToolCallCon
   return "Escalation logged — a team member has been alerted with this context. Tell the caller warmly that you're arranging for someone to call them back shortly with everything discussed, thank them, and end the call naturally. Don't keep trying to resolve it yourself past this point.";
 }
 
+// A real, trackable record (complaints table) rather than only the
+// post-call scoring agent's one-line guess — captures the caller's
+// actual specifics while they're still on the line. Distinct from
+// escalate_to_human: a complaint is about what went wrong and can
+// coexist with a call that otherwise continues normally; it doesn't
+// end the call by itself. Reuses the existing call_needs_follow_up
+// notification kind rather than adding another one — semantically it
+// already fits "something needs follow-up," and avoids a migration
+// for this piece beyond the complaints table itself. dedupeKey is the
+// complaint's own freshly-inserted id, not the call/lead — two
+// distinct complaints logged in the same call are two real events,
+// not the same one retried, so they should each get their own alert.
+async function handleLogComplaint(args: Record<string, any>, ctx: ToolCallContext): Promise<string> {
+  if (!ctx.leadId) {
+    return "Can't log a complaint — no caller record exists for this call.";
+  }
+  const description = typeof args?.description === "string" ? args.description.trim() : "";
+  if (!description) {
+    return "Describe the complaint in the caller's own specifics — what went wrong, when, any details given — before calling this tool again.";
+  }
+  const relatedOrderId = typeof args?.relatedOrderId === "string" && args.relatedOrderId.trim() ? args.relatedOrderId.trim() : null;
+
+  let callId: string | null = null;
+  if (ctx.vapiCallId) {
+    const { data: callRow } = await ctx.supabase.from("calls").select("id").eq("vapi_call_id", ctx.vapiCallId).maybeSingle();
+    callId = callRow?.id ?? null;
+  }
+
+  const { data: inserted, error } = await ctx.supabase
+    .from("complaints")
+    .insert({ dealership_id: ctx.dealershipId, lead_id: ctx.leadId, call_id: callId, order_id: relatedOrderId, description })
+    .select("id")
+    .single();
+  if (error) return `Couldn't log the complaint: ${error.message}`;
+
+  await emitNotification(ctx.supabase, {
+    dealershipId: ctx.dealershipId,
+    kind: "call_needs_follow_up",
+    title: "Complaint logged on a call",
+    body: description,
+    href: "/dashboard/complaints",
+    dedupeKey: `complaint:${inserted.id}`,
+  });
+
+  return "Complaint logged and a team member has been alerted. Reassure the caller it's been recorded and will be looked into, then continue the call naturally — this doesn't need to end the call.";
+}
+
 // Keyed by tool name, matching BUSINESS_BRAIN_TOOLS's `name` field in
 // toolRegistry.ts.
 const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
@@ -206,6 +257,7 @@ const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
   create_appointment: handleCreateAppointment,
   update_lead: handleUpdateLead,
   check_order_status: handleCheckOrderStatus,
+  log_complaint: handleLogComplaint,
   escalate_to_human: handleEscalateToHuman,
 };
 
