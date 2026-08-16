@@ -1,7 +1,7 @@
 // Business Brain — live-call tool-calling dispatcher. Phase 1 built the
 // framework (empty by design, provably inert — see git history for
-// that commit's reasoning); Phase 2 piece 2 activates the first two
-// real tools here: check_availability and create_appointment.
+// that commit's reasoning); Phase 2 piece 2 activated check_availability/
+// create_appointment; Phase 2 piece 3 adds update_lead below.
 //
 // Safety contract for handleVapiToolCalls(): it NEVER throws and
 // ALWAYS resolves to a well-formed { results: [...] } response — one
@@ -61,11 +61,62 @@ async function handleCreateAppointment(args: Record<string, any>, ctx: ToolCallC
   return `Booked successfully. Confirm to the caller: their appointment is set for ${readable}.`;
 }
 
+// Deliberately narrower than leads' full schema — a live call can
+// record what it just learned, not re-litigate the funnel. "converted"
+// is excluded on purpose (explicit decision): that transition has real
+// downstream implications (deal closed, reporting, billing-adjacent
+// context) and stays human-only. assigned_to/consent/DND fields aren't
+// here either — those belong to their own dedicated flows, not a
+// call's own tool.
+const LEAD_STATUS_ALLOWED = ["new", "ready_to_call", "appointment_set", "not_interested"] as const;
+
+async function handleUpdateLead(args: Record<string, any>, ctx: ToolCallContext): Promise<string> {
+  if (!ctx.leadId) {
+    return "Can't update the CRM — no caller record exists for this call.";
+  }
+
+  const update: Record<string, any> = {};
+  if (typeof args?.status === "string") {
+    if (!(LEAD_STATUS_ALLOWED as readonly string[]).includes(args.status)) {
+      return `"${args.status}" can't be set from a call — allowed values are ${LEAD_STATUS_ALLOWED.join(", ")}. Marking a lead "converted" needs a team member's review, not this tool.`;
+    }
+    update.status = args.status;
+  }
+  if (typeof args?.budget === "number") update.budget = args.budget;
+  if (typeof args?.vehicle === "string" && args.vehicle.trim()) update.vehicle = args.vehicle.trim();
+  if (typeof args?.purchaseYear === "number") update.purchase_year = args.purchaseYear;
+  if (typeof args?.dealValue === "number") update.deal_value = args.dealValue;
+  const notes = typeof args?.notes === "string" ? args.notes.trim() : "";
+
+  if (Object.keys(update).length === 0 && !notes) {
+    return "Nothing to update — no valid fields were given.";
+  }
+
+  if (Object.keys(update).length > 0) {
+    const { error } = await ctx.supabase.from("leads").update(update).eq("id", ctx.leadId);
+    if (error) return `Couldn't update the lead: ${error.message}`;
+  }
+
+  if (notes) {
+    // Best-effort, same as business_memory/notifications elsewhere in
+    // this codebase — a note-insert hiccup shouldn't undo an otherwise
+    // successful field update or block the call from continuing.
+    try {
+      await ctx.supabase.from("lead_notes").insert({ lead_id: ctx.leadId, dealership_id: ctx.dealershipId, note: notes, created_by: null });
+    } catch {
+      // swallow
+    }
+  }
+
+  return "Lead updated successfully.";
+}
+
 // Keyed by tool name, matching BUSINESS_BRAIN_TOOLS's `name` field in
 // toolRegistry.ts.
 const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
   check_availability: handleCheckAvailability,
   create_appointment: handleCreateAppointment,
+  update_lead: handleUpdateLead,
 };
 
 interface VapiToolCall {

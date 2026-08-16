@@ -7,12 +7,12 @@
 // without maintaining the same tool twice.
 //
 // The live tool-calling framework itself (toolDispatcher.ts + the
-// webhook's tool-calls branch) now exists, and Phase 2 piece 2
-// activates the first two real "call"-channel tools below
-// (check_availability, create_appointment) — vapiCallAgent.ts now
-// builds a real model.tools array from whatever's channels-enabled
-// here (see toVapiFunctionDefinition/getCallEnabledVapiTools below)
-// and sends it with every outbound call.
+// webhook's tool-calls branch) now exists, and Phase 2 activates real
+// "call"-channel tools below (check_availability/create_appointment
+// from piece 2, update_lead from piece 3) — vapiCallAgent.ts builds a
+// real model.tools array from whatever's channels-enabled here (see
+// toVapiFunctionDefinition/getCallEnabledVapiTools below) and sends
+// it with every outbound call.
 //
 // `channels` records where each action is reachable *today* — most
 // are chat-only. `handlerRef` points at the already-reusable function
@@ -94,6 +94,25 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     },
     channels: ["call"],
     handlerRef: "toolDispatcher.ts:handleCreateAppointment -> appointmentSlots.ts:createAppointmentForLead",
+    status: "live",
+  },
+  // Phase 2 piece 3 — no leadId param, same reasoning as above. Status
+  // is deliberately restricted to a subset of leads.status's full enum
+  // (explicit decision: "converted" stays human-only, set nowhere but
+  // the dashboard).
+  {
+    name: "update_lead",
+    description: "Update this call's lead record with what you learned — status, budget, vehicle interest, purchase timing, deal value, or free-text notes.",
+    parameters: {
+      status: { type: "string", description: "One of: new, ready_to_call, appointment_set, not_interested. Never 'converted' — that needs a team member's review." },
+      budget: { type: "number", description: "The lead's stated budget" },
+      vehicle: { type: "string", description: "What the lead is interested in" },
+      purchaseYear: { type: "number", description: "Year the lead wants to buy/purchase by" },
+      dealValue: { type: "number", description: "Estimated deal value, if known" },
+      notes: { type: "string", description: "Free-text notes about what was discussed — saved as a CRM note, not overwritten on the next update" },
+    },
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleUpdateLead -> leads update (allowlisted fields) + lead_notes insert",
     status: "live",
   },
   {

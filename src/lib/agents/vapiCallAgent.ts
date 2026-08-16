@@ -92,14 +92,16 @@ export async function triggerVapiCall(
   try {
     const baseAssistant = await fetchBaseAssistantConfig(apiKey, assistantId);
     if (baseAssistant && businessCtx) {
-      // Phase 2 piece 2 — the first real activation of live tool-
-      // calling. getCallEnabledVapiTools() renders whatever's
-      // channels:["call"] in toolRegistry.ts (today: check_availability,
-      // create_appointment) into Vapi's function-calling schema. If
-      // Vapi rejects a malformed tools array, the call simply fails to
-      // start below (vapiRes.ok check) with a clear error — it cannot
-      // corrupt or crash a call already in progress.
+      // Live tool-calling — getCallEnabledVapiTools() renders whatever's
+      // channels:["call"] in toolRegistry.ts into Vapi's function-
+      // calling schema. If Vapi rejects a malformed tools array, the
+      // call simply fails to start below (vapiRes.ok check) with a
+      // clear error — it cannot corrupt or crash a call already in
+      // progress. Prompt flags are derived from which tool names are
+      // actually present, not just "tools.length > 0" — so the prompt
+      // never claims a capability that isn't really attached.
       const callTools = getCallEnabledVapiTools();
+      const callToolNames = callTools.map((t) => t.function.name);
       const systemPrompt = buildDynamicSystemPrompt({
         dealershipName: businessCtx.name,
         businessCategory: businessCtx.category,
@@ -108,7 +110,8 @@ export async function triggerVapiCall(
         qualificationReason: leadRecord?.qualification_reason,
         customInstructions: dealershipCallConfig?.custom_call_instructions,
         knowledgeFacts: businessCtx.knowledgeFacts,
-        canBookAppointments: callTools.length > 0,
+        canBookAppointments: callToolNames.includes("create_appointment"),
+        canUpdateLead: callToolNames.includes("update_lead"),
       });
       const firstMessage = buildFirstMessage(businessCtx.name, lead.name, dealershipCallConfig?.custom_first_message);
 

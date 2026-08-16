@@ -30,6 +30,7 @@ interface CallScriptContext {
   customInstructions?: string | null; // dealerships.custom_call_instructions — owner-written, appended verbatim
   knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
   canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
+  canUpdateLead?: boolean; // true only when the call's assistant config actually declares update_lead
 }
 
 export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
@@ -59,12 +60,16 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
     ? `\nYou can check real appointment availability and book one directly on this call using your tools — do this whenever the caller wants a next step like a visit or meeting, instead of just saying someone will follow up. Call check_availability first, offer 2-3 of the real times it returns, then call create_appointment with the exact time value the caller picked — never invent or guess a time yourself. If create_appointment says the time isn't available anymore, check availability again and offer a different time rather than telling the caller it's booked.\n`
     : "";
 
+  const updateLeadLine = ctx.canUpdateLead
+    ? `\nWhen you learn something concrete about this lead (their budget, what they're interested in, that they're not interested, anything worth a note), use your update_lead tool to save it to the CRM directly during the call, not just in the call summary afterward. Never set their status to "converted" yourself — that decision always stays with a team member.\n`
+    : "";
+
   return `You are calling on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. You are speaking with ${ctx.leadName}, who has shown interest in the business.
 
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}${bookingLine}
+${customLine}${factsBlock}${bookingLine}${updateLeadLine}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.
