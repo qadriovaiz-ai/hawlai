@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { X } from "lucide-react";
+import { X, Store } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navGroups";
 
 export default function MainMenuPanel({ onClose }: { onClose: () => void }) {
@@ -34,6 +34,23 @@ export default function MainMenuPanel({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           ))}
+
+          {/* Not one of the 5 frozen NAV_GROUPS destinations — a real page
+              reached only via this deep-link, same pattern as
+              /dashboard/research-agent or /dashboard/assets. */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-2 mb-1.5">More</p>
+            <div className="space-y-0.5">
+              <Link
+                href="/dashboard/tools"
+                onClick={onClose}
+                className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <Store className="w-4 h-4 text-slate-400 shrink-0" />
+                Tool Marketplace
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </div>
