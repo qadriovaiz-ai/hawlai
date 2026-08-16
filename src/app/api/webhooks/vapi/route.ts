@@ -4,23 +4,26 @@ import { scoreLeadFromCall } from "@/lib/agents/callScoringAgent";
 import { logVapiUsage } from "@/lib/usage/logUsage";
 import { recordCallingMinutes } from "@/lib/usage/callingMinutes";
 import { buildInboundSystemPrompt, buildInboundFirstMessage } from "@/lib/agents/callScriptAgent";
-import { getBusinessContext } from "@/lib/businessBrain";
+import { getBusinessContext, handleVapiToolCalls } from "@/lib/businessBrain";
 import { recordCallOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
-// event types during a call; this app acts on two of them:
-// end-of-call-report (the full transcript, once a call ends) and
+// event types during a call; this app acts on three of them:
+// end-of-call-report (the full transcript, once a call ends),
 // assistant-request (fired the instant an INBOUND call arrives at a
 // number whose Server URL is this endpoint, before the call connects —
 // Vapi expects an assistant config back in the response so it knows who
-// should answer).
+// should answer), and tool-calls (fired mid-call when the model wants
+// to invoke a tool — see toolDispatcher.ts; provably inert today since
+// no assistant config this app sends declares any tools).
 export async function POST(request: Request) {
   const body = await request.json();
   const message = body?.message;
   if (!message) return NextResponse.json({ received: true });
 
   if (message.type === "assistant-request") return handleAssistantRequest(message);
+  if (message.type === "tool-calls") return handleToolCallsRequest(message);
   if (message.type !== "end-of-call-report") return NextResponse.json({ received: true });
 
   const vapiCallId = message.call?.id;
@@ -80,6 +83,21 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+// Mid-call tool-calling — see toolDispatcher.ts for the full safety
+// contract. dealershipId/leadId come from the same call.metadata
+// object triggerVapiCall() already sets on every outbound call (see
+// vapiCallAgent.ts); inbound calls don't carry a leadId today, which
+// is fine — handleVapiToolCalls() treats it as optional. This branch
+// can only fire once a call's assistant config actually declares
+// tools, which nothing in this app does yet (Phase 2 territory) — so
+// in practice this is currently unreachable, not just defensively coded.
+async function handleToolCallsRequest(message: any): Promise<NextResponse> {
+  const dealershipId = message.call?.metadata?.dealershipId ?? "";
+  const leadId = message.call?.metadata?.leadId ?? null;
+  const response = await handleVapiToolCalls(message, { dealershipId, leadId });
+  return NextResponse.json(response);
 }
 
 // Resolves which dealership owns the dialed number (by

@@ -1,18 +1,19 @@
-// Business Brain — tool registry (catalog only, not yet wired to any
-// live call).
+// Business Brain — tool registry (catalog, not the dispatcher).
 //
-// This is metadata, not a dispatcher: a single documented shape for
-// "actions the Business Brain could eventually expose," designed so
-// one definition can later render into BOTH Claude's tool schema (for
-// Master Chat, see masterBrainV2.ts's TOOLS array) and Vapi's function-
-// calling schema (for live calls) without maintaining the same tool
-// twice. Nothing in this file is invoked automatically by anything —
-// Phase 1's own approved sequence puts the actual live tool-calling
-// framework (a new webhook branch handling Vapi's tool-calls message,
-// wired into a real call) deliberately LAST, after the knowledge base,
-// this module, and structured intent/sentiment output all ship, since
-// a bad tool response mid-call is the one failure mode here that can
-// break a real, in-progress customer conversation.
+// A single documented shape for "actions the Business Brain could
+// eventually expose," designed so one definition can later render
+// into BOTH Claude's tool schema (for Master Chat, see masterBrainV2.ts's
+// TOOLS array) and Vapi's function-calling schema (for live calls)
+// without maintaining the same tool twice.
+//
+// The live tool-calling framework itself (toolDispatcher.ts + the
+// webhook's tool-calls branch) now exists — but every entry below is
+// still `channels: ["chat"]` or `[]`, never `"call"`, and
+// toolDispatcher.ts's handler map is still empty. No assistant config
+// this app sends to Vapi declares any tools, so Vapi has nothing to
+// decide to call — the framework is real but provably inert until
+// Phase 2 adds a "call"-enabled entry here AND a matching handler in
+// toolDispatcher.ts AND a tool definition in the assistant config.
 //
 // `channels` records where each action is reachable *today* — most
 // are chat-only. `handlerRef` points at the already-reusable function
