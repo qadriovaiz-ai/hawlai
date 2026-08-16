@@ -6,6 +6,7 @@ import { recordCallingMinutes } from "@/lib/usage/callingMinutes";
 import { buildInboundSystemPrompt, buildInboundFirstMessage } from "@/lib/agents/callScriptAgent";
 import { getBusinessContext, handleVapiToolCalls } from "@/lib/businessBrain";
 import { recordCallOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
+import { emitNotification } from "@/lib/notifications/emit";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
@@ -80,6 +81,23 @@ export async function POST(request: Request) {
 
   if (callRecord) {
     await recordCallOutcomeInsight(supabase, { id: callRecord.id, dealershipId, leadName: lead.name, temperature: result.temperature, reason: result.reason, urgency: result.urgency });
+
+    // Phase 2 piece 1 — deterministic, not a live in-call tool: a call
+    // that came back as a complaint or high-urgency gets a human
+    // alerted automatically, reusing the same notifications sink every
+    // other proactive signal in the app already goes through. Owner-
+    // only for now, per explicit decision — no team-member/assigned-
+    // salesperson routing yet.
+    if (result.intent === "complaint" || result.urgency === "high") {
+      await emitNotification(supabase, {
+        dealershipId,
+        kind: "call_needs_follow_up",
+        title: result.intent === "complaint" ? `Complaint on call with ${lead.name}` : `Urgent follow-up needed: ${lead.name}`,
+        body: result.reason,
+        href: `/dashboard/leads/${lead.id}`,
+        dedupeKey: `call_needs_follow_up:${callRecord.id}`,
+      });
+    }
   }
 
   return NextResponse.json({ received: true });
