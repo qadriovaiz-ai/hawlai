@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2, Wand2, Image as ImageIcon, Download, PenTool, Plus } from "lucide-react";
 import { GRAPHIC_TYPES } from "@/lib/agents/graphicDesignAgent";
 import { Button, Card, Input } from "@/components/ui";
+import PitchDeckBuilderCard from "./PitchDeckBuilderCard";
 
 interface CanvasDesign {
   id: string;
@@ -76,6 +77,8 @@ export default function GraphicDesignView() {
           <Plus className="w-3.5 h-3.5" /> New Design
         </Link>
       </Card>
+
+      <PitchDeckBuilderCard />
 
       {canvasDesigns.length > 0 && (
         <Card className="space-y-2">
