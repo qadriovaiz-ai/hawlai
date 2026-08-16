@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { getAvailableSlots, createAppointmentForLead } from "@/lib/appointments/appointmentSlots";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -10,29 +11,7 @@ export async function GET(request: Request) {
   const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name").eq("booking_slug", slug).maybeSingle();
   if (!dealership) return NextResponse.json({ error: "Booking page not found" }, { status: 404 });
 
-  // Next 7 days, hourly slots 10am-6pm, minus already-booked ones.
-  const { data: existing } = await supabase
-    .from("appointments")
-    .select("appointment_date")
-    .eq("dealership_id", dealership.id)
-    .eq("status", "scheduled")
-    .gte("appointment_date", new Date().toISOString());
-
-  const bookedTimes = new Set((existing ?? []).map((a: any) => new Date(a.appointment_date).toISOString()));
-
-  const slots: string[] = [];
-  const now = new Date();
-  for (let day = 0; day < 7; day++) {
-    for (let hour = 10; hour <= 18; hour++) {
-      const slot = new Date(now);
-      slot.setDate(now.getDate() + day);
-      slot.setHours(hour, 0, 0, 0);
-      if (slot <= now) continue;
-      if (bookedTimes.has(slot.toISOString())) continue;
-      slots.push(slot.toISOString());
-    }
-  }
-
+  const slots = await getAvailableSlots(supabase, dealership.id);
   return NextResponse.json({ dealershipName: dealership.dealership_name, slots });
 }
 
@@ -62,16 +41,11 @@ export async function POST(request: Request) {
     leadId = newLead.id;
   }
 
-  const { error: apptError } = await supabase.from("appointments").insert({
-    lead_id: leadId,
-    dealership_id: dealership.id,
-    appointment_date: appointmentDate,
-    appointment_type: "meeting",
-    notes: notes ?? null,
-  });
-  if (apptError) return NextResponse.json({ error: apptError.message }, { status: 500 });
-
-  await supabase.from("leads").update({ status: "appointment_set" }).eq("id", leadId);
+  const result = await createAppointmentForLead(supabase, { dealershipId: dealership.id, leadId, appointmentDate, notes });
+  if (!result.success) {
+    const status = result.error?.includes("no longer available") ? 409 : 500;
+    return NextResponse.json({ error: result.error }, { status });
+  }
 
   return NextResponse.json({ success: true });
 }

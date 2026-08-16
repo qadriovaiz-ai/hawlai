@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildDynamicSystemPrompt, buildFirstMessage } from "./callScriptAgent";
-import { getBusinessContext } from "../businessBrain";
+import { getBusinessContext, getCallEnabledVapiTools } from "../businessBrain";
 
 // Shared core of "trigger an AI call for this lead" — used by both the
 // manual "AI Call" button (via /api/calls/trigger, user-authenticated)
@@ -92,6 +92,14 @@ export async function triggerVapiCall(
   try {
     const baseAssistant = await fetchBaseAssistantConfig(apiKey, assistantId);
     if (baseAssistant && businessCtx) {
+      // Phase 2 piece 2 — the first real activation of live tool-
+      // calling. getCallEnabledVapiTools() renders whatever's
+      // channels:["call"] in toolRegistry.ts (today: check_availability,
+      // create_appointment) into Vapi's function-calling schema. If
+      // Vapi rejects a malformed tools array, the call simply fails to
+      // start below (vapiRes.ok check) with a clear error — it cannot
+      // corrupt or crash a call already in progress.
+      const callTools = getCallEnabledVapiTools();
       const systemPrompt = buildDynamicSystemPrompt({
         dealershipName: businessCtx.name,
         businessCategory: businessCtx.category,
@@ -100,11 +108,12 @@ export async function triggerVapiCall(
         qualificationReason: leadRecord?.qualification_reason,
         customInstructions: dealershipCallConfig?.custom_call_instructions,
         knowledgeFacts: businessCtx.knowledgeFacts,
+        canBookAppointments: callTools.length > 0,
       });
       const firstMessage = buildFirstMessage(businessCtx.name, lead.name, dealershipCallConfig?.custom_first_message);
 
       // Keep everything already tuned (voice, transcriber, provider) —
-      // only replace the actual script.
+      // only replace the actual script (and now, the tools).
       callBody = {
         assistant: {
           ...baseAssistant,
@@ -113,6 +122,7 @@ export async function triggerVapiCall(
           model: {
             ...baseAssistant.model,
             messages: [{ role: "system", content: systemPrompt }],
+            ...(callTools.length > 0 ? { tools: callTools } : {}),
           },
         },
       };

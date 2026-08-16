@@ -29,6 +29,7 @@ interface CallScriptContext {
   qualificationReason?: string | null; // from a prior interaction, if any — real context, not invented
   customInstructions?: string | null; // dealerships.custom_call_instructions — owner-written, appended verbatim
   knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
+  canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
 }
 
 export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
@@ -49,17 +50,26 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
 
   const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
 
+  // Only claim the booking capability when it's actually attached to
+  // this call's assistant config — see canBookAppointments's doc
+  // comment. Deliberately explicit about the check-then-book sequence
+  // and the "use the exact value" instruction, since a live tool call
+  // that fails still has to leave the conversation in a good state.
+  const bookingLine = ctx.canBookAppointments
+    ? `\nYou can check real appointment availability and book one directly on this call using your tools — do this whenever the caller wants a next step like a visit or meeting, instead of just saying someone will follow up. Call check_availability first, offer 2-3 of the real times it returns, then call create_appointment with the exact time value the caller picked — never invent or guess a time yourself. If create_appointment says the time isn't available anymore, check availability again and offer a different time rather than telling the caller it's booked.\n`
+    : "";
+
   return `You are calling on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. You are speaking with ${ctx.leadName}, who has shown interest in the business.
 
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}
+${customLine}${factsBlock}${bookingLine}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.
 3. Answer questions honestly — if you don't have specific product/pricing details, say a team member will follow up with exact information rather than guessing or making up specifics.
-4. If they're genuinely interested, offer a clear next step (a callback, a visit, more information sent to them) — don't try to close a sale on this call.
+4. If they're genuinely interested, offer a clear next step (a callback, a visit, more information sent to them, or a booked appointment if you have that tool) — don't try to close a sale on this call.
 5. Keep the call natural and unhurried — this is a real conversation, not a script being read aloud.
 
 If they're not interested, thank them politely and end the call — never pressure someone who says no.

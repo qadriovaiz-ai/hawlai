@@ -7,13 +7,12 @@
 // without maintaining the same tool twice.
 //
 // The live tool-calling framework itself (toolDispatcher.ts + the
-// webhook's tool-calls branch) now exists — but every entry below is
-// still `channels: ["chat"]` or `[]`, never `"call"`, and
-// toolDispatcher.ts's handler map is still empty. No assistant config
-// this app sends to Vapi declares any tools, so Vapi has nothing to
-// decide to call — the framework is real but provably inert until
-// Phase 2 adds a "call"-enabled entry here AND a matching handler in
-// toolDispatcher.ts AND a tool definition in the assistant config.
+// webhook's tool-calls branch) now exists, and Phase 2 piece 2
+// activates the first two real "call"-channel tools below
+// (check_availability, create_appointment) — vapiCallAgent.ts now
+// builds a real model.tools array from whatever's channels-enabled
+// here (see toVapiFunctionDefinition/getCallEnabledVapiTools below)
+// and sends it with every outbound call.
 //
 // `channels` records where each action is reachable *today* — most
 // are chat-only. `handlerRef` points at the already-reusable function
@@ -73,20 +72,29 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     handlerRef: "sendDealerEmail.ts:sendDealerEmail",
     status: "live",
   },
-  // Both confirmed gaps from the Phase 1 audit — no handler exists yet
-  // for either. Listed here so Phase 2 (real tool-calling) has a
-  // starting inventory instead of re-deriving this from scratch.
+  // Phase 2 piece 2 — the first two real call-enabled tools. leadId is
+  // deliberately NOT a parameter here (unlike add_lead/trigger_call) —
+  // on a call, the lead is already known from call.metadata, so the
+  // handler reads it from ToolCallContext instead of asking the model
+  // to supply it (one less thing the model could get wrong).
+  {
+    name: "check_availability",
+    description: "Check real appointment availability for this business over the next 7 days.",
+    parameters: {},
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleCheckAvailability -> appointmentSlots.ts:getAvailableSlots",
+    status: "live",
+  },
   {
     name: "create_appointment",
-    description: "Book an appointment for a lead. NOT YET BUILT — appointments are currently only created via a plain REST route from a UI modal (src/app/api/appointments/route.ts), never from chat or a call.",
+    description: "Book an appointment for the lead on this call, at a time returned by check_availability.",
     parameters: {
-      leadId: { type: "string", description: "The lead the appointment is for", required: true },
-      appointmentDate: { type: "string", description: "ISO datetime", required: true },
-      notes: { type: "string", description: "Any context" },
+      appointmentDate: { type: "string", description: "Exact ISO datetime value from check_availability's result — never invented or guessed", required: true },
+      notes: { type: "string", description: "Any context about what the appointment is for" },
     },
-    channels: [],
-    handlerRef: "NOT BUILT — extract reusable logic from src/app/api/appointments/route.ts when this is scheduled",
-    status: "planned",
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleCreateAppointment -> appointmentSlots.ts:createAppointmentForLead",
+    status: "live",
   },
   {
     name: "send_whatsapp",
@@ -100,3 +108,49 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     status: "planned",
   },
 ];
+
+// ------------------------------------------------------------------
+// Renders a BusinessBrainTool into Vapi's function-calling schema
+// (OpenAI-compatible: {type:"function", function:{name, description,
+// parameters}}) — the one definition above serves both Claude's tool
+// schema (masterBrainV2.ts's TOOLS array, built independently today)
+// and Vapi's, without hand-writing the same tool twice.
+//
+// Exact field names here are Vapi's documented function-calling
+// contract as best represented in this codebase; if Vapi's API has
+// since changed shape, the failure mode is safe, not silent-broken: a
+// malformed model.tools value causes Vapi's call-creation request to
+// be rejected outright (see vapiCallAgent.ts), so the call simply
+// fails to start with a clear error — it cannot corrupt or crash a
+// call that's already in progress.
+// ------------------------------------------------------------------
+
+export interface VapiFunctionToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: "object";
+      properties: Record<string, { type: string; description: string }>;
+      required: string[];
+    };
+  };
+}
+
+export function toVapiFunctionDefinition(tool: BusinessBrainTool): VapiFunctionToolDefinition {
+  const properties: Record<string, { type: string; description: string }> = {};
+  const required: string[] = [];
+  for (const [key, param] of Object.entries(tool.parameters)) {
+    properties[key] = { type: param.type, description: param.description };
+    if (param.required) required.push(key);
+  }
+  return {
+    type: "function",
+    function: { name: tool.name, description: tool.description, parameters: { type: "object", properties, required } },
+  };
+}
+
+export function getCallEnabledVapiTools(): VapiFunctionToolDefinition[] {
+  return BUSINESS_BRAIN_TOOLS.filter((t) => t.channels.includes("call") && t.status === "live").map(toVapiFunctionDefinition);
+}

@@ -16,8 +16,9 @@ import { emitNotification } from "@/lib/notifications/emit";
 // number whose Server URL is this endpoint, before the call connects —
 // Vapi expects an assistant config back in the response so it knows who
 // should answer), and tool-calls (fired mid-call when the model wants
-// to invoke a tool — see toolDispatcher.ts; provably inert today since
-// no assistant config this app sends declares any tools).
+// to invoke a tool — see toolDispatcher.ts for the two real tools
+// live since Phase 2 piece 2, check_availability/create_appointment,
+// and its safety contract for a failing tool).
 export async function POST(request: Request) {
   const body = await request.json();
   const message = body?.message;
@@ -106,16 +107,27 @@ export async function POST(request: Request) {
 // Mid-call tool-calling — see toolDispatcher.ts for the full safety
 // contract. dealershipId/leadId come from the same call.metadata
 // object triggerVapiCall() already sets on every outbound call (see
-// vapiCallAgent.ts); inbound calls don't carry a leadId today, which
-// is fine — handleVapiToolCalls() treats it as optional. This branch
-// can only fire once a call's assistant config actually declares
-// tools, which nothing in this app does yet (Phase 2 territory) — so
-// in practice this is currently unreachable, not just defensively coded.
+// vapiCallAgent.ts). Phase 2 piece 2 only attaches tools to OUTBOUND
+// calls — inbound calls never declare model.tools, so this branch
+// stays unreachable for them (their missing leadId would make booking
+// impossible to attribute anyway).
+//
+// Defense-in-depth beyond handleVapiToolCalls()'s own safety contract:
+// this whole function is wrapped too, so even createServiceClient()
+// throwing outright (e.g. missing env vars) still returns a validly-
+// shaped, if empty, response instead of a 500 the live call would be
+// left waiting on.
 async function handleToolCallsRequest(message: any): Promise<NextResponse> {
-  const dealershipId = message.call?.metadata?.dealershipId ?? "";
-  const leadId = message.call?.metadata?.leadId ?? null;
-  const response = await handleVapiToolCalls(message, { dealershipId, leadId });
-  return NextResponse.json(response);
+  try {
+    const supabase = createServiceClient();
+    const dealershipId = message.call?.metadata?.dealershipId ?? "";
+    const leadId = message.call?.metadata?.leadId ?? null;
+    const response = await handleVapiToolCalls(message, { supabase, dealershipId, leadId });
+    return NextResponse.json(response);
+  } catch (err: any) {
+    console.error("[vapi-webhook] tool-calls request failed entirely:", err.message);
+    return NextResponse.json({ results: [] });
+  }
 }
 
 // Resolves which dealership owns the dialed number (by
