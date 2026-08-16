@@ -31,6 +31,7 @@ interface CallScriptContext {
   knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
   canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
   canUpdateLead?: boolean; // true only when the call's assistant config actually declares update_lead
+  canCheckOrders?: boolean; // true only when the call's assistant config actually declares check_order_status
 }
 
 export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
@@ -64,12 +65,16 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
     ? `\nWhen you learn something concrete about this lead (their budget, what they're interested in, that they're not interested, anything worth a note), use your update_lead tool to save it to the CRM directly during the call, not just in the call summary afterward. Never set their status to "converted" yourself — that decision always stays with a team member.\n`
     : "";
 
+  const orderLookupLine = ctx.canCheckOrders
+    ? `\nIf the caller asks about an order they placed, use check_order_status to look up the real status instead of guessing — it matches by their phone number automatically, you don't need to ask for an order number. If it finds nothing or there's no phone on file, say a team member will look into it.\n`
+    : "";
+
   return `You are calling on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. You are speaking with ${ctx.leadName}, who has shown interest in the business.
 
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}${bookingLine}${updateLeadLine}
+${customLine}${factsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.

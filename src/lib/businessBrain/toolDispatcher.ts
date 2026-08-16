@@ -1,7 +1,8 @@
 // Business Brain — live-call tool-calling dispatcher. Phase 1 built the
 // framework (empty by design, provably inert — see git history for
-// that commit's reasoning); Phase 2 piece 2 activated check_availability/
-// create_appointment; Phase 2 piece 3 adds update_lead below.
+// that commit's reasoning); Phase 2 activated check_availability/
+// create_appointment/update_lead; Phase 3 piece 1 adds
+// check_order_status below.
 //
 // Safety contract for handleVapiToolCalls(): it NEVER throws and
 // ALWAYS resolves to a well-formed { results: [...] } response — one
@@ -111,12 +112,64 @@ async function handleUpdateLead(args: Record<string, any>, ctx: ToolCallContext)
   return "Lead updated successfully.";
 }
 
+function lastTenDigits(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-10);
+}
+
+// orders.customer_phone is stored exactly as the customer typed it at
+// checkout — no format is enforced (confirmed against the existing
+// verified-reviews route, which does a plain trimmed exact match and
+// inherits the same limitation). A live call can't afford that: a
+// real customer with a differently-formatted number (+91 vs bare 10
+// digits vs spaces) would wrongly hear "no order found." Matching by
+// normalized last-10-digits in JS, not a SQL pattern match, handles
+// any separator/format the customer used. Bounded to the 200 most
+// recent orders for this dealership — comfortably covers a small
+// business's real order volume without an unbounded scan.
+async function handleCheckOrderStatus(_args: Record<string, any>, ctx: ToolCallContext): Promise<string> {
+  if (!ctx.leadId) {
+    return "Can't look up an order — no caller record exists for this call.";
+  }
+
+  const { data: lead } = await ctx.supabase.from("leads").select("phone").eq("id", ctx.leadId).maybeSingle();
+  const leadDigits = lead?.phone ? lastTenDigits(String(lead.phone)) : "";
+  if (!leadDigits) {
+    return "No phone number is on file for this caller, so an order can't be looked up. Let them know a team member will check manually.";
+  }
+
+  const { data: candidates } = await ctx.supabase
+    .from("orders")
+    .select("status, payment_status, total, items, customer_phone, created_at")
+    .eq("dealership_id", ctx.dealershipId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const orders = (candidates ?? [])
+    .filter((o: any) => lastTenDigits(String(o.customer_phone ?? "")) === leadDigits)
+    .slice(0, 3);
+
+  if (orders.length === 0) {
+    return "No orders found for this caller's phone number. Let them know a team member will look into it.";
+  }
+
+  const summary = orders
+    .map((o: any) => {
+      const itemNames = (o.items ?? []).map((it: any) => it.name).filter(Boolean).join(", ");
+      const date = new Date(o.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      return `${date}: ${itemNames || "order"}, total ₹${o.total}, status "${o.status}", payment "${o.payment_status}"`;
+    })
+    .join("; ");
+
+  return `Found ${orders.length} recent order(s) for this caller: ${summary}. Share the relevant details naturally — don't read this back verbatim.`;
+}
+
 // Keyed by tool name, matching BUSINESS_BRAIN_TOOLS's `name` field in
 // toolRegistry.ts.
 const CALL_TOOL_HANDLERS: Record<string, ToolHandler> = {
   check_availability: handleCheckAvailability,
   create_appointment: handleCreateAppointment,
   update_lead: handleUpdateLead,
+  check_order_status: handleCheckOrderStatus,
 };
 
 interface VapiToolCall {

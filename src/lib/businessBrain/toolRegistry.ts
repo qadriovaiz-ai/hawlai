@@ -7,12 +7,12 @@
 // without maintaining the same tool twice.
 //
 // The live tool-calling framework itself (toolDispatcher.ts + the
-// webhook's tool-calls branch) now exists, and Phase 2 activates real
-// "call"-channel tools below (check_availability/create_appointment
-// from piece 2, update_lead from piece 3) — vapiCallAgent.ts builds a
-// real model.tools array from whatever's channels-enabled here (see
-// toVapiFunctionDefinition/getCallEnabledVapiTools below) and sends
-// it with every outbound call.
+// webhook's tool-calls branch) now exists, and real "call"-channel
+// tools below have grown across two phases: check_availability/
+// create_appointment/update_lead (Phase 2), check_order_status
+// (Phase 3 piece 1) — vapiCallAgent.ts builds a real model.tools array
+// from whatever's channels-enabled here (see toVapiFunctionDefinition/
+// getCallEnabledVapiTools below) and sends it with every outbound call.
 //
 // `channels` records where each action is reachable *today* — most
 // are chat-only. `handlerRef` points at the already-reusable function
@@ -113,6 +113,17 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     },
     channels: ["call"],
     handlerRef: "toolDispatcher.ts:handleUpdateLead -> leads update (allowlisted fields) + lead_notes insert",
+    status: "live",
+  },
+  // Phase 3 piece 1 — no orderId/phone param: matches by the call's
+  // own lead's phone number, resolved server-side, rather than asking
+  // the model to supply or transcribe a phone number by voice.
+  {
+    name: "check_order_status",
+    description: "Look up this caller's recent orders by their phone number and return status, payment status, and items.",
+    parameters: {},
+    channels: ["call"],
+    handlerRef: "toolDispatcher.ts:handleCheckOrderStatus -> orders table, matched by normalized phone",
     status: "live",
   },
   {

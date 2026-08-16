@@ -112,6 +112,7 @@ export async function triggerVapiCall(
         knowledgeFacts: businessCtx.knowledgeFacts,
         canBookAppointments: callToolNames.includes("create_appointment"),
         canUpdateLead: callToolNames.includes("update_lead"),
+        canCheckOrders: callToolNames.includes("check_order_status"),
       });
       const firstMessage = buildFirstMessage(businessCtx.name, lead.name, dealershipCallConfig?.custom_first_message);
 
