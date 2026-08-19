@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 
@@ -26,7 +27,7 @@ export async function PATCH(
   // RLS makes sure this creative actually belongs to this dealer's dealership.
   const { data: creative, error: fetchError } = await supabase
     .from("ad_creatives")
-    .select("id, meta_ad_id, dealership_id, daily_budget")
+    .select("id, meta_ad_id, dealership_id, daily_budget, headline")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();
@@ -55,7 +56,34 @@ export async function PATCH(
     }
     const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, creative.daily_budget ?? null);
     if (!authority.canApprove) {
-      return NextResponse.json({ error: authority.reason ?? "You don't have authority to activate ad spend." }, { status: 403 });
+      // P0 11b — a blocked activation doesn't just dead-end: it becomes
+      // a real request in the Approvals queue (same pending_approvals
+      // producer pattern as 11a) so whoever holds authority can act on
+      // it, instead of the requester having to go find someone and ask
+      // in person. One pending request per campaign at a time — a
+      // second click while one's outstanding just re-confirms it's queued.
+      const service = createServiceClient();
+      const { data: existing } = await service
+        .from("pending_approvals")
+        .select("id")
+        .eq("dealership_id", dealershipId)
+        .eq("action_type", "activate_ad_campaign")
+        .eq("status", "pending")
+        .contains("action_details", { campaign_id: id })
+        .maybeSingle();
+      if (!existing) {
+        await service.from("pending_approvals").insert({
+          dealership_id: dealershipId,
+          requested_by_agent: "ads_status_route",
+          action_type: "activate_ad_campaign",
+          action_details: { campaign_id: id, campaign_name: creative.headline },
+          amount: creative.daily_budget,
+        });
+      }
+      return NextResponse.json(
+        { pendingApproval: true, message: authority.reason ? `${authority.reason} Sent to Approvals for review.` : "Sent to Approvals for review — you don't have authority to activate this yourself." },
+        { status: 202 }
+      );
     }
   }
 

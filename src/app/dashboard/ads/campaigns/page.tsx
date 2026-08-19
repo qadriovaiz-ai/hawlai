@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown, FlaskConical } from "lucide-react";
@@ -25,7 +26,11 @@ export default async function CampaignsPage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const [{ data: campaigns }, performance] = await Promise.all([
+  // pending_approvals RLS is owner-only, so a non-owner manager viewing
+  // this page can't read it directly — reading via the service client
+  // here, scoped to the dealershipId already resolved above from this
+  // person's own session, same precedent as /api/approvals/[id].
+  const [{ data: campaigns }, performance, { data: pendingActivations }] = await Promise.all([
     supabase
       .from("ad_creatives")
       .select("*")
@@ -33,9 +38,16 @@ export default async function CampaignsPage() {
       .eq("status", "launched")
       .order("created_at", { ascending: false }),
     getCampaignPerformance(supabase, dealershipId),
+    createServiceClient()
+      .from("pending_approvals")
+      .select("action_details")
+      .eq("dealership_id", dealershipId)
+      .eq("action_type", "activate_ad_campaign")
+      .eq("status", "pending"),
   ]);
 
   const perfById = new Map(performance.campaigns.map((p) => [p.id, p]));
+  const pendingActivationIds = new Set((pendingActivations ?? []).map((a: any) => a.action_details?.campaign_id).filter(Boolean));
 
   // Group launched creatives that share a variant_group_id (started
   // via "Test a variant") so they render as one side-by-side
@@ -162,7 +174,7 @@ export default async function CampaignsPage() {
                           <p className="text-xs font-semibold text-slate-800">{perf?.roas != null ? `${perf.roas.toFixed(1)}x` : "—"}</p>
                         </div>
                       </div>
-                      <CampaignStatusToggle creativeId={c.id} currentStatus={status} />
+                      <CampaignStatusToggle creativeId={c.id} currentStatus={status} pendingActivation={pendingActivationIds.has(c.id)} />
                     </div>
                   );
                 })}
@@ -208,7 +220,7 @@ export default async function CampaignsPage() {
                       <span>{formatDate(c.created_at)}</span>
                     </div>
                   </div>
-                  <CampaignStatusToggle creativeId={c.id} currentStatus={status} />
+                  <CampaignStatusToggle creativeId={c.id} currentStatus={status} pendingActivation={pendingActivationIds.has(c.id)} />
                 </div>
 
                 {perf && (perf.spend > 0 || perf.leads > 0) && (

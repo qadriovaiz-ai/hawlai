@@ -9,6 +9,7 @@ import { titleCaseFromSnake } from "./utils";
 const ACTION_TYPE_LABELS: Record<string, string> = {
   change_campaign_budget: "Increase campaign budget",
   change_campaign_targeting: "Change campaign targeting",
+  activate_ad_campaign: "Activate ad spend",
   auto_paused_campaign: "Auto-paused a low performer",
   launch_campaign: "Launch new campaign",
   pause_campaign: "Pause campaign",
@@ -18,6 +19,8 @@ const AGENT_LABELS: Record<string, string> = {
   autopilot_auto_pause: "Autopilot",
   paid_ads_agent: "Paid Ads Agent",
   optimization_agent: "Optimization Agent",
+  master_chat_campaign_edit: "Master Chat",
+  ads_status_route: "Campaign Manager",
 };
 
 export function humanizeActionType(actionType: string): string {

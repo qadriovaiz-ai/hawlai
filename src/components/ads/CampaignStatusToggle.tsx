@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/Button";
 export default function CampaignStatusToggle({
   creativeId,
   currentStatus,
+  pendingActivation = false,
 }: {
   creativeId: string;
   currentStatus: string;
+  pendingActivation?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(pendingActivation);
   const router = useRouter();
 
   async function toggle() {
@@ -27,6 +30,10 @@ export default function CampaignStatusToggle({
         body: JSON.stringify({ status: nextStatus }),
       });
       const data = await res.json();
+      if (res.status === 202 && data.pendingApproval) {
+        setPending(true);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Kuch gadbad ho gaya");
       router.refresh();
     } catch (err: any) {
@@ -37,6 +44,15 @@ export default function CampaignStatusToggle({
   }
 
   const isActive = currentStatus === "ACTIVE";
+
+  if (pending) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <span className="badge bg-amber-500/10 text-amber-600 border border-amber-300">Pending approval</span>
+        <p className="text-[10.5px] text-slate-400 max-w-[200px] text-right">Sent to Approvals for review</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-end gap-1">

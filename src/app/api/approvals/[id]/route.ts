@@ -95,6 +95,34 @@ export async function PATCH(
         return NextResponse.json({ error: outcome.error ?? "Couldn't apply the targeting change" }, { status: 500 });
       }
     }
+
+    // P0 11b — same real-spend-activation Meta call as /api/ads/[id]/status,
+    // reused here for the case that route deferred to this queue because
+    // the requester lacked authority.
+    if (approval?.action_type === "activate_ad_campaign") {
+      const details = approval.action_details as any;
+      const { data: campaign } = await service
+        .from("ad_creatives").select("meta_ad_id").eq("id", details.campaign_id).single();
+      const { data: dealership } = await service
+        .from("dealerships").select("fb_page_access_token").eq("id", approval.dealership_id).single();
+      const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+
+      if (!token || !campaign?.meta_ad_id) {
+        return NextResponse.json({ error: "Can't apply this — the campaign or Facebook connection is missing" }, { status: 400 });
+      }
+
+      const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${campaign.meta_ad_id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ACTIVE", access_token: token }),
+      });
+      const metaData = await metaRes.json();
+      if (!metaRes.ok || metaData.error) {
+        return NextResponse.json({ error: metaData.error?.message ?? "Meta API error while activating the campaign" }, { status: 500 });
+      }
+
+      await service.from("ad_creatives").update({ meta_status: "ACTIVE" }).eq("id", details.campaign_id);
+    }
   }
 
   const { data, error } = await service
