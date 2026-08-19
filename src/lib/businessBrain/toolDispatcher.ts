@@ -18,6 +18,7 @@
 
 import { getAvailableSlots, createAppointmentForLead } from "../appointments/appointmentSlots";
 import { emitNotification } from "../notifications/emit";
+import { logAuditEvent } from "../audit/logAuditEvent";
 
 export interface ToolCallContext {
   supabase: any;
@@ -376,6 +377,18 @@ export async function handleVapiToolCalls(message: any, ctx: ToolCallContext): P
           const rawArgs = call.function?.arguments;
           const args = typeof rawArgs === "string" ? JSON.parse(rawArgs) : (rawArgs ?? {});
           const result = await CALL_TOOL_HANDLERS[name](args, ctx);
+          // P0 30b — live-call tools are one of the highest-value audit
+          // sources: a real, fully-autonomous action taken on a call
+          // with no human review before it happens.
+          await logAuditEvent(ctx.supabase, {
+            dealershipId: ctx.dealershipId,
+            actor: `vapi_call_tool:${name}`,
+            eventType: "call_tool_executed",
+            resourceType: ctx.leadId ? "lead" : undefined,
+            resourceId: ctx.leadId ?? undefined,
+            summary: `AI call executed ${name} — ${result.slice(0, 140)}`,
+            details: { toolName: name, args, vapiCallId: ctx.vapiCallId ?? null },
+          });
           return { toolCallId, result };
         } catch (err: any) {
           console.error(`[vapi-tool-call] handler for "${name}" failed:`, err.message);

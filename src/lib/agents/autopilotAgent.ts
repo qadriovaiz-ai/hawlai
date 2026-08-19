@@ -24,6 +24,7 @@ import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights
 import { emitNotification } from "@/lib/notifications/emit";
 import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
 import { generateAdPlan } from "../adEngine";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 const VARIANT_GROUP_LABELS = ["A", "B", "C", "D", "E"]; // same cap as variant-group/route.ts
@@ -125,6 +126,18 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
         action_details: { campaign_id: campaign.id, headline: campaign.headline, reason: rec.reason },
         status: "approved",
         reviewed_at: new Date().toISOString(),
+      });
+      // P0 30b — real spend stopped with zero human in the loop; this
+      // is the clearest "highest-value" cron event to audit (vs. the
+      // cron heartbeat itself, already covered by automation_run_log).
+      await logAuditEvent(supabase, {
+        dealershipId,
+        actor: "cron:daily_autopilot",
+        eventType: "campaign_auto_paused",
+        resourceType: "ad_creative",
+        resourceId: campaign.id,
+        summary: `Auto-paused "${campaign.headline}" — ${rec.reason}`,
+        details: { reason: rec.reason, explained_reason: explainedReason },
       });
       await recordCampaignPauseInsight(supabase, dealershipId, { id: campaign.id, headline: campaign.headline, reason: explainedReason });
       // Money was just stopped without a human in the loop — that

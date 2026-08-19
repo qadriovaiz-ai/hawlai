@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { humanizeActionType } from "@/lib/approvalLabels";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -148,5 +150,16 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAuditEvent(service, {
+    dealershipId: approval.dealership_id,
+    actor: `user:${user.id}`,
+    eventType: status === "approved" ? "approval_approved" : "approval_rejected",
+    resourceType: "pending_approval",
+    resourceId: id,
+    summary: `${humanizeActionType(approval.action_type)} — ${status}${hasValidModification ? " (modified)" : ""}`,
+    details: { action_type: approval.action_type, amount: approval.amount, modified_details: hasValidModification ? modified_details : null, rejection_reason: status === "rejected" ? (rejection_reason ?? null) : null },
+  });
+
   return NextResponse.json(data);
 }
