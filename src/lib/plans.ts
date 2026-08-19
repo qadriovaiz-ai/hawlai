@@ -43,6 +43,14 @@ export interface PlanLimits {
   voiceoverCharsPerMonth: number | null;
   brandKitsPerMonth: number | null;
   websiteBuildsPerMonth: number | null;
+  // Per-day caps (migration 125) — only for video/voiceover, the two
+  // priciest-per-unit resources. A second, tighter check layered on
+  // top of the monthly cap above, protecting against a single-day
+  // cost spike (a burst that burns the whole month's allowance in one
+  // sitting) rather than replacing the monthly limit. null = no daily
+  // cap for that resource.
+  videosPerDay: number | null;
+  voiceoverCharsPerDay: number | null;
 }
 
 export const PLAN_LABELS: Record<PlanKey, string> = {
@@ -86,6 +94,8 @@ const FREE_FALLBACK: PlanLimits = {
   voiceoverCharsPerMonth: 2000,
   brandKitsPerMonth: 1,
   websiteBuildsPerMonth: 1,
+  videosPerDay: 0,
+  voiceoverCharsPerDay: 2000,
 };
 
 interface PlanLimitsRow {
@@ -114,6 +124,8 @@ interface PlanLimitsRow {
   voiceover_chars_per_month: number | null;
   brand_kits_per_month: number | null;
   website_builds_per_month: number | null;
+  videos_per_day: number | null;
+  voiceover_chars_per_day: number | null;
 }
 
 function mapRow(row: PlanLimitsRow): PlanLimits {
@@ -146,6 +158,8 @@ function mapRow(row: PlanLimitsRow): PlanLimits {
     voiceoverCharsPerMonth: row.voiceover_chars_per_month,
     brandKitsPerMonth: row.brand_kits_per_month,
     websiteBuildsPerMonth: row.website_builds_per_month,
+    videosPerDay: row.videos_per_day,
+    voiceoverCharsPerDay: row.voiceover_chars_per_day,
   };
 }
 
