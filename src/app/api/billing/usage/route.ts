@@ -15,16 +15,21 @@ export async function GET() {
 
   const planLimits = await getDealershipPlanLimits(supabase, dealershipId);
 
-  // daily_message_usage and calling_minutes_usage have no RLS policy
-  // yet (see migration 079) — read them through the service-role
-  // client, scoped to the dealershipId already verified above, same as
-  // every other place this app touches those two tables.
+  // daily_message_usage, calling_minutes_usage and
+  // monthly_generation_usage have no RLS policy (see migrations 079,
+  // 100) — read them through the service-role client, scoped to the
+  // dealershipId already verified above, same as every other place
+  // this app touches these tables.
   const service = createServiceClient();
-  const [{ data: messageRow }, { data: callingRow }, { count: activeAdCampaigns }] = await Promise.all([
+  const [{ data: messageRow }, { data: callingRow }, { count: activeAdCampaigns }, { data: generationRows }] = await Promise.all([
     service.from("daily_message_usage").select("message_count").eq("dealership_id", dealershipId).eq("usage_date", todayDateString()).maybeSingle(),
     service.from("calling_minutes_usage").select("minutes_used, extra_minutes_charged, extra_charge_inr").eq("dealership_id", dealershipId).eq("billing_month", currentBillingMonth()).maybeSingle(),
     supabase.from("ad_creatives").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).eq("status", "launched").eq("meta_status", "ACTIVE"),
+    service.from("monthly_generation_usage").select("resource, count").eq("dealership_id", dealershipId).eq("billing_month", currentBillingMonth()),
   ]);
+
+  const generationUsage: Record<string, number> = {};
+  for (const row of generationRows ?? []) generationUsage[row.resource] = row.count;
 
   return NextResponse.json({
     planLimits,
@@ -35,5 +40,12 @@ export async function GET() {
       extraChargeInr: callingRow?.extra_charge_inr ?? 0,
     },
     activeAdCampaigns: activeAdCampaigns ?? 0,
+    generation: {
+      image: generationUsage.image ?? 0,
+      video: generationUsage.video ?? 0,
+      voiceoverChars: generationUsage.voiceover_chars ?? 0,
+      brandKit: generationUsage.brand_kit ?? 0,
+      websiteBuild: generationUsage.website_build ?? 0,
+    },
   });
 }
