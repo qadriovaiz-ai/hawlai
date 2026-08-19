@@ -2,8 +2,27 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck, Phone, Sparkles, PauseCircle, FlaskConical, PartyPopper, PieChart } from "lucide-react";
+import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck, Phone, Sparkles, PauseCircle, FlaskConical, PartyPopper, PieChart, Activity, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+// All 13 daily-cron subsystems (see /api/autopilot/daily-run/route.ts)
+// — shown even before any run exists yet, so a newly-deployed
+// dealership sees "not run yet" rather than the row silently missing.
+const SUBSYSTEM_LABELS: Record<string, string> = {
+  daily_autopilot: "Auto-pause & Variant Drafts",
+  budget_alerts: "Budget Alerts",
+  email_automation: "Welcome & Follow-up Emails",
+  workflows: "Custom Workflows",
+  competitor_alerts: "Competitor Monitoring",
+  topic_alerts: "Topic Monitoring",
+  report_snapshots: "Report Snapshots",
+  content_autopilot: "Social Media Auto-Posting",
+  google_reviews: "Google Reviews Sync",
+  seasonal_calendar: "Seasonal Campaign Prep",
+  churn_detection: "At-Risk Customer Detection",
+  cold_lead_detection: "Cold Lead Detection",
+  lead_scoring: "Lead Scoring",
+};
 
 export default function AutopilotCommandCenter() {
   const [data, setData] = useState<any>(null);
@@ -186,6 +205,36 @@ export default function AutopilotCommandCenter() {
           </div>
         </div>
       )}
+
+      {/* Automation health — P0 12d, built on automation_run_log
+          (migration 126, P0 12c). Every one of the 13 daily-cron
+          subsystems shown, not just the ones that happen to be
+          toggled on above — auto-pause/lead-scoring/etc run
+          regardless of any UI toggle here. */}
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Activity className="w-4 h-4" /> Automation Health</p>
+          <span className="text-xs text-slate-400 flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Runs daily at 8:30 AM IST</span>
+        </div>
+        <div className="space-y-1.5">
+          {Object.entries(SUBSYSTEM_LABELS).map(([key, label]) => {
+            const health = (data.automationHealth ?? []).find((h: any) => h.subsystem === key);
+            return (
+              <div key={key} className="flex items-center justify-between text-xs py-1">
+                <div className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${!health ? "bg-slate-300" : health.lastSuccess ? "bg-green-500" : "bg-red-500"}`} />
+                  <span className="text-slate-600">{label}</span>
+                </div>
+                {health ? (
+                  <span className="text-slate-400">{health.successRatePct}% success (7d) · last {new Date(health.lastRunAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                ) : (
+                  <span className="text-slate-400">Not run yet</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

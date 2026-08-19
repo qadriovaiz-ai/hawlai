@@ -13,7 +13,9 @@ export async function GET() {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const [{ data: dealership }, { data: workflows }, activityResults] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: dealership }, { data: workflows }, activityResults, { data: runLogRows }] = await Promise.all([
     supabase.from("dealerships").select(`
       dm_auto_reply_enabled, comment_auto_reply_enabled,
       welcome_email_auto_enabled, follow_up_email_auto_enabled, follow_up_inactive_days,
@@ -29,6 +31,11 @@ export async function GET() {
       supabase.from("email_automation_log").select("id, email_type, success, created_at").eq("dealership_id", dealershipId).order("created_at", { ascending: false }).limit(5),
       supabase.from("content_autopilot_log").select("id, success, created_at").eq("dealership_id", dealershipId).order("created_at", { ascending: false }).limit(5),
     ]),
+    // P0 12d — last 7 days of automation_run_log (migration 126),
+    // aggregated in JS below rather than a SQL GROUP BY: 13
+    // subsystems x ~7 daily rows is small enough that fetching and
+    // reducing here is simpler than adding a view/RPC for it.
+    supabase.from("automation_run_log").select("subsystem, success, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
   ]);
 
   const [{ data: replyLog }, { data: emailLog }, { data: contentLog }] = activityResults;
@@ -38,7 +45,24 @@ export async function GET() {
     ...(contentLog ?? []).map((l: any) => ({ ...l, type: "Auto-post" })),
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 10);
 
-  return NextResponse.json({ dealership, workflows: workflows ?? [], activity });
+  // rows arrive newest-first, so the first row seen per subsystem is
+  // its most recent run.
+  const bySubsystem: Record<string, { lastRunAt: string; lastSuccess: boolean; total: number; successCount: number }> = {};
+  for (const row of runLogRows ?? []) {
+    if (!bySubsystem[row.subsystem]) {
+      bySubsystem[row.subsystem] = { lastRunAt: row.created_at, lastSuccess: row.success, total: 0, successCount: 0 };
+    }
+    bySubsystem[row.subsystem].total += 1;
+    if (row.success) bySubsystem[row.subsystem].successCount += 1;
+  }
+  const automationHealth = Object.entries(bySubsystem).map(([subsystem, stats]) => ({
+    subsystem,
+    lastRunAt: stats.lastRunAt,
+    lastSuccess: stats.lastSuccess,
+    successRatePct: Math.round((stats.successCount / stats.total) * 100),
+  }));
+
+  return NextResponse.json({ dealership, workflows: workflows ?? [], activity, automationHealth });
 }
 
 export async function PATCH(request: Request) {
