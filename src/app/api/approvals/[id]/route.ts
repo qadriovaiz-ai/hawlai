@@ -16,11 +16,16 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { status, rejection_reason } = body;
+  const { status, rejection_reason, modified_details } = body;
 
   if (!status || !["approved", "rejected"].includes(status)) {
     return NextResponse.json({ error: "status must be 'approved' or 'rejected'" }, { status: 400 });
   }
+
+  // P0 11c — approve-with-modification, change_campaign_budget only.
+  // Only trusted when it's actually a positive number; anything else
+  // is ignored rather than erroring, same as approving unmodified.
+  const hasValidModification = modified_details && typeof modified_details.new_budget === "number" && modified_details.new_budget > 0;
 
   // pending_approvals RLS is owner-only by design — reading it here
   // with the service client, but only after real authorization is
@@ -47,9 +52,13 @@ export async function PATCH(
 
   // Rejecting never needs elevated authority — anyone who can see the
   // queue can say no. Only APPROVING (releasing money/publishing)
-  // needs the calibrated check.
+  // needs the calibrated check. A modification is checked against ITS
+  // OWN amount, not the original request's — approving a higher
+  // modified budget must still respect the approver's own ceiling,
+  // even if the original (lower or unrelated) amount would've passed.
   if (status === "approved") {
-    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, approval.amount ?? null);
+    const checkAmount = hasValidModification && approval.action_type === "change_campaign_budget" ? modified_details.new_budget : (approval.amount ?? null);
+    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, checkAmount);
     if (!authority.canApprove) {
       return NextResponse.json({ error: authority.reason ?? "You don't have authority to approve this." }, { status: 403 });
     }
@@ -59,7 +68,7 @@ export async function PATCH(
   // approving a request should mean it happens, not just change a label.
   if (status === "approved") {
     if (approval?.action_type === "change_campaign_budget") {
-      const details = approval.action_details as any;
+      const details = hasValidModification ? { ...approval.action_details, new_budget: modified_details.new_budget } : (approval.action_details as any);
       const { data: dealership } = await service
         .from("dealerships").select("fb_page_access_token").eq("id", approval.dealership_id).single();
       const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
@@ -132,6 +141,7 @@ export async function PATCH(
       reviewed_by: user.id,
       reviewed_at: new Date().toISOString(),
       rejection_reason: status === "rejected" ? (rejection_reason ?? null) : null,
+      modified_details: status === "approved" && hasValidModification && approval.action_type === "change_campaign_budget" ? { new_budget: modified_details.new_budget } : null,
     })
     .eq("id", id)
     .select()

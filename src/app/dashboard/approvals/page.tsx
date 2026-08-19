@@ -174,6 +174,7 @@ export default async function ApprovalsPage() {
                     approvalId={approval.id}
                     authority={checkApprovalAuthority(viewerRole, approvalThreshold, approval.amount ?? null)}
                     amount={approval.amount ?? null}
+                    modifiableBudget={approval.action_type === "change_campaign_budget" ? (details.new_budget ?? approval.amount ?? null) : undefined}
                   />
                 </div>
               </div>
@@ -199,6 +200,11 @@ export default async function ApprovalsPage() {
                     {humanizeActionType(approval.action_type)}
                     {approval.amount ? ` — ${formatCurrency(approval.amount)}` : ""}
                   </p>
+                  {approval.modified_details?.new_budget != null && (
+                    <p className="text-xs text-amber-500 mt-0.5 tabular-nums">
+                      Requested {formatCurrency(approval.amount)} → Approved {formatCurrency(approval.modified_details.new_budget)}
+                    </p>
+                  )}
                   {approval.action_details?.reason && (
                     <p className="text-xs text-slate-400 mt-0.5 italic">{approval.action_details.reason}</p>
                   )}
