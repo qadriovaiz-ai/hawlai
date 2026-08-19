@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck, Phone, Sparkles } from "lucide-react";
+import { Loader2, Zap, AlertTriangle, Clock, ArrowRight, ShieldCheck, Phone, Sparkles, PauseCircle, FlaskConical, PartyPopper, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export default function AutopilotCommandCenter() {
@@ -37,7 +37,7 @@ export default function AutopilotCommandCenter() {
   // always require a manual Launch click regardless).
   async function enableAll() {
     setEnablingAll(true);
-    const fields = ["dm_auto_reply_enabled", "comment_auto_reply_enabled", "welcome_email_auto_enabled", "follow_up_email_auto_enabled", "auto_call_new_leads"];
+    const fields = ["dm_auto_reply_enabled", "comment_auto_reply_enabled", "welcome_email_auto_enabled", "follow_up_email_auto_enabled", "auto_call_new_leads", "auto_pause_low_performers", "auto_generate_variant_on_pause", "seasonal_campaigns_enabled"];
     if (data.dealership.fb_page_id) fields.push("content_autopilot_enabled"); // only if Facebook's actually connected — turning this on without it does nothing
     const update: any = {};
     for (const f of fields) update[f] = true;
@@ -80,6 +80,41 @@ export default function AutopilotCommandCenter() {
           <span className="text-sm text-slate-700">Auto-call new leads</span>
           <input type="checkbox" checked={d.auto_call_new_leads} disabled={saving} onChange={(e) => toggle("auto_call_new_leads", e.target.checked)} className="w-5 h-5 accent-purple-600" />
         </label>
+      </div>
+
+      {/* Campaign Automation — formerly a separate page
+          (/dashboard/settings/automation), consolidated here per the
+          P0 12b audit so this is genuinely the one canonical control
+          surface, not one of several partial ones. */}
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><PauseCircle className="w-4 h-4 text-amber-500" /> Campaign Automation</p>
+        <label className="flex items-center justify-between">
+          <span className="text-sm text-slate-700">Auto-pause low performers</span>
+          <input type="checkbox" checked={d.auto_pause_low_performers} disabled={saving} onChange={(e) => toggle("auto_pause_low_performers", e.target.checked)} className="w-5 h-5 accent-purple-600" />
+        </label>
+        <p className="text-xs text-slate-400">If Optimization clearly recommends pausing a campaign (genuinely underperforming, not just low on data), let it pause automatically instead of waiting for you to review it. Always reversible — you can resume any campaign anytime.</p>
+        <label className="flex items-center justify-between pt-2 border-t border-slate-200">
+          <span className="text-sm text-slate-700 flex items-center gap-1.5"><FlaskConical className="w-3.5 h-3.5 text-slate-400" /> Auto-generate next variant</span>
+          <input type="checkbox" checked={d.auto_generate_variant_on_pause} disabled={saving} onChange={(e) => toggle("auto_generate_variant_on_pause", e.target.checked)} className="w-5 h-5 accent-purple-600" />
+        </label>
+        <p className="text-xs text-slate-400">When "Auto-pause low performers" above leaves one clear winner in an A/B test, prepare a new variant to test against it — as a draft only, never launched automatically. Requires auto-pause to be on too, since that's what decides a winner.</p>
+        <div className="pt-2 border-t border-slate-200 space-y-1.5 opacity-70">
+          <div className="flex items-center gap-2">
+            <PieChart className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-sm text-slate-500">Auto budget reallocation</span>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-400/30">Coming soon</span>
+          </div>
+          <p className="text-xs text-slate-400">Not active yet — moving budget between campaigns automatically still requires a team member today.</p>
+        </div>
+      </div>
+
+      {/* Seasonal campaign prep */}
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><PartyPopper className="w-4 h-4 text-amber-500" /> Seasonal Campaign Prep</p>
+          <input type="checkbox" checked={d.seasonal_campaigns_enabled} disabled={saving} onChange={(e) => toggle("seasonal_campaigns_enabled", e.target.checked)} className="w-5 h-5 accent-purple-600" />
+        </div>
+        <p className="text-xs text-slate-400">When an Indian festival or seasonal moment is coming up within its lead time, add a planning entry to your Content Calendar automatically — nothing gets generated or sent on its own, it just makes sure you don't miss the window to prep.</p>
       </div>
 
       {/* Content Autopilot — new, full auto posting */}

@@ -47,8 +47,7 @@ const SECTIONS: { label: string; items: HubItem[] }[] = [
   {
     label: "Automation",
     items: [
-      { href: "/dashboard/autopilot", label: "Autopilot", desc: "Turn on automatic calling, welcome & follow-up emails", icon: Zap },
-      { href: "/dashboard/settings/automation", label: "Social Auto-Reply", desc: "Automatic DM & comment replies", icon: Zap },
+      { href: "/dashboard/autopilot", label: "Autopilot", desc: "Every automation toggle in one place — calling, emails, social, campaigns, seasonal prep", icon: Zap },
     ],
   },
   {

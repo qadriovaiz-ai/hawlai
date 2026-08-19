@@ -19,6 +19,8 @@ export async function GET() {
       welcome_email_auto_enabled, follow_up_email_auto_enabled, follow_up_inactive_days,
       content_autopilot_enabled, content_autopilot_frequency_days,
       auto_call_new_leads,
+      auto_pause_low_performers, auto_generate_variant_on_pause, seasonal_campaigns_enabled,
+      auto_budget_reallocate_percent,
       gmail_email, fb_page_id
     `).eq("id", dealershipId).single(),
     supabase.from("workflows").select("id, name, enabled").eq("dealership_id", dealershipId),
@@ -47,11 +49,16 @@ export async function PATCH(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
+  // auto_budget_reallocate_percent is deliberately NOT in this list —
+  // read-only/display-only here too, matching the "Coming soon"
+  // treatment on the settings page (P0 12a): dormant, no backend
+  // logic reads it yet.
   const allowed = [
     "dm_auto_reply_enabled", "comment_auto_reply_enabled",
     "welcome_email_auto_enabled", "follow_up_email_auto_enabled", "follow_up_inactive_days",
     "content_autopilot_enabled", "content_autopilot_frequency_days",
     "auto_call_new_leads",
+    "auto_pause_low_performers", "auto_generate_variant_on_pause", "seasonal_campaigns_enabled",
   ];
   const update: any = {};
   for (const key of allowed) {
