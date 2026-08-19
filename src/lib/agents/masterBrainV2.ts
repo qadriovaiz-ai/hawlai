@@ -48,6 +48,7 @@ import { type BrandVoiceProfile, formatBrandVoiceSection, formatBrandVoiceVisual
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
+import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
 import { generateSeoIdeas } from "./seoAgent";
@@ -313,6 +314,30 @@ const TOOLS = [
     name: "set_automation_toggle",
     description: "Turn a real automation ON or OFF. Only do this when the person explicitly asks to enable/disable/turn on/turn off a specific automation — never proactively. Valid toggle values: dm_auto_reply (auto-reply to Instagram/FB DMs), comment_auto_reply (auto-reply to post comments), welcome_email (auto welcome email for new leads), follow_up_email (auto follow-up for inactive leads), content_autopilot (auto-generate + auto-post to Facebook on a schedule), auto_call_new_leads (real AI phone call placed automatically the moment a new lead comes in — this spends real money per call and reaches an actual person; make sure the person is knowingly turning this on, not just exploring).",
     input_schema: { type: "object", properties: { toggle: { type: "string", enum: ["dm_auto_reply", "comment_auto_reply", "welcome_email", "follow_up_email", "content_autopilot", "auto_call_new_leads"] }, enabled: { type: "boolean" } }, required: ["toggle", "enabled"] },
+  },
+  {
+    name: "propose_campaign_budget_change",
+    description: "Request a daily-budget change on an already-launched ad campaign. This never changes the budget directly — it sends the request to the Approvals queue for the person (or whoever holds approval authority) to review. Use when the person asks to raise/lower/change a specific campaign's budget.",
+    input_schema: {
+      type: "object",
+      properties: {
+        campaign_description: { type: "string", description: "How the person referred to the campaign, e.g. 'the Swift ad' or 'my Diwali campaign' — used to match it against their real launched campaigns" },
+        change_request: { type: "string", description: "What they want changed, in their own words, e.g. 'increase it to 3000' or 'double the budget'" },
+      },
+      required: ["campaign_description", "change_request"],
+    },
+  },
+  {
+    name: "propose_campaign_targeting_change",
+    description: "Request an audience-targeting change (age range / gender) on an already-launched ad campaign. This never changes targeting directly — it sends the request to the Approvals queue for review. Use when the person asks to narrow/change who a specific campaign targets.",
+    input_schema: {
+      type: "object",
+      properties: {
+        campaign_description: { type: "string", description: "How the person referred to the campaign, e.g. 'the Swift ad' or 'my Diwali campaign' — used to match it against their real launched campaigns" },
+        change_request: { type: "string", description: "What they want changed, in their own words, e.g. 'only show it to men 25-34'" },
+      },
+      required: ["campaign_description", "change_request"],
+    },
   },
   {
     name: "get_follow_up_reminders",
@@ -785,6 +810,46 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       if (error) return { error: error.message };
       return { success: true, toggle: input.toggle, enabled: !!input.enabled };
     }
+    case "propose_campaign_budget_change":
+    case "propose_campaign_targeting_change": {
+      const { data: campaigns } = await supabase
+        .from("ad_creatives")
+        .select("id, headline, car_type, targeting_city, daily_budget, meta_status, meta_ad_id")
+        .eq("dealership_id", ctx.id)
+        .not("meta_ad_id", "is", null);
+      const campaign = await matchCampaign(campaigns ?? [], input.campaign_description, { supabase, dealershipId: ctx.id });
+      if (!campaign) {
+        return { error: (campaigns ?? []).length === 0 ? "You don't have any launched campaigns yet." : "Couldn't tell which campaign you meant — can you name it more specifically?" };
+      }
+
+      const { createServiceClient } = await import("../supabase/service");
+      const serviceClient = createServiceClient();
+
+      if (toolName === "propose_campaign_budget_change") {
+        const proposal = await proposeBudgetChange(campaign, input.change_request, { supabase, dealershipId: ctx.id });
+        if (!proposal) return { error: "Couldn't work out the new budget from that — try giving a specific number, e.g. 'change it to ₹2000/day'." };
+        const { error } = await serviceClient.from("pending_approvals").insert({
+          dealership_id: ctx.id,
+          requested_by_agent: "master_chat_campaign_edit",
+          action_type: "change_campaign_budget",
+          action_details: { campaign_id: campaign.id, campaign_name: campaign.headline, old_budget: campaign.daily_budget, new_budget: proposal.new_budget },
+          amount: proposal.new_budget,
+        });
+        if (error) return { error: error.message };
+        return { success: true, campaign: campaign.headline, summary: proposal.summary, note: "Sent to Approvals — go to /dashboard/approvals to review and approve it." };
+      } else {
+        const proposal = await proposeTargetingChange(campaign, input.change_request, { supabase, dealershipId: ctx.id });
+        if (!proposal) return { error: "Couldn't work out the targeting change from that — try being more specific about age range or gender." };
+        const { error } = await serviceClient.from("pending_approvals").insert({
+          dealership_id: ctx.id,
+          requested_by_agent: "master_chat_campaign_edit",
+          action_type: "change_campaign_targeting",
+          action_details: { campaign_id: campaign.id, campaign_name: campaign.headline, age_min: proposal.age_min, age_max: proposal.age_max, genders: proposal.genders },
+        });
+        if (error) return { error: error.message };
+        return { success: true, campaign: campaign.headline, summary: proposal.summary, impact: proposal.estimated_impact, note: "Sent to Approvals — go to /dashboard/approvals to review and approve it." };
+      }
+    }
     case "get_follow_up_reminders": {
       const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -1139,6 +1204,8 @@ const DEPARTMENT_HREF: Record<string, string> = {
   create_workflow: "/dashboard/marketing-automation",
   manage_watch: "/dashboard/competitor-intel",
   set_automation_toggle: "/dashboard/settings",
+  propose_campaign_budget_change: "/dashboard/approvals",
+  propose_campaign_targeting_change: "/dashboard/approvals",
   get_follow_up_reminders: "/dashboard/leads-hub",
   get_booking_link: "/dashboard/appointments",
   get_website_analytics: "/dashboard/analytics",
@@ -1332,6 +1399,9 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       return { kind: "record", label: "Automation workflow created", fields: [{ label: "Status", value: result.enabled ? "Enabled" : "Created, not enabled yet" }], departmentHref };
     case "set_automation_toggle":
       return { kind: "record", label: "Automation setting changed", fields: [{ label: result.toggle.replace(/_/g, " "), value: result.enabled ? "Turned on" : "Turned off" }], departmentHref };
+    case "propose_campaign_budget_change":
+    case "propose_campaign_targeting_change":
+      return { kind: "record", label: `Change requested: ${result.campaign}`, summary: `${result.summary}${result.impact ? ` ${result.impact}` : ""} Waiting for approval.`, departmentHref };
     case "manage_watch":
       return { kind: "record", label: "Watch added", departmentHref };
     case "remember_insight":
@@ -1687,6 +1757,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
 - You CANNOT launch real ads or spend money — that needs the person's explicit approval in Ads Manager. If asked, generate the plan/draft with your tools and clearly tell them where to go review and approve it.
+- If the person wants to change the budget or targeting on a campaign that's already launched, use propose_campaign_budget_change / propose_campaign_targeting_change — these send the request to the Approvals queue rather than changing anything directly, so use them instead of just telling the person to go do it manually.
 - Be conversational and concise — you're texting with a business owner, not writing a report. Don't dump raw JSON at them, and don't enumerate a tool's list/array results (keywords, suggestions, checklist items, etc.) in your text either — those already render as a proper card right under your reply. Just say how many you found and the one-line takeaway (e.g. "Found 10 competitor keywords, split evenly between research and buy-intent — see the card below"), never spell out each item's fields as key: value text. Concise doesn't mean shallow — a sharp two-sentence read of the situation beats a bland five-paragraph one.
 - If a request is ambiguous, ask ONE clarifying question rather than guessing wildly, unless a reasonable default is obvious.`;
 

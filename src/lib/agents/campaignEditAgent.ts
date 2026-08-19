@@ -104,6 +104,46 @@ Interpret this into a Meta Ads targeting change. Return JSON only:
   }
 }
 
+export async function proposeBudgetChange(campaign: CampaignSummary, requestText: string, logContext?: { supabase: any; dealershipId: string }): Promise<{
+  new_budget: number;
+  summary: string;
+} | null> {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 150,
+        messages: [
+          {
+            role: "user",
+            content: `A dealer wants to change the daily budget on campaign "${campaign.headline}" (currently ₹${campaign.daily_budget}/day).
+Their request: "${requestText}"
+
+Work out the new daily budget in rupees (e.g. "double it" -> current * 2, "add 500 to it" -> current + 500, "make it 3000" -> 3000). Return JSON only:
+{"new_budget":number (whole rupees, must be > 0),"summary":"1 sentence describing exactly what will change, e.g. 'Daily budget goes from ₹1000 to ₹2000'"}`,
+          },
+        ],
+      }),
+    });
+    const data = await response.json();
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "campaign_edit_budget", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
+    if (!parsed.new_budget || parsed.new_budget <= 0) return null;
+    return parsed;
+  } catch (err: any) {
+    console.error("[campaign-edit-agent] proposeBudgetChange error:", err.message);
+    return null;
+  }
+}
+
 export async function applyTargetingChange(
   supabase: any,
   dealershipId: string,
