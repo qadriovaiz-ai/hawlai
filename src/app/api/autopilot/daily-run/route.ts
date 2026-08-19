@@ -13,6 +13,7 @@ import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
 import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
 import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
 import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
+import { runAndLog } from "@/lib/automation/runAndLog";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -37,75 +38,29 @@ export async function GET(request: Request) {
   const { data: dealerships, error } = await supabase.from("dealerships").select("id, business_category");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Every subsystem call below is wrapped in runAndLog() — same
+  // isolation the individual try/catch blocks gave before (one
+  // subsystem failing never blocks the next), now also writing a
+  // uniform automation_run_log row per subsystem per dealership
+  // (migration 126, P0 12c), so "last run"/"success" exists for all
+  // 13, not just the 3 that already had their own logging.
   const results: Record<string, any> = {};
   for (const dealership of dealerships ?? []) {
-    try {
-      results[dealership.id] = await runDailyAutopilot(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id] = { error: err.message };
-    }
-    try {
-      // Reads the snapshot runDailyAutopilot just wrote (via
-      // snapshotCampaignPerformance) — must run after it, not before.
-      results[dealership.id].budgetAlerts = await checkCampaignBudgets(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].budgetAlerts = { error: err.message };
-    }
-    try {
-      results[dealership.id].emailAutomation = await runEmailAutomation(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].emailAutomation = { error: err.message };
-    }
-    try {
-      results[dealership.id].workflows = await runWorkflows(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].workflows = { error: err.message };
-    }
-    try {
-      results[dealership.id].competitorAlerts = await checkCompetitorAlerts(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].competitorAlerts = { error: err.message };
-    }
-    try {
-      results[dealership.id].topicAlerts = await checkTopicAlerts(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].topicAlerts = { error: err.message };
-    }
-    try {
-      results[dealership.id].reportSnapshots = await runReportSnapshots(supabase, dealership.id, dealership.business_category ?? "business");
-    } catch (err: any) {
-      results[dealership.id].reportSnapshots = { error: err.message };
-    }
-    try {
-      results[dealership.id].contentAutopilot = await runContentAutopilot(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].contentAutopilot = { error: err.message };
-    }
-    try {
-      results[dealership.id].googleReviews = await fetchGoogleReviewsSnapshot(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].googleReviews = { error: err.message };
-    }
-    try {
-      results[dealership.id].seasonalCalendarEntries = await syncSeasonalCalendarEntries(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].seasonalCalendarEntries = { error: err.message };
-    }
-    try {
-      results[dealership.id].atRiskNotifications = await notifyAtRiskCustomers(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].atRiskNotifications = { error: err.message };
-    }
-    try {
-      results[dealership.id].coldLeadNotifications = await notifyColdLeads(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].coldLeadNotifications = { error: err.message };
-    }
-    try {
-      results[dealership.id].leadScores = await scoreActiveLeads(supabase, dealership.id);
-    } catch (err: any) {
-      results[dealership.id].leadScores = { error: err.message };
-    }
+    results[dealership.id] = await runAndLog(supabase, dealership.id, "daily_autopilot", () => runDailyAutopilot(supabase, dealership.id));
+    // Reads the snapshot runDailyAutopilot just wrote (via
+    // snapshotCampaignPerformance) — must run after it, not before.
+    results[dealership.id].budgetAlerts = await runAndLog(supabase, dealership.id, "budget_alerts", () => checkCampaignBudgets(supabase, dealership.id));
+    results[dealership.id].emailAutomation = await runAndLog(supabase, dealership.id, "email_automation", () => runEmailAutomation(supabase, dealership.id));
+    results[dealership.id].workflows = await runAndLog(supabase, dealership.id, "workflows", () => runWorkflows(supabase, dealership.id));
+    results[dealership.id].competitorAlerts = await runAndLog(supabase, dealership.id, "competitor_alerts", () => checkCompetitorAlerts(supabase, dealership.id));
+    results[dealership.id].topicAlerts = await runAndLog(supabase, dealership.id, "topic_alerts", () => checkTopicAlerts(supabase, dealership.id));
+    results[dealership.id].reportSnapshots = await runAndLog(supabase, dealership.id, "report_snapshots", () => runReportSnapshots(supabase, dealership.id, dealership.business_category ?? "business"));
+    results[dealership.id].contentAutopilot = await runAndLog(supabase, dealership.id, "content_autopilot", () => runContentAutopilot(supabase, dealership.id));
+    results[dealership.id].googleReviews = await runAndLog(supabase, dealership.id, "google_reviews", () => fetchGoogleReviewsSnapshot(supabase, dealership.id));
+    results[dealership.id].seasonalCalendarEntries = await runAndLog(supabase, dealership.id, "seasonal_calendar", () => syncSeasonalCalendarEntries(supabase, dealership.id));
+    results[dealership.id].atRiskNotifications = await runAndLog(supabase, dealership.id, "churn_detection", () => notifyAtRiskCustomers(supabase, dealership.id));
+    results[dealership.id].coldLeadNotifications = await runAndLog(supabase, dealership.id, "cold_lead_detection", () => notifyColdLeads(supabase, dealership.id));
+    results[dealership.id].leadScores = await runAndLog(supabase, dealership.id, "lead_scoring", () => scoreActiveLeads(supabase, dealership.id));
   }
 
   return NextResponse.json({ ranAt: new Date().toISOString(), dealerships: dealerships?.length ?? 0, results });
