@@ -125,13 +125,24 @@ export default function AutomationSettingsPage() {
         </p>
       </div>
 
-      <div className="card p-5 space-y-3">
+      {/* P0 audit (Master Development Spec, Section 12) — confirmed
+          dormant: this UI and dealerships.auto_budget_reallocate_percent
+          both round-trip correctly, but nothing anywhere in the
+          codebase reads the value to actually reallocate any budget.
+          Marked clearly rather than removed, so a dealership that
+          already set a non-zero % isn't silently reset — but disabled,
+          since letting someone set an expectation the backend can't
+          meet is exactly what the audit flagged. Real reallocation
+          logic is a real, separate feature for later (P1/P2), not a
+          P0 fix. */}
+      <div className="card p-5 space-y-3 opacity-70">
         <div className="flex items-center gap-2">
           <PieChart className="w-4 h-4 text-slate-400" />
           <p className="text-sm font-semibold text-slate-700">Auto budget reallocation</p>
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-400/30">Coming soon</span>
         </div>
         <p className="text-xs text-slate-400">
-          Allow moving up to this % of a campaign's budget toward better-performing campaigns automatically, without asking each time. Set to 0 to keep all budget changes manual.
+          Not active yet — moving budget between campaigns automatically still requires a team member today, no matter what this is set to. We'll turn this on once the real logic ships; nothing above 0% does anything right now.
         </p>
         <div className="flex items-center gap-3">
           <input
@@ -140,12 +151,10 @@ export default function AutomationSettingsPage() {
             max="25"
             step="5"
             value={reallocatePercent}
-            onChange={(e) => setReallocatePercent(Number(e.target.value))}
-            onMouseUp={() => handleSave()}
-            onTouchEnd={() => handleSave()}
-            className="flex-1"
+            disabled
+            className="flex-1 cursor-not-allowed"
           />
-          <span className="text-sm font-semibold text-slate-700 w-12 text-right">{reallocatePercent}%</span>
+          <span className="text-sm font-semibold text-slate-500 w-12 text-right">{reallocatePercent}%</span>
         </div>
       </div>
 
