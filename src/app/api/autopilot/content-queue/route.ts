@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
+import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -47,9 +48,17 @@ export async function POST(request: Request) {
   const pillars = brandProfile?.messaging_pillars ?? [];
   const effectiveTopic = topic || (pillars.length > 0 ? pillars[Math.floor(Math.random() * pillars.length)] : "");
 
+  // P0 cost-governance fix — this route was generating real Gemini
+  // images with no monthly-cap check and no cost logging at all,
+  // reachable by any authenticated user regardless of plan (including
+  // Free). Same check + logContext every other image-generation call
+  // site already uses (see /api/graphic-design/generate/route.ts).
+  const usage = await checkAndRecordGenerationUsage(dealershipId, "image");
+  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
+
   const [imageBuffer, contentResult] = await Promise.all([
-    generateGraphic("social_graphic", name, category, effectiveTopic, brandProfile),
-    generateContent("instagram_post", name, category, effectiveTopic, brandProfile),
+    generateGraphic("social_graphic", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }),
+    generateContent("instagram_post", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }),
   ]);
 
   if (contentResult._fallback) return NextResponse.json({ error: "Content generation didn't work right now — try again shortly." }, { status: 500 });
