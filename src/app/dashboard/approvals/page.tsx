@@ -6,12 +6,23 @@ import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/utils";
 import { humanizeActionType, humanizeAgentName } from "@/lib/approvalLabels";
 import ApprovalActions from "@/components/approvals/ApprovalActions";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { getActionPolicy } from "@/lib/executionPolicy";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-500/10 text-amber-300 border border-amber-700/50",
   approved: "bg-green-500/10 text-green-300 border border-green-700/50",
   rejected: "bg-red-500/10 text-red-300 border border-red-700/50",
+};
+
+// P0 11d — unrecognized action types get an honest "unrated" badge
+// rather than silently looking safe by omission (executionPolicy.ts's
+// own rule: absence from the registry is never "safe by default").
+const RISK_BADGE: Record<string, string> = {
+  low: "bg-slate-200 text-slate-500 border-slate-300/80",
+  medium: "bg-blue-500/10 text-blue-400 border border-blue-700/40",
+  high: "bg-orange-500/10 text-orange-400 border border-orange-700/40",
+  critical: "bg-red-500/10 text-red-400 border border-red-700/40",
 };
 
 // Pulls whichever field actually carries the agent's own reasoning for
@@ -115,6 +126,7 @@ export default async function ApprovalsPage() {
             const details = approval.action_details ?? {};
             const reasoning = pickReasoning(details);
             const exceedsThreshold = typeof approval.amount === "number" && approval.amount > approvalThreshold;
+            const riskLevel = getActionPolicy(approval.action_type)?.riskLevel ?? null;
             const chips = [
               details.daily_budget && approval.action_type !== "change_campaign_budget" ? `Daily budget: ${formatCurrency(details.daily_budget)}` : null,
               details.duration_days ? `${details.duration_days} days` : null,
@@ -143,7 +155,12 @@ export default async function ApprovalsPage() {
                       <p className="text-lg font-semibold text-slate-900">{humanizeActionType(approval.action_type)}</p>
                     )}
                   </div>
-                  <span className="text-xs text-slate-400 shrink-0">{formatRelativeTime(approval.created_at)}</span>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-xs text-slate-400">{formatRelativeTime(approval.created_at)}</span>
+                    <span className={`badge text-[10px] ${riskLevel ? RISK_BADGE[riskLevel] : "bg-slate-100 text-slate-400 border border-slate-200"}`}>
+                      {riskLevel ? `${riskLevel} risk` : "Risk: unrated"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -159,6 +176,9 @@ export default async function ApprovalsPage() {
 
                 {reasoning && (
                   <p className="text-sm text-slate-600 border-l-2 border-slate-200 pl-3 italic">"{reasoning}"</p>
+                )}
+                {details.estimated_impact && (
+                  <p className="text-xs text-slate-500">{details.estimated_impact}</p>
                 )}
 
                 {chips.length > 0 && (

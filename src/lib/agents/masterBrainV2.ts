@@ -844,7 +844,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           dealership_id: ctx.id,
           requested_by_agent: "master_chat_campaign_edit",
           action_type: "change_campaign_targeting",
-          action_details: { campaign_id: campaign.id, campaign_name: campaign.headline, age_min: proposal.age_min, age_max: proposal.age_max, genders: proposal.genders },
+          action_details: { campaign_id: campaign.id, campaign_name: campaign.headline, age_min: proposal.age_min, age_max: proposal.age_max, genders: proposal.genders, estimated_impact: proposal.estimated_impact },
         });
         if (error) return { error: error.message };
         return { success: true, campaign: campaign.headline, summary: proposal.summary, impact: proposal.estimated_impact, note: "Sent to Approvals — go to /dashboard/approvals to review and approve it." };
