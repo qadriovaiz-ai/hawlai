@@ -28,7 +28,11 @@ export interface ActionPolicy {
 }
 
 export const ACTION_POLICIES: Record<string, ActionPolicy> = {
-  ad_campaign_launch: { actionType: "spend", riskLevel: "critical", description: "Launch a new ad campaign", requiresApproval: true },
+  // Revised after reading the actual route (10b): "launching" an ad
+  // always creates the Meta campaign/adset/ad as status: "PAUSED" —
+  // real external resources and real AI cost, but zero spend starts
+  // here. The genuine spend trigger is exclusively ad_campaign_activate.
+  ad_campaign_launch: { actionType: "create", riskLevel: "medium", description: "Create a new (paused) ad campaign draft on Meta — no spend starts until separately activated", requiresApproval: false },
   ad_campaign_activate: { actionType: "spend", riskLevel: "critical", description: "Turn an existing ad campaign's spend on", requiresApproval: true },
   refund_approve: { actionType: "spend", riskLevel: "critical", description: "Process a refund via Razorpay", requiresApproval: true },
   // Not approval-gated per-run — instead gated by an explicit,

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -25,7 +26,7 @@ export async function PATCH(
   // RLS makes sure this creative actually belongs to this dealer's dealership.
   const { data: creative, error: fetchError } = await supabase
     .from("ad_creatives")
-    .select("id, meta_ad_id, dealership_id")
+    .select("id, meta_ad_id, dealership_id, daily_budget")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();
@@ -35,9 +36,28 @@ export async function PATCH(
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token")
+    .select("fb_page_access_token, owner_id, approval_threshold")
     .eq("id", dealershipId)
     .single();
+
+  // P0 10b — this PATCH is the actual real-money-spend trigger (Meta
+  // only starts spending once an ad is ACTIVE; launch itself always
+  // creates it PAUSED, see executionPolicy.ts's ad_campaign_launch/
+  // ad_campaign_activate split). Turning PAUSED back off never needs
+  // gating — same "reversible action needs no check" rule the
+  // approvals route (/api/approvals/[id]) already applies to "rejected".
+  if (status === "ACTIVE") {
+    const isOwner = dealership?.owner_id === user.id;
+    let role: ApprovalRole = "owner";
+    if (!isOwner) {
+      const { data: teamMember } = await supabase.from("team_members").select("role").eq("user_id", user.id).eq("dealership_id", dealershipId).eq("status", "active").maybeSingle();
+      role = (teamMember?.role as ApprovalRole) ?? "viewer";
+    }
+    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, creative.daily_budget ?? null);
+    if (!authority.canApprove) {
+      return NextResponse.json({ error: authority.reason ?? "You don't have authority to activate ad spend." }, { status: 403 });
+    }
+  }
 
   const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
