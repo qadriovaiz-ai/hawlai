@@ -17,7 +17,7 @@
 - `profiles.id = auth.uid()` on `profiles` itself.
 - `owner_id = auth.uid()` direct, no subquery — `dealerships` (the anchor table) and `agency_branding` (keyed by `owner_id`, not `dealership_id`, since it's agency-scoped).
 - `to authenticated using (true)` — `plan_limits` and `seasonal_events`: shared, non-secret, platform-wide reference data.
-- **No RLS at all** — `marketing_knowledge` (explicitly global platform knowledge, not per-business data) and the usage-counter tables (`monthly_generation_usage`, `daily_generation_usage`; `daily_message_usage`/`calling_minutes_usage` do have a policy but it's owner-only per the fix below). These are trusted only because every write goes through a service-role client with an already-verified `dealershipId` — RLS doesn't enforce it, the caller does.
+- **No RLS at all** — `marketing_knowledge` only (explicitly global platform knowledge, not per-business data). `monthly_generation_usage`/`daily_generation_usage` used to be in this bucket too (trusted only because every write goes through a service-role client with an already-verified `dealershipId`) but gained owner-only SELECT policies in P3's security-hardening pass (`137`) for defense-in-depth — writes are still service-role-only, this just closes RLS as a second line of defense rather than having none at all.
 
 **Historical bug, fixed:** `ad_creatives`, `daily_message_usage`, and `calling_minutes_usage` originally scoped access via `profiles.dealership_id` instead of ownership. Since team-invite acceptance sets that column, any active team member — including the lowest-privilege `viewer` role — got read/write access, and removing a member didn't revoke it (`profiles.dealership_id` was never cleared on removal). Migration `105_fix_ad_creatives_overgrant.sql` fixed all three: usage/billing tables became strictly owner-only, `ad_creatives` moved to owner OR `is_admin_or_marketing_manager()`.
 
@@ -168,8 +168,8 @@ Most share one shape: `dealership_id, task_type, output jsonb` — generic AI-ge
 | `plan_limits` | One row per tier (free/basic/pro/max→agency), all numeric limits + feature flags — source of truth so the app reads limits from data, not code constants. Open-read RLS (non-secret pricing data). | `079`, extended `086`/`096`/`099`/`125` |
 | `daily_message_usage` | Fast daily message-limit counter, separate from the full `api_usage_logs` audit trail. See RLS over-grant fix above. | `079` |
 | `calling_minutes_usage` | Monthly AI-calling minutes + overage charge tracker. Same RLS fix history as `daily_message_usage`. | `079` |
-| `monthly_generation_usage` | Generic monthly counters (image/video/voiceover/brand_kit/website_build), one `resource` discriminator column instead of 5 near-identical tables. No RLS — service-role only. | `100` |
-| `daily_generation_usage` | Tighter daily cap for video + voiceover specifically (priciest per-unit resources), on top of the monthly cap. | `125` |
+| `monthly_generation_usage` | Generic monthly counters (image/video/voiceover/brand_kit/website_build), one `resource` discriminator column instead of 5 near-identical tables. Owner-only SELECT RLS as of `137` — writes still service-role only. | `100`, RLS `137` |
+| `daily_generation_usage` | Tighter daily cap for video + voiceover specifically (priciest per-unit resources), on top of the monthly cap. Owner-only SELECT RLS as of `137`. | `125`, RLS `137` |
 
 ## M. Notifications
 
