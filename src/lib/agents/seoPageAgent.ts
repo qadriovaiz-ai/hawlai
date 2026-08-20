@@ -14,6 +14,7 @@ export interface SeoPageContent {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export async function generateSeoPage(
   topic: string,
@@ -27,7 +28,7 @@ export async function generateSeoPage(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 2000,
         messages: [{
           role: "user",

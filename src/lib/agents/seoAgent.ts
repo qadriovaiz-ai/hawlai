@@ -27,6 +27,7 @@ export interface SeoIdeas {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface BlogPost {
   title: string;
@@ -75,7 +76,7 @@ export async function generateBlogPost(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         // Was 1200 — too tight once metaDescription/headingOutline/
         // targetIntent/internalLinkSuggestions ride alongside the full
         // 400-600 word body in one JSON payload; matches the same
@@ -152,7 +153,7 @@ export async function generateSeoIdeas(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         // Was 500 — enough for a flat string array, not enough once
         // every keyword carries an intent label and a reasoning note.
         max_tokens: 1400,

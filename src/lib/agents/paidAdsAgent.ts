@@ -39,6 +39,7 @@ export const AD_TASKS: AdTaskMeta[] = [
 ];
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -68,7 +69,7 @@ export async function generateAdPlan(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 1800,
         messages: [{
           role: "user",

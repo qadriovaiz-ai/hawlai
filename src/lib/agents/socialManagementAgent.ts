@@ -7,6 +7,7 @@
 // are actually current instead of guessed from training data).
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface SocialTaskMeta {
   key: string;
@@ -63,7 +64,7 @@ export async function generateAutoReply(
         // constrained task (explicitly avoids prices/promises/
         // complaint resolution per the prompt below), and this fires
         // on every incoming DM/comment when the toggle is on.
-        model: "claude-haiku-4-5-20251001",
+        model: getModel("fast"),
         max_tokens: 300,
         messages: [{
           role: "user",
@@ -119,7 +120,7 @@ export async function generateSocialTask(
 
   try {
     const body: any = {
-      model: "claude-sonnet-4-6",
+      model: getModel("standard"),
       max_tokens: isTrends ? 3000 : 1600,
       messages: [{
         role: "user",

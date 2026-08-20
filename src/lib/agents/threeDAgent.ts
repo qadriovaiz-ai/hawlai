@@ -6,6 +6,7 @@
 // succeeds.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel, CLAUDE_MODELS } from "../models";
 
 export interface ThreeDResult {
   html: string | null;
@@ -28,7 +29,7 @@ export async function generate3DScene(
         // generation (real WebGL/Three.js), the same category of task
         // Claude Design uses its most capable model for. A cheaper
         // model would produce noticeably buggier 3D scenes.
-        model: "claude-opus-4-8",
+        model: getModel("premium"),
         max_tokens: 8000,
         messages: [{
           role: "user",
@@ -62,7 +63,7 @@ Respond with ONLY the raw HTML — no markdown code fences, no explanation befor
       return { html: null, error: `Generation service returned an error (${response.status}): ${errBody.slice(0, 200)}` };
     }
     const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "3d_scene_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "3d_scene_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.premium);
 
     const text = data.content?.[0]?.text ?? "";
     const htmlMatch = text.match(/<!DOCTYPE html>[\s\S]*<\/html>/i);

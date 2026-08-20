@@ -8,6 +8,8 @@
 // tracking, so real analytics isn't available; the Email page shows
 // honest guidance instead of fabricating numbers.
 
+import { getModel } from "../models";
+
 export interface EmailTaskMeta {
   key: string;
   label: string;
@@ -54,7 +56,7 @@ export async function generateEmailContent(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 2000,
         messages: [{
           role: "user",

@@ -9,6 +9,8 @@
 // Nothing is saved automatically; these only return suggestions.
 // ------------------------------------------------------------------
 
+import { getModel } from "../models";
+
 function stripHtmlToText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -72,7 +74,7 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         // Was 600 — too tight once brand_voice_draft's nested fields ride
         // alongside the original summary/persona/pillars in one payload.
         max_tokens: 1100,

@@ -7,6 +7,7 @@
 // lib/automation/competitorMonitor.ts.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface CompetitorTaskMeta {
   key: string;
@@ -58,7 +59,7 @@ export async function generateCompetitorIntel(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 2500,
         messages: [{
           role: "user",

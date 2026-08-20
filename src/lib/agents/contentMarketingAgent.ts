@@ -8,6 +8,7 @@
 // a fallback in the API layer.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface ContentTypeMeta {
   key: string;
@@ -77,7 +78,7 @@ export async function generateContent(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 2000,
         messages: [
           {

@@ -7,6 +7,7 @@
 // so this overwrites that guess.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel, CLAUDE_MODELS } from "../models";
 
 export type CallIntent = "interested" | "not_interested" | "requesting_info" | "ready_to_book" | "complaint" | "no_real_conversation" | "other";
 export type CallSentiment = "positive" | "neutral" | "negative";
@@ -55,7 +56,7 @@ export async function scoreLeadFromCall(transcript: string, leadName: string, lo
         // classifying a transcript into hot/warm/cold + a one-line
         // reason is a simpler task than the department-work this app
         // mostly uses Sonnet for. Frequency is high, complexity isn't.
-        model: "claude-haiku-4-5-20251001",
+        model: getModel("fast"),
         max_tokens: 500,
         messages: [{
           role: "user",
@@ -74,7 +75,7 @@ ${transcript.slice(0, 8000)}`,
     });
 
     const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "call_scoring", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-haiku-4-5-20251001");
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "call_scoring", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.fast);
     const text = data?.content?.[0]?.text ?? "";
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);

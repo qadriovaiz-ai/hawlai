@@ -11,6 +11,7 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 import type { OpusAccess } from "../plans";
+import { getModel } from "../models";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -54,7 +55,7 @@ export async function generateDeepStrategy(
   // to pass this never silently pays for Opus.
   opusAccess: OpusAccess = "none"
 ): Promise<DeepStrategy> {
-  const model = opusAccess === "full" ? "claude-opus-4-8" : "claude-sonnet-4-6";
+  const model = opusAccess === "full" ? getModel("premium") : getModel("standard");
   const fallback: DeepStrategy & { _fallback?: boolean } = {
     _fallback: true,
     businessAnalysis: `${dealershipName} is a ${businessCategory} business${city ? ` based in ${city}` : ""}. Add a Brand Voice description for a sharper analysis.`,

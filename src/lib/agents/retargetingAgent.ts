@@ -10,6 +10,7 @@
 // ------------------------------------------------------------------
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel, CLAUDE_MODELS } from "../models";
 
 export interface RetargetingCopy {
   headline: string;
@@ -54,7 +55,7 @@ export async function generateRetargetingCopy(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 600,
         messages: [
           {
@@ -75,7 +76,7 @@ Respond ONLY with JSON, no markdown fences:
     const parsed = JSON.parse(cleaned);
 
     if (logContext) {
-      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "retargeting_copy", data.usage?.input_tokens ?? 0, data.usage?.output_tokens ?? 0, "claude-sonnet-4-6");
+      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "retargeting_copy", data.usage?.input_tokens ?? 0, data.usage?.output_tokens ?? 0, CLAUDE_MODELS.standard);
     }
 
     return {

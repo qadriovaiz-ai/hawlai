@@ -33,6 +33,7 @@ interface BrandProfile {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel, CLAUDE_MODELS } from "../models";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -61,7 +62,7 @@ export async function generateWhatsappContent(
         // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
         // recovery) is a lower-complexity linguistic task than most
         // of what this app uses Sonnet for.
-        model: "claude-haiku-4-5-20251001",
+        model: getModel("fast"),
         max_tokens: 1600,
         messages: [{
           role: "user",
@@ -80,7 +81,7 @@ Return JSON only, no markdown, no preamble. WhatsApp messages should read like a
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "whatsapp_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-haiku-4-5-20251001");
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "whatsapp_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.fast);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

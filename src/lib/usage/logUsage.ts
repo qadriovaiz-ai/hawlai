@@ -1,4 +1,5 @@
 import { costOfClaudeCallInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeoVideoInr, costOfElevenLabsInr } from "./pricing";
+import { CLAUDE_MODELS } from "../models";
 
 // Single place every real usage log gets written from — keeps the
 // cost-calculation logic in one spot rather than duplicated at every
@@ -6,7 +7,7 @@ import { costOfClaudeCallInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeo
 // actual feature that triggered it, so errors are swallowed (best-
 // effort telemetry, not a critical path).
 
-export async function logClaudeUsage(supabase: any, dealershipId: string, operation: string, inputTokens: number, outputTokens: number, model: string = "claude-sonnet-4-6") {
+export async function logClaudeUsage(supabase: any, dealershipId: string, operation: string, inputTokens: number, outputTokens: number, model: string = CLAUDE_MODELS.standard) {
   try {
     await supabase.from("api_usage_logs").insert({
       dealership_id: dealershipId,

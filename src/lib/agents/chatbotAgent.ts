@@ -25,6 +25,8 @@
 // Now uses the dealership's actual business_category.
 // ------------------------------------------------------------------
 
+import { getModel } from "../models";
+
 interface DealershipContext {
   dealershipName: string;
   city?: string | null;
@@ -73,7 +75,7 @@ ${context.hasBookingLink ? "A booking page exists — you may suggest booking a 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 500,
         system: `You are an AI sales agent on ${context.dealershipName}'s website (a ${category} business). You chat with visitors like a helpful, knowledgeable salesperson would — not a generic FAQ bot.
 ${contextBlock}

@@ -9,6 +9,7 @@
 // ------------------------------------------------------------------
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -31,7 +32,7 @@ export async function generateSocialCaption(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 300,
         messages: [
           {

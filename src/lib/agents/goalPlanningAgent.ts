@@ -17,6 +17,7 @@
 // ------------------------------------------------------------------
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface GoalPlanTask {
   type: "human" | "agent";
@@ -54,7 +55,7 @@ export async function decomposeGoal(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 1200,
         messages: [
           {

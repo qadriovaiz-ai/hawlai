@@ -19,6 +19,7 @@ export interface LandingPageCopy {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export async function generateLandingPageCopy(
   dealershipName: string,
@@ -46,7 +47,7 @@ export async function generateLandingPageCopy(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 400,
         messages: [
           {

@@ -11,6 +11,7 @@
 import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel, CLAUDE_MODELS } from "../models";
 
 export interface SiteTypeMeta {
   key: string;
@@ -165,7 +166,7 @@ export async function planWebsite(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 1500,
         messages: [{
           role: "user",
@@ -362,7 +363,7 @@ async function generatePageBlocks(
         // (deciding a page list/theme is a lighter task), but the
         // real content quality here is worth the extra cost, and it
         // only runs once per page per generation, not on every visit.
-        model: "claude-opus-4-8",
+        model: getModel("premium"),
         // Was 2000 — too tight for a forced tool_use call that has to
         // emit an entire multi-section block tree as one JSON payload,
         // especially legal pages (real boilerplate text) and any page
@@ -397,7 +398,7 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
       return { page: fallback, fellBack: true, reason: `API returned ${response.status}: ${errBody.slice(0, 300)}` };
     }
     const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_page_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, "claude-opus-4-8");
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_page_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.premium);
     const toolUse = (data.content ?? []).find((c: any) => c.type === "tool_use" && c.name === "emit_page");
     const input = toolUse?.input;
     if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) {

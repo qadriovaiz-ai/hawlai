@@ -14,6 +14,7 @@
 // ------------------------------------------------------------------
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -40,7 +41,7 @@ export async function matchCampaign(campaigns: CampaignSummary[], description: s
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 100,
         messages: [
           {
@@ -79,7 +80,7 @@ export async function proposeTargetingChange(campaign: CampaignSummary, requestT
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 300,
         messages: [
           {
@@ -117,7 +118,7 @@ export async function proposeBudgetChange(campaign: CampaignSummary, requestText
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 150,
         messages: [
           {

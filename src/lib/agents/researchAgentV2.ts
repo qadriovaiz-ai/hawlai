@@ -9,6 +9,8 @@
 // since that's the actual, honest signal available, not something to
 // guess from search results about "customers in general."
 
+import { getModel } from "../models";
+
 export interface ResearchTaskMeta {
   key: string;
   label: string;
@@ -61,7 +63,7 @@ export async function generateResearch(
 
   if (taskKey === "industry_trends") {
     const parsed = await callClaude({
-      model: "claude-sonnet-4-6",
+      model: getModel("standard"),
       max_tokens: 2000,
       messages: [{ role: "user", content: `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
@@ -71,7 +73,7 @@ export async function generateResearch(
 
   if (taskKey === "market_research") {
     const parsed = await callClaude({
-      model: "claude-sonnet-4-6",
+      model: getModel("standard"),
       max_tokens: 2000,
       messages: [{ role: "user", content: `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
@@ -81,7 +83,7 @@ export async function generateResearch(
 
   if (taskKey === "new_opportunities") {
     const parsed = await callClaude({
-      model: "claude-sonnet-4-6",
+      model: getModel("standard"),
       max_tokens: 2000,
       messages: [{ role: "user", content: `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}` }],
       tools: [{ type: "web_search_20250305", name: "web_search" }],
@@ -108,7 +110,7 @@ export async function generateSentimentFromLeads(
   const summaryInput = withReasons.slice(0, 100).map((l) => `[${l.temperature}/${l.status}] ${l.qualificationReason}`).join("\n");
 
   const parsed = await callClaude({
-    model: "claude-sonnet-4-6",
+    model: getModel("standard"),
     max_tokens: 1500,
     messages: [{
       role: "user",

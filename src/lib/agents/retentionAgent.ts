@@ -20,6 +20,7 @@ interface BrandProfile {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export async function generateRetentionMessage(
   customer: CustomerInfo,
@@ -49,7 +50,7 @@ export async function generateRetentionMessage(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 300,
         messages: [
           {

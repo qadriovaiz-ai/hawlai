@@ -12,6 +12,7 @@
 
 import { getCampaignPerformance, CampaignPerformance } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface OptimizationRecommendation {
   campaign_id: string;
@@ -41,7 +42,7 @@ async function getRecommendations(campaigns: CampaignPerformance[], businessCate
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 600,
         messages: [
           {

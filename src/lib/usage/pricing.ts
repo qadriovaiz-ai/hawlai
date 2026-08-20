@@ -4,6 +4,8 @@
 // approximate FX rate; update PRICING.usdToInr if it drifts far from
 // reality.
 
+import { CLAUDE_MODELS } from "../models";
+
 export const PRICING = {
   usdToInr: 87,
 
@@ -13,9 +15,9 @@ export const PRICING = {
   // exact model string sent to the API, so cost is computed from
   // whichever model actually ran, not a single assumed rate.
   anthropic: {
-    "claude-opus-4-8": { inputPerMillionUsd: 5.0, outputPerMillionUsd: 25.0 },
-    "claude-sonnet-4-6": { inputPerMillionUsd: 3.0, outputPerMillionUsd: 15.0 },
-    "claude-haiku-4-5-20251001": { inputPerMillionUsd: 1.0, outputPerMillionUsd: 5.0 },
+    [CLAUDE_MODELS.premium]: { inputPerMillionUsd: 5.0, outputPerMillionUsd: 25.0 },
+    [CLAUDE_MODELS.standard]: { inputPerMillionUsd: 3.0, outputPerMillionUsd: 15.0 },
+    [CLAUDE_MODELS.fast]: { inputPerMillionUsd: 1.0, outputPerMillionUsd: 5.0 },
   } as Record<string, { inputPerMillionUsd: number; outputPerMillionUsd: number }>,
 
   // Vapi — ~$0.09/minute blended cost, as shown on the actual Vapi
@@ -47,8 +49,8 @@ export const PRICING = {
   },
 };
 
-export function costOfClaudeCallInr(inputTokens: number, outputTokens: number, model: string = "claude-sonnet-4-6"): number {
-  const rate = PRICING.anthropic[model] ?? PRICING.anthropic["claude-sonnet-4-6"];
+export function costOfClaudeCallInr(inputTokens: number, outputTokens: number, model: string = CLAUDE_MODELS.standard): number {
+  const rate = PRICING.anthropic[model] ?? PRICING.anthropic[CLAUDE_MODELS.standard];
   const usd = (inputTokens / 1_000_000) * rate.inputPerMillionUsd + (outputTokens / 1_000_000) * rate.outputPerMillionUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }

@@ -44,6 +44,7 @@ function brandContextFor(brandProfile?: BrandProfile | null): string {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 async function callClaude(prompt: string, maxTokens: number, operation: string, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
   try {
@@ -55,7 +56,7 @@ async function callClaude(prompt: string, maxTokens: number, operation: string, 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: maxTokens,
         messages: [{ role: "user", content: prompt }],
       }),

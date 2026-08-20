@@ -9,6 +9,7 @@
 
 import { getCampaignPerformance } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface ReportStats {
   totalLeads: number;
@@ -93,7 +94,7 @@ async function summarizeWithClaude(stats: ReportStats, businessCategory: string,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 500,
         messages: [
           {
@@ -258,7 +259,7 @@ Write 3-4 plain-language sentences: what's working, what isn't, and one concrete
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 300,
         messages: [{ role: "user", content: promptContent }],
       }),

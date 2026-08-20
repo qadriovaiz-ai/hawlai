@@ -51,6 +51,7 @@ import { validateAdvertisingClaimCompliance } from "./complianceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
+import { getModel } from "../models";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -947,7 +948,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         const photoElement = { type: "image", src: photoUrl, left: 0, top: 0, scaleX: 0.9, scaleY: 0.9, selectable: true };
 
         const claudeResult = await callClaudeWithRetry({
-          model: "claude-sonnet-4-6",
+          model: getModel("standard"),
           max_tokens: 3000,
           messages: [{
             role: "user",
@@ -987,7 +988,7 @@ Respond with ONLY the complete elements array as valid JSON (including the photo
         if (!design) return { error: input.designName ? `No design found matching "${input.designName}".` : "No designs exist yet — create one first in the Advanced Editor." };
 
         const claudeResult = await callClaudeWithRetry({
-          model: "claude-sonnet-4-6",
+          model: getModel("standard"),
           max_tokens: 4000,
           messages: [{
             role: "user",
@@ -1825,7 +1826,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 
   for (let iteration = 0; iteration < 6; iteration++) {
     const result = await callClaudeWithRetry(
-      { model: "claude-sonnet-4-6", max_tokens: 4096, system: systemPrompt, tools: TOOLS, messages },
+      { model: getModel("standard"), max_tokens: 4096, system: systemPrompt, tools: TOOLS, messages },
       ctx.id
     );
 

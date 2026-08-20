@@ -6,6 +6,7 @@
 // specific page, not generic CRO advice.
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface CroTaskMeta {
   key: string;
@@ -80,7 +81,7 @@ ${engagementRate ? `Engagement rate (view → any interaction): ${engagementRate
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 1800,
         messages: [{
           role: "user",

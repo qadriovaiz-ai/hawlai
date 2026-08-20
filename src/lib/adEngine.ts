@@ -10,6 +10,7 @@
 
 import sharp from "sharp";
 import { logClaudeUsage } from "./usage/logUsage";
+import { getModel } from "./models";
 
 export const GRAPH_VERSION = "v23.0";
 
@@ -31,7 +32,7 @@ export async function generateAdPlan(prompt: string, brandProfile?: any, busines
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 500,
         messages: [
           {

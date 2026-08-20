@@ -26,6 +26,7 @@ export interface MarketingPlan {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export async function generateMarketingStrategy(
   dealershipName: string,
@@ -83,7 +84,7 @@ export async function generateMarketingStrategy(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 1600,
         messages: [
           {

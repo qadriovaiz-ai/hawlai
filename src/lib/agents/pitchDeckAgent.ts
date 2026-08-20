@@ -18,6 +18,7 @@
 
 import PptxGenJS from "pptxgenjs";
 import { logClaudeUsage } from "../usage/logUsage";
+import { getModel } from "../models";
 
 export interface DeckBrandColor {
   name: string;
@@ -85,7 +86,7 @@ export async function generateDeckContent(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: getModel("standard"),
         max_tokens: 1600,
         messages: [
           {
