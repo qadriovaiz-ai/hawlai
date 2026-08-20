@@ -50,6 +50,7 @@ import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } 
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
+import { decomposeGoal } from "./goalPlanningAgent";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -396,6 +397,17 @@ const TOOLS = [
         goalId: { type: "string", description: "If this task is part of a larger multi-task goal, reuse the same goalId string across all tasks in that goal so they're grouped together." },
       },
       required: ["role", "title", "brief"],
+    },
+  },
+  {
+    name: "set_goal",
+    description: "Turn a high-level goal into a real, tracked plan — decomposes it into 2-5 concrete tasks (a mix of tasks assigned to team members and tasks the AI will execute itself later) and saves both the goal and its tasks. Use when the person states an ambition or target rather than a single specific action (e.g. 'grow leads 20% this quarter', 'get our brand more visible before Diwali') — not for a single concrete request another tool already handles directly.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goalText: { type: "string", description: "The goal, in the person's own words." },
+      },
+      required: ["goalText"],
     },
   },
   {
@@ -1017,6 +1029,60 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       if (error) return { error: error.message };
       return { success: true, taskId: data.id, assignedTo: match.email, note: `Assigned to ${match.email} (${input.role}) — they'll see it in their Task Inbox.` };
     }
+    case "set_goal": {
+      const availableRoles = Array.from(new Set(ctx.team.map((t) => t.role)));
+      const plan = await decomposeGoal(input.goalText, ctx.name, ctx.category, availableRoles, { supabase, dealershipId: ctx.id });
+      if (!plan) return { error: "Couldn't work out a plan for that — try being more specific about what you want to achieve." };
+
+      // Service client for every write here, same reasoning as the
+      // propose_campaign_* tools (11a): goals/agent_tasks RLS is
+      // owner-only, and tasks' insert would hit that same wall for a
+      // non-owner team member using the plain session-scoped client
+      // (a pre-existing gap in assign_task itself, not something this
+      // tool should inherit).
+      const { createServiceClient } = await import("../supabase/service");
+      const serviceClient = createServiceClient();
+
+      const { data: goal, error: goalError } = await serviceClient.from("goals").insert({
+        dealership_id: ctx.id,
+        title: plan.title,
+        description: plan.description,
+        target_metric: plan.target_metric,
+        target_value: plan.target_value,
+        deadline: plan.deadline,
+        created_by: "master_chat_tool:set_goal",
+      }).select("id").single();
+      if (goalError) return { error: goalError.message };
+
+      let humanTasksCreated = 0;
+      let agentTasksCreated = 0;
+      const skipped: string[] = [];
+      for (const task of plan.tasks) {
+        if (task.type === "human") {
+          const match = ctx.team.find((t) => t.role === task.role);
+          if (!match) { skipped.push(task.title); continue; }
+          const { error } = await serviceClient.from("tasks").insert({
+            dealership_id: ctx.id, goal_id: goal.id, title: task.title, brief: task.brief,
+            assigned_to: match.id, assigned_role: task.role, created_by: null, status: "open",
+          });
+          if (!error) humanTasksCreated++;
+        } else {
+          const { error } = await serviceClient.from("agent_tasks").insert({
+            dealership_id: ctx.id, goal_id: goal.id, action_type: "generate_content",
+            action_details: { contentType: task.contentType, topic: task.topic, businessName: ctx.name, businessCategory: ctx.category, toneOfVoice: ctx.toneOfVoice },
+            title: task.title, created_by: "master_chat_tool:set_goal",
+          });
+          if (!error) agentTasksCreated++;
+        }
+      }
+
+      const totalTasks = humanTasksCreated + agentTasksCreated;
+      const parts: string[] = [];
+      if (humanTasksCreated > 0) parts.push(`${humanTasksCreated} assigned to the team`);
+      if (agentTasksCreated > 0) parts.push(`${agentTasksCreated} the AI will generate automatically (usually within a couple minutes)`);
+      const note = `Goal "${plan.title}" created with ${totalTasks} task${totalTasks === 1 ? "" : "s"}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}.${skipped.length > 0 ? ` Skipped — no one holds that role yet: ${skipped.join(", ")}.` : ""}`;
+      return { success: true, goalId: goal.id, goalTitle: plan.title, humanTasksCreated, agentTasksCreated, skipped, note };
+    }
     case "assign_lead": {
       const salesRep = ctx.team.find((t) => t.email === input.salesRepEmail && t.role === "sales");
       if (!salesRep) return { error: `No active Sales team member found with email "${input.salesRepEmail}" — check the team roster.` };
@@ -1187,6 +1253,9 @@ const DEPARTMENT_HREF: Record<string, string> = {
   create_product_ad: "/design-editor",
   edit_canvas_design: "/design-editor",
   assign_task: "/dashboard/tasks",
+  // No dedicated goals view yet (Wave 4's 8b) — points at the closest
+  // existing surface that shows at least the human half of the plan.
+  set_goal: "/dashboard/tasks",
   assign_lead: "/dashboard/leads-hub",
   add_lead: "/dashboard/leads-hub",
   trigger_call: "/dashboard/calls",
@@ -1357,6 +1426,8 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       return { kind: "record", label: "Discount code created", summary: result.note, departmentHref };
     case "assign_task":
       return { kind: "record", label: "Task assigned", summary: result.note, departmentHref };
+    case "set_goal":
+      return { kind: "record", label: `Goal: ${result.goalTitle}`, summary: result.note, departmentHref };
     case "assign_lead":
       return { kind: "record", label: "Lead reassigned", summary: result.note, departmentHref };
     case "add_lead":
