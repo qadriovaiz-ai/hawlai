@@ -44,7 +44,11 @@ export async function generateAutoReply(
   // this surface had zero access to real business_knowledge before,
   // useful for questions ("are you open Sundays") the catalog alone
   // can't answer.
-  knowledgeFacts?: { category: string; title: string; content: string }[] | null
+  knowledgeFacts?: { category: string; title: string; content: string }[] | null,
+  // P3 (Personalization) — this specific sender's own history
+  // (getLeadMemory, P1 4a), only ever present once resolveDmLead has
+  // linked this conversation to a real lead.
+  pastInsights?: string[] | null
 ): Promise<string | null> {
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.";
 
@@ -58,6 +62,12 @@ export async function generateAutoReply(
 
   const knowledgeContext = knowledgeFacts && knowledgeFacts.length > 0
     ? `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${knowledgeFacts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`
+    : "";
+
+  // Comments are public and effectively anonymous per-thread — past
+  // insights only apply to DMs, where a real sender identity exists.
+  const insightsContext = channel === "dm" && pastInsights && pastInsights.length > 0
+    ? `\nWhat's happened with this person before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}`
     : "";
 
   const safety = channel === "comment"
@@ -78,7 +88,7 @@ export async function generateAutoReply(
         messages: [{
           role: "user",
           content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}${catalogContext}${knowledgeContext}
+${brandContext}${catalogContext}${knowledgeContext}${insightsContext}
 ${safety}
 Incoming message: "${incomingText}"
 

@@ -27,7 +27,10 @@ export async function generateRetentionMessage(
   brandProfile: BrandProfile | null,
   angle: "service_reminder" | "referral" | "upsell",
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  // P3 — real cross-interaction memory (getLeadMemory, P1 4a), same
+  // addition as contentAgent.ts's generateFollowUpMessage.
+  pastInsights?: string[]
 ): Promise<string> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -58,7 +61,7 @@ export async function generateRetentionMessage(
             content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already made a purchase), not a new lead.
 Customer: ${customer.name}${customer.vehicle ? `, bought/has: ${customer.vehicle}` : ""}.
 Goal: ${angleInstructions[angle]}
-${brandContext}
+${brandContext}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this customer before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}
 2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}`,
           },
         ],

@@ -1,6 +1,7 @@
 import { generateAutoReply } from "@/lib/agents/socialManagementAgent";
 import { resolveDmLead } from "@/lib/leads/dmLeadLinking";
 import { getBusinessContext } from "@/lib/businessBrain";
+import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -109,11 +110,24 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       const text = msgEvent?.message?.text;
       if (!senderId || !text || msgEvent?.message?.is_echo) continue;
 
+      // P2 27a-iii — attributes every DM to a real lead (a "DM-only"
+      // lead when no phone is ever volunteered), never left orphaned.
+      // Moved ahead of generation (P3 — Personalization) so this
+      // sender's own history can inform the reply itself, not just
+      // the log entry after the fact.
+      let leadId: string | null = null;
+      try {
+        leadId = await resolveDmLead(supabase, dealership.id, senderId, channel, text);
+      } catch (err: any) {
+        console.error("[auto-reply] resolveDmLead failed:", err.message);
+      }
+      const pastInsights = leadId ? await getLeadMemory(supabase, dealership.id, leadId) : [];
+
       let replyText: string | null = null;
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts);
+        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights);
         if (replyText) {
           if (channel === "instagram") {
             await sendInstagramDmReply(replyToken, entryId, senderId, replyText);
@@ -127,14 +141,6 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       } catch (err: any) {
         success = false;
         errorMsg = err.message;
-      }
-      // P2 27a-iii — attributes every DM to a real lead (a "DM-only"
-      // lead when no phone is ever volunteered), never left orphaned.
-      let leadId: string | null = null;
-      try {
-        leadId = await resolveDmLead(supabase, dealership.id, senderId, channel, text);
-      } catch (err: any) {
-        console.error("[auto-reply] resolveDmLead failed:", err.message);
       }
       await supabase.from("auto_reply_log").insert({
         dealership_id: dealership.id, channel: `dm_${channel}`, source_id: senderId, lead_id: leadId,

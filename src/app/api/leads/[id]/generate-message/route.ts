@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateFollowUpMessage } from "@/lib/agents/contentAgent";
+import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 
 export async function POST(
   request: Request,
@@ -23,18 +24,19 @@ export async function POST(
 
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("name, vehicle, budget, lead_temperature, status")
+    .select("name, vehicle, budget, lead_temperature, status, qualification_reason")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();
 
   if (leadError || !lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
 
-  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+  const [{ data: brandProfile }, { data: dealership }, pastInsights] = await Promise.all([
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+    getLeadMemory(supabase, dealershipId, id),
   ]);
 
-  const result = await generateFollowUpMessage(lead, brandProfile, channel, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+  const result = await generateFollowUpMessage(lead, brandProfile, channel, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, pastInsights);
   return NextResponse.json(result);
 }

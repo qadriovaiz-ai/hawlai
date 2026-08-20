@@ -17,6 +17,7 @@
 
 import { syncOpportunities } from "./opportunityAgent";
 import { generateFollowUpMessage } from "./contentAgent";
+import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { setCampaignStatus } from "./campaignEditAgent";
 import { snapshotCampaignPerformance, getCampaignPerformance } from "./analyticsAgent";
@@ -35,7 +36,7 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
 
   const { data: stuckLeads } = await supabase
     .from("leads")
-    .select("id, name, vehicle, budget, lead_temperature, status, draft_followup_generated_at")
+    .select("id, name, vehicle, budget, lead_temperature, status, qualification_reason, draft_followup_generated_at")
     .eq("dealership_id", dealershipId)
     .in("status", ["new", "ready_to_call"])
     .lt("created_at", twoDaysAgo);
@@ -56,7 +57,10 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
   let drafted = 0;
   for (const lead of needsDraft) {
     try {
-      const message = await generateFollowUpMessage(lead, brandProfile, "whatsapp");
+      // P3 — real cross-interaction memory (getLeadMemory, P1 4a),
+      // same addition as the manual generate-message route.
+      const pastInsights = await getLeadMemory(supabase, dealershipId, lead.id);
+      const message = await generateFollowUpMessage(lead, brandProfile, "whatsapp", undefined, undefined, pastInsights);
       await supabase
         .from("leads")
         .update({ draft_followup_message: message.message, draft_followup_generated_at: new Date().toISOString() })

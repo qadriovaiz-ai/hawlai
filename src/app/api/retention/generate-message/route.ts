@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateRetentionMessage } from "@/lib/agents/retentionAgent";
+import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -24,11 +25,12 @@ export async function POST(request: Request) {
     .single();
   if (leadError || !lead) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
 
-  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+  const [{ data: brandProfile }, { data: dealership }, pastInsights] = await Promise.all([
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+    getLeadMemory(supabase, dealershipId, leadId),
   ]);
 
-  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, pastInsights);
   return NextResponse.json({ message });
 }

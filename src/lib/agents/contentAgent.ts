@@ -19,6 +19,11 @@ interface LeadInfo {
   budget?: number | null;
   lead_temperature?: string | null;
   status?: string | null;
+  // P3 — real signals that already existed on the leads row but were
+  // never actually read by this generator; personalization before
+  // this was brand-voice + {name}/{vehicle}/{temperature} substitution
+  // only, identical for every lead regardless of what was actually said.
+  qualification_reason?: string | null;
 }
 
 interface BrandProfile {
@@ -40,7 +45,12 @@ export async function generateFollowUpMessage(
   brandProfile: BrandProfile | null,
   channel: "whatsapp" | "email",
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  // P3 — this lead's own business_memory history (getLeadMemory,
+  // P1 4a) — real cross-interaction memory, not just this one row's
+  // flat fields. Was already built and wired into live calls; this is
+  // the first async/messaging generator to use it too.
+  pastInsights?: string[]
 ): Promise<GeneratedMessage> {
   const brandContext = brandProfile
     ? `Brand tone to match: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -51,7 +61,7 @@ export async function generateFollowUpMessage(
       ? `Write a short WhatsApp message (2-4 sentences, casual, can use 1 emoji max, no formal greeting like "Dear"). Return JSON only: {"message":"the whatsapp text"}`
       : `Write a short professional email (greeting, 2-3 short paragraphs, sign-off). Return JSON only: {"subject":"email subject line","message":"the full email body"}`;
 
-  const leadContext = `Lead name: ${lead.name}. ${lead.vehicle ? `Interested in: ${lead.vehicle}.` : ""} ${lead.budget ? `Budget: ₹${lead.budget}.` : ""} Lead temperature: ${lead.lead_temperature ?? "unknown"}. Current stage: ${lead.status ?? "new"}.`;
+  const leadContext = `Lead name: ${lead.name}. ${lead.vehicle ? `Interested in: ${lead.vehicle}.` : ""} ${lead.budget ? `Budget: ₹${lead.budget}.` : ""} Lead temperature: ${lead.lead_temperature ?? "unknown"}. Current stage: ${lead.status ?? "new"}.${lead.qualification_reason ? ` What we know from the last real conversation: ${lead.qualification_reason}` : ""}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this lead before, from past interactions (reference this naturally, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}`;
 
   const fallback: GeneratedMessage =
     channel === "whatsapp"
