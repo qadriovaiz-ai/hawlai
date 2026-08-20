@@ -49,6 +49,7 @@ import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } 
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
 import { generateSeoIdeas } from "./seoAgent";
@@ -1791,6 +1792,21 @@ A junior marketer takes a request literally and produces the thing asked for. A 
         result = await executeTool(supabase, ctx, block.name, block.input, groundingContext);
       } catch (err: any) {
         result = { error: err.message };
+      }
+      // P1 18a — previously a failed tool call (thrown or handler-
+      // returned) was only ever fed back to Claude as conversation
+      // text, with no durable record and no guaranteed user-facing
+      // surfacing. Scoped to failures only, not every successful call
+      // — most of the ~40 tools here are routine generate/read actions
+      // already tracked via their own saved artifacts.
+      if (result?.error) {
+        await logAuditEvent(supabase, {
+          dealershipId: ctx.id,
+          actor: `master_chat_tool:${block.name}`,
+          eventType: "tool_call_failed",
+          summary: `${block.name} failed — ${String(result.error).slice(0, 140)}`,
+          details: { toolName: block.name, input: block.input, error: result.error },
+        });
       }
       const artifact = extractArtifact(block.name, block.input, result);
       // Phase 3 Task 4 — generic, applies regardless of which artifact
