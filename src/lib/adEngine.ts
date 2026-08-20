@@ -14,6 +14,33 @@ import { getModel } from "./models";
 
 export const GRAPH_VERSION = "v23.0";
 
+// P2 16a (Self-Evaluation) — below this, one self-critique-informed
+// retry fires. Fixed, not configurable (same fixed-cap reasoning as
+// 19a's retry logic) — a single hardcoded threshold, not a dealer
+// setting.
+const AD_PLAN_RETRY_THRESHOLD = 60;
+
+async function callAdPlanOnce(promptContent: string, logContext?: { supabase: any; dealershipId: string }): Promise<any> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": process.env.ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: getModel("standard"),
+      max_tokens: 500,
+      messages: [{ role: "user", content: promptContent }],
+    }),
+  });
+  const data = await response.json();
+  if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "ad_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+  const text = data.content?.[0]?.text ?? "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
 // ------------------------------------------------------------------
 // Step 1: Claude reads the dealer's one-line prompt and extracts
 // everything needed — copy, budget, city, and an image scene idea.
@@ -24,32 +51,39 @@ export async function generateAdPlan(prompt: string, brandProfile?: any, busines
       ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
       : "";
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 500,
-        messages: [
-          {
-            role: "user",
-            content: `You are an expert Facebook Lead Ad strategist for Indian ${businessCategory} businesses.
+    const basePrompt = `You are an expert Facebook Lead Ad strategist for Indian ${businessCategory} businesses.
 Based on this dealer's requirement: "${prompt}"${brandContext}
 Return JSON only (no markdown, no explanation):
-{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "ad_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean);
+{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"city extracted or null, else Lucknow","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`;
+
+    const first = await callAdPlanOnce(basePrompt, logContext);
+
+    // Self-evaluation: the model already scores its own copy in the
+    // same call above (confidence_score) — this is the first place
+    // that score is actually acted on rather than just displayed.
+    // Exactly one retry, informed by the model's own stated weakness,
+    // never more. What happens downstream (ad preview -> the dealer's
+    // own review -> launch) is completely unchanged either way — this
+    // only affects what generateAdPlan returns, never skips or
+    // shortcuts the human review that already exists after it.
+    const firstScore = Number(first?.confidence_score);
+    if (Number.isFinite(firstScore) && firstScore < AD_PLAN_RETRY_THRESHOLD) {
+      try {
+        const retryPrompt = `${basePrompt}\n\nYour first attempt scored itself only ${firstScore}/100 for this reason: "${first.score_reasoning}". Write a genuinely stronger version that fixes that specific weakness — don't just rephrase, actually address the issue. Still return the same JSON shape.`;
+        const retried = await callAdPlanOnce(retryPrompt, logContext);
+        const retriedScore = Number(retried?.confidence_score);
+        // Keep whichever attempt actually scored higher — the retry
+        // was asked to improve on a named weakness, but a self-
+        // reported score is noisy enough that it isn't blindly
+        // trusted just for being the second attempt.
+        if (Number.isFinite(retriedScore) && retriedScore >= firstScore) return retried;
+      } catch {
+        // Retry failed — fall through and return the first attempt,
+        // same as any other failure path here.
+      }
+    }
+
+    return first;
   } catch (err: any) {
     console.error("[ad-engine] generateAdPlan error:", err.message);
     const city = prompt.match(/(lucknow|delhi|mumbai|kanpur|agra|varanasi|jaipur|hyderabad|bangalore|pune)/i)?.[1] ?? "Lucknow";
