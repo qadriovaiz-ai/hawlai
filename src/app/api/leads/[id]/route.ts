@@ -13,10 +13,13 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+  // P1 7a — needed so the lead_converted workflow trigger can compute
+  // delay_days correctly (leads had no timestamp for this before).
+  const update = body.status === "converted" ? { ...body, converted_at: new Date().toISOString() } : body;
 
   const { data, error } = await supabase
     .from("leads")
-    .update(body)
+    .update(update)
     .eq("id", id)
     .select()
     .single();

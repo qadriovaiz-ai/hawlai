@@ -8,6 +8,7 @@ import { Button, Card, EmptyState, Input, Select, Textarea } from "@/components/
 const TRIGGERS = [
   { key: "new_lead", label: "New Lead Created" },
   { key: "appointment_booked", label: "Appointment Booked" },
+  { key: "lead_converted", label: "Lead Converted" },
 ];
 
 // P1 7a — the only other real action alongside email today. Kept as a

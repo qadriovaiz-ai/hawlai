@@ -20,6 +20,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (status !== undefined) {
     if (!validStatuses.includes(status)) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     update.status = status;
+    // P1 7a — needed so the lead_converted workflow trigger can
+    // compute delay_days correctly (leads had no timestamp for this).
+    if (status === "converted") update.converted_at = new Date().toISOString();
   }
   if (note !== undefined) update.qualification_reason = note;
   if (Object.keys(update).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

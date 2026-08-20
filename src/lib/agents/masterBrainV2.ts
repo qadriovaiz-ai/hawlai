@@ -263,12 +263,12 @@ const TOOLS = [
   },
   {
     name: "create_workflow",
-    description: "Create a real automated multi-step email workflow (Marketing Automation). Trigger is 'new_lead' or 'appointment_booked'. Steps are an ordered list, each with a delayDays (days after trigger to send) and either an emailTaskType (one of the generate_email taskType values) or custom subject/body. The workflow is created DISABLED by default — tell the person to enable it on the Marketing Automation page when ready, unless they explicitly say to turn it on now, in which case pass enableNow=true.",
+    description: "Create a real automated multi-step workflow (Marketing Automation). Trigger is 'new_lead', 'appointment_booked', or 'lead_converted'. Steps are an ordered list, each with a delayDays (days after trigger to fire) and an actionType — either send an email (emailTaskType or custom subject/body) or queue the AI to generate a piece of content (contentType + contentTopic). The workflow is created DISABLED by default — tell the person to enable it on the Marketing Automation page when ready, unless they explicitly say to turn it on now, in which case pass enableNow=true.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string" },
-        triggerType: { type: "string", enum: ["new_lead", "appointment_booked"] },
+        triggerType: { type: "string", enum: ["new_lead", "appointment_booked", "lead_converted"] },
         steps: {
           type: "array",
           items: {

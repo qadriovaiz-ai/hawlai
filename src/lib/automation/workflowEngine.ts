@@ -24,12 +24,24 @@ async function getTriggeredLeads(supabase: any, dealershipId: string, workflow: 
     return (data ?? []).map((l: any) => ({ leadId: l.id, email: l.email, name: l.name, triggerDate: l.created_at }));
   }
 
-  // P1 7a — lead_converted lands once leads.converted_at exists
-  // (migration 134, pending confirmation) — leads has no updated_at
-  // today, and using created_at here would silently make delay_days
-  // meaningless for this trigger (every converted lead's created_at
-  // is already in the past, so every step would compute as
-  // immediately due regardless of when it actually converted).
+  // P1 7a — same polling pattern as new_lead, not event-driven: this
+  // engine already re-scans daily and relies on workflow_step_runs'
+  // unique constraint + the dueDate check for idempotency, so a new
+  // trigger type needs zero new plumbing. Uses converted_at (migration
+  // 134), not created_at — every converted lead's created_at is
+  // already in the past, which would've made delay_days meaningless.
+  if (workflow.trigger_type === "lead_converted") {
+    const { data } = await supabase
+      .from("leads")
+      .select("id, name, email, converted_at, status")
+      .eq("dealership_id", dealershipId)
+      .eq("status", "converted")
+      .not("email", "is", null)
+      .not("converted_at", "is", null)
+      .eq("dnd_opt_out", false)
+      .limit(200);
+    return (data ?? []).map((l: any) => ({ leadId: l.id, email: l.email, name: l.name, triggerDate: l.converted_at }));
+  }
 
   if (workflow.trigger_type === "appointment_booked") {
     // !inner + dot-path filter so the DND check applies to the joined
