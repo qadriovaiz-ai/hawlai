@@ -1,12 +1,17 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { EVENT_HANDLERS } from "@/lib/events/eventHandlers";
+import { TASK_EXECUTORS } from "@/lib/tasks/taskExecutors";
 
 // Triggered by pg_cron every 2 minutes (see migration 129's commented
 // manual setup) via pg_net, which sends the same
 // `Authorization: Bearer $CRON_SECRET` shape /api/autopilot/daily-run
 // already checks — same secret, same pattern, so both crons are
 // authorized identically.
+//
+// P1 9b — this same route also drains agent_tasks now, reusing the
+// Event Bus's existing pg_cron/pg_net trigger rather than standing up
+// a second frequent-poll schedule (per the confirmed Wave 3 decision).
 export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
@@ -23,32 +28,31 @@ export async function POST(request: Request) {
   // Bounded batch per run — this fires every 2 minutes, so a backlog
   // drains within a few runs rather than one run trying to do
   // everything and risking a serverless timeout.
-  const { data: pending, error } = await supabase
+  const { data: pendingEvents, error: eventsError } = await supabase
     .from("event_queue")
     .select("id, dealership_id, event_type, payload, attempts")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(50);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!pending || pending.length === 0) return NextResponse.json({ processed: 0 });
+  if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 });
 
-  let done = 0;
-  let failed = 0;
-  for (const event of pending) {
+  let eventsDone = 0;
+  let eventsFailed = 0;
+  for (const event of pendingEvents ?? []) {
     const handlers = EVENT_HANDLERS[event.event_type];
     if (!handlers || handlers.length === 0) {
       // No subscriber registered for this event_type — not an error,
       // just nothing to do yet. Marked done so it doesn't sit
       // "pending" forever waiting on a handler that may never exist.
       await supabase.from("event_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", event.id);
-      done++;
+      eventsDone++;
       continue;
     }
     try {
       for (const handler of handlers) await handler(supabase, event);
       await supabase.from("event_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", event.id);
-      done++;
+      eventsDone++;
     } catch (err: any) {
       await supabase.from("event_queue").update({
         status: "failed",
@@ -56,9 +60,53 @@ export async function POST(request: Request) {
         attempts: (event.attempts ?? 0) + 1,
         processed_at: new Date().toISOString(),
       }).eq("id", event.id);
-      failed++;
+      eventsFailed++;
     }
   }
 
-  return NextResponse.json({ processed: pending.length, done, failed });
+  // agent_tasks (P1 9b) — same bounded-batch reasoning as event_queue
+  // above, plus scheduled_for so a task queued for later doesn't run
+  // early.
+  const { data: pendingTasks, error: tasksError } = await supabase
+    .from("agent_tasks")
+    .select("id, dealership_id, action_type, action_details, title, attempts")
+    .eq("status", "pending")
+    .lte("scheduled_for", new Date().toISOString())
+    .order("scheduled_for", { ascending: true })
+    .limit(50);
+
+  if (tasksError) return NextResponse.json({ error: tasksError.message }, { status: 500 });
+
+  let tasksDone = 0;
+  let tasksFailed = 0;
+  let tasksSkipped = 0;
+  for (const task of pendingTasks ?? []) {
+    const executor = TASK_EXECUTORS[task.action_type];
+    if (!executor) {
+      // No executor registered for this action_type yet — left
+      // pending (not marked done), unlike an unhandled event: a
+      // queued task is real work someone's waiting on, so it stays
+      // visibly unresolved rather than silently disappearing.
+      tasksSkipped++;
+      continue;
+    }
+    try {
+      const result = await executor(supabase, task);
+      await supabase.from("agent_tasks").update({ status: "done", result: result ?? null, completed_at: new Date().toISOString() }).eq("id", task.id);
+      tasksDone++;
+    } catch (err: any) {
+      await supabase.from("agent_tasks").update({
+        status: "failed",
+        error: err.message,
+        attempts: (task.attempts ?? 0) + 1,
+        completed_at: new Date().toISOString(),
+      }).eq("id", task.id);
+      tasksFailed++;
+    }
+  }
+
+  return NextResponse.json({
+    events: { processed: pendingEvents?.length ?? 0, done: eventsDone, failed: eventsFailed },
+    tasks: { processed: pendingTasks?.length ?? 0, done: tasksDone, failed: tasksFailed, skipped: tasksSkipped },
+  });
 }
