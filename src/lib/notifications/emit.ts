@@ -25,7 +25,9 @@ export type NotificationKind =
   | "variant_draft_generated"
   | "call_needs_follow_up"
   | "call_escalated"
-  | "refund_requested";
+  | "refund_requested"
+  | "goal_completed"
+  | "goal_task_failed";
 
 export interface EmitNotificationInput {
   dealershipId: string;

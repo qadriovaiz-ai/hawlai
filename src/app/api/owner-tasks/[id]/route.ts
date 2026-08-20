@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { emitEvent } from "@/lib/events/emitEvent";
 
 // Owner-side task actions — mark done, cancel. Didn't exist before this
 // redesign: the Tasks screen's own subtitle promised tasks were "yours
@@ -29,6 +30,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data, error } = await supabase.from("tasks").update(update).eq("id", id).select().maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+
+  // P1 3a — only goal-linked tasks matter for the Orchestrator; a
+  // standalone task has nothing to check completion against.
+  if (status === "done" && data.goal_id) {
+    await emitEvent(supabase, { dealershipId: data.dealership_id, eventType: "task_completed", payload: { goalId: data.goal_id } });
+  }
 
   return NextResponse.json(data);
 }

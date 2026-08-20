@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { resolveActiveMembership } from "@/lib/teamMembership";
+import { emitEvent } from "@/lib/events/emitEvent";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,12 +19,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const service = createServiceClient();
   // Scoped to assigned_to = this exact member's own id — they can
   // never touch a task assigned to someone else, even by guessing an id.
-  const { data: task } = await service.from("tasks").select("id, assigned_to").eq("id", id).maybeSingle();
+  const { data: task } = await service.from("tasks").select("id, assigned_to, dealership_id, goal_id").eq("id", id).maybeSingle();
   if (!task || task.assigned_to !== membership.id) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
   const update: Record<string, any> = { status };
   if (status === "done") update.completed_at = new Date().toISOString();
   const { error } = await service.from("tasks").update(update).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // P1 3a — same Orchestrator wiring as /api/owner-tasks/[id].
+  if (status === "done" && task.goal_id) {
+    await emitEvent(service, { dealershipId: task.dealership_id, eventType: "task_completed", payload: { goalId: task.goal_id } });
+  }
+
   return NextResponse.json({ success: true });
 }

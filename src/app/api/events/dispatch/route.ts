@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { EVENT_HANDLERS } from "@/lib/events/eventHandlers";
 import { TASK_EXECUTORS } from "@/lib/tasks/taskExecutors";
+import { emitEvent } from "@/lib/events/emitEvent";
 
 // Triggered by pg_cron every 2 minutes (see migration 129's commented
 // manual setup) via pg_net, which sends the same
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
   // early.
   const { data: pendingTasks, error: tasksError } = await supabase
     .from("agent_tasks")
-    .select("id, dealership_id, action_type, action_details, title, attempts")
+    .select("id, dealership_id, action_type, action_details, title, attempts, goal_id")
     .eq("status", "pending")
     .lte("scheduled_for", new Date().toISOString())
     .order("scheduled_for", { ascending: true })
@@ -94,6 +95,8 @@ export async function POST(request: Request) {
       const result = await executor(supabase, task);
       await supabase.from("agent_tasks").update({ status: "done", result: result ?? null, completed_at: new Date().toISOString() }).eq("id", task.id);
       tasksDone++;
+      // P1 3a — only goal-linked tasks matter for the Orchestrator.
+      if (task.goal_id) await emitEvent(supabase, { dealershipId: task.dealership_id, eventType: "task_completed", payload: { goalId: task.goal_id } });
     } catch (err: any) {
       await supabase.from("agent_tasks").update({
         status: "failed",
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
         completed_at: new Date().toISOString(),
       }).eq("id", task.id);
       tasksFailed++;
+      if (task.goal_id) await emitEvent(supabase, { dealershipId: task.dealership_id, eventType: "task_failed", payload: { goalId: task.goal_id, taskTitle: task.title, error: err.message } });
     }
   }
 
