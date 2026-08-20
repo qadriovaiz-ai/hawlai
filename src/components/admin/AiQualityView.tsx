@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, ThumbsUp, ThumbsDown, AlertTriangle } from "lucide-react";
+import { Loader2, ThumbsUp, ThumbsDown, AlertTriangle, ShieldAlert, Gauge } from "lucide-react";
 
 export default function AiQualityView() {
   const [data, setData] = useState<any>(null);
@@ -43,6 +43,34 @@ export default function AiQualityView() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* P2 17a — AI self-generated quality signals, distinct from the
+          human feedback above: how often the AI's own advisory checks
+          actually flag something, and how confident it reports being
+          in its own ad copy. */}
+      <div className="card p-5 space-y-3">
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><ShieldAlert className="w-4 h-4 text-purple-400" /> Self-checks, last 30 days</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-200 rounded-lg p-3 text-center">
+            <p className="text-lg font-bold text-slate-800">{data.flagRate?.pct != null ? `${data.flagRate.pct}%` : "—"}</p>
+            <p className="text-xs text-slate-400">Brand voice / compliance flag rate ({data.flagRate?.flaggedCount ?? 0} of {data.flagRate?.artifactCount ?? 0})</p>
+          </div>
+          <div className="bg-slate-200 rounded-lg p-3 text-center">
+            <p className="text-lg font-bold text-slate-800 flex items-center justify-center gap-1"><Gauge className="w-4 h-4 text-slate-500" /> {data.creativeScoreStats?.avg ?? "—"}</p>
+            <p className="text-xs text-slate-400">Avg ad creative confidence score ({data.creativeScoreStats?.count ?? 0} generated)</p>
+          </div>
+        </div>
+        {data.creativeScoreStats && (
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="text-red-400">{data.creativeScoreStats.low} scored &lt;50</span>
+            <span>·</span>
+            <span className="text-amber-500">{data.creativeScoreStats.mid} scored 50-74</span>
+            <span>·</span>
+            <span className="text-green-500">{data.creativeScoreStats.high} scored 75+</span>
+          </div>
+        )}
+        <p className="text-xs text-slate-400">These are advisory-only checks — none of them block or auto-regenerate anything today (see P2 16a for that).</p>
       </div>
 
       {data.toolsInDownVoted?.length > 0 && (

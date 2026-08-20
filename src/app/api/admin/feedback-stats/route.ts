@@ -28,6 +28,42 @@ export async function GET() {
     .gte("created_at", thirtyDaysAgo)
     .order("created_at", { ascending: false });
 
+  // P2 17a — AI self-generated quality signals, distinct from the
+  // human feedback above: how often the AI's own advisory checks
+  // (brand voice, advertising-claim compliance) actually flag
+  // something, and how confident the AI reports being in its own ad
+  // copy. Both already exist in the schema (chat_messages.artifacts,
+  // migration 081; ad_creatives.creative_score) but were never
+  // surfaced together anywhere — no new logging, no new table.
+  const { data: allAssistantMessages } = await service
+    .from("chat_messages")
+    .select("artifacts")
+    .eq("role", "assistant")
+    .gte("created_at", thirtyDaysAgo)
+    .not("artifacts", "is", null);
+  let flaggedCount = 0;
+  let artifactCount = 0;
+  for (const m of allAssistantMessages ?? []) {
+    for (const a of (m.artifacts as any[]) ?? []) {
+      artifactCount++;
+      if ((a?.brandVoiceFlags?.length ?? 0) > 0 || (a?.complianceFlags?.length ?? 0) > 0) flaggedCount++;
+    }
+  }
+
+  const { data: creatives } = await service
+    .from("ad_creatives")
+    .select("creative_score")
+    .gte("created_at", thirtyDaysAgo)
+    .not("creative_score", "is", null);
+  const scores = (creatives ?? []).map((c) => c.creative_score as number);
+  const creativeScoreStats = scores.length > 0 ? {
+    count: scores.length,
+    avg: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+    low: scores.filter((s) => s < 50).length,
+    mid: scores.filter((s) => s >= 50 && s < 75).length,
+    high: scores.filter((s) => s >= 75).length,
+  } : null;
+
   const all = messages ?? [];
   const up = all.filter((m) => m.feedback === "up").length;
   const down = all.filter((m) => m.feedback === "down").length;
@@ -64,5 +100,11 @@ export async function GET() {
     upRate: all.length > 0 ? Math.round((up / all.length) * 1000) / 10 : null,
     recentDownVoted,
     toolsInDownVoted,
+    flagRate: {
+      artifactCount,
+      flaggedCount,
+      pct: artifactCount > 0 ? Math.round((flaggedCount / artifactCount) * 1000) / 10 : null,
+    },
+    creativeScoreStats,
   });
 }
