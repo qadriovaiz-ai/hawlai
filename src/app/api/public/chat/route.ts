@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { runSalesAgentTurn } from "@/lib/agents/chatbotAgent";
 import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
+import { getBusinessContext } from "@/lib/businessBrain";
 
 // Public, unauthenticated — the landing page AI Sales Agent widget
 // posts here.
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
   const { data: page } = await supabase
     .from("landing_pages")
-    .select("dealership_id, headline, offer_text, dealerships(dealership_name, city, business_category, booking_slug)")
+    .select("dealership_id, headline, offer_text, dealerships(booking_slug)")
     .eq("slug", slug)
     .eq("published", true)
     .maybeSingle();
@@ -22,21 +23,29 @@ export async function POST(request: Request) {
   if (!page) return NextResponse.json({ error: "Page not found" }, { status: 404 });
 
   const dealership = (page as any).dealerships;
-  const { data: brandProfile } = await supabase
-    .from("brand_profiles")
-    .select("tone_of_voice, messaging_pillars")
-    .eq("dealership_id", page.dealership_id)
-    .maybeSingle();
+  // P3 20a — was its own separate dealerships/brand_profiles query;
+  // now the same shared assembler chat and calls already use, so this
+  // surface gains business_knowledge (hours/pricing/policies/FAQs) for
+  // the first time — it had zero access before. messaging_pillars
+  // stays its own small query — getBusinessContext doesn't carry it
+  // (a separate brand_profiles column from the structured brandVoice
+  // object it does return), kept as-is rather than folding it in and
+  // risking a behavior change beyond "same source, more facts."
+  const [businessCtx, { data: brandProfile }] = await Promise.all([
+    getBusinessContext(supabase, page.dealership_id),
+    supabase.from("brand_profiles").select("messaging_pillars").eq("dealership_id", page.dealership_id).maybeSingle(),
+  ]);
 
   const { reply, leadCapture, suggestBooking } = await runSalesAgentTurn(
     {
-      dealershipName: dealership?.dealership_name ?? "the business",
-      city: dealership?.city,
-      businessCategory: dealership?.business_category,
+      dealershipName: businessCtx.name,
+      city: businessCtx.city,
+      businessCategory: businessCtx.category,
       headline: page.headline,
       offerText: page.offer_text,
-      toneOfVoice: brandProfile?.tone_of_voice,
+      toneOfVoice: businessCtx.toneOfVoice,
       messagingPillars: brandProfile?.messaging_pillars,
+      knowledgeFacts: businessCtx.knowledgeFacts,
       hasBookingLink: !!dealership?.booking_slug,
     },
     Array.isArray(history) ? history.slice(-6) : [],

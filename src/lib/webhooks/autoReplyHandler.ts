@@ -1,5 +1,6 @@
 import { generateAutoReply } from "@/lib/agents/socialManagementAgent";
 import { resolveDmLead } from "@/lib/leads/dmLeadLinking";
+import { getBusinessContext } from "@/lib/businessBrain";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -82,11 +83,13 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
   if (!replyToken) return;
   if (!dealership.dm_auto_reply_enabled && !dealership.comment_auto_reply_enabled) return;
 
-  const { data: brandProfile } = await supabase
-    .from("brand_profiles")
-    .select("tone_of_voice")
-    .eq("dealership_id", dealership.id)
-    .maybeSingle();
+  // P3 20a — was its own separate brand_profiles query; now the same
+  // shared assembler chat and calls already use, so this surface
+  // gains business_knowledge (hours/pricing/policies/FAQs) for the
+  // first time — useful for common DM questions ("are you open
+  // Sundays") the catalog alone could never answer.
+  const businessCtx = await getBusinessContext(supabase, dealership.id);
+  const brandProfile = { tone_of_voice: businessCtx.toneOfVoice };
 
   // Real catalog — capped at 40 products to keep the prompt a
   // reasonable size; a seller with more than that is a genuine edge
@@ -110,7 +113,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog);
+        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts);
         if (replyText) {
           if (channel === "instagram") {
             await sendInstagramDmReply(replyToken, entryId, senderId, replyText);
@@ -159,7 +162,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog);
+        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts);
         if (replyText) {
           await sendCommentReply(replyToken, commentId, replyText);
         } else {

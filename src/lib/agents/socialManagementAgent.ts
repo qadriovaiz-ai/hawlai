@@ -39,7 +39,12 @@ export async function generateAutoReply(
   dealershipName: string,
   businessCategory: string,
   brandProfile?: BrandProfile | null,
-  productCatalog?: { name: string; price: number; description?: string | null; inventoryCount?: number | null }[]
+  productCatalog?: { name: string; price: number; description?: string | null; inventoryCount?: number | null }[],
+  // P3 20a — sourced from the shared getBusinessContext() assembler;
+  // this surface had zero access to real business_knowledge before,
+  // useful for questions ("are you open Sundays") the catalog alone
+  // can't answer.
+  knowledgeFacts?: { category: string; title: string; content: string }[] | null
 ): Promise<string | null> {
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.";
 
@@ -49,6 +54,10 @@ export async function generateAutoReply(
   // price for something not genuinely in the catalog.
   const catalogContext = productCatalog && productCatalog.length > 0
     ? `\nReal current product catalog (use this for any question about a specific product — price, availability):\n${productCatalog.map((p) => `- ${p.name}: ₹${p.price}${p.inventoryCount !== undefined && p.inventoryCount !== null ? (p.inventoryCount > 0 ? ` (in stock)` : ` (out of stock)`) : ""}${p.description ? ` — ${p.description.slice(0, 80)}` : ""}`).join("\n")}`
+    : "";
+
+  const knowledgeContext = knowledgeFacts && knowledgeFacts.length > 0
+    ? `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${knowledgeFacts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`
     : "";
 
   const safety = channel === "comment"
@@ -69,7 +78,7 @@ export async function generateAutoReply(
         messages: [{
           role: "user",
           content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}${catalogContext}
+${brandContext}${catalogContext}${knowledgeContext}
 ${safety}
 Incoming message: "${incomingText}"
 

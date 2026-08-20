@@ -35,7 +35,15 @@ interface DealershipContext {
   offerText?: string | null;
   toneOfVoice?: string | null;
   messagingPillars?: string[] | null;
+  // P3 20a — sourced from the shared getBusinessContext() assembler;
+  // this surface had zero access to real business_knowledge before.
+  knowledgeFacts?: { category: string; title: string; content: string }[] | null;
   hasBookingLink: boolean;
+}
+
+function formatKnowledgeFacts(facts?: DealershipContext["knowledgeFacts"]): string {
+  if (!facts || facts.length === 0) return "";
+  return `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${facts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`;
 }
 
 export interface SalesAgentResult {
@@ -64,7 +72,7 @@ ${context.headline ? `Tagline: ${context.headline}` : ""}
 ${context.offerText ? `Current offer: ${context.offerText}` : ""}
 ${context.toneOfVoice ? `Tone to use: ${context.toneOfVoice}` : "Tone: friendly and helpful"}
 ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.join("; ")}` : ""}
-${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}`;
+${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
