@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, Gauge, TrendingUp, Pencil, Save, X } from "lucide-react";
+import { Sparkles, ArrowRight, Gauge, TrendingUp, Pencil, Save, X, Target, Check } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Badge, Button, Card, type BadgeTone } from "@/components/ui";
@@ -131,17 +131,61 @@ function GrowthOutputRenderer({ output }: { output: any }) {
         {output.readiness && <p className="text-sm font-semibold text-brand-600 capitalize">Readiness: {output.readiness}</p>}
         {output.reasoning && <p className="text-sm text-slate-600">{output.reasoning}</p>}
         {output[arrayKey].map((item: any, i: number) => (
-          <div key={i} className="bg-slate-200 rounded-lg p-2.5 text-sm text-slate-700">
-            {typeof item === "string" ? item : (
-              <>
-                {(item.opportunity || item.campaign) && <p className="font-semibold text-slate-800">{item.opportunity || item.campaign} {item.action && <span className="text-xs text-brand-500">({item.action})</span>}</p>}
-                <p className="text-xs text-slate-500">{item.why || item.reasoning || JSON.stringify(item)}</p>
-              </>
-            )}
-          </div>
+          <RecommendationItem key={i} item={item} />
         ))}
       </div>
     );
   }
   return <p className="text-sm text-slate-700 whitespace-pre-wrap">{JSON.stringify(output)}</p>;
+}
+
+// P2 26a (Strategy -> Execution Loop) — "Turn into a goal" only ever
+// creates a draft (see /api/growth-advisor/create-goal-draft) —
+// review/confirm happens on the Tasks page, same as any other goal.
+function RecommendationItem({ item }: { item: any }) {
+  const [state, setState] = useState<"idle" | "loading" | "done">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const label = typeof item === "string" ? item : (item.opportunity || item.campaign);
+  const detail = typeof item === "string" ? "" : (item.why || item.reasoning || "");
+  const recommendationText = typeof item === "string" ? item : `${label ?? ""}${item.action ? ` (${item.action})` : ""}${detail ? ` — ${detail}` : ""}`;
+
+  async function turnIntoGoal() {
+    setState("loading");
+    setError(null);
+    try {
+      const res = await fetch("/api/growth-advisor/create-goal-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recommendationText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      setState("done");
+    } catch (err: any) {
+      setError(err.message);
+      setState("idle");
+    }
+  }
+
+  return (
+    <div className="bg-slate-200 rounded-lg p-2.5 text-sm text-slate-700 space-y-1.5">
+      {typeof item === "string" ? item : (
+        <>
+          {label && <p className="font-semibold text-slate-800">{label} {item.action && <span className="text-xs text-brand-500">({item.action})</span>}</p>}
+          <p className="text-xs text-slate-500">{detail || JSON.stringify(item)}</p>
+        </>
+      )}
+      <div className="flex items-center justify-end gap-2">
+        {state === "done" ? (
+          <span className="text-xs text-green-500 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Drafted — review at Tasks</span>
+        ) : (
+          <button onClick={turnIntoGoal} disabled={state === "loading"} className="text-xs text-brand-500 hover:text-brand-400 flex items-center gap-1 disabled:opacity-50">
+            <Target className="w-3.5 h-3.5" /> {state === "loading" ? "Drafting..." : "Turn into a tracked goal"}
+          </button>
+        )}
+      </div>
+      {error && <p className="text-[11px] text-red-400 text-right">{error}</p>}
+    </div>
+  );
 }

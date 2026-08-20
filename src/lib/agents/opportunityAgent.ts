@@ -132,7 +132,28 @@ async function detectCandidates(supabase: any, dealershipId: string): Promise<Ca
     });
   }
 
-  // 7. Affiliate commission owed — a relationship-maintenance signal;
+  // 7. P2 25a (Business Outcome Engine) — a goal past its own deadline
+  // and still active is a real outcome nothing was watching for
+  // before: goalOrchestrator.ts only reacts to task completion/
+  // failure, never to time simply running out.
+  const { data: overdueGoals } = await supabase
+    .from("goals")
+    .select("id, title, deadline")
+    .eq("dealership_id", dealershipId)
+    .eq("status", "active")
+    .not("deadline", "is", null)
+    .lt("deadline", new Date().toISOString());
+  for (const goal of overdueGoals ?? []) {
+    candidates.push({
+      type: "goal_overdue",
+      reference_id: goal.id,
+      title: `Goal "${goal.title}" is past its deadline`,
+      priority: "medium",
+      action_href: "/dashboard/tasks",
+    });
+  }
+
+  // 8. Affiliate commission owed — a relationship-maintenance signal;
   // unpaid commission sitting too long risks the affiliate losing
   // trust and stopping promotion.
   const { data: affiliates } = await supabase.from("affiliates").select("id, discount_code, commission_type, commission_rate, total_paid").eq("dealership_id", dealershipId).eq("status", "active").not("discount_code", "is", null);
