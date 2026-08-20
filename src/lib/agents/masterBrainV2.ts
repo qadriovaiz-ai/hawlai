@@ -949,15 +949,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         // manual process.
         const photoElement = { type: "image", src: photoUrl, left: 0, top: 0, scaleX: 0.9, scaleY: 0.9, selectable: true };
 
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 3000,
-            messages: [{
-              role: "user",
-              content: `You're designing an ad creative for "${product.name}" on a ${canvasWidth}x${canvasHeight} fabric.js canvas. A real product photo already covers most of the canvas as the first element (don't move or remove it):
+        const claudeResult = await callClaudeWithRetry({
+          model: "claude-sonnet-4-6",
+          max_tokens: 3000,
+          messages: [{
+            role: "user",
+            content: `You're designing an ad creative for "${product.name}" on a ${canvasWidth}x${canvasHeight} fabric.js canvas. A real product photo already covers most of the canvas as the first element (don't move or remove it):
 ${JSON.stringify(photoElement)}
 
 Add whatever additional fabric.js elements (type "i-text" for text with left/top/fontSize/fontFamily/fill/fontWeight, or "rect"/"circle" for badge shapes with left/top/width or radius/fill/rx for rounded corners) the instruction below asks for — badges, discount text, price, headline, etc. Position them so they don't cover the product's main subject, typically a corner or edge.
@@ -965,11 +962,10 @@ Add whatever additional fabric.js elements (type "i-text" for text with left/top
 Instruction: "${input.instruction}"
 
 Respond with ONLY the complete elements array as valid JSON (including the photo element unchanged as the first item) — no markdown, no explanation.`,
-            }],
-          }),
-        });
-        if (!response.ok) return { error: "Couldn't reach the design service — try again shortly." };
-        const data = await response.json();
+          }],
+        }, ctx.id);
+        if (!claudeResult.ok) return { error: "Couldn't reach the design service — try again shortly." };
+        const data = claudeResult.data;
         if (data.usage) await logClaudeUsage(supabase, ctx.id, "canvas_edit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
         const text = data.content?.[0]?.text ?? "";
         const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -993,15 +989,12 @@ Respond with ONLY the complete elements array as valid JSON (including the photo
         const design = designs?.[0];
         if (!design) return { error: input.designName ? `No design found matching "${input.designName}".` : "No designs exist yet — create one first in the Advanced Editor." };
 
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 4000,
-            messages: [{
-              role: "user",
-              content: `You're editing a fabric.js canvas design. Canvas is ${design.canvas_width}x${design.canvas_height}, background color ${design.background_color}.
+        const claudeResult = await callClaudeWithRetry({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4000,
+          messages: [{
+            role: "user",
+            content: `You're editing a fabric.js canvas design. Canvas is ${design.canvas_width}x${design.canvas_height}, background color ${design.background_color}.
 
 Current elements (fabric.js object JSON array — each has at least "type", "left", "top", and type-specific fields like "text"/"fontSize"/"fontFamily" for text, "fill"/"width"/"height" for rects, "fill"/"radius" for circles, "src" for images):
 ${JSON.stringify(design.elements)}
@@ -1009,11 +1002,10 @@ ${JSON.stringify(design.elements)}
 Instruction: "${input.instruction}"
 
 Apply ONLY the change(s) implied by the instruction. Preserve every field you're not intentionally changing, and preserve every element not mentioned. Never invent new elements unless the instruction explicitly asks to add something. Respond with ONLY the complete updated elements array as valid JSON — no markdown, no explanation, no preamble.`,
-            }],
-          }),
-        });
-        if (!response.ok) return { error: "Couldn't reach the editing service — try again shortly." };
-        const data = await response.json();
+          }],
+        }, ctx.id);
+        if (!claudeResult.ok) return { error: "Couldn't reach the editing service — try again shortly." };
+        const data = claudeResult.data;
         if (data.usage) await logClaudeUsage(supabase, ctx.id, "canvas_edit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
         const text = data.content?.[0]?.text ?? "";
         const jsonMatch = text.match(/\[[\s\S]*\]/);

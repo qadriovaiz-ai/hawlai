@@ -146,7 +146,17 @@ export function buildTextOverlaySvg(width: number, height: number, headline: str
 // Step 3: Meta Graph API helpers — token/ad-account come from the
 // calling dealership's own connection, not a shared env var.
 // ------------------------------------------------------------------
-export async function metaPost(path: string, params: Record<string, any>, token: string) {
+// Meta's documented transient error codes — service temporarily
+// unavailable / too-many-calls rate limits, not a real request
+// problem. HTTP 5xx is treated the same way. Deliberately capped to
+// ONE retry with a fixed short wait, same reasoning as
+// callClaudeWithRetry in masterBrainV2.ts: a rate limit isn't fixed by
+// hammering the endpoint again a few hundred ms later, and ad launch
+// already makes 5 sequential calls (image, creative, campaign, adset,
+// ad) — every extra attempt here multiplies across all of them.
+const META_RETRYABLE_ERROR_CODES = new Set([1, 2, 4, 17, 613]);
+
+export async function metaPost(path: string, params: Record<string, any>, token: string, _attempt = 0): Promise<any> {
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -155,6 +165,11 @@ export async function metaPost(path: string, params: Record<string, any>, token:
   const data = await res.json();
   if (!res.ok || data.error) {
     const e = data.error ?? {};
+    const isTransient = res.status >= 500 || META_RETRYABLE_ERROR_CODES.has(e.code);
+    if (isTransient && _attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return metaPost(path, params, token, _attempt + 1);
+    }
     throw new Error(`[${path}] ${e.message ?? "Meta API error"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}${e.error_subcode ? ` (subcode ${e.error_subcode})` : ""}`);
   }
   return data;
