@@ -405,7 +405,7 @@ const TOOLS = [
   },
   {
     name: "set_goal",
-    description: "Turn a high-level goal into a real, tracked plan — decomposes it into 2-5 concrete tasks (a mix of tasks assigned to team members and tasks the AI will execute itself later) and saves both the goal and its tasks. Use when the person states an ambition or target rather than a single specific action (e.g. 'grow leads 20% this quarter', 'get our brand more visible before Diwali') — not for a single concrete request another tool already handles directly.",
+    description: "Turn a high-level goal into a DRAFT plan — decomposes it into 2-5 concrete tasks (a mix of tasks assigned to team members and tasks the AI will execute itself later) and saves it as a draft for the person to review. Nothing is actually created yet — they confirm it at Tasks before any real task/assignment exists. Use when the person states an ambition or target rather than a single specific action (e.g. 'grow leads 20% this quarter', 'get our brand more visible before Diwali') — not for a single concrete request another tool already handles directly.",
     input_schema: {
       type: "object",
       properties: {
@@ -1039,55 +1039,40 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       const availableRoles = Array.from(new Set(ctx.team.map((t) => t.role)));
       const plan = await decomposeGoal(input.goalText, ctx.name, ctx.category, availableRoles, { supabase, dealershipId: ctx.id });
       if (!plan) return { error: "Couldn't work out a plan for that — try being more specific about what you want to achieve." };
+      if (!plan.tasks || plan.tasks.length === 0) return { error: "Couldn't come up with any concrete tasks for that goal — try being more specific." };
 
-      // Service client for every write here, same reasoning as the
-      // propose_campaign_* tools (11a): goals/agent_tasks RLS is
-      // owner-only, and tasks' insert would hit that same wall for a
-      // non-owner team member using the plain session-scoped client
-      // (a pre-existing gap in assign_task itself, not something this
-      // tool should inherit).
+      // P2 28a (Sandbox Mode) — drafted only, nothing real created yet.
+      // Previously this committed the plan immediately with no review
+      // step, unlike everything else in this codebase (ad drafts,
+      // approvals). Now it's a goals row with status 'draft' and the
+      // plan stashed in proposed_tasks — /api/goals/[id]/confirm is
+      // what actually creates the tasks/agent_tasks rows.
+      //
+      // Service client: goals RLS is owner-only, same reasoning as the
+      // propose_campaign_* tools (11a).
       const { createServiceClient } = await import("../supabase/service");
       const serviceClient = createServiceClient();
 
       const { data: goal, error: goalError } = await serviceClient.from("goals").insert({
         dealership_id: ctx.id,
+        status: "draft",
         title: plan.title,
         description: plan.description,
         target_metric: plan.target_metric,
         target_value: plan.target_value,
         deadline: plan.deadline,
+        proposed_tasks: plan.tasks,
         created_by: "master_chat_tool:set_goal",
       }).select("id").single();
       if (goalError) return { error: goalError.message };
 
-      let humanTasksCreated = 0;
-      let agentTasksCreated = 0;
-      const skipped: string[] = [];
-      for (const task of plan.tasks) {
-        if (task.type === "human") {
-          const match = ctx.team.find((t) => t.role === task.role);
-          if (!match) { skipped.push(task.title); continue; }
-          const { error } = await serviceClient.from("tasks").insert({
-            dealership_id: ctx.id, goal_id: goal.id, title: task.title, brief: task.brief,
-            assigned_to: match.id, assigned_role: task.role, created_by: null, status: "open",
-          });
-          if (!error) humanTasksCreated++;
-        } else {
-          const { error } = await serviceClient.from("agent_tasks").insert({
-            dealership_id: ctx.id, goal_id: goal.id, action_type: "generate_content",
-            action_details: { contentType: task.contentType, topic: task.topic, businessName: ctx.name, businessCategory: ctx.category, toneOfVoice: ctx.toneOfVoice },
-            title: task.title, created_by: "master_chat_tool:set_goal",
-          });
-          if (!error) agentTasksCreated++;
-        }
-      }
-
-      const totalTasks = humanTasksCreated + agentTasksCreated;
+      const humanCount = plan.tasks.filter((t: any) => t.type === "human").length;
+      const agentCount = plan.tasks.filter((t: any) => t.type === "agent").length;
       const parts: string[] = [];
-      if (humanTasksCreated > 0) parts.push(`${humanTasksCreated} assigned to the team`);
-      if (agentTasksCreated > 0) parts.push(`${agentTasksCreated} the AI will generate automatically (usually within a couple minutes)`);
-      const note = `Goal "${plan.title}" created with ${totalTasks} task${totalTasks === 1 ? "" : "s"}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}.${skipped.length > 0 ? ` Skipped — no one holds that role yet: ${skipped.join(", ")}.` : ""}`;
-      return { success: true, goalId: goal.id, goalTitle: plan.title, humanTasksCreated, agentTasksCreated, skipped, note };
+      if (humanCount > 0) parts.push(`${humanCount} assigned to the team`);
+      if (agentCount > 0) parts.push(`${agentCount} the AI would generate`);
+      const note = `Drafted a plan for "${plan.title}" — ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}. Nothing's real yet — review and confirm it at Tasks before anything's created.`;
+      return { success: true, goalId: goal.id, goalTitle: plan.title, taskCount: plan.tasks.length, note };
     }
     case "assign_lead": {
       const salesRep = ctx.team.find((t) => t.email === input.salesRepEmail && t.role === "sales");
@@ -1433,7 +1418,7 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
     case "assign_task":
       return { kind: "record", label: "Task assigned", summary: result.note, departmentHref };
     case "set_goal":
-      return { kind: "record", label: `Goal: ${result.goalTitle}`, summary: result.note, departmentHref };
+      return { kind: "record", label: `Draft plan: ${result.goalTitle}`, summary: result.note, departmentHref };
     case "assign_lead":
       return { kind: "record", label: "Lead reassigned", summary: result.note, departmentHref };
     case "add_lead":
