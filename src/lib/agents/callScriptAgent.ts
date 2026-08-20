@@ -21,12 +21,23 @@ function formatKnowledgeFacts(facts?: KnowledgeFact[] | null): string {
   return `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${lines}\n`;
 }
 
+// Distinct from qualificationReason (a single field set once at
+// qualification time) — this is the growing list of discrete past
+// events for this specific lead (prior call outcomes, conversion
+// insights), from business_memory.
+function formatPastInsights(insights?: string[] | null): string {
+  if (!insights || insights.length === 0) return "";
+  const lines = insights.map((i) => `- ${i}`).join("\n");
+  return `\nWhat's happened with this lead before, from past calls/interactions (real history, weigh it — don't repeat something they already said no to):\n${lines}\n`;
+}
+
 interface CallScriptContext {
   dealershipName: string;
   businessCategory: string;
   toneOfVoice?: string | null;
   leadName: string;
   qualificationReason?: string | null; // from a prior interaction, if any — real context, not invented
+  pastInsights?: string[] | null; // business_memory rows for this specific lead (P1 4a)
   customInstructions?: string | null; // dealerships.custom_call_instructions — owner-written, appended verbatim
   knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
   canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
@@ -54,6 +65,7 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
     : "";
 
   const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
+  const insightsBlock = formatPastInsights(ctx.pastInsights);
 
   // Only claim the booking capability when it's actually attached to
   // this call's assistant config — see canBookAppointments's doc
@@ -94,7 +106,7 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}${refundLine}
+${customLine}${factsBlock}${insightsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}${refundLine}
 Your goals on this call:
 1. Confirm you're speaking with the right person, briefly and naturally.
 2. Understand what they're looking for or what stopped them from moving forward.
