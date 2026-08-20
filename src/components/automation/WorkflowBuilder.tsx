@@ -10,11 +10,26 @@ const TRIGGERS = [
   { key: "appointment_booked", label: "Appointment Booked" },
 ];
 
+// P1 7a — the only other real action alongside email today. Kept as a
+// small fixed list here rather than importing contentMarketingAgent's
+// full CONTENT_TYPES (15+ entries) — same curated-subset reasoning as
+// goalPlanningAgent.ts's VALID_CONTENT_TYPES.
+const CONTENT_TYPES = [
+  { key: "instagram_post", label: "Instagram Post" },
+  { key: "facebook_post", label: "Facebook Post" },
+  { key: "linkedin_post", label: "LinkedIn Post" },
+  { key: "blog_post", label: "Blog Post" },
+  { key: "email_newsletter", label: "Email Newsletter" },
+];
+
 interface StepDraft {
   delayDays: number;
+  actionType: "send_email" | "queue_content";
   emailTaskType: string;
   customSubject: string;
   customBody: string;
+  contentType: string;
+  contentTopic: string;
 }
 
 export default function WorkflowBuilder() {
@@ -23,7 +38,7 @@ export default function WorkflowBuilder() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [name, setName] = useState("");
   const [triggerType, setTriggerType] = useState(TRIGGERS[0].key);
-  const [steps, setSteps] = useState<StepDraft[]>([{ delayDays: 0, emailTaskType: "welcome_email", customSubject: "", customBody: "" }]);
+  const [steps, setSteps] = useState<StepDraft[]>([{ delayDays: 0, actionType: "send_email", emailTaskType: "welcome_email", customSubject: "", customBody: "", contentType: CONTENT_TYPES[0].key, contentTopic: "" }]);
   const [saving, setSaving] = useState(false);
 
   function loadWorkflows() {
@@ -32,7 +47,7 @@ export default function WorkflowBuilder() {
   useEffect(loadWorkflows, []);
 
   function addStep() {
-    setSteps([...steps, { delayDays: steps.length === 0 ? 0 : 3, emailTaskType: "follow_up", customSubject: "", customBody: "" }]);
+    setSteps([...steps, { delayDays: steps.length === 0 ? 0 : 3, actionType: "send_email", emailTaskType: "follow_up", customSubject: "", customBody: "", contentType: CONTENT_TYPES[0].key, contentTopic: "" }]);
   }
   function removeStep(i: number) {
     setSteps(steps.filter((_, idx) => idx !== i));
@@ -51,7 +66,7 @@ export default function WorkflowBuilder() {
         body: JSON.stringify({ name, triggerType, steps }),
       });
       setName("");
-      setSteps([{ delayDays: 0, emailTaskType: "welcome_email", customSubject: "", customBody: "" }]);
+      setSteps([{ delayDays: 0, actionType: "send_email", emailTaskType: "welcome_email", customSubject: "", customBody: "", contentType: CONTENT_TYPES[0].key, contentTopic: "" }]);
       setShowBuilder(false);
       loadWorkflows();
     } finally {
@@ -83,7 +98,7 @@ export default function WorkflowBuilder() {
       </div>
 
       <div className="bg-amber-500/10 border border-amber-700/40 rounded-lg p-3 text-xs text-amber-800">
-        Runs once daily. Only Email steps send automatically here — WhatsApp still needs a tap-to-send (see WhatsApp Marketing), and SMS isn't connected. Enabling a workflow is your approval for every email it sends.
+        Runs once daily. Email and Generate Content steps run automatically here — WhatsApp still needs a tap-to-send (see WhatsApp Marketing), and SMS isn't connected. Enabling a workflow is your approval for every email it sends and every piece of content it generates.
       </div>
 
       {showBuilder && (
@@ -113,14 +128,34 @@ export default function WorkflowBuilder() {
                     {steps.length > 1 && <button onClick={() => removeStep(i)} className="text-red-400 hover:text-red-500 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>}
                   </div>
                 </div>
-                <Select value={step.emailTaskType} onChange={(e) => updateStep(i, "emailTaskType", e.target.value)} className="text-xs">
-                  {EMAIL_TASKS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  <option value="custom">Custom message</option>
-                </Select>
-                {step.emailTaskType === "custom" && (
+                <div className="flex gap-1.5">
+                  <button onClick={() => updateStep(i, "actionType", "send_email")} className={`flex-1 text-xs px-2 py-1.5 rounded-lg border ${step.actionType === "send_email" ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
+                    Send Email
+                  </button>
+                  <button onClick={() => updateStep(i, "actionType", "queue_content")} className={`flex-1 text-xs px-2 py-1.5 rounded-lg border ${step.actionType === "queue_content" ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-200 border-slate-300 text-slate-600"}`}>
+                    Generate Content
+                  </button>
+                </div>
+
+                {step.actionType === "queue_content" ? (
                   <>
-                    <Input value={step.customSubject} onChange={(e) => updateStep(i, "customSubject", e.target.value)} placeholder="Subject" className="text-xs" />
-                    <Textarea value={step.customBody} onChange={(e) => updateStep(i, "customBody", e.target.value)} placeholder="Email body" rows={3} className="text-xs" />
+                    <Select value={step.contentType} onChange={(e) => updateStep(i, "contentType", e.target.value)} className="text-xs">
+                      {CONTENT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                    </Select>
+                    <Input value={step.contentTopic} onChange={(e) => updateStep(i, "contentTopic", e.target.value)} placeholder="Topic, e.g. 'our Diwali sale'" className="text-xs" />
+                  </>
+                ) : (
+                  <>
+                    <Select value={step.emailTaskType} onChange={(e) => updateStep(i, "emailTaskType", e.target.value)} className="text-xs">
+                      {EMAIL_TASKS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                      <option value="custom">Custom message</option>
+                    </Select>
+                    {step.emailTaskType === "custom" && (
+                      <>
+                        <Input value={step.customSubject} onChange={(e) => updateStep(i, "customSubject", e.target.value)} placeholder="Subject" className="text-xs" />
+                        <Textarea value={step.customBody} onChange={(e) => updateStep(i, "customBody", e.target.value)} placeholder="Email body" rows={3} className="text-xs" />
+                      </>
+                    )}
                   </>
                 )}
               </div>

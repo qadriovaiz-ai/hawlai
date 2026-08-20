@@ -275,9 +275,12 @@ const TOOLS = [
             type: "object",
             properties: {
               delayDays: { type: "number" },
-              emailTaskType: { type: "string", description: `One of: ${EMAIL_TASKS.map((t) => t.key).join(", ")}, or 'custom'` },
+              actionType: { type: "string", enum: ["send_email", "queue_content"], description: "send_email sends an email step (existing behavior). queue_content queues the AI to generate a piece of content instead — the only other real action today, WhatsApp/SMS aren't connected." },
+              emailTaskType: { type: "string", description: `Only for actionType 'send_email'. One of: ${EMAIL_TASKS.map((t) => t.key).join(", ")}, or 'custom'` },
               customSubject: { type: "string" },
               customBody: { type: "string" },
+              contentType: { type: "string", description: "Only for actionType 'queue_content'. One of: instagram_post, facebook_post, linkedin_post, blog_post, email_newsletter" },
+              contentTopic: { type: "string", description: "Only for actionType 'queue_content'. The specific topic to generate content about." },
             },
           },
         },
@@ -778,7 +781,9 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       if (wError) return { error: wError.message };
       const stepRows = (input.steps ?? []).map((s: any, i: number) => ({
         workflow_id: workflow.id, step_order: i, delay_days: s.delayDays ?? 0,
+        action_type: s.actionType ?? "send_email",
         email_task_type: s.emailTaskType ?? "custom", custom_subject: s.customSubject ?? null, custom_body: s.customBody ?? null,
+        content_type: s.contentType ?? null, content_topic: s.contentTopic ?? null,
       }));
       if (stepRows.length > 0) await supabase.from("workflow_steps").insert(stepRows);
       return { success: true, workflowId: workflow.id, enabled: !!input.enableNow };

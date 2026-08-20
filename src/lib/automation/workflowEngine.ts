@@ -24,6 +24,13 @@ async function getTriggeredLeads(supabase: any, dealershipId: string, workflow: 
     return (data ?? []).map((l: any) => ({ leadId: l.id, email: l.email, name: l.name, triggerDate: l.created_at }));
   }
 
+  // P1 7a — lead_converted lands once leads.converted_at exists
+  // (migration 134, pending confirmation) — leads has no updated_at
+  // today, and using created_at here would silently make delay_days
+  // meaningless for this trigger (every converted lead's created_at
+  // is already in the past, so every step would compute as
+  // immediately due regardless of when it actually converted).
+
   if (workflow.trigger_type === "appointment_booked") {
     // !inner + dot-path filter so the DND check applies to the joined
     // lead row, not the appointment itself — appointments has no
@@ -52,7 +59,7 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
     .select("dealership_name, business_category, gmail_email")
     .eq("id", dealershipId)
     .single();
-  if (!dealership?.gmail_email) return { stepsSent: 0, skipped: "gmail not connected" };
+  if (!dealership) return { stepsSent: 0, skipped: "no dealership" };
 
   const { data: workflows } = await supabase
     .from("workflows")
@@ -88,6 +95,36 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
         const dueDate = new Date(lead.triggerDate);
         dueDate.setDate(dueDate.getDate() + (step.delay_days ?? 0));
         if (new Date() < dueDate) break; // not due yet — and later steps are due even later, so stop here for this lead
+
+        // P1 7a — queue_content queues the AI to generate a piece of
+        // content instead of emailing this specific lead. Not
+        // personalized per-lead (content_pieces has no lead
+        // reference) — the topic is set by whoever built the
+        // workflow, same simplicity as a custom email's fixed text.
+        if (step.action_type === "queue_content") {
+          if (!step.content_type) break; // misconfigured step — nothing sensible to queue
+          const { error: taskError } = await supabase.from("agent_tasks").insert({
+            dealership_id: dealershipId,
+            action_type: "generate_content",
+            action_details: {
+              contentType: step.content_type, topic: step.content_topic ?? "",
+              businessName: dealership.dealership_name ?? "our business",
+              businessCategory: dealership.business_category ?? "business",
+              toneOfVoice: brandProfile?.tone_of_voice ?? null,
+            },
+            title: `Workflow: ${workflow.name} — step ${step.step_order + 1}`,
+            created_by: `workflow:${workflow.id}`,
+          });
+          await supabase.from("workflow_step_runs").insert({
+            workflow_id: workflow.id, step_id: step.id, lead_id: lead.leadId,
+            success: !taskError, error: taskError?.message ?? null,
+          });
+          if (!taskError) stepsSent++;
+          if (taskError) break;
+          continue;
+        }
+
+        if (!dealership.gmail_email) break; // email step, but Gmail isn't connected — try again once it is
 
         let subject = step.custom_subject ?? "";
         let body = step.custom_body ?? "";

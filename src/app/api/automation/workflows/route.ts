@@ -66,9 +66,12 @@ export async function POST(request: Request) {
     workflow_id: workflow.id,
     step_order: i,
     delay_days: s.delayDays ?? 0,
+    action_type: s.actionType ?? "send_email",
     email_task_type: s.emailTaskType ?? "custom",
     custom_subject: s.customSubject ?? null,
     custom_body: s.customBody ?? null,
+    content_type: s.contentType ?? null,
+    content_topic: s.contentTopic ?? null,
   }));
   const { error: sError } = await supabase.from("workflow_steps").insert(stepRows);
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
