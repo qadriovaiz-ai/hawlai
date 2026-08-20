@@ -22,6 +22,11 @@ const SUBSYSTEM_LABELS: Record<string, string> = {
   churn_detection: "At-Risk Customer Detection",
   cold_lead_detection: "Cold Lead Detection",
   lead_scoring: "Lead Scoring",
+  stale_approvals: "Stale Approval Detection", // P1 19b
+  // P1 18b — not cron subsystems, but the same health shape applies:
+  // event_queue/agent_tasks track status directly on each row.
+  event_bus: "Event Bus",
+  task_queue: "Task Queue (Goals & Automations)",
 };
 
 export default function AutopilotCommandCenter() {
@@ -214,7 +219,7 @@ export default function AutopilotCommandCenter() {
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Activity className="w-4 h-4" /> Automation Health</p>
-          <span className="text-xs text-slate-400 flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Runs daily at 8:30 AM IST</span>
+          <span className="text-xs text-slate-400 flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Most run daily at 8:30 AM IST — Event Bus & Task Queue run every 2 min</span>
         </div>
         <div className="space-y-1.5">
           {Object.entries(SUBSYSTEM_LABELS).map(([key, label]) => {

@@ -38,6 +38,16 @@ export async function GET() {
     supabase.from("automation_run_log").select("subsystem, success, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
   ]);
 
+  // P1 18b — event_queue/agent_tasks track their own status directly
+  // on each row (no separate log table needed the way cron subsystems
+  // needed automation_run_log), so their health is computed straight
+  // from those tables and merged into the same automationHealth shape
+  // below rather than building a second, parallel health surface.
+  const [{ data: eventRows }, { data: taskRows }] = await Promise.all([
+    supabase.from("event_queue").select("status, processed_at, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).in("status", ["done", "failed"]).order("processed_at", { ascending: false }),
+    supabase.from("agent_tasks").select("status, completed_at, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).in("status", ["done", "failed"]).order("completed_at", { ascending: false }),
+  ]);
+
   const [{ data: replyLog }, { data: emailLog }, { data: contentLog }] = activityResults;
   const activity = [
     ...(replyLog ?? []).map((l: any) => ({ ...l, type: `Auto-reply (${l.channel})` })),
@@ -61,6 +71,23 @@ export async function GET() {
     lastSuccess: stats.lastSuccess,
     successRatePct: Math.round((stats.successCount / stats.total) * 100),
   }));
+
+  // Same {subsystem, lastRunAt, lastSuccess, successRatePct} shape as
+  // above, computed directly rather than via bySubsystem — rows arrive
+  // newest-first here too, so [0] is the most recent.
+  for (const [subsystem, rows, resolvedAtField] of [
+    ["event_bus", eventRows ?? [], "processed_at"],
+    ["task_queue", taskRows ?? [], "completed_at"],
+  ] as const) {
+    if (rows.length === 0) continue;
+    const successCount = rows.filter((r: any) => r.status === "done").length;
+    automationHealth.push({
+      subsystem,
+      lastRunAt: (rows[0] as any)[resolvedAtField] ?? rows[0].created_at,
+      lastSuccess: rows[0].status === "done",
+      successRatePct: Math.round((successCount / rows.length) * 100),
+    });
+  }
 
   return NextResponse.json({ dealership, workflows: workflows ?? [], activity, automationHealth });
 }

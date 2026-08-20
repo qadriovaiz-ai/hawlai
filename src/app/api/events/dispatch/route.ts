@@ -98,14 +98,22 @@ export async function POST(request: Request) {
       // P1 3a — only goal-linked tasks matter for the Orchestrator.
       if (task.goal_id) await emitEvent(supabase, { dealershipId: task.dealership_id, eventType: "task_completed", payload: { goalId: task.goal_id } });
     } catch (err: any) {
-      await supabase.from("agent_tasks").update({
-        status: "failed",
-        error: err.message,
-        attempts: (task.attempts ?? 0) + 1,
-        completed_at: new Date().toISOString(),
-      }).eq("id", task.id);
+      // P1 19b — capped at 3 total attempts, same "don't hammer a
+      // transient failure" reasoning as callClaudeWithRetry/metaPost
+      // (19a): a genuinely broken task won't fix itself by retrying
+      // faster, and each extra attempt multiplies across every pending
+      // task on every 2-minute run.
+      const attempts = (task.attempts ?? 0) + 1;
+      const willRetry = attempts < 3;
+      await supabase.from("agent_tasks").update(
+        willRetry
+          ? { status: "pending", error: err.message, attempts, scheduled_for: new Date(Date.now() + 5 * 60 * 1000).toISOString() }
+          : { status: "failed", error: err.message, attempts, completed_at: new Date().toISOString() }
+      ).eq("id", task.id);
       tasksFailed++;
-      if (task.goal_id) await emitEvent(supabase, { dealershipId: task.dealership_id, eventType: "task_failed", payload: { goalId: task.goal_id, taskTitle: task.title, error: err.message } });
+      // Only notify on terminal failure — a transient hiccup that
+      // self-heals on retry shouldn't page the owner.
+      if (!willRetry && task.goal_id) await emitEvent(supabase, { dealershipId: task.dealership_id, eventType: "task_failed", payload: { goalId: task.goal_id, taskTitle: task.title, error: err.message } });
     }
   }
 

@@ -13,6 +13,7 @@ import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
 import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
 import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
 import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
+import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runAndLog } from "@/lib/automation/runAndLog";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
     results[dealership.id].atRiskNotifications = await runAndLog(supabase, dealership.id, "churn_detection", () => notifyAtRiskCustomers(supabase, dealership.id));
     results[dealership.id].coldLeadNotifications = await runAndLog(supabase, dealership.id, "cold_lead_detection", () => notifyColdLeads(supabase, dealership.id));
     results[dealership.id].leadScores = await runAndLog(supabase, dealership.id, "lead_scoring", () => scoreActiveLeads(supabase, dealership.id));
+    results[dealership.id].staleApprovals = await runAndLog(supabase, dealership.id, "stale_approvals", () => checkStalePendingApprovals(supabase, dealership.id));
   }
 
   return NextResponse.json({ ranAt: new Date().toISOString(), dealerships: dealerships?.length ?? 0, results });
