@@ -1,4 +1,5 @@
 import { generateAutoReply } from "@/lib/agents/socialManagementAgent";
+import { resolveDmLead } from "@/lib/leads/dmLeadLinking";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -124,8 +125,16 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
         success = false;
         errorMsg = err.message;
       }
+      // P2 27a-iii — attributes every DM to a real lead (a "DM-only"
+      // lead when no phone is ever volunteered), never left orphaned.
+      let leadId: string | null = null;
+      try {
+        leadId = await resolveDmLead(supabase, dealership.id, senderId, channel, text);
+      } catch (err: any) {
+        console.error("[auto-reply] resolveDmLead failed:", err.message);
+      }
       await supabase.from("auto_reply_log").insert({
-        dealership_id: dealership.id, channel: `dm_${channel}`, source_id: senderId,
+        dealership_id: dealership.id, channel: `dm_${channel}`, source_id: senderId, lead_id: leadId,
         incoming_text: text, reply_text: replyText, success, error: errorMsg,
       });
     }
