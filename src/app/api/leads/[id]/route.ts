@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { recordLeadOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
+import { emitEvent } from "@/lib/events/emitEvent";
 
 export async function PATCH(
   request: Request,
@@ -22,6 +23,9 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (body.status) await recordLeadOutcomeInsight(supabase, data);
+  if (body.status === "converted") {
+    await emitEvent(supabase, { dealershipId: data.dealership_id, eventType: "lead_converted", payload: { leadId: data.id, leadName: data.name } });
+  }
   return NextResponse.json(data);
 }
 

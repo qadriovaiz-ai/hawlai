@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { recordLeadOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 import { resolveActiveMembership } from "@/lib/teamMembership";
+import { emitEvent } from "@/lib/events/emitEvent";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -32,5 +33,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data, error } = await service.from("leads").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (update.status) await recordLeadOutcomeInsight(service, data);
+  if (update.status === "converted") {
+    await emitEvent(service, { dealershipId: data.dealership_id, eventType: "lead_converted", payload: { leadId: data.id, leadName: data.name } });
+  }
   return NextResponse.json({ success: true });
 }
