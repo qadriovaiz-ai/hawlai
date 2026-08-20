@@ -7,6 +7,7 @@ import { buildInboundSystemPrompt, buildInboundFirstMessage } from "@/lib/agents
 import { getBusinessContext, handleVapiToolCalls } from "@/lib/businessBrain";
 import { recordCallOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 import { emitNotification } from "@/lib/notifications/emit";
+import { resolveInboundCallLead } from "@/lib/leads/inboundCallLeadLinking";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
@@ -34,11 +35,33 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  const { data: callRecord } = await supabase.from("calls").select("id, lead_id, dealership_id").eq("vapi_call_id", vapiCallId).maybeSingle();
+  let callRecord = (await supabase.from("calls").select("id, lead_id, dealership_id").eq("vapi_call_id", vapiCallId).maybeSingle()).data;
   // Fall back to the metadata leadId if we somehow don't have a local
   // row yet (shouldn't normally happen — the row is created at the
   // moment the call is triggered).
-  const resolvedLeadId = callRecord?.lead_id ?? leadId;
+  let resolvedLeadId = callRecord?.lead_id ?? leadId;
+
+  // P2 27a-iv — INBOUND calls previously created nothing at all
+  // (no calls row, no lead lookup) and just bailed out here, since
+  // they have neither a pre-existing callRecord nor outbound
+  // metadata. Dormant/untested until DLT registration provisions a
+  // real dedicated number — see inboundCallLeadLinking.ts's header.
+  if (!resolvedLeadId) {
+    const phoneNumberId: string | undefined = message.phoneNumber?.id ?? message.call?.phoneNumberId;
+    const { data: dealership } = phoneNumberId
+      ? await supabase.from("dealerships").select("id").eq("vapi_phone_number_id", phoneNumberId).maybeSingle()
+      : { data: null };
+    if (dealership) {
+      const callerPhone: string | null = message.call?.customer?.number ?? null;
+      const lead = await resolveInboundCallLead(supabase, dealership.id, callerPhone);
+      const { data: newCallRecord } = await supabase.from("calls").insert({
+        dealership_id: dealership.id, lead_id: lead.id, vapi_call_id: vapiCallId, status: "completed",
+      }).select("id, lead_id, dealership_id").single();
+      callRecord = newCallRecord;
+      resolvedLeadId = lead.id;
+    }
+  }
+
   if (!resolvedLeadId) return NextResponse.json({ received: true });
 
   const transcript: string = message.artifact?.transcript ?? message.transcript ?? "";
