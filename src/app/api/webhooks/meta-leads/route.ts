@@ -121,7 +121,20 @@ export async function POST(request: Request) {
             .gte("created_at", thirtyDaysAgo)
             .maybeSingle();
           if (existingLead) {
-            console.log("[meta-leads] Skipping duplicate lead for phone:", phone);
+            // P2 27a-i — merge instead of silently dropping: a repeat
+            // submission often carries fresher info (a different
+            // vehicle interest, a budget not given the first time)
+            // that was previously lost entirely. Doesn't touch status
+            // (never regress a lead that's already progressed in the
+            // pipeline) and doesn't re-fire the new-lead side effects
+            // below (touchpoint, hot-lead alert, auto-call) — those
+            // already ran for the original submission.
+            await supabase.from("leads").update({
+              name, email, vehicle, budget,
+              ai_score: qualification.score, lead_temperature: qualification.temperature, qualification_reason: qualification.reason,
+              meta_campaign_id: metaCampaignId, meta_ad_id: metaAdId,
+            }).eq("id", existingLead.id);
+            console.log("[meta-leads] Merged duplicate lead for phone:", phone);
             continue;
           }
         }

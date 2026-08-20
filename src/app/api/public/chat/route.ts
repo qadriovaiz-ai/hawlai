@@ -44,22 +44,29 @@ export async function POST(request: Request) {
     { supabase, dealershipId: page.dealership_id }
   );
 
-  // Real CRM update — only when the visitor volunteered both a name
-  // and phone number in the conversation (never fabricated). Matches
-  // an existing lead by phone so a returning visitor doesn't create
-  // duplicates, same pattern as the public booking endpoint.
+  // Real CRM update — only when the visitor volunteered a name and at
+  // least one real identity signal (never fabricated). P2 27a-ii —
+  // previously required phone specifically, so a visitor who only
+  // gave an email was never captured at all. Matches an existing lead
+  // by phone first (the stronger signal), falling back to email only
+  // when no phone was given — never both loosely, to avoid a false
+  // match on a mistyped/shared email.
   let leadCaptured = false;
-  if (leadCapture?.phone) {
-    const { data: existing } = await supabase
-      .from("leads")
-      .select("id")
-      .eq("dealership_id", page.dealership_id)
-      .eq("phone", leadCapture.phone)
-      .maybeSingle();
+  if (leadCapture?.phone || leadCapture?.email) {
+    let existing: { id: string } | null = null;
+    if (leadCapture.phone) {
+      const { data } = await supabase.from("leads").select("id").eq("dealership_id", page.dealership_id).eq("phone", leadCapture.phone).maybeSingle();
+      existing = data;
+    }
+    if (!existing && leadCapture.email) {
+      const { data } = await supabase.from("leads").select("id").eq("dealership_id", page.dealership_id).eq("email", leadCapture.email).maybeSingle();
+      existing = data;
+    }
 
     if (existing) {
       await supabase.from("leads").update({
         name: leadCapture.name,
+        phone: leadCapture.phone ?? undefined,
         email: leadCapture.email ?? undefined,
         qualification_reason: leadCapture.interest ?? undefined,
       }).eq("id", existing.id);
@@ -67,7 +74,7 @@ export async function POST(request: Request) {
       const { data: newLead } = await supabase.from("leads").insert({
         dealership_id: page.dealership_id,
         name: leadCapture.name,
-        phone: leadCapture.phone,
+        phone: leadCapture.phone ?? null,
         email: leadCapture.email ?? null,
         source: "ai_sales_agent",
         qualification_reason: leadCapture.interest ?? null,
