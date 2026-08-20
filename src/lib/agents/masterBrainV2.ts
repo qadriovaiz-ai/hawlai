@@ -44,7 +44,8 @@ import { generateGrowthOpportunities, generateBudgetRecommendations, generateExp
 import { generateInfluencerPlan } from "./influencerAgent";
 import { generateRetargetingCopy } from "./retargetingAgent";
 import { retrieveRelevantKnowledge } from "../knowledge/retrieveKnowledge";
-import { type BrandVoiceProfile, formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceProfile } from "./brandVoice";
+import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceProfile } from "./brandVoice";
+import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
 import { getCampaignPerformance } from "./analyticsAgent";
@@ -94,38 +95,16 @@ const TOOL_GENERATION_RESOURCE_MAP: Partial<Record<string, GenerationResource>> 
   build_website: "website_build",
 };
 
-interface DealershipCtx {
-  id: string;
-  name: string;
-  category: string;
-  city: string | null;
-  toneOfVoice: string | null;
-  brandVoice: BrandVoiceProfile | null;
-  team: { id: string; role: string; email: string }[];
-  memories: { id: string; category: string; insight: string }[];
-}
+// P1 5a — was a second, separate implementation of the same
+// dealerships/brand_profiles query getBusinessContext() (Business
+// Brain, the calling path's shared context module) already did, plus
+// its own team_members/business_memory fetches. Now just the chat-
+// specific type alias + a thin call into the one shared assembler,
+// per that file's own "chat as a fast-follow" migration comment.
+type DealershipCtx = BusinessContext;
 
 async function getContext(supabase: any, dealershipId: string): Promise<DealershipCtx> {
-  const [{ data: d }, { data: bp }, { data: team }, { data: memories }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
-    supabase.from("brand_profiles").select("tone_of_voice, brand_voice").eq("dealership_id", dealershipId).maybeSingle(),
-    supabase.from("team_members").select("id, role, email").eq("dealership_id", dealershipId).eq("status", "active"),
-    // Most recent 20 — an old, stale memory naturally falls out of
-    // context rather than the list growing unbounded forever. If this
-    // ever needs smarter pruning (e.g. relevance-based), that's a
-    // real future upgrade, not something guessed at here.
-    supabase.from("business_memory").select("id, category, insight").eq("dealership_id", dealershipId).order("created_at", { ascending: false }).limit(20),
-  ]);
-  return {
-    id: dealershipId,
-    name: d?.dealership_name ?? "the business",
-    category: d?.business_category ?? "business",
-    city: d?.city ?? null,
-    toneOfVoice: bp?.tone_of_voice ?? null,
-    brandVoice: bp?.brand_voice ?? null,
-    memories: memories ?? [],
-    team: team ?? [],
-  };
+  return getBusinessContext(supabase, dealershipId);
 }
 
 // ---- Tool definitions (Claude tool-use schema) ----
@@ -1706,7 +1685,17 @@ export async function runMasterBrainChat(
   const brandVoiceSection = formatBrandVoiceSection(ctx.brandVoice, ctx.toneOfVoice);
 
   const memorySection = ctx.memories.length > 0
-    ? `\n\n## What you've learned about this business over time\nThese are real, durable observations from past conversations and results — apply them naturally, the way a CMO who's worked here for months would, without announcing "per my memory" or listing them back:\n${ctx.memories.map((m) => `- [${m.category.replace(/_/g, " ")}] ${m.insight}`).join("\n")}`
+    ? `\n\n## What you've learned about this business over time\nThese are real, durable observations from past conversations and results — apply them naturally, the way a CMO who's worked here for months would, without announcing "per my memory" or listing them back:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}`
+    : "";
+
+  // P1 5a — business_knowledge (hours, pricing notes, policies, FAQs)
+  // was already reaching live calls via callScriptAgent.ts's own
+  // formatKnowledgeFacts, but chat had zero access to it before this
+  // shared getBusinessContext() migration — a real gap, not a
+  // deliberate scoping choice, now closed for free since ctx already
+  // carries it.
+  const businessFactsSection = ctx.knowledgeFacts.length > 0
+    ? `\n\n## Real facts about this business\nOwner-entered facts you can state with confidence — don't extend or guess beyond them:\n${ctx.knowledgeFacts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`
     : "";
 
   // Real semantic retrieval against a curated marketing knowledge base
@@ -1726,7 +1715,7 @@ export async function runMasterBrainChat(
   // fetched for this exact turn. Threaded into executeTool() below so
   // every real generation call gets the same grounding the orchestrator
   // itself reasons with.
-  const groundingContext = `${brandVoiceSection}${memorySection}${knowledgeSection}`;
+  const groundingContext = `${brandVoiceSection}${memorySection}${businessFactsSection}${knowledgeSection}`;
 
   const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}
 

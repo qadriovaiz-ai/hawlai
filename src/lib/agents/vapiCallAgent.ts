@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildDynamicSystemPrompt, buildFirstMessage } from "./callScriptAgent";
 import { getBusinessContext, getCallEnabledVapiTools } from "../businessBrain";
-import { getLeadMemory } from "../businessMemory/getLeadMemory";
 
 // Shared core of "trigger an AI call for this lead" — used by both the
 // manual "AI Call" button (via /api/calls/trigger, user-authenticated)
@@ -70,18 +69,19 @@ export async function triggerVapiCall(
   let dealershipCallConfig: { vapi_phone_number_id: string | null; vapi_assistant_id: string | null; custom_call_instructions: string | null; custom_first_message: string | null } | null = null;
   let leadRecord: { qualification_reason: string | null } | null = null;
   let businessCtx: Awaited<ReturnType<typeof getBusinessContext>> | null = null;
-  let pastInsights: string[] = [];
   try {
-    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes, pastInsightsRes] = await Promise.all([
-      getBusinessContext(serviceClient, lead.dealership_id),
+    // leadId scopes businessCtx.memories to this lead specifically
+    // (getLeadMemory, P1 4a) instead of the dealership-wide feed — one
+    // fetch through the shared assembler rather than a separate
+    // parallel call (P1 5a folded this in).
+    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes] = await Promise.all([
+      getBusinessContext(serviceClient, lead.dealership_id, lead.id),
       serviceClient.from("dealerships").select("vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
-      getLeadMemory(serviceClient, lead.dealership_id, lead.id),
     ]);
     businessCtx = businessCtxRes;
     dealershipCallConfig = dealershipCallConfigRes.data;
     leadRecord = leadRecordRes.data;
-    pastInsights = pastInsightsRes;
   } catch (err: any) {
     console.error("[vapi-call] failed loading dealership context, falling back to platform defaults:", err.message);
   }
@@ -112,7 +112,7 @@ export async function triggerVapiCall(
         toneOfVoice: businessCtx.toneOfVoice,
         leadName: lead.name,
         qualificationReason: leadRecord?.qualification_reason,
-        pastInsights,
+        pastInsights: businessCtx.memories,
         customInstructions: dealershipCallConfig?.custom_call_instructions,
         knowledgeFacts: businessCtx.knowledgeFacts,
         canBookAppointments: callToolNames.includes("create_appointment"),
