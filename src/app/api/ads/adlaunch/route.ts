@@ -260,6 +260,14 @@ export async function POST(request: Request) {
         meta_campaign_id: campaignRes.id,
         meta_adset_id: adsetRes.id,
         meta_status: "PAUSED",
+        // Dual-write during the multi-platform transition (migration
+        // 140) — meta_* stays authoritative for existing Meta code,
+        // external_* is what new/generic code reads.
+        platform: "meta",
+        external_ad_id: adRes.id,
+        external_campaign_id: campaignRes.id,
+        external_adset_id: adsetRes.id,
+        external_status: "PAUSED",
         daily_budget: plan.daily_budget ?? 500,
         targeting_city: plan.targeting_city ?? null,
         scheduled_start: scheduled_start ? new Date(scheduled_start).toISOString() : null,

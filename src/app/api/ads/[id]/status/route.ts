@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { getValidGoogleAdsAccessToken, setGoogleCampaignStatus } from "@/lib/ads/googleAds";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -27,17 +28,25 @@ export async function PATCH(
   // RLS makes sure this creative actually belongs to this dealer's dealership.
   const { data: creative, error: fetchError } = await supabase
     .from("ad_creatives")
-    .select("id, meta_ad_id, dealership_id, daily_budget, headline")
+    .select("id, meta_ad_id, dealership_id, daily_budget, headline, platform, external_campaign_id, external_ad_id")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();
 
   if (fetchError || !creative) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
-  if (!creative.meta_ad_id) return NextResponse.json({ error: "This ad hasn't been launched on Meta yet" }, { status: 400 });
+
+  // P3 piece 6 — multi-platform. The approval gating below is platform-
+  // agnostic on purpose: it's about money and authority, not about
+  // which ad network. Only the actual API call at the end branches.
+  const platform = creative.platform ?? "meta";
+  const externalId = platform === "meta" ? creative.meta_ad_id : creative.external_campaign_id;
+  if (!externalId) {
+    return NextResponse.json({ error: `This ad hasn't been launched on ${platform === "meta" ? "Meta" : platform} yet` }, { status: 400 });
+  }
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, owner_id, approval_threshold")
+    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id")
     .eq("id", dealershipId)
     .single();
 
@@ -87,6 +96,39 @@ export async function PATCH(
     }
   }
 
+  if (platform === "google") {
+    if (!dealership?.google_ads_refresh_token || !dealership?.google_ads_customer_id) {
+      return NextResponse.json({ error: "Google Ads isn't connected" }, { status: 400 });
+    }
+    try {
+      const creds = {
+        accessToken: dealership.google_ads_access_token ?? "",
+        refreshToken: dealership.google_ads_refresh_token,
+        tokenExpiry: dealership.google_ads_token_expiry,
+        customerId: String(dealership.google_ads_customer_id).replace(/-/g, ""),
+      };
+      const { accessToken, refreshed } = await getValidGoogleAdsAccessToken(creds);
+      if (refreshed) {
+        await createServiceClient().from("dealerships").update({
+          google_ads_access_token: refreshed.accessToken,
+          google_ads_token_expiry: refreshed.expiry,
+        }).eq("id", dealershipId);
+      }
+      // Google's own vocabulary is ENABLED/PAUSED, not ACTIVE/PAUSED.
+      await setGoogleCampaignStatus(creds, accessToken, creative.external_campaign_id!, status === "ACTIVE" ? "ENABLED" : "PAUSED");
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+
+    const { data: updated } = await supabase
+      .from("ad_creatives")
+      .update({ external_status: status })
+      .eq("id", id)
+      .select()
+      .single();
+    return NextResponse.json(updated);
+  }
+
   const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
@@ -107,9 +149,12 @@ export async function PATCH(
     );
   }
 
+  // Dual-write during the multi-platform transition (migration 140):
+  // meta_status stays authoritative for existing Meta code paths,
+  // external_status is what new/generic code reads.
   const { data: updated } = await supabase
     .from("ad_creatives")
-    .update({ meta_status: status })
+    .update({ meta_status: status, external_status: status })
     .eq("id", id)
     .select()
     .single();
