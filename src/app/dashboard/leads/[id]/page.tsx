@@ -7,6 +7,7 @@ import AddToQueueButton from "@/components/leads/AddToQueueButton";
 import CreateAppointmentModal from "@/components/appointments/CreateAppointmentModal";
 import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
 import LeadCrmPanel from "@/components/leads/LeadCrmPanel";
+import LeadPrivacyActions from "@/components/leads/LeadPrivacyActions";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DndOptOutToggle from "@/components/leads/DndOptOutToggle";
 
@@ -196,6 +197,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         <p className="text-sm font-semibold text-slate-700 mb-3">CRM</p>
         <LeadCrmPanel leadId={lead.id} initialDealValue={lead.deal_value ?? null} />
       </div>
+
+      <LeadPrivacyActions leadId={lead.id} leadName={lead.name} />
     </div>
   );
 }
