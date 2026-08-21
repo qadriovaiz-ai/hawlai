@@ -8,6 +8,7 @@ import { getBusinessContext, handleVapiToolCalls } from "@/lib/businessBrain";
 import { recordCallOutcomeInsight } from "@/lib/businessMemory/outcomeInsights";
 import { emitNotification } from "@/lib/notifications/emit";
 import { resolveInboundCallLead } from "@/lib/leads/inboundCallLeadLinking";
+import { resolvePersona } from "@/lib/agents/personas";
 
 // Vapi's "Server URL" webhook — configured once in the Vapi dashboard
 // (Assistant or Phone Number settings) to point here. Fires on several
@@ -196,9 +197,10 @@ async function handleAssistantRequest(message: any): Promise<NextResponse> {
     // a negligible cost on a path that's dormant until real dedicated
     // numbers are provisioned, traded for staying on the same shared
     // module the outbound path uses (see vapiCallAgent.ts).
-    const [assistantRes, businessCtx] = await Promise.all([
+    const [assistantRes, businessCtx, persona] = await Promise.all([
       fetch(`https://api.vapi.ai/assistant/${assistantId}`, { headers: { Authorization: `Bearer ${apiKey}` } }),
       getBusinessContext(supabase, dealership.id),
+      resolvePersona(supabase, dealership.id, "call_inbound"),
     ]);
     const baseAssistant = assistantRes.ok ? await assistantRes.json() : null;
     if (!baseAssistant) return NextResponse.json({ assistantId });
@@ -208,6 +210,7 @@ async function handleAssistantRequest(message: any): Promise<NextResponse> {
       businessCategory: businessCtx.category,
       toneOfVoice: businessCtx.toneOfVoice,
       knowledgeFacts: businessCtx.knowledgeFacts,
+      personaGoals: persona.goals, // P3 piece 5 — defaults to receptionist
     });
     const firstMessage = buildInboundFirstMessage(businessCtx.name);
 

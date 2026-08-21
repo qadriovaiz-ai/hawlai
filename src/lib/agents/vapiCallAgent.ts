@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildDynamicSystemPrompt, buildFirstMessage } from "./callScriptAgent";
 import { getBusinessContext, getCallEnabledVapiTools } from "../businessBrain";
+import { AGENT_PERSONAS, resolvePersona } from "./personas";
 
 // Shared core of "trigger an AI call for this lead" — used by both the
 // manual "AI Call" button (via /api/calls/trigger, user-authenticated)
@@ -69,19 +70,24 @@ export async function triggerVapiCall(
   let dealershipCallConfig: { vapi_phone_number_id: string | null; vapi_assistant_id: string | null; custom_call_instructions: string | null; custom_first_message: string | null } | null = null;
   let leadRecord: { qualification_reason: string | null } | null = null;
   let businessCtx: Awaited<ReturnType<typeof getBusinessContext>> | null = null;
+  // P3 piece 5 — defaults to the sales persona (this path's original,
+  // unchanged behavior) unless the owner reassigned this channel.
+  let persona = AGENT_PERSONAS.sales;
   try {
     // leadId scopes businessCtx.memories to this lead specifically
     // (getLeadMemory, P1 4a) instead of the dealership-wide feed — one
     // fetch through the shared assembler rather than a separate
     // parallel call (P1 5a folded this in).
-    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes] = await Promise.all([
+    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes, personaRes] = await Promise.all([
       getBusinessContext(serviceClient, lead.dealership_id, lead.id),
       serviceClient.from("dealerships").select("vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
+      resolvePersona(serviceClient, lead.dealership_id, "call_outbound"),
     ]);
     businessCtx = businessCtxRes;
     dealershipCallConfig = dealershipCallConfigRes.data;
     leadRecord = leadRecordRes.data;
+    persona = personaRes;
   } catch (err: any) {
     console.error("[vapi-call] failed loading dealership context, falling back to platform defaults:", err.message);
   }
@@ -104,7 +110,11 @@ export async function triggerVapiCall(
       // progress. Prompt flags are derived from which tool names are
       // actually present, not just "tools.length > 0" — so the prompt
       // never claims a capability that isn't really attached.
-      const callTools = getCallEnabledVapiTools();
+      // P3 piece 5 — scoped to the persona's own tool grant (e.g. the
+      // sales persona has no refund handling). The prompt flags below
+      // derive from what's actually attached after this filter, so the
+      // prompt still never claims a capability the model doesn't have.
+      const callTools = getCallEnabledVapiTools().filter((t) => persona.callTools.includes(t.function.name));
       const callToolNames = callTools.map((t) => t.function.name);
       const systemPrompt = buildDynamicSystemPrompt({
         dealershipName: businessCtx.name,
@@ -113,6 +123,7 @@ export async function triggerVapiCall(
         leadName: lead.name,
         qualificationReason: leadRecord?.qualification_reason,
         pastInsights: businessCtx.memories,
+        personaGoals: persona.goals,
         customInstructions: dealershipCallConfig?.custom_call_instructions,
         knowledgeFacts: businessCtx.knowledgeFacts,
         canBookAppointments: callToolNames.includes("create_appointment"),

@@ -9,6 +9,7 @@
 // benefit, since a well-designed template covers this job reliably.
 
 import type { KnowledgeFact } from "../businessBrain";
+import { AGENT_PERSONAS } from "./personas";
 export type { KnowledgeFact };
 
 // Shared by both the outbound and inbound prompts — real, owner-entered
@@ -38,6 +39,10 @@ interface CallScriptContext {
   leadName: string;
   qualificationReason?: string | null; // from a prior interaction, if any — real context, not invented
   pastInsights?: string[] | null; // business_memory rows for this specific lead (P1 4a)
+  // P3 piece 5 — the persona's goals section, replacing what used to
+  // be hardcoded here. Falls back to the sales persona's goals (this
+  // prompt's original text, verbatim) when not supplied.
+  personaGoals?: string | null;
   customInstructions?: string | null; // dealerships.custom_call_instructions — owner-written, appended verbatim
   knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
   canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
@@ -66,6 +71,7 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
 
   const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
   const insightsBlock = formatPastInsights(ctx.pastInsights);
+  const goals = ctx.personaGoals?.trim() || AGENT_PERSONAS.sales.goals;
 
   // Only claim the booking capability when it's actually attached to
   // this call's assistant config — see canBookAppointments's doc
@@ -108,13 +114,7 @@ ${toneLine}
 ${contextLine}
 ${customLine}${factsBlock}${insightsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}${refundLine}
 Your goals on this call:
-1. Confirm you're speaking with the right person, briefly and naturally.
-2. Understand what they're looking for or what stopped them from moving forward.
-3. Answer questions honestly — if you don't have specific product/pricing details, say a team member will follow up with exact information rather than guessing or making up specifics.
-4. If they're genuinely interested, offer a clear next step (a callback, a visit, more information sent to them, or a booked appointment if you have that tool) — don't try to close a sale on this call.
-5. Keep the call natural and unhurried — this is a real conversation, not a script being read aloud.
-
-If they're not interested, thank them politely and end the call — never pressure someone who says no.
+${goals}
 Never invent specific prices, stock availability, or promises about the business you don't actually know — if asked something specific you don't have real information for, say a team member will call back with exact details.`;
 }
 
@@ -138,6 +138,9 @@ interface InboundCallScriptContext {
   businessCategory: string;
   toneOfVoice?: string | null;
   knowledgeFacts?: KnowledgeFact[] | null;
+  // P3 piece 5 — falls back to the receptionist persona's goals (this
+  // prompt's original text, verbatim) when not supplied.
+  personaGoals?: string | null;
 }
 
 export function buildInboundSystemPrompt(ctx: InboundCallScriptContext): string {
@@ -146,18 +149,14 @@ export function buildInboundSystemPrompt(ctx: InboundCallScriptContext): string 
     : `Speak warmly and professionally — this is a small Indian business, not a corporate call center.`;
 
   const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
+  const goals = ctx.personaGoals?.trim() || AGENT_PERSONAS.receptionist.goals;
 
   return `You are answering an inbound phone call on behalf of ${ctx.dealershipName}, a ${ctx.businessCategory} business in India. The caller dialed this number themselves — you don't yet know who they are or why they're calling.
 
 ${toneLine}
 ${factsBlock}
 Your goals on this call:
-1. Greet the caller and ask how you can help, naturally.
-2. Understand what they need — a question, a booking, an order, a complaint — before trying to resolve it.
-3. Answer honestly — if you don't have specific product/pricing/availability details, say a team member will follow up with exact information rather than guessing or making up specifics.
-4. If it's something you can't resolve on the call, take their name and number and confirm someone will call back, rather than leaving them without a next step.
-5. Keep the call natural and unhurried — this is a real conversation, not a script being read aloud.
-
+${goals}
 Never invent specific prices, stock availability, or promises about the business you don't actually know — if asked something specific you don't have real information for, say a team member will call back with exact details.`;
 }
 

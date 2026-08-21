@@ -1,6 +1,7 @@
 import { generateAutoReply } from "@/lib/agents/socialManagementAgent";
 import { resolveDmLead } from "@/lib/leads/dmLeadLinking";
 import { getBusinessContext } from "@/lib/businessBrain";
+import { resolvePersona } from "@/lib/agents/personas";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 
 const GRAPH_VERSION = "v19.0";
@@ -89,7 +90,10 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
   // gains business_knowledge (hours/pricing/policies/FAQs) for the
   // first time — useful for common DM questions ("are you open
   // Sundays") the catalog alone could never answer.
-  const businessCtx = await getBusinessContext(supabase, dealership.id);
+  const [businessCtx, persona] = await Promise.all([
+    getBusinessContext(supabase, dealership.id),
+    resolvePersona(supabase, dealership.id, "dm"), // P3 piece 5 — defaults to support
+  ]);
   const brandProfile = { tone_of_voice: businessCtx.toneOfVoice };
 
   // Real catalog — capped at 40 products to keep the prompt a
@@ -127,7 +131,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights);
+        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals);
         if (replyText) {
           if (channel === "instagram") {
             await sendInstagramDmReply(replyToken, entryId, senderId, replyText);
@@ -168,7 +172,10 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts);
+        // No pastInsights on the comment path — a public comment has
+        // no resolved lead identity (resolveDmLead is DM-only, P2
+        // 27a-iii), so there's no specific person's history to draw on.
+        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, null, persona.goals);
         if (replyText) {
           await sendCommentReply(replyToken, commentId, replyText);
         } else {

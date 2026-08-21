@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { runSalesAgentTurn } from "@/lib/agents/chatbotAgent";
 import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
 import { getBusinessContext } from "@/lib/businessBrain";
+import { resolvePersona } from "@/lib/agents/personas";
 
 // Public, unauthenticated — the landing page AI Sales Agent widget
 // posts here.
@@ -31,9 +32,10 @@ export async function POST(request: Request) {
   // (a separate brand_profiles column from the structured brandVoice
   // object it does return), kept as-is rather than folding it in and
   // risking a behavior change beyond "same source, more facts."
-  const [businessCtx, { data: brandProfile }] = await Promise.all([
+  const [businessCtx, { data: brandProfile }, persona] = await Promise.all([
     getBusinessContext(supabase, page.dealership_id),
     supabase.from("brand_profiles").select("messaging_pillars").eq("dealership_id", page.dealership_id).maybeSingle(),
+    resolvePersona(supabase, page.dealership_id, "website_chat"), // P3 piece 5 — defaults to sales
   ]);
 
   const { reply, leadCapture, suggestBooking } = await runSalesAgentTurn(
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
       toneOfVoice: businessCtx.toneOfVoice,
       messagingPillars: brandProfile?.messaging_pillars,
       knowledgeFacts: businessCtx.knowledgeFacts,
+      personaGoals: persona.goals,
       hasBookingLink: !!dealership?.booking_slug,
     },
     Array.isArray(history) ? history.slice(-6) : [],

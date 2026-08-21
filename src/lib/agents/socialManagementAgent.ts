@@ -48,7 +48,10 @@ export async function generateAutoReply(
   // P3 (Personalization) — this specific sender's own history
   // (getLeadMemory, P1 4a), only ever present once resolveDmLead has
   // linked this conversation to a real lead.
-  pastInsights?: string[] | null
+  pastInsights?: string[] | null,
+  // P3 piece 5 — the assigned persona's goals, shaping what this
+  // reply is trying to achieve (support vs. sales vs. front-desk).
+  personaGoals?: string | null
 ): Promise<string | null> {
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.";
 
@@ -70,6 +73,13 @@ export async function generateAutoReply(
     ? `\nWhat's happened with this person before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}`
     : "";
 
+  // P3 piece 5 — what this reply is trying to achieve, per the
+  // persona the owner assigned to this channel. Advisory framing on
+  // top of the hard safety rules below, never a replacement for them.
+  const personaContext = personaGoals?.trim()
+    ? `\nWhat you're here to do, in priority order:\n${personaGoals.trim()}`
+    : "";
+
   const safety = channel === "comment"
     ? "This reply is PUBLIC on a comment thread — keep it brief, warm, and generic. Never share prices, personal details, or specific commitments publicly, even if the catalog above has the answer; if the comment needs specifics, invite them to DM instead."
     : `This is a private DM auto-reply sent with NO human review before sending. If the question is about a specific product's price/availability AND it's genuinely in the catalog above, answer it directly and confidently — that's a normal, safe question to answer instantly. For anything else (a complaint, a custom request, a product genuinely not in the catalog, or anything you're not confident about), reply with acknowledgement + "our team will get back to you shortly" rather than guessing or promising something specific. Never invent a price or availability for a product not actually listed above.`;
@@ -88,7 +98,7 @@ export async function generateAutoReply(
         messages: [{
           role: "user",
           content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}${catalogContext}${knowledgeContext}${insightsContext}
+${brandContext}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}
 ${safety}
 Incoming message: "${incomingText}"
 

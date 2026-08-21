@@ -38,6 +38,9 @@ interface DealershipContext {
   // P3 20a — sourced from the shared getBusinessContext() assembler;
   // this surface had zero access to real business_knowledge before.
   knowledgeFacts?: { category: string; title: string; content: string }[] | null;
+  // P3 piece 5 — the assigned persona's goals, replacing what used to
+  // be a hardcoded sales-shaped goals list.
+  personaGoals?: string | null;
   hasBookingLink: boolean;
 }
 
@@ -67,6 +70,13 @@ export async function runSalesAgentTurn(
   };
 
   const category = context.businessCategory || "business";
+  // P3 piece 5 — layered ON TOP of the channel-specific mechanics
+  // below (lead capture, booking suggestion), not replacing them:
+  // those drive this surface's JSON output fields, so swapping them
+  // out for persona goals wholesale would break lead capture.
+  const personaBlock = context.personaGoals?.trim()
+    ? `\n\nWhat you're here to do, in priority order:\n${context.personaGoals.trim()}`
+    : "";
   const contextBlock = `Business: ${context.dealershipName}${context.city ? `, ${context.city}` : ""} (${category}).
 ${context.headline ? `Tagline: ${context.headline}` : ""}
 ${context.offerText ? `Current offer: ${context.offerText}` : ""}
@@ -85,8 +95,8 @@ ${context.hasBookingLink ? "A booking page exists — you may suggest booking a 
       body: JSON.stringify({
         model: getModel("standard"),
         max_tokens: 500,
-        system: `You are an AI sales agent on ${context.dealershipName}'s website (a ${category} business). You chat with visitors like a helpful, knowledgeable salesperson would — not a generic FAQ bot.
-${contextBlock}
+        system: `You are an AI assistant on ${context.dealershipName}'s website (a ${category} business). You chat with visitors like a helpful, knowledgeable person would — not a generic FAQ bot.
+${contextBlock}${personaBlock}
 
 Your job in this conversation, as relevant to what the visitor says:
 - Answer questions honestly using the context above. If you don't know something specific (exact pricing, exact stock/availability), say so plainly and don't invent numbers.

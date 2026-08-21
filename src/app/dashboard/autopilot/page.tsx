@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Zap } from "lucide-react";
 import AutopilotCommandCenter from "@/components/autopilot/AutopilotCommandCenter";
 import ContentQueueView from "@/components/autopilot/ContentQueueView";
+import PersonaSettingsCard from "@/components/autopilot/PersonaSettingsCard";
 
 export default async function AutopilotPage() {
   const supabase = await createClient();
@@ -20,6 +21,7 @@ export default async function AutopilotPage() {
           <p className="text-sm text-slate-500">Every automation toggle in one place. Everything except money is switchable to full-auto here.</p>
         </div>
       </div>
+      <PersonaSettingsCard />
       <AutopilotCommandCenter />
       <ContentQueueView />
     </div>
