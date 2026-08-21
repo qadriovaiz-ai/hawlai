@@ -17,7 +17,6 @@ import { buttonClasses } from "@/components/ui";
 // since 2020, so it has no value for this platform's customer base.
 const PENDING_APPROVAL = [
   { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
-  { name: "Snapchat Ads", note: "Requires Snapchat Marketing API approval" },
 ];
 
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
@@ -32,7 +31,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, snapchat_access_token")
     .eq("id", dealershipId)
     .single();
 
@@ -41,6 +40,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const isGoogleAdsConnected = !!dealership?.google_ads_email;
   const isYoutubeConnected = !!dealership?.youtube_channel_title;
   const isPinterestConnected = !!dealership?.pinterest_access_token;
+  const isSnapchatConnected = !!dealership?.snapchat_access_token;
 
   const limits = await getDealershipPlanLimits(supabase, dealershipId);
   const whatsappAutomationAllowed = hasFeature(limits, "whatsappAutomation");
@@ -149,6 +149,26 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
           ) : (
             <a href="/api/auth/pinterest/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
+              Connect <ArrowRight className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+
+        {/* Snapchat Ads */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-amber-400/20 rounded-lg flex items-center justify-center shrink-0">
+              <Radio className="w-4 h-4 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Snapchat Ads</p>
+              <p className="text-xs text-slate-400">Launch Snap Ads from your creatives</p>
+            </div>
+          </div>
+          {isSnapchatConnected ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+          ) : (
+            <a href="/api/auth/snapchat/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </a>
           )}
