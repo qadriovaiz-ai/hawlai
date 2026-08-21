@@ -65,10 +65,15 @@ export default function SignupPage() {
         return;
       }
 
-      // Update profile with dealership
+      // Update profile with dealership. home_dealership_id (P3 agency
+      // multi-business-switching fix) is set once here and never
+      // touched again — it's what lets /api/agency/switch safely
+      // repoint dealership_id to a client team's business and still
+      // know how to get back, without needing its own separate
+      // switching flow.
       await supabase
         .from("profiles")
-        .update({ dealership_id: dealership.id, full_name: form.fullName })
+        .update({ dealership_id: dealership.id, home_dealership_id: dealership.id, full_name: form.fullName })
         .eq("id", data.user.id);
 
       setSuccess(true);

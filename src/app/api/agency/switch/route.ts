@@ -2,21 +2,17 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
-// Deliberately safe-scoped: only lets a person switch if they don't
-// own a dealership themselves. profiles.dealership_id is set once at
-// signup for an owner (their own business) and nothing else ever
-// writes to it — every one of the ~53 dashboard pages and ~69 API
-// routes already trusts this single field as "the current business,"
-// so switching it is what makes the entire existing app work
-// correctly for the newly-selected client with no other code changes
-// needed. But that also means switching it for an OWNER would
-// overwrite the pointer to their own business with no way back
-// (nothing tracks a separate "home" dealership yet) — so for now,
-// switching is only offered to people with no business of their own,
-// where there's no original value at risk of being lost. Owners who
-// also want to do agency-style work for other businesses is a real,
-// separate feature to build later (needs a distinct
-// "home_dealership_id" column so switching never overwrites it).
+// profiles.dealership_id is the single field every dashboard page/API
+// route trusts as "the current business," so switching it is what
+// makes the whole app work correctly for the newly-selected team with
+// no other code changes needed. Previously this was blocked entirely
+// for anyone who owns a dealership, since switching would overwrite
+// the pointer to their own business with no way back. P3 agency
+// multi-business-switching fix: profiles.home_dealership_id (set once
+// at signup, migration 138) now always remembers an owner's own
+// business regardless of what dealership_id currently points to, so
+// the block is no longer needed — DealershipSwitcher.tsx surfaces a
+// "back to my business" option using it.
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -25,21 +21,18 @@ export async function POST(request: Request) {
   const { dealershipId } = await request.json();
   if (!dealershipId) return NextResponse.json({ error: "dealershipId required" }, { status: 400 });
 
-  // Existence check, not a row-resolution — .maybeSingle() here would
-  // silently return null (never erroring, since this destructure drops
-  // `error`) the moment this user owns 2+ dealerships, which would
-  // have let a multi-business owner slip past this block entirely with
-  // no error. A plain array select + length check is correct for
-  // "owns at least one" regardless of how many they actually own.
-  const { data: ownedDealerships } = await supabase.from("dealerships").select("id").eq("owner_id", user.id).limit(1);
-  if (ownedDealerships && ownedDealerships.length > 0) {
-    return NextResponse.json({ error: "Switching isn't available yet for accounts that own their own business — this is a planned upgrade." }, { status: 403 });
-  }
+  const { data: profile } = await supabase.from("profiles").select("home_dealership_id").eq("id", user.id).single();
 
-  // Real authorization: confirmed through the user's own RLS-
-  // protected session (team_members_self_read), not bypassed.
-  const { data: membership } = await supabase.from("team_members").select("id").eq("user_id", user.id).eq("dealership_id", dealershipId).eq("status", "active").maybeSingle();
-  if (!membership) return NextResponse.json({ error: "You're not an active team member of that business" }, { status: 403 });
+  // Switching to your own home business is authorized by ownership,
+  // not team membership — an owner isn't a team_members row of their
+  // own business. Everything else still requires real, active team
+  // membership on that specific business, confirmed through the
+  // user's own RLS-protected session (team_members_self_read), not
+  // bypassed.
+  if (dealershipId !== profile?.home_dealership_id) {
+    const { data: membership } = await supabase.from("team_members").select("id").eq("user_id", user.id).eq("dealership_id", dealershipId).eq("status", "active").maybeSingle();
+    if (!membership) return NextResponse.json({ error: "You're not an active team member of that business" }, { status: 403 });
+  }
 
   const service = createServiceClient();
   const { error } = await service.from("profiles").update({ dealership_id: dealershipId }).eq("id", user.id);

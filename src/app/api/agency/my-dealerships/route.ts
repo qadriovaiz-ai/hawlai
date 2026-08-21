@@ -2,9 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
-// Powers the dealership switcher. Deliberately only useful for pure
-// agency staff (no dealership of their own) — see /api/agency/switch
-// for why owners aren't offered switching yet.
+// Powers the dealership switcher — for pure agency staff (switching
+// between client teams) and, as of the P3 agency fix, for owners who
+// are also staff on someone else's team (homeDealership below is
+// their way back). See /api/agency/switch.
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -28,11 +29,22 @@ export async function GET() {
     dealerships = (data ?? []).map((d) => ({ id: d.id, dealership_name: d.dealership_name, role: roleById.get(d.id) ?? "viewer" }));
   }
 
-  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("dealership_id, home_dealership_id").eq("id", user.id).single();
+
+  // P3 agency multi-business-switching fix — an owner who's also
+  // staff on a different team needs a way back; resolved here (not
+  // left to the client) since RLS on dealerships already scopes this
+  // safely to a business the user actually owns.
+  let homeDealership: { id: string; dealership_name: string } | null = null;
+  if (profile?.home_dealership_id) {
+    const { data } = await supabase.from("dealerships").select("id, dealership_name").eq("id", profile.home_dealership_id).maybeSingle();
+    homeDealership = data;
+  }
 
   return NextResponse.json({
     ownsABusiness: !!(ownedDealerships && ownedDealerships.length > 0),
     dealerships, // every team the person is actively on
     currentDealershipId: profile?.dealership_id ?? null,
+    homeDealership,
   });
 }
