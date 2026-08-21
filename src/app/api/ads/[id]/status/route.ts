@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 import { getValidGoogleAdsAccessToken, setGoogleCampaignStatus } from "@/lib/ads/googleAds";
+import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/ads/pinterestAds";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -46,7 +47,7 @@ export async function PATCH(
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id")
+    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_refresh_token, pinterest_token_expiry, pinterest_ad_account_id")
     .eq("id", dealershipId)
     .single();
 
@@ -116,6 +117,38 @@ export async function PATCH(
       }
       // Google's own vocabulary is ENABLED/PAUSED, not ACTIVE/PAUSED.
       await setGoogleCampaignStatus(creds, accessToken, creative.external_campaign_id!, status === "ACTIVE" ? "ENABLED" : "PAUSED");
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+
+    const { data: updated } = await supabase
+      .from("ad_creatives")
+      .update({ external_status: status })
+      .eq("id", id)
+      .select()
+      .single();
+    return NextResponse.json(updated);
+  }
+
+  if (platform === "pinterest") {
+    if (!dealership?.pinterest_access_token || !dealership?.pinterest_ad_account_id) {
+      return NextResponse.json({ error: "Pinterest isn't connected" }, { status: 400 });
+    }
+    try {
+      const creds = {
+        accessToken: dealership.pinterest_access_token,
+        refreshToken: dealership.pinterest_refresh_token ?? "",
+        tokenExpiry: dealership.pinterest_token_expiry,
+        adAccountId: dealership.pinterest_ad_account_id,
+      };
+      const { accessToken, refreshed } = await getValidPinterestAccessToken(creds);
+      if (refreshed) {
+        await createServiceClient().from("dealerships").update({
+          pinterest_access_token: refreshed.accessToken,
+          pinterest_token_expiry: refreshed.expiry,
+        }).eq("id", dealershipId);
+      }
+      await setPinterestCampaignStatus(creds, accessToken, creative.external_campaign_id!, status);
     } catch (err: any) {
       return NextResponse.json({ error: err.message }, { status: 500 });
     }

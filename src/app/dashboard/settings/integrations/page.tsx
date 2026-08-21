@@ -13,11 +13,11 @@ import GoogleReviewsConnect from "@/components/settings/GoogleReviewsConnect";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { buttonClasses } from "@/components/ui";
 
+// TikTok is deliberately absent — TikTok has been banned in India
+// since 2020, so it has no value for this platform's customer base.
 const PENDING_APPROVAL = [
   { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
-  { name: "TikTok Ads", note: "Requires TikTok Marketing API approval" },
   { name: "Snapchat Ads", note: "Requires Snapchat Marketing API approval" },
-  { name: "Pinterest Ads", note: "Requires Pinterest Ads API approval" },
 ];
 
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
@@ -32,7 +32,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token")
     .eq("id", dealershipId)
     .single();
 
@@ -40,6 +40,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const isGmailConnected = !!dealership?.gmail_email;
   const isGoogleAdsConnected = !!dealership?.google_ads_email;
   const isYoutubeConnected = !!dealership?.youtube_channel_title;
+  const isPinterestConnected = !!dealership?.pinterest_access_token;
 
   const limits = await getDealershipPlanLimits(supabase, dealershipId);
   const whatsappAutomationAllowed = hasFeature(limits, "whatsappAutomation");
@@ -128,6 +129,26 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.google_ads_email})</span>
           ) : (
             <a href="/api/auth/google-ads/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
+              Connect <ArrowRight className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+
+        {/* Pinterest Ads */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-rose-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Radio className="w-4 h-4 text-rose-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Pinterest Ads</p>
+              <p className="text-xs text-slate-400">Launch image campaigns from your creatives</p>
+            </div>
+          </div>
+          {isPinterestConnected ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+          ) : (
+            <a href="/api/auth/pinterest/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </a>
           )}
