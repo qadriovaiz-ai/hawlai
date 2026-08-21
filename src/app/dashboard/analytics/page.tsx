@@ -6,6 +6,9 @@ import GrowthMetricsCard from "@/components/dashboard/GrowthMetricsCard";
 import WebsiteAnalyticsCard from "@/components/dashboard/WebsiteAnalyticsCard";
 import { formatCurrency } from "@/lib/utils";
 import { History } from "lucide-react";
+import { computeAttribution } from "@/lib/analytics/attribution";
+import { computeLtv, computeCohorts } from "@/lib/analytics/ltvCohorts";
+import AdvancedAnalyticsSection from "@/components/dashboard/AdvancedAnalyticsSection";
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
@@ -16,12 +19,24 @@ export default async function AnalyticsPage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const [{ data: leads }, { data: calls }, { data: appointments }, { data: perfHistory }] = await Promise.all([
+  const [{ data: leads }, { data: calls }, { data: appointments }, { data: perfHistory }, { data: touchpoints }, { data: orders }] = await Promise.all([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId),
     supabase.from("calls").select("*").eq("dealership_id", dealershipId),
     supabase.from("appointments").select("*").eq("dealership_id", dealershipId),
     supabase.from("campaign_performance_history").select("*").eq("dealership_id", dealershipId).order("snapshot_date", { ascending: false }),
+    // P3 8a — lead_touchpoints (migration 112) has been collecting
+    // real multi-touch data all along; nothing ever read it for
+    // attribution until now.
+    supabase.from("lead_touchpoints").select("lead_id, channel, occurred_at").eq("dealership_id", dealershipId),
+    // P3 8b/8c — repeat purchases were already recorded, just never
+    // grouped per customer.
+    supabase.from("orders").select("customer_phone, customer_name, total, created_at, payment_status, status").eq("dealership_id", dealershipId),
   ]);
+
+  const convertedLeads = (leads ?? []).filter((l) => l.status === "converted").map((l) => ({ id: l.id, deal_value: l.deal_value }));
+  const attribution = computeAttribution(convertedLeads, touchpoints ?? []);
+  const ltv = computeLtv(orders ?? []);
+  const cohorts = computeCohorts((leads ?? []).map((l) => ({ created_at: l.created_at, status: l.status, converted_at: l.converted_at ?? null, deal_value: l.deal_value })));
 
   const totalLeads = leads?.length ?? 0;
   const hotLeads = leads?.filter((l) => l.lead_temperature === "hot").length ?? 0;
@@ -55,9 +70,13 @@ export default async function AnalyticsPage() {
   // Revenue per source closes the audit's channel-attribution gap:
   // campaign ROAS only ever counted leads carrying a meta_campaign_id,
   // so revenue from organic, referral, walk-in and email leads existed
-  // in the CRM but appeared nowhere in any performance view. This is
-  // still single-touch (one source stamped per lead) — real multi-touch
-  // would need a touchpoint table and UTM capture that don't exist yet.
+  // in the CRM but appeared nowhere in any performance view. This
+  // breakdown is single-touch (one source stamped per lead) and stays
+  // that way deliberately — real multi-touch attribution now exists
+  // separately in AdvancedAnalyticsSection below (P3 8a), built on
+  // lead_touchpoints. Keeping both is intentional: this one answers
+  // "where did leads come from", that one answers "what actually
+  // earned the credit".
   const sourceTotals = new Map<string, { count: number; revenue: number; conversions: number }>();
   for (const lead of leads ?? []) {
     const key = lead.source || "unknown";
@@ -145,6 +164,8 @@ export default async function AnalyticsPage() {
         sourceData={sourceData}
         monthlyTrend={monthlyTrend}
       />
+
+      <AdvancedAnalyticsSection attribution={attribution} ltv={ltv} cohorts={cohorts} />
 
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-3">Campaign Performance — Meta-style graphs</p>

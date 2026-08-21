@@ -73,6 +73,7 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: "Payment verified but the order couldn't be saved — please contact the business" }, { status: 500 });
 
   await applyOrderSideEffects(supabase, {
+    orderId: order.id,
     dealershipId: website.dealership_id,
     resolvedItems,
     productMap,

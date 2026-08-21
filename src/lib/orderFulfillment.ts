@@ -7,9 +7,36 @@ import type { ResolvedOrderItem } from "@/lib/orderPricing";
 // so an abandoned or fake payment attempt never touches stock, discount
 // usage counts, or sends the dealer a notification for an order that
 // was never really placed.
+// P3 8b — links a committed order to an existing lead by exact phone
+// match, reusing the identity rule P2 27a-iii established (last 10
+// digits, so +91/91/0 prefix variations still match). Best-effort and
+// non-blocking: an unlinked order is still a perfectly valid order,
+// it just doesn't roll up into that lead's lifetime value.
+async function linkOrderToLead(supabase: any, orderId: string, dealershipId: string, customerPhone: string) {
+  try {
+    const suffix = customerPhone.replace(/\D/g, "").slice(-10);
+    if (suffix.length < 10) return;
+    const { data: matches } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("dealership_id", dealershipId)
+      .ilike("phone", `%${suffix}`)
+      .is("merged_into_lead_id", null)
+      .limit(2);
+    // Exactly one match only — two leads sharing a phone is the
+    // ambiguous case P2 27a-iii deliberately never auto-resolves.
+    if (matches?.length === 1) {
+      await supabase.from("orders").update({ lead_id: matches[0].id }).eq("id", orderId);
+    }
+  } catch (err: any) {
+    console.error("[orderFulfillment] linkOrderToLead failed:", err.message);
+  }
+}
+
 export async function applyOrderSideEffects(
   supabase: any,
   opts: {
+    orderId: string;
     dealershipId: string;
     resolvedItems: ResolvedOrderItem[];
     productMap: Map<string, { inventory_count: number | null }>;
@@ -26,6 +53,7 @@ export async function applyOrderSideEffects(
   }
 ) {
   const {
+    orderId,
     dealershipId,
     resolvedItems,
     productMap,
@@ -40,6 +68,8 @@ export async function applyOrderSideEffects(
     total,
     paymentMethod,
   } = opts;
+
+  await linkOrderToLead(supabase, orderId, dealershipId, customerPhone);
 
   if (appliedDiscountId) {
     const { data: dc } = await supabase.from("discount_codes").select("used_count").eq("id", appliedDiscountId).single();

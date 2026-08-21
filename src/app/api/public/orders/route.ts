@@ -76,6 +76,7 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: "Something went wrong placing your order, please try again" }, { status: 500 });
 
   await applyOrderSideEffects(supabase, {
+    orderId: order.id,
     dealershipId: website.dealership_id,
     resolvedItems,
     productMap,
