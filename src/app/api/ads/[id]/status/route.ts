@@ -5,6 +5,7 @@ import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthori
 import { getValidGoogleAdsAccessToken, setGoogleCampaignStatus } from "@/lib/ads/googleAds";
 import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/ads/pinterestAds";
 import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ads/snapchatAds";
+import { getValidLinkedInAccessToken, setLinkedInCampaignStatus } from "@/lib/ads/linkedinAds";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -48,7 +49,7 @@ export async function PATCH(
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_refresh_token, pinterest_token_expiry, pinterest_ad_account_id, snapchat_access_token, snapchat_refresh_token, snapchat_token_expiry, snapchat_ad_account_id")
+    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_refresh_token, pinterest_token_expiry, pinterest_ad_account_id, snapchat_access_token, snapchat_refresh_token, snapchat_token_expiry, snapchat_ad_account_id, linkedin_access_token, linkedin_refresh_token, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
     .eq("id", dealershipId)
     .single();
 
@@ -182,6 +183,39 @@ export async function PATCH(
         }).eq("id", dealershipId);
       }
       await setSnapchatCampaignStatus(accessToken, creative.external_campaign_id!, creds.adAccountId, status);
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+
+    const { data: updated } = await supabase
+      .from("ad_creatives")
+      .update({ external_status: status })
+      .eq("id", id)
+      .select()
+      .single();
+    return NextResponse.json(updated);
+  }
+
+  if (platform === "linkedin") {
+    if (!dealership?.linkedin_access_token || !dealership?.linkedin_ad_account_id) {
+      return NextResponse.json({ error: "LinkedIn isn't connected" }, { status: 400 });
+    }
+    try {
+      const creds = {
+        accessToken: dealership.linkedin_access_token,
+        refreshToken: dealership.linkedin_refresh_token ?? "",
+        tokenExpiry: dealership.linkedin_token_expiry,
+        adAccountId: dealership.linkedin_ad_account_id,
+        organizationId: dealership.linkedin_organization_id ?? "",
+      };
+      const { accessToken, refreshed } = await getValidLinkedInAccessToken(creds);
+      if (refreshed) {
+        await createServiceClient().from("dealerships").update({
+          linkedin_access_token: refreshed.accessToken,
+          linkedin_token_expiry: refreshed.expiry,
+        }).eq("id", dealershipId);
+      }
+      await setLinkedInCampaignStatus(accessToken, creative.external_campaign_id!, status);
     } catch (err: any) {
       return NextResponse.json({ error: err.message }, { status: 500 });
     }

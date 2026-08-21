@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, Clock, ArrowRight, Globe, FileText, Radio, Star } from "lucide-react";
+import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, ArrowRight, Globe, FileText, Radio, Star } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import InstagramBusinessLoginConnect from "@/components/settings/InstagramBusinessLoginConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
@@ -13,11 +13,10 @@ import GoogleReviewsConnect from "@/components/settings/GoogleReviewsConnect";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { buttonClasses } from "@/components/ui";
 
-// TikTok is deliberately absent — TikTok has been banned in India
-// since 2020, so it has no value for this platform's customer base.
-const PENDING_APPROVAL = [
-  { name: "LinkedIn Ads", note: "Requires LinkedIn Marketing API partner approval" },
-];
+// All four ad platforms (Meta, Google, Pinterest, Snapchat, LinkedIn)
+// now have real connect cards above — the old "Pending Platform
+// Approval" list is gone. TikTok was deliberately dropped rather than
+// built: banned in India since 2020, so no value for this customer base.
 
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
   const params = await searchParams;
@@ -31,7 +30,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, snapchat_access_token")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, snapchat_access_token, linkedin_access_token")
     .eq("id", dealershipId)
     .single();
 
@@ -41,6 +40,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const isYoutubeConnected = !!dealership?.youtube_channel_title;
   const isPinterestConnected = !!dealership?.pinterest_access_token;
   const isSnapchatConnected = !!dealership?.snapchat_access_token;
+  const isLinkedinConnected = !!dealership?.linkedin_access_token;
 
   const limits = await getDealershipPlanLimits(supabase, dealershipId);
   const whatsappAutomationAllowed = hasFeature(limits, "whatsappAutomation");
@@ -174,6 +174,26 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           )}
         </div>
 
+        {/* LinkedIn Ads */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-sky-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Radio className="w-4 h-4 text-sky-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">LinkedIn Ads</p>
+              <p className="text-xs text-slate-400">Needs a LinkedIn company page you administer</p>
+            </div>
+          </div>
+          {isLinkedinConnected ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+          ) : (
+            <a href="/api/auth/linkedin/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
+              Connect <ArrowRight className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+
         {/* YouTube */}
         <div className="card p-5 space-y-3">
           <div className="flex items-center gap-2.5">
@@ -282,23 +302,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         </div>
       </div>
 
-      <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Pending Platform Approval</p>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {PENDING_APPROVAL.map((p) => (
-            <div key={p.name} className="card p-4 opacity-60">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                <p className="text-sm font-medium text-slate-600">{p.name}</p>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">{p.note}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-slate-400 mt-3">
-          These require the ad platform's own developer approval process (can take days to weeks) — not something Hawlai or any tool can skip. Applications are in progress.
-        </p>
-      </div>
+      <p className="text-xs text-slate-400">
+        Each ad platform still requires its own developer-app approval before it works with real accounts (can take days to weeks) — not something Hawlai or any tool can skip. Connecting above will report a clear error until that's granted.
+      </p>
     </div>
   );
 }
