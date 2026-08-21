@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Briefcase, Flame, Users, ShieldCheck, PhoneCall, CalendarDays, IndianRupee, TrendingUp, Lock, ChevronRight } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
-import { getPortfolioSummaries } from "@/lib/agents/portfolioAgent";
+import { getPortfolioSummaries, computePortfolioTotals } from "@/lib/agents/portfolioAgent";
 import BulkAutomationPanel from "@/components/agency/BulkAutomationPanel";
 import { buttonClasses } from "@/components/ui/Button";
 
@@ -45,6 +45,7 @@ export default async function AgencyPortfolioPage() {
   }
 
   const summaries = await getPortfolioSummaries(supabase, user.id);
+  const totals = computePortfolioTotals(summaries);
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -62,6 +63,31 @@ export default async function AgencyPortfolioPage() {
         <p className="text-sm text-slate-400 text-center py-12">No businesses found.</p>
       ) : (
         <>
+        {/* P3 piece 7a — combined totals across every managed business.
+            Previously the page was cards-only, so "how is the whole
+            portfolio doing" meant adding it up by eye. */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-700">All {totals.businessCount} businesses combined</p>
+            {totals.pendingApprovals > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+                <ShieldCheck className="w-3.5 h-3.5" /> {totals.pendingApprovals} waiting for approval
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+            <Metric icon={Users} label="Leads" value={totals.totalLeads} />
+            <Metric icon={Flame} label="Hot" value={totals.hotLeads} />
+            <Metric icon={PhoneCall} label="Calls" value={totals.callsMade} />
+            <Metric icon={CalendarDays} label="Appts" value={totals.appointments} />
+            <Metric icon={IndianRupee} label="Spend" value={formatCurrency(totals.spend)} />
+            <Metric icon={TrendingUp} label="ROAS" value={totals.blendedRoas != null ? `${totals.blendedRoas.toFixed(1)}x` : "—"} />
+          </div>
+          <p className="text-[10.5px] text-slate-400">
+            Spend, revenue and ROAS come from each business's most recent daily campaign snapshot. ROAS is blended (total revenue ÷ total spend), not an average of each business's own ratio.
+          </p>
+        </div>
+
         <BulkAutomationPanel businesses={summaries.map((b) => ({ id: b.id, dealershipName: b.dealershipName }))} />
         <div className="grid sm:grid-cols-2 gap-4">
           {summaries.map((b) => (

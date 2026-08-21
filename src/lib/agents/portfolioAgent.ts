@@ -24,7 +24,46 @@ export interface PortfolioBusinessSummary {
   appointments: number;
   spend: number;
   campaignLeads: number;
+  // Already computed internally to derive roas — exposed so the
+  // portfolio aggregate can sum real revenue rather than reverse it
+  // out of roas (which loses the value entirely when spend is 0).
+  revenue: number;
   roas: number | null;
+}
+
+export interface PortfolioTotals {
+  businessCount: number;
+  totalLeads: number;
+  hotLeads: number;
+  pendingApprovals: number;
+  callsMade: number;
+  appointments: number;
+  spend: number;
+  revenue: number;
+  // Blended: total revenue / total spend, NOT the average of each
+  // business's roas — averaging ratios would let a tiny-spend
+  // business with a freak return distort the whole portfolio.
+  blendedRoas: number | null;
+}
+
+export function computePortfolioTotals(summaries: PortfolioBusinessSummary[]): PortfolioTotals {
+  const totals = summaries.reduce(
+    (acc, b) => ({
+      totalLeads: acc.totalLeads + b.totalLeads,
+      hotLeads: acc.hotLeads + b.hotLeads,
+      pendingApprovals: acc.pendingApprovals + b.pendingApprovals,
+      callsMade: acc.callsMade + b.callsMade,
+      appointments: acc.appointments + b.appointments,
+      spend: acc.spend + b.spend,
+      revenue: acc.revenue + b.revenue,
+    }),
+    { totalLeads: 0, hotLeads: 0, pendingApprovals: 0, callsMade: 0, appointments: 0, spend: 0, revenue: 0 }
+  );
+  return {
+    businessCount: summaries.length,
+    ...totals,
+    blendedRoas: totals.spend > 0 ? totals.revenue / totals.spend : null,
+  };
 }
 
 async function batchCounts(supabase: any, table: string, ids: string[], extraFilter?: (q: any) => any) {
@@ -106,6 +145,7 @@ export async function getPortfolioSummaries(supabase: any, ownerId: string): Pro
       appointments: appointmentsCount.get(d.id) ?? 0,
       spend: campaign.spend,
       campaignLeads: campaign.leads,
+      revenue: campaign.revenue,
       roas: campaign.spend > 0 ? campaign.revenue / campaign.spend : null,
     };
   });
