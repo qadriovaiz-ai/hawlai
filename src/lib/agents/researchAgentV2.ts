@@ -71,17 +71,23 @@ async function callPerplexityAsJson(
 ): Promise<any | null> {
   try {
     const result = await fn(`${prompt}\n\nReturn JSON only, no markdown, no preamble.`);
+    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+    const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
+    if (!clean) return null;
+    const parsed = JSON.parse(clean);
+
+    // Billed only AFTER the output is confirmed usable. Returning null
+    // here makes the caller fall back to Claude (Section 21), which
+    // bills its own cost — charging for the discarded Perplexity call
+    // too would make the customer pay twice for one result.
     if (logContext) {
       const model = result.model as "sonar-pro" | "sonar-deep-research";
       await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "research", result.inputTokens, result.outputTokens, model);
       await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, model));
     }
-    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
-    if (!clean) return null;
-    return JSON.parse(clean);
+    return parsed;
   } catch (err: any) {
-    console.error("[research-agent] perplexity error:", err.message);
+    console.warn("[research-agent] perplexity failed, falling back to Claude web search:", err.message);
     return null;
   }
 }
@@ -109,27 +115,47 @@ export async function generateResearch(
   const routing = classifyResearch({ plan, taskType: taskKey });
   const usePerplexity = routing.active && (routing.provider === "perplexity" || routing.provider === "perplexity_deep");
 
+  // Section 21 — automatic provider failover. Perplexity failing at
+  // RUNTIME (outage, rate limit, malformed response) now falls through
+  // to Claude's own web search rather than surfacing an error, which
+  // is what the previous version did. researchRouter's own check is
+  // config-time only ("is the key set?") and can't catch this.
+  //
+  // The customer never learns a provider failed, per Section 21 — but
+  // nothing pretends the failover didn't happen either: the fallback
+  // path is logged server-side, and the answer returned is a real
+  // researched answer from the substitute provider, not a degraded
+  // placeholder.
+  const runResearch = async (prompt: string): Promise<any | null> => {
+    const claudeCall = () => callClaude(
+      { model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] },
+      logContext
+    );
+    if (!usePerplexity) return claudeCall();
+
+    const viaPerplexity = await callPerplexityAsJson(
+      routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch,
+      prompt,
+      logContext
+    );
+    if (viaPerplexity) return viaPerplexity;
+
+    console.warn(`[research-agent] ${routing.provider} failed for "${taskKey}" — falling back to Claude web search.`);
+    return claudeCall();
+  };
+
   if (taskKey === "industry_trends") {
-    const prompt = `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`;
-    const parsed = usePerplexity
-      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt, logContext)
-      : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
+    const parsed = await runResearch(`Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`);
     return parsed ? { output: parsed } : fallback;
   }
 
   if (taskKey === "market_research") {
-    const prompt = `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`;
-    const parsed = usePerplexity
-      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt, logContext)
-      : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
+    const parsed = await runResearch(`Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`);
     return parsed ? { output: parsed } : fallback;
   }
 
   if (taskKey === "new_opportunities") {
-    const prompt = `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`;
-    const parsed = usePerplexity
-      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt, logContext)
-      : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
+    const parsed = await runResearch(`Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`);
     return parsed ? { output: parsed } : fallback;
   }
 

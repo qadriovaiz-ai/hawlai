@@ -34,6 +34,7 @@ export default function CreativeStudioPage() {
   const [videoPolling, setVideoPolling] = useState(false);
   const [videoResult, setVideoResult] = useState<any>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoNotice, setVideoNotice] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/creative/video/models").then((r) => r.json()).then((d) => setVideoModels(d.models ?? []));
@@ -121,6 +122,7 @@ export default function CreativeStudioPage() {
 
   async function handleGenerateVideo() {
     setVideoError(null);
+    setVideoNotice(null);
     setVideoResult(null);
     if (videoPrompt.trim().length < 5) return setVideoError("Describe the video in a bit more detail");
     setVideoStarting(true);
@@ -132,6 +134,15 @@ export default function CreativeStudioPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+      // Provider failover (Section 21) — the chosen model was
+      // unavailable and another one ran instead. Surfaced rather than
+      // hidden: the customer picked a specific model, and different
+      // models produce visibly different video.
+      if (data.switchedTo) {
+        const ranLabel = videoModels.find((m) => m.key === data.switchedTo)?.label ?? data.switchedTo;
+        const askedLabel = videoModels.find((m) => m.key === data.requestedModel)?.label ?? data.requestedModel;
+        setVideoNotice(`${askedLabel} was unavailable — generating with ${ranLabel} instead.`);
+      }
       setVideoStarting(false);
       setVideoPolling(true);
       pollVideoStatus(data.id);
@@ -365,6 +376,7 @@ export default function CreativeStudioPage() {
           {videoPolling ? "Rendering..." : "Generate Video"}
         </Button>
         {videoError && <p className="text-xs text-red-400">{videoError}</p>}
+        {videoNotice && <p className="text-xs text-amber-500">{videoNotice}</p>}
         {videoResult?.video_url && (
           <video src={videoResult.video_url} controls className="bg-slate-200 text-slate-900 w-full rounded-lg border border-slate-300" />
         )}

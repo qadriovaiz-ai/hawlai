@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getVideoAdapter, isModelConfigured } from "@/lib/videoModels";
+import { getVideoAdapter, isModelConfigured, getFallbackModelKey } from "@/lib/videoModels";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 export async function POST(request: Request) {
@@ -33,11 +33,29 @@ export async function POST(request: Request) {
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
   try {
-    const adapter = getVideoAdapter(modelKey);
-    const taskId = await adapter.start(prompt.trim(), modelKey);
+    const taskId = await getVideoAdapter(modelKey).start(prompt.trim(), modelKey);
     await supabase.from("video_generations").update({ task_id: taskId, operation_name: taskId }).eq("id", draft.id);
     return NextResponse.json({ id: draft.id });
   } catch (err: any) {
+    // Section 21 — try the other provider before giving up. Unlike
+    // research failover this is NOT silent: the customer explicitly
+    // picked this model, so model_key is updated to whatever actually
+    // ran and `switchedTo` is returned for the UI to surface. Failing
+    // over is better than a dead end; misreporting which model made
+    // their video is not.
+    const fallbackKey = getFallbackModelKey(modelKey);
+    if (fallbackKey) {
+      try {
+        const taskId = await getVideoAdapter(fallbackKey).start(prompt.trim(), fallbackKey);
+        await supabase.from("video_generations").update({ task_id: taskId, operation_name: taskId, model_key: fallbackKey }).eq("id", draft.id);
+        console.warn(`[video] ${modelKey} failed (${err.message}) — switched to ${fallbackKey}.`);
+        return NextResponse.json({ id: draft.id, switchedTo: fallbackKey, requestedModel: modelKey });
+      } catch (fallbackErr: any) {
+        // Both providers down — report the ORIGINAL failure, since
+        // that's the model the customer actually asked for.
+        console.error(`[video] fallback ${fallbackKey} also failed:`, fallbackErr.message);
+      }
+    }
     await supabase.from("video_generations").update({ status: "failed", error_message: err.message }).eq("id", draft.id);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

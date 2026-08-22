@@ -75,21 +75,30 @@ ${meta.instructions(competitorName, dealershipName, businessCategory)}
 
 Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.`;
 
+  // Section 21 — automatic provider failover. Perplexity failing at
+  // RUNTIME falls THROUGH to the Claude web_search path below rather
+  // than returning an error, which is what this did before. The
+  // customer never learns a provider failed; they get a real
+  // researched answer from the substitute, not a degraded placeholder.
   if (routing.active && routing.provider === "perplexity") {
     // Unreachable today (routing.active requires PERPLEXITY_API_KEY).
     try {
       const result = await callComplexResearch(prompt);
-      if (logContext) {
-        await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", result.inputTokens, result.outputTokens, "sonar-pro");
-        await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, "sonar-pro"));
-      }
       const jsonMatch = result.text.match(/\{[\s\S]*\}/);
       const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
-      if (!clean) return fallback;
-      return { output: JSON.parse(clean) };
+      if (clean) {
+        // Only bill once the call genuinely produced usable output —
+        // a Perplexity response we then discard and redo on Claude
+        // shouldn't cost the customer credits for both.
+        if (logContext) {
+          await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", result.inputTokens, result.outputTokens, "sonar-pro");
+          await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, "sonar-pro"));
+        }
+        return { output: JSON.parse(clean) };
+      }
+      console.warn("[competitor-intel-agent] perplexity returned no usable JSON — falling back to Claude web search.");
     } catch (err: any) {
-      console.error("[competitor-intel-agent] perplexity error:", err.message);
-      return fallback;
+      console.warn("[competitor-intel-agent] perplexity failed, falling back to Claude web search:", err.message);
     }
   }
 
