@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import UsageView from "@/components/billing/UsageView";
+import BillingProfileCard from "@/components/billing/BillingProfileCard";
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -24,6 +25,7 @@ export default async function BillingPage() {
         </Link>
       </div>
       <UsageView />
+      <BillingProfileCard />
     </div>
   );
 }
