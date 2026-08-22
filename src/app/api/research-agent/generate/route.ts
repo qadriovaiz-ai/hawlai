@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateResearch, generateSentimentFromLeads } from "@/lib/agents/researchAgentV2";
 import { getDealershipPlanLimits } from "@/lib/plans";
+import { checkUsage } from "@/lib/usage/usageGuard";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -17,6 +18,15 @@ export async function POST(request: Request) {
 
   const { taskType } = await request.json();
   if (!taskType) return NextResponse.json({ error: "taskType required" }, { status: 400 });
+
+  // Phase 3a — research credits now hard-block, matching every other
+  // capped resource. Covers customer_sentiment too: it doesn't search
+  // the web, but it's a real Claude call on this surface and has
+  // recorded credits since Phase 2 (both paths share callClaude), so
+  // gating only the web-search tasks would charge for something it
+  // then refused to gate consistently.
+  const usage = await checkUsage(dealershipId, "research");
+  if (!usage.allowed) return NextResponse.json({ error: usage.message, limitReached: true }, { status: 429 });
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single();
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateCompetitorIntel } from "@/lib/agents/competitorIntelAgent";
 import { requireFeature } from "@/lib/featureGate";
 import { getDealershipPlanLimits } from "@/lib/plans";
+import { checkUsage } from "@/lib/usage/usageGuard";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -21,6 +22,11 @@ export async function POST(request: Request) {
 
   const { taskType, competitorName } = await request.json();
   if (!taskType || !competitorName) return NextResponse.json({ error: "taskType and competitorName required" }, { status: 400 });
+
+  // Phase 3a — research credits hard-block. All 4 tasks here are
+  // COMPLEX multi-source research, the most credit-expensive kind.
+  const usage = await checkUsage(dealershipId, "research");
+  if (!usage.allowed) return NextResponse.json({ error: usage.message, limitReached: true }, { status: 429 });
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single();
 

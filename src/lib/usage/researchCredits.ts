@@ -20,7 +20,7 @@
 // internal provider costs). Customer surfaces show credit counts only.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { getDealershipPlanLimits } from "@/lib/plans";
+import { getDealershipPlanLimits, isPlanGatingBypassed } from "@/lib/plans";
 
 const CREDIT_VALUE_INR = 1;
 
@@ -62,6 +62,53 @@ export async function recordResearchCredits(dealershipId: string, costInr: numbe
     // research call that already succeeded.
     console.error("[researchCredits] recordResearchCredits failed:", err.message);
   }
+}
+
+export interface ResearchCreditCheck {
+  allowed: boolean;
+  limit: number | null; // null = unlimited
+  used: number;
+}
+
+/**
+ * Pre-call enforcement (Phase 3a) — hard-blocks once the plan's monthly
+ * credit allowance is spent, matching how every other capped resource
+ * here already behaves (generation caps, message limits).
+ *
+ * GENUINE TENSION worth naming: credits can only be computed AFTER a
+ * call completes, because they're derived from that call's real
+ * provider cost (Section 7's whole point). So this checks the balance
+ * BEFORE, and recordResearchCredits() writes the actual amount AFTER.
+ * A business sitting just under their limit can therefore overshoot on
+ * their final call. That's the same accepted read-then-write tradeoff
+ * as checkAndRecordGenerationUsage/checkAndRecordMessageUsage, and the
+ * overshoot is bounded by one request — never worth pre-charging a
+ * guessed amount and then reconciling, which would make every usage
+ * number an estimate rather than the real cost.
+ */
+export async function checkResearchCredits(dealershipId: string): Promise<ResearchCreditCheck> {
+  // Same short-circuit as generation caps — testing traffic never
+  // touches real usage counts.
+  if (isPlanGatingBypassed()) return { allowed: true, limit: null, used: 0 };
+
+  const service = createServiceClient();
+  const [limits, { data: row }] = await Promise.all([
+    getDealershipPlanLimits(service, dealershipId),
+    service
+      .from("research_credits_usage")
+      .select("credits_used")
+      .eq("dealership_id", dealershipId)
+      .eq("billing_month", currentBillingMonth())
+      .maybeSingle(),
+  ]);
+
+  const used = Number(row?.credits_used ?? 0);
+  const limit = limits.researchCreditsPerMonth;
+  return { allowed: limit == null || used < limit, limit, used };
+}
+
+export function researchCreditsLimitMessage(result: ResearchCreditCheck): string {
+  return `You've used this month's research allowance (${result.limit} credits) for your plan. Upgrade for more, or try again next month.`;
 }
 
 export interface ResearchCreditsBalance {
