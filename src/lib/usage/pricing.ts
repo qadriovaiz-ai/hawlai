@@ -47,6 +47,38 @@ export const PRICING = {
   elevenlabs: {
     perThousandCharsUsd: 0.1,
   },
+
+  // Perplexity Sonar API — used only for COMPLEX/DEEP research (see
+  // researchRouter.ts). Verified 2026-08-22 from docs.perplexity.ai,
+  // cross-checked against independent trackers, seeded into
+  // provider_costs (migration 145) as the durable record; these
+  // in-code constants are the fast-path copy, kept manually in sync
+  // rather than read from the DB on every call — Option A, confirmed:
+  // prices change rarely enough that a DB round-trip on every AI call
+  // isn't worth it.
+  perplexity: {
+    sonarPro: {
+      inputPerMillionUsd: 3.0,
+      outputPerMillionUsd: 15.0,
+      // Real fee genuinely varies $6-$14/1,000 requests by
+      // search_context_size (low/medium/high) — this app doesn't set
+      // an explicit context size, so the TOP of that range is used
+      // deliberately, to never undercharge.
+      perRequestUsd: 0.014,
+    },
+    sonarDeepResearch: {
+      inputPerMillionUsd: 2.0,
+      // Deep Research separately bills $8/M base output, +$2/M
+      // citation tokens, +$3/M reasoning tokens — not representable
+      // from a single completion's input/output token counts alone.
+      // Approximated by billing all output at the higher $3/M
+      // reasoning rate, a deliberate overestimate. No call site uses
+      // this model yet (see researchRouter.ts) — revisit if/when Deep
+      // Research is wired to a real feature.
+      outputPerMillionUsd: 3.0,
+      perSearchUsd: 0.005,
+    },
+  },
 };
 
 export function costOfClaudeCallInr(inputTokens: number, outputTokens: number, model: string = CLAUDE_MODELS.standard): number {
@@ -82,5 +114,16 @@ export function costOfVeoVideoInr(durationSeconds: number = PRICING.veo.defaultD
 
 export function costOfElevenLabsInr(characterCount: number): number {
   const usd = (characterCount / 1000) * PRICING.elevenlabs.perThousandCharsUsd;
+  return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
+}
+
+export function costOfPerplexityCallInr(inputTokens: number, outputTokens: number, model: "sonar-pro" | "sonar-deep-research" = "sonar-pro"): number {
+  if (model === "sonar-deep-research") {
+    const rate = PRICING.perplexity.sonarDeepResearch;
+    const usd = (inputTokens / 1_000_000) * rate.inputPerMillionUsd + (outputTokens / 1_000_000) * rate.outputPerMillionUsd + rate.perSearchUsd;
+    return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
+  }
+  const rate = PRICING.perplexity.sonarPro;
+  const usd = (inputTokens / 1_000_000) * rate.inputPerMillionUsd + (outputTokens / 1_000_000) * rate.outputPerMillionUsd + rate.perRequestUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }

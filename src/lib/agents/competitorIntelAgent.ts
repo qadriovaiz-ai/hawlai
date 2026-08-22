@@ -6,12 +6,12 @@
 // data. New Product Alerts is a separate real monitoring system, see
 // lib/automation/competitorMonitor.ts.
 
-import { logClaudeUsage } from "../usage/logUsage";
+import { logClaudeUsage, logPerplexityUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import type { PlanKey } from "../plans";
 import { classifyResearch } from "../research/researchRouter";
 import { callComplexResearch } from "../research/perplexityClient";
-import { costOfClaudeCallInr } from "../usage/pricing";
+import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
 
 export interface CompetitorTaskMeta {
@@ -77,11 +77,12 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
 
   if (routing.active && routing.provider === "perplexity") {
     // Unreachable today (routing.active requires PERPLEXITY_API_KEY).
-    // Neither api_usage_logs nor Research Credits are recorded here
-    // yet — both need a verified costOfPerplexityCallInr(), added in
-    // the Cost Engine piece, not guessed here.
     try {
       const result = await callComplexResearch(prompt);
+      if (logContext) {
+        await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", result.inputTokens, result.outputTokens, "sonar-pro");
+        await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, "sonar-pro"));
+      }
       const jsonMatch = result.text.match(/\{[\s\S]*\}/);
       const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
       if (!clean) return fallback;

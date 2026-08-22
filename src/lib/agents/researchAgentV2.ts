@@ -27,8 +27,8 @@ export const RESEARCH_TASKS: ResearchTaskMeta[] = [
   { key: "customer_sentiment", label: "Customer Sentiment", usesWebSearch: false },
 ];
 
-import { logClaudeUsage } from "../usage/logUsage";
-import { costOfClaudeCallInr } from "../usage/pricing";
+import { logClaudeUsage, logPerplexityUsage } from "../usage/logUsage";
+import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
 
 async function callClaude(body: any, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
@@ -63,17 +63,19 @@ async function callClaude(body: any, logContext?: { supabase: any; dealershipId:
 
 // Perplexity path — only ever reached when researchRouter.ts's
 // classifyResearch() returns active:true (PERPLEXITY_API_KEY set), so
-// this is unreachable in production today. Neither api_usage_logs nor
-// Research Credits are recorded here yet — both need a real
-// costOfPerplexityCallInr(), which needs Perplexity's real pricing
-// verified from their own docs first (the very next piece, not
-// guessed here). Wiring both in is that piece's job, not this one's.
+// this is unreachable in production today.
 async function callPerplexityAsJson(
-  fn: (prompt: string, maxTokens?: number) => Promise<{ text: string }>,
-  prompt: string
+  fn: (prompt: string, maxTokens?: number) => Promise<{ text: string; model: string; inputTokens: number; outputTokens: number }>,
+  prompt: string,
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<any | null> {
   try {
     const result = await fn(`${prompt}\n\nReturn JSON only, no markdown, no preamble.`);
+    if (logContext) {
+      const model = result.model as "sonar-pro" | "sonar-deep-research";
+      await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "research", result.inputTokens, result.outputTokens, model);
+      await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, model));
+    }
     const jsonMatch = result.text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
     if (!clean) return null;
@@ -110,7 +112,7 @@ export async function generateResearch(
   if (taskKey === "industry_trends") {
     const prompt = `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`;
     const parsed = usePerplexity
-      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt)
+      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt, logContext)
       : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
@@ -118,7 +120,7 @@ export async function generateResearch(
   if (taskKey === "market_research") {
     const prompt = `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`;
     const parsed = usePerplexity
-      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt)
+      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt, logContext)
       : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
@@ -126,7 +128,7 @@ export async function generateResearch(
   if (taskKey === "new_opportunities") {
     const prompt = `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`;
     const parsed = usePerplexity
-      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt)
+      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt, logContext)
       : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
