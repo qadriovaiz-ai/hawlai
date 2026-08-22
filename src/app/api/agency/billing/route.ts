@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { computeDepartmentSpend } from "@/lib/analytics/departmentSpend";
 
 // P3 piece 7c — agency billing REPORT view (confirmed scope): what
 // each managed business actually costs to run this month, so an
@@ -33,7 +34,7 @@ export async function GET() {
   // re-derived here.
   const { data: usage } = await supabase
     .from("api_usage_logs")
-    .select("dealership_id, service, cost_inr")
+    .select("dealership_id, service, operation, cost_inr")
     .in("dealership_id", ids)
     .gte("created_at", monthStart.toISOString());
 
@@ -57,11 +58,19 @@ export async function GET() {
     };
   });
 
+  // Phase 4 / 2b — where the cost actually goes, by department.
+  // Read-only visibility; per-department CAPS were deliberately not
+  // built (see migration 148's header), and this is the data that
+  // would tell us whether they'd ever be worth it.
+  const { rows: departmentRows, totalInr: departmentTotalInr } = computeDepartmentSpend(usage ?? []);
+
   return NextResponse.json({
     businesses: rows,
+    byDepartment: departmentRows,
     totals: {
       businessCount: rows.length,
       costInr: Math.round(rows.reduce((s, r) => s + r.costInr, 0) * 100) / 100,
+      departmentCostInr: departmentTotalInr,
       monthStart: monthStart.toISOString(),
     },
   });
