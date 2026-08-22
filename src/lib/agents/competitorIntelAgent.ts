@@ -11,6 +11,8 @@ import { getModel } from "../models";
 import type { PlanKey } from "../plans";
 import { classifyResearch } from "../research/researchRouter";
 import { callComplexResearch } from "../research/perplexityClient";
+import { costOfClaudeCallInr } from "../usage/pricing";
+import { recordResearchCredits } from "../usage/researchCredits";
 
 export interface CompetitorTaskMeta {
   key: string;
@@ -74,6 +76,10 @@ ${meta.instructions(competitorName, dealershipName, businessCategory)}
 Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.`;
 
   if (routing.active && routing.provider === "perplexity") {
+    // Unreachable today (routing.active requires PERPLEXITY_API_KEY).
+    // Neither api_usage_logs nor Research Credits are recorded here
+    // yet — both need a verified costOfPerplexityCallInr(), added in
+    // the Cost Engine piece, not guessed here.
     try {
       const result = await callComplexResearch(prompt);
       const jsonMatch = result.text.match(/\{[\s\S]*\}/);
@@ -101,7 +107,13 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
     const bodyText = await response.text();
     if (!bodyText.trim()) return fallback;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) {
+      const inputTokens = data.usage.input_tokens ?? 0;
+      const outputTokens = data.usage.output_tokens ?? 0;
+      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", inputTokens, outputTokens);
+      // Research Credits (Section 7) — real cost from this call.
+      await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(inputTokens, outputTokens));
+    }
     const text = (data.content ?? [])
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)

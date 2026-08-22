@@ -28,6 +28,8 @@ export const RESEARCH_TASKS: ResearchTaskMeta[] = [
 ];
 
 import { logClaudeUsage } from "../usage/logUsage";
+import { costOfClaudeCallInr } from "../usage/pricing";
+import { recordResearchCredits } from "../usage/researchCredits";
 
 async function callClaude(body: any, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
   try {
@@ -40,7 +42,14 @@ async function callClaude(body: any, logContext?: { supabase: any; dealershipId:
     const bodyText = await response.text();
     if (!bodyText.trim()) return null;
     const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "research", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    if (logContext && data.usage) {
+      const inputTokens = data.usage.input_tokens ?? 0;
+      const outputTokens = data.usage.output_tokens ?? 0;
+      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "research", inputTokens, outputTokens, body.model);
+      // Research Credits (Section 7) — real cost from what this call
+      // actually used, converted through the one tunable credit rate.
+      await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(inputTokens, outputTokens, body.model));
+    }
     const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
@@ -54,10 +63,11 @@ async function callClaude(body: any, logContext?: { supabase: any; dealershipId:
 
 // Perplexity path — only ever reached when researchRouter.ts's
 // classifyResearch() returns active:true (PERPLEXITY_API_KEY set), so
-// this is unreachable in production today. Usage isn't logged here:
-// api_usage_logs' service enum doesn't have a 'perplexity' value yet —
-// that's the Cost Engine's job (Phase 2, Section 8/9), added once real
-// Perplexity pricing has been verified rather than guessed here.
+// this is unreachable in production today. Neither api_usage_logs nor
+// Research Credits are recorded here yet — both need a real
+// costOfPerplexityCallInr(), which needs Perplexity's real pricing
+// verified from their own docs first (the very next piece, not
+// guessed here). Wiring both in is that piece's job, not this one's.
 async function callPerplexityAsJson(
   fn: (prompt: string, maxTokens?: number) => Promise<{ text: string }>,
   prompt: string

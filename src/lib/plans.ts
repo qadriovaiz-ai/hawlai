@@ -53,6 +53,12 @@ export interface PlanLimits {
   // cap for that resource.
   videosPerDay: number | null;
   voiceoverCharsPerDay: number | null;
+  // Usage/Pricing/Cost-Control spec, Section 7 (migration 144) — the
+  // monthly Research Credits allowance. null = unlimited, same
+  // convention as every other cap here (though per the spec's own
+  // "no truly unlimited AI" rule, no plan is actually seeded null —
+  // even Agency has a high, finite ceiling).
+  researchCreditsPerMonth: number | null;
 }
 
 export const PLAN_LABELS: Record<PlanKey, string> = {
@@ -99,6 +105,7 @@ const FREE_FALLBACK: PlanLimits = {
   websiteBuildsPerMonth: 1,
   videosPerDay: 0,
   voiceoverCharsPerDay: 2000,
+  researchCreditsPerMonth: 10,
 };
 
 interface PlanLimitsRow {
@@ -129,6 +136,7 @@ interface PlanLimitsRow {
   website_builds_per_month: number | null;
   videos_per_day: number | null;
   voiceover_chars_per_day: number | null;
+  research_credits_per_month: number | null;
 }
 
 function mapRow(row: PlanLimitsRow): PlanLimits {
@@ -163,6 +171,7 @@ function mapRow(row: PlanLimitsRow): PlanLimits {
     websiteBuildsPerMonth: row.website_builds_per_month,
     videosPerDay: row.videos_per_day,
     voiceoverCharsPerDay: row.voiceover_chars_per_day,
+    researchCreditsPerMonth: row.research_credits_per_month,
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Crown, CheckCircle2, MessageSquare, PhoneCall, Megaphone, Image as ImageIcon, Video, Mic, Palette, Globe } from "lucide-react";
+import { Loader2, Crown, CheckCircle2, MessageSquare, PhoneCall, Megaphone, Image as ImageIcon, Video, Mic, Palette, Globe, Search } from "lucide-react";
 import { buttonClasses } from "@/components/ui/Button";
 
 interface PlanLimits {
@@ -18,6 +18,7 @@ interface PlanLimits {
   voiceoverCharsPerMonth: number | null;
   brandKitsPerMonth: number | null;
   websiteBuildsPerMonth: number | null;
+  researchCreditsPerMonth: number | null;
   whatsappAutomation: boolean;
   businessReports: boolean;
   marketingAutomationWorkflows: boolean;
@@ -34,6 +35,7 @@ interface UsageData {
   messagesUsedToday: number;
   calling: { minutesUsed: number; extraMinutesCharged: number; extraChargeInr: number };
   activeAdCampaigns: number;
+  researchCreditsUsed: number;
   generation: { image: number; video: number; voiceoverChars: number; brandKit: number; websiteBuild: number };
 }
 
@@ -80,7 +82,7 @@ export default function UsageView() {
   if (loading) return <div className="card p-8 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading usage...</div>;
   if (!data) return <div className="card p-8 text-sm text-red-400">Couldn't load usage data.</div>;
 
-  const { planLimits, messagesUsedToday, calling, activeAdCampaigns, generation } = data;
+  const { planLimits, messagesUsedToday, calling, activeAdCampaigns, researchCreditsUsed, generation } = data;
 
   return (
     <div className="space-y-5">
@@ -121,6 +123,12 @@ export default function UsageView() {
           )}
         </div>
         <p className="text-xs text-slate-400">Messages reset daily, calling minutes reset on the 1st of each month.</p>
+      </div>
+
+      <div className="card p-5 space-y-4">
+        <p className="text-sm font-semibold text-slate-700">Web Intelligence</p>
+        <UsageBar icon={Search} label="Research Credits" used={researchCreditsUsed} limit={planLimits.researchCreditsPerMonth} />
+        <p className="text-xs text-slate-400">Used automatically whenever the AI researches your industry, market, or competitors. Resets on the 1st of each month.</p>
       </div>
 
       <div className="card p-5 space-y-4">

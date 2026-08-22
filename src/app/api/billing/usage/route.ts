@@ -21,11 +21,12 @@ export async function GET() {
   // dealershipId already verified above, same as every other place
   // this app touches these tables.
   const service = createServiceClient();
-  const [{ data: messageRow }, { data: callingRow }, { count: activeAdCampaigns }, { data: generationRows }] = await Promise.all([
+  const [{ data: messageRow }, { data: callingRow }, { count: activeAdCampaigns }, { data: generationRows }, { data: creditsRow }] = await Promise.all([
     service.from("daily_message_usage").select("message_count").eq("dealership_id", dealershipId).eq("usage_date", todayDateString()).maybeSingle(),
     service.from("calling_minutes_usage").select("minutes_used, extra_minutes_charged, extra_charge_inr").eq("dealership_id", dealershipId).eq("billing_month", currentBillingMonth()).maybeSingle(),
     supabase.from("ad_creatives").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).eq("status", "launched").eq("meta_status", "ACTIVE"),
     service.from("monthly_generation_usage").select("resource, count").eq("dealership_id", dealershipId).eq("billing_month", currentBillingMonth()),
+    service.from("research_credits_usage").select("credits_used").eq("dealership_id", dealershipId).eq("billing_month", currentBillingMonth()).maybeSingle(),
   ]);
 
   const generationUsage: Record<string, number> = {};
@@ -40,6 +41,9 @@ export async function GET() {
       extraChargeInr: callingRow?.extra_charge_inr ?? 0,
     },
     activeAdCampaigns: activeAdCampaigns ?? 0,
+    // Section 16 — Web Intelligence: research credits remaining.
+    // Credit counts only, never the underlying real cost.
+    researchCreditsUsed: creditsRow?.credits_used ?? 0,
     generation: {
       image: generationUsage.image ?? 0,
       video: generationUsage.video ?? 0,
