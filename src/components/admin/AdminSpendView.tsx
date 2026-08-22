@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, PhoneCall, MessageSquare, Sparkles, IndianRupee, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
+import { Loader2, PhoneCall, MessageSquare, Sparkles, IndianRupee, CheckCircle2, AlertCircle, TrendingUp, Lightbulb } from "lucide-react";
 
 interface SpendData {
   month: string;
@@ -29,6 +29,12 @@ interface SpendData {
     caveat: string;
   } | null;
   projectionWarning: string | null;
+  marginSuggestions: {
+    id: string;
+    severity: "info" | "warning" | "critical";
+    title: string;
+    detail: string;
+  }[];
   totalDealerships: number;
   perDealership: { id: string; name: string; plan: string; exactCostInr: number; revenueInr: number; grossProfitInr: number; calls: number; content: number; images: number; videos: number }[];
 }
@@ -158,6 +164,42 @@ export default function AdminSpendView() {
               <p className="text-xs text-amber-700">{data.projectionWarning}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Margin optimization — rule-based findings over the real
+          numbers above, each citing the figures it came from. */}
+      {(data.marginSuggestions ?? []).length > 0 && (
+        <div className="card p-5 space-y-3">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+            <Lightbulb className="w-4 h-4 text-slate-400" /> Margin findings
+          </p>
+          <div className="space-y-2">
+            {data.marginSuggestions.map((s) => (
+              <div
+                key={s.id}
+                className={`rounded-lg p-3 border ${
+                  s.severity === "critical"
+                    ? "bg-red-500/5 border-red-300/50"
+                    : s.severity === "warning"
+                    ? "bg-amber-50 border-amber-200"
+                    : "bg-slate-100 border-slate-200"
+                }`}
+              >
+                <p
+                  className={`text-xs font-semibold ${
+                    s.severity === "critical" ? "text-red-600" : s.severity === "warning" ? "text-amber-700" : "text-slate-700"
+                  }`}
+                >
+                  {s.title}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{s.detail}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10.5px] text-slate-400">
+            Derived from this month&apos;s real revenue and provider cost by fixed rules — not AI-generated, so every figure above is checkable against the numbers on this page.
+          </p>
         </div>
       )}
 

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { projectMonthEndSpend, projectedBudgetWarning } from "@/lib/analytics/spendProjection";
+import { computeMarginSuggestions } from "@/lib/analytics/marginOptimization";
 
 // Usage/Pricing/Cost-Control spec, Section 17 (Admin Cost Dashboard).
 // EXTENDS the existing admin spend view — verified before touching it
@@ -166,6 +167,21 @@ export async function GET(request: Request) {
   const projection = isCurrentMonth ? projectMonthEndSpend(logs, now) : null;
   const projectionWarning = projection ? projectedBudgetWarning(projection, dailySpendAlertInr) : null;
 
+  // Margin optimization (Phase 4 / 4) — rule-based findings over the
+  // real revenue/cost numbers computed above, not AI-generated.
+  const byPlanObject = Object.fromEntries(
+    Array.from(byPlan.entries()).map(([k, v]) => [k, { dealerships: v.dealerships, revenueInr: Math.round(v.revenueInr * 100) / 100, costInr: Math.round(v.costInr * 100) / 100 }])
+  );
+  const byOperationObject = Object.fromEntries(Array.from(byOperation.entries()).map(([k, v]) => [k, Math.round(v * 100) / 100]));
+  const marginSuggestions = computeMarginSuggestions({
+    revenueInr: Math.round(revenueInr * 100) / 100,
+    cogsInr: Math.round(cogsInr * 100) / 100,
+    grossMarginPct: grossMarginPct === null ? null : Math.round(grossMarginPct * 10) / 10,
+    byPlan: byPlanObject,
+    byOperation: byOperationObject,
+    perDealership,
+  });
+
   return NextResponse.json({
     month: monthLabel,
     since,
@@ -211,8 +227,9 @@ export async function GET(request: Request) {
       elevenlabs: Math.round(exactElevenLabsCostInr * 100) / 100,
       perplexity: Math.round(exactPerplexityCostInr * 100) / 100,
     },
-    byOperation: Object.fromEntries(Array.from(byOperation.entries()).map(([k, v]) => [k, Math.round(v * 100) / 100])),
-    byPlan: Object.fromEntries(Array.from(byPlan.entries()).map(([k, v]) => [k, { dealerships: v.dealerships, revenueInr: Math.round(v.revenueInr * 100) / 100, costInr: Math.round(v.costInr * 100) / 100 }])),
+    byOperation: byOperationObject,
+    byPlan: byPlanObject,
+    marginSuggestions,
     perDealership,
     totalDealerships: allDealerships.length,
   });
