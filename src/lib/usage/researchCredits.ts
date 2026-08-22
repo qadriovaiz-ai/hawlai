@@ -20,7 +20,8 @@
 // internal provider costs). Customer surfaces show credit counts only.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { getDealershipPlanLimits, isPlanGatingBypassed } from "@/lib/plans";
+import { isPlanGatingBypassed } from "@/lib/plans";
+import { getEffectiveLimits } from "@/lib/usage/effectiveLimits";
 
 const CREDIT_VALUE_INR = 1;
 
@@ -93,7 +94,7 @@ export async function checkResearchCredits(dealershipId: string): Promise<Resear
 
   const service = createServiceClient();
   const [limits, { data: row }] = await Promise.all([
-    getDealershipPlanLimits(service, dealershipId),
+    getEffectiveLimits(service, dealershipId),
     service
       .from("research_credits_usage")
       .select("credits_used")
@@ -120,7 +121,10 @@ export interface ResearchCreditsBalance {
 /** For the customer-facing Usage & Billing dashboard (Section 16) — credit counts only, never the underlying INR value. */
 export async function getResearchCreditsBalance(supabase: any, dealershipId: string): Promise<ResearchCreditsBalance> {
   const [limits, { data: row }] = await Promise.all([
-    getDealershipPlanLimits(supabase, dealershipId),
+    // Effective, not plan — a client capped below their tier must see
+    // the real ceiling they're operating under, not a plan number
+    // they can never actually reach (confirmed transparency decision).
+    getEffectiveLimits(supabase, dealershipId),
     supabase
       .from("research_credits_usage")
       .select("credits_used")

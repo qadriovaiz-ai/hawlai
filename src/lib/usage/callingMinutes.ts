@@ -6,7 +6,7 @@
 // user session anyway.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { getDealershipPlanLimits } from "@/lib/plans";
+import { getEffectiveLimits } from "@/lib/usage/effectiveLimits";
 import { costOfCallingOverageInr } from "@/lib/usage/pricing";
 
 export interface CallingMinutesResult {
@@ -31,7 +31,11 @@ export async function recordCallingMinutes(dealershipId: string, callDurationSec
   if (callDurationSeconds <= 0) return null;
 
   const service = createServiceClient();
-  const limits = await getDealershipPlanLimits(service, dealershipId);
+  // Effective, not plan — an agency override lowers the included
+  // minutes, so overage starts sooner. The margin itself is never
+  // overridable: it's the pricing rule (actual cost + ₹X/min,
+  // Section 12), not an allowance.
+  const limits = await getEffectiveLimits(service, dealershipId);
   const billingMonth = currentBillingMonth();
   const callMinutes = callDurationSeconds / 60;
 

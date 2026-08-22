@@ -16,7 +16,8 @@
 // route through anyway.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { getDealershipPlanLimits, isPlanGatingBypassed, type PlanLimits } from "@/lib/plans";
+import { isPlanGatingBypassed, type PlanLimits } from "@/lib/plans";
+import { getEffectiveLimits } from "@/lib/usage/effectiveLimits";
 import { currentBillingMonth } from "@/lib/usage/callingMinutes";
 
 export type GenerationResource = "image" | "video" | "voiceover_chars" | "brand_kit" | "website_build";
@@ -79,7 +80,9 @@ export async function checkAndRecordGenerationUsage(
   if (isPlanGatingBypassed()) return { allowed: true, limit: null, used: 0, resource };
 
   const service = createServiceClient();
-  const limits = await getDealershipPlanLimits(service, dealershipId);
+  // Effective, not plan — applies any agency per-client override
+  // (migration 148), which can only ever tighten.
+  const limits = await getEffectiveLimits(service, dealershipId);
   const monthlyLimit = limits[RESOURCE_LIMIT_KEY[resource]] as number | null;
   const billingMonth = currentBillingMonth();
 

@@ -6,7 +6,7 @@
 // dealershipId) keeps this safe regardless of that gap.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { getDealershipPlanLimits } from "@/lib/plans";
+import { getEffectiveLimits } from "@/lib/usage/effectiveLimits";
 
 export interface MessageLimitResult {
   allowed: boolean;
@@ -26,7 +26,8 @@ export function todayDateString(): string {
  */
 export async function checkAndRecordMessageUsage(dealershipId: string): Promise<MessageLimitResult> {
   const service = createServiceClient();
-  const limits = await getDealershipPlanLimits(service, dealershipId);
+  // Effective, not plan — applies any agency per-client override.
+  const limits = await getEffectiveLimits(service, dealershipId);
   const usageDate = todayDateString();
 
   const { data: row } = await service

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { getDealershipPlanLimits } from "@/lib/plans";
+import { getEffectiveLimits } from "@/lib/usage/effectiveLimits";
 import { todayDateString } from "@/lib/usage/messageLimits";
 import { currentBillingMonth } from "@/lib/usage/callingMinutes";
 
@@ -13,7 +13,11 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const planLimits = await getDealershipPlanLimits(supabase, dealershipId);
+  // Effective, not plan — if an agency capped this client below their
+  // tier, they see the real ceiling they're operating under. Showing
+  // the plan number would be showing them something they can't reach
+  // (confirmed transparency decision).
+  const planLimits = await getEffectiveLimits(supabase, dealershipId);
 
   // daily_message_usage, calling_minutes_usage and
   // monthly_generation_usage have no RLS policy (see migrations 079,

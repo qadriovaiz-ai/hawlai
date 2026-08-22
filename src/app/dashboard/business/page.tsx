@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase, BookOpen, MessageSquareWarning, IndianRupee, History, ShieldCheck } from "lucide-react";
+import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase, BookOpen, MessageSquareWarning, IndianRupee, History, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
 import BusinessSwitcherCard from "@/components/business/BusinessSwitcherCard";
 
@@ -57,6 +57,7 @@ const SECTIONS: { label: string; items: HubItem[] }[] = [
       { href: "/dashboard/agency-branding", label: "Agency Branding", desc: "White-label client reports with your own logo and colors", icon: Palette, feature: "multiBusiness" },
       { href: "/dashboard/agency-team", label: "Agency Team", desc: "Who can reach which client, and as what — one screen for every business", icon: Users2, feature: "multiBusiness" },
       { href: "/dashboard/agency-billing", label: "Agency Billing", desc: "What each client costs you to run this month", icon: CreditCard, feature: "multiBusiness" },
+      { href: "/dashboard/agency-limits", label: "Client Limits", desc: "Cap what each client can use, below what their plan includes", icon: SlidersHorizontal, feature: "multiBusiness" },
       { href: "/dashboard/team", label: "Team", desc: "Invite people, manage roles", icon: Users2 },
       { href: "/dashboard/audit-log", label: "Audit Log", desc: "Every approval decision, AI call action, and auto-pause — who/what did it and when", icon: History },
       { href: "/dashboard/settings/security", label: "Security", desc: "Two-factor authentication, SSO, and customer data requests", icon: ShieldCheck },
