@@ -1,12 +1,14 @@
-// Plan tiers (Free/Basic/Pro/Max) — see migration 079_new_pricing_tiers.sql
-// for the source-of-truth `plan_limits` table. Limits live in the DB, not
-// here, so pricing changes don't need a deploy; this file just maps that
-// row into a typed shape and provides a safe fallback if the table is
-// ever empty (e.g. a fresh local DB before the migration has been run).
+// Plan tiers (Free/Basic/Growth/Pro/Agency) — see
+// migration 079_new_pricing_tiers.sql + 099 (agency rename/reprice) +
+// 143 (growth tier + Usage/Pricing/Cost-Control spec repricing) for the
+// source-of-truth `plan_limits` table. Limits live in the DB, not here,
+// so pricing changes don't need a deploy; this file just maps that row
+// into a typed shape and provides a safe fallback if the table is ever
+// empty (e.g. a fresh local DB before the migration has been run).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PlanKey = "free" | "basic" | "pro" | "agency";
+export type PlanKey = "free" | "basic" | "growth" | "pro" | "agency";
 export type OpusAccess = "none" | "limited" | "full";
 
 export interface PlanLimits {
@@ -56,6 +58,7 @@ export interface PlanLimits {
 export const PLAN_LABELS: Record<PlanKey, string> = {
   free: "Free",
   basic: "Basic",
+  growth: "Growth",
   pro: "Pro",
   agency: "Agency",
 };

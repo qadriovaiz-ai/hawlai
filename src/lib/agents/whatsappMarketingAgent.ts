@@ -33,7 +33,8 @@ interface BrandProfile {
 }
 
 import { logClaudeUsage } from "../usage/logUsage";
-import { getModel, CLAUDE_MODELS } from "../models";
+import { CLAUDE_MODELS } from "../models";
+import { modelForTask } from "../aiTaskRouter";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -61,8 +62,11 @@ export async function generateWhatsappContent(
       body: JSON.stringify({
         // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
         // recovery) is a lower-complexity linguistic task than most
-        // of what this app uses Sonnet for.
-        model: getModel("fast"),
+        // of what this app uses Sonnet for. Routed through the AI
+        // Task Router by taskKey (Usage/Pricing spec Section 10) —
+        // every WHATSAPP_TASKS key maps to "simple", so this is the
+        // same Haiku choice as before, now named rather than hardcoded.
+        model: modelForTask(taskKey),
         max_tokens: 1600,
         messages: [{
           role: "user",

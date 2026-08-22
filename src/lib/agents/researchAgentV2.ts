@@ -10,6 +10,9 @@
 // guess from search results about "customers in general."
 
 import { getModel } from "../models";
+import type { PlanKey } from "../plans";
+import { classifyResearch } from "../research/researchRouter";
+import { callComplexResearch, callDeepResearch } from "../research/perplexityClient";
 
 export interface ResearchTaskMeta {
   key: string;
@@ -49,45 +52,72 @@ async function callClaude(body: any, logContext?: { supabase: any; dealershipId:
   }
 }
 
+// Perplexity path — only ever reached when researchRouter.ts's
+// classifyResearch() returns active:true (PERPLEXITY_API_KEY set), so
+// this is unreachable in production today. Usage isn't logged here:
+// api_usage_logs' service enum doesn't have a 'perplexity' value yet —
+// that's the Cost Engine's job (Phase 2, Section 8/9), added once real
+// Perplexity pricing has been verified rather than guessed here.
+async function callPerplexityAsJson(
+  fn: (prompt: string, maxTokens?: number) => Promise<{ text: string }>,
+  prompt: string
+): Promise<any | null> {
+  try {
+    const result = await fn(`${prompt}\n\nReturn JSON only, no markdown, no preamble.`);
+    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+    const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
+    if (!clean) return null;
+    return JSON.parse(clean);
+  } catch (err: any) {
+    console.error("[research-agent] perplexity error:", err.message);
+    return null;
+  }
+}
+
 export async function generateResearch(
   taskKey: string,
   dealershipName: string,
   businessCategory: string,
   city: string | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  // Defaults to "pro" (unrestricted) rather than "free" — a caller
+  // that hasn't been updated to pass the real plan gets today's exact
+  // behavior, not an accidental Free-tier downgrade.
+  plan: PlanKey = "pro"
 ): Promise<{ output: any; _fallback?: boolean }> {
   const location = city ? ` in ${city}, India` : " in India";
   const fallback = { output: { text: "Couldn't complete this research right now — try again shortly." }, _fallback: true };
   const grounding = groundingContext ?? "";
 
+  // Research Router — decides depth + provider for this task/plan.
+  // Provider only ever resolves to Perplexity when routing.active is
+  // true (PERPLEXITY_API_KEY set); until then every task below keeps
+  // using Claude's own web_search exactly as before this wiring.
+  const routing = classifyResearch({ plan, taskType: taskKey });
+  const usePerplexity = routing.active && (routing.provider === "perplexity" || routing.provider === "perplexity_deep");
+
   if (taskKey === "industry_trends") {
-    const parsed = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 2000,
-      messages: [{ role: "user", content: `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}` }],
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-    }, logContext);
+    const prompt = `Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`;
+    const parsed = usePerplexity
+      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt)
+      : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
 
   if (taskKey === "market_research") {
-    const parsed = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 2000,
-      messages: [{ role: "user", content: `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}` }],
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-    }, logContext);
+    const prompt = `Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`;
+    const parsed = usePerplexity
+      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt)
+      : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
 
   if (taskKey === "new_opportunities") {
-    const parsed = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 2000,
-      messages: [{ role: "user", content: `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}` }],
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-    }, logContext);
+    const prompt = `Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`;
+    const parsed = usePerplexity
+      ? await callPerplexityAsJson(routing.provider === "perplexity_deep" ? callDeepResearch : callComplexResearch, prompt)
+      : await callClaude({ model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] }, logContext);
     return parsed ? { output: parsed } : fallback;
   }
 

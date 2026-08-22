@@ -7,7 +7,8 @@
 // so this overwrites that guess.
 
 import { logClaudeUsage } from "../usage/logUsage";
-import { getModel, CLAUDE_MODELS } from "../models";
+import { CLAUDE_MODELS } from "../models";
+import { modelForTask } from "../aiTaskRouter";
 
 export type CallIntent = "interested" | "not_interested" | "requesting_info" | "ready_to_book" | "complaint" | "no_real_conversation" | "other";
 export type CallSentiment = "positive" | "neutral" | "negative";
@@ -56,7 +57,10 @@ export async function scoreLeadFromCall(transcript: string, leadName: string, lo
         // classifying a transcript into hot/warm/cold + a one-line
         // reason is a simpler task than the department-work this app
         // mostly uses Sonnet for. Frequency is high, complexity isn't.
-        model: getModel("fast"),
+        // Routed through the AI Task Router (Usage/Pricing spec
+        // Section 10) rather than getModel("fast") directly — same
+        // model, now via the named "call_scoring" -> simple mapping.
+        model: modelForTask("call_scoring"),
         max_tokens: 500,
         messages: [{
           role: "user",

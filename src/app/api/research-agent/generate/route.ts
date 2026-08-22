@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateResearch, generateSentimentFromLeads } from "@/lib/agents/researchAgentV2";
+import { getDealershipPlanLimits } from "@/lib/plans";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
       { supabase, dealershipId }
     );
   } else {
-    result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId });
+    const limits = await getDealershipPlanLimits(supabase, dealershipId);
+    result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId }, undefined, limits.plan);
   }
 
   const { output, _fallback } = result;

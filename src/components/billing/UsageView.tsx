@@ -106,7 +106,7 @@ export default function UsageView() {
         <div>
           <div className="flex items-center justify-between text-sm mb-1">
             <span className="flex items-center gap-1.5 text-slate-700"><PhoneCall className="w-4 h-4 text-slate-400" /> Calling Minutes This Month</span>
-            <span className="text-slate-500">{calling.minutesUsed} / {planLimits.callingFreeMinutes} free</span>
+            <span className="text-slate-500">{calling.minutesUsed} / {planLimits.callingFreeMinutes} included</span>
           </div>
           <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
             <div

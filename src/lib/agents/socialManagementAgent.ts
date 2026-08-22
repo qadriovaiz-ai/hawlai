@@ -8,6 +8,7 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { modelForTask } from "../aiTaskRouter";
 
 export interface SocialTaskMeta {
   key: string;
@@ -92,8 +93,10 @@ export async function generateAutoReply(
         // Haiku — a safe, single, auto-sent reply is a tightly
         // constrained task (explicitly avoids prices/promises/
         // complaint resolution per the prompt below), and this fires
-        // on every incoming DM/comment when the toggle is on.
-        model: getModel("fast"),
+        // on every incoming DM/comment when the toggle is on. Routed
+        // through the AI Task Router (Usage/Pricing spec Section 10)
+        // — same Haiku choice, now via the named per-channel mapping.
+        model: modelForTask(channel === "dm" ? "dm_auto_reply" : "comment_auto_reply"),
         max_tokens: 300,
         messages: [{
           role: "user",

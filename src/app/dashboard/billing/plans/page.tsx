@@ -25,11 +25,12 @@ interface PlanRow {
   multi_business: boolean;
 }
 
-const PLAN_ORDER: PlanKey[] = ["free", "basic", "pro", "agency"];
+const PLAN_ORDER: PlanKey[] = ["free", "basic", "growth", "pro", "agency"];
 
 const PLAN_COPY: Record<PlanKey, { label: string; tagline: string }> = {
   free: { label: "Free", tagline: "Try Hawlai with your real business, no card needed." },
   basic: { label: "Basic", tagline: "Everything a single-location business runs day to day." },
+  growth: { label: "Growth", tagline: "More room to run — higher volume, WhatsApp automation, reports." },
   pro: { label: "Pro", tagline: "Add the intelligence layer — automation, research, growth." },
   agency: { label: "Agency", tagline: "For agencies and multi-business operators, fully unlocked." },
 };
@@ -77,7 +78,7 @@ export default async function PlansPage() {
 
       {/* Mobile: horizontal snap-scroll, one card at a time. Desktop (md+): four-up grid.
           Same card markup for both — only the wrapping layout changes. */}
-      <div className="flex md:grid md:grid-cols-4 gap-4 overflow-x-auto md:overflow-visible snap-x snap-mandatory px-4 md:px-0 pb-2 md:pb-0 -mx-4 md:mx-0 scrollbar-none">
+      <div className="flex md:grid md:grid-cols-5 gap-4 overflow-x-auto md:overflow-visible snap-x snap-mandatory px-4 md:px-0 pb-2 md:pb-0 -mx-4 md:mx-0 scrollbar-none">
         {plans.map((plan) => {
           const isCurrent = plan.plan === currentPlan;
           const isPro = plan.plan === "pro";
@@ -135,7 +136,7 @@ export default async function PlansPage() {
                     label={
                       plan.plan === "free"
                         ? "AI phone calling"
-                        : `${plan.calling_free_minutes.toLocaleString("en-IN")} free calling min/mo, then +₹${plan.calling_margin_inr.toFixed(2)}/min`
+                        : `${plan.calling_free_minutes.toLocaleString("en-IN")} included calling min/mo, then +₹${plan.calling_margin_inr.toFixed(2)}/min`
                     }
                   />
                 </FeatureGroup>

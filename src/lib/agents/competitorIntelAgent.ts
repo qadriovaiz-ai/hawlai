@@ -8,6 +8,9 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import type { PlanKey } from "../plans";
+import { classifyResearch } from "../research/researchRouter";
+import { callComplexResearch } from "../research/perplexityClient";
 
 export interface CompetitorTaskMeta {
   key: string;
@@ -44,7 +47,11 @@ export async function generateCompetitorIntel(
   dealershipName: string,
   businessCategory: string,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  // Defaults to "pro" — this feature is already gated to pro+ by
+  // requireFeature(..., "competitorIntel") at the route level, so
+  // Free never reaches here regardless.
+  plan: PlanKey = "pro"
 ): Promise<{ output: any; _fallback?: boolean }> {
   const meta = COMPETITOR_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -54,6 +61,31 @@ export async function generateCompetitorIntel(
     _fallback: true,
   };
 
+  // Research Router — all 4 tasks here are COMPLEX (multi-source
+  // competitive research), so this is the most likely place Perplexity
+  // actually engages once PERPLEXITY_API_KEY is set. Until then
+  // routing.active is false and this behaves exactly as before.
+  const routing = classifyResearch({ plan, taskType: taskKey });
+  const prompt = `You are a competitive intelligence analyst working for "${dealershipName}", a ${businessCategory} business in India, researching their competitor "${competitorName}".${groundingContext ?? ""}
+
+Task: ${meta.label}
+${meta.instructions(competitorName, dealershipName, businessCategory)}
+
+Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.`;
+
+  if (routing.active && routing.provider === "perplexity") {
+    try {
+      const result = await callComplexResearch(prompt);
+      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+      const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
+      if (!clean) return fallback;
+      return { output: JSON.parse(clean) };
+    } catch (err: any) {
+      console.error("[competitor-intel-agent] perplexity error:", err.message);
+      return fallback;
+    }
+  }
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -61,15 +93,7 @@ export async function generateCompetitorIntel(
       body: JSON.stringify({
         model: getModel("standard"),
         max_tokens: 2500,
-        messages: [{
-          role: "user",
-          content: `You are a competitive intelligence analyst working for "${dealershipName}", a ${businessCategory} business in India, researching their competitor "${competitorName}".${groundingContext ?? ""}
-
-Task: ${meta.label}
-${meta.instructions(competitorName, dealershipName, businessCategory)}
-
-Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.`,
-        }],
+        messages: [{ role: "user", content: prompt }],
         tools: [{ type: "web_search_20250305", name: "web_search" }],
       }),
     });

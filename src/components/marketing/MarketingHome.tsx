@@ -2,6 +2,8 @@ import Link from "next/link";
 import ApprovalSlip from "@/components/marketing/ApprovalSlip";
 import { Check } from "lucide-react";
 import { buildGoogleFontsUrl } from "@/lib/googleFontsUrl";
+import { createServiceClient } from "@/lib/supabase/service";
+import type { PlanKey } from "@/lib/plans";
 
 // Previously next/font/google's Space Grotesk + IBM Plex Mono — their
 // build-time font fetch failing (fonts.gstatic.com hiccup) took down the
@@ -34,47 +36,79 @@ const DEPARTMENT_GROUPS = [
   },
 ];
 
-const PLANS = [
-  {
+// Prices are NOT hardcoded here — they're fetched from plan_limits
+// below (the same table /dashboard/billing/plans reads) so this page
+// can never drift from what a signed-up customer actually sees.
+// Copy (tagline/features/cta) isn't a price, so it stays static —
+// only the numbers that could silently go stale are data-driven.
+const PLAN_COPY: Record<PlanKey, { label: string; tagline: string; features: string[]; featured?: boolean }> = {
+  free: {
     label: "Free",
-    price: "₹0",
-    period: "forever",
     tagline: "Try Hawlai on your real business, no card needed.",
     features: ["100 AI messages/day", "1 team seat", "1-page website"],
-    href: "/auth/signup",
-    cta: "Start free",
   },
-  {
+  basic: {
     label: "Basic",
-    price: "₹1,999",
-    period: "/month",
     tagline: "Everything a single-location business runs day to day.",
-    features: ["200 AI messages/day", "WhatsApp automation", "5 ad campaigns", "50 free calling min/mo"],
-    href: "/auth/signup",
-    cta: "Start free",
+    features: ["200 AI messages/day", "WhatsApp automation", "5 ad campaigns", "Included calling minutes"],
   },
-  {
+  growth: {
+    label: "Growth",
+    tagline: "More room to run — higher volume, automation, reports.",
+    features: ["500 AI messages/day", "WhatsApp automation & reports", "10 ad campaigns", "Included calling minutes"],
+  },
+  pro: {
     label: "Pro",
-    price: "₹7,999",
-    period: "/month",
     tagline: "Add the intelligence layer — automation, research, growth.",
-    features: ["1,000 AI messages/day", "Automation workflows", "Competitor Intel & Growth Advisor", "200 free calling min/mo"],
-    href: "/auth/signup",
-    cta: "Start free",
+    features: ["1,000 AI messages/day", "Automation workflows", "Competitor Intel & Growth Advisor", "Included calling minutes"],
     featured: true,
   },
-  {
+  agency: {
     label: "Agency",
-    price: "₹50,000",
-    period: "/month",
     tagline: "For agencies and multi-business operators, fully unlocked.",
-    features: ["Unlimited AI messages", "3D Studio & full Opus AI", "Multi-business management", "500 free calling min/mo"],
-    href: "/auth/signup",
-    cta: "Start free",
+    features: ["Unlimited AI messages", "3D Studio & full Opus AI", "Multi-business management", "Included calling minutes"],
   },
-];
+};
 
-export default function MarketingHome() {
+const PLAN_ORDER: PlanKey[] = ["free", "basic", "growth", "pro", "agency"];
+
+// Mirrors migration 143's seeded price_inr values — same fallback
+// pattern as plans.ts's FREE_FALLBACK. This is NOT the source of
+// truth (plan_limits is); it only protects the homepage — the single
+// most-visited, most-cacheable page in the app — from ever depending
+// on a live Supabase round-trip to render. If plan_limits is
+// unreachable (a build environment with no credentials, or a real
+// Supabase outage) or drifts from these numbers, the page still
+// renders correctly for everything except a stale price, rather than
+// failing to render at all.
+const FALLBACK_PRICE_INR: Record<PlanKey, number> = { free: 0, basic: 1999, growth: 3999, pro: 14999, agency: 49999 };
+
+function formatPrice(priceInr: number): { amount: string; period: string } {
+  return priceInr === 0 ? { amount: "₹0", period: "forever" } : { amount: `₹${priceInr.toLocaleString("en-IN")}`, period: "/month" };
+}
+
+export default async function MarketingHome() {
+  // Service-role client — this is an unauthenticated public page, and
+  // plan_limits' RLS policy (migration 080) only allows `authenticated`
+  // reads. The table holds no per-customer data, just shared pricing,
+  // so a service-role read here is the same trust boundary as any
+  // other public pricing page. Best-effort: never let a Supabase
+  // problem take down the homepage — fall back to FALLBACK_PRICE_INR.
+  let priceByPlan = new Map<PlanKey, number>();
+  try {
+    const service = createServiceClient();
+    const { data: rows } = await service.from("plan_limits").select("plan, price_inr");
+    priceByPlan = new Map((rows ?? []).map((r: any) => [r.plan as PlanKey, r.price_inr as number]));
+  } catch (err) {
+    console.error("[marketing-home] couldn't fetch live plan prices, using fallback:", err);
+  }
+
+  const PLANS = PLAN_ORDER.map((key) => {
+    const copy = PLAN_COPY[key];
+    const price = formatPrice(priceByPlan.get(key) ?? FALLBACK_PRICE_INR[key]);
+    return { ...copy, ...price, href: "/auth/signup", cta: "Start free" };
+  });
+
   return (
     <div
       className="min-h-screen bg-paper text-ink"
@@ -227,7 +261,7 @@ export default function MarketingHome() {
           </h2>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {PLANS.map((plan) => (
             <div
               key={plan.label}
@@ -243,7 +277,7 @@ export default function MarketingHome() {
               <p className="font-heading font-bold text-base mb-1">{plan.label}</p>
               <p className="text-xs text-ink/50 mb-4 min-h-[32px]">{plan.tagline}</p>
               <div className="flex items-baseline gap-1 mb-5">
-                <span className="font-heading font-bold text-2xl">{plan.price}</span>
+                <span className="font-heading font-bold text-2xl">{plan.amount}</span>
                 <span className="text-xs text-ink/40">{plan.period}</span>
               </div>
               <Link
