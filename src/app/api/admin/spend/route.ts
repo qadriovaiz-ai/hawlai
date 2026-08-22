@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
   const service = createServiceClient();
 
-  const [{ data: usageLogs }, { data: content }, { data: images }, { data: videos }, { data: dealerships }, { data: planLimitsRows }, { data: callingRows }] = await Promise.all([
+  const [{ data: usageLogs }, { data: content }, { data: images }, { data: videos }, { data: dealerships }, { data: planLimitsRows }, { data: callingRows }, { data: alertSetting }] = await Promise.all([
     service.from("api_usage_logs").select("dealership_id, service, operation, input_tokens, output_tokens, duration_seconds, cost_inr").gte("created_at", since).lt("created_at", until),
     service.from("content_pieces").select("dealership_id").gte("created_at", since).lt("created_at", until),
     service.from("graphic_designs").select("dealership_id").gte("created_at", since).lt("created_at", until),
@@ -61,6 +61,7 @@ export async function GET(request: Request) {
     // shows the customer, so admin totals never diverge from what a
     // business is actually being asked to pay.
     service.from("calling_minutes_usage").select("dealership_id, extra_charge_inr").eq("billing_month", `${monthStart.toISOString().slice(0, 8)}01`),
+    service.from("platform_settings").select("value").eq("key", "daily_spend_alert_inr").maybeSingle(),
   ]);
 
   const priceByPlan = new Map((planLimitsRows ?? []).map((r: any) => [r.plan, r.price_inr as number]));
@@ -148,10 +149,15 @@ export async function GET(request: Request) {
   }).filter((d) => d.exactCostInr > 0 || d.revenueInr > 0)
     .sort((a, b) => b.revenueInr - b.exactCostInr - (a.revenueInr - a.exactCostInr));
 
+  // Daily spend alert threshold (Phase 3b) — shown so the operator
+  // can see what it's currently set to alongside the actual numbers.
+  const alertThresholdInr = Number(alertSetting?.value);
+
   return NextResponse.json({
     month: monthLabel,
     since,
     filters: { dealershipId: dealershipFilter ?? null },
+    dailySpendAlertInr: Number.isFinite(alertThresholdInr) && alertThresholdInr > 0 ? alertThresholdInr : null,
     revenue: {
       totalInr: Math.round(revenueInr * 100) / 100,
       subscriptionInr: Math.round(subscriptionRevenueInr * 100) / 100,

@@ -15,6 +15,7 @@ import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
 import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runAndLog } from "@/lib/automation/runAndLog";
+import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -65,5 +66,18 @@ export async function GET(request: Request) {
     results[dealership.id].staleApprovals = await runAndLog(supabase, dealership.id, "stale_approvals", () => checkStalePendingApprovals(supabase, dealership.id));
   }
 
-  return NextResponse.json({ ranAt: new Date().toISOString(), dealerships: dealerships?.length ?? 0, results });
+  // Platform-wide, so deliberately OUTSIDE the per-dealership loop —
+  // it sums across every business at once rather than checking each
+  // in isolation, which is the whole point (see
+  // platformSpendAlertAgent.ts). Wrapped so a failure here can never
+  // fail the cron run that already did all the per-business work.
+  let platformSpend: any = null;
+  try {
+    platformSpend = await checkPlatformDailySpend(supabase);
+  } catch (err: any) {
+    console.error("[autopilot] platform spend check failed:", err.message);
+    platformSpend = { error: err.message };
+  }
+
+  return NextResponse.json({ ranAt: new Date().toISOString(), dealerships: dealerships?.length ?? 0, results, platformSpend });
 }

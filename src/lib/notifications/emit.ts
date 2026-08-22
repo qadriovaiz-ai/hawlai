@@ -28,7 +28,8 @@ export type NotificationKind =
   | "refund_requested"
   | "goal_completed"
   | "goal_task_failed"
-  | "lead_merge_needs_review";
+  | "lead_merge_needs_review"
+  | "platform_spend_alert";
 
 export interface EmitNotificationInput {
   dealershipId: string;

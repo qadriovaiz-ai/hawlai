@@ -17,6 +17,7 @@ interface SpendData {
   byProvider: Record<string, number>;
   byOperation: Record<string, number>;
   byPlan: Record<string, { dealerships: number; revenueInr: number; costInr: number }>;
+  dailySpendAlertInr: number | null;
   totalDealerships: number;
   perDealership: { id: string; name: string; plan: string; exactCostInr: number; revenueInr: number; grossProfitInr: number; calls: number; content: number; images: number; videos: number }[];
 }
@@ -94,6 +95,11 @@ export default function AdminSpendView() {
           </div>
         </div>
         <p className="text-[10.5px] text-slate-400">{data.revenue.basis}</p>
+        {data.dailySpendAlertInr !== null && (
+          <p className="text-[10.5px] text-slate-400">
+            Daily spend alert set at {inr(data.dailySpendAlertInr)}/day across all businesses — checked once daily against the previous complete day, notifying platform admins if crossed.
+          </p>
+        )}
       </div>
 
       {/* Exact cost by provider */}
