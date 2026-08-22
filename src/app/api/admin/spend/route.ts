@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { projectMonthEndSpend, projectedBudgetWarning } from "@/lib/analytics/spendProjection";
 
 // Usage/Pricing/Cost-Control spec, Section 17 (Admin Cost Dashboard).
 // EXTENDS the existing admin spend view — verified before touching it
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
   const service = createServiceClient();
 
   const [{ data: usageLogs }, { data: content }, { data: images }, { data: videos }, { data: dealerships }, { data: planLimitsRows }, { data: callingRows }, { data: alertSetting }] = await Promise.all([
-    service.from("api_usage_logs").select("dealership_id, service, operation, input_tokens, output_tokens, duration_seconds, cost_inr").gte("created_at", since).lt("created_at", until),
+    service.from("api_usage_logs").select("dealership_id, service, operation, input_tokens, output_tokens, duration_seconds, cost_inr, created_at").gte("created_at", since).lt("created_at", until),
     service.from("content_pieces").select("dealership_id").gte("created_at", since).lt("created_at", until),
     service.from("graphic_designs").select("dealership_id").gte("created_at", since).lt("created_at", until),
     service.from("video_generations").select("dealership_id").gte("created_at", since).lt("created_at", until),
@@ -152,12 +153,26 @@ export async function GET(request: Request) {
   // Daily spend alert threshold (Phase 3b) — shown so the operator
   // can see what it's currently set to alongside the actual numbers.
   const alertThresholdInr = Number(alertSetting?.value);
+  const dailySpendAlertInr = Number.isFinite(alertThresholdInr) && alertThresholdInr > 0 ? alertThresholdInr : null;
+
+  // Predictive cost monitoring (Phase 4 / 3) — CURRENT MONTH ONLY.
+  // This route can also render a past month, where "at this rate the
+  // month will reach X" is meaningless: the month already ended and
+  // the real total is right there. Returned as null in that case so
+  // the UI shows nothing rather than a nonsense projection.
+  const now = new Date();
+  const isCurrentMonth =
+    monthStart.getUTCFullYear() === now.getUTCFullYear() && monthStart.getUTCMonth() === now.getUTCMonth();
+  const projection = isCurrentMonth ? projectMonthEndSpend(logs, now) : null;
+  const projectionWarning = projection ? projectedBudgetWarning(projection, dailySpendAlertInr) : null;
 
   return NextResponse.json({
     month: monthLabel,
     since,
     filters: { dealershipId: dealershipFilter ?? null },
-    dailySpendAlertInr: Number.isFinite(alertThresholdInr) && alertThresholdInr > 0 ? alertThresholdInr : null,
+    dailySpendAlertInr,
+    projection,
+    projectionWarning,
     revenue: {
       totalInr: Math.round(revenueInr * 100) / 100,
       subscriptionInr: Math.round(subscriptionRevenueInr * 100) / 100,

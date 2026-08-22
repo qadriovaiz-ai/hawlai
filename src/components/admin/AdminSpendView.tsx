@@ -18,6 +18,17 @@ interface SpendData {
   byOperation: Record<string, number>;
   byPlan: Record<string, { dealerships: number; revenueInr: number; costInr: number }>;
   dailySpendAlertInr: number | null;
+  projection: {
+    confidence: "insufficient_data" | "low" | "moderate" | "good";
+    daysElapsed: number;
+    daysInMonth: number;
+    spendSoFarInr: number;
+    dailyAverageInr: number;
+    projectedMonthEndInr: number | null;
+    projectedRangeInr: { low: number; high: number } | null;
+    caveat: string;
+  } | null;
+  projectionWarning: string | null;
   totalDealerships: number;
   perDealership: { id: string; name: string; plan: string; exactCostInr: number; revenueInr: number; grossProfitInr: number; calls: number; content: number; images: number; videos: number }[];
 }
@@ -101,6 +112,54 @@ export default function AdminSpendView() {
           </p>
         )}
       </div>
+
+      {/* Projection — current month only. Deliberately shows NO number
+          when there isn't enough data to project honestly. */}
+      {data.projection && (
+        <div className="card p-5 space-y-2">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+            <TrendingUp className="w-4 h-4 text-slate-400" /> Month-end projection
+          </p>
+
+          {data.projection.projectedMonthEndInr === null ? (
+            <p className="text-sm text-slate-500">{data.projection.caveat}</p>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-2xl font-bold text-slate-900 tabular-nums">{inr(data.projection.projectedMonthEndInr)}</span>
+                {data.projection.projectedRangeInr && (
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    likely {inr(data.projection.projectedRangeInr.low)}–{inr(data.projection.projectedRangeInr.high)}
+                  </span>
+                )}
+                <span
+                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                    data.projection.confidence === "good"
+                      ? "bg-green-500/15 text-green-600"
+                      : data.projection.confidence === "moderate"
+                      ? "bg-blue-500/15 text-blue-600"
+                      : "bg-amber-500/15 text-amber-600"
+                  }`}
+                >
+                  {data.projection.confidence} confidence
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                {inr(data.projection.spendSoFarInr)} spent over {data.projection.daysElapsed} of {data.projection.daysInMonth} days · averaging {inr(data.projection.dailyAverageInr)}/day
+              </p>
+            </>
+          )}
+
+          <p className="text-[10.5px] text-slate-400">{data.projection.caveat}</p>
+
+          {data.projectionWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700">{data.projectionWarning}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Exact cost by provider */}
       <div className="card p-5 space-y-3">
