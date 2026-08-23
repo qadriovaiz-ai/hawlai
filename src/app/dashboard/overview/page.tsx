@@ -8,6 +8,7 @@ import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunit
 import { generateGrowthReport, type GrowthReport } from "@/lib/agents/growthAdvisorAgent";
 import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
 import ActivityFeed from "@/components/activity/ActivityFeed";
+import HawlaiWorkingOn from "@/components/dashboard/HawlaiWorkingOn";
 import WelcomeChatCard from "@/components/dashboard/WelcomeChatCard";
 
 export default async function DashboardOverviewPage() {
@@ -111,6 +112,13 @@ export default async function DashboardOverviewPage() {
         {growth && <p className="text-slate-500 text-sm mt-0.5">{growth.headline}</p>}
       </div>
 
+      {/* ---- What needs my attention? ----
+          Heading only renders when there IS something — an empty
+          "Needs your attention" header on a clean day is noise. */}
+      {(brandProfileMissing || pendingApprovals > 0) && (
+        <h2 className="text-sm font-semibold text-slate-700 -mb-2">Needs your attention</h2>
+      )}
+
       {brandProfileMissing && (
         <Link
           href="/dashboard/settings/brand"
@@ -147,40 +155,62 @@ export default async function DashboardOverviewPage() {
         </Link>
       )}
 
-      {growth && growth.nextActions.length > 0 && (
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">What to do next</h2>
-          <ol className="space-y-2.5">
-            {growth.nextActions.map((action, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm text-slate-700">
-                <span className="w-5 h-5 rounded-full bg-brand-500/10 text-brand-400 text-xs font-semibold flex items-center justify-center shrink-0 mt-0.5">
-                  {i + 1}
-                </span>
-                <span>{action}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+      {/* ---- What is Hawlai working on? ----
+          Renders nothing when there's no live work — see the component.
+          Placed above results because "happening now" is more
+          actionable than "already happened". */}
+      <HawlaiWorkingOn />
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {kpis.map(({ label, value, icon: Icon, color, title }) => (
-          <div key={label} className="card p-5" title={title}>
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${color}`}>
-              <Icon className="w-4 h-4" />
+      {/* ---- Recent results ---- */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">Recent results</h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {kpis.map(({ label, value, icon: Icon, color, title }) => (
+            <div key={label} className="card p-5" title={title}>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${color}`}>
+                <Icon className="w-4 h-4" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
+              <p className="text-xs text-slate-500 mt-1">{label}</p>
             </div>
-            <p className="text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
-            <p className="text-xs text-slate-500 mt-1">{label}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      <OpportunityFeed initial={opportunities} />
+      <ActivityFeed
+        limit={10}
+        title="What Hawlai has done"
+        historyOnly
+        emptyMessage="Nothing yet — this fills in as Hawlai works."
+      />
 
-      {/* UX Transformation Piece 1 — "what has Hawlai actually done?".
-          Piece 3 restructures this page around it; this makes the feed
-          reachable now rather than shipping it unused. */}
-      <ActivityFeed limit={12} title="What Hawlai has been doing" historyOnly />
+      {/* ---- What should I do? ----
+          growth.nextActions (AI-generated advice) and OpportunityFeed
+          (detected, actionable openings) are both recommendations, so
+          they now sit together under one heading instead of being
+          separated by five KPI cards. */}
+      {((growth && growth.nextActions.length > 0) || opportunities.length > 0) && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-slate-700">Hawlai recommends</h2>
+
+          {growth && growth.nextActions.length > 0 && (
+            <div className="card p-5">
+              <ol className="space-y-2.5">
+                {growth.nextActions.map((action, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm text-slate-700">
+                    <span className="w-5 h-5 rounded-full bg-brand-500/10 text-brand-400 text-xs font-semibold flex items-center justify-center shrink-0 mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span>{action}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          <OpportunityFeed initial={opportunities} />
+        </div>
+      )}
 
       <Link
         href="/dashboard/marketing?tab=launch"
