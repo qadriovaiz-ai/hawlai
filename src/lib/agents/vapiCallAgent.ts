@@ -73,21 +73,28 @@ export async function triggerVapiCall(
   // P3 piece 5 — defaults to the sales persona (this path's original,
   // unchanged behavior) unless the owner reassigned this channel.
   let persona = AGENT_PERSONAS.sales;
+  // Empty by default — a failed lookup must never silently drop the
+  // owner's hard limits without it being visible in the catch log.
+  let boundaryRules: string[] = [];
   try {
     // leadId scopes businessCtx.memories to this lead specifically
     // (getLeadMemory, P1 4a) instead of the dealership-wide feed — one
     // fetch through the shared assembler rather than a separate
     // parallel call (P1 5a folded this in).
-    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes, personaRes] = await Promise.all([
+    const [businessCtxRes, dealershipCallConfigRes, leadRecordRes, personaRes, boundariesRes] = await Promise.all([
       getBusinessContext(serviceClient, lead.dealership_id, lead.id),
       serviceClient.from("dealerships").select("vapi_phone_number_id, vapi_assistant_id, custom_call_instructions, custom_first_message").eq("id", lead.dealership_id).single(),
       serviceClient.from("leads").select("qualification_reason").eq("id", lead.id).maybeSingle(),
       resolvePersona(serviceClient, lead.dealership_id, "call_outbound"),
+      // UX Transformation 5b — the owner's explicit "never do this"
+      // rules, rendered as hard limits in the prompt.
+      serviceClient.from("ai_employee_boundaries").select("rule").eq("dealership_id", lead.dealership_id).eq("is_active", true).order("created_at"),
     ]);
     businessCtx = businessCtxRes;
     dealershipCallConfig = dealershipCallConfigRes.data;
     leadRecord = leadRecordRes.data;
     persona = personaRes;
+    boundaryRules = (boundariesRes.data ?? []).map((b: any) => b.rule);
   } catch (err: any) {
     console.error("[vapi-call] failed loading dealership context, falling back to platform defaults:", err.message);
   }
@@ -125,6 +132,7 @@ export async function triggerVapiCall(
         pastInsights: businessCtx.memories,
         personaGoals: persona.goals,
         customInstructions: dealershipCallConfig?.custom_call_instructions,
+        boundaries: boundaryRules,
         knowledgeFacts: businessCtx.knowledgeFacts,
         canBookAppointments: callToolNames.includes("create_appointment"),
         canUpdateLead: callToolNames.includes("update_lead"),

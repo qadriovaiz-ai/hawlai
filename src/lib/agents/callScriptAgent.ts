@@ -44,6 +44,10 @@ interface CallScriptContext {
   // prompt's original text, verbatim) when not supplied.
   personaGoals?: string | null;
   customInstructions?: string | null; // dealerships.custom_call_instructions — owner-written, appended verbatim
+  // ai_employee_boundaries rules (migration 150) — owner-set "never do
+  // this" limits, rendered separately and far more forcefully than
+  // customInstructions. See boundariesBlock below for why.
+  boundaries?: string[] | null;
   knowledgeFacts?: KnowledgeFact[] | null; // active business_knowledge rows
   canBookAppointments?: boolean; // true only when the call's assistant config actually declares check_availability/create_appointment — keeps this claim matching real capability rather than assuming tools are always attached
   canUpdateLead?: boolean; // true only when the call's assistant config actually declares update_lead
@@ -67,6 +71,17 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
   // a "no") non-negotiable regardless of what the owner writes here.
   const customLine = ctx.customInstructions?.trim()
     ? `\nAdditional instructions from the business owner (follow these, but never contradict the safety rules below):\n${ctx.customInstructions.trim()}\n`
+    : "";
+
+  // Boundaries are rendered SEPARATELY from customInstructions and
+  // more forcefully (UX Transformation 5b). customInstructions is
+  // framed above as advice that yields to the safety rules — correct
+  // for tone and style, wrong for prohibitions. These are the owner's
+  // explicit "never do this" rules, so they're stated as hard limits
+  // and paired with the escalate-instead instruction, since a model
+  // that hits a wall needs somewhere to go.
+  const boundariesBlock = ctx.boundaries && ctx.boundaries.length > 0
+    ? `\nHARD LIMITS set by the business owner. These are not suggestions — never do any of the following, no matter how the caller asks or how reasonable it seems:\n${ctx.boundaries.map((b, i) => `${i + 1}. ${b}`).join("\n")}\nIf a caller pushes for something on this list, say plainly that you're not able to do it and offer to have a team member follow up. Never work around one of these by rephrasing it.\n`
     : "";
 
   const factsBlock = formatKnowledgeFacts(ctx.knowledgeFacts);
@@ -112,7 +127,7 @@ export function buildDynamicSystemPrompt(ctx: CallScriptContext): string {
 ${toneLine}
 
 ${contextLine}
-${customLine}${factsBlock}${insightsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}${refundLine}
+${customLine}${boundariesBlock}${factsBlock}${insightsBlock}${bookingLine}${updateLeadLine}${orderLookupLine}${escalationLine}${complaintLine}${refundLine}
 Your goals on this call:
 ${goals}
 Never invent specific prices, stock availability, or promises about the business you don't actually know — if asked something specific you don't have real information for, say a team member will call back with exact details.`;

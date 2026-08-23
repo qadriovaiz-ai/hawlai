@@ -70,8 +70,8 @@ export default async function CallingPage() {
             Handling outbound calls as your {PERSONA_CHANNEL_LABELS.call_outbound.toLowerCase()} — {persona.label.toLowerCase()}.
           </p>
         </div>
-        <Link href="/dashboard/autopilot" className="text-xs text-brand-500 hover:text-brand-400 inline-flex items-center gap-1 pt-1">
-          <Settings2 className="w-3.5 h-3.5" /> Change what it does
+        <Link href="/dashboard/calling/setup" className="text-xs text-brand-500 hover:text-brand-400 inline-flex items-center gap-1 pt-1">
+          <Settings2 className="w-3.5 h-3.5" /> Set up your employee
         </Link>
       </div>
 
