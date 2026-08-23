@@ -53,6 +53,17 @@ function FullLaunchForm() {
   const [draft, setDraft] = useState<any>(null);
   const [plan, setPlan] = useState<any>(null);
   const [result, setResult] = useState<any>(null);
+  const [targetingPreview, setTargetingPreview] = useState<{ summary: string; personaApplied: boolean; restricted: boolean } | null>(null);
+
+  // Location override — real-persona-targeting piece. Defaults to
+  // "ai_city": the AI-guessed single city from the plan, exactly the
+  // pre-existing behavior. A dealer who never opens this section
+  // launches identically to before this feature existed.
+  const [locationMode, setLocationMode] = useState<"ai_city" | "all_india" | "cities" | "state">("ai_city");
+  const [citiesInput, setCitiesInput] = useState("");
+  const [stateInput, setStateInput] = useState("");
+  const [radiusKm, setRadiusKm] = useState(25);
+  const [showLocationEditor, setShowLocationEditor] = useState(false);
 
   const [executionStepIndex, setExecutionStepIndex] = useState(0);
 
@@ -106,11 +117,26 @@ function FullLaunchForm() {
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setDraft(data.draft);
       setPlan(data.plan);
+      setTargetingPreview(data.targetingPreview ?? null);
       setStage("preview");
     } catch (err: any) {
       setError(err.message);
       setStage("form");
     }
+  }
+
+  // Mirrors LocationChoice in metaTargeting.ts. "ai_city" sends no
+  // override at all — the launch route's own default — so a dealer
+  // who never touches this section changes nothing about today's
+  // behavior.
+  function buildLocationChoice() {
+    if (locationMode === "all_india") return { mode: "all_india" };
+    if (locationMode === "state" && stateInput.trim()) return { mode: "state", state: stateInput.trim() };
+    if (locationMode === "cities") {
+      const cities = citiesInput.split(",").map((c) => c.trim()).filter(Boolean);
+      if (cities.length > 0) return { mode: "cities", cities, radiusKm };
+    }
+    return undefined;
   }
 
   // Stage 2 -> 3: actually launch on Meta, with a live step-by-step screen
@@ -135,6 +161,7 @@ function FullLaunchForm() {
           destination,
           product_destination_url: productDestinationUrl,
           ...(variantGroupId && { variant_group_id: variantGroupId, variant_label: variantLabel }),
+          targeting_location: buildLocationChoice(),
         }),
       });
       const data = await res.json();
@@ -415,9 +442,17 @@ function FullLaunchForm() {
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-purple-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-slate-400">Audience</p>
-                  <p className="text-sm font-semibold text-slate-800">{plan.targeting_city ?? "All India"}</p>
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-400">Location</p>
+                  <p className="text-sm font-semibold text-slate-800 truncate">
+                    {locationMode === "all_india"
+                      ? "All India"
+                      : locationMode === "state"
+                      ? stateInput.trim() || "Pick a state"
+                      : locationMode === "cities"
+                      ? citiesInput.trim() || "Pick cities"
+                      : plan.targeting_city ?? "All India"}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -427,6 +462,88 @@ function FullLaunchForm() {
                   <p className="text-sm font-semibold text-slate-800">{estLow}-{estHigh}</p>
                 </div>
               </div>
+            </div>
+
+            {/* Real-persona-targeting piece — the dealer now sees WHO
+                this ad will actually reach before launching, and can
+                change where it runs. */}
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-400">Who will see this</p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    {targetingPreview?.summary ?? "Meta's automatic audience"}
+                  </p>
+                  {targetingPreview && !targetingPreview.personaApplied && !targetingPreview.restricted && (
+                    <a href="/dashboard/settings/brand" className="text-[10.5px] text-brand-500 hover:underline">
+                      Set your target customer in Brand to target this more precisely →
+                    </a>
+                  )}
+                </div>
+                {!targetingPreview?.restricted && (
+                  <button
+                    onClick={() => setShowLocationEditor((v) => !v)}
+                    className="text-[10.5px] text-brand-500 hover:text-brand-400 shrink-0"
+                  >
+                    {showLocationEditor ? "Done" : "Change location"}
+                  </button>
+                )}
+              </div>
+
+              {showLocationEditor && !targetingPreview?.restricted && (
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { key: "ai_city", label: plan.targeting_city ? `${plan.targeting_city} (suggested)` : "Suggested" },
+                      { key: "cities", label: "Pick cities" },
+                      { key: "state", label: "A whole state" },
+                      { key: "all_india", label: "All India" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setLocationMode(opt.key)}
+                        className={`text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors ${
+                          locationMode === opt.key ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {locationMode === "cities" && (
+                    <div className="space-y-2">
+                      <input
+                        value={citiesInput}
+                        onChange={(e) => setCitiesInput(e.target.value)}
+                        placeholder="Mumbai, Delhi, Bangalore"
+                        className="input text-sm"
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10.5px] text-slate-400 shrink-0">Radius</label>
+                        <input
+                          type="number"
+                          min={17}
+                          max={80}
+                          value={radiusKm}
+                          onChange={(e) => setRadiusKm(Number(e.target.value))}
+                          className="input text-sm w-20"
+                        />
+                        <span className="text-[10.5px] text-slate-400">km around each city (Meta allows 17–80)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {locationMode === "state" && (
+                    <input
+                      value={stateInput}
+                      onChange={(e) => setStateInput(e.target.value)}
+                      placeholder="e.g. Maharashtra"
+                      className="input text-sm"
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 pt-2">

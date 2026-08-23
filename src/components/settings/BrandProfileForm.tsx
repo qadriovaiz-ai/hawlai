@@ -8,7 +8,7 @@ import { Button } from "@/components/ui";
 interface BrandProfileFormProps {
   initial: {
     tone_of_voice: string | null;
-    target_persona: { age_range?: string; income?: string; concerns?: string[] } | null;
+    target_persona: { age_range?: string; income?: string; concerns?: string[]; gender?: "all" | "male" | "female" } | null;
     messaging_pillars: string[] | null;
     preferred_language: string | null;
   } | null;
@@ -18,6 +18,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
   const router = useRouter();
   const [tone, setTone] = useState(initial?.tone_of_voice ?? "");
   const [ageRange, setAgeRange] = useState(initial?.target_persona?.age_range ?? "");
+  const [gender, setGender] = useState<"all" | "male" | "female">(initial?.target_persona?.gender ?? "all");
   const [income, setIncome] = useState(initial?.target_persona?.income ?? "");
   const [concerns, setConcerns] = useState((initial?.target_persona?.concerns ?? []).join(", "));
   const [pillars, setPillars] = useState<string[]>(initial?.messaging_pillars?.length ? initial.messaging_pillars : [""]);
@@ -39,6 +40,12 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
     setAgeRange(data.target_persona?.age_range ?? ageRange);
     setIncome(data.target_persona?.income ?? income);
     setConcerns((data.target_persona?.concerns ?? []).join(", "));
+    // Only applied when the AI extraction actually found an explicit
+    // gender signal in the business description ("women's ethnic
+    // wear") — never inferred from category alone. See
+    // businessIntelligenceAgent.ts for why this is deliberately more
+    // conservative than age_range/income/concerns.
+    if (data.target_persona?.gender && data.target_persona.gender !== "all") setGender(data.target_persona.gender);
     if (data.messaging_pillars?.length) setPillars(data.messaging_pillars);
     setAnalysisSummary(data.summary);
 
@@ -111,6 +118,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
             age_range: ageRange,
             income,
             concerns: concerns.split(",").map((c) => c.trim()).filter(Boolean),
+            gender,
           },
           messaging_pillars: pillars.map((p) => p.trim()).filter(Boolean),
           preferred_language: language,
@@ -232,6 +240,28 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
             placeholder="e.g. EMI affordability, resale value, service cost"
             className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Gender</label>
+          <div className="flex gap-1.5">
+            {([
+              { key: "all", label: "All" },
+              { key: "male", label: "Mostly men" },
+              { key: "female", label: "Mostly women" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setGender(opt.key)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  gender === opt.key ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10.5px] text-slate-400 mt-1">Used to actually target your ads, not just guide ad copy. Leave on "All" unless your customers are genuinely skewed.</p>
         </div>
       </div>
 

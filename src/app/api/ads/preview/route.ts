@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateAdPlan, buildFinalCreativeImage } from "@/lib/adEngine";
+import { previewPersonaSummary } from "@/lib/ads/metaTargeting";
 
 // Phase 1 of the two-phase launch flow (Block 2 — Plan Card): generates
 // the ad copy + finished creative image and saves it as a draft, WITHOUT
@@ -76,7 +77,14 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    return NextResponse.json({ draft: updated, plan });
+    // Pure/no-network preview of what targeting will be attempted at
+    // launch (real-persona-targeting piece) — kept out of this route's
+    // Meta-free design (see this file's own header) by never calling
+    // Meta's search API here; the fully resolved version with real
+    // interest names comes back from /api/ads/adlaunch instead.
+    const targetingPreview = previewPersonaSummary(brandProfile?.target_persona ?? null, businessCategory);
+
+    return NextResponse.json({ draft: updated, plan, targetingPreview });
   } catch (err: any) {
     await serviceClient.from("ad_creatives").update({ status: "failed", error_message: err.message }).eq("id", draft.id);
     return NextResponse.json({ error: err.message }, { status: 500 });

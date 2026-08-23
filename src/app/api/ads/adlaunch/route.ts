@@ -5,9 +5,9 @@ import {
   generateAdPlan,
   buildFinalCreativeImage,
   metaPost,
-  resolveCityKey,
   GRAPH_VERSION,
 } from "@/lib/adEngine";
+import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url, variant_group_id, variant_label } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url, variant_group_id, variant_label, targeting_location } = body;
   const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
 
   if (adDestination === "instant_form" && !leadFormId) {
@@ -215,20 +215,31 @@ export async function POST(request: Request) {
       },
     }, pageAccessToken);
 
+    // Real-persona-targeting piece — real brand persona (age/gender/
+    // income/interests) now reaches actual Meta targeting instead of
+    // only informing ad copy, and business_category drives Meta's
+    // legally-required Special Ad Category declaration (Real Estate ->
+    // HOUSING, which strips demographic targeting to geo-only — see
+    // metaTargeting.ts's header for what was verified before writing this).
+    const built = await buildMetaTargeting({
+      businessCategory: dealership?.business_category,
+      persona: brandProfile?.target_persona ?? null,
+      location: targeting_location ?? null,
+      aiSuggestedCity: plan.targeting_city,
+      accessToken: pageAccessToken!,
+    });
+
     // Step 5: campaign
     const campaignRes = await metaPost(`${adAccount}/campaigns`, {
       name: `Hawlai - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
       objective: "OUTCOME_LEADS",
       status: "PAUSED",
-      special_ad_categories: ["NONE"],
+      special_ad_categories: [built.specialAdCategory],
       is_adset_budget_sharing_enabled: false,
     }, pageAccessToken);
 
     // Step 6: ad set (targeting + budget)
-    const cityKey = plan.targeting_city ? await resolveCityKey(plan.targeting_city, pageAccessToken) : null;
-    const targeting = cityKey
-      ? { geo_locations: { cities: [{ key: cityKey, radius: 25, distance_unit: "kilometer" }] }, age_min: 21, targeting_automation: { advantage_audience: 1 } }
-      : { geo_locations: { countries: ["IN"] }, age_min: 21, targeting_automation: { advantage_audience: 1 } };
+    const targeting = built.targeting;
 
     const adsetRes = await metaPost(`${adAccount}/adsets`, {
       name: `${plan.headline} - AdSet`,
@@ -270,6 +281,11 @@ export async function POST(request: Request) {
         external_status: "PAUSED",
         daily_budget: plan.daily_budget ?? 500,
         targeting_city: plan.targeting_city ?? null,
+        // Migration 151 — the full resolved targeting spec (location
+        // mode, age/gender/interests actually applied, and the
+        // customer-facing summary), alongside targeting_city which is
+        // kept for existing display code and as a fallback.
+        targeting_json: { ...built.targeting, summary: built.summary, personaApplied: built.personaApplied, specialAdCategory: built.specialAdCategory },
         scheduled_start: scheduled_start ? new Date(scheduled_start).toISOString() : null,
         // Creative variant testing — master audit Part D. Both fields
         // are optional and null for every ordinary single-ad launch;
@@ -286,6 +302,7 @@ export async function POST(request: Request) {
       creative: updated,
       plan,
       meta: { campaign_id: campaignRes.id, adset_id: adsetRes.id, ad_id: adRes.id, creative_id: creativeRes.id },
+      targetingSummary: built.summary,
     });
   } catch (err: any) {
     await serviceClient.from("ad_creatives").update({ status: "failed", error_message: err.message }).eq("id", draft.id);

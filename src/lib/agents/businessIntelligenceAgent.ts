@@ -27,7 +27,13 @@ export interface BusinessIntelligenceResult {
   summary: string;
   business_category: string;
   tone_of_voice: string;
-  target_persona: { age_range?: string; income?: string; concerns?: string[] };
+  // gender is deliberately absent from age_range/income/concerns' "best
+  // guess" pattern below — see RESPONSE_SCHEMA's prompt instruction.
+  // Inferring "this business's customers are probably male/female" from
+  // a category alone risks baking a stereotype into real ad targeting,
+  // not just copy tone. Only returned when the source text itself
+  // states it explicitly.
+  target_persona: { age_range?: string; income?: string; concerns?: string[]; gender?: "male" | "female" };
   messaging_pillars: string[];
   // A DRAFT structured profile inferred purely from the source text —
   // the onboarding flow overrides formality_level, hinglish_ok,
@@ -39,7 +45,7 @@ export interface BusinessIntelligenceResult {
   brand_voice_draft: BrandVoiceProfile;
 }
 
-const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Car Dealership', 'Real Estate', 'Restaurant', 'Coaching Institute'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"]},"messaging_pillars":["3-4 key selling points or values"],"brand_voice_draft":{"personality_traits":["3-4 adjectives capturing this brand's personality"],"vocabulary_preferences":{"favor":["2-3 words/phrases this business would naturally use"],"avoid":["1-2 words/phrases that would feel off-brand, or empty array if nothing obvious"]},"sentence_rhythm":"one sentence describing how this brand should sound written — short and punchy vs. flowing and detailed","formality_level":"casual|conversational|professional|formal","hinglish_ok":true,"punctuation_emoji_style":{"emoji_usage":"none|minimal|expressive","exclamation_marks":"avoid|occasional|frequent"}}}`;
+const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Car Dealership', 'Real Estate', 'Restaurant', 'Coaching Institute'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"],"gender":"ONLY include this field if the business description EXPLICITLY states a gendered customer base (e.g. 'women's ethnic wear', 'men's grooming') — value 'male' or 'female'. NEVER infer gender from the business category or type alone (e.g. do not guess a gender for a car dealership, restaurant, or clinic just because of what kind of business it is) — omit the field entirely in every other case."},"messaging_pillars":["3-4 key selling points or values"],"brand_voice_draft":{"personality_traits":["3-4 adjectives capturing this brand's personality"],"vocabulary_preferences":{"favor":["2-3 words/phrases this business would naturally use"],"avoid":["1-2 words/phrases that would feel off-brand, or empty array if nothing obvious"]},"sentence_rhythm":"one sentence describing how this brand should sound written — short and punchy vs. flowing and detailed","formality_level":"casual|conversational|professional|formal","hinglish_ok":true,"punctuation_emoji_style":{"emoji_usage":"none|minimal|expressive","exclamation_marks":"avoid|occasional|frequent"}}}`;
 
 import { logClaudeUsage } from "../usage/logUsage";
 import type { BrandVoiceProfile } from "./brandVoice";

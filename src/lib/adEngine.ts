@@ -222,6 +222,23 @@ export async function resolveCityKey(cityName: string, token: string): Promise<s
   }
 }
 
+// Same search endpoint as resolveCityKey, just location_types=["region"]
+// — Meta's adgeolocation search covers cities/regions/countries through
+// one endpoint, verified against Meta's own docs before building this
+// (Real-Estate-persona-targeting piece). Used for state/region-level
+// targeting (geo_locations.regions), an alternative to city+radius.
+export async function resolveRegionKey(regionName: string, token: string): Promise<string | null> {
+  try {
+    const url = `https://graph.facebook.com/${GRAPH_VERSION}/search?type=adgeolocation&location_types=["region"]&q=${encodeURIComponent(regionName)}&access_token=${token}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const match = data?.data?.find((d: any) => d.country_code === "IN") ?? data?.data?.[0];
+    return match?.key ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ------------------------------------------------------------------
 // Composites a finished, ready-to-upload ad image: background
 // (template or AI) + text overlay, resized to Meta's expected 1080x1080.
