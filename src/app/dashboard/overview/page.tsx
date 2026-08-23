@@ -7,6 +7,7 @@ import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
 import { generateGrowthReport, type GrowthReport } from "@/lib/agents/growthAdvisorAgent";
 import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
+import ActivityFeed from "@/components/activity/ActivityFeed";
 import WelcomeChatCard from "@/components/dashboard/WelcomeChatCard";
 
 export default async function DashboardOverviewPage() {
@@ -175,6 +176,11 @@ export default async function DashboardOverviewPage() {
       </div>
 
       <OpportunityFeed initial={opportunities} />
+
+      {/* UX Transformation Piece 1 — "what has Hawlai actually done?".
+          Piece 3 restructures this page around it; this makes the feed
+          reachable now rather than shipping it unused. */}
+      <ActivityFeed limit={12} title="What Hawlai has been doing" />
 
       <Link
         href="/dashboard/marketing?tab=launch"
