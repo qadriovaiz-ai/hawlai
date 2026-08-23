@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
+import IntentStep from "@/components/onboarding/IntentStep";
+import { MODE_LABELS, type ProductMode } from "@/lib/onboarding/intentRouter";
 
 interface BrandVoiceDraft {
   personality_traits: string[];
@@ -30,7 +32,11 @@ interface AnalyzeResult {
 // can't reliably infer (formality, language mixing, personality words,
 // words to avoid) — all part of the SAME flow, one combined save at
 // the end, not a disconnected second form.
-type Step = "describe" | "formality" | "language" | "language_notes" | "personality" | "avoid_words" | "done";
+// "intent" is the new first step (UX Transformation piece 4): ask what
+// the customer WANTS before asking who they are. The brand-voice steps
+// that follow are unchanged — they were always good, they just
+// answered the second question first.
+type Step = "intent" | "describe" | "formality" | "language" | "language_notes" | "personality" | "avoid_words" | "done";
 
 const FORMALITY_CHOICES: { label: string; value: BrandVoiceDraft["formality_level"] }[] = [
   { label: "Formal", value: "formal" },
@@ -40,7 +46,8 @@ const FORMALITY_CHOICES: { label: string; value: BrandVoiceDraft["formality_leve
 
 export default function WelcomeChatCard({ dealershipName, ownerName }: { dealershipName: string; ownerName: string | null }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("describe");
+  const [step, setStep] = useState<Step>("intent");
+  const [productMode, setProductMode] = useState<ProductMode | null>(null);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +59,25 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   const [regionalNotes, setRegionalNotes] = useState("");
   const [personalityInput, setPersonalityInput] = useState("");
   const [avoidWordsInput, setAvoidWordsInput] = useState("");
+
+  // Saved as soon as it's known rather than batched into the final
+  // submit: if someone abandons onboarding after this step, knowing
+  // what they came for is still worth having.
+  async function handleIntentResolved(mode: ProductMode, intentText: string) {
+    setProductMode(mode);
+    try {
+      await fetch("/api/dealership", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product_mode: mode, onboarding_intent_text: intentText }),
+      });
+    } catch {
+      // Best-effort — a failed save here shouldn't trap someone on the
+      // first screen of their first session. They continue in the mode
+      // they picked; only the persisted record is lost.
+    }
+    setStep("describe");
+  }
 
   async function handleDescribe() {
     setError(null);
@@ -160,6 +186,14 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       Skip for now
     </button>
   );
+
+  if (step === "intent") {
+    return (
+      <div className="w-full max-w-xl animate-fade-in-up">
+        <IntentStep ownerName={ownerName} onResolved={handleIntentResolved} />
+      </div>
+    );
+  }
 
   if (step === "done" && profile) {
     return (
@@ -355,11 +389,22 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-6 shadow-lg shadow-brand-600/30">
         <Image src="/logo-icon.png" alt="Hawlai" width={56} height={56} className="w-full h-full object-cover" />
       </div>
+      {/* Acknowledges what they just asked for, so this reads as the
+          next step in one conversation rather than a second, unrelated
+          form. The greeting moves to the intent step when one ran. */}
+      {productMode && (
+        <p className="text-xs font-medium text-brand-500 mb-2">
+          Setting up {MODE_LABELS[productMode]}
+        </p>
+      )}
       <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-        {ownerName ? `Welcome, ${ownerName}. ` : "Welcome. "}Tell me about {dealershipName}.
+        {productMode ? "" : ownerName ? `Welcome, ${ownerName}. ` : "Welcome. "}
+        Tell me about {dealershipName}.
       </h1>
       <p className="text-slate-500 mt-3 max-w-md mx-auto">
-        A couple of sentences is enough — what you sell, who your customers are, what makes you different. I'll set up your Brand Voice from it, then ask a couple of quick follow-ups.
+        {productMode
+          ? "First, a couple of sentences about your business — what you sell, who your customers are, what makes you different. Everything Hawlai does for you uses this."
+          : "A couple of sentences is enough — what you sell, who your customers are, what makes you different. I'll set up your Brand Voice from it, then ask a couple of quick follow-ups."}
       </p>
 
       <div className="mt-8 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Globe, Users2, Users, CreditCard, Palette, FolderOpen, Link2, Zap, Wand2, Box, ChevronRight, Megaphone, CalendarDays, Percent, Lock, Briefcase, BookOpen, MessageSquareWarning, IndianRupee, History, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
 import BusinessSwitcherCard from "@/components/business/BusinessSwitcherCard";
+import ProductModeCard from "@/components/business/ProductModeCard";
 
 interface HubItem {
   href: string;
@@ -93,6 +94,8 @@ export default async function BusinessPage() {
       </div>
 
       <BusinessSwitcherCard initialBusinesses={businesses} multiBusinessAllowed={hasFeature(limits, "multiBusiness")} />
+
+      <ProductModeCard />
 
       <div className="space-y-5">
         {SECTIONS.map((section) => (
