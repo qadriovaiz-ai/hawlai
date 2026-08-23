@@ -4,11 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS } from "@/lib/navGroups";
+import { getNavGroups } from "@/lib/navGroups";
+import type { ProductMode } from "@/lib/onboarding/intentRouter";
 import DealershipSwitcher from "@/components/agency/DealershipSwitcher";
 
-export default function Sidebar({ dealershipName }: { dealershipName: string }) {
+export default function Sidebar({ dealershipName, productMode }: { dealershipName: string; productMode?: ProductMode | null }) {
   const pathname = usePathname();
+  const navGroups = getNavGroups(productMode);
 
   return (
     <div className="hidden md:flex w-64 bg-slate-100 border-r border-slate-200 flex-col h-full shrink-0">
@@ -26,7 +28,7 @@ export default function Sidebar({ dealershipName }: { dealershipName: string }) 
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3 space-y-4">
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.label}>
             {group.label && (
               <p className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
