@@ -180,7 +180,7 @@ export default async function DashboardOverviewPage() {
       {/* UX Transformation Piece 1 — "what has Hawlai actually done?".
           Piece 3 restructures this page around it; this makes the feed
           reachable now rather than shipping it unused. */}
-      <ActivityFeed limit={12} title="What Hawlai has been doing" />
+      <ActivityFeed limit={12} title="What Hawlai has been doing" historyOnly />
 
       <Link
         href="/dashboard/marketing?tab=launch"

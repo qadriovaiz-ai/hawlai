@@ -105,6 +105,7 @@ interface AutomationRow { id: string; subsystem: string; success: boolean; detai
 interface AgentTaskRow { id: string; action_type: string; title: string; status: string; error: string | null; scheduled_for: string; completed_at: string | null; created_at: string }
 interface CallRow { id: string; status: string; summary: string | null; direction: string | null; created_at: string; leads?: { name: string } | { name: string }[] | null }
 interface NotificationRow { id: string; kind: string; title: string; body: string | null; href: string | null; read_at: string | null; created_at: string }
+interface ApprovalRow { id: string; action_type: string; amount: number | string | null; created_at: string }
 
 export interface ActivitySources {
   audit?: AuditRow[] | null;
@@ -112,7 +113,22 @@ export interface ActivitySources {
   agentTasks?: AgentTaskRow[] | null;
   calls?: CallRow[] | null;
   notifications?: NotificationRow[] | null;
+  approvals?: ApprovalRow[] | null;
 }
+
+// Pending approvals are read DIRECTLY rather than inferred from
+// notifications: an approval is the single most important thing that
+// can be waiting on someone, and depending on a notification row
+// having been emitted would make "Waiting for You" silently wrong if
+// that best-effort emit ever failed.
+const APPROVAL_LABELS: Record<string, string> = {
+  activate_ad_campaign: "Approve activating a campaign",
+  change_campaign_budget: "Approve a campaign budget change",
+  change_campaign_targeting: "Approve a campaign targeting change",
+  launch_campaign: "Approve launching a campaign",
+  increase_budget: "Approve a budget increase",
+  pause_campaign: "Approve pausing a campaign",
+};
 
 /** Supabase returns an embedded to-one relation as an object or a single-element array depending on the query shape. */
 function leadName(lead: CallRow["leads"]): string | null {
@@ -192,6 +208,10 @@ export function buildActivityFeed(sources: ActivitySources, limit = 50): Activit
   }
 
   for (const row of sources.notifications ?? []) {
+    // approval_pending notifications are skipped — approvals come from
+    // pending_approvals below, which is authoritative. Keeping both
+    // would show the same pending approval twice.
+    if (row.kind === "approval_pending") continue;
     items.push({
       id: `notification:${row.id}`,
       at: row.created_at,
@@ -201,13 +221,34 @@ export function buildActivityFeed(sources: ActivitySources, limit = 50): Activit
       // person, which is what "needs_you" means to the Work page.
       status: row.read_at ? "done" : "needs_you",
       href: row.href,
-      kind: row.kind === "approval_pending" ? "approval" : "alert",
+      kind: "alert",
     });
   }
 
-  return items
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, limit);
+  for (const row of sources.approvals ?? []) {
+    const amount = Number(row.amount);
+    items.push({
+      id: `approval:${row.id}`,
+      at: row.created_at,
+      title: APPROVAL_LABELS[row.action_type] ?? "Approve an action",
+      detail: Number.isFinite(amount) && amount > 0 ? `₹${Math.round(amount).toLocaleString("en-IN")}` : null,
+      status: "needs_you",
+      href: "/dashboard/approvals",
+      kind: "approval",
+    });
+  }
+
+  const byNewest = (a: ActivityItem, b: ActivityItem) => new Date(b.at).getTime() - new Date(a.at).getTime();
+
+  // Live items (needs-you, in-progress, scheduled) are never dropped by
+  // the limit. Sorting purely by date would push a three-week-old
+  // pending approval past the slice — precisely the item that most
+  // needs surfacing. The limit therefore applies only to the historical
+  // tail, which is the part that's genuinely safe to truncate.
+  const live = items.filter((i) => i.status === "needs_you" || i.status === "in_progress" || i.status === "scheduled").sort(byNewest);
+  const past = items.filter((i) => i.status === "done" || i.status === "failed").sort(byNewest);
+
+  return [...live, ...past.slice(0, Math.max(0, limit - live.length))];
 }
 
 /** Groups a feed into the four Work-page buckets. Kept here so Work and Home can't disagree about what "now" means. */

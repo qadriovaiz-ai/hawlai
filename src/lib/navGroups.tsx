@@ -23,7 +23,11 @@ export const NAV_GROUPS = [
     items: [
       { href: "/dashboard/overview", label: "Home", icon: Home },
       { href: "/chat", label: "AI Employee", icon: Brain },
-      { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks },
+      // Route stays /dashboard/tasks — every existing deep link points
+      // there. Only the label changed, because the page now shows
+      // Hawlai's own work alongside human tasks (UX Transformation
+      // piece 2), and "Tasks" undersold that.
+      { href: "/dashboard/tasks", label: "Work", icon: ListChecks },
       { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
       { href: "/dashboard/business", label: "Business", icon: Building2 },
       { href: "/dashboard/tools", label: "Tools", icon: Store },

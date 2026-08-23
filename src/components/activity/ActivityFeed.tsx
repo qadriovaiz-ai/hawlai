@@ -86,10 +86,13 @@ export default function ActivityFeed({
   limit = 25,
   title = "Recent activity",
   emptyMessage = "Nothing yet — this fills in as Hawlai works.",
+  historyOnly = false,
 }: {
   limit?: number;
   title?: string | null;
   emptyMessage?: string;
+  /** Drops still-open items (approvals, scheduled work). Use where the surface means "what happened", not "what's outstanding" — otherwise a pending approval leads a history list and duplicates whatever already surfaces it. */
+  historyOnly?: boolean;
 }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [partial, setPartial] = useState(false);
@@ -99,11 +102,12 @@ export default function ActivityFeed({
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? "Couldn't load");
-        setItems(d.items ?? []);
+        const all: ActivityItem[] = d.items ?? [];
+        setItems(historyOnly ? all.filter((i) => i.status === "done" || i.status === "failed") : all);
         setPartial(!!d.partial);
       })
       .catch(() => setItems([]));
-  }, [limit]);
+  }, [limit, historyOnly]);
 
   if (items === null) {
     return (

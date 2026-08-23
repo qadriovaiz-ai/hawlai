@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   // allSettled, not all: five independent sources, and one failing
   // shouldn't blank the whole timeline — a partial feed is far more
   // useful than an error page.
-  const [auditRes, automationRes, tasksRes, callsRes, notificationsRes] = await Promise.allSettled([
+  const [auditRes, automationRes, tasksRes, callsRes, notificationsRes, approvalsRes] = await Promise.allSettled([
     service
       .from("audit_log")
       .select("id, event_type, summary, created_at")
@@ -69,6 +69,16 @@ export async function GET(request: Request) {
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(limit),
+    // Deliberately NOT date-filtered: an approval waiting 3 weeks is
+    // exactly the one that most needs surfacing, so `since` would hide
+    // the worst case.
+    service
+      .from("pending_approvals")
+      .select("id, action_type, amount, created_at")
+      .eq("dealership_id", dealershipId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(limit),
   ]);
 
   const unwrap = <T,>(r: PromiseSettledResult<any>): T[] =>
@@ -81,13 +91,14 @@ export async function GET(request: Request) {
       agentTasks: unwrap(tasksRes),
       calls: unwrap(callsRes),
       notifications: unwrap(notificationsRes),
+      approvals: unwrap(approvalsRes),
     },
     limit
   );
 
   // Reported so a partial timeline is visibly partial rather than
   // silently short — the UI can say "some activity couldn't be loaded".
-  const failedSources = [auditRes, automationRes, tasksRes, callsRes, notificationsRes].filter(
+  const failedSources = [auditRes, automationRes, tasksRes, callsRes, notificationsRes, approvalsRes].filter(
     (r) => r.status === "rejected" || (r.status === "fulfilled" && r.value.error)
   ).length;
 
