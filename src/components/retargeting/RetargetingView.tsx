@@ -105,6 +105,9 @@ export default function RetargetingView() {
           <li>In Meta Ads Manager: Audiences → Create Audience → Custom Audience → Customer List → upload the CSV.</li>
           <li>Use the generated ad copy for a new campaign targeted at that Custom Audience.</li>
         </ol>
+        <p className="text-xs text-slate-400">
+          Phone numbers and emails in this file are hashed (SHA-256), which is the format Meta requires — Meta matches the hashes against its own, so nothing readable leaves your account. Anyone who opted out of contact is automatically excluded, so the file may contain fewer people than the count shown above.
+        </p>
         <p className="text-xs text-slate-400">Hawlai doesn't auto-launch retargeting ads yet — that needs a live Meta Ads connection, same as other ad campaigns. This gets you a real, ready-to-use audience list and copy in the meantime.</p>
         <button disabled className="w-full mt-1 text-xs bg-slate-200 text-slate-400 py-2 rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5">
           <Lock className="w-3.5 h-3.5" /> Auto-sync to Meta Custom Audience — available once Meta Ads is connected
