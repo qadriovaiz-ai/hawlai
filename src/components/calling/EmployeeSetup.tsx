@@ -105,9 +105,12 @@ export default function EmployeeSetup({ business }: { business: BusinessInfo }) 
         </div>
         <h2 className="text-lg font-bold text-slate-900">Your AI Calling Employee is set up</h2>
         <p className="text-sm text-slate-500 max-w-sm mx-auto">
-          It knows your business, what its job is, and what it can and can&apos;t do. Test it on a real call before it starts working through your leads.
+          It knows your business, what its job is, and what it can and can&apos;t do. Hear it on a real call before it starts working through your leads.
         </p>
-        <Button onClick={() => router.push("/dashboard/calling")}>Go to Calling</Button>
+        <div className="flex flex-wrap gap-2 justify-center">
+          <Button onClick={() => router.push("/dashboard/calling/test")}>Test it on a call</Button>
+          <Button onClick={() => router.push("/dashboard/calling")} variant="secondary">Go to Calling</Button>
+        </div>
       </div>
     );
   }

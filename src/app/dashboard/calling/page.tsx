@@ -70,9 +70,14 @@ export default async function CallingPage() {
             Handling outbound calls as your {PERSONA_CHANNEL_LABELS.call_outbound.toLowerCase()} — {persona.label.toLowerCase()}.
           </p>
         </div>
-        <Link href="/dashboard/calling/setup" className="text-xs text-brand-500 hover:text-brand-400 inline-flex items-center gap-1 pt-1">
-          <Settings2 className="w-3.5 h-3.5" /> Set up your employee
-        </Link>
+        <div className="flex items-center gap-3 pt-1">
+          <Link href="/dashboard/calling/test" className="text-xs text-brand-500 hover:text-brand-400 inline-flex items-center gap-1">
+            <PhoneCall className="w-3.5 h-3.5" /> Test &amp; go live
+          </Link>
+          <Link href="/dashboard/calling/setup" className="text-xs text-slate-400 hover:text-slate-600 inline-flex items-center gap-1">
+            <Settings2 className="w-3.5 h-3.5" /> Set up
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
