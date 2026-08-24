@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { LeadTemperature, LeadStatus, CallStatus, AppointmentStatus } from "@/types";
+import { readConsent, getVisitorIdIfConsented } from "./consent";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -147,28 +148,19 @@ export function toWhatsAppLink(phone: string | null | undefined, message: string
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
-const VISITOR_ID_KEY = "hawlai_visitor_id";
-
-// Anonymous, first-party, per-browser id — lets a pre-conversion touch
-// (WhatsApp click, chat open) recorded here get matched back to the
-// lead once they submit the form. No TTL: localStorage already caps
-// its own lifetime to "until the visitor clears it"; the 30-day
-// matching window is enforced server-side at read time instead.
-// Never a name/phone/email, never sent anywhere but our own backend.
-export function getOrCreateVisitorId(): string | null {
-  try {
-    let id = localStorage.getItem(VISITOR_ID_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(VISITOR_ID_KEY, id);
-    }
-    return id;
-  } catch {
-    // localStorage blocked (private browsing, disabled cookies, etc.)
-    // — tracking just degrades to no visitor-id bridge for this visit.
-    return null;
-  }
-}
+// Per-browser id that lets a pre-conversion touch (WhatsApp click,
+// chat open) get matched back to the lead once they submit the form.
+//
+// NOW CONSENT-GATED (retargeting piece 2). It was described here as
+// "anonymous", but it isn't in practice: it persists across sessions
+// and bridgeVisitorTouchpoints retroactively attaches it to a NAMED
+// lead on conversion. That's cross-session identification tied to a
+// real person, so it requires consent under DPDP. Aggregate view/click
+// counts continue without it — see src/lib/consent.ts for the split.
+//
+// Re-exported from consent.ts rather than reimplemented so there is
+// exactly one place that decides whether an identifier may exist.
+export { getVisitorIdIfConsented as getOrCreateVisitorId } from "./consent";
 
 // Read directly from the current URL rather than threading utm_*
 // through every component that calls trackEvent — as long as the
@@ -192,10 +184,26 @@ function getUtmParams(): { utm_source: string | null; utm_medium: string | null;
 // the page for a real visitor.
 export function trackEvent(slug: string, eventType: string, coords?: { xPct: number; yPct: number }, variant?: string | null) {
   try {
+    // Consent decides how much of this event is identifiable, not
+    // whether it fires at all: an aggregate view/click count with no
+    // identifier is genuine site operation. Without consent the
+    // visitor id and UTM attribution are withheld — UTM only means
+    // anything when tied to that identifier, so sending it alone
+    // would be identifiable-adjacent data with no legitimate use.
+    const consented = readConsent() === "granted";
     fetch("/api/public/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, eventType, xPct: coords?.xPct, yPct: coords?.yPct, variant, visitorId: getOrCreateVisitorId(), ...getUtmParams() }),
+      body: JSON.stringify({
+        slug,
+        eventType,
+        xPct: coords?.xPct,
+        yPct: coords?.yPct,
+        variant,
+        visitorId: consented ? getVisitorIdIfConsented() : null,
+        consentGranted: consented,
+        ...(consented ? getUtmParams() : {}),
+      }),
       keepalive: true,
     }).catch(() => {});
   } catch {

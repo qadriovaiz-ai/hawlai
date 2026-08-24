@@ -1,6 +1,29 @@
-import Script from "next/script";
+"use client";
 
+import Script from "next/script";
+import { useState, useEffect } from "react";
+import { readConsent } from "@/lib/consent";
+
+// Third-party tracking tags — CONSENT-GATED (retargeting piece 2/7).
+//
+// Previously these rendered unconditionally, meaning Meta and Google
+// received a PageView from every visitor before anyone was asked.
+// Under DPDP that's non-essential processing without a lawful basis.
+//
+// Now a client component that renders nothing until consent is
+// actually granted. That does cost the server-rendered <Script>
+// placement, but the alternative — rendering tags server-side and
+// hoping a client script suppresses them in time — would fire the
+// pixel first and ask afterwards, which is the exact problem.
 export default function TrackingScripts({ gaId, metaPixelId, gtmId }: { gaId?: string | null; metaPixelId?: string | null; gtmId?: string | null }) {
+  const [consented, setConsented] = useState(false);
+
+  useEffect(() => {
+    setConsented(readConsent() === "granted");
+  }, []);
+
+  if (!consented) return null;
+
   return (
     <>
       {gaId && (

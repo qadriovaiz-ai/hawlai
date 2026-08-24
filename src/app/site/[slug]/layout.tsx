@@ -5,6 +5,7 @@ import { getTheme } from "@/lib/landingThemes";
 import { getSiteFontFamilies, getSiteFontStylesheetUrl } from "@/lib/siteFonts";
 import CartIcon from "@/components/website/CartIcon";
 import PageTracker from "@/components/website/PageTracker";
+import ConsentBanner from "@/components/website/ConsentBanner";
 
 // Same stale-cache risk as the page routes under this layout (see
 // src/app/site/[slug]/page.tsx) — this specifically renders the nav
@@ -66,6 +67,7 @@ export default async function SiteLayout({ children, params }: { children: React
         © {new Date().getFullYear()} {dealershipName}
       </footer>
       <PageTracker slug={slug} />
+      <ConsentBanner slug={slug} businessName={(website as any).dealerships?.dealership_name ?? null} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "whatsapp_click", "popup_shown"];
 
 export async function POST(request: Request) {
-  const { slug, eventType, xPct, yPct, variant, visitorId, utm_source, utm_medium, utm_campaign } = await request.json();
+  const { slug, eventType, xPct, yPct, variant, visitorId, utm_source, utm_medium, utm_campaign, consentGranted } = await request.json();
   if (!slug || !VALID_EVENTS.includes(eventType)) {
     return NextResponse.json({ error: "Invalid tracking event" }, { status: 400 });
   }
@@ -33,6 +33,13 @@ export async function POST(request: Request) {
     utm_source: typeof utm_source === "string" ? utm_source : null,
     utm_medium: typeof utm_medium === "string" ? utm_medium : null,
     utm_campaign: typeof utm_campaign === "string" ? utm_campaign : null,
+    // Records what the visitor had consented to at the moment this
+    // event fired (migration 152) — without it, a later withdrawal
+    // leaves no way to tell which rows were collected lawfully.
+    // Defensively re-derived from whether an identifier is actually
+    // present, so a client claiming consent while sending no id can't
+    // mark a row as consented.
+    consent_granted: consentGranted === true && typeof visitorId === "string",
   });
 
   return NextResponse.json({ ok: true });

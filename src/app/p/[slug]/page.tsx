@@ -6,6 +6,7 @@ import ChatWidget from "@/components/website/ChatWidget";
 import PageTracker from "@/components/website/PageTracker";
 import Popup from "@/components/website/Popup";
 import TrackingScripts from "@/components/website/TrackingScripts";
+import ConsentBanner from "@/components/website/ConsentBanner";
 import { getTheme } from "@/lib/landingThemes";
 import { buildGoogleFontsUrl } from "@/lib/googleFontsUrl";
 import type { Metadata } from "next";
@@ -218,6 +219,7 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
       <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
       <PageTracker slug={slug} variant={assignedVariant} />
       <TrackingScripts gaId={page.ga_tracking_id} metaPixelId={page.meta_pixel_id} gtmId={page.gtm_id} />
+      <ConsentBanner slug={slug} businessName={dealershipName} />
       {page.popup_enabled && page.popup_headline && page.popup_body && (
         <Popup
           slug={slug}
