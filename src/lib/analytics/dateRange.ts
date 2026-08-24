@@ -125,3 +125,86 @@ export function trendGranularity(range: ResolvedRange): "day" | "week" | "month"
   if (range.days <= 90) return "week";
   return "month";
 }
+
+export interface TrendBucket {
+  label: string;
+  start: number; // epoch ms, inclusive
+  end: number;   // epoch ms, exclusive
+}
+
+/**
+ * Builds the actual buckets spanning the selected range.
+ *
+ * Replaces a hardcoded "last 6 months from today" that was computed
+ * independently of the range — once the underlying rows became
+ * range-filtered, that produced a 7-day view rendered as six month
+ * buckets, five of them empty. The buckets must be derived from the
+ * same range as the data or the chart lies about the period.
+ */
+export function buildTrendBuckets(range: ResolvedRange): TrendBucket[] {
+  const granularity = trendGranularity(range);
+  const start = new Date(range.from);
+  const end = new Date(range.to);
+  const buckets: TrendBucket[] = [];
+
+  if (granularity === "month") {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cursor < end) {
+      const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+      buckets.push({
+        label: cursor.toLocaleString("en-IN", { month: "short" }),
+        start: cursor.getTime(),
+        end: Math.min(next.getTime(), end.getTime()),
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return buckets;
+  }
+
+  const stepDays = granularity === "week" ? 7 : 1;
+  const cursor = startOfDay(start);
+  while (cursor < end) {
+    const next = new Date(cursor.getTime() + stepDays * DAY_MS);
+    buckets.push({
+      label: cursor.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+      start: cursor.getTime(),
+      // Clamped so the final bucket never claims to extend past the
+      // range the user actually chose.
+      end: Math.min(next.getTime(), end.getTime()),
+    });
+    cursor.setTime(next.getTime());
+  }
+  return buckets;
+}
+
+export interface MetricDelta {
+  current: number;
+  previous: number;
+  absolute: number;
+  /** null when a percentage would be meaningless or misleading — see below. */
+  percent: number | null;
+  direction: "up" | "down" | "flat";
+}
+
+/**
+ * Current vs previous period.
+ *
+ * percent is deliberately null in two cases rather than fabricated:
+ *   previous === 0 — there is no "percent increase from zero"; showing
+ *     +100% (or ∞) would invent a baseline that didn't exist.
+ *   previous < 5  — a move from 1 to 2 is "+100%", which reads as a
+ *     dramatic improvement and is really just one extra lead. The
+ *     absolute change is the honest number at that scale, so only it
+ *     is shown.
+ */
+export function computeDelta(current: number, previous: number): MetricDelta {
+  const absolute = Math.round((current - previous) * 100) / 100;
+  const meaningfulBase = previous >= 5;
+  return {
+    current,
+    previous,
+    absolute,
+    percent: meaningfulBase ? Math.round(((current - previous) / previous) * 100) : null,
+    direction: absolute > 0 ? "up" : absolute < 0 ? "down" : "flat",
+  };
+}

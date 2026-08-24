@@ -11,7 +11,8 @@ import { computeLtv, computeCohorts } from "@/lib/analytics/ltvCohorts";
 import AdvancedAnalyticsSection from "@/components/dashboard/AdvancedAnalyticsSection";
 import AnalyticsToolbar from "@/components/dashboard/AnalyticsToolbar";
 import MetricOverlayChart from "@/components/dashboard/MetricOverlayChart";
-import { resolveRange, RANGE_EXEMPT } from "@/lib/analytics/dateRange";
+import PeriodComparison from "@/components/dashboard/PeriodComparison";
+import { resolveRange, RANGE_EXEMPT, previousPeriod, buildTrendBuckets, computeDelta } from "@/lib/analytics/dateRange";
 
 export default async function AnalyticsPage({
   searchParams,
@@ -31,6 +32,7 @@ export default async function AnalyticsPage({
 
   const params = searchParams ? await searchParams : {};
   const range = resolveRange(params.range, params.from, params.to);
+  const prior = previousPeriod(range);
 
   // Date-governed sections (KPIs, trend, campaigns, source breakdown)
   // now respect the picker. Before this the page had NO date filtering
@@ -40,7 +42,7 @@ export default async function AnalyticsPage({
   // leadsAllTime / touchpoints / orders are fetched UNFILTERED on
   // purpose: attribution, cohorts and LTV would become quietly wrong
   // if windowed — see RANGE_EXEMPT in dateRange.ts.
-  const [{ data: leads }, { data: leadsAllTime }, { data: calls }, { data: appointments }, { data: perfHistory }, { data: touchpoints }, { data: orders }] = await Promise.all([
+  const [{ data: leads }, { data: leadsAllTime }, { data: calls }, { data: appointments }, { data: perfHistory }, { data: touchpoints }, { data: orders }, { count: priorLeadCount }, { count: priorCallCount }, { count: priorAppointmentCount }] = await Promise.all([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
     supabase.from("leads").select("*").eq("dealership_id", dealershipId),
     supabase.from("calls").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
@@ -53,6 +55,13 @@ export default async function AnalyticsPage({
     // P3 8b/8c — repeat purchases were already recorded, just never
     // grouped per customer.
     supabase.from("orders").select("customer_phone, customer_name, total, created_at, payment_status, status").eq("dealership_id", dealershipId),
+    // Previous equal-length window, for "vs previous period". Counts
+    // only — head:true means no rows are transferred, just the count,
+    // so the comparison costs three cheap index lookups rather than a
+    // second full data fetch.
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).gte("created_at", prior.from).lt("created_at", prior.to),
+    supabase.from("calls").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).gte("created_at", prior.from).lt("created_at", prior.to),
+    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).gte("created_at", prior.from).lt("created_at", prior.to),
   ]);
 
   // These three deliberately use the UNFILTERED lead set (confirmed
@@ -123,18 +132,35 @@ export default async function AnalyticsPage({
     .map(([source, v]) => ({ source: source.replace(/_/g, " "), ...v }))
     .sort((a, b) => b.count - a.count);
 
-  // Monthly trend
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));
-    return { month: d.toLocaleString("en-IN", { month: "short" }), monthNum: d.getMonth(), year: d.getFullYear() };
-  });
-  const monthlyTrend = months.map(({ month, monthNum, year }) => ({
-    month,
-    leads: leads?.filter((l) => { const d = new Date(l.created_at); return d.getMonth() === monthNum && d.getFullYear() === year; }).length ?? 0,
-    calls: calls?.filter((c) => { const d = new Date(c.created_at); return d.getMonth() === monthNum && d.getFullYear() === year; }).length ?? 0,
-    appointments: appointments?.filter((a) => { const d = new Date(a.created_at); return d.getMonth() === monthNum && d.getFullYear() === year; }).length ?? 0,
+  // Trend — buckets derived from the SELECTED RANGE, adaptively
+  // (daily / weekly / monthly by span).
+  //
+  // This replaces a hardcoded "last 6 months from today" that was
+  // computed independently of the range. Once the underlying rows
+  // became range-filtered, that combination was actively wrong: a
+  // 7-day view rendered six month buckets with five of them empty.
+  // Buckets and data must come from the same range or the chart
+  // misrepresents the period it claims to show.
+  const buckets = buildTrendBuckets(range);
+  const countIn = (rows: { created_at: string }[] | null, b: { start: number; end: number }) =>
+    (rows ?? []).filter((r) => {
+      const t = new Date(r.created_at).getTime();
+      return t >= b.start && t < b.end;
+    }).length;
+
+  const monthlyTrend = buckets.map((b) => ({
+    month: b.label, // key name kept — AnalyticsCharts already reads `month`
+    leads: countIn(leads as any, b),
+    calls: countIn(calls as any, b),
+    appointments: countIn(appointments as any, b),
   }));
+
+  // vs previous period — same length window immediately before.
+  const deltas = {
+    leads: computeDelta(leads?.length ?? 0, priorLeadCount ?? 0),
+    calls: computeDelta(calls?.length ?? 0, priorCallCount ?? 0),
+    appointments: computeDelta(appointments?.length ?? 0, priorAppointmentCount ?? 0),
+  };
 
   // Lifetime totals per campaign from the permanent daily-snapshot
   // history — this survives even if a campaign is later paused,
@@ -187,6 +213,8 @@ export default async function AnalyticsPage({
 
       {/* KPI Metrics — governed by the date picker. Labelled with the
           active range so the numbers are never read as all-time. */}
+      <PeriodComparison deltas={deltas} rangeLabel={range.label} />
+
       <p className="text-xs text-slate-400 -mb-2">Showing {range.label.toLowerCase()}</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
