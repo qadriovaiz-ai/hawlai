@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Loader2, CheckCircle, Tag, X, Wallet, Truck } from "lucide-react";
 import { getCart, clearCart, cartTotal, type CartItem } from "@/lib/cart";
 import { computeShippingAmount, type ShippingSettings } from "@/lib/shipping";
+import { readConsent } from "@/lib/consent";
+import { trackInitiateCheckout, trackPurchase } from "@/lib/pixelEvents";
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -57,6 +59,19 @@ export default function CheckoutPage() {
       .then((d) => setShippingSettings({ shipping_mode: d.mode, shipping_rate: d.rate, shipping_free_threshold: d.freeThreshold }))
       .catch(() => setShippingSettings(null));
   }, [slug]);
+
+  // InitiateCheckout — fires once, when a real cart reaches this page.
+  // Guarded on items.length so an empty-cart visit isn't reported as a
+  // checkout, and on the ref so a re-render can't fire it twice.
+  const initiateCheckoutFired = useRef(false);
+  useEffect(() => {
+    if (initiateCheckoutFired.current || items.length === 0 || orderId) return;
+    initiateCheckoutFired.current = true;
+    trackInitiateCheckout(
+      items.map((i) => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+      cartTotal(items)
+    );
+  }, [items, orderId]);
 
   const abandonedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -120,6 +135,18 @@ export default function CheckoutPage() {
     setDiscountAmount(0);
   }
 
+  // The browser half of Purchase reporting. eventId is the order id —
+  // the server sends the identical value via the Conversions API, and
+  // that match is what stops Meta counting one sale as two. Must be
+  // called BEFORE clearCart, while `items` still holds the order.
+  function firePurchase(newOrderId: string) {
+    trackPurchase(
+      newOrderId,
+      items.map((i) => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+      total
+    );
+  }
+
   function orderPayload() {
     return {
       slug,
@@ -130,6 +157,11 @@ export default function CheckoutPage() {
       items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       discountCode: appliedCode,
       honeypot,
+      // Only the browser knows whether this buyer consented to
+      // tracking; the server can't infer it. Gates whether the
+      // Conversions API shares hashed customer identifiers with Meta
+      // — the sale is still reported either way.
+      trackingConsent: readConsent() === "granted",
     };
   }
 
@@ -167,6 +199,9 @@ export default function CheckoutPage() {
             });
             const verifyData = await verifyRes.json();
             if (!verifyRes.ok) throw new Error(verifyData.error ?? "Payment verification failed");
+            // Fired BEFORE clearCart — afterwards `items` is empty and
+            // the event would carry no products or value.
+            firePurchase(verifyData.orderId);
             clearCart(slug);
             setPaidOnline(true);
             setOrderId(verifyData.orderId);
@@ -193,6 +228,7 @@ export default function CheckoutPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Something went wrong");
+    firePurchase(data.orderId);
     clearCart(slug);
     setOrderId(data.orderId);
   }

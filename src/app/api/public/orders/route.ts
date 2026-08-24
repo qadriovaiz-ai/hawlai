@@ -20,7 +20,7 @@ import { isRazorpayConfigured, createRazorpayOrder } from "@/lib/payments/razorp
 //   pending order, decrementing stock, or notifying the dealer.
 export async function POST(request: Request) {
   const body = await request.json();
-  const { slug, customerName, customerPhone, customerEmail, shippingAddress, items, discountCode, honeypot, paymentMethod } = body;
+  const { slug, customerName, customerPhone, customerEmail, shippingAddress, items, discountCode, honeypot, paymentMethod, trackingConsent } = body;
 
   if (honeypot) return NextResponse.json({ success: true, orderId: "ok" });
 
@@ -84,12 +84,14 @@ export async function POST(request: Request) {
     discountCode,
     customerName,
     customerPhone,
+    customerEmail,
     shippingAddress,
     subtotal,
     discountAmount,
     shippingAmount,
     total,
     paymentMethod: "cod",
+    trackingConsent: trackingConsent === true,
   });
 
   return NextResponse.json({ success: true, orderId: order.id, subtotal, discountAmount, shippingAmount, total });

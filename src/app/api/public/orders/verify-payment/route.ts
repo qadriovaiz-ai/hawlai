@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     razorpayOrderId,
     razorpayPaymentId,
     razorpaySignature,
+    trackingConsent,
   } = body;
 
   if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
@@ -81,12 +82,14 @@ export async function POST(request: Request) {
     discountCode,
     customerName,
     customerPhone,
+    customerEmail,
     shippingAddress,
     subtotal,
     discountAmount,
     shippingAmount,
     total,
     paymentMethod: "razorpay",
+    trackingConsent: trackingConsent === true,
   });
 
   return NextResponse.json({ success: true, orderId: order.id, subtotal, discountAmount, shippingAmount, total });

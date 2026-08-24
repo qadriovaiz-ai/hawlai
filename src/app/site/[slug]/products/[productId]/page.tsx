@@ -20,7 +20,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   const { data: product } = await supabase
     .from("products")
-    .select("id, name, description, price, compare_at_price, images, inventory_count, is_active")
+    .select("id, name, description, price, compare_at_price, images, inventory_count, is_active, category")
     .eq("id", productId)
     .eq("dealership_id", website.dealership_id)
     .maybeSingle();
@@ -46,7 +46,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           {product.description && <div className="text-sm text-neutral-600 leading-relaxed mb-6">{renderRichText(product.description)}</div>}
           <ProductAddToCart
             slug={slug}
-            product={{ id: product.id, name: product.name, price: Number(product.price), image: product.images?.[0] }}
+            product={{ id: product.id, name: product.name, price: Number(product.price), image: product.images?.[0], category: product.category }}
             outOfStock={outOfStock}
             theme={theme}
           />

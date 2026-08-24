@@ -6,6 +6,7 @@ import { getSiteFontFamilies, getSiteFontStylesheetUrl } from "@/lib/siteFonts";
 import CartIcon from "@/components/website/CartIcon";
 import PageTracker from "@/components/website/PageTracker";
 import ConsentBanner from "@/components/website/ConsentBanner";
+import TrackingScripts from "@/components/website/TrackingScripts";
 
 // Same stale-cache risk as the page routes under this layout (see
 // src/app/site/[slug]/page.tsx) — this specifically renders the nav
@@ -19,7 +20,10 @@ export default async function SiteLayout({ children, params }: { children: React
 
   const { data: website } = await supabase
     .from("websites")
-    .select("id, slug, theme_key, published, logo_url, font_key, dealerships(dealership_name)")
+    // meta_pixel_id/ga_tracking_id come from the DEALERSHIP (migration
+    // 153) — the storefront previously had no tracking at all because
+    // pixel config only existed on landing_pages.
+    .select("id, slug, theme_key, published, logo_url, font_key, dealerships(dealership_name, meta_pixel_id, ga_tracking_id)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -67,6 +71,12 @@ export default async function SiteLayout({ children, params }: { children: React
         © {new Date().getFullYear()} {dealershipName}
       </footer>
       <PageTracker slug={slug} />
+      {/* The root-cause fix: the storefront — where every real
+          e-commerce event happens — had no pixel at all. */}
+      <TrackingScripts
+        gaId={(website as any).dealerships?.ga_tracking_id}
+        metaPixelId={(website as any).dealerships?.meta_pixel_id}
+      />
       <ConsentBanner slug={slug} businessName={(website as any).dealerships?.dealership_name ?? null} />
     </div>
   );

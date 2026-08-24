@@ -1,5 +1,6 @@
 import { sendEmail } from "@/lib/agents/gmailAgent";
 import type { ResolvedOrderItem } from "@/lib/orderPricing";
+import { sendAndLogConversion } from "@/lib/ads/metaConversionsApi";
 
 // Runs once an order is actually committed — for COD that's immediately
 // at order creation (as before); for Razorpay that's only after the
@@ -33,6 +34,51 @@ async function linkOrderToLead(supabase: any, orderId: string, dealershipId: str
   }
 }
 
+// Reads the business's own pixel + Conversions API token and reports
+// the sale. Entirely best-effort: a business that hasn't connected a
+// pixel simply reports nothing, and a delivery failure is recorded in
+// conversion_events rather than surfacing to the buyer — nothing here
+// may ever affect an order that already succeeded.
+async function reportPurchaseConversion(
+  supabase: any,
+  opts: {
+    dealershipId: string;
+    orderId: string;
+    total: number;
+    contentIds: string[];
+    customerPhone: string;
+    customerEmail: string | null;
+    consented: boolean;
+  }
+) {
+  try {
+    const { data: dealership } = await supabase
+      .from("dealerships")
+      .select("meta_pixel_id, meta_conversions_api_token")
+      .eq("id", opts.dealershipId)
+      .single();
+
+    if (!dealership?.meta_pixel_id || !dealership?.meta_conversions_api_token) return;
+
+    await sendAndLogConversion(supabase, opts.dealershipId, {
+      pixelId: dealership.meta_pixel_id,
+      accessToken: dealership.meta_conversions_api_token,
+      eventName: "Purchase",
+      eventId: opts.orderId,
+      value: opts.total,
+      currency: "INR",
+      contentIds: opts.contentIds,
+      customer: {
+        email: opts.customerEmail,
+        phone: opts.customerPhone,
+        consented: opts.consented,
+      },
+    });
+  } catch (err: any) {
+    console.error("[orderFulfillment] purchase conversion reporting failed:", err?.message);
+  }
+}
+
 export async function applyOrderSideEffects(
   supabase: any,
   opts: {
@@ -44,12 +90,20 @@ export async function applyOrderSideEffects(
     discountCode?: string | null;
     customerName: string;
     customerPhone: string;
+    // Added for Conversions API customer matching (retargeting piece
+    // 3) — optional, since a COD order may genuinely have no email.
+    customerEmail?: string | null;
     shippingAddress: string;
     subtotal: number;
     discountAmount: number;
     shippingAmount: number;
     total: number;
     paymentMethod: "cod" | "razorpay";
+    // Whether this buyer consented to tracking. Only the BROWSER
+    // knows this, so it's passed in rather than inferred server-side.
+    // Defaults to false: absent information must never be treated as
+    // consent.
+    trackingConsent?: boolean;
   }
 ) {
   const {
@@ -61,15 +115,36 @@ export async function applyOrderSideEffects(
     discountCode,
     customerName,
     customerPhone,
+    customerEmail,
     shippingAddress,
     subtotal,
     discountAmount,
     shippingAmount,
     total,
     paymentMethod,
+    trackingConsent,
   } = opts;
 
   await linkOrderToLead(supabase, orderId, dealershipId, customerPhone);
+
+  // Server-side Purchase reporting (retargeting piece 3). Fired from
+  // here rather than the browser because this is the point a purchase
+  // is genuinely COMMITTED — for COD immediately, for Razorpay only
+  // after signature verification — so an abandoned or fake payment
+  // attempt can never report a conversion. Also survives ad blockers,
+  // which drop 20-40% of browser pixel events.
+  //
+  // eventId is the order id, matching what the browser pixel sends,
+  // so Meta deduplicates the two into one conversion.
+  await reportPurchaseConversion(supabase, {
+    dealershipId,
+    orderId,
+    total,
+    contentIds: resolvedItems.map((i: any) => String(i.productId ?? i.product_id ?? "")).filter(Boolean),
+    customerPhone,
+    customerEmail: customerEmail ?? null,
+    consented: trackingConsent === true,
+  });
 
   if (appliedDiscountId) {
     const { data: dc } = await supabase.from("discount_codes").select("used_count").eq("id", appliedDiscountId).single();
