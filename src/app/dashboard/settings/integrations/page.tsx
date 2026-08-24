@@ -11,6 +11,7 @@ import WordPressConnect from "@/components/settings/WordPressConnect";
 import ConnectWhatsAppCard from "@/components/settings/ConnectWhatsAppCard";
 import GoogleReviewsConnect from "@/components/settings/GoogleReviewsConnect";
 import TrackingSettingsCard from "@/components/settings/TrackingSettingsCard";
+import ProductFeedCard from "@/components/settings/ProductFeedCard";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { buttonClasses } from "@/components/ui";
 
@@ -304,6 +305,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       </div>
 
       <TrackingSettingsCard />
+
+      <ProductFeedCard />
 
       <p className="text-xs text-slate-400">
         Each ad platform still requires its own developer-app approval before it works with real accounts (can take days to weeks) — not something Hawlai or any tool can skip. Connecting above will report a clear error until that's granted.
