@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url, variant_group_id, variant_label, targeting_location } = body;
+  const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url, variant_group_id, variant_label, targeting_location, retarget_audience_key } = body;
   const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
 
   if (adDestination === "instant_form" && !leadFormId) {
@@ -221,12 +221,36 @@ export async function POST(request: Request) {
     // legally-required Special Ad Category declaration (Real Estate ->
     // HOUSING, which strips demographic targeting to geo-only — see
     // metaTargeting.ts's header for what was verified before writing this).
+    // Retargeting (piece 6): resolve the saved audience to its real
+    // Meta id. Looked up server-side from audience_key rather than
+    // accepting an id from the client — a raw id in the request body
+    // would let a caller target an arbitrary audience id, including
+    // one belonging to another business's ad account.
+    let retargetAudienceIds: string[] = [];
+    if (retarget_audience_key) {
+      const { data: audience } = await serviceClient
+        .from("meta_custom_audiences")
+        .select("meta_audience_id")
+        .eq("dealership_id", dealershipId)
+        .eq("audience_key", retarget_audience_key)
+        .eq("sync_status", "synced")
+        .maybeSingle();
+      if (!audience?.meta_audience_id) {
+        return NextResponse.json(
+          { error: "That audience isn't synced to Meta yet — create it in Retargeting first." },
+          { status: 400 }
+        );
+      }
+      retargetAudienceIds = [audience.meta_audience_id];
+    }
+
     const built = await buildMetaTargeting({
       businessCategory: dealership?.business_category,
       persona: brandProfile?.target_persona ?? null,
       location: targeting_location ?? null,
       aiSuggestedCity: plan.targeting_city,
       accessToken: pageAccessToken!,
+      customAudienceIds: retargetAudienceIds,
     });
 
     // Step 5: campaign

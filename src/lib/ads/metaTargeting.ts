@@ -211,6 +211,12 @@ export interface BuildTargetingInput {
   location: LocationChoice | null | undefined;
   aiSuggestedCity: string | null | undefined;
   accessToken: string;
+  /**
+   * Meta Custom Audience ids to retarget (piece 5/6). When present the
+   * audience IS the targeting definition, so persona demographics are
+   * deliberately NOT layered on top — see buildMetaTargeting().
+   */
+  customAudienceIds?: string[] | null;
 }
 
 export interface BuiltTargeting {
@@ -264,6 +270,30 @@ export async function buildMetaTargeting(input: BuildTargetingInput): Promise<Bu
       targeting: { ...location.geo_locations, targeting_automation: { advantage_audience: 1 } },
       specialAdCategory,
       summary: `Location only (${location.summaryLabel}) — required for ${input.businessCategory} ads under Meta's housing ad policy.`,
+      personaApplied: false,
+    };
+  }
+
+  // RETARGETING: when a Custom Audience is supplied, that audience IS
+  // the definition of who to reach, so persona demographics are
+  // deliberately not applied on top.
+  //
+  // This isn't tidiness — retargeting audiences are small by nature
+  // (people who abandoned a cart in 30 days). Narrowing one further by
+  // age/gender/interests can push it under Meta's delivery minimum,
+  // at which point the ad simply doesn't run. Advantage Audience is
+  // also forced OFF: expanding beyond your actual cart-abandoners is
+  // the opposite of retargeting them.
+  const retargetIds = (input.customAudienceIds ?? []).filter(Boolean);
+  if (retargetIds.length > 0) {
+    return {
+      targeting: {
+        ...location.geo_locations, // Meta still requires a geo
+        custom_audiences: retargetIds.map((id) => ({ id })),
+        targeting_automation: { advantage_audience: 0 },
+      },
+      specialAdCategory: "NONE",
+      summary: `Retargeting a saved audience in ${location.summaryLabel}`,
       personaApplied: false,
     };
   }

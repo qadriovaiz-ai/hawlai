@@ -3,7 +3,7 @@
 import { useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil, FlaskConical } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil, FlaskConical, RotateCcw } from "lucide-react";
 import ProductPicker from "@/components/ads/ProductPicker";
 import PhotoEditor from "@/components/ads/PhotoEditor";
 import ScoreBadge from "@/components/shared/ScoreBadge";
@@ -38,6 +38,11 @@ function FullLaunchForm() {
   const searchParams = useSearchParams();
   const variantGroupId = searchParams.get("variantGroupId");
   const variantLabel = searchParams.get("variantLabel");
+  // Retargeting hand-off (piece 6): the Retargeting page creates a
+  // draft with audience-specific copy, then sends the dealer here to
+  // review, add a photo and launch — so the campaign still goes
+  // through the same PAUSED-then-approval path as any other ad.
+  const retargetAudienceKey = searchParams.get("retarget");
   const [stage, setStage] = useState<Stage>("form");
 
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -161,6 +166,10 @@ function FullLaunchForm() {
           destination,
           product_destination_url: productDestinationUrl,
           ...(variantGroupId && { variant_group_id: variantGroupId, variant_label: variantLabel }),
+          // Resolved server-side to the real Meta audience id — the
+          // key is passed, never an id, so a caller can't target an
+          // arbitrary audience.
+          ...(retargetAudienceKey && { retarget_audience_key: retargetAudienceKey }),
           targeting_location: buildLocationChoice(),
         }),
       });
@@ -216,6 +225,15 @@ function FullLaunchForm() {
             <FlaskConical className="w-4 h-4 text-brand-500 shrink-0" />
             <p className="text-xs text-brand-600">
               Launching as <span className="font-semibold">Variant {variantLabel}</span> — this will be compared against the campaign it's testing on the Campaigns page.
+            </p>
+          </div>
+        )}
+
+        {retargetAudienceKey && (
+          <div className="flex items-center gap-2.5 bg-brand-500/10 border border-brand-400/30 rounded-lg px-4 py-2.5">
+            <RotateCcw className="w-4 h-4 text-brand-500 shrink-0" />
+            <p className="text-xs text-brand-600">
+              This ad will be shown only to your saved retargeting audience — not to new people. Age, gender and interest targeting are skipped, since the audience already defines who sees it.
             </p>
           </div>
         )}

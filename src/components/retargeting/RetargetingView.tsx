@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Sparkles, Download, ShoppingCart, UserX, RotateCcw } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import CustomAudiencesPanel from "@/components/retargeting/CustomAudiencesPanel";
+import RetargetingDashboard from "@/components/retargeting/RetargetingDashboard";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";
 import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel";
@@ -32,6 +33,11 @@ export default function RetargetingView() {
 
   return (
     <div className="space-y-5">
+      {/* Piece 6 — who's retargetable right now, and a one-click
+          route to advertising to them. Sits above the existing
+          copy-generation flow, which is still useful on its own. */}
+      <RetargetingDashboard />
+
       {/* Segment picker with real counts */}
       <Card className="space-y-3">
         <p className="text-sm font-semibold text-slate-700">Real audience segments</p>
