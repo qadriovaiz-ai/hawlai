@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { ShoppingCart, Check } from "lucide-react";
 import { addToCart } from "@/lib/cart";
 import { trackViewContent, trackAddToCart } from "@/lib/pixelEvents";
+import { trackRemarketing } from "@/lib/googleAdsEvents";
+import { useTrackingConfig } from "@/components/website/TrackingConfigProvider";
 import type { LandingTheme } from "@/lib/landingThemes";
 
 export default function ProductAddToCart({
@@ -18,6 +20,7 @@ export default function ProductAddToCart({
   theme: LandingTheme;
 }) {
   const [added, setAdded] = useState(false);
+  const trackingConfig = useTrackingConfig();
 
   // ViewContent lives here rather than in the server-rendered product
   // page because these events are inherently client-side (they need
@@ -26,6 +29,16 @@ export default function ProductAddToCart({
   // beside it just to fire one event would be redundant.
   useEffect(() => {
     trackViewContent({ id: product.id, name: product.name, price: product.price, category: product.category });
+    // Google dynamic remarketing for this product view. Only when the
+    // business has actually enabled it — see migration 154 for why
+    // it's off by default (no Merchant Center feed until piece 7).
+    if (trackingConfig.googleRemarketingEnabled) {
+      trackRemarketing(trackingConfig.googleAdsConversionId, {
+        pageType: "product",
+        productIds: [product.id],
+        totalValue: product.price,
+      });
+    }
   }, [product.id]);
 
   function handleAdd() {

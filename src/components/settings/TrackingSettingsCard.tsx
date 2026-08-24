@@ -16,6 +16,9 @@ export default function TrackingSettingsCard() {
   const [gaId, setGaId] = useState("");
   const [capiToken, setCapiToken] = useState("");
   const [capiConnected, setCapiConnected] = useState(false);
+  const [googleConversionId, setGoogleConversionId] = useState("");
+  const [googleConversionLabel, setGoogleConversionLabel] = useState("");
+  const [googleRemarketing, setGoogleRemarketing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +31,9 @@ export default function TrackingSettingsCard() {
           setPixelId(d.metaPixelId ?? "");
           setGaId(d.gaTrackingId ?? "");
           setCapiConnected(!!d.conversionsApiConnected);
+          setGoogleConversionId(d.googleAdsConversionId ?? "");
+          setGoogleConversionLabel(d.googleAdsConversionLabel ?? "");
+          setGoogleRemarketing(!!d.googleRemarketingEnabled);
         }
       })
       .catch(() => {})
@@ -45,6 +51,9 @@ export default function TrackingSettingsCard() {
         body: JSON.stringify({
           metaPixelId: pixelId,
           gaTrackingId: gaId,
+          googleAdsConversionId: googleConversionId,
+          googleAdsConversionLabel: googleConversionLabel,
+          googleRemarketingEnabled: googleRemarketing,
           // Only sent when actually typed — an empty box means "leave
           // it as it is", not "disconnect".
           ...(capiToken.trim() ? { conversionsApiToken: capiToken.trim() } : {}),
@@ -98,6 +107,45 @@ export default function TrackingSettingsCard() {
             className="input text-sm"
           />
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">Google Ads conversion ID</label>
+            <input
+              value={googleConversionId}
+              onChange={(e) => { setGoogleConversionId(e.target.value); setSaved(false); }}
+              placeholder="AW-123456789"
+              className="input text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">Conversion label</label>
+            <input
+              value={googleConversionLabel}
+              onChange={(e) => { setGoogleConversionLabel(e.target.value); setSaved(false); }}
+              placeholder="e.g. AbC-D_efG"
+              className="input text-sm"
+            />
+          </div>
+        </div>
+        <p className="text-[10px] text-slate-400 -mt-1">
+          Both come from Google Ads → Goals → Conversions → your purchase action. Needed to record sales against your Google campaigns.
+        </p>
+
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={googleRemarketing}
+            onChange={(e) => { setGoogleRemarketing(e.target.checked); setSaved(false); }}
+            className="mt-0.5 w-3.5 h-3.5 accent-brand-600"
+          />
+          <span>
+            <span className="text-xs text-slate-700">Show people the exact product they viewed</span>
+            <span className="block text-[10px] text-slate-400">
+              Needs a Google Merchant Center product feed to actually display products — leave off until that&apos;s connected.
+            </span>
+          </span>
+        </label>
 
         <div>
           <label className="block text-[11px] font-medium text-slate-500 mb-1 flex items-center gap-1.5">

@@ -8,6 +8,8 @@ import { getCart, clearCart, cartTotal, type CartItem } from "@/lib/cart";
 import { computeShippingAmount, type ShippingSettings } from "@/lib/shipping";
 import { readConsent } from "@/lib/consent";
 import { trackInitiateCheckout, trackPurchase } from "@/lib/pixelEvents";
+import { trackGoogleConversion, trackRemarketing } from "@/lib/googleAdsEvents";
+import { useTrackingConfig } from "@/components/website/TrackingConfigProvider";
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -32,6 +34,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const trackingConfig = useTrackingConfig();
   const [paidOnline, setPaidOnline] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [couponApplying, setCouponApplying] = useState(false);
@@ -145,6 +148,22 @@ export default function CheckoutPage() {
       items.map((i) => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
       total
     );
+    // Google's equivalent. transaction_id = order id serves the same
+    // dedup role as Meta's event_id, so a reload of the confirmation
+    // page can't double-count the sale.
+    trackGoogleConversion(
+      trackingConfig.googleAdsConversionId,
+      trackingConfig.googleAdsConversionLabel,
+      newOrderId,
+      total
+    );
+    if (trackingConfig.googleRemarketingEnabled) {
+      trackRemarketing(trackingConfig.googleAdsConversionId, {
+        pageType: "purchase",
+        productIds: items.map((i) => i.productId),
+        totalValue: total,
+      });
+    }
   }
 
   function orderPayload() {

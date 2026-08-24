@@ -15,7 +15,18 @@ import { readConsent } from "@/lib/consent";
 // placement, but the alternative — rendering tags server-side and
 // hoping a client script suppresses them in time — would fire the
 // pixel first and ask afterwards, which is the exact problem.
-export default function TrackingScripts({ gaId, metaPixelId, gtmId }: { gaId?: string | null; metaPixelId?: string | null; gtmId?: string | null }) {
+export default function TrackingScripts({
+  gaId,
+  metaPixelId,
+  gtmId,
+  googleAdsConversionId,
+}: {
+  gaId?: string | null;
+  metaPixelId?: string | null;
+  gtmId?: string | null;
+  /** 'AW-XXXXXXXXX' — enables Google Ads remarketing + conversions (piece 4). */
+  googleAdsConversionId?: string | null;
+}) {
   const [consented, setConsented] = useState(false);
 
   useEffect(() => {
@@ -24,16 +35,22 @@ export default function TrackingScripts({ gaId, metaPixelId, gtmId }: { gaId?: s
 
   if (!consented) return null;
 
+  // GA4 and Google Ads share ONE gtag script — loading it twice would
+  // double-fire every event. So the tag loads if EITHER is configured,
+  // and each destination gets its own config line.
+  const googleTagId = gaId || googleAdsConversionId;
+
   return (
     <>
-      {gaId && (
+      {googleTagId && (
         <>
-          <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />
-          <Script id="ga-init" strategy="afterInteractive">
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
+          <Script id="google-tag-init" strategy="afterInteractive">
             {`window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               gtag('js', new Date());
-              gtag('config', '${gaId}');`}
+              ${gaId ? `gtag('config', '${gaId}');` : ""}
+              ${googleAdsConversionId ? `gtag('config', '${googleAdsConversionId}');` : ""}`}
           </Script>
         </>
       )}

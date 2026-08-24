@@ -7,6 +7,7 @@ import CartIcon from "@/components/website/CartIcon";
 import PageTracker from "@/components/website/PageTracker";
 import ConsentBanner from "@/components/website/ConsentBanner";
 import TrackingScripts from "@/components/website/TrackingScripts";
+import { TrackingConfigProvider } from "@/components/website/TrackingConfigProvider";
 
 // Same stale-cache risk as the page routes under this layout (see
 // src/app/site/[slug]/page.tsx) — this specifically renders the nav
@@ -23,7 +24,7 @@ export default async function SiteLayout({ children, params }: { children: React
     // meta_pixel_id/ga_tracking_id come from the DEALERSHIP (migration
     // 153) — the storefront previously had no tracking at all because
     // pixel config only existed on landing_pages.
-    .select("id, slug, theme_key, published, logo_url, font_key, dealerships(dealership_name, meta_pixel_id, ga_tracking_id)")
+    .select("id, slug, theme_key, published, logo_url, font_key, dealerships(dealership_name, meta_pixel_id, ga_tracking_id, google_ads_conversion_id, google_ads_conversion_label, google_remarketing_enabled)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -66,7 +67,17 @@ export default async function SiteLayout({ children, params }: { children: React
           {hasStore && <CartIcon slug={slug} color={theme.dark} />}
         </div>
       </nav>
-      <main>{children}</main>
+      <main>
+        <TrackingConfigProvider
+          config={{
+            googleAdsConversionId: (website as any).dealerships?.google_ads_conversion_id ?? null,
+            googleAdsConversionLabel: (website as any).dealerships?.google_ads_conversion_label ?? null,
+            googleRemarketingEnabled: !!(website as any).dealerships?.google_remarketing_enabled,
+          }}
+        >
+          {children}
+        </TrackingConfigProvider>
+      </main>
       <footer className="text-center text-xs py-8 opacity-50" style={{ color: theme.dark }}>
         © {new Date().getFullYear()} {dealershipName}
       </footer>
@@ -76,6 +87,7 @@ export default async function SiteLayout({ children, params }: { children: React
       <TrackingScripts
         gaId={(website as any).dealerships?.ga_tracking_id}
         metaPixelId={(website as any).dealerships?.meta_pixel_id}
+        googleAdsConversionId={(website as any).dealerships?.google_ads_conversion_id}
       />
       <ConsentBanner slug={slug} businessName={(website as any).dealerships?.dealership_name ?? null} />
     </div>

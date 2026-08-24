@@ -32,7 +32,7 @@ export async function GET() {
 
   const { data } = await supabase
     .from("dealerships")
-    .select("meta_pixel_id, ga_tracking_id, meta_conversions_api_token")
+    .select("meta_pixel_id, ga_tracking_id, meta_conversions_api_token, google_ads_conversion_id, google_ads_conversion_label, google_remarketing_enabled")
     .eq("id", resolved.dealershipId)
     .single();
 
@@ -41,6 +41,9 @@ export async function GET() {
     gaTrackingId: data?.ga_tracking_id ?? "",
     // Never the value itself.
     conversionsApiConnected: !!data?.meta_conversions_api_token,
+    googleAdsConversionId: data?.google_ads_conversion_id ?? "",
+    googleAdsConversionLabel: data?.google_ads_conversion_label ?? "",
+    googleRemarketingEnabled: !!data?.google_remarketing_enabled,
   });
 }
 
@@ -49,13 +52,30 @@ export async function PATCH(request: Request) {
   const resolved = await resolveOwnedDealership(supabase);
   if (resolved.error) return resolved.error;
 
-  const { metaPixelId, gaTrackingId, conversionsApiToken } = await request.json();
+  const { metaPixelId, gaTrackingId, conversionsApiToken, googleAdsConversionId, googleAdsConversionLabel, googleRemarketingEnabled } = await request.json();
 
   const clean = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
   const update: Record<string, any> = {};
   if (metaPixelId !== undefined) update.meta_pixel_id = clean(metaPixelId);
   if (gaTrackingId !== undefined) update.ga_tracking_id = clean(gaTrackingId);
+  if (googleAdsConversionLabel !== undefined) update.google_ads_conversion_label = clean(googleAdsConversionLabel);
+  if (googleRemarketingEnabled !== undefined) update.google_remarketing_enabled = googleRemarketingEnabled === true;
+
+  if (googleAdsConversionId !== undefined) {
+    const value = clean(googleAdsConversionId);
+    // Validated for SHAPE only. A GA4 property id (G-...) pasted here
+    // instead of a Google Ads conversion id is a genuinely easy
+    // mistake — they're both "the Google tracking id" to a dealer —
+    // and it would silently record no conversions at all.
+    if (value && !/^AW-\d+$/i.test(value)) {
+      return NextResponse.json(
+        { error: "A Google Ads conversion ID looks like AW-123456789. If yours starts with G-, that's your Analytics ID — put it in the Analytics field instead." },
+        { status: 400 }
+      );
+    }
+    update.google_ads_conversion_id = value ? value.toUpperCase() : null;
+  }
   // Only written when a non-empty value is sent, so saving the form
   // without retyping the token can't wipe it. Sending an explicit
   // null is the deliberate way to disconnect.
