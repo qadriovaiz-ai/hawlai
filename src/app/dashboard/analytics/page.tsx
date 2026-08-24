@@ -4,7 +4,6 @@ import AnalyticsCharts from "@/components/dashboard/AnalyticsCharts";
 import CampaignPerformanceCharts from "@/components/dashboard/CampaignPerformanceCharts";
 import GrowthMetricsCard from "@/components/dashboard/GrowthMetricsCard";
 import WebsiteAnalyticsCard from "@/components/dashboard/WebsiteAnalyticsCard";
-import { formatCurrency } from "@/lib/utils";
 import { History } from "lucide-react";
 import { computeAttribution } from "@/lib/analytics/attribution";
 import { computeLtv, computeCohorts } from "@/lib/analytics/ltvCohorts";
@@ -12,6 +11,7 @@ import AdvancedAnalyticsSection from "@/components/dashboard/AdvancedAnalyticsSe
 import AnalyticsToolbar from "@/components/dashboard/AnalyticsToolbar";
 import MetricOverlayChart from "@/components/dashboard/MetricOverlayChart";
 import PeriodComparison from "@/components/dashboard/PeriodComparison";
+import CampaignTable from "@/components/dashboard/CampaignTable";
 import { resolveRange, RANGE_EXEMPT, previousPeriod, buildTrendBuckets, computeDelta } from "@/lib/analytics/dateRange";
 
 export default async function AnalyticsPage({
@@ -265,42 +265,7 @@ export default async function AnalyticsPage({
         {campaignTotalsList.length === 0 ? (
           <p className="text-sm text-slate-400 py-6 text-center">No history recorded yet — this fills in once a launched campaign has run for at least a day.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
-                  <th className="pb-2 font-medium">Campaign</th>
-                  <th className="pb-2 font-medium">Days Tracked</th>
-                  <th className="pb-2 font-medium">Total Spend</th>
-                  <th className="pb-2 font-medium">Total Leads</th>
-                  <th className="pb-2 font-medium">Avg. Cost/Lead</th>
-                  <th className="pb-2 font-medium">Sales</th>
-                  <th className="pb-2 font-medium">Revenue</th>
-                  <th className="pb-2 font-medium">ROAS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campaignTotalsList.map((c, i) => (
-                  <tr key={i} className="border-b border-slate-50 last:border-0">
-                    <td className="py-2 font-medium text-slate-800">{c.headline}</td>
-                    <td className="py-2 text-slate-500">{c.days}</td>
-                    <td className="py-2 text-slate-700">{formatCurrency(c.spend)}</td>
-                    <td className="py-2 text-slate-700">{c.leads}</td>
-                    <td className="py-2 text-slate-700">{c.leads > 0 ? formatCurrency(c.spend / c.leads) : "—"}</td>
-                    <td className="py-2 text-slate-700">{c.conversions}</td>
-                    <td className="py-2 text-slate-700">{c.revenue > 0 ? formatCurrency(c.revenue) : "—"}</td>
-                    <td className="py-2 font-medium">
-                      {c.spend > 0 && c.revenue > 0 ? (
-                        <span className={c.revenue / c.spend >= 1 ? "text-green-400" : "text-amber-400"}>
-                          {(c.revenue / c.spend).toFixed(1)}x
-                        </span>
-                      ) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CampaignTable rows={campaignTotalsList} />
         )}
       </div>
 
