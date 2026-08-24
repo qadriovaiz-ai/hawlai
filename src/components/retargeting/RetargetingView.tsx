@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Sparkles, Download, ShoppingCart, UserX, RotateCcw, Lock } from "lucide-react";
+import { Loader2, Sparkles, Download, ShoppingCart, UserX, RotateCcw } from "lucide-react";
 import { Button, Card } from "@/components/ui";
+import CustomAudiencesPanel from "@/components/retargeting/CustomAudiencesPanel";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";
 import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel";
@@ -108,11 +109,12 @@ export default function RetargetingView() {
         <p className="text-xs text-slate-400">
           Phone numbers and emails in this file are hashed (SHA-256), which is the format Meta requires — Meta matches the hashes against its own, so nothing readable leaves your account. Anyone who opted out of contact is automatically excluded, so the file may contain fewer people than the count shown above.
         </p>
-        <p className="text-xs text-slate-400">Hawlai doesn't auto-launch retargeting ads yet — that needs a live Meta Ads connection, same as other ad campaigns. This gets you a real, ready-to-use audience list and copy in the meantime.</p>
-        <button disabled className="w-full mt-1 text-xs bg-slate-200 text-slate-400 py-2 rounded-lg cursor-not-allowed flex items-center justify-center gap-1.5">
-          <Lock className="w-3.5 h-3.5" /> Auto-sync to Meta Custom Audience — available once Meta Ads is connected
-        </button>
+        <p className="text-xs text-slate-400">
+          Uploading a CSV is the manual route. If your Meta ad account is connected, the panel below builds these audiences directly in Meta instead — no download needed.
+        </p>
       </Card>
+
+      <CustomAudiencesPanel />
     </div>
   );
 }
