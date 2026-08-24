@@ -49,6 +49,14 @@ const MIN_RADIUS_KM = 17;
 const MAX_RADIUS_KM = 80;
 const DEFAULT_RADIUS_KM = 25;
 
+// Special Ad Categories (housing / employment / credit) carry a
+// HIGHER radius floor than ordinary ads — Meta requires at least 15
+// miles, which is 24.14km, so 25 is the first safe whole number. A
+// real-estate dealer picking the ordinary 17km minimum would have the
+// ad rejected at the API, and the failure names a radius the dealer
+// never typed, so it reads as a Hawlai bug rather than a policy rule.
+export const SPECIAL_CATEGORY_MIN_RADIUS_KM = 25;
+
 // ---- Special Ad Category (Real Estate compliance) ------------------
 
 // Only Real Estate exists as a real business_category option today
@@ -159,9 +167,12 @@ export interface ResolvedLocation {
 export async function resolveLocation(
   choice: LocationChoice | null | undefined,
   aiSuggestedCity: string | null | undefined,
-  token: string
+  token: string,
+  /** Housing/employment/credit ads have a higher radius floor — see SPECIAL_CATEGORY_MIN_RADIUS_KM. */
+  isSpecialCategory = false
 ): Promise<ResolvedLocation> {
   const mode = choice?.mode ?? "ai_city";
+  const minRadius = isSpecialCategory ? SPECIAL_CATEGORY_MIN_RADIUS_KM : MIN_RADIUS_KM;
 
   if (mode === "all_india") {
     return { geo_locations: { countries: ["IN"] }, summaryLabel: "All India" };
@@ -176,7 +187,7 @@ export async function resolveLocation(
   }
 
   if (mode === "cities" && choice && choice.mode === "cities" && choice.cities.length > 0) {
-    const radius = Math.max(MIN_RADIUS_KM, Math.min(MAX_RADIUS_KM, choice.radiusKm ?? DEFAULT_RADIUS_KM));
+    const radius = Math.max(minRadius, Math.min(MAX_RADIUS_KM, choice.radiusKm ?? DEFAULT_RADIUS_KM));
     const keys = await Promise.all(choice.cities.slice(0, 250).map((c) => resolveCityKey(c, token)));
     const cities = keys
       .map((key, i) => (key ? { key, radius, distance_unit: "kilometer" } : null))
@@ -194,9 +205,12 @@ export async function resolveLocation(
   if (aiSuggestedCity) {
     const key = await resolveCityKey(aiSuggestedCity, token);
     if (key) {
+      // Clamped rather than using DEFAULT_RADIUS_KM directly, so this
+      // path stays correct if either floor is ever retuned.
+      const defaultRadius = Math.max(minRadius, DEFAULT_RADIUS_KM);
       return {
-        geo_locations: { cities: [{ key, radius: DEFAULT_RADIUS_KM, distance_unit: "kilometer" }] },
-        summaryLabel: `${aiSuggestedCity} (${DEFAULT_RADIUS_KM}km)`,
+        geo_locations: { cities: [{ key, radius: defaultRadius, distance_unit: "kilometer" }] },
+        summaryLabel: `${aiSuggestedCity} (${defaultRadius}km)`,
       };
     }
   }
@@ -257,7 +271,7 @@ export function previewPersonaSummary(persona: TargetPersona | null | undefined,
 
 export async function buildMetaTargeting(input: BuildTargetingInput): Promise<BuiltTargeting> {
   const specialAdCategory = isSpecialAdCategory(input.businessCategory);
-  const location = await resolveLocation(input.location, input.aiSuggestedCity, input.accessToken);
+  const location = await resolveLocation(input.location, input.aiSuggestedCity, input.accessToken, !!specialAdCategory);
 
   // Real Estate (or any future Special Ad Category): Meta legally
   // strips age/gender/interest targeting regardless of what's sent,

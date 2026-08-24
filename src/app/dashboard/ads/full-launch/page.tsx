@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, Suspense } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil, FlaskConical, RotateCcw } from "lucide-react";
@@ -69,6 +69,16 @@ function FullLaunchForm() {
   const [stateInput, setStateInput] = useState("");
   const [radiusKm, setRadiusKm] = useState(25);
   const [showLocationEditor, setShowLocationEditor] = useState(false);
+
+  // Mirrors the floors in metaTargeting.ts. The server clamps
+  // regardless — this only keeps the field from offering a value that
+  // would come back as a Meta rejection the dealer can't interpret.
+  const minRadiusKm = targetingPreview?.restricted ? 25 : 17;
+  useEffect(() => {
+    // Category is only known once the plan comes back, so a radius
+    // chosen before that can end up under a restricted floor.
+    if (radiusKm < minRadiusKm) setRadiusKm(minRadiusKm);
+  }, [minRadiusKm, radiusKm]);
 
   const [executionStepIndex, setExecutionStepIndex] = useState(0);
 
@@ -498,17 +508,20 @@ function FullLaunchForm() {
                     </a>
                   )}
                 </div>
-                {!targetingPreview?.restricted && (
-                  <button
-                    onClick={() => setShowLocationEditor((v) => !v)}
-                    className="text-[10.5px] text-brand-500 hover:text-brand-400 shrink-0"
-                  >
-                    {showLocationEditor ? "Done" : "Change location"}
-                  </button>
-                )}
+                {/* Shown for restricted categories TOO. Under Meta's
+                    housing policy the demographic levers are stripped,
+                    which makes location the only targeting control a
+                    real-estate dealer has left — hiding it here left
+                    exactly those dealers with nothing to adjust. */}
+                <button
+                  onClick={() => setShowLocationEditor((v) => !v)}
+                  className="text-[10.5px] text-brand-500 hover:text-brand-400 shrink-0"
+                >
+                  {showLocationEditor ? "Done" : "Change location"}
+                </button>
               </div>
 
-              {showLocationEditor && !targetingPreview?.restricted && (
+              {showLocationEditor && (
                 <div className="rounded-lg border border-slate-200 p-3 space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     {([
@@ -541,14 +554,21 @@ function FullLaunchForm() {
                         <label className="text-[10.5px] text-slate-400 shrink-0">Radius</label>
                         <input
                           type="number"
-                          min={17}
+                          min={minRadiusKm}
                           max={80}
                           value={radiusKm}
                           onChange={(e) => setRadiusKm(Number(e.target.value))}
                           className="input text-sm w-20"
                         />
-                        <span className="text-[10.5px] text-slate-400">km around each city (Meta allows 17–80)</span>
+                        <span className="text-[10.5px] text-slate-400">
+                          km around each city (Meta allows {minRadiusKm}–80)
+                        </span>
                       </div>
+                      {targetingPreview?.restricted && (
+                        <p className="text-[10.5px] text-amber-600">
+                          {minRadiusKm}km is the smallest area Meta permits for property ads — a tighter radius would be rejected.
+                        </p>
+                      )}
                     </div>
                   )}
 
