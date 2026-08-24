@@ -10,10 +10,17 @@ export default function AdvancedAnalyticsSection({
   attribution,
   ltv,
   cohorts,
+  exemptLabels,
 }: {
   attribution: AttributionResult;
   ltv: LtvSummary;
   cohorts: CohortRow[];
+  /**
+   * Why each of these ignores the date picker. Shown explicitly rather
+   * than left for a dealer to discover by noticing a number didn't
+   * move when they changed the range — which reads as a bug.
+   */
+  exemptLabels?: { attribution: string; ltv: string; cohorts: string };
 }) {
   return (
     <div className="space-y-6">
@@ -23,6 +30,7 @@ export default function AdvancedAnalyticsSection({
           <GitBranch className="w-4 h-4 text-brand-500" />
           <p className="text-sm font-semibold text-slate-700">Channel attribution</p>
         </div>
+        {exemptLabels && <p className="text-[10.5px] text-slate-400 -mt-2">{exemptLabels.attribution}</p>}
 
         {attribution.channels.length === 0 ? (
           <p className="text-xs text-slate-400 py-3">No touchpoint data yet — this fills in as leads come through tracked channels.</p>
@@ -70,6 +78,7 @@ export default function AdvancedAnalyticsSection({
             {ltv.isEssentiallySinglePurchase ? "Average customer value" : "Customer lifetime value"}
           </p>
         </div>
+        {exemptLabels && <p className="text-[10.5px] text-slate-400 -mt-2">{exemptLabels.ltv}</p>}
 
         {ltv.customerCount === 0 ? (
           <p className="text-xs text-slate-400 py-3">No paid orders yet — this fills in once customers start buying.</p>
@@ -112,6 +121,7 @@ export default function AdvancedAnalyticsSection({
           <LayersIcon className="w-4 h-4 text-brand-500" />
           <p className="text-sm font-semibold text-slate-700">Cohorts by acquisition month</p>
         </div>
+        {exemptLabels && <p className="text-[10.5px] text-slate-400 -mt-2">{exemptLabels.cohorts}</p>}
 
         {cohorts.length === 0 ? (
           <p className="text-xs text-slate-400 py-3">Not enough lead history yet for cohort analysis.</p>

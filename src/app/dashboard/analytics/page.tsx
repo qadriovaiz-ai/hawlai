@@ -9,8 +9,18 @@ import { History } from "lucide-react";
 import { computeAttribution } from "@/lib/analytics/attribution";
 import { computeLtv, computeCohorts } from "@/lib/analytics/ltvCohorts";
 import AdvancedAnalyticsSection from "@/components/dashboard/AdvancedAnalyticsSection";
+import AnalyticsToolbar from "@/components/dashboard/AnalyticsToolbar";
+import MetricOverlayChart from "@/components/dashboard/MetricOverlayChart";
+import { resolveRange, RANGE_EXEMPT } from "@/lib/analytics/dateRange";
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  // Optional because /dashboard/insights renders this component
+  // directly rather than as a route — it has no searchParams of its
+  // own to pass, and should keep working with the default range.
+  searchParams?: Promise<{ range?: string; from?: string; to?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -19,11 +29,23 @@ export default async function AnalyticsPage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const [{ data: leads }, { data: calls }, { data: appointments }, { data: perfHistory }, { data: touchpoints }, { data: orders }] = await Promise.all([
+  const params = searchParams ? await searchParams : {};
+  const range = resolveRange(params.range, params.from, params.to);
+
+  // Date-governed sections (KPIs, trend, campaigns, source breakdown)
+  // now respect the picker. Before this the page had NO date filtering
+  // at all — five sections each carried a different implicit window
+  // (all-time vs 6-month) while being read as the same period.
+  //
+  // leadsAllTime / touchpoints / orders are fetched UNFILTERED on
+  // purpose: attribution, cohorts and LTV would become quietly wrong
+  // if windowed — see RANGE_EXEMPT in dateRange.ts.
+  const [{ data: leads }, { data: leadsAllTime }, { data: calls }, { data: appointments }, { data: perfHistory }, { data: touchpoints }, { data: orders }] = await Promise.all([
+    supabase.from("leads").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
     supabase.from("leads").select("*").eq("dealership_id", dealershipId),
-    supabase.from("calls").select("*").eq("dealership_id", dealershipId),
-    supabase.from("appointments").select("*").eq("dealership_id", dealershipId),
-    supabase.from("campaign_performance_history").select("*").eq("dealership_id", dealershipId).order("snapshot_date", { ascending: false }),
+    supabase.from("calls").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
+    supabase.from("appointments").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
+    supabase.from("campaign_performance_history").select("*").eq("dealership_id", dealershipId).gte("snapshot_date", range.from.slice(0, 10)).lte("snapshot_date", range.to.slice(0, 10)).order("snapshot_date", { ascending: false }),
     // P3 8a — lead_touchpoints (migration 112) has been collecting
     // real multi-touch data all along; nothing ever read it for
     // attribution until now.
@@ -33,10 +55,19 @@ export default async function AnalyticsPage() {
     supabase.from("orders").select("customer_phone, customer_name, total, created_at, payment_status, status").eq("dealership_id", dealershipId),
   ]);
 
-  const convertedLeads = (leads ?? []).filter((l) => l.status === "converted").map((l) => ({ id: l.id, deal_value: l.deal_value }));
+  // These three deliberately use the UNFILTERED lead set (confirmed
+  // decision). Filtering them to the picker's window would change what
+  // they mean rather than what they cover:
+  //   attribution — needs each lead's full journey; a windowed
+  //     touchpoint set drops earlier touches and over-credits last-touch
+  //   LTV — is lifetime value by definition; windowed, it's a
+  //     different metric wearing the same label
+  //   cohorts — track acquisition months forward; a 30-day window
+  //     shows one partial cohort and destroys the comparison
+  const convertedLeads = (leadsAllTime ?? []).filter((l) => l.status === "converted").map((l) => ({ id: l.id, deal_value: l.deal_value }));
   const attribution = computeAttribution(convertedLeads, touchpoints ?? []);
   const ltv = computeLtv(orders ?? []);
-  const cohorts = computeCohorts((leads ?? []).map((l) => ({ created_at: l.created_at, status: l.status, converted_at: l.converted_at ?? null, deal_value: l.deal_value })));
+  const cohorts = computeCohorts((leadsAllTime ?? []).map((l) => ({ created_at: l.created_at, status: l.status, converted_at: l.converted_at ?? null, deal_value: l.deal_value })));
 
   const totalLeads = leads?.length ?? 0;
   const hotLeads = leads?.filter((l) => l.lead_temperature === "hot").length ?? 0;
@@ -134,6 +165,17 @@ export default async function AnalyticsPage() {
   }
   const dailyChartData = Array.from(dailyTotals.values()).sort((a, b) => a.date.localeCompare(b.date));
 
+  // Overlay series — the same daily snapshot rows, shaped for the
+  // multi-metric chart. Reuses dailyChartData rather than re-querying:
+  // spend/leads/revenue already sit together on each row, which is
+  // exactly what makes overlaying them meaningful.
+  const overlayData = dailyChartData.map((d) => ({
+    date: new Date(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    spend: Math.round(d.spend),
+    leads: d.leads,
+    revenue: Math.round(d.revenue),
+  }));
+
   return (
     <div className="max-w-6xl space-y-6">
       <div>
@@ -141,7 +183,11 @@ export default async function AnalyticsPage() {
         <p className="text-slate-500 text-sm mt-0.5">Performance metrics and insights</p>
       </div>
 
-      {/* KPI Metrics */}
+      <AnalyticsToolbar />
+
+      {/* KPI Metrics — governed by the date picker. Labelled with the
+          active range so the numbers are never read as all-time. */}
+      <p className="text-xs text-slate-400 -mb-2">Showing {range.label.toLowerCase()}</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Qualification Rate", value: `${qualificationRate}%`, sub: "Hot + Warm leads", color: "bg-brand-500/10 text-brand-300" },
@@ -165,11 +211,19 @@ export default async function AnalyticsPage() {
         monthlyTrend={monthlyTrend}
       />
 
-      <AdvancedAnalyticsSection attribution={attribution} ltv={ltv} cohorts={cohorts} />
+      <AdvancedAnalyticsSection
+        attribution={attribution}
+        ltv={ltv}
+        cohorts={cohorts}
+        exemptLabels={RANGE_EXEMPT}
+      />
 
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-3">Campaign Performance — Meta-style graphs</p>
-        <CampaignPerformanceCharts data={dailyChartData} />
+        <MetricOverlayChart data={overlayData} rangeLabel={range.label} />
+        <div className="mt-6">
+          <CampaignPerformanceCharts data={dailyChartData} />
+        </div>
       </div>
 
       <div className="card p-5 space-y-3">
