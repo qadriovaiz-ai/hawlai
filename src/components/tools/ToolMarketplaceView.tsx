@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, ArrowRight, Lock, MessageCircle } from "lucide-react";
 import { TOOL_CATALOG, TOOL_DEPARTMENTS, type ToolCatalogEntry } from "@/lib/toolCatalog";
+import { isFeatureEnabled } from "@/lib/featureFlags";
 import { hasFeature, GATED_FEATURE_LABELS, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type PlanLimits, type GatedFeatureKey, type PlanKey } from "@/lib/plans";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -25,6 +26,17 @@ function minPlanTier(entry: ToolCatalogEntry): TierFilter {
   return minPlan === "agency" ? "agency" : "pro";
 }
 
+// Switched-off tools are removed from the catalog entirely rather than
+// shown locked. A locked card invites a click and then explains a plan
+// the customer may already be on; a tool Hawlai doesn't ship has no
+// upsell behind it, so the honest presentation is absence.
+//
+// Filtered once at module level, not per-render: env flags are baked in
+// at build time and can't change while the page is open. Every count,
+// filter and group in this component reads from here, so the "N AI
+// tools" header can't drift out of step with what's actually listed.
+const AVAILABLE_TOOLS = TOOL_CATALOG.filter((t) => !t.killSwitch || isFeatureEnabled(t.killSwitch));
+
 export default function ToolMarketplaceView({ limits }: { limits: PlanLimits }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -33,13 +45,13 @@ export default function ToolMarketplaceView({ limits }: { limits: PlanLimits }) 
   const [lockedMessage, setLockedMessage] = useState<string | null>(null);
 
   const unlockedCount = useMemo(
-    () => TOOL_CATALOG.filter((t) => !t.gateKey || hasFeature(limits, t.gateKey as GatedFeatureKey)).length,
+    () => AVAILABLE_TOOLS.filter((t) => !t.gateKey || hasFeature(limits, t.gateKey as GatedFeatureKey)).length,
     [limits]
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return TOOL_CATALOG.filter((t) => {
+    return AVAILABLE_TOOLS.filter((t) => {
       if (deptFilter !== "all" && t.department !== deptFilter) return false;
       if (tierFilter !== "all" && minPlanTier(t) !== tierFilter) return false;
       if (q && !`${t.label} ${t.description} ${t.department}`.toLowerCase().includes(q)) return false;
@@ -73,7 +85,7 @@ export default function ToolMarketplaceView({ limits }: { limits: PlanLimits }) 
             Browse every agent and tool by department. Run it in chat with context already loaded, or open its dedicated workspace.
           </p>
           <p className="text-xs text-slate-400 mt-2">
-            {TOOL_CATALOG.length} AI tools across {TOOL_DEPARTMENTS.length} departments · {unlockedCount} of {TOOL_CATALOG.length} unlocked on your plan
+            {AVAILABLE_TOOLS.length} AI tools across {TOOL_DEPARTMENTS.length} departments · {unlockedCount} of {AVAILABLE_TOOLS.length} unlocked on your plan
           </p>
         </div>
         <Badge tone="brand" className="shrink-0">{limits.label} plan</Badge>

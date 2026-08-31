@@ -3,8 +3,17 @@ import { redirect } from "next/navigation";
 import ThreeDStudioView from "@/components/three-d/ThreeDStudioView";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import UpgradeRequired from "@/components/billing/UpgradeRequired";
+import FeatureUnavailable from "@/components/billing/FeatureUnavailable";
+import { isFeatureEnabled } from "@/lib/featureFlags";
 
 export default async function ThreeDStudioPage() {
+  // The route is deliberately kept rather than removed — existing deep
+  // links (including ones the AI wrote into past chat replies, see
+  // masterBrainV2's 3D scene note) still resolve to an explanation
+  // instead of a 404. Checked before auth work so a switched-off page
+  // costs no queries.
+  if (!isFeatureEnabled("studio3d")) return <FeatureUnavailable feature="studio3d" />;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

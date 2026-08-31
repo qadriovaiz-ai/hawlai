@@ -2,8 +2,18 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getVideoAdapter, isModelConfigured, getFallbackModelKey } from "@/lib/videoModels";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
+import { isFeatureEnabled, unavailableMessage } from "@/lib/featureFlags";
 
 export async function POST(request: Request) {
+  // Video generation has no plan-gate boolean to hang a kill switch on
+  // (every tier could generate video, capped by videosPerMonth), so the
+  // switch is enforced here directly. This is the real block — hiding
+  // the Creative Studio panel only removes the button, and this route
+  // is a plain authenticated POST that anything could still call.
+  if (!isFeatureEnabled("videoGeneration")) {
+    return NextResponse.json({ error: unavailableMessage("videoGeneration"), unavailable: true }, { status: 403 });
+  }
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

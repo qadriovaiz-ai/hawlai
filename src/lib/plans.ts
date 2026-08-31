@@ -7,6 +7,7 @@
 // empty (e.g. a fresh local DB before the migration has been run).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isFeatureEnabled, type KillSwitchFeature } from "@/lib/featureFlags";
 
 export type PlanKey = "free" | "basic" | "growth" | "pro" | "agency";
 export type OpusAccess = "none" | "limited" | "full";
@@ -260,7 +261,27 @@ export function isPlanGatingBypassed(): boolean {
   return process.env.BYPASS_PLAN_GATING === "true";
 }
 
+// Gated features that ALSO sit behind a global kill switch. 3D Studio
+// is switched off product-wide; its plan gate (agency) stays in place
+// underneath, so flipping the switch back on restores the original
+// behavior rather than exposing it to every tier.
+const KILL_SWITCHED: Partial<Record<GatedFeatureKey, KillSwitchFeature>> = {
+  threeDStudio: "studio3d",
+};
+
+/** The kill switch covering a gated feature, if it has one — lets callers show the right message instead of an upgrade prompt. */
+export function killSwitchFor(feature: GatedFeatureKey): KillSwitchFeature | undefined {
+  return KILL_SWITCHED[feature];
+}
+
 export function hasFeature(limits: PlanLimits, feature: GatedFeatureKey): boolean {
+  // Checked BEFORE the bypass, deliberately. BYPASS_PLAN_GATING exists
+  // to ignore what a customer paid for, not to resurrect a feature the
+  // product has switched off — checking it after would mean any demo
+  // environment with the bypass set quietly brought 3D Studio back.
+  const killSwitch = KILL_SWITCHED[feature];
+  if (killSwitch && !isFeatureEnabled(killSwitch)) return false;
+
   if (isPlanGatingBypassed()) return true;
   return Boolean(limits[feature]);
 }

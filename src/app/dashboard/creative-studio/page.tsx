@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Clapperboard, AlertCircle, Film, Copy, Check, Layers, Tag, Sparkles, Palette, Video, Mic, Play } from "lucide-react";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 import { Button } from "@/components/ui/Button";
+import { isFeatureEnabled } from "@/lib/featureFlags";
 
 export default function CreativeStudioPage() {
   const [topic, setTopic] = useState("");
@@ -36,9 +37,14 @@ export default function CreativeStudioPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoNotice, setVideoNotice] = useState<string | null>(null);
 
+  const videoEnabled = isFeatureEnabled("videoGeneration");
+
   useEffect(() => {
+    // Skipped entirely when switched off — no point fetching a model
+    // list for a panel that isn't rendered.
+    if (!videoEnabled) return;
     fetch("/api/creative/video/models").then((r) => r.json()).then((d) => setVideoModels(d.models ?? []));
-  }, []);
+  }, [videoEnabled]);
 
   const [voiceoverText, setVoiceoverText] = useState("");
   const [voiceoverLoading, setVoiceoverLoading] = useState(false);
@@ -340,6 +346,9 @@ export default function CreativeStudioPage() {
         )}
       </div>
 
+      {/* Only the video panel is switched off — voiceover, scenes and
+          captions below are untouched and still generate. */}
+      {videoEnabled && (
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Video className="w-4 h-4 text-slate-400" /> AI Video</p>
         <p className="text-xs text-slate-400">Describe a short video (5-8 seconds). Takes 1-3 minutes to generate — feel free to keep working elsewhere while it renders.</p>
@@ -381,6 +390,7 @@ export default function CreativeStudioPage() {
           <video src={videoResult.video_url} controls className="bg-slate-200 text-slate-900 w-full rounded-lg border border-slate-300" />
         )}
       </div>
+      )}
 
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Mic className="w-4 h-4 text-slate-400" /> AI Voiceover</p>

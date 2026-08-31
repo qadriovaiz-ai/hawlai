@@ -57,8 +57,9 @@ import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
 import { generateSeoIdeas } from "./seoAgent";
 import { generateGraphic, GRAPHIC_TYPES } from "./graphicDesignAgent";
-import { getDealershipPlanLimits, hasFeature, type GatedFeatureKey } from "../plans";
+import { getDealershipPlanLimits, hasFeature, killSwitchFor, type GatedFeatureKey } from "../plans";
 import { upgradeMessage } from "../featureGate";
+import { isFeatureEnabled, unavailableMessage } from "../featureFlags";
 import { checkAndRecordGenerationUsage, generationLimitMessage, type GenerationResource } from "../usage/generationLimits";
 import { formatCurrency } from "../utils";
 import { randomBytes } from "crypto";
@@ -499,6 +500,15 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
   const gatedFeature: GatedFeatureKey | undefined =
     toolName === "manage_watch" && input?.kind === "competitor" ? "competitorIntel" : TOOL_FEATURE_MAP[toolName];
   if (gatedFeature) {
+    // A switched-off feature and an unpaid one both fail hasFeature(),
+    // but they need different answers. Without this branch the AI would
+    // tell an Agency customer to upgrade to Agency for a tool Hawlai no
+    // longer ships — and it would say so in chat, in its own voice.
+    const killSwitch = killSwitchFor(gatedFeature);
+    if (killSwitch && !isFeatureEnabled(killSwitch)) {
+      return { error: unavailableMessage(killSwitch), unavailable: true };
+    }
+
     const limits = await getDealershipPlanLimits(supabase, ctx.id);
     if (!hasFeature(limits, gatedFeature)) {
       return { error: upgradeMessage(gatedFeature), upgradeRequired: true };

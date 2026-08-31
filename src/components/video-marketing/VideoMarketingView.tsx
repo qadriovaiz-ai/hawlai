@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Sparkles, Video, Mic2, ArrowRight } from "lucide-react";
 import { VIDEO_TASKS } from "@/lib/agents/videoMarketingAgent";
+import { isFeatureEnabled } from "@/lib/featureFlags";
 import { Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";
@@ -18,15 +19,21 @@ export default function VideoMarketingView() {
   } = useGeneratedOutput({ endpoint: "/api/video-marketing/generate" });
 
   const currentMeta = VIDEO_TASKS.find((t) => t.key === selectedTask);
+  const videoEnabled = isFeatureEnabled("videoGeneration");
 
   return (
     <div className="space-y-5">
-      {/* Link to existing AI video generation + voiceover in Creative Studio */}
-      <div className="grid sm:grid-cols-2 gap-3">
-        <Link href="/dashboard/creative-studio" className="card p-4 flex items-center justify-between hover:border-brand-400 transition-colors">
-          <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Video className="w-4 h-4 text-brand-400" /> AI Video Generation</span>
-          <ArrowRight className="w-4 h-4 text-slate-400" />
-        </Link>
+      {/* Links into Creative Studio. The video card follows the kill
+          switch — it would otherwise send someone to a page where the
+          panel it names no longer exists. Voiceover is unaffected and
+          spans the full width on its own. */}
+      <div className={`grid gap-3 ${videoEnabled ? "sm:grid-cols-2" : ""}`}>
+        {videoEnabled && (
+          <Link href="/dashboard/creative-studio" className="card p-4 flex items-center justify-between hover:border-brand-400 transition-colors">
+            <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Video className="w-4 h-4 text-brand-400" /> AI Video Generation</span>
+            <ArrowRight className="w-4 h-4 text-slate-400" />
+          </Link>
+        )}
         <Link href="/dashboard/creative-studio" className="card p-4 flex items-center justify-between hover:border-brand-400 transition-colors">
           <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Mic2 className="w-4 h-4 text-brand-400" /> Voiceover</span>
           <ArrowRight className="w-4 h-4 text-slate-400" />

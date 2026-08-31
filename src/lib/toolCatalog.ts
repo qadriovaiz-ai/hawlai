@@ -25,6 +25,8 @@
 // Integrations, Team, Approvals, Assets, etc.) are deliberately excluded —
 // this is an AI-capability marketplace, not a sitemap.
 
+import type { KillSwitchFeature } from "@/lib/featureFlags";
+
 export type ToolKind = "chat" | "page" | "both";
 
 export interface ToolCatalogEntry {
@@ -48,6 +50,12 @@ export interface ToolCatalogEntry {
   // the marketplace UI yet (Phase C) — stored now so that phase doesn't need
   // another pass through all 46 entries.
   capResource: string | null;
+  // KillSwitchFeature from src/lib/featureFlags.ts — set when the tool
+  // is switched off product-wide. Separate from gateKey because this
+  // isn't about the customer's plan: a tool with a killSwitch is hidden
+  // from the marketplace entirely rather than shown locked, since
+  // there's nothing they could buy to unlock it.
+  killSwitch?: KillSwitchFeature;
 }
 
 export const TOOL_CATALOG: ToolCatalogEntry[] = [
@@ -90,7 +98,13 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
   { id: "publish_to_youtube", label: "YouTube Publisher", description: "Uploads your most recent ready video straight to YouTube.", department: "Video Marketing", kind: "both", route: "/dashboard/video-marketing", gateKey: null, capResource: null },
   // Not a masterBrainV2 tool — real Veo video / ElevenLabs voiceover
   // generation, Creative Studio, page-only.
-  { id: "video_generation", label: "Video & Voiceover Studio", description: "Real AI video and voiceover generation, ready to publish.", department: "Video Marketing", kind: "page", route: "/dashboard/creative-studio", gateKey: null, capResource: "video" },
+  // Split from one "Video & Voiceover Studio" card into two. They share
+  // a page but only video is switched off, and a single card would have
+  // to either vanish (hiding working voiceover) or keep a name promising
+  // video it no longer does. Two entries let each follow its own flag,
+  // so re-enabling the switch restores the video card with no code edit.
+  { id: "video_generation", label: "AI Video Studio", description: "Real AI video generation, ready to publish.", department: "Video Marketing", kind: "page", route: "/dashboard/creative-studio", gateKey: null, capResource: "video", killSwitch: "videoGeneration" },
+  { id: "voiceover_generation", label: "Voiceover Studio", description: "AI voiceover for your scripts, reels and ads.", department: "Video Marketing", kind: "page", route: "/dashboard/creative-studio", gateKey: null, capResource: "voiceover_chars" },
 
   // ─── Competitor Intel ────────────────────────────────────────────────────
   { id: "research_competitor", label: "Competitor Research", description: "Live web research on a named competitor's moves.", department: "Competitor Intel", kind: "both", route: "/dashboard/competitor-intel", gateKey: "competitorIntel", capResource: null },
@@ -118,7 +132,7 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
   { id: "generate_retargeting_copy", label: "Retargeting Copy", description: "Copy for abandoned-cart, cold-lead and lapsed-buyer segments.", department: "Retargeting", kind: "both", route: "/dashboard/retargeting", gateKey: "retargeting", capResource: null },
 
   // ─── 3D Studio ───────────────────────────────────────────────────────────
-  { id: "generate_3d_scene", label: "3D Studio", description: "Turns a text prompt into an interactive 3D product scene.", department: "3D Studio", kind: "both", route: "/dashboard/3d-studio", gateKey: "threeDStudio", capResource: null },
+  { id: "generate_3d_scene", label: "3D Studio", description: "Turns a text prompt into an interactive 3D product scene.", department: "3D Studio", kind: "both", route: "/dashboard/3d-studio", gateKey: "threeDStudio", capResource: null, killSwitch: "studio3d" },
 
   // ─── Brand Kit ───────────────────────────────────────────────────────────
   { id: "generate_brand_kit", label: "Brand Kit", description: "Colours, typography, tagline, mission and brand story.", department: "Brand Kit", kind: "both", route: "/dashboard/brand-building", gateKey: null, capResource: "brand_kit" },
