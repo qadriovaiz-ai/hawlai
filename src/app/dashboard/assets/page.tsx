@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { redirect } from "next/navigation";
-import { FolderOpen, Image as ImageIcon, Video, Palette } from "lucide-react";
+import Link from "next/link";
+import { FolderOpen, Image as ImageIcon, Video, Palette, Pencil } from "lucide-react";
 import PublishToYoutubeButton from "@/components/assets/PublishToYoutubeButton";
 
 export default async function AssetsPage() {
@@ -72,12 +73,23 @@ export default async function AssetsPage() {
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                 {creatives.map((c) => (
-                  <a key={c.id} href={c.generated_image_url!} target="_blank" rel="noopener noreferrer" className="group">
-                    <div className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
-                      <img src={c.generated_image_url!} alt={c.headline ?? ""} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                    </div>
-                    <p className="text-xs text-slate-500 truncate mt-1">{c.headline}</p>
-                  </a>
+                  <div key={c.id}>
+                    <a href={c.generated_image_url!} target="_blank" rel="noopener noreferrer" className="group block">
+                      <div className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                        <img src={c.generated_image_url!} alt={c.headline ?? ""} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      </div>
+                      <p className="text-xs text-slate-500 truncate mt-1">{c.headline}</p>
+                    </a>
+                    {/* Opens this exact image in Canva to edit. The
+                        original is never modified — Canva works on a
+                        copy and the result comes back as a new file. */}
+                    <Link
+                      href={`/dashboard/design-edit?from=${encodeURIComponent(c.generated_image_url!)}&title=${encodeURIComponent(c.headline ?? "Edited creative")}`}
+                      className="text-[10.5px] text-brand-500 hover:text-brand-400 inline-flex items-center gap-1 mt-0.5"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit in Canva
+                    </Link>
+                  </div>
                 ))}
               </div>
             </div>

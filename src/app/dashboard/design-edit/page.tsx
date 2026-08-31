@@ -11,10 +11,23 @@ import { isTokenCryptoConfigured } from "@/lib/canva/tokenCrypto";
 // src/lib/featureFlags.ts), so nothing a customer previously made has
 // gone anywhere.
 
+/** Only images already stored in this project's Supabase bucket may be shown or sent to Canva. */
+function safeSourceImage(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const allowedHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host;
+    if (parsed.protocol === "https:" && parsed.host === allowedHost) return parsed.toString();
+  } catch {
+    // Malformed URL — treated the same as absent.
+  }
+  return null;
+}
+
 export default async function DesignEditPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ canva?: string; reason?: string }>;
+  searchParams?: Promise<{ canva?: string; reason?: string; from?: string; title?: string }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -53,6 +66,12 @@ export default async function DesignEditPage({
         serverReady={isCanvaConfigured() && isTokenCryptoConfigured()}
         callbackStatus={params.canva ?? null}
         callbackReason={params.reason ?? null}
+        // Validated here as well as in the API route. The route is the
+        // real guard, but rendering an <img> from an unchecked query
+        // parameter would let any link put an arbitrary remote image on
+        // a logged-in Hawlai page.
+        sourceImageUrl={safeSourceImage(params.from)}
+        sourceTitle={params.title?.slice(0, 120) ?? null}
       />
     </div>
   );

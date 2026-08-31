@@ -31,6 +31,8 @@ export default function DesignEditPanel({
   serverReady,
   callbackStatus,
   callbackReason,
+  sourceImageUrl,
+  sourceTitle,
 }: {
   initialConnected: boolean;
   connectedAt: string | null;
@@ -38,6 +40,9 @@ export default function DesignEditPanel({
   serverReady: boolean;
   callbackStatus: string | null;
   callbackReason: string | null;
+  /** Set when arriving from an "Edit in Canva" link on an existing asset. */
+  sourceImageUrl: string | null;
+  sourceTitle: string | null;
 }) {
   const router = useRouter();
   const [connected, setConnected] = useState(initialConnected);
@@ -49,7 +54,7 @@ export default function DesignEditPanel({
     callbackStatus === "cancelled" ? "Connection cancelled — nothing was changed." : null
   );
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(sourceTitle ?? "");
   const [size, setSize] = useState(SIZES[0]);
   const [assetType, setAssetType] = useState<"image" | "video">("image");
   const [creating, setCreating] = useState(false);
@@ -105,7 +110,13 @@ export default function DesignEditPanel({
       const res = await fetch("/api/canva/designs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, width: size.width, height: size.height, assetType }),
+        body: JSON.stringify({
+          title,
+          width: size.width,
+          height: size.height,
+          assetType,
+          ...(sourceImageUrl ? { sourceImageUrl } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't create that design.");
@@ -255,7 +266,20 @@ export default function DesignEditPanel({
           </Card>
 
           <Card className="space-y-3">
-            <p className="text-sm font-semibold text-slate-700">New design</p>
+            <p className="text-sm font-semibold text-slate-700">{sourceImageUrl ? "Edit this image" : "New design"}</p>
+
+            {/* Arrived from an "Edit in Canva" link on an existing
+                asset. Shown as a thumbnail so it's obvious WHICH image
+                is about to open, rather than trusting a URL parameter
+                the user never saw. */}
+            {sourceImageUrl && (
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-100 p-2">
+                <img src={sourceImageUrl} alt="" className="w-14 h-14 rounded object-cover border border-slate-200" />
+                <p className="text-xs text-slate-500">
+                  This image opens in Canva ready to edit. The original stays untouched in your library.
+                </p>
+              </div>
+            )}
 
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's this for? e.g. Diwali offer post" />
 
