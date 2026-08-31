@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Palette, ExternalLink, Unlink, AlertCircle, CheckCircle2 } from "lucide-react";
-import { Button, Card } from "@/components/ui";
+import { Palette, ExternalLink, Unlink, AlertCircle, CheckCircle2, Download, Loader2, RotateCcw } from "lucide-react";
+import { Button, Card, Input } from "@/components/ui";
 
 export interface CanvaDesignRow {
   id: string;
@@ -15,12 +15,14 @@ export interface CanvaDesignRow {
   created_at: string;
 }
 
-// Design & Edit panel — connect flow and design list.
-//
-// Three states, per the spec: not connected, connecting, connected.
-// "Connecting" is a real state here rather than a spinner on the
-// button, because the user leaves for Canva's consent screen entirely
-// and may come back minutes later, or not at all.
+// Sizes a dealer actually posts at, rather than Canva's full preset
+// list — the point of this screen is to get them into the editor fast.
+const SIZES = [
+  { label: "Square post", width: 1080, height: 1080 },
+  { label: "Story / Reel", width: 1080, height: 1920 },
+  { label: "Ad banner", width: 1200, height: 628 },
+  { label: "Thumbnail", width: 1280, height: 720 },
+];
 
 export default function DesignEditPanel({
   initialConnected,
@@ -47,6 +49,19 @@ export default function DesignEditPanel({
     callbackStatus === "cancelled" ? "Connection cancelled — nothing was changed." : null
   );
 
+  const [title, setTitle] = useState("");
+  const [size, setSize] = useState(SIZES[0]);
+  const [assetType, setAssetType] = useState<"image" | "video">("image");
+  const [creating, setCreating] = useState(false);
+
+  const [designs, setDesigns] = useState<CanvaDesignRow[]>(initialDesigns);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Cleared on unmount so a poll can't keep running against a page
+  // that's gone and then setState into a dead component.
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
   async function handleConnect() {
     setError(null);
     setNotice(null);
@@ -55,9 +70,6 @@ export default function DesignEditPanel({
       const res = await fetch("/api/canva/oauth/start", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't start the connection.");
-      // Full navigation, not a popup: Canva's consent screen sets its
-      // own framing rules and popups get blocked when the click is a
-      // step removed from the navigation.
       window.location.href = data.url;
     } catch (err: any) {
       setError(err.message);
@@ -74,6 +86,100 @@ export default function DesignEditPanel({
       setNotice("Canva disconnected. Your existing designs are still here.");
       router.refresh();
     } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  async function handleCreate() {
+    setError(null);
+    setNotice(null);
+    setCreating(true);
+
+    // Opened synchronously, before the await. A tab opened after an
+    // async response is no longer tied to the user's click and browsers
+    // block it as a popup — the design would be created in Canva with
+    // no way for the user to reach it.
+    const tab = window.open("about:blank", "_blank");
+
+    try {
+      const res = await fetch("/api/canva/designs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, width: size.width, height: size.height, assetType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't create that design.");
+
+      if (tab) tab.location.href = data.editUrl;
+      else window.location.href = data.editUrl; // popup blocked anyway — fall back rather than strand them
+
+      setTitle("");
+      setNotice("Opened in Canva. Come back here when you're done and choose Bring into Hawlai.");
+      router.refresh();
+    } catch (err: any) {
+      tab?.close();
+      setError(err.message);
+      if (err.message?.includes("Connect Canva")) setConnected(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function pollExport(rowId: string, jobId: string, attempt = 0) {
+    // ~2 minutes at 3s. An MP4 can genuinely take that long; past it
+    // the user gets their time back and a retry rather than a spinner
+    // that never resolves.
+    if (attempt > 40) {
+      setBusyId(null);
+      setError("That export is taking unusually long. It may still finish — try Bring into Hawlai again in a moment.");
+      return;
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/canva/export", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ designRowId: rowId, jobId }),
+        });
+        const data = await res.json();
+
+        if (data.status === "in_progress") return pollExport(rowId, jobId, attempt + 1);
+
+        setBusyId(null);
+        if (data.status === "ready") {
+          setDesigns((prev) =>
+            prev.map((d) => (d.id === rowId ? { ...d, status: "ready", exported_asset_url: data.url } : d))
+          );
+          setNotice("Saved into Hawlai — it's in your library now.");
+        } else {
+          setDesigns((prev) => prev.map((d) => (d.id === rowId ? { ...d, status: "failed" } : d)));
+          setError(data.error ?? "That export didn't finish.");
+        }
+      } catch {
+        setBusyId(null);
+        setError("Lost contact while saving that design. Please try again.");
+      }
+    }, 3000);
+    timers.current.push(t);
+  }
+
+  async function handleExport(row: CanvaDesignRow) {
+    setError(null);
+    setNotice(null);
+    setBusyId(row.id);
+    try {
+      const res = await fetch("/api/canva/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ designRowId: row.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't start that export.");
+      setDesigns((prev) => prev.map((d) => (d.id === row.id ? { ...d, status: "exporting" } : d)));
+      pollExport(row.id, data.jobId);
+    } catch (err: any) {
+      setBusyId(null);
       setError(err.message);
     }
   }
@@ -123,37 +229,132 @@ export default function DesignEditPanel({
           </Button>
         </Card>
       ) : (
-        <Card className="space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-500" /> Canva connected
-              </p>
-              {connectedAt && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Since {new Date(connectedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+        <>
+          <Card className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-500" /> Canva connected
                 </p>
-              )}
+                {connectedAt && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Since {new Date(connectedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={handleDisconnect}
+                className="text-[10.5px] text-slate-400 hover:text-slate-600 shrink-0 inline-flex items-center gap-1"
+              >
+                <Unlink className="w-3 h-3" /> Disconnect
+              </button>
             </div>
-            <button
-              onClick={handleDisconnect}
-              className="text-[10.5px] text-slate-400 hover:text-slate-600 shrink-0 inline-flex items-center gap-1"
-            >
-              <Unlink className="w-3 h-3" /> Disconnect
-            </button>
-          </div>
-          <p className="text-xs text-slate-400">
-            Disconnecting only removes the link from Hawlai — it doesn&apos;t change anything in your Canva account, and
-            your designs here stay put.
-          </p>
-        </Card>
-      )}
+            <p className="text-xs text-slate-400">
+              Disconnecting only removes the link from Hawlai — it doesn&apos;t change anything in your Canva account.
+            </p>
+          </Card>
 
-      {initialDesigns.length > 0 && (
-        <Card className="space-y-2">
-          <p className="text-sm font-semibold text-slate-700">Your designs</p>
-          <p className="text-xs text-slate-400">{initialDesigns.length} so far</p>
-        </Card>
+          <Card className="space-y-3">
+            <p className="text-sm font-semibold text-slate-700">New design</p>
+
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's this for? e.g. Diwali offer post" />
+
+            <div className="flex flex-wrap gap-1.5">
+              {SIZES.map((s) => (
+                <button
+                  key={s.label}
+                  onClick={() => setSize(s)}
+                  className={`text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors ${
+                    size.label === s.label
+                      ? "bg-brand-600 border-brand-600 text-white"
+                      : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  {s.label} <span className="opacity-60">{s.width}×{s.height}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {(["image", "video"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setAssetType(t)}
+                  className={`text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors capitalize ${
+                    assetType === t
+                      ? "bg-brand-600 border-brand-600 text-white"
+                      : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10.5px] text-slate-400">
+              This decides the file you get back — a PNG for image, an MP4 for video. You can still add video clips to
+              either inside Canva.
+            </p>
+
+            <Button onClick={handleCreate} loading={creating} variant="primary">
+              {!creating && <ExternalLink className="w-4 h-4" />}
+              Open in Canva
+            </Button>
+          </Card>
+
+          <Card className="space-y-3">
+            <p className="text-sm font-semibold text-slate-700">Your designs</p>
+
+            {designs.length === 0 ? (
+              <p className="text-sm text-slate-400 py-4 text-center">
+                Nothing yet — your first design will appear here once you open one in Canva.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {designs.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-3 py-2 border-b border-slate-200/70 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-700 truncate">{d.title ?? "Untitled design"}</p>
+                      <p className="text-[10.5px] text-slate-400">
+                        {d.asset_type === "video" ? "Video" : "Image"} ·{" "}
+                        {new Date(d.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        {d.status === "failed" && <span className="text-red-500"> · didn&apos;t export</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {d.exported_asset_url && d.status === "ready" ? (
+                        <a
+                          href={d.exported_asset_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10.5px] text-brand-500 hover:text-brand-400 inline-flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" /> Open file
+                        </a>
+                      ) : busyId === d.id || d.status === "exporting" ? (
+                        <span className="text-[10.5px] text-slate-400 inline-flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                        </span>
+                      ) : null}
+
+                      {/* Always offered, even once ready — a design edited
+                          again in Canva needs re-importing, and there's no
+                          signal telling us it changed. */}
+                      <button
+                        onClick={() => handleExport(d)}
+                        disabled={busyId === d.id}
+                        className="text-[10.5px] text-slate-500 hover:text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        {d.status === "ready" ? "Re-import" : "Bring into Hawlai"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
       )}
     </div>
   );
