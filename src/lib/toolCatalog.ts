@@ -133,6 +133,11 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
 
   // ─── 3D Studio ───────────────────────────────────────────────────────────
   { id: "generate_3d_scene", label: "3D Studio", description: "Turns a text prompt into an interactive 3D product scene.", department: "3D Studio", kind: "both", route: "/dashboard/3d-studio", gateKey: "threeDStudio", capResource: null, killSwitch: "studio3d" },
+  // Takes the creative slot the switched-off video and 3D tools left.
+  // Filed under Graphic Design rather than a new department: it edits
+  // images and video, which is what that department already means to a
+  // customer, and a one-tool department reads as a gap.
+  { id: "canva_design_edit", label: "Design & Edit", description: "Edit photos and video in Canva, then bring the file back into Hawlai.", department: "Graphic Design", kind: "page", route: "/dashboard/design-edit", gateKey: null, capResource: null },
 
   // ─── Brand Kit ───────────────────────────────────────────────────────────
   { id: "generate_brand_kit", label: "Brand Kit", description: "Colours, typography, tagline, mission and brand story.", department: "Brand Kit", kind: "both", route: "/dashboard/brand-building", gateKey: null, capResource: "brand_kit" },
