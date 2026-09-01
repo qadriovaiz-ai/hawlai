@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Gauge, IndianRupee, TrendingUp, Megaphone, Flame, ArrowRight, Rocket, ShieldCheck, Palette } from "lucide-react";
+import { Gauge, IndianRupee, ArrowRight, Rocket, ShieldCheck, Palette } from "lucide-react";
 import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
 import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
@@ -10,8 +10,16 @@ import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
 import ActivityFeed from "@/components/activity/ActivityFeed";
 import HawlaiWorkingOn from "@/components/dashboard/HawlaiWorkingOn";
 import WelcomeChatCard from "@/components/dashboard/WelcomeChatCard";
+import AnalyticsToolbar from "@/components/dashboard/AnalyticsToolbar";
+import PerformanceSection from "@/components/dashboard/PerformanceSection";
+import { resolveRange } from "@/lib/analytics/dateRange";
+import { getDashboardData, readConnections, DEALERSHIP_CONNECTION_FIELDS } from "@/lib/dashboard/dashboardData";
 
-export default async function DashboardOverviewPage() {
+export default async function DashboardOverviewPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ range?: string; from?: string; to?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -22,7 +30,7 @@ export default async function DashboardOverviewPage() {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, onboarding_completed, business_category")
+    .select(`dealership_name, onboarding_completed, business_category, ${DEALERSHIP_CONNECTION_FIELDS}`)
     .eq("id", dealershipId)
     .single();
 
@@ -36,8 +44,15 @@ export default async function DashboardOverviewPage() {
 
   await syncOpportunities(supabase, dealershipId);
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // Governs the performance section ONLY. Opportunities and the growth
+  // report deliberately ignore it: they answer "what should I do now",
+  // not "what happened in this window", and making them shift under a
+  // 7-day filter would change what they mean rather than what they show.
+  const params = (await searchParams) ?? {};
+  const range = resolveRange(params.range, params.from, params.to);
+  const connections = readConnections(dealership);
+  const dashboardData = await getDashboardData(supabase, dealershipId, range, connections);
+
 
   // Promise.allSettled, not Promise.all: this page synthesizes five
   // independent data sources (leads, ad performance, opportunities, an
@@ -70,10 +85,12 @@ export default async function DashboardOverviewPage() {
   const brandProfileMissing =
     brandProfileRes.status === "fulfilled" && !brandProfileRes.value.data;
 
-  const leadsToday = leads?.filter((l) => new Date(l.created_at) >= todayStart).length ?? 0;
-  const activeCampaigns = performance?.campaigns.filter((c) => c.meta_status === "ACTIVE").length ?? 0;
+  // Lifetime revenue is the one figure still taken from
+  // getCampaignPerformance. It's safe here in a way spend and campaign
+  // counts were not: revenue is summed from our OWN attributed leads,
+  // so a missing Meta token doesn't silently turn a real number into a
+  // zero the way it does for spend.
   const totalRevenue = performance?.campaigns.reduce((s, c) => s + c.revenue, 0) ?? 0;
-  const totalSpend = performance?.totals.spend ?? 0;
   const recentLeads = leads?.slice(0, 5) ?? [];
 
   const scoreColorClass = !growth
@@ -86,15 +103,15 @@ export default async function DashboardOverviewPage() {
 
   // Ordered actionable-today-first, longer-horizon-last: what changed
   // recently belongs above what's true in general.
+  // Only the genuinely period-independent tiles remain here. Leads
+  // Today, Active Campaigns and Marketing ROI moved into
+  // PerformanceSection, which is range-aware and — more importantly —
+  // distinguishes "no ad account connected" from "zero". All three
+  // were sourced from getCampaignPerformance, which returns
+  // spend/leads of 0 when the Meta token is MISSING, so an unconnected
+  // dealer was being shown "Active Campaigns: 0" and "Marketing ROI: —"
+  // as though their marketing had produced nothing.
   const kpis: { label: string; value: string | number; icon: typeof Gauge; color: string; title?: string }[] = [
-    { label: "Leads Today", value: leadsToday, icon: Flame, color: "bg-red-500/10 text-red-400" },
-    { label: "Active Campaigns", value: activeCampaigns, icon: Megaphone, color: "bg-blue-500/10 text-blue-400" },
-    {
-      label: "Marketing ROI",
-      value: totalSpend > 0 && totalRevenue > 0 ? `${(totalRevenue / totalSpend).toFixed(1)}x` : "—",
-      icon: TrendingUp,
-      color: "bg-brand-500/10 text-brand-400",
-    },
     {
       label: "Business Health",
       value: growth ? `${growth.healthScore}/100` : "—",
@@ -161,10 +178,27 @@ export default async function DashboardOverviewPage() {
           actionable than "already happened". */}
       <HawlaiWorkingOn />
 
-      {/* ---- Recent results ---- */}
+      {/* ---- Performance (range-governed) ---- */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-sm font-semibold text-slate-700">Performance</h2>
+        </div>
+        <AnalyticsToolbar />
+        <PerformanceSection data={dashboardData} rangeLabel={range.label} />
+      </div>
+
+      {/* ---- At a glance ----
+          Kept out of the section above because neither figure is
+          period-based: health is a current assessment and revenue is
+          lifetime. Labelled so nobody reads them as following the
+          range selector, matching the RANGE_EXEMPT convention the
+          analytics page already uses. */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">Recent results</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="flex items-baseline gap-2 mb-3 flex-wrap">
+          <h2 className="text-sm font-semibold text-slate-700">At a glance</h2>
+          <span className="text-[10.5px] text-slate-400">Not affected by the date range</span>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           {kpis.map(({ label, value, icon: Icon, color, title }) => (
             <div key={label} className="card p-5" title={title}>
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${color}`}>
