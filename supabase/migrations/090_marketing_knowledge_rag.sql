@@ -40,6 +40,19 @@ create index if not exists idx_marketing_knowledge_embedding on marketing_knowle
 -- frameworks, not any business's private data) — no dealership_id,
 -- no RLS needed. Every business's Master Chat draws from the same
 -- shared knowledge base.
+--
+-- ***** SUPERSEDED BY MIGRATION 161 — DO NOT ACT ON THE PARAGRAPH
+-- ***** ABOVE. It reasons only about reads, and is correct about
+-- ***** them: there is no private data here to leak. It does not
+-- ***** consider WRITES, and that is where the risk was. Because
+-- ***** every tenant's Master Chat draws from this table, anyone who
+-- ***** can write to it injects text into every other business's AI
+-- ***** context. A 2026-09-02 audit found the `anon` role — the
+-- ***** UNAUTHENTICATED one — holding INSERT, DELETE and TRUNCATE
+-- ***** here with RLS off. Migration 161 enables RLS, adds a
+-- ***** read-only policy for `authenticated`, and revokes those
+-- ***** grants. "Shared by everyone" is the reason to protect this
+-- ***** table, not the reason it needed no protection.
 
 -- Supabase's JS client can't run raw vector operators (<=>) directly
 -- in a .select() call — this RPC function is the standard way to
