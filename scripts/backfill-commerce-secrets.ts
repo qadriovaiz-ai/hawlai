@@ -28,8 +28,28 @@
 //     field only.
 // ------------------------------------------------------------------
 
+import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
 import { encryptSecret, decryptSecret, isRingConfigured } from "../src/lib/crypto/secretCrypto";
+
+// tsx does not load .env.local the way `next dev` does, and this
+// project has no dotenv dependency. Parsed here rather than adding one
+// for a script that runs a handful of times. Existing environment
+// variables win, so an explicitly exported value can override the file.
+function loadEnvLocal() {
+  try {
+    for (const line of fs.readFileSync(".env.local", "utf8").split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
+      if (!match) continue;
+      const [, key, rawValue] = match;
+      if (process.env[key]) continue;
+      process.env[key] = rawValue.trim().replace(/^["']|["']$/g, "");
+    }
+  } catch {
+    // No .env.local — variables may be exported directly instead.
+  }
+}
+loadEnvLocal();
 
 const FIELDS = [
   { plain: "razorpay_key_secret", enc: "razorpay_key_secret_encrypted" },
