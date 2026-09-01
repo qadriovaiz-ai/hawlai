@@ -29,7 +29,7 @@ export async function PATCH(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const body = await request.json();
-  const { tone_of_voice, target_persona, messaging_pillars, preferred_language, brand_voice } = body;
+  const { tone_of_voice, target_persona, messaging_pillars, preferred_language, brand_voice, business_description } = body;
 
   const upsertPayload: Record<string, any> = {
     dealership_id: dealershipId,
@@ -44,6 +44,13 @@ export async function PATCH(request: Request) {
   // previously-set structured profile untouched on conflict instead of
   // silently wiping it out every time the owner edits any other field.
   if (brand_voice !== undefined) upsertPayload.brand_voice = brand_voice;
+
+  // Same guard, same reason (migration 159). This is the SOURCE TEXT
+  // the voice was derived from, so losing it is worse than losing a
+  // derived field — it's the only copy of what the owner actually
+  // said, and it can't be reconstructed from the profile. Any caller
+  // that doesn't send the key leaves it untouched.
+  if (business_description !== undefined) upsertPayload.business_description = business_description;
 
   const { data, error } = await supabase
     .from("brand_profiles")

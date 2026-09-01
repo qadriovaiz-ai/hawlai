@@ -143,6 +143,11 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
             messaging_pillars: draft.messaging_pillars,
             preferred_language: "hinglish",
             brand_voice,
+            // The owner's own words, kept as the source the voice came
+            // from (migration 159). Saved here rather than at the
+            // describe step so nothing persists until they confirm —
+            // the derived profile is a proposal until this point.
+            business_description: description.trim(),
           }),
         }),
         draft.business_category

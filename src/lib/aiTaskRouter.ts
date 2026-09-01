@@ -96,6 +96,20 @@ export const TASK_COMPLEXITY: Record<string, TaskComplexity> = {
   ad_plan: "normal",
   social_post: "normal",
 
+  // Structured extraction from the owner's own description of their
+  // business — businessIntelligenceAgent.ts, used by onboarding and by
+  // Settings -> Brand's analyzer.
+  //
+  // Deliberately "normal" and NOT "simple", even though extraction is
+  // the kind of task a cheap model often handles. This runs once and
+  // its output — the Brand Voice Profile — is then reused by every
+  // downstream agent, forever, to write in the customer's voice.
+  // Saving a fraction of a rupee on the one call that defines how the
+  // product sounds for that business would be false economy. This also
+  // matches what the agent already used (getModel("standard")), so
+  // registering it here changes no behavior.
+  business_intelligence: "normal",
+
   // COMPLEX — real strategic reasoning across a topic, still
   // Sonnet-class per the mapping above (unchanged from today).
   marketing_strategy: "complex",

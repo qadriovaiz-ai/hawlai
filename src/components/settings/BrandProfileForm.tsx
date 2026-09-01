@@ -11,6 +11,9 @@ interface BrandProfileFormProps {
     target_persona: { age_range?: string; income?: string; concerns?: string[]; gender?: "all" | "male" | "female" } | null;
     messaging_pillars: string[] | null;
     preferred_language: string | null;
+    // Migration 159. Optional because profiles created before it exist
+    // with the column absent from older cached shapes.
+    business_description?: string | null;
   } | null;
 }
 
@@ -29,7 +32,12 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
 
   const [showAnalyzer, setShowAnalyzer] = useState(!initial?.tone_of_voice);
   const [analyzeMode, setAnalyzeMode] = useState<"describe" | "website">("describe");
-  const [description, setDescription] = useState("");
+  // Pre-filled with what the owner originally wrote (migration 159).
+  // This is what makes re-derivation real: before, this box opened
+  // blank every time, so changing the brand voice meant retyping the
+  // whole description from memory or hand-editing derived fields one
+  // by one.
+  const [description, setDescription] = useState(initial?.business_description ?? "");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -122,6 +130,10 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
           },
           messaging_pillars: pillars.map((p) => p.trim()).filter(Boolean),
           preferred_language: language,
+          // Sent only when there's something to store, so saving an
+          // unrelated field on a profile that predates migration 159
+          // doesn't overwrite a description with an empty string.
+          ...(description.trim() ? { business_description: description.trim() } : {}),
         }),
       });
       const data = await res.json();
@@ -139,8 +151,14 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
     <div className="space-y-5">
       <div className="card p-5 space-y-3 bg-purple-500/10 border-purple-700/40">
         <button onClick={() => setShowAnalyzer(!showAnalyzer)} className="w-full flex items-center justify-between text-left">
+          {/* Label follows state. Once a description is stored this
+              section is no longer "fill this in for me" — it's where
+              you change what you told us and derive the voice again.
+              Left as the original invitation for anyone who hasn't
+              written one yet. */}
           <span className="text-sm font-semibold text-purple-200 flex items-center gap-2">
-            <Wand2 className="w-4 h-4" /> Let AI fill this in for you
+            <Wand2 className="w-4 h-4" />
+            {initial?.business_description ? "Edit your description and re-derive" : "Let AI fill this in for you"}
           </span>
           {showAnalyzer ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
         </button>

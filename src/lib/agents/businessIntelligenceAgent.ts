@@ -9,7 +9,7 @@
 // Nothing is saved automatically; these only return suggestions.
 // ------------------------------------------------------------------
 
-import { getModel } from "../models";
+import { modelForTask } from "../aiTaskRouter";
 
 function stripHtmlToText(html: string): string {
   return html
@@ -80,7 +80,10 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: getModel("standard"),
+        // Routed by task identity rather than a hardcoded tier. Resolves
+        // to the same standard-tier model this used before — see
+        // aiTaskRouter.ts for why this one stays on Sonnet.
+        model: modelForTask("business_intelligence"),
         // Was 600 — too tight once brand_voice_draft's nested fields ride
         // alongside the original summary/persona/pillars in one payload.
         max_tokens: 1100,
