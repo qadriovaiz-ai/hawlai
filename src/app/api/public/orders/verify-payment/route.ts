@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { applyOrderSideEffects } from "@/lib/orderFulfillment";
 import { verifyRazorpaySignature } from "@/lib/payments/razorpay";
+import { razorpaySecret, RAZORPAY_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 // Confirms a Razorpay payment and only then commits the order. The
 // order is deliberately NOT written by /api/public/orders for the
@@ -45,8 +46,12 @@ export async function POST(request: Request) {
   if (!pricing.ok) return NextResponse.json({ error: pricing.error }, { status: pricing.status });
   const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
 
-  const { data: dealership } = await supabase.from("dealerships").select("razorpay_key_secret").eq("id", website.dealership_id).maybeSingle();
-  if (!verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature, dealership?.razorpay_key_secret)) {
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select(RAZORPAY_SECRET_SELECT)
+    .eq("id", website.dealership_id)
+    .maybeSingle();
+  if (!verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature, razorpaySecret(dealership))) {
     return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
   }
 

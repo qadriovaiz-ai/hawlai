@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { createRazorpayRefund } from "@/lib/payments/razorpay";
+import { razorpaySecret, RAZORPAY_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -65,14 +66,19 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "This order has no Razorpay payment on record — refund it manually with your payment provider instead." }, { status: 400 });
   }
 
-  const { data: dealership } = await supabase.from("dealerships").select("razorpay_key_id, razorpay_key_secret").eq("id", dealershipId).single();
-  if (!dealership?.razorpay_key_id || !dealership?.razorpay_key_secret) {
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select(`razorpay_key_id, ${RAZORPAY_SECRET_SELECT}`)
+    .eq("id", dealershipId)
+    .single();
+  const keySecret = razorpaySecret(dealership);
+  if (!dealership?.razorpay_key_id || !keySecret) {
     return NextResponse.json({ error: "Razorpay isn't connected for this business — connect it in Settings before approving refunds." }, { status: 400 });
   }
 
   try {
     const amountInPaise = Math.round(Number(refundRequest.requested_amount) * 100);
-    const refund = await createRazorpayRefund(paymentId, amountInPaise, dealership.razorpay_key_id, dealership.razorpay_key_secret);
+    const refund = await createRazorpayRefund(paymentId, amountInPaise, dealership.razorpay_key_id, keySecret);
     const { error } = await supabase
       .from("refund_requests")
       .update({ status: "processed", razorpay_refund_id: refund.id, processed_by: user.id, processed_at: new Date().toISOString(), updated_at: new Date().toISOString() })

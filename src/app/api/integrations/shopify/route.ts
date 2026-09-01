@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { testShopifyConnection, fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
+import { shopifyAccessToken, encryptedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
 
 export async function GET() {
   const supabase = await createClient();
@@ -11,13 +12,14 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { data } = await supabase.from("dealerships").select("shopify_store_url, shopify_access_token").eq("id", dealershipId).single();
-  const connected = !!(data?.shopify_store_url && data?.shopify_access_token);
+  const { data } = await supabase.from("dealerships").select(`shopify_store_url, ${SHOPIFY_TOKEN_SELECT}`).eq("id", dealershipId).single();
+  const token = shopifyAccessToken(data);
+  const connected = !!(data?.shopify_store_url && token);
 
   let products: any[] = [];
   if (connected) {
     try {
-      products = await fetchShopifyProducts(data!.shopify_store_url!, data!.shopify_access_token!);
+      products = await fetchShopifyProducts(data!.shopify_store_url!, token!);
     } catch {
       // Connection may have gone stale — still report connected: true, just no products
     }
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
   const test = await testShopifyConnection(store_url, access_token);
   if (!test.success) return NextResponse.json({ error: test.error }, { status: 400 });
 
-  await supabase.from("dealerships").update({ shopify_store_url: store_url, shopify_access_token: access_token }).eq("id", dealershipId);
+  await supabase.from("dealerships").update({ shopify_store_url: store_url, ...encryptedWrite("shopify_access_token", access_token) }).eq("id", dealershipId);
   return NextResponse.json({ success: true, shopName: test.shopName });
 }
 
@@ -54,6 +56,8 @@ export async function DELETE() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  await supabase.from("dealerships").update({ shopify_store_url: null, shopify_access_token: null }).eq("id", dealershipId);
+  // Both columns cleared. Nulling only the plaintext one would leave
+  // the encrypted secret live after the user disconnected the store.
+  await supabase.from("dealerships").update({ shopify_store_url: null, shopify_access_token: null, shopify_access_token_encrypted: null }).eq("id", dealershipId);
   return NextResponse.json({ success: true });
 }

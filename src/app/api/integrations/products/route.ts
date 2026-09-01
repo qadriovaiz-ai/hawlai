@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
 import { fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
+import { shopifyAccessToken, woocommerceConsumerSecret, SHOPIFY_TOKEN_SELECT, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 // Combined product list across whichever store platforms are
 // connected — the Launch Ad page uses this to let a dealer pick a
@@ -17,24 +18,27 @@ export async function GET() {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("shopify_store_url, shopify_access_token, woocommerce_store_url, woocommerce_consumer_key, woocommerce_consumer_secret")
+    .select(`shopify_store_url, ${SHOPIFY_TOKEN_SELECT}, woocommerce_store_url, woocommerce_consumer_key, ${WOOCOMMERCE_SECRET_SELECT}`)
     .eq("id", dealershipId)
     .single();
 
   const products: { source: "shopify" | "woocommerce"; id: string; title: string; price: string | null; image_url: string | null }[] = [];
 
-  if (dealership?.shopify_store_url && dealership?.shopify_access_token) {
+  const shopToken = shopifyAccessToken(dealership);
+  const wooSecret = woocommerceConsumerSecret(dealership);
+
+  if (dealership?.shopify_store_url && shopToken) {
     try {
-      const shopifyProducts = await fetchShopifyProducts(dealership.shopify_store_url, dealership.shopify_access_token, 30);
+      const shopifyProducts = await fetchShopifyProducts(dealership.shopify_store_url, shopToken, 30);
       products.push(...shopifyProducts.map((p) => ({ source: "shopify" as const, ...p })));
     } catch (err: any) {
       console.error("[integrations/products] Shopify fetch error:", err.message);
     }
   }
 
-  if (dealership?.woocommerce_store_url && dealership?.woocommerce_consumer_key && dealership?.woocommerce_consumer_secret) {
+  if (dealership?.woocommerce_store_url && dealership?.woocommerce_consumer_key && wooSecret) {
     try {
-      const wooProducts = await fetchWooCommerceProducts(dealership.woocommerce_store_url, dealership.woocommerce_consumer_key, dealership.woocommerce_consumer_secret, 30);
+      const wooProducts = await fetchWooCommerceProducts(dealership.woocommerce_store_url, dealership.woocommerce_consumer_key, wooSecret, 30);
       products.push(...wooProducts.map((p) => ({ source: "woocommerce" as const, ...p })));
     } catch (err: any) {
       console.error("[integrations/products] WooCommerce fetch error:", err.message);

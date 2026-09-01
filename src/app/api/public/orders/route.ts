@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { applyOrderSideEffects } from "@/lib/orderFulfillment";
 import { isRazorpayConfigured, createRazorpayOrder } from "@/lib/payments/razorpay";
+import { razorpaySecret, RAZORPAY_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 // Public, unauthenticated endpoint — the storefront checkout page posts
 // here. Prices are ALWAYS re-read from the products table server-side
@@ -35,12 +36,17 @@ export async function POST(request: Request) {
   const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
 
   if (paymentMethod === "razorpay") {
-    const { data: dealership } = await supabase.from("dealerships").select("razorpay_key_id, razorpay_key_secret").eq("id", website.dealership_id).maybeSingle();
-    if (!isRazorpayConfigured(dealership?.razorpay_key_id, dealership?.razorpay_key_secret)) {
+    const { data: dealership } = await supabase
+      .from("dealerships")
+      .select(`razorpay_key_id, ${RAZORPAY_SECRET_SELECT}`)
+      .eq("id", website.dealership_id)
+      .maybeSingle();
+    const keySecret = razorpaySecret(dealership);
+    if (!isRazorpayConfigured(dealership?.razorpay_key_id, keySecret)) {
       return NextResponse.json({ error: "Online payment isn't available right now — please choose Cash on Delivery" }, { status: 400 });
     }
     try {
-      const razorpayOrder = await createRazorpayOrder(Math.round(total * 100), `site_${slug}_${Date.now()}`, dealership!.razorpay_key_id!, dealership!.razorpay_key_secret!);
+      const razorpayOrder = await createRazorpayOrder(Math.round(total * 100), `site_${slug}_${Date.now()}`, dealership!.razorpay_key_id!, keySecret!);
       return NextResponse.json({
         success: true,
         razorpay: { orderId: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, keyId: dealership!.razorpay_key_id },

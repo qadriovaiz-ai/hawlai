@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { testWooCommerceConnection, fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
+import { woocommerceConsumerSecret, encryptedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 export async function GET() {
   const supabase = await createClient();
@@ -11,13 +12,14 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { data } = await supabase.from("dealerships").select("woocommerce_store_url, woocommerce_consumer_key, woocommerce_consumer_secret").eq("id", dealershipId).single();
+  const { data } = await supabase.from("dealerships").select(`woocommerce_store_url, woocommerce_consumer_key, ${WOOCOMMERCE_SECRET_SELECT}`).eq("id", dealershipId).single();
+  const wooSecret = woocommerceConsumerSecret(data);
   const connected = !!(data?.woocommerce_store_url && data?.woocommerce_consumer_key);
 
   let products: any[] = [];
   if (connected) {
     try {
-      products = await fetchWooCommerceProducts(data!.woocommerce_store_url!, data!.woocommerce_consumer_key!, data!.woocommerce_consumer_secret!);
+      products = await fetchWooCommerceProducts(data!.woocommerce_store_url!, data!.woocommerce_consumer_key!, wooSecret!);
     } catch {
       // Connection may have gone stale — still report connected: true, just no products
     }
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
   await supabase.from("dealerships").update({
     woocommerce_store_url: store_url,
     woocommerce_consumer_key: consumer_key,
-    woocommerce_consumer_secret: consumer_secret,
+    ...encryptedWrite("woocommerce_consumer_secret", consumer_secret),
   }).eq("id", dealershipId);
   return NextResponse.json({ success: true, storeName: test.storeName });
 }
@@ -61,7 +63,9 @@ export async function DELETE() {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   await supabase.from("dealerships").update({
-    woocommerce_store_url: null, woocommerce_consumer_key: null, woocommerce_consumer_secret: null,
+    // Both secret columns cleared — see the Shopify DELETE for why.
+    woocommerce_store_url: null, woocommerce_consumer_key: null,
+    woocommerce_consumer_secret: null, woocommerce_consumer_secret_encrypted: null,
   }).eq("id", dealershipId);
   return NextResponse.json({ success: true });
 }
