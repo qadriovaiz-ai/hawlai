@@ -87,10 +87,13 @@ export default function ActivityFeed({
   title = "Recent activity",
   emptyMessage = "Nothing yet — this fills in as Hawlai works.",
   historyOnly = false,
+  hideWhenEmpty = false,
 }: {
   limit?: number;
   title?: string | null;
   emptyMessage?: string;
+  /** Render nothing at all instead of an empty card. For launchpad surfaces where an empty panel is noise rather than information — the same reasoning HawlaiWorkingOn applies on Home. */
+  hideWhenEmpty?: boolean;
   /** Drops still-open items (approvals, scheduled work). Use where the surface means "what happened", not "what's outstanding" — otherwise a pending approval leads a history list and duplicates whatever already surfaces it. */
   historyOnly?: boolean;
 }) {
@@ -110,12 +113,18 @@ export default function ActivityFeed({
   }, [limit, historyOnly]);
 
   if (items === null) {
+    // Also suppressed while loading when hidden-when-empty: flashing a
+    // "Loading activity..." card that then vanishes is worse than
+    // never showing one.
+    if (hideWhenEmpty) return null;
     return (
       <div className="card p-5 flex items-center gap-2 text-xs text-slate-400">
         <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading activity...
       </div>
     );
   }
+
+  if (hideWhenEmpty && items.length === 0) return null;
 
   return (
     <div className="card p-5 space-y-1">

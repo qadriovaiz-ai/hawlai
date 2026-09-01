@@ -59,9 +59,18 @@ interface ChatMessage {
 export default function MasterChatPage({
   conversationId: initialConversationId,
   initialMessages = [],
+  workSurface,
 }: {
   conversationId?: string | null;
   initialMessages?: ChatMessage[];
+  /**
+   * Optional server-rendered content for the empty state — the AI
+   * Employee work surface. Taken as a ReactNode rather than fetched
+   * here so its queries stay on the server: this is a client
+   * component, and moving them in would mean new API endpoints and a
+   * bigger bundle for something the server already knows.
+   */
+  workSurface?: React.ReactNode;
 }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -178,6 +187,13 @@ export default function MasterChatPage({
                 </button>
               ))}
             </div>
+
+            {/* The AI Employee work surface, passed in already rendered
+                from the server. Absent on /chat/[id]: an open
+                conversation is work in progress, and priorities and
+                capability links above a thread you're mid-way through
+                would compete with what you came to do. */}
+            {workSurface}
           </div>
         )}
 
