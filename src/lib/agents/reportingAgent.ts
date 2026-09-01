@@ -7,7 +7,7 @@
 // would give a founder who doesn't have time to read every dashboard.
 // ------------------------------------------------------------------
 
-import { getCampaignPerformance } from "./analyticsAgent";
+import { getCampaignPerformanceState } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 
@@ -19,8 +19,11 @@ export interface ReportStats {
   leadsByStage: Record<string, number>;
   pendingApprovals: number;
   campaignsLaunched: number;
-  totalSpend: number;
+  /** null when ad data couldn't be read — see adDataReadable. Never conflate with 0. */
+  totalSpend: number | null;
   costPerLead: number | null;
+  /** false when the Meta account is disconnected or the load failed, so consumers can label the gap instead of printing zeros. */
+  adDataReadable: boolean;
   totalRevenue: number;
   roas: number | null;
   appointmentsScheduled: number;
@@ -48,7 +51,7 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
     supabase.from("ad_creatives").select("id").eq("dealership_id", dealershipId).eq("status", "launched"),
     supabase.from("appointments").select("status").eq("dealership_id", dealershipId),
     supabase.from("calls").select("id").eq("dealership_id", dealershipId),
-    getCampaignPerformance(supabase, dealershipId),
+    getCampaignPerformanceState(supabase, dealershipId),
   ]);
 
   const leadsByStage: Record<string, number> = {};
@@ -58,7 +61,16 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
 
   const totalRevenue = (leads ?? []).reduce((sum: number, l: any) => sum + (Number(l.deal_value) || 0), 0);
 
+  // Ad figures are reported as null, not 0, when they can't be read.
+  // A report stating "Total spend: Rs 0" to a business that spent real
+  // money is worse than one that says the number is unavailable — the
+  // zero looks authoritative and gets acted on.
+  const adDataReadable = performance.state === "ok";
+  const perf = adDataReadable ? performance.value : null;
+  const spend = perf?.totals.spend ?? null;
+
   return {
+    adDataReadable,
     totalLeads: leads?.length ?? 0,
     hotLeads: leads?.filter((l: any) => l.lead_temperature === "hot").length ?? 0,
     warmLeads: leads?.filter((l: any) => l.lead_temperature === "warm").length ?? 0,
@@ -66,10 +78,10 @@ async function gatherStats(supabase: any, dealershipId: string): Promise<ReportS
     leadsByStage,
     pendingApprovals: approvals?.length ?? 0,
     campaignsLaunched: campaigns?.length ?? 0,
-    totalSpend: performance.totals.spend,
-    costPerLead: performance.totals.cost_per_lead,
+    totalSpend: spend,
+    costPerLead: perf?.totals.cost_per_lead ?? null,
     totalRevenue,
-    roas: performance.totals.spend > 0 ? totalRevenue / performance.totals.spend : null,
+    roas: spend !== null && spend > 0 ? totalRevenue / spend : null,
     appointmentsScheduled: appointments?.filter((a: any) => a.status === "scheduled").length ?? 0,
     appointmentsCompleted: appointments?.filter((a: any) => a.status === "completed").length ?? 0,
     callsMade: calls?.length ?? 0,

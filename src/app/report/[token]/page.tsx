@@ -28,7 +28,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ t
   const cards = [
     ["Total Leads", String(stats.totalLeads)],
     ["Campaigns Launched", String(stats.campaignsLaunched)],
-    ["Total Ad Spend", formatCurrency(stats.totalSpend)],
+    ["Total Ad Spend", stats.totalSpend === null ? "Not available — ad account not connected" : formatCurrency(stats.totalSpend)],
     ["Revenue", formatCurrency(stats.totalRevenue)],
     ["ROAS", stats.roas !== null ? `${stats.roas.toFixed(1)}x` : "—"],
     ["Appointments Completed", String(stats.appointmentsCompleted)],

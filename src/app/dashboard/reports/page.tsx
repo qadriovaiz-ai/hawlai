@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { FileText, Flame, ShieldCheck, Megaphone, IndianRupee, CheckCircle2, ListChecks, TrendingUp, Gauge, ArrowUpRight, AlertTriangle } from "lucide-react";
@@ -29,7 +30,7 @@ export default async function ReportsPage() {
   const cards = [
     { label: "Total Leads", value: stats.totalLeads, icon: Flame, color: "bg-red-500/10 text-red-400" },
     { label: "Campaigns Launched", value: stats.campaignsLaunched, icon: Megaphone, color: "bg-purple-500/10 text-purple-400" },
-    { label: "Total Ad Spend", value: formatCurrency(stats.totalSpend), icon: IndianRupee, color: "bg-amber-500/10 text-amber-400" },
+    { label: "Total Ad Spend", value: stats.totalSpend === null ? "—" : formatCurrency(stats.totalSpend), icon: IndianRupee, color: "bg-amber-500/10 text-amber-400" },
     { label: "Cost / Lead", value: stats.costPerLead !== null ? formatCurrency(stats.costPerLead) : "—", icon: IndianRupee, color: "bg-blue-500/10 text-blue-400" },
     { label: "Revenue", value: formatCurrency(stats.totalRevenue), icon: IndianRupee, color: "bg-green-500/10 text-green-400" },
     { label: "ROAS", value: stats.roas !== null ? `${stats.roas.toFixed(1)}x` : "—", icon: TrendingUp, color: "bg-emerald-50 text-emerald-600" },
@@ -48,6 +49,21 @@ export default async function ReportsPage() {
           <p className="text-sm text-slate-500">Everything that matters, in one look</p>
         </div>
       </div>
+
+      {/* Names the gap the dashes leave. Without this, spend, cost per
+          lead and ROAS all read "—" with no indication that the cause
+          is a disconnected ad account rather than an idle month. */}
+      {!stats.adDataReadable && (
+        <div className="rounded-lg border border-amber-300/50 bg-amber-500/10 px-3.5 py-2.5">
+          <p className="text-sm text-amber-700">
+            Ad spend, cost per lead and ROAS couldn&apos;t be read — your Meta ad account isn&apos;t connected.
+            Everything else on this page is accurate.{" "}
+            <Link href="/dashboard/settings/integrations" className="underline font-medium">
+              Connect it
+            </Link>
+          </p>
+        </div>
+      )}
 
       <div className="card p-5">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-4">

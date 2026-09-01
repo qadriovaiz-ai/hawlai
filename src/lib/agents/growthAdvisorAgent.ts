@@ -8,7 +8,7 @@
 // collection, since all the underlying numbers already exist.
 // ------------------------------------------------------------------
 
-import { getCampaignPerformance } from "./analyticsAgent";
+import { getCampaignPerformanceState } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 
@@ -21,13 +21,53 @@ export interface GrowthReport {
 }
 
 export async function generateGrowthReport(supabase: any, dealershipId: string, businessCategory: string = "car dealership"): Promise<GrowthReport> {
-  const [{ data: leads }, performance, { data: dealership }] = await Promise.all([
+  const [{ data: leads }, performanceState, { data: dealership }] = await Promise.all([
     supabase.from("leads").select("lead_temperature, status, created_at, deal_value").eq("dealership_id", dealershipId),
-    getCampaignPerformance(supabase, dealershipId),
+    getCampaignPerformanceState(supabase, dealershipId),
     supabase.from("dealerships").select("dealership_name, onboarding_completed").eq("id", dealershipId).single(),
   ]);
 
+  // This was the most consequential of the four: spend and campaign
+  // counts feed the HEALTH SCORE, not just a label. With a missing Meta
+  // token the old code read zeros and scored the business as though it
+  // ran no campaigns — a dealer spending real money could be marked
+  // 30/100 for "no live campaigns" and told to launch their first ad.
+  // Unreadable is now distinguished from absent, and the score is
+  // withheld rather than computed on data we don't have.
   const totalLeads = leads?.length ?? 0;
+
+  // Returns early when ad data is UNREADABLE — not connected, or the
+  // query failed. "no_data" deliberately falls through instead: no
+  // campaigns launched genuinely means zero spend and zero live
+  // campaigns, so the normal scoring below is correct for it.
+  //
+  // This matters beyond the score. totalSpend is interpolated straight
+  // into the prompt below, so falling through on unreadable data would
+  // tell Claude the business spent ₹0 and ask it to advise on that.
+  if (performanceState.state === "not_connected" || performanceState.state === "error") {
+    const notConnected = performanceState.state === "not_connected";
+    return {
+      // Scored on leads alone, and deliberately never the 30 that
+      // "liveCampaigns === 0" would have produced — we don't know
+      // whether campaigns are running, and guessing low is still a
+      // guess presented as a measurement.
+      healthScore: totalLeads === 0 ? 10 : 50,
+      headline: notConnected
+        ? "Your Meta ad account isn't connected, so ad performance is missing from this."
+        : "Ad performance couldn't be loaded, so this is based on leads only.",
+      strengths: [],
+      risks: ["Ad spend and campaign results can't be read right now — this score reflects leads only."],
+      nextActions: notConnected
+        ? ["Reconnect Meta in Settings → Integrations to include campaign performance here"]
+        : ["Refresh in a few minutes — if it keeps failing, check Settings → Integrations"],
+    };
+  }
+
+  const performance =
+    performanceState.state === "ok"
+      ? performanceState.value
+      : { campaigns: [], totals: { spend: 0, leads: 0, cost_per_lead: null } };
+
   const hotLeads = leads?.filter((l: any) => l.lead_temperature === "hot").length ?? 0;
   const converted = leads?.filter((l: any) => l.status === "converted").length ?? 0;
   const totalRevenue = performance.campaigns.reduce((s, c) => s + c.revenue, 0);

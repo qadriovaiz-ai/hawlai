@@ -10,6 +10,8 @@
 // conversations is the single number dealers care about most.
 // ------------------------------------------------------------------
 
+import type { Loaded } from "@/lib/dataState";
+
 const GRAPH_VERSION = "v23.0";
 
 export interface CampaignPerformance {
@@ -45,10 +47,97 @@ async function fetchInsights(campaignId: string, token: string) {
   }
 }
 
+export interface CampaignPerformanceResult {
+  campaigns: CampaignPerformance[];
+  totals: { spend: number; leads: number; cost_per_lead: number | null };
+}
+
+/**
+ * Campaign performance, with the reason for an empty result preserved.
+ *
+ * getCampaignPerformance() below collapses three genuinely different
+ * situations into the same `{ campaigns: [], spend: 0 }`:
+ *
+ *   1. no launched campaigns      -> "you haven't launched anything"
+ *   2. no Meta token              -> "we can't see your ad account"
+ *   3. the ad_creatives query failed -> "we couldn't load this"
+ *
+ * Only the first means zero. The other two are indistinguishable from
+ * it at every call site, which is how a dealer with live campaigns and
+ * an expired token ends up being told their campaigns produced nothing.
+ *
+ * This is a SIBLING rather than a change to the existing function's
+ * signature, on purpose: getCampaignPerformance has 13 call sites
+ * across 11 files and this codebase has no automated tests, so
+ * rewriting all of them at once would be a large unverifiable change.
+ * The user-visible call sites move here; the rest are listed as
+ * follow-up in the commit so the two don't quietly become permanent.
+ */
+export async function getCampaignPerformanceState(
+  supabase: any,
+  dealershipId: string
+): Promise<Loaded<CampaignPerformanceResult>> {
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select("fb_page_access_token")
+    .eq("id", dealershipId)
+    .single();
+
+  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+
+  // Checked BEFORE the campaign query. Without a token the campaign
+  // list is irrelevant — we could not read performance for it either
+  // way, and reporting "no campaigns" would be the wrong reason.
+  if (!token) return { state: "not_connected", channel: "meta_ads" };
+
+  const { data: launchedAds, error } = await supabase
+    .from("ad_creatives")
+    .select("id, headline, meta_campaign_id, meta_status")
+    .eq("dealership_id", dealershipId)
+    .eq("status", "launched")
+    .not("meta_campaign_id", "is", null);
+
+  if (error) return { state: "error", message: "Couldn't load your campaigns." };
+
+  if (!launchedAds || launchedAds.length === 0) {
+    return {
+      state: "no_data",
+      reason: "No campaigns launched yet — this fills in once you launch your first ad.",
+    };
+  }
+
+  // Past the guards the underlying implementation is identical, so
+  // there is one code path fetching insights rather than two that
+  // could drift.
+  return { state: "ok", value: await getCampaignPerformance(supabase, dealershipId) };
+}
+
+/**
+ * DEPRECATED for anything user-visible — prefer
+ * getCampaignPerformanceState() above.
+ *
+ * Returns `{ campaigns: [], spend: 0 }` for three different reasons
+ * (no campaigns / no Meta token / query failure) with no way for a
+ * caller to tell them apart. Kept because 10 call sites still use it
+ * and this codebase has no tests to catch a bulk rewrite regression.
+ *
+ * REMAINING CALLERS, to migrate and then delete this function:
+ *   src/app/api/ads/[id]/explain/route.ts:29
+ *   src/app/api/analytics/growth-metrics/route.ts:16
+ *   src/app/api/growth-advisor/generate/route.ts:51
+ *   src/app/api/paid-ads/generate/route.ts:26
+ *   src/app/api/strategy/route.ts:47
+ *   src/app/dashboard/overview/page.tsx:64        (lifetime revenue only — safe, revenue sums our own leads)
+ *   src/lib/agents/autopilotAgent.ts:118          (explanation only, AFTER the pause decision — no decision rides on it)
+ *   src/lib/agents/masterBrainV2.ts:641, 694, 738
+ *
+ * Two of those are already known-safe, annotated above. The other
+ * eight can each show a false zero to a customer.
+ */
 export async function getCampaignPerformance(
   supabase: any,
   dealershipId: string
-): Promise<{ campaigns: CampaignPerformance[]; totals: { spend: number; leads: number; cost_per_lead: number | null } }> {
+): Promise<CampaignPerformanceResult> {
   const { data: dealership } = await supabase
     .from("dealerships")
     .select("fb_page_access_token")

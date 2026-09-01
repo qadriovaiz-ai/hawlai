@@ -10,7 +10,7 @@ import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
 import ExplainCampaignButton from "@/components/ads/ExplainCampaignButton";
 import TestVariantButton from "@/components/ads/TestVariantButton";
 import ScoreBadge from "@/components/shared/ScoreBadge";
-import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "bg-green-500/10 text-green-300 border border-green-700/50",
@@ -37,7 +37,7 @@ export default async function CampaignsPage() {
       .eq("dealership_id", dealershipId)
       .eq("status", "launched")
       .order("created_at", { ascending: false }),
-    getCampaignPerformance(supabase, dealershipId),
+    getCampaignPerformanceState(supabase, dealershipId),
     createServiceClient()
       .from("pending_approvals")
       .select("action_details")
@@ -46,7 +46,19 @@ export default async function CampaignsPage() {
       .eq("status", "pending"),
   ]);
 
-  const perfById = new Map(performance.campaigns.map((p) => [p.id, p]));
+  // Campaign CARDS come from ad_creatives (queried above), so the list
+  // renders either way. Only the per-card metrics come from Meta. When
+  // those can't be read, the cards show without numbers and the banner
+  // below says why — rather than every card silently reading zero
+  // spend, which looks like campaigns that ran and achieved nothing.
+  const adDataReadable = performance.state === "ok";
+  const perfById = new Map(
+    (adDataReadable ? performance.value.campaigns : []).map((p) => [p.id, p])
+  );
+  // null, not zeroed totals — these three tiles are the headline
+  // numbers on this page and a Rs 0 here is exactly the false zero
+  // this change exists to remove.
+  const totals = adDataReadable ? performance.value.totals : null;
   const pendingActivationIds = new Set((pendingActivations ?? []).map((a: any) => a.action_details?.campaign_id).filter(Boolean));
 
   // Group launched creatives that share a variant_group_id (started
@@ -92,26 +104,40 @@ export default async function CampaignsPage() {
         </Link>
       </div>
 
+      {/* Says why the numbers are missing. Without it every card shows
+          blank metrics and reads as "these campaigns achieved nothing"
+          rather than "we can't see your ad account right now". */}
+      {!adDataReadable && (
+        <div className="rounded-lg border border-amber-300/50 bg-amber-500/10 px-3.5 py-2.5">
+          <p className="text-sm text-amber-700">
+            {performance.state === "not_connected"
+              ? "Your Meta ad account isn't connected, so spend and results can't be shown. Your campaigns are still listed below."
+              : "Campaign performance couldn't be loaded just now. Your campaigns are still listed below — try refreshing in a moment."}
+          </p>
+        </div>
+      )}
+
+
       {campaigns && campaigns.length > 0 && (
         <div className="grid grid-cols-3 gap-4">
           <div className="card p-4">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
               <IndianRupee className="w-3.5 h-3.5" /> Total Spend
             </div>
-            <p className="text-2xl font-bold text-slate-900">{formatCurrency(performance.totals.spend)}</p>
+            <p className="text-2xl font-bold text-slate-900">{totals ? formatCurrency(totals.spend) : "—"}</p>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
               <Users className="w-3.5 h-3.5" /> Leads from Ads
             </div>
-            <p className="text-2xl font-bold text-slate-900">{performance.totals.leads}</p>
+            <p className="text-2xl font-bold text-slate-900">{totals ? totals.leads : "—"}</p>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
               <TrendingDown className="w-3.5 h-3.5" /> Avg Cost / Lead
             </div>
             <p className="text-2xl font-bold text-slate-900">
-              {performance.totals.cost_per_lead !== null ? formatCurrency(performance.totals.cost_per_lead) : "—"}
+              {totals && totals.cost_per_lead !== null ? formatCurrency(totals.cost_per_lead) : "—"}
             </p>
           </div>
         </div>

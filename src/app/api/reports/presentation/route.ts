@@ -51,7 +51,7 @@ export async function GET() {
   const metrics: [string, string][] = [
     ["Total Leads", String(stats.totalLeads)],
     ["Campaigns Launched", String(stats.campaignsLaunched)],
-    ["Total Ad Spend", formatCurrency(stats.totalSpend)],
+    ["Total Ad Spend", stats.totalSpend === null ? "Not available — ad account not connected" : formatCurrency(stats.totalSpend)],
     ["Cost per Lead", stats.costPerLead !== null ? formatCurrency(stats.costPerLead) : "—"],
     ["Revenue", formatCurrency(stats.totalRevenue)],
     ["ROAS", stats.roas !== null ? `${stats.roas.toFixed(1)}x` : "—"],

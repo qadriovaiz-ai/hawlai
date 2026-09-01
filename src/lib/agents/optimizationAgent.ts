@@ -10,7 +10,7 @@
 // campaigns are live.
 // ------------------------------------------------------------------
 
-import { getCampaignPerformance, CampaignPerformance } from "./analyticsAgent";
+import { getCampaignPerformanceState, CampaignPerformance } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 
@@ -78,21 +78,39 @@ Only include campaigns where you have enough signal (spend > 0 or leads > 0) to 
 }
 
 export async function analyzeCampaigns(supabase: any, dealershipId: string): Promise<OptimizationResult> {
-  const [performance, { data: dealership }] = await Promise.all([
-    getCampaignPerformance(supabase, dealershipId),
+  const [performanceState, { data: dealership }] = await Promise.all([
+    getCampaignPerformanceState(supabase, dealershipId),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
   const businessCategory = dealership?.business_category ?? "car dealership";
+
+  // Previously this said "No launched campaigns yet — nothing to
+  // optimize until you launch one" whenever the result was empty,
+  // including when the Meta token was missing. A dealer with live
+  // campaigns and an expired connection was told they had none.
+  if (performanceState.state !== "ok") {
+    return {
+      hasEnoughData: false,
+      recommendations: [],
+      summary:
+        performanceState.state === "not_connected"
+          ? "Your Meta ad account isn't connected, so campaign performance can't be read. Reconnect it in Settings → Integrations to get recommendations."
+          : performanceState.state === "error"
+          ? "Couldn't load your campaigns just now, so there are no recommendations to give. Try again shortly."
+          : performanceState.reason,
+    };
+  }
+
+  const performance = performanceState.value;
   const hasEnoughData = performance.campaigns.some((c) => c.spend > 0 || c.leads > 0);
 
   if (!hasEnoughData) {
     return {
       hasEnoughData: false,
       recommendations: [],
-      summary:
-        performance.campaigns.length === 0
-          ? "No launched campaigns yet — nothing to optimize until you launch one."
-          : "Campaigns are live but don't have spend or lead data yet — check back once they've been running a bit.",
+      // Reached only with campaigns present and readable, so this is
+      // now unambiguously "live but no numbers yet".
+      summary: "Campaigns are live but don't have spend or lead data yet — check back once they've been running a bit.",
     };
   }
 

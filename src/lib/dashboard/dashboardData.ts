@@ -24,26 +24,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeDelta, previousPeriod, type ResolvedRange, type MetricDelta } from "@/lib/analytics/dateRange";
 
-export type ChannelKey = "meta_ads" | "meta_page" | "whatsapp" | "google_ads";
-
-export const CHANNEL_LABELS: Record<ChannelKey, string> = {
-  meta_ads: "Meta Ads",
-  meta_page: "Facebook & Instagram",
-  whatsapp: "WhatsApp",
-  google_ads: "Google Ads",
-};
-
-/**
- * A value that knows why it might be absent.
- *
- * `no_data` carries the reason so the empty state can explain what
- * would fill it, rather than showing a shrug.
- */
-export type Loaded<T> =
-  | { state: "ok"; value: T }
-  | { state: "not_connected"; channel: ChannelKey }
-  | { state: "no_data"; reason: string }
-  | { state: "error"; message: string };
+// Loaded<T>, ChannelKey and CHANNEL_LABELS now live in lib/dataState
+// so analyticsAgent can share the vocabulary without an agent
+// importing from a dashboard module. Re-exported here so every
+// existing import of them from this file keeps working.
+import type { ChannelKey, Loaded } from "@/lib/dataState";
+// Re-exported so every existing import of these from this file keeps working.
+export type { ChannelKey, Loaded };
+export { CHANNEL_LABELS } from "@/lib/dataState";
 
 export interface Connections {
   metaPage: boolean;
