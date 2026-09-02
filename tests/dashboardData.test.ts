@@ -96,3 +96,27 @@ describe("connection detection", () => {
     expect(c.metaAds).toBe(false);
   });
 });
+
+// ---- Campaign performance surface (Gap 2) ----
+//
+// The raw getCampaignPerformance() returns { campaigns: [], spend: 0 }
+// for three different reasons and cannot say which. Every caller now
+// uses the state wrapper instead. This asserts the door stays shut:
+// re-exporting the raw function would let a new caller reintroduce the
+// false zero without anything noticing.
+
+describe("analyticsAgent public surface", () => {
+  it("exports ONLY the state-aware version", async () => {
+    const mod: Record<string, unknown> = await import("@/lib/agents/analyticsAgent");
+    expect(typeof mod.getCampaignPerformanceState).toBe("function");
+    expect(mod.getCampaignPerformance).toBeUndefined();
+  });
+
+  it("still exports the snapshot writer the daily cron depends on", async () => {
+    const mod: Record<string, unknown> = await import("@/lib/agents/analyticsAgent");
+    // Guards against an over-zealous cleanup: this one IS meant to be
+    // public, and the campaign_performance_history the dashboard reads
+    // has no other writer.
+    expect(typeof mod.snapshotCampaignPerformance).toBe("function");
+  });
+});

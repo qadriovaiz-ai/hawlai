@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { getCampaignPerformance, getCampaignPerformanceState } from "./analyticsAgent";
+import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
 import { getModel } from "../models";

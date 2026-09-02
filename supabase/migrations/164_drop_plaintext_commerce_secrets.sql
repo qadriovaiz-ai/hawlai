@@ -13,11 +13,16 @@
 --   - Application code no longer NAMES these columns. The commerce
 --     secret helpers select the _encrypted columns only.
 --
--- ORDER DOES NOT MATTER HERE, unlike migration 160. The code that
--- stopped referencing these columns can deploy before or after this
--- runs, because it no longer mentions them either way. 160's hazard
--- was the opposite direction: code that NAMED a column the database
--- did not have yet.
+-- ORDER MATTERS, and an earlier version of this comment said it did
+-- not. Correcting that: this must run AFTER the code that stopped
+-- naming these columns is deployed. The NEW code is order-independent
+-- because it never mentions them — but the OLD code selects
+-- razorpay_key_secret, so dropping it while that build is still
+-- serving traffic breaks checkout. That is migration 160's failure in
+-- the opposite direction, and just as avoidable.
+--
+-- Run order used: 163 and 165 (both additive) -> deploy -> backfill
+-- -> this.
 --
 -- RLS: ALTER TABLE, so no policy block. dealerships already has RLS
 -- enabled (001_schema.sql:84) with owner and team policies. Dropping a

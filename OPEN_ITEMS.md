@@ -37,6 +37,26 @@ helper shape; extend `OAuthProvider` and add the Meta columns.
 
 ---
 
+## 1b. Drop the plaintext marketing OAuth columns
+
+**Status:** ready when convenient
+**Unblocked by:** nothing — safe to do now
+
+Migration 165 added the encrypted columns; the backfill ran on
+2026-09-03 and encrypted the two live values (one dealership's Gmail
+pair). A confirming dry run reported `to encrypt: 0`, and the stored
+ciphertext was verified to decrypt from the live database.
+
+The twelve plaintext columns are still populated and still read as a
+fallback. Dropping them is the same shape as migration 164, with the
+same ordering rule: the code must stop naming them BEFORE the drop
+runs, which means editing `oauthSecrets.ts` to select only the
+encrypted columns first, deploying, then dropping.
+
+Low urgency — 94 of 96 columns are empty — but it should not drift.
+
+---
+
 ## 2. Middleware double-auth on `/api/*`
 
 **Status:** recorded, needs a deliberate decision

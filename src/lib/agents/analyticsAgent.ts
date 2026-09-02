@@ -66,12 +66,11 @@ export interface CampaignPerformanceResult {
  * it at every call site, which is how a dealer with live campaigns and
  * an expired token ends up being told their campaigns produced nothing.
  *
- * This is a SIBLING rather than a change to the existing function's
- * signature, on purpose: getCampaignPerformance has 13 call sites
- * across 11 files and this codebase has no automated tests, so
- * rewriting all of them at once would be a large unverifiable change.
- * The user-visible call sites move here; the rest are listed as
- * follow-up in the commit so the two don't quietly become permanent.
+ * Introduced as a sibling rather than a signature change, because the
+ * raw function had 13 call sites across 11 files and this codebase had
+ * no automated tests at the time. That migration is now COMPLETE — all
+ * callers use this, and the raw fetch below is private, so the two
+ * cannot drift back apart.
  */
 export async function getCampaignPerformanceState(
   supabase: any,
@@ -113,28 +112,30 @@ export async function getCampaignPerformanceState(
 }
 
 /**
- * DEPRECATED. Prefer getCampaignPerformanceState() above.
+ * The raw fetch. PRIVATE — call getCampaignPerformanceState() instead.
  *
  * Returns `{ campaigns: [], spend: 0 }` for three different reasons —
  * no campaigns launched, no Meta token, or a failed query — with no
- * way for a caller to tell them apart.
+ * way for a caller to tell them apart. That ambiguity is the entire
+ * bug the state wrapper exists to remove, so this is no longer
+ * exported: it cannot be reached from outside this module, and a new
+ * caller therefore cannot reintroduce the false zero by accident.
  *
- * ONE CALLER REMAINS, and it is genuinely safe:
- *   src/lib/agents/autopilotAgent.ts:118 — verified: the value is used
- *   only at lines 119-120, to build the comparison set and per-campaign
- *   figures passed to explainCampaign(). It runs AFTER the pause
- *   decision, which comes from optimizationAgent's own guarded
- *   analysis. A false zero here produces a weaker explanation, never a
- *   wrong action.
+ * Every caller has now been migrated. The last was autopilotAgent,
+ * which used it only to enrich a pause EXPLANATION after the decision
+ * was already made by optimizationAgent's own guarded analysis — so a
+ * false zero there produced a weaker explanation, never a wrong
+ * action. It now degrades to the plain reason instead.
  *
- * The overview page was ALSO annotated safe here and was not. Its
- * lifetime-revenue sum ran over performance.campaigns, which is empty
- * when the token is missing, so a business with real attributed
- * revenue showed Rs 0. Fixed; the annotation had been wrong.
- *
- * Delete this function once autopilotAgent moves across.
+ * Worth keeping in view: the overview page was ALSO annotated safe in
+ * this comment and was not. Its lifetime-revenue sum ran over
+ * performance.campaigns, which is empty when the token is missing, so
+ * a business with real attributed revenue showed Rs 0. Two of my three
+ * "verified safe" annotations on this function turned out wrong, which
+ * is the case for making it unreachable rather than trusting the next
+ * reader to check.
  */
-export async function getCampaignPerformance(
+async function getCampaignPerformance(
   supabase: any,
   dealershipId: string
 ): Promise<CampaignPerformanceResult> {

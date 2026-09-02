@@ -20,7 +20,7 @@ import { generateFollowUpMessage } from "./contentAgent";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 import { analyzeCampaigns } from "./optimizationAgent";
 import { setCampaignStatus } from "./campaignEditAgent";
-import { snapshotCampaignPerformance, getCampaignPerformance } from "./analyticsAgent";
+import { snapshotCampaignPerformance, getCampaignPerformanceState, type CampaignPerformanceResult } from "./analyticsAgent";
 import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights";
 import { emitNotification } from "@/lib/notifications/emit";
 import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
@@ -99,7 +99,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
   // Fetched at most once per cron run, not once per paused campaign —
   // Meta's Insights API is a live call, no need to hit it repeatedly
   // in the same pass.
-  let performanceCache: Awaited<ReturnType<typeof getCampaignPerformance>> | null = null;
+  let performanceCache: CampaignPerformanceResult | null = null;
 
   for (const rec of toPause) {
     const campaign = (campaigns ?? []).find((c: any) => c.id === rec.campaign_id && c.meta_status === "ACTIVE");
@@ -115,7 +115,15 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
       // reason, so it's what reaches the business owner and gets
       // written into business_memory. rec.reason stays untouched as
       // the internal audit trail of what triggered the pause action.
-      if (!performanceCache) performanceCache = await getCampaignPerformance(supabase, dealershipId);
+      // Used ONLY to enrich the explanation — the pause decision was
+      // already made by analyzeCampaigns above, which has its own
+      // not-connected handling. So when performance is unreadable here
+      // the campaign still pauses; it just gets the plain reason
+      // instead of a comparative one. rec.reason is never a false zero.
+      if (!performanceCache) {
+        const state = await getCampaignPerformanceState(supabase, dealershipId);
+        performanceCache = state.state === "ok" ? state.value : { campaigns: [], totals: { spend: 0, leads: 0, cost_per_lead: null } };
+      }
       const comparisons = await getComparisonCampaigns(supabase, dealershipId, campaign, performanceCache.campaigns);
       const thisPerf = performanceCache.campaigns.find((p) => p.id === campaign.id) ?? null;
       const explainedReason = comparisons.length > 0
