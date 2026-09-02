@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -49,8 +50,8 @@ export async function GET(request: Request) {
       .update({
         youtube_channel_id: channel?.id ?? null,
         youtube_channel_title: channel?.snippet?.title ?? null,
-        youtube_access_token: access_token,
-        youtube_refresh_token: refresh_token,
+        ...tokenWrite("youtube", "access_token", access_token),
+        ...(refresh_token ? tokenWrite("youtube", "refresh_token", refresh_token) : {}),
         youtube_token_expiry: new Date(Date.now() + expires_in * 1000).toISOString(),
       })
       .eq("id", dealershipId);

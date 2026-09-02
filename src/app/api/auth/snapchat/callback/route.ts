@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -60,8 +61,8 @@ export async function GET(request: Request) {
       .update({
         snapchat_org_id: orgId,
         snapchat_ad_account_id: adAccountId,
-        snapchat_access_token: access_token,
-        snapchat_refresh_token: refresh_token ?? null,
+        ...tokenWrite("snapchat", "access_token", access_token),
+        ...(refresh_token ? tokenWrite("snapchat", "refresh_token", refresh_token) : {}),
         snapchat_token_expiry: new Date(Date.now() + (expires_in ?? 3600) * 1000).toISOString(),
       })
       .eq("id", dealershipId);

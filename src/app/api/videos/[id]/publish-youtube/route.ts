@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getValidYoutubeAccessToken, uploadVideoToYouTube } from "@/lib/agents/youtubeAgent";
 import { NextResponse } from "next/server";
+import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,19 +19,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!video) return NextResponse.json({ error: "Video not found" }, { status: 404 });
   if (video.status !== "ready" || !video.video_url) return NextResponse.json({ error: "This video isn't ready yet" }, { status: 400 });
 
-  const { data: dealership } = await supabase.from("dealerships").select("youtube_access_token, youtube_refresh_token, youtube_token_expiry").eq("id", dealershipId).single();
-  if (!dealership?.youtube_refresh_token) {
+  const { data: dealership } = await supabase.from("dealerships").select("youtube_access_token, youtube_access_token_encrypted, youtube_refresh_token, youtube_refresh_token_encrypted, youtube_token_expiry").eq("id", dealershipId).single();
+
+  // Encrypted column first, plaintext fallback while the backfill is
+  // pending. Null means "not connected" — never a decryption error
+  // thrown at a caller that only wanted to publish a video.
+  const accessTokenValue = readToken(dealership, "youtube", "access_token");
+  const refreshTokenValue = readToken(dealership, "youtube", "refresh_token");
+  if (!refreshTokenValue) {
     return NextResponse.json({ error: "YouTube isn't connected yet — connect it from Business → Integrations first." }, { status: 400 });
   }
 
   try {
     const { accessToken, refreshed } = await getValidYoutubeAccessToken({
-      accessToken: dealership.youtube_access_token,
-      refreshToken: dealership.youtube_refresh_token,
-      tokenExpiry: dealership.youtube_token_expiry,
+      // "" not null: an absent access token means "refresh it", which
+      // is exactly what the refresh token below is for. The guard
+      // above already rejected the genuinely-not-connected case.
+      accessToken: accessTokenValue ?? "",
+      refreshToken: refreshTokenValue,
+      tokenExpiry: dealership?.youtube_token_expiry ?? null,
     });
     if (refreshed) {
-      await supabase.from("dealerships").update({ youtube_access_token: refreshed.accessToken, youtube_token_expiry: refreshed.expiry }).eq("id", dealershipId);
+      await supabase.from("dealerships").update({ ...tokenWrite("youtube", "access_token", refreshed.accessToken), youtube_token_expiry: refreshed.expiry }).eq("id", dealershipId);
     }
 
     const result = await uploadVideoToYouTube(accessToken, video.video_url, title || video.prompt.slice(0, 90), description || video.prompt);

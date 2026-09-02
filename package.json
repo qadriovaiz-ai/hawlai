@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p .",
     "migrations:check": "tsx scripts/check-migrations.ts",
-    "secrets:rekey": "tsx scripts/rekey-secrets.ts"
+    "secrets:rekey": "tsx scripts/rekey-secrets.ts",
+    "secrets:backfill-oauth": "tsx scripts/backfill-oauth-tokens.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

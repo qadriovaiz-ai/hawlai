@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { getValidPinterestAccessToken, launchPinterestCampaign } from "@/lib/ads/pinterestAds";
+import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 // P3 piece 6 — Pinterest launch, Phase 2 of the same two-phase flow
 // every platform here uses: /api/ads/preview already generated the
@@ -40,11 +41,17 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, booking_slug, pinterest_access_token, pinterest_refresh_token, pinterest_token_expiry, pinterest_ad_account_id")
+    .select("dealership_name, booking_slug, pinterest_access_token, pinterest_access_token_encrypted, pinterest_refresh_token, pinterest_refresh_token_encrypted, pinterest_token_expiry, pinterest_ad_account_id")
     .eq("id", dealershipId)
     .single();
 
-  if (!dealership?.pinterest_access_token) {
+  // Encrypted column first, plaintext fallback while the backfill
+  // is pending. Null means "not connected" — never a decryption
+  // error thrown at a caller that only wanted to launch an ad.
+  const accessTokenValue = readToken(dealership, "pinterest", "access_token");
+  const refreshTokenValue = readToken(dealership, "pinterest", "refresh_token");
+
+  if (!accessTokenValue) {
     return NextResponse.json({ error: "Pinterest isn't connected yet — connect it in Integrations first." }, { status: 400 });
   }
   if (!dealership?.pinterest_ad_account_id) {
@@ -64,15 +71,15 @@ export async function POST(request: Request) {
 
   try {
     const creds = {
-      accessToken: dealership.pinterest_access_token,
-      refreshToken: dealership.pinterest_refresh_token ?? "",
+      accessToken: accessTokenValue,
+      refreshToken: refreshTokenValue ?? "",
       tokenExpiry: dealership.pinterest_token_expiry,
       adAccountId: dealership.pinterest_ad_account_id,
     };
     const { accessToken, refreshed } = await getValidPinterestAccessToken(creds);
     if (refreshed) {
       await service.from("dealerships").update({
-        pinterest_access_token: refreshed.accessToken,
+        ...tokenWrite("pinterest", "access_token", refreshed.accessToken),
         pinterest_token_expiry: refreshed.expiry,
       }).eq("id", dealershipId);
     }

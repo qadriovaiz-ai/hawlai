@@ -60,6 +60,7 @@ import { generateGraphic, GRAPHIC_TYPES } from "./graphicDesignAgent";
 import { getDealershipPlanLimits, hasFeature, killSwitchFor, type GatedFeatureKey } from "../plans";
 import { upgradeMessage } from "../featureGate";
 import { isFeatureEnabled, unavailableMessage } from "../featureFlags";
+import { tokenSelect, readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 import { checkAndRecordGenerationUsage, generationLimitMessage, type GenerationResource } from "../usage/generationLimits";
 import { formatCurrency } from "../utils";
 import { randomBytes } from "crypto";
@@ -932,18 +933,19 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
     }
     case "publish_to_youtube": {
       try {
-        const { data: dealership } = await supabase.from("dealerships").select("youtube_access_token, youtube_refresh_token, youtube_token_expiry").eq("id", ctx.id).single();
-        if (!dealership?.youtube_refresh_token) return { error: "YouTube isn't connected yet — connect it from Business → Integrations first." };
+        const { data: dealership } = await supabase.from("dealerships").select(`${tokenSelect("youtube")}, youtube_token_expiry`).eq("id", ctx.id).single();
+        const ytRefresh = readToken(dealership, "youtube", "refresh_token");
+        if (!ytRefresh) return { error: "YouTube isn't connected yet — connect it from Business → Integrations first." };
 
         const { data: video } = await supabase.from("video_generations").select("id, video_url, prompt").eq("dealership_id", ctx.id).eq("status", "ready").not("video_url", "is", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
         if (!video) return { error: "No ready video found to publish — generate one first." };
 
         const { accessToken, refreshed } = await getValidYoutubeAccessToken({
-          accessToken: dealership.youtube_access_token,
-          refreshToken: dealership.youtube_refresh_token,
+          accessToken: readToken(dealership, "youtube", "access_token") ?? "",
+          refreshToken: ytRefresh,
           tokenExpiry: dealership.youtube_token_expiry,
         });
-        if (refreshed) await supabase.from("dealerships").update({ youtube_access_token: refreshed.accessToken, youtube_token_expiry: refreshed.expiry }).eq("id", ctx.id);
+        if (refreshed) await supabase.from("dealerships").update({ ...tokenWrite("youtube", "access_token", refreshed.accessToken), youtube_token_expiry: refreshed.expiry }).eq("id", ctx.id);
 
         const result = await uploadVideoToYouTube(accessToken, video.video_url, input.title || video.prompt.slice(0, 90), video.prompt);
         await supabase.from("video_generations").update({ youtube_video_id: result.videoId, youtube_url: result.url }).eq("id", video.id);

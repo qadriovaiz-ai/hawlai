@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -48,8 +49,8 @@ export async function GET(request: Request) {
       .from("dealerships")
       .update({
         gmail_email: userInfo.email ?? null,
-        gmail_access_token: access_token,
-        gmail_refresh_token: refresh_token,
+        ...tokenWrite("gmail", "access_token", access_token),
+        ...(refresh_token ? tokenWrite("gmail", "refresh_token", refresh_token) : {}),
         gmail_token_expiry: new Date(Date.now() + expires_in * 1000).toISOString(),
       })
       .eq("id", dealershipId);

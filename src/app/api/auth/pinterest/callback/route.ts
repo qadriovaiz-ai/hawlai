@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -50,8 +51,8 @@ export async function GET(request: Request) {
       .update({
         pinterest_account_id: accountId,
         pinterest_ad_account_id: adAccountId,
-        pinterest_access_token: access_token,
-        pinterest_refresh_token: refresh_token ?? null,
+        ...tokenWrite("pinterest", "access_token", access_token),
+        ...(refresh_token ? tokenWrite("pinterest", "refresh_token", refresh_token) : {}),
         pinterest_token_expiry: new Date(Date.now() + (expires_in ?? 2592000) * 1000).toISOString(),
       })
       .eq("id", dealershipId);

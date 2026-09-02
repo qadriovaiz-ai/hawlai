@@ -4,7 +4,7 @@
 //   npx tsx scripts/rekey-secrets.ts <ring>            # dry run
 //   npx tsx scripts/rekey-secrets.ts <ring> --write    # apply
 //
-//   <ring> is "canva" or "commerce".
+//   <ring> is "canva", "commerce" or "marketing".
 //
 // ================================================================
 // THE PROCEDURE — the order matters, and getting it wrong locks
@@ -81,6 +81,24 @@ const TARGETS: Record<KeyRing, { table: string; idColumn: string; columns: strin
       "woocommerce_consumer_secret_encrypted",
     ],
   },
+  marketing: {
+    table: "dealerships",
+    idColumn: "id",
+    columns: [
+      "gmail_access_token_encrypted",
+      "gmail_refresh_token_encrypted",
+      "youtube_access_token_encrypted",
+      "youtube_refresh_token_encrypted",
+      "google_ads_access_token_encrypted",
+      "google_ads_refresh_token_encrypted",
+      "linkedin_access_token_encrypted",
+      "linkedin_refresh_token_encrypted",
+      "pinterest_access_token_encrypted",
+      "pinterest_refresh_token_encrypted",
+      "snapchat_access_token_encrypted",
+      "snapchat_refresh_token_encrypted",
+    ],
+  },
 };
 
 async function main() {
@@ -89,8 +107,8 @@ async function main() {
   const ring = process.argv[2] as KeyRing;
   const write = process.argv.includes("--write");
 
-  if (ring !== "canva" && ring !== "commerce") {
-    console.error('Usage: npx tsx scripts/rekey-secrets.ts <canva|commerce> [--write]');
+  if (!Object.prototype.hasOwnProperty.call(TARGETS, ring)) {
+    console.error(`Usage: npx tsx scripts/rekey-secrets.ts <${Object.keys(TARGETS).join("|")}> [--write]`);
     process.exit(1);
   }
 

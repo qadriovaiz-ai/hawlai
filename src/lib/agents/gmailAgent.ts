@@ -7,21 +7,29 @@
 // account beyond the free Google sign-in they already have.
 // ------------------------------------------------------------------
 
+import { tokenSelect, readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
+
 async function getValidAccessToken(supabase: any, dealershipId: string): Promise<string> {
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("gmail_access_token, gmail_refresh_token, gmail_token_expiry")
+    .select(`${tokenSelect("gmail")}, gmail_token_expiry`)
     .eq("id", dealershipId)
     .single();
 
-  if (!dealership?.gmail_refresh_token) {
+  const refreshToken = readToken(dealership, "gmail", "refresh_token");
+  if (!refreshToken) {
     throw new Error("Gmail isn't connected yet. Go to Settings and connect your Gmail account first.");
   }
 
   const expiresAt = dealership.gmail_token_expiry ? new Date(dealership.gmail_token_expiry).getTime() : 0;
   const isExpired = Date.now() > expiresAt - 60_000; // refresh a minute early
 
-  if (!isExpired) return dealership.gmail_access_token;
+  if (!isExpired) {
+    const accessToken = readToken(dealership, "gmail", "access_token");
+    // An unreadable stored token falls through to a refresh rather
+    // than crashing the caller with a decryption error.
+    if (accessToken) return accessToken;
+  }
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -29,7 +37,7 @@ async function getValidAccessToken(supabase: any, dealershipId: string): Promise
     body: new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID ?? "",
       client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      refresh_token: dealership.gmail_refresh_token,
+      refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
   });
@@ -38,7 +46,10 @@ async function getValidAccessToken(supabase: any, dealershipId: string): Promise
 
   await supabase
     .from("dealerships")
-    .update({ gmail_access_token: data.access_token, gmail_token_expiry: new Date(Date.now() + data.expires_in * 1000).toISOString() })
+    // Encrypted on write, plaintext nulled in the same statement — a
+    // refreshed token is never stored in the clear again, whenever the
+    // backfill happens to run.
+    .update({ ...tokenWrite("gmail", "access_token", data.access_token), gmail_token_expiry: new Date(Date.now() + data.expires_in * 1000).toISOString() })
     .eq("id", dealershipId);
 
   return data.access_token;

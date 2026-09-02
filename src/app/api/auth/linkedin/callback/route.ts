@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 const LINKEDIN_VERSION = "202405";
 
@@ -64,8 +65,8 @@ export async function GET(request: Request) {
       .update({
         linkedin_ad_account_id: adAccountId,
         linkedin_organization_id: organizationId,
-        linkedin_access_token: access_token,
-        linkedin_refresh_token: refresh_token ?? null,
+        ...tokenWrite("linkedin", "access_token", access_token),
+        ...(refresh_token ? tokenWrite("linkedin", "refresh_token", refresh_token) : {}),
         linkedin_token_expiry: new Date(Date.now() + (expires_in ?? 3600) * 1000).toISOString(),
       })
       .eq("id", dealershipId);

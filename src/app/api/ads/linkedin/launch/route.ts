@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { getValidLinkedInAccessToken, launchLinkedInCampaign } from "@/lib/ads/linkedinAds";
+import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 // P3 piece 6 — LinkedIn launch, Phase 2 of the same two-phase flow
 // every platform here uses. Created PAUSED; activation is the
@@ -33,11 +34,17 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("booking_slug, linkedin_access_token, linkedin_refresh_token, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
+    .select("booking_slug, linkedin_access_token, linkedin_access_token_encrypted, linkedin_refresh_token, linkedin_refresh_token_encrypted, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
     .eq("id", dealershipId)
     .single();
 
-  if (!dealership?.linkedin_access_token) {
+  // Encrypted column first, plaintext fallback while the backfill
+  // is pending. Null means "not connected" — never a decryption
+  // error thrown at a caller that only wanted to launch an ad.
+  const accessTokenValue = readToken(dealership, "linkedin", "access_token");
+  const refreshTokenValue = readToken(dealership, "linkedin", "refresh_token");
+
+  if (!accessTokenValue) {
     return NextResponse.json({ error: "LinkedIn isn't connected yet — connect it in Integrations first." }, { status: 400 });
   }
   if (!dealership?.linkedin_ad_account_id) {
@@ -63,8 +70,8 @@ export async function POST(request: Request) {
 
   try {
     const creds = {
-      accessToken: dealership.linkedin_access_token,
-      refreshToken: dealership.linkedin_refresh_token ?? "",
+      accessToken: accessTokenValue,
+      refreshToken: refreshTokenValue ?? "",
       tokenExpiry: dealership.linkedin_token_expiry,
       adAccountId: dealership.linkedin_ad_account_id,
       organizationId: dealership.linkedin_organization_id,
@@ -72,7 +79,7 @@ export async function POST(request: Request) {
     const { accessToken, refreshed } = await getValidLinkedInAccessToken(creds);
     if (refreshed) {
       await service.from("dealerships").update({
-        linkedin_access_token: refreshed.accessToken,
+        ...tokenWrite("linkedin", "access_token", refreshed.accessToken),
         linkedin_token_expiry: refreshed.expiry,
       }).eq("id", dealershipId);
     }

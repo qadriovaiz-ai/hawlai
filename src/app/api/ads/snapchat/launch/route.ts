@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { getValidSnapchatAccessToken, launchSnapchatCampaign } from "@/lib/ads/snapchatAds";
+import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 // P3 piece 6 — Snapchat launch, Phase 2 of the same two-phase flow
 // every platform here uses. Created PAUSED; activation is the
@@ -35,11 +36,17 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, booking_slug, snapchat_access_token, snapchat_refresh_token, snapchat_token_expiry, snapchat_ad_account_id")
+    .select("dealership_name, booking_slug, snapchat_access_token, snapchat_access_token_encrypted, snapchat_refresh_token, snapchat_refresh_token_encrypted, snapchat_token_expiry, snapchat_ad_account_id")
     .eq("id", dealershipId)
     .single();
 
-  if (!dealership?.snapchat_access_token) {
+  // Encrypted column first, plaintext fallback while the backfill
+  // is pending. Null means "not connected" — never a decryption
+  // error thrown at a caller that only wanted to launch an ad.
+  const accessTokenValue = readToken(dealership, "snapchat", "access_token");
+  const refreshTokenValue = readToken(dealership, "snapchat", "refresh_token");
+
+  if (!accessTokenValue) {
     return NextResponse.json({ error: "Snapchat isn't connected yet — connect it in Integrations first." }, { status: 400 });
   }
   if (!dealership?.snapchat_ad_account_id) {
@@ -59,15 +66,15 @@ export async function POST(request: Request) {
 
   try {
     const creds = {
-      accessToken: dealership.snapchat_access_token,
-      refreshToken: dealership.snapchat_refresh_token ?? "",
+      accessToken: accessTokenValue,
+      refreshToken: refreshTokenValue ?? "",
       tokenExpiry: dealership.snapchat_token_expiry,
       adAccountId: dealership.snapchat_ad_account_id,
     };
     const { accessToken, refreshed } = await getValidSnapchatAccessToken(creds);
     if (refreshed) {
       await service.from("dealerships").update({
-        snapchat_access_token: refreshed.accessToken,
+        ...tokenWrite("snapchat", "access_token", refreshed.accessToken),
         snapchat_token_expiry: refreshed.expiry,
       }).eq("id", dealershipId);
     }

@@ -13,6 +13,14 @@
 //               user to reconnect Canva. Annoying, survivable.
 //   commerce  — money. Losing this key breaks checkout for every
 //               merchant and locks their store integrations.
+//   marketing — third-party OAuth tokens (Gmail, YouTube, Google Ads,
+//               LinkedIn, Pinterest, Snapchat). Same blast radius as
+//               canva — losing it means reconnecting an integration,
+//               not losing data or money. Kept SEPARATE from canva
+//               anyway: folding these in would mean a Canva key
+//               rotation also forced every Gmail and YouTube
+//               reconnect, growing a blast radius that is currently
+//               small and well understood.
 //
 // They are separate variables so the two can be rotated
 // independently. Rotating the Canva key is a routine operation with a
@@ -22,12 +30,17 @@
 // prefer one secret to manage — that stays their call, and separate
 // names keep the option of divorcing them later without a migration.
 //
-// SCOPE. Covers razorpay_key_secret, shopify_access_token and
-// woocommerce_consumer_secret. The 14 remaining marketing OAuth
-// columns (Gmail, Google Ads, LinkedIn, Pinterest, Snapchat, YouTube,
-// Instagram, Meta page token) are still PLAINTEXT and are scheduled
-// separately. Stated here so nobody reads this file and concludes the
-// database is encrypted generally.
+// SCOPE. Canva tokens, the three commerce secrets (now the only
+// columns, the plaintext originals dropped by migration 164), and
+// twelve marketing OAuth columns.
+//
+// STILL PLAINTEXT, deliberately deferred: fb_page_access_token and
+// instagram_access_token. Neither ever refreshes, and the Meta token
+// spans 13 files across lead ingestion, ad launch and analytics —
+// touching that surface immediately before the pending live tests
+// would make any regression impossible to attribute. Scheduled for
+// after those tests pass. Stated here so nobody reads this file and
+// concludes the database is encrypted generally.
 //
 // What this protects against: a dump of the dealerships table, a leaked
 // backup, a read-only SQL compromise. What it does NOT protect against:
@@ -41,11 +54,12 @@ const KEY_BYTES = 32; // AES-256
 const IV_BYTES = 12; // 96-bit nonce, the size GCM is specified for
 const VERSION = "v1";
 
-export type KeyRing = "canva" | "commerce";
+export type KeyRing = "canva" | "commerce" | "marketing";
 
 const RING_ENV: Record<KeyRing, string> = {
   canva: "CANVA_TOKEN_ENCRYPTION_KEY",
   commerce: "COMMERCE_ENCRYPTION_KEY",
+  marketing: "MARKETING_ENCRYPTION_KEY",
 };
 
 // ---- Key rotation -------------------------------------------------
@@ -68,6 +82,7 @@ const RING_ENV: Record<KeyRing, string> = {
 const RING_ENV_PREVIOUS: Record<KeyRing, string> = {
   canva: "CANVA_TOKEN_ENCRYPTION_KEY_PREVIOUS",
   commerce: "COMMERCE_ENCRYPTION_KEY_PREVIOUS",
+  marketing: "MARKETING_ENCRYPTION_KEY_PREVIOUS",
 };
 
 /**
@@ -88,6 +103,8 @@ function readRawKey(ring: KeyRing): string | undefined {
       return process.env.CANVA_TOKEN_ENCRYPTION_KEY;
     case "commerce":
       return process.env.COMMERCE_ENCRYPTION_KEY;
+    case "marketing":
+      return process.env.MARKETING_ENCRYPTION_KEY;
   }
 }
 
@@ -97,6 +114,8 @@ function readPreviousRawKey(ring: KeyRing): string | undefined {
       return process.env.CANVA_TOKEN_ENCRYPTION_KEY_PREVIOUS;
     case "commerce":
       return process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS;
+    case "marketing":
+      return process.env.MARKETING_ENCRYPTION_KEY_PREVIOUS;
   }
 }
 

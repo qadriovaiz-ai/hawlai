@@ -14,6 +14,7 @@ import TrackingSettingsCard from "@/components/settings/TrackingSettingsCard";
 import ProductFeedCard from "@/components/settings/ProductFeedCard";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { buttonClasses } from "@/components/ui";
+import { hasToken } from "@/lib/crypto/oauthSecrets";
 
 // All four ad platforms (Meta, Google, Pinterest, Snapchat, LinkedIn)
 // now have real connect cards above — the old "Pending Platform
@@ -32,7 +33,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, snapchat_access_token, linkedin_access_token")
+    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, pinterest_access_token_encrypted, snapchat_access_token, snapchat_access_token_encrypted, linkedin_access_token, linkedin_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
@@ -40,9 +41,12 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const isGmailConnected = !!dealership?.gmail_email;
   const isGoogleAdsConnected = !!dealership?.google_ads_email;
   const isYoutubeConnected = !!dealership?.youtube_channel_title;
-  const isPinterestConnected = !!dealership?.pinterest_access_token;
-  const isSnapchatConnected = !!dealership?.snapchat_access_token;
-  const isLinkedinConnected = !!dealership?.linkedin_access_token;
+  // hasToken(), not readToken(): whether a connection exists is
+  // answerable without decrypting one, and a settings page has no
+  // business holding a plaintext token in memory to render a tick.
+  const isPinterestConnected = hasToken(dealership, "pinterest");
+  const isSnapchatConnected = hasToken(dealership, "snapchat");
+  const isLinkedinConnected = hasToken(dealership, "linkedin");
 
   const limits = await getDealershipPlanLimits(supabase, dealershipId);
   const whatsappAutomationAllowed = hasFeature(limits, "whatsappAutomation");

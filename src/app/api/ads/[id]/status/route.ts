@@ -6,6 +6,7 @@ import { getValidGoogleAdsAccessToken, setGoogleCampaignStatus } from "@/lib/ads
 import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/ads/pinterestAds";
 import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ads/snapchatAds";
 import { getValidLinkedInAccessToken, setLinkedInCampaignStatus } from "@/lib/ads/linkedinAds";
+import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -49,7 +50,7 @@ export async function PATCH(
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_refresh_token, pinterest_token_expiry, pinterest_ad_account_id, snapchat_access_token, snapchat_refresh_token, snapchat_token_expiry, snapchat_ad_account_id, linkedin_access_token, linkedin_refresh_token, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
+    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_access_token_encrypted, google_ads_refresh_token, google_ads_refresh_token_encrypted, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_access_token_encrypted, pinterest_refresh_token, pinterest_refresh_token_encrypted, pinterest_token_expiry, pinterest_ad_account_id, snapchat_access_token, snapchat_access_token_encrypted, snapchat_refresh_token, snapchat_refresh_token_encrypted, snapchat_token_expiry, snapchat_ad_account_id, linkedin_access_token, linkedin_access_token_encrypted, linkedin_refresh_token, linkedin_refresh_token_encrypted, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
     .eq("id", dealershipId)
     .single();
 
@@ -100,20 +101,20 @@ export async function PATCH(
   }
 
   if (platform === "google") {
-    if (!dealership?.google_ads_refresh_token || !dealership?.google_ads_customer_id) {
+    if (!readToken(dealership, "google_ads", "refresh_token") || !dealership?.google_ads_customer_id) {
       return NextResponse.json({ error: "Google Ads isn't connected" }, { status: 400 });
     }
     try {
       const creds = {
-        accessToken: dealership.google_ads_access_token ?? "",
-        refreshToken: dealership.google_ads_refresh_token,
+        accessToken: readToken(dealership, "google_ads", "access_token") ?? "",
+        refreshToken: (readToken(dealership, "google_ads", "refresh_token") ?? ""),
         tokenExpiry: dealership.google_ads_token_expiry,
         customerId: String(dealership.google_ads_customer_id).replace(/-/g, ""),
       };
       const { accessToken, refreshed } = await getValidGoogleAdsAccessToken(creds);
       if (refreshed) {
         await createServiceClient().from("dealerships").update({
-          google_ads_access_token: refreshed.accessToken,
+          ...tokenWrite("google_ads", "access_token", refreshed.accessToken),
           google_ads_token_expiry: refreshed.expiry,
         }).eq("id", dealershipId);
       }
@@ -133,20 +134,20 @@ export async function PATCH(
   }
 
   if (platform === "pinterest") {
-    if (!dealership?.pinterest_access_token || !dealership?.pinterest_ad_account_id) {
+    if (!readToken(dealership, "pinterest", "access_token") || !dealership?.pinterest_ad_account_id) {
       return NextResponse.json({ error: "Pinterest isn't connected" }, { status: 400 });
     }
     try {
       const creds = {
-        accessToken: dealership.pinterest_access_token,
-        refreshToken: dealership.pinterest_refresh_token ?? "",
+        accessToken: (readToken(dealership, "pinterest", "access_token") ?? ""),
+        refreshToken: readToken(dealership, "pinterest", "refresh_token") ?? "",
         tokenExpiry: dealership.pinterest_token_expiry,
         adAccountId: dealership.pinterest_ad_account_id,
       };
       const { accessToken, refreshed } = await getValidPinterestAccessToken(creds);
       if (refreshed) {
         await createServiceClient().from("dealerships").update({
-          pinterest_access_token: refreshed.accessToken,
+          ...tokenWrite("pinterest", "access_token", refreshed.accessToken),
           pinterest_token_expiry: refreshed.expiry,
         }).eq("id", dealershipId);
       }
@@ -165,20 +166,20 @@ export async function PATCH(
   }
 
   if (platform === "snapchat") {
-    if (!dealership?.snapchat_access_token || !dealership?.snapchat_ad_account_id) {
+    if (!readToken(dealership, "snapchat", "access_token") || !dealership?.snapchat_ad_account_id) {
       return NextResponse.json({ error: "Snapchat isn't connected" }, { status: 400 });
     }
     try {
       const creds = {
-        accessToken: dealership.snapchat_access_token,
-        refreshToken: dealership.snapchat_refresh_token ?? "",
+        accessToken: (readToken(dealership, "snapchat", "access_token") ?? ""),
+        refreshToken: readToken(dealership, "snapchat", "refresh_token") ?? "",
         tokenExpiry: dealership.snapchat_token_expiry,
         adAccountId: dealership.snapchat_ad_account_id,
       };
       const { accessToken, refreshed } = await getValidSnapchatAccessToken(creds);
       if (refreshed) {
         await createServiceClient().from("dealerships").update({
-          snapchat_access_token: refreshed.accessToken,
+          ...tokenWrite("snapchat", "access_token", refreshed.accessToken),
           snapchat_token_expiry: refreshed.expiry,
         }).eq("id", dealershipId);
       }
@@ -197,13 +198,13 @@ export async function PATCH(
   }
 
   if (platform === "linkedin") {
-    if (!dealership?.linkedin_access_token || !dealership?.linkedin_ad_account_id) {
+    if (!readToken(dealership, "linkedin", "access_token") || !dealership?.linkedin_ad_account_id) {
       return NextResponse.json({ error: "LinkedIn isn't connected" }, { status: 400 });
     }
     try {
       const creds = {
-        accessToken: dealership.linkedin_access_token,
-        refreshToken: dealership.linkedin_refresh_token ?? "",
+        accessToken: (readToken(dealership, "linkedin", "access_token") ?? ""),
+        refreshToken: readToken(dealership, "linkedin", "refresh_token") ?? "",
         tokenExpiry: dealership.linkedin_token_expiry,
         adAccountId: dealership.linkedin_ad_account_id,
         organizationId: dealership.linkedin_organization_id ?? "",
@@ -211,7 +212,7 @@ export async function PATCH(
       const { accessToken, refreshed } = await getValidLinkedInAccessToken(creds);
       if (refreshed) {
         await createServiceClient().from("dealerships").update({
-          linkedin_access_token: refreshed.accessToken,
+          ...tokenWrite("linkedin", "access_token", refreshed.accessToken),
           linkedin_token_expiry: refreshed.expiry,
         }).eq("id", dealershipId);
       }

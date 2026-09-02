@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { getValidGoogleAdsAccessToken, launchGoogleCampaign, type GoogleAdFormat } from "@/lib/ads/googleAds";
+import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 // P3 piece 6 — Google Ads launch, Phase 2 of the same two-phase flow
 // Meta uses: /api/ads/preview already generated the copy (and, for
@@ -40,11 +41,17 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, booking_slug, google_ads_access_token, google_ads_refresh_token, google_ads_token_expiry, google_ads_customer_id")
+    .select("dealership_name, booking_slug, google_ads_access_token, google_ads_access_token_encrypted, google_ads_refresh_token, google_ads_refresh_token_encrypted, google_ads_token_expiry, google_ads_customer_id")
     .eq("id", dealershipId)
     .single();
 
-  if (!dealership?.google_ads_refresh_token || !dealership?.google_ads_customer_id) {
+  // Encrypted column first, plaintext fallback while the backfill
+  // is pending. Null means "not connected" — never a decryption
+  // error thrown at a caller that only wanted to launch an ad.
+  const accessTokenValue = readToken(dealership, "google_ads", "access_token");
+  const refreshTokenValue = readToken(dealership, "google_ads", "refresh_token");
+
+  if (!refreshTokenValue || !dealership?.google_ads_customer_id) {
     return NextResponse.json({ error: "Google Ads isn't connected yet — connect it in Integrations first." }, { status: 400 });
   }
 
@@ -73,15 +80,15 @@ export async function POST(request: Request) {
 
   try {
     const creds = {
-      accessToken: dealership.google_ads_access_token ?? "",
-      refreshToken: dealership.google_ads_refresh_token,
+      accessToken: accessTokenValue ?? "",
+      refreshToken: refreshTokenValue,
       tokenExpiry: dealership.google_ads_token_expiry,
       customerId: String(dealership.google_ads_customer_id).replace(/-/g, ""),
     };
     const { accessToken, refreshed } = await getValidGoogleAdsAccessToken(creds);
     if (refreshed) {
       await service.from("dealerships").update({
-        google_ads_access_token: refreshed.accessToken,
+        ...tokenWrite("google_ads", "access_token", refreshed.accessToken),
         google_ads_token_expiry: refreshed.expiry,
       }).eq("id", dealershipId);
     }

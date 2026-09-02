@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -65,8 +66,8 @@ export async function GET(request: Request) {
       .from("dealerships")
       .update({
         google_ads_email: userInfo.email ?? null,
-        google_ads_access_token: access_token,
-        google_ads_refresh_token: refresh_token,
+        ...tokenWrite("google_ads", "access_token", access_token),
+        ...(refresh_token ? tokenWrite("google_ads", "refresh_token", refresh_token) : {}),
         google_ads_token_expiry: new Date(Date.now() + expires_in * 1000).toISOString(),
         google_ads_customer_id: customerId,
       })
