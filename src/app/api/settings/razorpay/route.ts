@@ -22,7 +22,7 @@ export async function GET() {
     .single();
   return NextResponse.json({
     keyId: dealership?.razorpay_key_id ?? "",
-    hasSecret: Boolean(dealership?.razorpay_key_secret_encrypted || dealership?.razorpay_key_secret),
+    hasSecret: Boolean(dealership?.razorpay_key_secret_encrypted),
   });
 }
 

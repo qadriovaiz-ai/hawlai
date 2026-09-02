@@ -1,8 +1,21 @@
 // ------------------------------------------------------------------
 // Backfill: encrypt existing payment and commerce secrets. R1 phase 1.
 // ------------------------------------------------------------------
-// Run AFTER migration 160, BEFORE migration 161 (which drops the
-// plaintext columns).
+// OBSOLETE as of migration 164, which dropped the plaintext columns
+// this reads FROM. It will now fail with column-does-not-exist, which
+// is the correct outcome: there is nothing left to migrate.
+//
+// Kept rather than deleted as the record of how the cutover was done —
+// and because the same shape is the template for the 14 marketing
+// OAuth token columns still stored in plaintext.
+//
+// When it ran on 2026-09-02 it found 0 values to encrypt across all 8
+// dealerships: no business had ever connected Razorpay, Shopify or
+// WooCommerce. The encryption work was therefore forward-looking, not
+// a rescue of exposed data.
+// ------------------------------------------------------------------
+// Ran AFTER migration 160 and BEFORE migration 164 (the drop).
+// Migration 161 is unrelated — it is the marketing_knowledge RLS fix.
 //
 //   npx tsx scripts/backfill-commerce-secrets.ts          # dry run
 //   npx tsx scripts/backfill-commerce-secrets.ts --write  # apply
@@ -137,7 +150,7 @@ async function main() {
   if (write) console.log(`written:         ${written}`);
 
   if (failed > 0) {
-    console.log("\nSome values failed. Do NOT run migration 161 until this reports 0 failures.");
+    console.log("\nSome values failed. Do NOT run the drop migration until this reports 0 failures.");
     process.exit(1);
   }
   if (!write) console.log("\nNothing was changed. Re-run with --write to apply.");

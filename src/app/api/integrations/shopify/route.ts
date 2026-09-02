@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { testShopifyConnection, fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
-import { shopifyAccessToken, encryptedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
+import { shopifyAccessToken, encryptedWrite, clearedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
 
 export async function GET() {
   const supabase = await createClient();
@@ -56,8 +56,6 @@ export async function DELETE() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  // Both columns cleared. Nulling only the plaintext one would leave
-  // the encrypted secret live after the user disconnected the store.
-  await supabase.from("dealerships").update({ shopify_store_url: null, shopify_access_token: null, shopify_access_token_encrypted: null }).eq("id", dealershipId);
+  await supabase.from("dealerships").update({ shopify_store_url: null, ...clearedWrite("shopify_access_token") }).eq("id", dealershipId);
   return NextResponse.json({ success: true });
 }

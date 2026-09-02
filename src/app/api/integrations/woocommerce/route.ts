@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { testWooCommerceConnection, fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
-import { woocommerceConsumerSecret, encryptedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { woocommerceConsumerSecret, encryptedWrite, clearedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 export async function GET() {
   const supabase = await createClient();
@@ -63,9 +63,8 @@ export async function DELETE() {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   await supabase.from("dealerships").update({
-    // Both secret columns cleared — see the Shopify DELETE for why.
     woocommerce_store_url: null, woocommerce_consumer_key: null,
-    woocommerce_consumer_secret: null, woocommerce_consumer_secret_encrypted: null,
+    ...clearedWrite("woocommerce_consumer_secret"),
   }).eq("id", dealershipId);
   return NextResponse.json({ success: true });
 }
