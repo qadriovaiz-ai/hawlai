@@ -7,6 +7,7 @@ import TopBar from "@/components/dashboard/TopBar";
 import MasterBrainWidget from "@/components/dashboard/MasterBrainWidget";
 import MobileTabBar from "@/components/dashboard/MobileTabBar";
 import { resolveActiveMembership } from "@/lib/teamMembership";
+import { resolveOnboardingState, shouldSendToOnboarding } from "@/lib/onboardingState";
 
 export default async function DashboardLayout({
   children,
@@ -44,8 +45,16 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
-  const dealershipName = profile?.dealerships?.dealership_name ?? "My Dealership";
-  const onboardingCompleted = profile?.dealerships?.onboarding_completed ?? true;
+  // The profile query above stays — TopBar needs the whole row. But
+  // the onboarding DECISION comes from the shared resolver, so this
+  // layout cannot disagree with the page it wraps. It previously read
+  // the embedded join independently, which meant a failed embed here
+  // rendered full sidebar chrome around /dashboard/page's onboarding
+  // card. Not a redirect loop like /chat was, but the same root cause:
+  // one fact, read three ways.
+  const onboarding = await resolveOnboardingState(supabase, user.id);
+  const dealershipName = onboarding.dealershipName ?? profile?.dealerships?.dealership_name ?? "My Dealership";
+  const onboardingCompleted = !shouldSendToOnboarding(onboarding);
 
   // No sidebar/nav clutter until the welcome step is done or skipped
   // — matches a clean, single-focus "describe your idea" first screen

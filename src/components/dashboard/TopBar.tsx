@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Bell, LogOut, ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
+import { fetchWithTimeout } from "@/lib/hooks/fetchWithTimeout";
 import { formatRelativeTime } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 
@@ -30,13 +31,25 @@ export default function TopBar({ user, profile }: Props) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    fetch("/api/notifications")
-      .then((r) => r.json())
-      .then((d) => {
-        setNotifications(d.notifications ?? []);
-        setUnreadCount(d.unreadCount ?? 0);
-      })
-      .catch(() => {});
+    // Bounded, and it always settles. The previous version's
+    // `.catch(() => {})` could never run for a request that never
+    // resolved, so a hang was completely silent — see
+    // lib/hooks/fetchWithTimeout.ts.
+    let cancelled = false;
+    fetchWithTimeout<{ notifications: Notification[]; unreadCount: number }>("/api/notifications").then((res) => {
+      if (cancelled) return;
+      if (res.error) {
+        // The bell is not worth an alarm, but it must not silently
+        // claim zero unread when it simply could not look.
+        console.warn("[notifications] could not load:", res.error);
+        return;
+      }
+      setNotifications(res.data?.notifications ?? []);
+      setUnreadCount(res.data?.unreadCount ?? 0);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Opening the dropdown IS the acknowledgement — the dot answers

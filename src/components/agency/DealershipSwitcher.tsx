@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { fetchWithTimeout } from "@/lib/hooks/fetchWithTimeout";
 import { Building2, Check, Loader2, ChevronDown } from "lucide-react";
 
 export default function DealershipSwitcher() {
@@ -12,7 +13,19 @@ export default function DealershipSwitcher() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/agency/my-dealerships").then((r) => r.json()).then(setData).finally(() => setLoading(false));
+    // `.finally(() => setLoading(false))` never ran for a request that
+    // never settled, so this component sat in its loading state
+    // indefinitely. Bounded now, and loading always clears.
+    let cancelled = false;
+    fetchWithTimeout<any>("/api/agency/my-dealerships").then((res) => {
+      if (cancelled) return;
+      if (res.data) setData(res.data);
+      else console.warn("[dealership-switcher] could not load:", res.error);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // P3 agency multi-business-switching fix — previously hidden
