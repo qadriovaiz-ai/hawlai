@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { qualifyLead } from "@/lib/ai-engine";
 import { NextResponse } from "next/server";
+import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
@@ -41,14 +42,43 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Read the RAW body, not request.json(). The signature is computed
+  // over the exact bytes Meta sent; parsing and re-serialising changes
+  // them and the digest will never match.
+  const rawBody = await request.text();
+
+  // This IS the authentication for this route. Webhook paths are
+  // excluded from the auth middleware because Meta has no Hawlai
+  // session, so there is no second layer behind this check. Without
+  // it, anyone who learns the URL can insert fabricated leads AND
+  // trigger handleAutoReplyEntry below, making the product send
+  // messages on a dealer's behalf.
+  //
+  // Fails CLOSED, including when FACEBOOK_APP_SECRET is unset. An
+  // unverifiable payload is not trustworthy just because the server is
+  // misconfigured — and the log line for that case says explicitly
+  // that leads will not arrive until it is set.
+  const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
+  if (!signature.valid) {
+    console.error("[meta-leads]", describeRejection(signature));
+    // 401 with no detail. A rejection must not tell an unauthenticated
+    // caller anything about why, or it becomes an oracle.
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: any;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  console.log("[meta-leads] Incoming POST:", JSON.stringify(body, null, 2));
+  // Was JSON.stringify(body) — the entire payload, which carries lead
+  // names, phone numbers and email addresses, into the platform logs
+  // on every delivery. Reduced to the shape needed to debug routing.
+  // Adjacent to this fix rather than part of it, and called out in the
+  // commit rather than slipped in.
+  console.log("[meta-leads] verified POST:", { entries: body?.entry?.length ?? 0 });
 
   const entries = body?.entry ?? [];
   const results = [];

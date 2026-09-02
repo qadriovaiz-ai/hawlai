@@ -104,3 +104,96 @@ describe("subscription verification", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ---- Payload signature verification (added after the audit flagged
+// this endpoint as an unauthenticated write) ----
+
+import crypto from "crypto";
+import { POST } from "@/app/api/webhooks/meta-leads/route";
+import { verifyMetaSignature } from "@/lib/webhooks/metaSignature";
+
+const APP_SECRET = "test-app-secret";
+
+function sign(body: string, secret = APP_SECRET) {
+  return "sha256=" + crypto.createHmac("sha256", secret).update(body, "utf8").digest("hex");
+}
+
+function postRequest(body: string, signature: string | null) {
+  return new Request("https://example.test/api/webhooks/meta-leads", {
+    method: "POST",
+    body,
+    headers: signature ? { "x-hub-signature-256": signature } : {},
+  });
+}
+
+describe("payload signature", () => {
+  const body = JSON.stringify({ entry: [{ id: "page-1", changes: [] }] });
+
+  beforeEach(() => {
+    process.env.FACEBOOK_APP_SECRET = APP_SECRET;
+  });
+
+  it("accepts a correctly signed payload", () => {
+    expect(verifyMetaSignature(body, sign(body))).toEqual({ valid: true });
+  });
+
+  it("rejects a payload signed with the wrong secret", () => {
+    expect(verifyMetaSignature(body, sign(body, "wrong-secret"))).toEqual({ valid: false, reason: "mismatch" });
+  });
+
+  it("rejects a tampered body under a valid-looking signature", () => {
+    // The forgery that matters: an attacker replaying a captured
+    // signature against a payload of their own leads.
+    const signature = sign(body);
+    const tampered = JSON.stringify({ entry: [{ id: "attacker-page", changes: [] }] });
+    expect(verifyMetaSignature(tampered, signature).valid).toBe(false);
+  });
+
+  it("rejects a missing signature header", () => {
+    expect(verifyMetaSignature(body, null)).toEqual({ valid: false, reason: "missing_header" });
+  });
+
+  it("rejects a malformed header", () => {
+    expect(verifyMetaSignature(body, "sha1=abc").valid).toBe(false);
+    expect(verifyMetaSignature(body, "garbage").valid).toBe(false);
+  });
+
+  it("does not throw on a short signature", () => {
+    // timingSafeEqual throws on length mismatch; the length guard
+    // before it is what keeps this a rejection rather than a crash.
+    expect(() => verifyMetaSignature(body, "sha256=abc")).not.toThrow();
+    expect(verifyMetaSignature(body, "sha256=abc").valid).toBe(false);
+  });
+
+  it("FAILS CLOSED when the app secret is not configured", () => {
+    delete process.env.FACEBOOK_APP_SECRET;
+    // An unverifiable payload is not trustworthy just because the
+    // server is misconfigured.
+    expect(verifyMetaSignature(body, sign(body))).toEqual({ valid: false, reason: "not_configured" });
+  });
+});
+
+describe("POST handler rejects unsigned requests", () => {
+  const body = JSON.stringify({ entry: [] });
+
+  beforeEach(() => {
+    process.env.FACEBOOK_APP_SECRET = APP_SECRET;
+  });
+
+  it("returns 401 with no signature", async () => {
+    const res = await POST(postRequest(body, null));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 for a bad signature", async () => {
+    const res = await POST(postRequest(body, sign(body, "wrong")));
+    expect(res.status).toBe(401);
+  });
+
+  it("does not explain WHY it rejected", async () => {
+    const res = await POST(postRequest(body, null));
+    const text = await res.text();
+    // A detailed rejection turns the endpoint into an oracle.
+    expect(text).not.toMatch(/signature|secret|hmac/i);
+  });
+});
