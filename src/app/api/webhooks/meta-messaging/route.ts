@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
+import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
 
 // Kept as a standalone endpoint in case a separate Callback URL is
 // ever configured for this specifically, but in practice Meta only
@@ -22,9 +23,23 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Raw body: the digest is over the exact bytes Meta sent, so parsing
+  // and re-serialising would never match. Same reasoning as meta-leads.
+  const rawBody = await request.text();
+
+  // This route runs handleAutoReplyEntry directly, so an unsigned
+  // payload here is not just fake data — it makes the product send
+  // messages on a dealer's behalf to whoever the payload names. Fails
+  // closed, including when FACEBOOK_APP_SECRET is unset.
+  const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
+  if (!signature.valid) {
+    console.error("[meta-messaging]", describeRejection(signature));
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: any;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }

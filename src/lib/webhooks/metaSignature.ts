@@ -24,11 +24,13 @@
 // — and the signature will never match. Callers must read the body
 // with request.text() and parse it themselves afterwards.
 //
-// ALSO MISSING VERIFICATION, recorded not fixed (same class, out of
-// scope for this pass): /api/webhooks/meta-messaging,
-// /api/webhooks/whatsapp, /api/webhooks/vapi. meta-messaging uses this
-// identical scheme and can be fixed with one call to the function
-// below. /api/webhooks/resend already verifies its own signature.
+// USED BY: /api/webhooks/meta-leads and /api/webhooks/meta-messaging.
+// Both run handleAutoReplyEntry, so an unsigned payload on either can
+// make the product send messages on a dealer's behalf.
+//
+// STILL MISSING VERIFICATION, recorded not fixed (different schemes,
+// so not a one-line change): /api/webhooks/whatsapp and
+// /api/webhooks/vapi. /api/webhooks/resend already verifies its own.
 // ------------------------------------------------------------------
 
 import crypto from "crypto";

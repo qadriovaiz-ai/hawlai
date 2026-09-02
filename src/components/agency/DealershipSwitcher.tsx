@@ -17,7 +17,7 @@ export default function DealershipSwitcher() {
     // never settled, so this component sat in its loading state
     // indefinitely. Bounded now, and loading always clears.
     let cancelled = false;
-    fetchWithTimeout<any>("/api/agency/my-dealerships").then((res) => {
+    fetchWithTimeout<any>("/api/agency/my-dealerships", { dedupeKey: "my-dealerships" }).then((res) => {
       if (cancelled) return;
       if (res.data) setData(res.data);
       else console.warn("[dealership-switcher] could not load:", res.error);

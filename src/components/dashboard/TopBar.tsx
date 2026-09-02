@@ -36,7 +36,7 @@ export default function TopBar({ user, profile }: Props) {
     // resolved, so a hang was completely silent — see
     // lib/hooks/fetchWithTimeout.ts.
     let cancelled = false;
-    fetchWithTimeout<{ notifications: Notification[]; unreadCount: number }>("/api/notifications").then((res) => {
+    fetchWithTimeout<{ notifications: Notification[]; unreadCount: number }>("/api/notifications", { dedupeKey: "notifications" }).then((res) => {
       if (cancelled) return;
       if (res.error) {
         // The bell is not worth an alarm, but it must not silently
