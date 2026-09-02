@@ -48,6 +48,28 @@ const RING_ENV: Record<KeyRing, string> = {
   commerce: "COMMERCE_ENCRYPTION_KEY",
 };
 
+// ---- Key rotation -------------------------------------------------
+//
+// Before this, both keys were unrecoverable: changing or losing one
+// permanently invalidated every value encrypted under it, with no
+// migration path. For Canva that meant every user reconnecting; for
+// commerce it meant checkout broken for every merchant.
+//
+// Rotation works by reading under EITHER key while writing only under
+// the current one. Set <RING>_ENCRYPTION_KEY_PREVIOUS to the retiring
+// key for the duration of a rotation, then remove it once the re-key
+// script reports everything migrated.
+//
+// This needs no format change and no key id in the payload, because
+// GCM authenticates: decrypting with the wrong key FAILS rather than
+// returning plausible garbage. Trying the current key and falling back
+// to the previous one is therefore safe in a way it would not be under
+// CBC, where a wrong key yields bytes that look like data.
+const RING_ENV_PREVIOUS: Record<KeyRing, string> = {
+  canva: "CANVA_TOKEN_ENCRYPTION_KEY_PREVIOUS",
+  commerce: "COMMERCE_ENCRYPTION_KEY_PREVIOUS",
+};
+
 /**
  * Read per call, not at module load. Module-load validation would take
  * the whole app down on boot over a missing key — including every page
@@ -69,22 +91,48 @@ function readRawKey(ring: KeyRing): string | undefined {
   }
 }
 
+function readPreviousRawKey(ring: KeyRing): string | undefined {
+  switch (ring) {
+    case "canva":
+      return process.env.CANVA_TOKEN_ENCRYPTION_KEY_PREVIOUS;
+    case "commerce":
+      return process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS;
+  }
+}
+
+/** Accepts hex or base64 so whoever sets it can paste whatever their key generator produced. */
+function parseKey(raw: string, envName: string): Buffer {
+  const key = /^[0-9a-fA-F]{64}$/.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+  if (key.length !== KEY_BYTES) {
+    throw new Error(
+      `${envName} must decode to ${KEY_BYTES} bytes (got ${key.length}). Generate one with: openssl rand -hex 32`
+    );
+  }
+  return key;
+}
+
 function getKey(ring: KeyRing): Buffer {
   const raw = readRawKey(ring);
   if (!raw) {
     throw new Error(`${RING_ENV[ring]} is not set — these secrets cannot be stored or read.`);
   }
+  return parseKey(raw, RING_ENV[ring]);
+}
 
-  // Accepts hex or base64 so whoever sets it can paste whatever their
-  // key generator produced, rather than guessing an encoding.
-  const key = /^[0-9a-fA-F]{64}$/.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+/** The retiring key, when a rotation is in progress. Null otherwise. */
+function getPreviousKey(ring: KeyRing): Buffer | null {
+  const raw = readPreviousRawKey(ring);
+  if (!raw) return null;
+  return parseKey(raw, RING_ENV_PREVIOUS[ring]);
+}
 
-  if (key.length !== KEY_BYTES) {
-    throw new Error(
-      `${RING_ENV[ring]} must decode to ${KEY_BYTES} bytes (got ${key.length}). Generate one with: openssl rand -hex 32`
-    );
+/** True while a rotation is in progress — the previous key is still configured. */
+export function isRotationInProgress(ring: KeyRing): boolean {
+  try {
+    return getPreviousKey(ring) !== null;
+  } catch {
+    return false;
   }
-  return key;
 }
 
 /**
@@ -122,10 +170,45 @@ export function decryptSecret(payload: string, ring: KeyRing): string {
   const [version, ivB64, tagB64, dataB64] = parts;
   if (version !== VERSION) throw new Error(`Stored secret uses unknown format "${version}".`);
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, getKey(ring), Buffer.from(ivB64, "base64"));
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  // Current key first, then the retiring one if a rotation is in
+  // progress. Safe to try both because GCM's auth tag makes a
+  // wrong-key attempt FAIL rather than return plausible bytes — the
+  // property that lets rotation work without storing a key id.
+  const keys: Buffer[] = [getKey(ring)];
+  const previous = getPreviousKey(ring);
+  if (previous) keys.push(previous);
 
-  return Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]).toString("utf8");
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivB64, "base64"));
+      decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+      return Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]).toString("utf8");
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Stored secret could not be decrypted.");
+}
+
+/**
+ * Does this value already use the CURRENT key?
+ *
+ * The re-key script's idempotency check: a value that decrypts under
+ * the current key alone has already been migrated and must be left
+ * untouched, so a re-run resumes rather than re-encrypting everything.
+ */
+export function isUnderCurrentKey(payload: string, ring: KeyRing): boolean {
+  const parts = payload.split(":");
+  if (parts.length !== 4 || parts[0] !== VERSION) return false;
+  try {
+    const decipher = crypto.createDecipheriv(ALGORITHM, getKey(ring), Buffer.from(parts[1], "base64"));
+    decipher.setAuthTag(Buffer.from(parts[2], "base64"));
+    Buffer.concat([decipher.update(Buffer.from(parts[3], "base64")), decipher.final()]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** True when the ring's key is present and usable. */

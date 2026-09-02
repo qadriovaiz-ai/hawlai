@@ -141,3 +141,90 @@ describe("key validation", () => {
     process.env.COMMERCE_ENCRYPTION_KEY = saved;
   });
 });
+
+// ---- Key rotation (R6) ----
+//
+// Before this existed, both keys were unrecoverable: changing one
+// permanently invalidated everything encrypted under it. These assert
+// the property that makes rotation possible — reading under either key
+// while writing only under the current one — and the idempotency check
+// the re-key script depends on to be safely interruptible.
+
+describe("key rotation", () => {
+  const OLD_KEY = "1".repeat(64);
+  const NEW_KEY = "2".repeat(64);
+
+  it("reads a value written under the PREVIOUS key", async () => {
+    const { encryptSecret, decryptSecret } = await mod();
+    process.env.COMMERCE_ENCRYPTION_KEY = OLD_KEY;
+    const underOldKey = encryptSecret("legacy-secret", "commerce");
+
+    // Rotation begins: new key current, old key retiring.
+    process.env.COMMERCE_ENCRYPTION_KEY = NEW_KEY;
+    process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS = OLD_KEY;
+
+    expect(decryptSecret(underOldKey, "commerce")).toBe("legacy-secret");
+  });
+
+  it("writes only under the CURRENT key during rotation", async () => {
+    const { encryptSecret, decryptSecret, isUnderCurrentKey } = await mod();
+    process.env.COMMERCE_ENCRYPTION_KEY = NEW_KEY;
+    process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS = OLD_KEY;
+
+    const fresh = encryptSecret("new-secret", "commerce");
+    expect(isUnderCurrentKey(fresh, "commerce")).toBe(true);
+
+    // And it must NOT be readable once the old key alone remains —
+    // proving it was written with the new one.
+    process.env.COMMERCE_ENCRYPTION_KEY = OLD_KEY;
+    delete process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS;
+    expect(() => decryptSecret(fresh, "commerce")).toThrow();
+  });
+
+  it("distinguishes already-migrated values from ones still on the old key", async () => {
+    const { encryptSecret, isUnderCurrentKey } = await mod();
+    process.env.COMMERCE_ENCRYPTION_KEY = OLD_KEY;
+    delete process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS;
+    const legacy = encryptSecret("legacy", "commerce");
+
+    process.env.COMMERCE_ENCRYPTION_KEY = NEW_KEY;
+    process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS = OLD_KEY;
+    const migrated = encryptSecret("migrated", "commerce");
+
+    // This is the re-key script's idempotency check: a re-run must
+    // skip what it already did rather than churn every row.
+    expect(isUnderCurrentKey(legacy, "commerce")).toBe(false);
+    expect(isUnderCurrentKey(migrated, "commerce")).toBe(true);
+  });
+
+  it("reports whether a rotation is in progress", async () => {
+    const { isRotationInProgress } = await mod();
+    process.env.COMMERCE_ENCRYPTION_KEY = NEW_KEY;
+    process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS = OLD_KEY;
+    expect(isRotationInProgress("commerce")).toBe(true);
+
+    delete process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS;
+    expect(isRotationInProgress("commerce")).toBe(false);
+  });
+
+  it("still fails on a value encrypted under a THIRD, unknown key", async () => {
+    const { encryptSecret, decryptSecret } = await mod();
+    process.env.COMMERCE_ENCRYPTION_KEY = "3".repeat(64);
+    delete process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS;
+    const stranger = encryptSecret("stranger", "commerce");
+
+    process.env.COMMERCE_ENCRYPTION_KEY = NEW_KEY;
+    process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS = OLD_KEY;
+    // Trying two keys must not become "accept anything".
+    expect(() => decryptSecret(stranger, "commerce")).toThrow();
+  });
+
+  it("keeps the rings independent during rotation", async () => {
+    const { encryptSecret, decryptSecret } = await mod();
+    process.env.COMMERCE_ENCRYPTION_KEY = NEW_KEY;
+    process.env.COMMERCE_ENCRYPTION_KEY_PREVIOUS = OLD_KEY;
+    const commerceValue = encryptSecret("commerce-only", "commerce");
+    // Rotating commerce must not make canva able to read its values.
+    expect(() => decryptSecret(commerceValue, "canva")).toThrow();
+  });
+});
