@@ -22,6 +22,51 @@ import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
 // is set as an env var — we check for it here. If CRON_SECRET isn't
 // set yet, the route still works (useful while testing) but logs a
 // warning, since it'd otherwise be publicly triggerable.
+// ------------------------------------------------------------------
+// SUBSYSTEM GROUPS — audit item R7.
+// ------------------------------------------------------------------
+// All fifteen subsystems used to run in ONE invocation, sequentially,
+// for every dealership. A timeout partway through silently skipped
+// every later subsystem for every remaining tenant, and the run still
+// reported success for whatever it had managed.
+//
+// Worse, and only found while fixing this: THIS ROUTE NEVER SET
+// maxDuration. Other long routes in this codebase set 300 explicitly;
+// this one ran on the platform default, which is far shorter than a
+// loop containing several LLM calls per dealership needs. The
+// "timeout partway through" in the audit finding was not hypothetical
+// — it was the likely steady state.
+//
+// Split by COST rather than per-dealership fan-out. Fan-out needs a
+// queue or self-invocation, which is a lot of machinery for eight
+// tenants, and it would not help the case that actually hurts: one
+// tenant with enough data to exhaust a single budget. Grouping gives
+// the slow work its own budget so it cannot starve the fast work,
+// which is what the finding is about.
+type SubsystemKey =
+  | "daily_autopilot" | "content_autopilot" | "report_snapshots"
+  | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
+  | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
+  | "lead_scoring" | "stale_approvals";
+
+const GROUPS: Record<string, SubsystemKey[]> = {
+  // LLM-backed and slowest. Isolated so a slow Claude call cannot eat
+  // the budget that lead scoring and approval checks need.
+  heavy: ["daily_autopilot", "content_autopilot", "report_snapshots"],
+  // Third-party APIs — slow for reasons outside our control.
+  integrations: ["email_automation", "workflows", "competitor_alerts", "topic_alerts", "google_reviews"],
+  // Database-only and fast. These are the ones that must never be
+  // starved, because they are what surfaces work waiting on a human.
+  signals: ["budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "stale_approvals"],
+};
+
+/** Every subsystem, for a manual "run everything" invocation. */
+const ALL: SubsystemKey[] = [...GROUPS.heavy, ...GROUPS.integrations, ...GROUPS.signals];
+
+// Matches the other long-running routes in this codebase. Without it
+// this route inherited the platform default — see the note above.
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
@@ -36,48 +81,111 @@ export async function GET(request: Request) {
     console.warn("[autopilot] CRON_SECRET is not set — this endpoint is currently unprotected.");
   }
 
+  // Which slice of the work this invocation is responsible for.
+  // Absent = everything, so a manual call still runs the full set.
+  const groupParam = new URL(request.url).searchParams.get("group");
+  const subsystems = groupParam ? GROUPS[groupParam] : ALL;
+  if (!subsystems) {
+    return NextResponse.json(
+      { error: `Unknown group "${groupParam}". Expected one of: ${Object.keys(GROUPS).join(", ")}` },
+      { status: 400 }
+    );
+  }
+
   const supabase = createServiceClient();
   const { data: dealerships, error } = await supabase.from("dealerships").select("id, business_category");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Every subsystem call below is wrapped in runAndLog() — same
-  // isolation the individual try/catch blocks gave before (one
-  // subsystem failing never blocks the next), now also writing a
-  // uniform automation_run_log row per subsystem per dealership
-  // (migration 126, P0 12c), so "last run"/"success" exists for all
-  // 13, not just the 3 that already had their own logging.
+  // Declared BEFORE any work starts, so a partial run is detectable by
+  // comparison rather than by noticing nothing complained.
+  const expected = (dealerships?.length ?? 0) * subsystems.length;
+  let completed = 0;
+  const failures: { dealershipId: string; subsystem: string; error: string }[] = [];
+
+  // Each subsystem stays wrapped in runAndLog — one failing never
+  // blocks the next, and each writes its own automation_run_log row.
+  // What is new is that the outcome is COUNTED, not just logged.
+  async function run<T>(dealershipId: string, subsystem: SubsystemKey, fn: () => Promise<T>) {
+    const result = await runAndLog(supabase, dealershipId, subsystem, fn);
+    if (result && typeof result === "object" && "error" in result) {
+      failures.push({ dealershipId, subsystem, error: String((result as any).error) });
+    } else {
+      completed++;
+    }
+    return result;
+  }
+
   const results: Record<string, any> = {};
   for (const dealership of dealerships ?? []) {
-    results[dealership.id] = await runAndLog(supabase, dealership.id, "daily_autopilot", () => runDailyAutopilot(supabase, dealership.id));
-    // Reads the snapshot runDailyAutopilot just wrote (via
-    // snapshotCampaignPerformance) — must run after it, not before.
-    results[dealership.id].budgetAlerts = await runAndLog(supabase, dealership.id, "budget_alerts", () => checkCampaignBudgets(supabase, dealership.id));
-    results[dealership.id].emailAutomation = await runAndLog(supabase, dealership.id, "email_automation", () => runEmailAutomation(supabase, dealership.id));
-    results[dealership.id].workflows = await runAndLog(supabase, dealership.id, "workflows", () => runWorkflows(supabase, dealership.id));
-    results[dealership.id].competitorAlerts = await runAndLog(supabase, dealership.id, "competitor_alerts", () => checkCompetitorAlerts(supabase, dealership.id));
-    results[dealership.id].topicAlerts = await runAndLog(supabase, dealership.id, "topic_alerts", () => checkTopicAlerts(supabase, dealership.id));
-    results[dealership.id].reportSnapshots = await runAndLog(supabase, dealership.id, "report_snapshots", () => runReportSnapshots(supabase, dealership.id, dealership.business_category ?? "business"));
-    results[dealership.id].contentAutopilot = await runAndLog(supabase, dealership.id, "content_autopilot", () => runContentAutopilot(supabase, dealership.id));
-    results[dealership.id].googleReviews = await runAndLog(supabase, dealership.id, "google_reviews", () => fetchGoogleReviewsSnapshot(supabase, dealership.id));
-    results[dealership.id].seasonalCalendarEntries = await runAndLog(supabase, dealership.id, "seasonal_calendar", () => syncSeasonalCalendarEntries(supabase, dealership.id));
-    results[dealership.id].atRiskNotifications = await runAndLog(supabase, dealership.id, "churn_detection", () => notifyAtRiskCustomers(supabase, dealership.id));
-    results[dealership.id].coldLeadNotifications = await runAndLog(supabase, dealership.id, "cold_lead_detection", () => notifyColdLeads(supabase, dealership.id));
-    results[dealership.id].leadScores = await runAndLog(supabase, dealership.id, "lead_scoring", () => scoreActiveLeads(supabase, dealership.id));
-    results[dealership.id].staleApprovals = await runAndLog(supabase, dealership.id, "stale_approvals", () => checkStalePendingApprovals(supabase, dealership.id));
+    const id = dealership.id;
+    const category = dealership.business_category ?? "business";
+    results[id] = {};
+    const only = (key: SubsystemKey) => subsystems.includes(key);
+
+    if (only("daily_autopilot")) results[id].dailyAutopilot = await run(id, "daily_autopilot", () => runDailyAutopilot(supabase, id));
+    // Budget alerts read the snapshot daily_autopilot writes, so when
+    // both are in the same group this ordering matters. They are in
+    // DIFFERENT groups now (heavy vs signals), which means signals may
+    // read yesterday's snapshot if heavy has not run yet today —
+    // acceptable for an alert, and called out so it is not a surprise.
+    if (only("budget_alerts")) results[id].budgetAlerts = await run(id, "budget_alerts", () => checkCampaignBudgets(supabase, id));
+    if (only("email_automation")) results[id].emailAutomation = await run(id, "email_automation", () => runEmailAutomation(supabase, id));
+    if (only("workflows")) results[id].workflows = await run(id, "workflows", () => runWorkflows(supabase, id));
+    if (only("competitor_alerts")) results[id].competitorAlerts = await run(id, "competitor_alerts", () => checkCompetitorAlerts(supabase, id));
+    if (only("topic_alerts")) results[id].topicAlerts = await run(id, "topic_alerts", () => checkTopicAlerts(supabase, id));
+    if (only("report_snapshots")) results[id].reportSnapshots = await run(id, "report_snapshots", () => runReportSnapshots(supabase, id, category));
+    if (only("content_autopilot")) results[id].contentAutopilot = await run(id, "content_autopilot", () => runContentAutopilot(supabase, id));
+    if (only("google_reviews")) results[id].googleReviews = await run(id, "google_reviews", () => fetchGoogleReviewsSnapshot(supabase, id));
+    if (only("seasonal_calendar")) results[id].seasonalCalendarEntries = await run(id, "seasonal_calendar", () => syncSeasonalCalendarEntries(supabase, id));
+    if (only("churn_detection")) results[id].atRiskNotifications = await run(id, "churn_detection", () => notifyAtRiskCustomers(supabase, id));
+    if (only("cold_lead_detection")) results[id].coldLeadNotifications = await run(id, "cold_lead_detection", () => notifyColdLeads(supabase, id));
+    if (only("lead_scoring")) results[id].leadScores = await run(id, "lead_scoring", () => scoreActiveLeads(supabase, id));
+    if (only("stale_approvals")) results[id].staleApprovals = await run(id, "stale_approvals", () => checkStalePendingApprovals(supabase, id));
   }
 
   // Platform-wide, so deliberately OUTSIDE the per-dealership loop —
-  // it sums across every business at once rather than checking each
-  // in isolation, which is the whole point (see
-  // platformSpendAlertAgent.ts). Wrapped so a failure here can never
-  // fail the cron run that already did all the per-business work.
+  // it sums across every business at once rather than checking each in
+  // isolation (see platformSpendAlertAgent.ts). Runs with the fast
+  // group, and is not counted in `expected` because it is one call for
+  // the whole platform rather than one per dealership.
   let platformSpend: any = null;
-  try {
-    platformSpend = await checkPlatformDailySpend(supabase);
-  } catch (err: any) {
-    console.error("[autopilot] platform spend check failed:", err.message);
-    platformSpend = { error: err.message };
+  if (!groupParam || groupParam === "signals") {
+    try {
+      platformSpend = await checkPlatformDailySpend(supabase);
+    } catch (err: any) {
+      console.error("[autopilot] platform spend check failed:", err.message);
+      platformSpend = { error: err.message };
+      failures.push({ dealershipId: "-", subsystem: "platform_spend", error: err.message });
+    }
   }
 
-  return NextResponse.json({ ranAt: new Date().toISOString(), dealerships: dealerships?.length ?? 0, results, platformSpend });
+  const partial = completed < expected || failures.length > 0;
+  const summary = {
+    ranAt: new Date().toISOString(),
+    group: groupParam ?? "all",
+    dealerships: dealerships?.length ?? 0,
+    expected,
+    completed,
+    failed: failures.length,
+    failures: failures.slice(0, 20),
+    results,
+    platformSpend,
+  };
+
+  if (partial) {
+    // A NON-2XX is the point. Vercel records a failed cron invocation
+    // and surfaces it in its own monitoring, so an incomplete run is
+    // visible without building an alerting system for it. Returning
+    // 200 with a failure count buried in the body is exactly the
+    // silence the audit flagged.
+    //
+    // Deliberately strict: any subsystem failing for any dealership
+    // marks the run failed. For a once-a-day job, a transient failure
+    // that nobody hears about is worse than an alert that turns out to
+    // be transient.
+    console.error(`[autopilot] PARTIAL RUN group=${groupParam ?? "all"} completed=${completed}/${expected} failed=${failures.length}`);
+    return NextResponse.json(summary, { status: 500 });
+  }
+
+  return NextResponse.json(summary);
 }

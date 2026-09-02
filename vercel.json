@@ -6,8 +6,16 @@
   "outputDirectory": ".next",
   "crons": [
     {
-      "path": "/api/autopilot/daily-run",
+      "path": "/api/autopilot/daily-run?group=signals",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/autopilot/daily-run?group=integrations",
+      "schedule": "20 3 * * *"
+    },
+    {
+      "path": "/api/autopilot/daily-run?group=heavy",
+      "schedule": "40 3 * * *"
     }
   ]
 }
