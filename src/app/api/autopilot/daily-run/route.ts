@@ -49,23 +49,41 @@ type SubsystemKey =
   | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
   | "lead_scoring" | "stale_approvals";
 
+// TWO groups, not three: this project is on Vercel Hobby, which allows
+// exactly two cron entries. The slow work (LLM-backed and third-party
+// APIs) is merged into one group rather than dropping a group
+// entirely, so nothing stops running.
 const GROUPS: Record<string, SubsystemKey[]> = {
-  // LLM-backed and slowest. Isolated so a slow Claude call cannot eat
-  // the budget that lead scoring and approval checks need.
-  heavy: ["daily_autopilot", "content_autopilot", "report_snapshots"],
-  // Third-party APIs — slow for reasons outside our control.
-  integrations: ["email_automation", "workflows", "competitor_alerts", "topic_alerts", "google_reviews"],
-  // Database-only and fast. These are the ones that must never be
-  // starved, because they are what surfaces work waiting on a human.
+  // Database-only and fast, and what surfaces work waiting on a human
+  // — so it runs FIRST and never queues behind LLM calls.
   signals: ["budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "stale_approvals"],
+  // Everything slow: LLM-backed work plus third-party APIs.
+  heavy: [
+    "daily_autopilot", "content_autopilot", "report_snapshots",
+    "email_automation", "workflows", "competitor_alerts", "topic_alerts", "google_reviews",
+  ],
 };
 
 /** Every subsystem, for a manual "run everything" invocation. */
-const ALL: SubsystemKey[] = [...GROUPS.heavy, ...GROUPS.integrations, ...GROUPS.signals];
+const ALL: SubsystemKey[] = [...GROUPS.signals, ...GROUPS.heavy];
 
-// Matches the other long-running routes in this codebase. Without it
-// this route inherited the platform default — see the note above.
-export const maxDuration = 300;
+// 60, not the 300 used by other long routes here: Vercel Hobby caps
+// function duration at 60 seconds. Setting 300 would be aspirational
+// at best and a rejected deployment at worst.
+//
+// WORTH KNOWING, not fixed here: several existing routes in this
+// codebase (master-brain, website-builder, 3d-scenes, the whatsapp
+// webhook) declare maxDuration = 300 while on a plan that caps at 60.
+// They are either being silently capped or would fail on a config
+// change — recorded rather than changed, since altering them is
+// outside this item.
+//
+// CONSEQUENCE FOR THE HEAVY GROUP, stated plainly: eight dealerships
+// times three LLM-backed subsystems will not reliably finish inside 60
+// seconds. The partial-run detection below is what makes that visible
+// instead of silent, and per-dealership batching with a cursor is the
+// real fix if it proves to be a problem.
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;

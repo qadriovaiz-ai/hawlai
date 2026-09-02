@@ -33,8 +33,8 @@ function groupsFromSource(): Record<string, string[]> {
 describe("subsystem grouping", () => {
   const groups = groupsFromSource();
 
-  it("declares the three cost-based groups", () => {
-    expect(Object.keys(groups).sort()).toEqual(["heavy", "integrations", "signals"]);
+  it("declares exactly two groups — Vercel Hobby allows two cron entries", () => {
+    expect(Object.keys(groups).sort()).toEqual(["heavy", "signals"]);
   });
 
   it("covers all fourteen per-dealership subsystems", () => {
@@ -49,12 +49,16 @@ describe("subsystem grouping", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("keeps the LLM-backed work isolated from the fast work", () => {
+  it("keeps the slow work isolated from the fast work", () => {
     // The whole point of the split: a slow Claude call must not be
     // able to eat the budget lead scoring and approval checks need.
     expect(groups.heavy).toContain("daily_autopilot");
     expect(groups.heavy).toContain("content_autopilot");
     expect(groups.heavy).toContain("report_snapshots");
+    // Third-party API work is slow too, and merged into heavy rather
+    // than dropped when the plan forced two groups instead of three.
+    expect(groups.heavy).toContain("google_reviews");
+    expect(groups.heavy).toContain("email_automation");
     expect(groups.signals).toContain("lead_scoring");
     expect(groups.signals).toContain("stale_approvals");
     for (const key of groups.signals) expect(groups.heavy).not.toContain(key);
@@ -95,10 +99,14 @@ describe("cron configuration", () => {
 
 describe("partial-run detection", () => {
   // SOURCE-LEVEL assertions, labelled as such — see the file header.
-  it("sets an explicit maxDuration rather than inheriting the platform default", () => {
+  it("sets an explicit maxDuration within the Hobby plan cap", () => {
     // Its absence is the likely reason the timeout in the audit
-    // finding was the steady state rather than an edge case.
-    expect(source).toMatch(/export const maxDuration = \d+/);
+    // finding was the steady state rather than an edge case. The value
+    // must also be <= 60: Hobby caps there, so a larger number is
+    // aspirational at best and a rejected deploy at worst.
+    const match = source.match(/export const maxDuration = (\d+)/);
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBeLessThanOrEqual(60);
   });
 
   it("counts completed work against a declared expectation", () => {
