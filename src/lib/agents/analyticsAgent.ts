@@ -113,26 +113,26 @@ export async function getCampaignPerformanceState(
 }
 
 /**
- * DEPRECATED for anything user-visible — prefer
- * getCampaignPerformanceState() above.
+ * DEPRECATED. Prefer getCampaignPerformanceState() above.
  *
- * Returns `{ campaigns: [], spend: 0 }` for three different reasons
- * (no campaigns / no Meta token / query failure) with no way for a
- * caller to tell them apart. Kept because 10 call sites still use it
- * and this codebase has no tests to catch a bulk rewrite regression.
+ * Returns `{ campaigns: [], spend: 0 }` for three different reasons —
+ * no campaigns launched, no Meta token, or a failed query — with no
+ * way for a caller to tell them apart.
  *
- * REMAINING CALLERS, to migrate and then delete this function:
- *   src/app/api/ads/[id]/explain/route.ts:29
- *   src/app/api/analytics/growth-metrics/route.ts:16
- *   src/app/api/growth-advisor/generate/route.ts:51
- *   src/app/api/paid-ads/generate/route.ts:26
- *   src/app/api/strategy/route.ts:47
- *   src/app/dashboard/overview/page.tsx:64        (lifetime revenue only — safe, revenue sums our own leads)
- *   src/lib/agents/autopilotAgent.ts:118          (explanation only, AFTER the pause decision — no decision rides on it)
- *   src/lib/agents/masterBrainV2.ts:641, 694, 738
+ * ONE CALLER REMAINS, and it is genuinely safe:
+ *   src/lib/agents/autopilotAgent.ts:118 — verified: the value is used
+ *   only at lines 119-120, to build the comparison set and per-campaign
+ *   figures passed to explainCampaign(). It runs AFTER the pause
+ *   decision, which comes from optimizationAgent's own guarded
+ *   analysis. A false zero here produces a weaker explanation, never a
+ *   wrong action.
  *
- * Two of those are already known-safe, annotated above. The other
- * eight can each show a false zero to a customer.
+ * The overview page was ALSO annotated safe here and was not. Its
+ * lifetime-revenue sum ran over performance.campaigns, which is empty
+ * when the token is missing, so a business with real attributed
+ * revenue showed Rs 0. Fixed; the annotation had been wrong.
+ *
+ * Delete this function once autopilotAgent moves across.
  */
 export async function getCampaignPerformance(
   supabase: any,

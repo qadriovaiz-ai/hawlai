@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
 import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
 import {
   computeRevenueForecast,
@@ -48,8 +48,12 @@ export async function POST(request: Request) {
     const context = `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}. By source: ${JSON.stringify(bySource)}.`;
     result = await generateGrowthOpportunities(name, category, context);
   } else if (taskType === "budget_recommendations") {
-    const performance = await getCampaignPerformance(supabase, dealershipId);
-    const context = performance.campaigns.length > 0
+    const perfState = await getCampaignPerformanceState(supabase, dealershipId);
+    const performance = perfState.state === 'ok' ? perfState.value : { campaigns: [], totals: { spend: 0, leads: 0, cost_per_lead: null } };
+    const unreadable = perfState.state === 'not_connected' || perfState.state === 'error';
+    const context = unreadable
+      ? 'Campaign performance could not be read. Do not recommend budget changes based on past results — say the ad account needs reconnecting first.'
+      : performance.campaigns.length > 0
       ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}, cost/lead ${c.cost_per_lead ?? "—"}`).join("\n")
       : "No campaign performance data yet.";
     result = await generateBudgetRecommendations(name, category, context);

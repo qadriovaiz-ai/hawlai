@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Gauge, IndianRupee, ArrowRight, Rocket, ShieldCheck, Palette } from "lucide-react";
 import { formatDate, formatCurrency, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
-import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
 import { syncOpportunities, getOpenOpportunities } from "@/lib/agents/opportunityAgent";
 import { generateGrowthReport, type GrowthReport } from "@/lib/agents/growthAdvisorAgent";
 import OpportunityFeed from "@/components/dashboard/OpportunityFeed";
@@ -61,7 +61,7 @@ export default async function DashboardOverviewPage({
   // the whole Home screen down; each section degrades on its own.
   const [leadsRes, performanceRes, opportunitiesRes, growthRes, approvalsRes, brandProfileRes] = await Promise.allSettled([
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
-    getCampaignPerformance(supabase, dealershipId),
+    getCampaignPerformanceState(supabase, dealershipId),
     getOpenOpportunities(supabase, dealershipId),
     generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "car dealership"),
     supabase.from("pending_approvals").select("id").eq("dealership_id", dealershipId).eq("status", "pending"),
@@ -69,7 +69,7 @@ export default async function DashboardOverviewPage({
   ]);
 
   const leads = leadsRes.status === "fulfilled" ? leadsRes.value.data : null;
-  const performance = performanceRes.status === "fulfilled" ? performanceRes.value : null;
+  const performanceState = performanceRes.status === "fulfilled" ? performanceRes.value : null;
   const opportunities = opportunitiesRes.status === "fulfilled" ? opportunitiesRes.value : [];
   const growth: GrowthReport | null = growthRes.status === "fulfilled" ? growthRes.value : null;
   const pendingApprovals = approvalsRes.status === "fulfilled" ? (approvalsRes.value.data?.length ?? 0) : 0;
@@ -85,12 +85,18 @@ export default async function DashboardOverviewPage({
   const brandProfileMissing =
     brandProfileRes.status === "fulfilled" && !brandProfileRes.value.data;
 
-  // Lifetime revenue is the one figure still taken from
-  // getCampaignPerformance. It's safe here in a way spend and campaign
-  // counts were not: revenue is summed from our OWN attributed leads,
-  // so a missing Meta token doesn't silently turn a real number into a
-  // zero the way it does for spend.
-  const totalRevenue = performance?.campaigns.reduce((s, c) => s + c.revenue, 0) ?? 0;
+  // I previously annotated this as safe on the grounds that revenue is
+  // summed from our OWN attributed leads. That was wrong. The sum runs
+  // over performance.campaigns, and getCampaignPerformanceState returns
+  // no campaigns when the Meta token is missing — so a business with
+  // real attributed revenue would have shown Rs 0. Same false zero,
+  // just one step further from the token.
+  //
+  // null now, rendered as an em dash, because unreadable is not zero.
+  const totalRevenue =
+    performanceState?.state === 'ok'
+      ? performanceState.value.campaigns.reduce((sum, c) => sum + c.revenue, 0)
+      : null;
   const recentLeads = leads?.slice(0, 5) ?? [];
 
   const scoreColorClass = !growth
@@ -119,7 +125,7 @@ export default async function DashboardOverviewPage({
       color: scoreColorClass,
       title: growth?.headline ?? "Couldn't load right now",
     },
-    { label: "Revenue (Lifetime)", value: formatCurrency(totalRevenue), icon: IndianRupee, color: "bg-green-500/10 text-green-400" },
+    { label: "Revenue (Lifetime)", value: totalRevenue === null ? "—" : formatCurrency(totalRevenue), icon: IndianRupee, color: "bg-green-500/10 text-green-400", title: totalRevenue === null ? "Ad account not connected, so attributed revenue can not be read" : undefined },
   ];
 
   return (

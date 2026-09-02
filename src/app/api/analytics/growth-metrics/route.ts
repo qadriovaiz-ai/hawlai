@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
 
 export async function GET() {
   const supabase = await createClient();
@@ -11,19 +11,24 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const [{ data: leads }, performance] = await Promise.all([
+  const [{ data: leads }, performanceState] = await Promise.all([
     supabase.from("leads").select("status, deal_value, created_at").eq("dealership_id", dealershipId),
-    getCampaignPerformance(supabase, dealershipId),
+    getCampaignPerformanceState(supabase, dealershipId),
   ]);
 
   const allLeads = leads ?? [];
   const converted = allLeads.filter((l: any) => l.status === "converted");
-  const totalSpend = performance.totals.spend;
+
+  // null, not 0, when ad data can't be read. CAC is spend divided by
+  // conversions — a zero spend here yields a CAC of ₹0, which reads as
+  // "customers are free" rather than "we can't see your ad account".
+  const adDataReadable = performanceState.state === "ok";
+  const totalSpend = adDataReadable ? performanceState.value.totals.spend : null;
 
   // CAC — real cost per customer acquired (not just per lead): total ad
   // spend divided by leads that actually converted. Null when there's
   // no spend or no conversions yet, rather than showing a misleading 0.
-  const cac = totalSpend > 0 && converted.length > 0 ? totalSpend / converted.length : null;
+  const cac = totalSpend !== null && totalSpend > 0 && converted.length > 0 ? totalSpend / converted.length : null;
 
   // LTV — average deal value of converted leads. This is a single-
   // purchase estimate based on the deal_value field the dealer enters;
@@ -41,5 +46,8 @@ export async function GET() {
     totalLeads: allLeads.length,
     convertedLeads: converted.length,
     totalSpend,
+    // Lets the caller label the gap instead of rendering a bare dash
+    // that looks like an idle month.
+    adDataReadable,
   });
 }

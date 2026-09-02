@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateMarketingStrategy } from "@/lib/agents/strategyAgent";
-import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { getCampaignPerformanceState, type CampaignPerformance } from "@/lib/agents/analyticsAgent";
 
 export async function GET() {
   const supabase = await createClient();
@@ -44,8 +44,13 @@ export async function POST(request: Request) {
   // / total leads across campaigns that actually generated leads),
   // not an average of each campaign's own ratio, so one low-spend
   // campaign doesn't skew the number.
-  const performance = await getCampaignPerformance(supabase, dealershipId);
-  const withLeads = performance.campaigns.filter((c) => c.leads > 0);
+  const performanceState = await getCampaignPerformanceState(supabase, dealershipId);
+  // null, not an empty array: an unreadable ad account must not
+  // produce a confident "your historical cost per lead is —" that
+  // reads as measured rather than missing.
+  const readableCampaigns: CampaignPerformance[] | null =
+    performanceState.state === "ok" ? performanceState.value.campaigns : null;
+  const withLeads = (readableCampaigns ?? []).filter((c) => c.leads > 0);
   const totalSpend = withLeads.reduce((sum, c) => sum + c.spend, 0);
   const totalLeads = withLeads.reduce((sum, c) => sum + c.leads, 0);
   const historicalCostPerLead = totalLeads > 0 ? totalSpend / totalLeads : null;

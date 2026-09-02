@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/agents/paidAdsAgent";
-import { getCampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -23,10 +23,19 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
-  const performance = await getCampaignPerformance(supabase, dealershipId);
-  const performanceContext = performance.campaigns.length > 0
-    ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}, cost/lead ${c.cost_per_lead ?? "—"}`).join("\n")
-    : null;
+  // Distinguishes "no campaigns yet" from "we cannot read them". The
+  // difference matters because this string is handed to Claude:
+  // telling it there is no campaign data when an ad account is simply
+  // disconnected invites a plan written as if nothing had ever run.
+  const performanceState = await getCampaignPerformanceState(supabase, dealershipId);
+  const performanceContext =
+    performanceState.state === "ok" && performanceState.value.campaigns.length > 0
+      ? performanceState.value.campaigns
+          .map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}, cost/lead ${c.cost_per_lead ?? "—"}`)
+          .join("\n")
+      : performanceState.state === "not_connected" || performanceState.state === "error"
+      ? "Past campaign performance could not be read — do not assume there is none, and do not draw conclusions about what has or has not worked before."
+      : null;
 
   const { output, _fallback } = await generateAdPlan(
     platform,

@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { getCampaignPerformance } from "./analyticsAgent";
+import { getCampaignPerformance, getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
 import { getModel } from "../models";
@@ -638,10 +638,13 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_ad_plan": {
-      const performance = await getCampaignPerformance(supabase, ctx.id);
-      const performanceContext = performance.campaigns.length > 0
-        ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n")
-        : null;
+      const perfState = await getCampaignPerformanceState(supabase, ctx.id);
+      const performanceContext =
+        perfState.state === "ok" && perfState.value.campaigns.length > 0
+          ? perfState.value.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n")
+          : perfState.state === "not_connected" || perfState.state === "error"
+          ? "Past campaign performance could not be read — do not assume there is none."
+          : null;
       const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
       return withBrandVoiceCheck(output, resolvedBrandVoice);
@@ -691,8 +694,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         return output;
       }
       if (input.kind === "budget") {
-        const performance = await getCampaignPerformance(supabase, ctx.id);
-        const context = performance.campaigns.length > 0 ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n") : "No campaign data yet.";
+        const budgetState = await getCampaignPerformanceState(supabase, ctx.id);
+        // "No campaign data yet" used to be said whether the dealer had
+        // no campaigns or an unreadable ad account. Budget advice
+        // written on that false premise is the expensive kind.
+        const context =
+          budgetState.state === "ok" && budgetState.value.campaigns.length > 0
+            ? budgetState.value.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}`).join("\n")
+            : budgetState.state === "not_connected" || budgetState.state === "error"
+            ? "Campaign performance could not be read. Do not recommend budget changes based on past results — say the ad account needs reconnecting first."
+            : "No campaign data yet.";
         const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context, groundingContext) as { output: any; _fallback?: boolean };
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "budget_recommendations", output });
         return output;
@@ -735,8 +746,20 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return { success: true, note: "Noted — I'll remember this going forward." };
     }
     case "get_analytics_summary": {
-      const performance = await getCampaignPerformance(supabase, ctx.id);
-      return performance;
+      const summaryState = await getCampaignPerformanceState(supabase, ctx.id);
+      if (summaryState.state === "ok") return summaryState.value;
+      // Returned as an explicit reason rather than empty totals. This
+      // value goes straight into the chat's reasoning, and zeros here
+      // become "your campaigns produced nothing" in Hawlai's own voice.
+      return {
+        unavailable: true,
+        reason:
+          summaryState.state === "not_connected"
+            ? "The Meta ad account isn't connected, so campaign performance can't be read."
+            : summaryState.state === "error"
+            ? "Campaign performance couldn't be loaded just now."
+            : summaryState.reason,
+      };
     }
     case "generate_marketing_strategy": {
       const { data: competitorRows } = await supabase.from("competitor_intel_items").select("competitor_name, output").eq("dealership_id", ctx.id).limit(3);
