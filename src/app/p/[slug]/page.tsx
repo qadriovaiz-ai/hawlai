@@ -63,7 +63,11 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
 
   const { data: page } = await supabase
     .from("landing_pages")
-    .select("*, dealerships(id, dealership_name, city)")
+    .select(
+      // The dealership's tracking columns are joined in so the tags
+      // below can fall back to them — see the TrackingScripts call.
+      "*, dealerships(id, dealership_name, city, meta_pixel_id, ga_tracking_id, gtm_id)"
+    )
     .eq("slug", slug)
     .eq("published", true)
     .maybeSingle();
@@ -218,7 +222,21 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
       <div className="sm:hidden h-14" />
       <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
       <PageTracker slug={slug} variant={assignedVariant} />
-      <TrackingScripts gaId={page.ga_tracking_id} metaPixelId={page.meta_pixel_id} gtmId={page.gtm_id} />
+      {/* Per-page value FIRST, business-level value as the fallback.
+          Migration 153 moved tracking config to the business level and
+          kept these per-page columns as an override — but the override
+          was never implemented as one: this read only page.*, so a
+          business that configured its pixel in Settings → Integrations
+          got tracking on its storefront and nothing on its landing
+          pages. Verified against production on 2026-09-04: no page had
+          an override set and no business had a pixel set, so nothing
+          was broken YET — the first dealer to configure one would have
+          hit it. */}
+      <TrackingScripts
+        gaId={page.ga_tracking_id ?? dealership?.ga_tracking_id}
+        metaPixelId={page.meta_pixel_id ?? dealership?.meta_pixel_id}
+        gtmId={page.gtm_id ?? dealership?.gtm_id}
+      />
       <ConsentBanner slug={slug} businessName={dealershipName} />
       {page.popup_enabled && page.popup_headline && page.popup_body && (
         <Popup

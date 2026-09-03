@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Check, Bell, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import Link from "next/link";
 
 export default function PopupAndTrackingSettings() {
   const [loading, setLoading] = useState(true);
@@ -91,11 +92,22 @@ export default function PopupAndTrackingSettings() {
 
       {/* Tracking Codes */}
       <div className="card p-5 space-y-3">
-        <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Code2 className="w-4 h-4" /> Tracking Codes</p>
-        <p className="text-xs text-slate-400">Paste your own tracking IDs — Hawlai injects them into your landing page automatically. Hawlai's own analytics (Website Analytics on the Insights page) run regardless of these.</p>
-        <input value={gaId} onChange={(e) => setGaId(e.target.value)} placeholder="Google Analytics ID (e.g. G-XXXXXXX)" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
-        <input value={metaPixelId} onChange={(e) => setMetaPixelId(e.target.value)} placeholder="Meta Pixel ID" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
-        <input value={gtmId} onChange={(e) => setGtmId(e.target.value)} placeholder="Google Tag Manager ID (e.g. GTM-XXXXXXX)" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+        <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Code2 className="w-4 h-4" /> Tracking Codes — this page only</p>
+        {/* These are per-PAGE overrides, not the business setting. They
+            were labelled identically to the business-level fields in
+            Settings → Integrations, so two screens both said "Meta
+            Pixel ID" and neither mentioned the other. The wording now
+            says which is which, and that blank is the normal state. */}
+        <p className="text-xs text-slate-400">
+          Only fill these in if this landing page needs <em>different</em> tracking from the rest of your business.
+          Leave them blank and the page uses your business tracking from{" "}
+          <Link href="/dashboard/settings/integrations" className="text-brand-500 hover:underline">Settings → Integrations</Link>,
+          which is where most businesses should set it once.
+        </p>
+        <input value={gaId} onChange={(e) => setGaId(e.target.value)} placeholder="Override Google Analytics ID (optional)" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+        <input value={metaPixelId} onChange={(e) => setMetaPixelId(e.target.value)} placeholder="Override Meta Pixel ID (optional)" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+        <input value={gtmId} onChange={(e) => setGtmId(e.target.value)} placeholder="Override Google Tag Manager ID (optional)" className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+        <p className="text-[10px] text-slate-400">Hawlai&apos;s own analytics (Website Analytics on the Insights page) run regardless of these.</p>
       </div>
 
       <Button onClick={handleSave} disabled={saving} loading={saving}>
