@@ -39,12 +39,27 @@ describe("business-level fallback", () => {
     expect(join).toContain("gtm_id");
   });
 
+  // String.raw, NOT a plain template literal. The first version of this
+  // used one, so `\s` collapsed to a literal "s" and `\?\?` became a
+  // lazy quantifier — the pattern was defanged before RegExp ever saw
+  // it. It failed loudly here, but the dangerous case is the opposite:
+  // a silently-weakened pattern that matches the buggy code too and
+  // reports green. Hence the negative control below.
+  const fallbackPattern = (field: string) =>
+    new RegExp(String.raw`page\.${field}\s*\?\?\s*dealership\?\.${field}`);
+
   it("prefers the per-page value and falls back to the business one", () => {
     for (const field of ["meta_pixel_id", "ga_tracking_id", "gtm_id"]) {
-      expect(source, `${field} must fall back`).toMatch(
-        new RegExp(`page\.${field}\s*\?\?\s*dealership\?\.${field}`)
-      );
+      expect(source, `${field} must fall back`).toMatch(fallbackPattern(field));
     }
+  });
+
+  it("the pattern above actually rejects the bug it is meant to catch", () => {
+    // Guards the assertion, not the app: if someone re-breaks the
+    // escaping, this fails instead of quietly approving `page.X` alone.
+    expect("metaPixelId={page.meta_pixel_id}").not.toMatch(fallbackPattern("meta_pixel_id"));
+    expect("metaPixelId={dealership?.meta_pixel_id}").not.toMatch(fallbackPattern("meta_pixel_id"));
+    expect("x={page.meta_pixel_id ?? dealership?.meta_pixel_id}").toMatch(fallbackPattern("meta_pixel_id"));
   });
 
   it("does not pass a bare page value for any of the three", () => {
