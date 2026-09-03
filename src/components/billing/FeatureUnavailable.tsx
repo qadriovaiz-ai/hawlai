@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PowerOff } from "lucide-react";
 import { KILL_SWITCH_LABELS, unavailableMessage, type KillSwitchFeature } from "@/lib/featureFlags";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 // The counterpart to UpgradeRequired, for features switched off
 // product-wide rather than locked behind a plan.

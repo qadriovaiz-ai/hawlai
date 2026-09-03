@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Users2, Lock } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
 import AgencyTeamGrid from "@/components/agency/AgencyTeamGrid";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 // P3 piece 7b — manage who reaches which client from one screen.
 // /dashboard/team stays as-is for single-business team management;

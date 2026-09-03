@@ -7,7 +7,8 @@ import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Se
 import ProductPicker from "@/components/ads/ProductPicker";
 import PhotoEditor from "@/components/ads/PhotoEditor";
 import ScoreBadge from "@/components/shared/ScoreBadge";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { Button } from "@/components/ui";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 const EXAMPLES = [
   "Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500",

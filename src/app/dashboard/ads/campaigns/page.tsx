@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Megaphone, ArrowRight, Clock, MapPin, IndianRupee, Users, TrendingDown, FlaskConical } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 import { EmptyState } from "@/components/ui/EmptyState";
 import CampaignStatusToggle from "@/components/ads/CampaignStatusToggle";
 import ExplainCampaignButton from "@/components/ads/ExplainCampaignButton";

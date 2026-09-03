@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
 import { getPortfolioSummaries, computePortfolioTotals } from "@/lib/agents/portfolioAgent";
 import BulkAutomationPanel from "@/components/agency/BulkAutomationPanel";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 // Master audit Part E1 — the highest-value missing Agency-tier
 // feature per the audit: a single screen showing every managed

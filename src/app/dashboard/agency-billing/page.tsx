@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Receipt, Lock } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
 import AgencyBillingView from "@/components/agency/AgencyBillingView";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 // P3 piece 7c — a reporting view of what each client actually costs
 // to run, for an agency re-billing its own clients. Deliberately not a

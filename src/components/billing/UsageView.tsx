@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Crown, CheckCircle2, MessageSquare, PhoneCall, Megaphone, Image as ImageIcon, Video, Mic, Palette, Globe, Search } from "lucide-react";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 interface PlanLimits {
   plan: string;

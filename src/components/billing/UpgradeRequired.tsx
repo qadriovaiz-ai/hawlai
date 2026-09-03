@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { GATED_FEATURE_LABELS, GATED_FEATURE_MIN_PLAN, PLAN_LABELS, type GatedFeatureKey } from "@/lib/plans";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 export default function UpgradeRequired({ feature }: { feature: GatedFeatureKey }) {
   const label = GATED_FEATURE_LABELS[feature];

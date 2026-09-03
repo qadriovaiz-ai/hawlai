@@ -6,7 +6,7 @@ import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon } f
 import MarkCalledButton from "@/components/calls/MarkCalledButton";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DraftMessagePreview from "@/components/leads/DraftMessagePreview";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export default async function QueuePage() {

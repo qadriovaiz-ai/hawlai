@@ -1,4 +1,8 @@
-export { Button, buttonClasses, type ButtonProps, type ButtonVariant, type ButtonSize } from "./Button";
+// buttonClasses is re-exported from the NON-client module on purpose:
+// routing it through Button.tsx ("use client") makes it a client
+// export, and every server component calling it throws at render.
+export { Button, type ButtonProps } from "./Button";
+export { buttonClasses, type ButtonVariant, type ButtonSize } from "./buttonClasses";
 export { Card, type CardProps, type CardPadding } from "./Card";
 export { Badge, type BadgeProps, type BadgeTone } from "./Badge";
 export { Input } from "./Input";

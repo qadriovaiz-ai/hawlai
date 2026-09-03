@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, PhoneCall, Clock } from "lucide-react";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 interface Lead {
   id: string;

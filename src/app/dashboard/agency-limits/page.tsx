@@ -4,7 +4,7 @@ import Link from "next/link";
 import { SlidersHorizontal, Lock } from "lucide-react";
 import { getDealershipPlanLimits, hasFeature, GATED_FEATURE_MIN_PLAN, PLAN_LABELS } from "@/lib/plans";
 import ClientLimitsView from "@/components/agency/ClientLimitsView";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 // Phase 4 / 2a — per-client usage caps for agency operators.
 export default async function AgencyLimitsPage() {
