@@ -9,6 +9,64 @@ it. Delete an entry when it is done.
 
 ---
 
+## 0. Route-level smoke tests — render every page, assert non-500
+
+**Status:** proposed, highest value of anything on this list
+**Unblocked by:** nothing
+
+TWO production incidents in two days got past a green build and a full
+test suite, because both were RUNTIME failures the compiler cannot
+see:
+
+- **2026-09-02** — a redirect loop plus a request storm left the
+  dashboard blank. `tsc` and `next build` both passed.
+- **2026-09-03** — `buttonClasses` was a client export called from
+  thirteen server components. Every one of those pages returned 500.
+  263 tests passed and the build was green the entire time.
+
+The second is the clearer argument. A dozen pages were dead for weeks
+and nothing in the repository could tell, because no test and no build
+step ever *rendered* them. `next build` prerenders only static routes;
+everything behind auth is dynamic and therefore never executed.
+
+**What would catch this family:** a test that boots the app, requests
+each route, and asserts the response is not a 5xx. It does not need to
+assert content — the entire value is in executing the render at all.
+Authenticated routes need a session, so this likely means Playwright
+with a seeded test user, or a request-level harness with a mocked
+Supabase session.
+
+**Why it is worth the setup cost:** it is the only check that covers
+server/client boundary violations, missing env vars at runtime, RLS
+denials on a page query, and dropped-column references — four distinct
+failure classes, none visible to `tsc`, all of which have now actually
+happened here.
+
+---
+
+## 0b. Nobody is reading CI
+
+**Status:** needs a decision, not code
+
+The GitHub Actions workflow runs typecheck, tests and build on every
+push to `main`. It exists precisely so a broken commit fails before a
+deploy does.
+
+On 2026-09-03, commit `ae1b96f` shipped a build-breaking import.
+Vercel surfaced it first; the Actions run either had not finished or
+had gone red unread. Either way the signal existed and was not acted
+on.
+
+**A CI pipeline nobody watches is close to no CI at all.** Options,
+roughly in order of effort: branch protection so `main` cannot take a
+red commit; a notification on failure (Slack, email); or simply making
+it habit to check the run before deploying.
+
+Worth deciding deliberately rather than assuming the workflow is doing
+a job it is not.
+
+---
+
 ## 1. Encrypt `fb_page_access_token` and `instagram_access_token`
 
 **Status:** blocked on live testing
