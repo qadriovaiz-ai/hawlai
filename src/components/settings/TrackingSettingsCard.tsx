@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Radio, CheckCircle2 } from "lucide-react";
+import { Loader2, Radio, CheckCircle2, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import type { ConversionAction } from "@/lib/ads/googleConversions";
+
+type ConversionOption = ConversionAction;
 
 // Per-business tracking IDs (retargeting piece 3/7).
 //
@@ -26,6 +29,27 @@ export default function TrackingSettingsCard() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // null = not looked up yet; [] = looked up and Google had none.
+  // Collapsing these to [] would show "create one first" before the
+  // dealer has even asked us to check.
+  const [conversions, setConversions] = useState<ConversionOption[] | null>(null);
+  const [loadingConversions, setLoadingConversions] = useState(false);
+  const [conversionsError, setConversionsError] = useState<string | null>(null);
+
+  async function loadConversions() {
+    setConversionsError(null);
+    setLoadingConversions(true);
+    try {
+      const res = await fetch("/api/integrations/google-ads/conversions", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't read your conversion actions");
+      setConversions(data.actions ?? []);
+    } catch (err: any) {
+      setConversionsError(err.message);
+    } finally {
+      setLoadingConversions(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/settings/tracking")
@@ -120,29 +144,62 @@ export default function TrackingSettingsCard() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 mb-1">Google Ads conversion ID</label>
-            <input
-              value={googleConversionId}
-              onChange={(e) => { setGoogleConversionId(e.target.value); setSaved(false); }}
-              placeholder="AW-123456789"
-              className="input text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 mb-1">Conversion label</label>
-            <input
-              value={googleConversionLabel}
-              onChange={(e) => { setGoogleConversionLabel(e.target.value); setSaved(false); }}
-              placeholder="e.g. AbC-D_efG"
-              className="input text-sm"
-            />
-          </div>
+        {/* A4 — was two text boxes and an instruction to open Google
+            Ads → Goals → Conversions and copy two fragments out of a
+            tag snippet. Now the conversion actions are read over the
+            API and the dealer clicks one. */}
+        <div>
+          <label className="block text-[11px] font-medium text-slate-500 mb-1">Record sales against Google campaigns</label>
+          {googleConversionId && googleConversionLabel && !conversions ? (
+            <div className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-100 rounded-lg p-2.5">
+              <span className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                <span className="truncate">Tracking {googleConversionId}</span>
+              </span>
+              <button onClick={loadConversions} disabled={loadingConversions} className="text-[10px] text-brand-600 hover:underline shrink-0">
+                {loadingConversions ? "Loading..." : "Change"}
+              </button>
+            </div>
+          ) : !conversions ? (
+            <Button variant="secondary" size="sm" onClick={loadConversions} loading={loadingConversions} className="w-full justify-center">
+              {!loadingConversions && <Search className="w-3.5 h-3.5" />} Find my conversion actions
+            </Button>
+          ) : null}
+
+          {conversions?.length === 0 && (
+            <p className="text-[10px] text-slate-400 mt-1">
+              No conversion actions found in your Google Ads account. Create one in Google Ads first — a purchase or lead
+              action — then check again.
+            </p>
+          )}
+
+          {conversions && conversions.length > 0 && (
+            <div className="space-y-1.5 mt-1">
+              {conversions.map((c) => {
+                const active = c.conversionId === googleConversionId && c.conversionLabel === googleConversionLabel;
+                return (
+                  <button
+                    key={c.resourceName}
+                    onClick={() => {
+                      setGoogleConversionId(c.conversionId ?? "");
+                      setGoogleConversionLabel(c.conversionLabel ?? "");
+                      setConversions(null);
+                      setSaved(false);
+                    }}
+                    className={`w-full text-left p-2 rounded-lg border text-xs transition-colors ${
+                      active ? "border-purple-400 bg-purple-50" : "border-slate-200 bg-slate-100 hover:border-purple-400"
+                    }`}
+                  >
+                    <span className="font-medium text-slate-900">{c.name}</span>
+                    {c.category && <span className="text-[10px] text-slate-400 ml-1.5">{c.category.toLowerCase()}</span>}
+                  </button>
+                );
+              })}
+              <p className="text-[10px] text-slate-400">Pick the action that means a sale, then save.</p>
+            </div>
+          )}
+          {conversionsError && <p className="text-[10px] text-red-500 mt-1">{conversionsError}</p>}
         </div>
-        <p className="text-[10px] text-slate-400 -mt-1">
-          Both come from Google Ads → Goals → Conversions → your purchase action. Needed to record sales against your Google campaigns.
-        </p>
 
         <label className="flex items-start gap-2 cursor-pointer">
           <input
