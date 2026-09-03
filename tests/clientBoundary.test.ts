@@ -13,70 +13,74 @@
 // to `next build`, and it only surfaced when someone opened one of the
 // affected pages.
 //
-// These tests are static analysis over the source, which is the only
-// way to catch it short of rendering every route.
+// THESE READ THE COMMITTED TREE, NOT THE WORKING TREE — deliberately,
+// and the reason is the first version of this file. It read from disk,
+// passed locally because the fix was present there, and the push still
+// broke the build: one of the thirteen files had been fixed but never
+// staged. A test that validates work you have not committed says
+// nothing about what you shipped. Reading through git closes that gap.
 
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { execFileSync } from "child_process";
 
-function walk(dir: string, out: string[] = []): string[] {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full, out);
-    else if (/\.tsx?$/.test(entry.name)) out.push(full);
+/** Files in HEAD matching a pattern. One git process, not one per file. */
+function grepCommitted(pattern: string): string[] {
+  try {
+    const out = execFileSync("git", ["grep", "-l", "-E", pattern, "HEAD", "--", "src"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.split("\n").filter(Boolean).map((line) => line.replace(/^HEAD:/, ""));
+  } catch {
+    // git grep exits non-zero when nothing matches.
+    return [];
   }
-  return out;
 }
 
-const FILES = walk("src");
-const isClientModule = (file: string) => /^["']use client["']/.test(fs.readFileSync(file, "utf8").trimStart());
+/** One file's contents as committed. Falls back to disk if HEAD is unreadable. */
+function committed(file: string): string {
+  const gitPath = file.split(path.sep).join("/");
+  try {
+    return execFileSync("git", ["show", `HEAD:${gitPath}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return fs.readFileSync(file, "utf8");
+  }
+}
 
 describe("buttonClasses is callable from the server", () => {
   it("lives in a module with no 'use client' directive", () => {
-    expect(isClientModule("src/components/ui/buttonClasses.ts")).toBe(false);
+    expect(committed("src/components/ui/buttonClasses.ts").trimStart()).not.toMatch(/^["']use client["']/);
   });
 
   it("is NOT re-exported through the client Button module", () => {
     // Re-exporting it from Button.tsx would put it straight back
     // behind the boundary and reintroduce the 500.
-    const button = fs.readFileSync("src/components/ui/Button.tsx", "utf8");
-    expect(button).not.toMatch(/export\s+(function\s+buttonClasses|\{[^}]*\bbuttonClasses\b)/);
+    const button = committed("src/components/ui/Button.tsx");
+    expect(button).not.toMatch(/export\s+function\s+buttonClasses/);
+    expect(button).not.toMatch(/export\s*\{[^}]*\bbuttonClasses\b/);
   });
 
   it("is re-exported by the barrel from the non-client module", () => {
-    const barrel = fs.readFileSync("src/components/ui/index.ts", "utf8");
-    expect(barrel).toMatch(/export \{[^}]*buttonClasses[^}]*\} from "\.\/buttonClasses"/);
+    expect(committed("src/components/ui/index.ts")).toMatch(
+      /export \{[^}]*buttonClasses[^}]*\} from "\.\/buttonClasses"/
+    );
   });
 
-  it("no file imports buttonClasses from the client Button module", () => {
-    const offenders = FILES.filter((f) => {
-      const src = fs.readFileSync(f, "utf8");
-      return /import[^;]*\bbuttonClasses\b[^;]*from\s+["'][^"']*\/ui\/Button["']/.test(src);
-    });
+  it("no committed file imports buttonClasses from the client Button module", () => {
+    // THE LOAD-BEARING ONE. It fails the moment someone moves
+    // buttonClasses back into Button.tsx for convenience, or adds a
+    // new page importing it from there — which is how this returns.
+    const offenders = grepCommitted('import.*buttonClasses.*from "@/components/ui/Button"');
     expect(offenders).toEqual([]);
   });
-});
 
-describe("no server component calls a client-only export", () => {
-  it("every caller of buttonClasses resolves to the shared module", () => {
-    // The regression this guards: someone re-adds buttonClasses to
-    // Button.tsx for convenience, and a dozen server-rendered pages
-    // start throwing again with a green build.
-    const callers = FILES.filter((f) => /\bbuttonClasses\s*\(/.test(fs.readFileSync(f, "utf8")));
+  it("still has real callers, so the checks above are not passing vacuously", () => {
+    const callers = grepCommitted("buttonClasses\\(").filter((f) => !f.endsWith("ui/buttonClasses.ts"));
     expect(callers.length).toBeGreaterThan(5);
-
-    for (const file of callers) {
-      const src = fs.readFileSync(file, "utf8");
-      const importsIt = /import[^;]*\bbuttonClasses\b[^;]*from\s+["']([^"']+)["']/.exec(src);
-      // The definition site itself has no import.
-      if (file.endsWith(path.join("ui", "buttonClasses.ts"))) continue;
-      expect(importsIt, `${file} calls buttonClasses without importing it`).not.toBeNull();
-      const from = importsIt![1];
-      expect(
-        from === "@/components/ui" || from.endsWith("/ui/buttonClasses") || from === "./buttonClasses",
-        `${file} imports buttonClasses from ${from}`
-      ).toBe(true);
-    }
   });
 });

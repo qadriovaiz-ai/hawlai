@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import { ArrowRight } from "lucide-react";
 import type { Lead } from "@/types";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/buttonClasses";
 
 export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
   if (leads.length === 0) {
