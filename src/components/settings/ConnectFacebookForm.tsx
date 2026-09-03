@@ -13,11 +13,17 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
   const [pageId, setPageId] = useState(pages[0]?.id ?? "");
   const [adAccountId, setAdAccountId] = useState(adAccounts[0]?.id ?? "");
   const [leadFormId, setLeadFormId] = useState("");
+  const [pixelId, setPixelId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedPage = pages.find((p: any) => p.id === pageId);
   const leadForms = selectedPage?.leadForms ?? [];
+
+  // Pixels come from the ad account, not the Page — the callback
+  // attached them per account.
+  const selectedAccount = adAccounts.find((a: any) => a.id === adAccountId);
+  const pixels = selectedAccount?.pixels ?? [];
 
   async function handleSave() {
     setLoading(true);
@@ -26,7 +32,12 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
       const res = await fetch("/api/auth/facebook/finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page_id: pageId, ad_account_id: adAccountId, lead_form_id: leadFormId || undefined }),
+        body: JSON.stringify({
+          page_id: pageId,
+          ad_account_id: adAccountId,
+          lead_form_id: leadFormId || undefined,
+          pixel_id: pixelId || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't save");
@@ -68,7 +79,7 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
         <label className="text-sm font-semibold text-slate-700 block mb-1.5">Ad Account</label>
         <select
           value={adAccountId}
-          onChange={(e) => setAdAccountId(e.target.value)}
+          onChange={(e) => { setAdAccountId(e.target.value); setPixelId(""); }}
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           {adAccounts.length === 0 && <option value="">No Ad Account found</option>}
@@ -77,6 +88,36 @@ export default function ConnectFacebookForm({ pending }: { pending: any }) {
           ))}
         </select>
       </div>
+
+      {/* Only shown when there is genuinely a choice. One pixel needs
+          no question — finalize takes it automatically — and zero
+          pixels needs an explanation, not a dropdown. Dealers used to
+          have to find this 15-digit number in Events Manager and paste
+          it into Settings → Integrations. */}
+      {pixels.length > 1 ? (
+        <div>
+          <label className="text-sm font-semibold text-slate-700 block mb-1.5">Meta Pixel</label>
+          <select
+            value={pixelId || pixels[0].id}
+            onChange={(e) => setPixelId(e.target.value)}
+            className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            {pixels.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-400 mt-1">This ad account has more than one — pick the one on your website.</p>
+        </div>
+      ) : pixels.length === 1 ? (
+        <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-2.5">
+          <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0 mt-px" />
+          <p>Meta Pixel <span className="font-medium text-slate-700">{pixels[0].name}</span> found and will be set up for you.</p>
+        </div>
+      ) : adAccountId ? (
+        <p className="text-xs text-slate-400">
+          No Meta Pixel found on this ad account. Conversion tracking stays off until one exists — everything else still works.
+        </p>
+      ) : null}
 
       <div>
         <label className="text-sm font-semibold text-slate-700 block mb-1.5">Lead Form (optional)</label>

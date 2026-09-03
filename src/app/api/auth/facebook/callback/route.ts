@@ -45,7 +45,35 @@ export async function GET(request: Request) {
       `https://graph.facebook.com/${GRAPH_VERSION}/me/adaccounts?fields=id,name,account_status,currency&access_token=${userToken}`
     );
     const adAccountsData = await adAccountsRes.json();
-    const adAccounts = adAccountsData?.data ?? [];
+    const adAccountsRaw = adAccountsData?.data ?? [];
+
+    // Step 4b: for each ad account, fetch the Pixels on it.
+    //
+    // This is why the dealer no longer types a Pixel ID. It has to
+    // happen HERE and not in finalize: the adspixels edge hangs off the
+    // ad account and needs a user token carrying ads_management /
+    // ads_read (both already in SCOPES). The page tokens are the only
+    // credential we persist, and a page token cannot read an ad
+    // account's edges at all — so once this handler returns, the
+    // ability to discover pixels is gone until the next reconnect.
+    //
+    // Per-account try/catch, not one Promise.all rejection: a business
+    // with three ad accounts where one has no pixel permission should
+    // still connect. A failure here degrades to "no pixel found",
+    // which finalize treats as leave-it-alone, never as clobber.
+    const adAccounts = await Promise.all(
+      adAccountsRaw.map(async (account: any) => {
+        try {
+          const pixelsRes = await fetch(
+            `https://graph.facebook.com/${GRAPH_VERSION}/${account.id}/adspixels?fields=id,name&access_token=${userToken}`
+          );
+          const pixelsData = await pixelsRes.json();
+          return { ...account, pixels: pixelsData?.data ?? [] };
+        } catch {
+          return { ...account, pixels: [] };
+        }
+      })
+    );
 
     // Step 5: for each page, fetch its lead forms (if any) using that page's own token
     const pagesWithForms = await Promise.all(

@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/Button";
 //
 // Deliberately describes what each field DOES rather than naming the
 // mechanism — a dealer knows "show ads to people who visited", not
-// "server-side event deduplication". The one exception is the pixel
-// ID itself, which they have to copy verbatim from Meta.
+// "server-side event deduplication".
+//
+// The Meta Pixel ID used to be the exception: a 15-digit number the
+// dealer had to go and find in Events Manager. A1 made the Facebook
+// connect flow discover it, so this box is now an override for the
+// unusual case, not the way it gets set.
 export default function TrackingSettingsCard() {
   const [loaded, setLoaded] = useState(false);
   const [pixelId, setPixelId] = useState("");
@@ -92,10 +96,18 @@ export default function TrackingSettingsCard() {
           <input
             value={pixelId}
             onChange={(e) => { setPixelId(e.target.value); setSaved(false); }}
-            placeholder="e.g. 1234567890123456"
+            placeholder="Fills in when you connect Facebook"
             className="input text-sm"
           />
-          <p className="text-[10px] text-slate-400 mt-0.5">From Meta Events Manager → Data Sources.</p>
+          {/* No longer "go and find this in Events Manager". Connecting
+              Facebook reads the pixels off the chosen ad account and
+              sets this, so the field exists for the rare case of a
+              pixel that lives on an account we can't see. */}
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            Set automatically when you{" "}
+            <a href="/dashboard/settings/connect-facebook" className="text-brand-600 hover:underline">connect Facebook</a>.
+            Only change it if you use a pixel from a different ad account.
+          </p>
         </div>
 
         <div>
