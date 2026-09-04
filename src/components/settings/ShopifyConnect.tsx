@@ -17,7 +17,11 @@ const SHOPIFY_ERRORS: Record<string, string> = {
   invalid_shop: "That store address isn't a valid .myshopify.com domain.",
   missing_code: "Shopify didn't send an approval back. Try again.",
   token_exchange_failed: "Shopify wouldn't finish the connection. Try again.",
-  token_rejected: "Shopify approved the app but the access was refused. Check you're an admin on that store.",
+  token_rejected: "Shopify approved the app but then rejected the access token. Try connecting again.",
+  // Distinct from token_rejected on purpose: this one is never the
+  // dealer's fault and there is nothing for them to fix, so it must
+  // not send them off checking their own permissions.
+  missing_scope: "Connected, but this app isn't allowed to read your products yet. That's on our side — we're on it.",
   network: "Couldn't reach Shopify. Try again in a moment.",
 };
 

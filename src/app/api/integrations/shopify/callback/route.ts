@@ -66,10 +66,31 @@ export async function GET(request: Request) {
     // Confirm the token works before reporting success, so a dealer
     // never lands on "Connected" over a credential that returns
     // nothing.
-    const shopRes = await fetch(`https://${check.shop}/admin/api/${SHOPIFY_API_VERSION}/shop.json`, {
+    //
+    // VERIFY WITH THE RESOURCE WE ACTUALLY ASKED FOR. This was
+    // shop.json, which cost a real connect attempt: shop.json needs
+    // `read_shop`, we request only `read_products`, so Shopify
+    // returned 403 on a PERFECTLY VALID token. OAuth had fully
+    // succeeded — HMAC verified, code exchanged, token issued — and
+    // the dealer was told their access was refused, by a health check
+    // probing a resource the app had never asked to see.
+    //
+    // products.json is the right probe for the same reason shop.json
+    // was the wrong one: it is exactly the capability this product
+    // needs, so a pass here means the integration genuinely works,
+    // and a failure is a real failure rather than an artefact of the
+    // check. limit=1 because nothing here needs the data.
+    const verifyRes = await fetch(`https://${check.shop}/admin/api/${SHOPIFY_API_VERSION}/products.json?limit=1`, {
       headers: { "X-Shopify-Access-Token": tokenData.access_token },
     });
-    if (!shopRes.ok) return settings(origin, "shopify_error=token_rejected");
+    if (!verifyRes.ok) {
+      // 401 and 403 mean different things to whoever has to fix it:
+      // a rejected token versus a token that is fine but not
+      // permitted. Collapsing them is what made this bug take a live
+      // attempt to find.
+      const reason = verifyRes.status === 403 ? "missing_scope" : "token_rejected";
+      return settings(origin, `shopify_error=${reason}`);
+    }
 
     await service
       .from("dealerships")

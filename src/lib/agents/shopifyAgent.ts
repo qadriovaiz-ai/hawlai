@@ -17,6 +17,14 @@ function normalizeStoreUrl(storeUrl: string): string {
   return url;
 }
 
+// UNUSED since the OAuth flow replaced the paste-a-token screen, and
+// DO NOT reuse it as a connection check without reading this first:
+// shop.json requires `read_shop`, which the OAuth app does not
+// request (SHOPIFY_SCOPES is read_products). It returns 403 on a
+// perfectly valid token. That cost a live connect attempt on
+// 2026-09-04 — the callback used it as a health check and told the
+// dealer their access had been refused after OAuth had fully
+// succeeded. Verify with products.json instead.
 export async function testShopifyConnection(storeUrl: string, accessToken: string): Promise<{ success: boolean; shopName?: string; error?: string }> {
   try {
     const domain = normalizeStoreUrl(storeUrl);
