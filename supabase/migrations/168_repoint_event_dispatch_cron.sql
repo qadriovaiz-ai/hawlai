@@ -1,0 +1,77 @@
+-- Re-point the event-dispatch cron at the production domain.
+--
+-- NO DDL RUNS FROM THIS FILE. The cron job lives in the database's
+-- cron.job table, put there by hand in the Supabase SQL editor —
+-- migration 129 deliberately keeps that step out of git because the
+-- setup embeds CRON_SECRET. This file exists so the change is not
+-- invisible to anyone reading the repo, and so the ledger records
+-- that it happened.
+--
+-- WHAT WENT WRONG. Migration 129's template hardcodes:
+--
+--   url := 'https://hawlai.vercel.app/api/events/dispatch'
+--
+-- and whoever ran it pasted that literal. That is the raw deployment
+-- domain, not hawlai.online.
+--
+-- The domain was NOT the failure, though — it is worth being precise,
+-- because fixing only the domain would have fixed nothing. Every
+-- invocation was 307'd to /auth/login on BOTH domains, because
+-- /api/events/dispatch was missing from PUBLIC_PATH_PREFIXES in
+-- src/lib/supabase/middleware.ts. The route authenticates itself with
+-- `Authorization: Bearer $CRON_SECRET` and never needed a session.
+-- That omission is the bug; this file is the tidy-up beside it.
+--
+-- The 405s in the logs were a downstream symptom:
+-- NextResponse.redirect defaults to 307, which PRESERVES the method,
+-- so the POST was replayed against /auth/login — a page component,
+-- GET-only — which correctly refused it.
+--
+-- RUN THIS BY HAND in the Supabase SQL editor, AFTER the middleware
+-- fix is deployed. Doing it before just moves the redirect to a
+-- different hostname.
+--
+-- ------------------------------------------------------------------
+-- Step 1 — see what is actually scheduled. Do not assume the job
+-- matches 129's template; confirm the name and the URL first.
+--
+--   select jobid, jobname, schedule, command
+--   from cron.job
+--   order by jobid;
+--
+-- Step 2 — remove the old job. Use the name from step 1 if it differs.
+--
+--   select cron.unschedule('dispatch-event-queue');
+--
+-- Step 3 — recreate it against hawlai.online. The secret is read from
+-- the vault, never written literally, so this statement is safe to
+-- keep in git.
+--
+--   select cron.schedule(
+--     'dispatch-event-queue',
+--     '*/2 * * * *',
+--     $$
+--     select net.http_post(
+--       url := 'https://hawlai.online/api/events/dispatch',
+--       headers := jsonb_build_object(
+--         'Content-Type', 'application/json',
+--         'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_dispatch_secret')
+--       ),
+--       body := '{}'::jsonb
+--     );
+--     $$
+--   );
+--
+-- Step 4 — confirm it is firing and getting 200s rather than 307s.
+-- pg_net records every response; anything in the 3xx range means the
+-- request is still being redirected.
+--
+--   select id, status_code, created
+--   from net._http_response
+--   order by created desc
+--   limit 20;
+-- ------------------------------------------------------------------
+
+insert into schema_migrations (version, filename)
+values ('168', '168_repoint_event_dispatch_cron.sql')
+on conflict (version) do nothing;
