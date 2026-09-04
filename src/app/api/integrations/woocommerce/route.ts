@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { testWooCommerceConnection, fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
-import { woocommerceConsumerSecret, encryptedWrite, clearedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
+import { woocommerceConsumerSecret, clearedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 
 export async function GET() {
   const supabase = await createClient();
@@ -28,30 +28,15 @@ export async function GET() {
   return NextResponse.json({ connected, storeUrl: data?.woocommerce_store_url ?? null, products });
 }
 
-export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
-  const dealershipId = profile?.dealership_id;
-  if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
-
-  const { store_url, consumer_key, consumer_secret } = await request.json();
-  if (!store_url || !consumer_key || !consumer_secret) {
-    return NextResponse.json({ error: "Store URL, Consumer Key, and Consumer Secret are all required" }, { status: 400 });
-  }
-
-  const test = await testWooCommerceConnection(store_url, consumer_key, consumer_secret);
-  if (!test.success) return NextResponse.json({ error: test.error }, { status: 400 });
-
-  await supabase.from("dealerships").update({
-    woocommerce_store_url: store_url,
-    woocommerce_consumer_key: consumer_key,
-    ...encryptedWrite("woocommerce_consumer_secret", consumer_secret),
-  }).eq("id", dealershipId);
-  return NextResponse.json({ success: true, storeName: test.storeName });
-}
+// The POST that took a pasted store URL, consumer key and consumer
+// secret is GONE, replaced by the /wc-auth/v1/authorize handshake in
+// ./start and ./callback (A6). Deleted rather than left in place: it
+// was unreachable from the UI the moment the new flow landed, and an
+// endpoint that accepts credentials over the wire should not outlive
+// the screen that fed it — dead auth surface is the kind of thing that
+// gets rediscovered later and assumed to be load-bearing.
+//
+// GET and DELETE remain: both are still used by the settings card.
 
 export async function DELETE() {
   const supabase = await createClient();

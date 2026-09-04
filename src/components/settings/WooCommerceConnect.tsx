@@ -8,8 +8,6 @@ export default function WooCommerceConnect() {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [storeUrl, setStoreUrl] = useState("");
-  const [consumerKey, setConsumerKey] = useState("");
-  const [consumerSecret, setConsumerSecret] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [productCount, setProductCount] = useState(0);
@@ -24,24 +22,31 @@ export default function WooCommerceConnect() {
       .finally(() => setLoading(false));
   }, []);
 
+  // A6 — hand off to the store's own approval screen instead of asking
+  // for a key and a secret. WooCommerce POSTs the credentials back to
+  // our callback, so there is nothing for the dealer to copy: they
+  // approve on their own site and land back here connected.
   async function handleConnect() {
     setError(null);
-    if (!storeUrl.trim() || !consumerKey.trim() || !consumerSecret.trim()) return setError("All fields are required");
+    if (!storeUrl.trim()) return setError("Enter your store address");
     setSaving(true);
     try {
-      const res = await fetch("/api/integrations/woocommerce", {
+      const res = await fetch("/api/integrations/woocommerce/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store_url: storeUrl.trim(), consumer_key: consumerKey.trim(), consumer_secret: consumerSecret.trim() }),
+        body: JSON.stringify({ store_url: storeUrl.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setConnected(true);
+      // Full navigation, not a popup — the approval screen is on the
+      // dealer's own domain and needs to be visibly theirs.
+      window.location.href = data.authorizeUrl;
     } catch (err: any) {
       setError(err.message);
-    } finally {
       setSaving(false);
     }
+    // Deliberately no finally: on success the page is navigating away,
+    // and clearing the spinner first would flash the form back.
   }
 
   async function handleDisconnect() {
@@ -63,31 +68,18 @@ export default function WooCommerceConnect() {
   return (
     <div className="space-y-2">
       <p className="text-xs text-slate-400">
-        In wp-admin: WooCommerce → Settings → Advanced → REST API → Add key → give it Read access → generate.
+        Enter your store address. You&apos;ll approve the connection on your own site — nothing to copy or paste.
       </p>
       <input
         value={storeUrl}
         onChange={(e) => setStoreUrl(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") handleConnect(); }}
         placeholder="yourstore.com"
-        className="w-full p-2 text-xs bg-slate-100 text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-      />
-      <input
-        value={consumerKey}
-        onChange={(e) => setConsumerKey(e.target.value)}
-        placeholder="Consumer Key (ck_...)"
-        type="password"
-        className="w-full p-2 text-xs bg-slate-100 text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-      />
-      <input
-        value={consumerSecret}
-        onChange={(e) => setConsumerSecret(e.target.value)}
-        placeholder="Consumer Secret (cs_...)"
-        type="password"
         className="w-full p-2 text-xs bg-slate-100 text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
       <Button variant="secondary" size="sm" onClick={handleConnect} loading={saving} className="w-full justify-center">
-        Connect
+        {saving ? "Taking you to your store..." : "Connect WooCommerce"}
       </Button>
     </div>
   );
