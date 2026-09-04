@@ -79,8 +79,36 @@ export async function GET(request: Request) {
         expiring: 1,
       }),
     });
-    const tokenData = await tokenRes.json();
+    // Read the body as TEXT first, then parse.
+    //
+    // `await tokenRes.json()` throws on any non-JSON body, and that
+    // throw landed in the bare catch at the bottom of this function —
+    // which reported "network" and logged NOTHING. A reconnect
+    // produced a failure with no server-side trace at all, and the
+    // body Shopify actually sent, the one thing that would have
+    // explained it, was discarded by the parse that failed.
+    //
+    // This is the third time in this integration that the evidence was
+    // thrown away: the granted scope went unread, then the verify
+    // response body, now this. Keeping the raw text costs nothing and
+    // is the difference between diagnosing and guessing.
+    const rawBody = await tokenRes.text().catch(() => "");
+    let tokenData: any = null;
+    try {
+      tokenData = JSON.parse(rawBody);
+    } catch {
+      console.error(
+        `[shopify-callback] token exchange returned non-JSON for ${check.shop} status=${tokenRes.status} body=${rawBody.slice(0, 400)}`
+      );
+      return settings(origin, "shopify_error=token_exchange_unparseable");
+    }
+
     if (!tokenRes.ok || !tokenData?.access_token) {
+      // Shopify's own message, which names the reason — an invalid
+      // code, a rejected parameter, a client_id mismatch.
+      console.error(
+        `[shopify-callback] token exchange failed for ${check.shop} status=${tokenRes.status} body=${rawBody.slice(0, 400)}`
+      );
       return settings(origin, "shopify_error=token_exchange_failed");
     }
 
@@ -205,7 +233,24 @@ export async function GET(request: Request) {
       .eq("id", dealership.id);
 
     return settings(origin, "shopify=connected");
-  } catch {
-    return settings(origin, "shopify_error=network");
+  } catch (err: any) {
+    // THE ERROR IS NOW BOUND AND LOGGED. It was `catch {` — no
+    // binding, no logging — so any exception in this whole block
+    // surfaced to the merchant as "Couldn't reach Shopify" and left
+    // NOTHING server-side. A reconnect failed with zero trace, which
+    // is worse than a crash: a crash at least leaves a stack.
+    //
+    // "network" was also a lie for most of what lands here. A fetch
+    // failure is one possibility; an encryption key missing, a
+    // malformed response, a bug in this code are others, and they are
+    // not the merchant's connection.
+    //
+    // The message and stack only — never `err` wholesale, which for a
+    // fetch failure can carry the request including the client secret.
+    console.error(
+      `[shopify-callback] UNCAUGHT for ${check.shop}: ${err?.name ?? "Error"}: ${err?.message ?? String(err)}`
+    );
+    if (err?.stack) console.error(`[shopify-callback] stack: ${String(err.stack).slice(0, 800)}`);
+    return settings(origin, "shopify_error=unexpected");
   }
 }
