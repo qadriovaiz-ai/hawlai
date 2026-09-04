@@ -9,38 +9,66 @@ it. Delete an entry when it is done.
 
 ---
 
-## 0. Route-level smoke tests — render every page, assert non-500
+## 0. Route-level smoke tests — hit every route, assert it works
 
-**Status:** proposed, highest value of anything on this list
+**Status:** SCHEDULED. Next work item after the Shopify and
+WooCommerce connects are verified live. Decided 2026-09-04, after the
+third incident in a week.
 **Unblocked by:** nothing
 
-TWO production incidents in two days got past a green build and a full
-test suite, because both were RUNTIME failures the compiler cannot
-see:
+THREE production incidents in three days got past a green build and a
+full test suite, because all three were RUNTIME failures the compiler
+cannot see:
 
 - **2026-09-02** — a redirect loop plus a request storm left the
   dashboard blank. `tsc` and `next build` both passed.
 - **2026-09-03** — `buttonClasses` was a client export called from
   thirteen server components. Every one of those pages returned 500.
   263 tests passed and the build was green the entire time.
+- **2026-09-04** — the auth middleware matched both new OAuth
+  callbacks and 307'd them to `/auth/login`. WooCommerce connect was
+  COMPLETELY BROKEN on arrival: its store POSTs credentials
+  server-to-server with no cookie, so the credentials were never
+  stored and the dealer got no error. Shopify survived only because
+  its callback is a browser redirect carrying the user's own cookie.
+  349 tests passed, including 21 written specifically for the
+  WooCommerce flow.
 
-The second is the clearer argument. A dozen pages were dead for weeks
-and nothing in the repository could tell, because no test and no build
-step ever *rendered* them. `next build` prerenders only static routes;
-everything behind auth is dynamic and therefore never executed.
+The third is the sharpest argument yet, because the tests were not
+thin. They covered the SSRF guard, the nonce format, the HMAC rule,
+and the expiry arithmetic — and none of them could have caught it,
+because not one executed the route in its real environment. It was
+found by curling production after deploying.
 
-**What would catch this family:** a test that boots the app, requests
-each route, and asserts the response is not a 5xx. It does not need to
-assert content — the entire value is in executing the render at all.
+`next build` prerenders only static routes; everything behind auth is
+dynamic and therefore never executed. That gap is where all three
+lived.
+
+**What to build:**
+
+1. **Route reachability.** Hit every route and assert it neither 5xx's
+   nor redirects somewhere unexpected. The redirect half is not
+   optional — the 2026-09-04 incident was a 307, not a 500, and a
+   smoke test that only checked for 5xx would have passed it.
+2. **Page render.** Request every page with a session and assert
+   non-5xx. Content assertions are not the point; executing the render
+   is.
+3. **Middleware matcher.** Already built and already earning its keep
+   — `tests/middlewareMatcher.test.ts` evaluates the real exported
+   matcher against real paths in both directions. It caught the
+   missing `$` anchor, without which a future
+   `/api/integrations/shopify/callback-verify` would have been
+   silently public. Fold it into the suite rather than rewriting it.
+
 Authenticated routes need a session, so this likely means Playwright
 with a seeded test user, or a request-level harness with a mocked
 Supabase session.
 
-**Why it is worth the setup cost:** it is the only check that covers
-server/client boundary violations, missing env vars at runtime, RLS
-denials on a page query, and dropped-column references — four distinct
-failure classes, none visible to `tsc`, all of which have now actually
-happened here.
+**Why it is worth the setup cost:** it is the only check covering
+server/client boundary violations, middleware matcher mistakes,
+missing env vars at runtime, RLS denials on a page query, and
+dropped-column references — five distinct failure classes, none
+visible to `tsc`, three of which have now actually happened here.
 
 ---
 

@@ -84,6 +84,17 @@ describe("normaliseShopDomain", () => {
       expect(normaliseShopDomain(host).ok, `${host} must be allowed`).toBe(true);
     }
   });
+
+  it("accepts the real test store", () => {
+    // A Shopify-generated handle: digits and a hyphen mid-string. Kept
+    // as a permanent case because the hostile list above is long and a
+    // guard that over-tightens would fail here first — and the failure
+    // a dealer sees ("that isn't a valid .myshopify.com domain" for a
+    // domain that plainly is) gives them nothing to act on.
+    expect(normaliseShopDomain("pg3ggw-xr.myshopify.com")).toEqual({ ok: true, shop: "pg3ggw-xr.myshopify.com" });
+    expect(normaliseShopDomain("https://pg3ggw-xr.myshopify.com/admin").ok).toBe(true);
+    expect(normaliseShopDomain("  PG3GGW-XR.myshopify.com ")).toEqual({ ok: true, shop: "pg3ggw-xr.myshopify.com" });
+  });
 });
 
 describe("buildInstallUrl", () => {
