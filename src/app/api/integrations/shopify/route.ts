@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { testShopifyConnection, fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
-import { shopifyAccessToken, encryptedWrite, clearedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
+import { fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
+import { shopifyAccessToken, clearedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
 
 export async function GET() {
   const supabase = await createClient();
@@ -28,24 +28,13 @@ export async function GET() {
   return NextResponse.json({ connected, storeUrl: data?.shopify_store_url ?? null, products });
 }
 
-export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
-  const dealershipId = profile?.dealership_id;
-  if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
-
-  const { store_url, access_token } = await request.json();
-  if (!store_url || !access_token) return NextResponse.json({ error: "Store URL and Access Token are both required" }, { status: 400 });
-
-  const test = await testShopifyConnection(store_url, access_token);
-  if (!test.success) return NextResponse.json({ error: test.error }, { status: 400 });
-
-  await supabase.from("dealerships").update({ shopify_store_url: store_url, ...encryptedWrite("shopify_access_token", access_token) }).eq("id", dealershipId);
-  return NextResponse.json({ success: true, shopName: test.shopName });
-}
+// The POST that took a pasted store URL and Admin API token is GONE,
+// replaced by the OAuth handshake in ./start and ./callback. Deleted
+// rather than left unreachable, for the same reason as the WooCommerce
+// one: an endpoint that accepts credentials over the wire should not
+// outlive the screen that fed it.
+//
+// GET and DELETE remain — both are still used by the settings card.
 
 export async function DELETE() {
   const supabase = await createClient();

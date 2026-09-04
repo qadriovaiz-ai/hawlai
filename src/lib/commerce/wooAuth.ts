@@ -23,14 +23,21 @@
 // business's product feed. It has to be an unguessable single-use
 // nonce with an expiry.
 
-import { randomBytes } from "crypto";
+import {
+  createHandshakeNonce,
+  isHandshakeFresh,
+  isValidNonceFormat,
+  HANDSHAKE_TTL_MS,
+} from "./connectHandshake";
 
-export const WOO_NONCE_TTL_MS = 15 * 60 * 1000;
+// The nonce and freshness rules moved to connectHandshake.ts when
+// Shopify needed the identical pair. Re-exported under the original
+// names so callers and tests keep working, and because "the WooCommerce
+// nonce" is still the clearer term at the call sites here.
+export const WOO_NONCE_TTL_MS = HANDSHAKE_TTL_MS;
 
 /** 256 bits of randomness — this is the entire authenticator for the callback. */
-export function createWooNonce(): string {
-  return randomBytes(32).toString("hex");
-}
+export const createWooNonce = createHandshakeNonce;
 
 export type NormalisedStore = { ok: true; origin: string; host: string } | { ok: false; reason: string };
 
@@ -138,19 +145,11 @@ export function validateCallbackPayload(body: any): CallbackCheck {
   // 64 hex chars, exactly what createWooNonce produces. A length and
   // charset check here means a malformed or probing callback never
   // reaches the database lookup.
-  if (!/^[0-9a-f]{64}$/.test(nonce)) return { ok: false, reason: "Invalid authorization reference." };
+  if (!isValidNonceFormat(nonce)) return { ok: false, reason: "Invalid authorization reference." };
   if (!consumerKey || !consumerSecret) return { ok: false, reason: "WooCommerce sent no credentials." };
 
   return { ok: true, payload: { consumerKey, consumerSecret, nonce } };
 }
 
 /** Whether a stored pending record is still usable. */
-export function isPendingFresh(createdAt: string | null | undefined, now: number = Date.now()): boolean {
-  if (!createdAt) return false;
-  const started = new Date(createdAt).getTime();
-  if (!Number.isFinite(started)) return false;
-  // Future-dated records are treated as stale rather than valid
-  // forever — a clock skew shouldn't extend a credential window.
-  if (started > now) return false;
-  return now - started < WOO_NONCE_TTL_MS;
-}
+export const isPendingFresh = isHandshakeFresh;
