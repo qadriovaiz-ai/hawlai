@@ -35,7 +35,8 @@ export default function AdminSeedKnowledgePage() {
     <div style={{ maxWidth: 480, margin: "60px auto", padding: "0 20px", fontFamily: "sans-serif" }}>
       <h1 style={{ fontSize: 20, marginBottom: 8 }}>Seed Marketing Knowledge Base</h1>
       <p style={{ color: "#888", fontSize: 14, marginBottom: 16 }}>
-        Enter your ADMIN_SEED_SECRET (the one set in Vercel env vars), then click the button. Only needs to run once.
+        Sign in as a platform admin first — the secret alone is no longer enough. Then enter your ADMIN_SEED_SECRET
+        (the one set in Vercel env vars) and click the button. Only needs to run once.
       </p>
       <input
         type="password"
