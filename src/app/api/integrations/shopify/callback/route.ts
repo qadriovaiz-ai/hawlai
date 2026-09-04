@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { checkCallback, isShopifyPendingFresh, SHOPIFY_API_VERSION } from "@/lib/commerce/shopifyAuth";
+import { checkCallback, isShopifyPendingFresh, SHOPIFY_API_VERSION, SHOPIFY_SCOPES } from "@/lib/commerce/shopifyAuth";
 import { encryptedWrite } from "@/lib/crypto/commerceSecrets";
 
 // Shopify OAuth step 2 — Shopify redirects the dealer's BROWSER here
@@ -63,6 +63,38 @@ export async function GET(request: Request) {
       return settings(origin, "shopify_error=token_exchange_failed");
     }
 
+    // WHAT SHOPIFY ACTUALLY GRANTED. This was being discarded, which
+    // is why the first two diagnoses were guesses: the exchange
+    // response carries the granted scope, and without reading it the
+    // only evidence available was a 403, which says what a token
+    // LACKS and never what it has. Inferring "the token has
+    // read_products" from "the token lacks read_shop" was invalid,
+    // and it sent the investigation down the wrong path.
+    //
+    // Costs no extra request. Should have been here from the start.
+    const grantedScope: string = typeof tokenData.scope === "string" ? tokenData.scope : "";
+    const grantedList = grantedScope.split(",").map((s) => s.trim()).filter(Boolean);
+    const requested = SHOPIFY_SCOPES.split(",").map((s) => s.trim()).filter(Boolean);
+    const missing = requested.filter((s) => !grantedList.includes(s));
+
+    // Server-side, so it survives regardless of where the redirect
+    // lands. Never logs the token itself.
+    console.error(
+      `[shopify-callback] shop=${check.shop} granted="${grantedScope || "(none)"}" requested="${SHOPIFY_SCOPES}" missing="${missing.join(",") || "(none)"}"`
+    );
+
+    if (missing.length > 0) {
+      // Distinguishes "Shopify granted something other than what we
+      // asked for" from "our probe hit the wrong resource" — the two
+      // failures that have so far been indistinguishable from the
+      // outside. `granted` is not secret and is the single most
+      // useful fact for whoever debugs this next.
+      return settings(
+        origin,
+        `shopify_error=scope_not_granted&granted=${encodeURIComponent(grantedScope || "none")}`
+      );
+    }
+
     // Confirm the token works before reporting success, so a dealer
     // never lands on "Connected" over a credential that returns
     // nothing.
@@ -84,6 +116,12 @@ export async function GET(request: Request) {
       headers: { "X-Shopify-Access-Token": tokenData.access_token },
     });
     if (!verifyRes.ok) {
+      // Shopify names the offending scope in the body. Discarding it
+      // was the other half of debugging blind.
+      const detail = await verifyRes.text().catch(() => "");
+      console.error(
+        `[shopify-callback] verify failed shop=${check.shop} status=${verifyRes.status} granted="${grantedScope}" body=${detail.slice(0, 300)}`
+      );
       // 401 and 403 mean different things to whoever has to fix it:
       // a rejected token versus a token that is fine but not
       // permitted. Collapsing them is what made this bug take a live

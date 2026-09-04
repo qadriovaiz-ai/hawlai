@@ -22,6 +22,10 @@ const SHOPIFY_ERRORS: Record<string, string> = {
   // dealer's fault and there is nothing for them to fix, so it must
   // not send them off checking their own permissions.
   missing_scope: "Connected, but this app isn't allowed to read your products yet. That's on our side — we're on it.",
+  // Shopify handed back a token carrying a different scope set than
+  // the one requested. Always a configuration problem on our end or
+  // in the Partner dashboard, never the dealer's.
+  scope_not_granted: "Shopify didn't grant permission to read products. That's a setup problem on our side, not yours.",
   network: "Couldn't reach Shopify. Try again in a moment.",
 };
 
@@ -47,7 +51,15 @@ export default function ShopifyConnect() {
     // meaningful to us and meaningless to a dealer.
     const params = new URLSearchParams(window.location.search);
     const failure = params.get("shopify_error");
-    if (failure) setError(SHOPIFY_ERRORS[failure] ?? "Couldn't connect to Shopify. Try again.");
+    if (failure) {
+      const base = SHOPIFY_ERRORS[failure] ?? "Couldn't connect to Shopify. Try again.";
+      // The scope Shopify actually granted, shown verbatim. Not
+      // secret, and it is the one fact that distinguishes "Shopify
+      // granted nothing" from "Shopify granted something else" —
+      // which two rounds of guessing could not separate.
+      const granted = params.get("granted");
+      setError(granted ? `${base} (Shopify granted: ${granted})` : base);
+    }
   }, []);
 
   // Hand off to Shopify's own approval screen instead of asking for an
