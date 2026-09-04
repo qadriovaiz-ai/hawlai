@@ -19,8 +19,18 @@
 import { decryptSecret, encryptSecret } from "./secretCrypto";
 
 export const RAZORPAY_SECRET_SELECT = "razorpay_key_secret_encrypted";
-export const SHOPIFY_TOKEN_SELECT = "shopify_access_token_encrypted";
 export const WOOCOMMERCE_SECRET_SELECT = "woocommerce_consumer_secret_encrypted";
+
+/**
+ * Everything needed to use OR refresh a Shopify connection.
+ *
+ * A plain string literal, deliberately — building a select() from a
+ * template literal or a computed value defeats the typed client's row
+ * inference and silently degrades the result to any, which is the trap
+ * five routes hit during migration 165.
+ */
+export const SHOPIFY_TOKEN_SELECT =
+  "shopify_access_token_encrypted, shopify_refresh_token_encrypted, shopify_token_expires_at, shopify_refresh_token_expires_at, shopify_refresh_lock_at";
 
 type Row = Record<string, any> | null | undefined;
 
@@ -51,6 +61,15 @@ export function shopifyAccessToken(row: Row): string | null {
   return read(row?.shopify_access_token_encrypted, "Shopify access token");
 }
 
+/**
+ * The refresh token. Kept encrypted like the access token, and
+ * arguably more sensitive: it mints access tokens for 90 days with no
+ * merchant interaction.
+ */
+export function shopifyRefreshToken(row: Row): string | null {
+  return read(row?.shopify_refresh_token_encrypted, "Shopify refresh token");
+}
+
 export function woocommerceConsumerSecret(row: Row): string | null {
   return read(row?.woocommerce_consumer_secret_encrypted, "WooCommerce consumer secret");
 }
@@ -58,6 +77,7 @@ export function woocommerceConsumerSecret(row: Row): string | null {
 export type CommerceSecretColumn =
   | "razorpay_key_secret"
   | "shopify_access_token"
+  | "shopify_refresh_token"
   | "woocommerce_consumer_secret";
 
 /** Update payload for storing a commerce secret. Only the encrypted column is written. */

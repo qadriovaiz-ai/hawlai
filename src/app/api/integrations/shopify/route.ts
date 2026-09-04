@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
 import { shopifyAccessToken, clearedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
+import { getValidShopifyAccessToken } from "@/lib/commerce/shopifyToken";
 
 export async function GET() {
   const supabase = await createClient();
@@ -12,16 +13,25 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { data } = await supabase.from("dealerships").select(`shopify_store_url, ${SHOPIFY_TOKEN_SELECT}`).eq("id", dealershipId).single();
-  const token = shopifyAccessToken(data);
-  const connected = !!(data?.shopify_store_url && token);
+  const { data } = await supabase
+    .from("dealerships")
+    .select(`id, shopify_store_url, ${SHOPIFY_TOKEN_SELECT}`)
+    .eq("id", dealershipId)
+    .single();
+  const connected = !!(data?.shopify_store_url && shopifyAccessToken(data));
 
   let products: any[] = [];
   if (connected) {
-    try {
-      products = await fetchShopifyProducts(data!.shopify_store_url!, token!);
-    } catch {
-      // Connection may have gone stale — still report connected: true, just no products
+    // Never the stored token directly — expiring offline tokens live
+    // 60 minutes, so a token read straight from the row is very likely
+    // already dead.
+    const token = await getValidShopifyAccessToken(supabase, data as any, data!.shopify_store_url!);
+    if (token.ok) {
+      try {
+        products = await fetchShopifyProducts(data!.shopify_store_url!, token.accessToken);
+      } catch {
+        // Connection may have gone stale — still report connected: true, just no products
+      }
     }
   }
 

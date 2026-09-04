@@ -30,6 +30,9 @@ const SHOPIFY_ERRORS: Record<string, string> = {
   // the one requested. Always a configuration problem on our end or
   // in the Partner dashboard, never the dealer's.
   scope_not_granted: "Shopify didn't grant permission to read products. That's a setup problem on our side, not yours.",
+  // Shopify issued a token it will then refuse on every API call.
+  // Always our configuration, never the merchant's.
+  non_expiring_token: "Shopify issued a token we can't use. That's a setup problem on our side, not yours.",
   network: "Couldn't reach Shopify. Try again in a moment.",
 };
 

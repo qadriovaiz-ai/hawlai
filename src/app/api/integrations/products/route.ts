@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
 import { fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
 import { shopifyAccessToken, woocommerceConsumerSecret, SHOPIFY_TOKEN_SELECT, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { getValidShopifyAccessToken } from "@/lib/commerce/shopifyToken";
 
 // Combined product list across whichever store platforms are
 // connected — the Launch Ad page uses this to let a dealer pick a
@@ -18,7 +19,10 @@ export async function GET() {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select(`shopify_store_url, ${SHOPIFY_TOKEN_SELECT}, woocommerce_store_url, woocommerce_consumer_key, ${WOOCOMMERCE_SECRET_SELECT}`)
+    // `id` is required by getValidShopifyAccessToken — it is what the
+    // refresh lock and the token write are keyed on. Without it the
+    // refresh would silently target an undefined row.
+    .select(`id, shopify_store_url, ${SHOPIFY_TOKEN_SELECT}, woocommerce_store_url, woocommerce_consumer_key, ${WOOCOMMERCE_SECRET_SELECT}`)
     .eq("id", dealershipId)
     .single();
 
@@ -28,11 +32,18 @@ export async function GET() {
   const wooSecret = woocommerceConsumerSecret(dealership);
 
   if (dealership?.shopify_store_url && shopToken) {
-    try {
-      const shopifyProducts = await fetchShopifyProducts(dealership.shopify_store_url, shopToken, 30);
-      products.push(...shopifyProducts.map((p) => ({ source: "shopify" as const, ...p })));
-    } catch (err: any) {
-      console.error("[integrations/products] Shopify fetch error:", err.message);
+    // Refresh first — an expiring offline token lasts 60 minutes, so
+    // the stored one is usually stale by the time anything reads it.
+    const token = await getValidShopifyAccessToken(supabase, dealership as any, dealership.shopify_store_url);
+    if (!token.ok) {
+      console.error(`[integrations/products] Shopify token unusable: ${token.reason} ${token.detail ?? ""}`);
+    } else {
+      try {
+        const shopifyProducts = await fetchShopifyProducts(dealership.shopify_store_url, token.accessToken, 30);
+        products.push(...shopifyProducts.map((p) => ({ source: "shopify" as const, ...p })));
+      } catch (err: any) {
+        console.error("[integrations/products] Shopify fetch error:", err.message);
+      }
     }
   }
 

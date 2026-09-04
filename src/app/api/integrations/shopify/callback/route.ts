@@ -7,7 +7,7 @@ import {
   SHOPIFY_API_VERSION,
   SHOPIFY_SCOPES,
 } from "@/lib/commerce/shopifyAuth";
-import { encryptedWrite } from "@/lib/crypto/commerceSecrets";
+import { refreshedWrite } from "@/lib/commerce/shopifyToken";
 
 // Shopify OAuth step 2 — Shopify redirects the dealer's BROWSER here
 // with a code, an hmac and a shop.
@@ -62,11 +62,42 @@ export async function GET(request: Request) {
     const tokenRes = await fetch(`https://${check.shop}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code: check.code }),
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: check.code,
+        // THE FIX. Without this Shopify issues a NON-EXPIRING token,
+        // which it accepts at issue time and then refuses on every
+        // Admin API call with "[API] Non-expiring access tokens are no
+        // longer accepted for the Admin API." New public apps have
+        // been required to use expiring offline tokens since 1 April
+        // 2026; all public apps from 1 January 2027.
+        //
+        // This is why the failure read as a permissions problem for
+        // three rounds: OAuth completed, a token existed, and nothing
+        // broke until the token was USED.
+        expiring: 1,
+      }),
     });
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok || !tokenData?.access_token) {
       return settings(origin, "shopify_error=token_exchange_failed");
+    }
+
+    // A response with no refresh_token means `expiring=1` did not take
+    // effect, so Shopify has issued a NON-EXPIRING token — the exact
+    // credential it refuses on every Admin API call. Storing it would
+    // recreate the bug this change exists to fix, and would look like
+    // a successful connection until the first product fetch.
+    //
+    // Fail the connect instead. A merchant who cannot connect will say
+    // so; a merchant who connects to a dead token will not, and
+    // neither will anything in the logs.
+    if (!tokenData.refresh_token) {
+      console.error(
+        `[shopify-callback] no refresh_token for ${check.shop} — expiring=1 did not take effect, refusing to store a non-expiring token`
+      );
+      return settings(origin, "shopify_error=non_expiring_token");
     }
 
     // WHAT SHOPIFY ACTUALLY GRANTED. This was being discarded, which
@@ -157,7 +188,17 @@ export async function GET(request: Request) {
       .from("dealerships")
       .update({
         shopify_store_url: check.shop,
-        ...encryptedWrite("shopify_access_token", tokenData.access_token),
+        // All four values, together. An expiring token is useless
+        // without its refresh token, and the refresh token is useless
+        // without knowing when either expires — storing the access
+        // token alone would work for exactly 60 minutes and then
+        // strand the connection with no way back but a reconnect.
+        ...refreshedWrite({
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token,
+          expires_in: Number(tokenData.expires_in) || 3600,
+          refresh_token_expires_in: Number(tokenData.refresh_token_expires_in) || 7776000,
+        }),
         // Same write, so the nonce cannot be replayed.
         shopify_connect_pending: null,
       })
