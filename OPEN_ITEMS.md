@@ -67,6 +67,55 @@ a job it is not.
 
 ---
 
+## 0c. A2 and A5 are NOT Group A — both need a registration round
+
+**Status:** reclassified after research, not built
+**Unblocked by:** Meta Tech Provider onboarding (A2); a Google OAuth
+verification submission (A5)
+
+I grouped both as "pure wiring, nothing blocked" in the connection
+audit plan. Verifying before building showed that was wrong in both
+cases, in the same way: the credential can only be obtained
+automatically through a programme that has to be applied for.
+
+**A2 — Meta Conversions API token.** The plan was to reuse the
+long-lived user token from the existing Facebook OAuth as the CAPI
+token. Two problems, and the second is the disqualifying one:
+
+- Meta's own documentation does not state that a user access token is
+  accepted at `POST /{pixel_id}/events`. It documents two paths:
+  generate one in Events Manager, or use a System User token. Third
+  parties report user tokens working, but building on an undocumented
+  behaviour for the credential that carries purchase data is not a
+  trade worth making.
+- Even where it works, a long-lived user token expires in ~60 days.
+  Today a dealer pastes a non-expiring Events Manager token once.
+  Replacing that with a credential that dies silently after two
+  months, taking server-side purchase tracking with it, is a
+  REGRESSION dressed as an improvement — and the failure is invisible
+  until someone notices conversions have quietly dropped.
+
+The clean path is Meta Business Extension / Tech Provider onboarding,
+which issues a non-expiring system user token through OAuth. That is
+a registration, so A2 belongs with Shopify in Group B.
+
+**A5 — GA4 measurement ID and GTM container ID.** Reading these needs
+`analytics.readonly` and `tagmanager.readonly`. Both are Google
+SENSITIVE scopes: they require app verification before any account
+outside the test list can grant them — a submission with written
+justification and a video demonstration, and 3–5 business days.
+
+The app already requests `adwords`, itself a sensitive scope, so the
+verification posture needs checking before anything is built: adding
+scopes to a verified app means re-submitting, and if the app is
+currently in Testing mode then every Google connection is already
+capped at 100 test users.
+
+**Neither was built.** Both would otherwise have shipped as code that
+looks finished and cannot work.
+
+---
+
 ## 1. Encrypt `fb_page_access_token` and `instagram_access_token`
 
 **Status:** blocked on live testing
