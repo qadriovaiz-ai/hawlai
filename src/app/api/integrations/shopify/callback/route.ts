@@ -134,8 +134,23 @@ export async function GET(request: Request) {
       // a rejected token versus a token that is fine but not
       // permitted. Collapsing them is what made this bug take a live
       // attempt to find.
-      const reason = verifyRes.status === 403 ? "missing_scope" : "token_rejected";
-      return settings(origin, `shopify_error=${reason}`);
+      const reason = verifyRes.status === 403 ? "products_forbidden" : "token_rejected";
+      // The granted scope and the status ride along, for the same
+      // reason they do on the scope-check path above.
+      //
+      // WHY THIS RENAME. The old code was `missing_scope`, whose UI
+      // string said "isn't allowed to read your products yet" — near
+      // enough to the scope-check path's message that the two were
+      // indistinguishable on screen. When the scope-check fix landed
+      // and the flow got FURTHER, reaching this branch for the first
+      // time, the unchanged wording looked exactly like a stale
+      // deploy, and a working fix was read as a build that had not
+      // shipped. Two different failures must never present the same
+      // sentence.
+      return settings(
+        origin,
+        `shopify_error=${reason}&granted=${encodeURIComponent(grantedScope || "none")}&status=${verifyRes.status}`
+      );
     }
 
     await service

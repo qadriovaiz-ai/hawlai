@@ -21,7 +21,11 @@ const SHOPIFY_ERRORS: Record<string, string> = {
   // Distinct from token_rejected on purpose: this one is never the
   // dealer's fault and there is nothing for them to fix, so it must
   // not send them off checking their own permissions.
-  missing_scope: "Connected, but this app isn't allowed to read your products yet. That's on our side — we're on it.",
+  // DELIBERATELY WORDED NOTHING LIKE scope_not_granted below. These
+  // are different failures at different stages, and when they read
+  // alike on screen a working fix looks like a deploy that never
+  // shipped — which is exactly what happened on 2026-09-04.
+  products_forbidden: "Shopify accepted the connection but refused the product list. We're reading the exact reason from Shopify now.",
   // Shopify handed back a token carrying a different scope set than
   // the one requested. Always a configuration problem on our end or
   // in the Partner dashboard, never the dealer's.
@@ -58,7 +62,11 @@ export default function ShopifyConnect() {
       // granted nothing" from "Shopify granted something else" —
       // which two rounds of guessing could not separate.
       const granted = params.get("granted");
-      setError(granted ? `${base} (Shopify granted: ${granted})` : base);
+      const status = params.get("status");
+      // Both appended when present, so every scope-related failure
+      // carries the evidence needed to tell it from its neighbour.
+      const detail = [granted && `Shopify granted: ${granted}`, status && `HTTP ${status}`].filter(Boolean).join(" · ");
+      setError(detail ? `${base} (${detail})` : base);
     }
   }, []);
 
