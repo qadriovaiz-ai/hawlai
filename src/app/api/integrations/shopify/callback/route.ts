@@ -1,6 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { checkCallback, isShopifyPendingFresh, SHOPIFY_API_VERSION, SHOPIFY_SCOPES } from "@/lib/commerce/shopifyAuth";
+import {
+  checkCallback,
+  isShopifyPendingFresh,
+  missingScopes,
+  SHOPIFY_API_VERSION,
+  SHOPIFY_SCOPES,
+} from "@/lib/commerce/shopifyAuth";
 import { encryptedWrite } from "@/lib/crypto/commerceSecrets";
 
 // Shopify OAuth step 2 — Shopify redirects the dealer's BROWSER here
@@ -73,9 +79,11 @@ export async function GET(request: Request) {
     //
     // Costs no extra request. Should have been here from the start.
     const grantedScope: string = typeof tokenData.scope === "string" ? tokenData.scope : "";
-    const grantedList = grantedScope.split(",").map((s) => s.trim()).filter(Boolean);
-    const requested = SHOPIFY_SCOPES.split(",").map((s) => s.trim()).filter(Boolean);
-    const missing = requested.filter((s) => !grantedList.includes(s));
+    // missingScopes, not a plain includes(): write_products covers
+    // read_products, and Shopify omits the implied read scope from
+    // the granted list. A literal membership test rejected a
+    // completely valid grant here on 2026-09-04.
+    const missing = missingScopes(SHOPIFY_SCOPES, grantedScope);
 
     // Server-side, so it survives regardless of where the redirect
     // lands. Never logs the token itself.

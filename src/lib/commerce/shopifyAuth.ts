@@ -33,8 +33,54 @@ import { isValidNonceFormat } from "./connectHandshake";
 
 export { createHandshakeNonce as createShopifyNonce, isHandshakeFresh as isShopifyPendingFresh } from "./connectHandshake";
 
-/** Products read is all this product needs — see shopifyAgent.ts. */
+/**
+ * What this app REQUIRES — not necessarily what it is granted.
+ *
+ * The distinction matters and cost a live install to learn. This app
+ * uses Shopify-managed installation (`use_legacy_install_flow: false`),
+ * under which the grant comes from the app version's declared scopes
+ * and the `scope` parameter below is decorative. So this constant's
+ * real job is the check in the callback: does the token we were handed
+ * cover what we need?
+ *
+ * Products read is all this product needs — see shopifyAgent.ts.
+ */
 export const SHOPIFY_SCOPES = "read_products";
+
+/**
+ * Whether a granted scope list covers a required scope.
+ *
+ * NOT a plain membership test, and assuming it was cost two rounds of
+ * wrong diagnosis. Shopify's own words: "Any permission to write a
+ * resource includes permission to read it, so request the write scope
+ * only when your app needs both."
+ *
+ * Shopify also omits the implied read scope from the granted list. A
+ * real install declaring all six scopes came back granting exactly
+ * `read_customers,read_orders,write_products,write_content` — both
+ * "missing" entries were the read counterparts of granted writes. The
+ * grant was complete; the check was wrong.
+ *
+ * The implication is one-directional: write_x covers read_x, but
+ * read_x never covers write_x.
+ */
+export function scopeSatisfied(required: string, granted: string[]): boolean {
+  if (granted.includes(required)) return true;
+  if (required.startsWith("read_")) {
+    return granted.includes(`write_${required.slice("read_".length)}`);
+  }
+  return false;
+}
+
+/** Required scopes not covered by the grant. Empty means good to go. */
+export function missingScopes(required: string, grantedScope: string): string[] {
+  const granted = grantedScope.split(",").map((s) => s.trim()).filter(Boolean);
+  return required
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((scope) => !scopeSatisfied(scope, granted));
+}
 
 export const SHOPIFY_API_VERSION = "2024-01";
 
