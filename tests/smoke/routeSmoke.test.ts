@@ -30,7 +30,7 @@
 // framework routed to it.
 
 import { describe, it, expect } from "vitest";
-import { collectRoutes, shouldSkip, isDbDependent, isStructuralMode, type Route } from "./routeInventory";
+import { collectRoutes, shouldSkip, isServiceRoleDependent, isStructuralMode, type Route } from "./routeInventory";
 import fs from "fs";
 import { SMOKE_BASE, SESSION_FILE } from "./globalSetup";
 
@@ -50,7 +50,7 @@ const routes = collectRoutes();
 // The distinction is stated in the output rather than buried, because
 // "345 passed" means materially different things in the two modes.
 const STRUCTURAL = isStructuralMode();
-const exempt = (url: string) => STRUCTURAL && isDbDependent(url);
+const exempt = (url: string) => STRUCTURAL && isServiceRoleDependent(url);
 
 /** Public prefixes, mirroring PUBLIC_PATH_PREFIXES in the middleware. */
 const PUBLIC_PREFIXES = ["/auth", "/p/", "/site/", "/collabs", "/affiliates", "/book/", "/report/", "/invite/", "/seo/", "/api/public/", "/api/admin/", "/admin-seed-knowledge", "/api/events/dispatch", "/api/autopilot/daily-run"];

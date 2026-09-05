@@ -63,11 +63,19 @@ jobs:
           # the production project by a copy-paste accident.
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SMOKE_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
-          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
+          # Without a real service role key, 14 routes that call
+          # createServiceClient() throw at client construction and 500
+          # regardless of how good the database is. Supplying it is what
+          # takes the run from 346/360 to full coverage.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SMOKE_SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
           SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
           SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
           # Full mode: the CI project has a real schema, so a 500 from
           # a database-backed route is a genuine defect, not a missing
           # database. This is what makes the run assert on all 355
           # routes rather than exempting 14.
-          SMOKE_REAL_DB: ${{ secrets.SMOKE_SUPABASE_URL && '1' || '' }}
+          # Full mode needs BOTH a real project and a service role key —
+          # without the latter those 14 routes cannot pass, and asserting
+          # strictly would fail the suite for a missing secret rather than
+          # a defect.
+          SMOKE_REAL_DB: ${{ secrets.SMOKE_SUPABASE_SERVICE_ROLE_KEY && '1' || '' }}

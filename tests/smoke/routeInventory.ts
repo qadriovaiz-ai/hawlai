@@ -88,24 +88,34 @@ export function shouldSkip(url: string): string | null {
 }
 
 /**
- * Routes that CANNOT return 2xx without a real database, because they
- * query Supabase before rendering anything.
+ * Routes that need the SERVICE ROLE KEY, not merely a database.
  *
- * This list is only consulted in STRUCTURAL MODE — when the smoke run
- * has no real Supabase project and is using placeholder credentials.
- * There, a 500 from these is the fake database refusing a connection,
- * not a defect, and asserting otherwise would fail the suite for a
- * reason that has nothing to do with the code.
+ * This was originally called DB_DEPENDENT, and that name was wrong in
+ * a way worth recording. Running the suite against a real, fully
+ * migrated Supabase project produced exactly the same 14 failures as
+ * running it against a placeholder host — which made no sense under
+ * the "they need a database" theory. The actual error, once read
+ * rather than assumed, was:
  *
- * Point real credentials at the run (NEXT_PUBLIC_SUPABASE_URL) and
- * this list is IGNORED ENTIRELY — every route must then be < 500.
+ *   Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
  *
- * It is deliberately a list rather than a pattern. A pattern would
- * silently absorb new routes; this makes each addition a visible
- * decision, and a route that starts 500ing WITHOUT being on it still
- * fails the suite.
+ * Every route here calls createServiceClient(): public storefront
+ * pages that deliberately bypass RLS, the public API routes, and the
+ * cron route. They throw at the client construction, before any query
+ * is attempted, so a perfect database makes no difference to them.
+ *
+ * The distinction matters because it names what is actually needed to
+ * close the gap — one more secret, not a schema.
+ *
+ * Consulted only in STRUCTURAL MODE. Set SMOKE_REAL_DB=1 with both a
+ * real project AND a service role key and this list is ignored
+ * entirely: every route must then be < 500.
+ *
+ * Deliberately a list rather than a pattern. A pattern would silently
+ * absorb new routes; this makes each addition a visible decision, and
+ * a route that starts 500ing WITHOUT being on it still fails.
  */
-export const DB_DEPENDENT = [
+export const SERVICE_ROLE_DEPENDENT = [
   "/p/",
   "/site/",
   "/seo/",
@@ -117,8 +127,8 @@ export const DB_DEPENDENT = [
   "/api/autopilot/daily-run",
 ];
 
-export function isDbDependent(url: string): boolean {
-  return DB_DEPENDENT.some((prefix) => url.startsWith(prefix));
+export function isServiceRoleDependent(url: string): boolean {
+  return SERVICE_ROLE_DEPENDENT.some((prefix) => url.startsWith(prefix));
 }
 
 /**
