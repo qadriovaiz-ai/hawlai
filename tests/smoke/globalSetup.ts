@@ -44,11 +44,35 @@ export async function setup() {
     throw new Error("No production build found. Run `npm run build` first (npm run test:smoke does this for you).");
   }
 
+  // Supabase config is REQUIRED for the app to boot at all — without
+  // it every request 500s with "Your project's URL and Key are
+  // required to create a Supabase client", which would make the whole
+  // suite fail for a reason that has nothing to do with the routes.
+  //
+  // Placeholders are enough, and that is what makes this runnable in
+  // CI with no secrets. Verified: with dummy values the marketing home
+  // renders 200, /dashboard correctly 307s to /auth/login, and
+  // /api/events/dispatch answers 405 rather than being redirected —
+  // every classification part 1 asserts still holds. getUser() simply
+  // fails against a host that isn't there, which reads as "logged
+  // out", which is exactly the state these tests exercise.
+  //
+  // ?? so a real configuration is never overridden — someone running
+  // this against a real project should get that project.
+  const smokeEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "production" as const,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://smoke.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.smoke",
+  };
+
   server = spawn("npx", ["next", "start", "--port", String(SMOKE_PORT)], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     shell: process.platform === "win32",
-    env: { ...process.env, NODE_ENV: "production" },
+    env: smokeEnv,
   });
 
   // Server output is captured and surfaced only on failure — a route

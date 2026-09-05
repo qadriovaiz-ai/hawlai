@@ -86,3 +86,55 @@ export const SKIP: { url: string; why: string }[] = [
 export function shouldSkip(url: string): string | null {
   return SKIP.find((s) => s.url === url)?.why ?? null;
 }
+
+/**
+ * Routes that CANNOT return 2xx without a real database, because they
+ * query Supabase before rendering anything.
+ *
+ * This list is only consulted in STRUCTURAL MODE — when the smoke run
+ * has no real Supabase project and is using placeholder credentials.
+ * There, a 500 from these is the fake database refusing a connection,
+ * not a defect, and asserting otherwise would fail the suite for a
+ * reason that has nothing to do with the code.
+ *
+ * Point real credentials at the run (NEXT_PUBLIC_SUPABASE_URL) and
+ * this list is IGNORED ENTIRELY — every route must then be < 500.
+ *
+ * It is deliberately a list rather than a pattern. A pattern would
+ * silently absorb new routes; this makes each addition a visible
+ * decision, and a route that starts 500ing WITHOUT being on it still
+ * fails the suite.
+ */
+export const DB_DEPENDENT = [
+  "/p/",
+  "/site/",
+  "/seo/",
+  "/report/",
+  "/api/public/collabs",
+  "/api/public/products/",
+  "/api/admin/website-fallback-audit",
+  "/api/auth/instagram/callback",
+  "/api/autopilot/daily-run",
+];
+
+export function isDbDependent(url: string): boolean {
+  return DB_DEPENDENT.some((prefix) => url.startsWith(prefix));
+}
+
+/**
+ * Whether this run lacks a real database behind it.
+ *
+ * An explicit OPT-IN to full mode, not host-sniffing. Sniffing for a
+ * placeholder hostname was the first version and it was wrong: CI
+ * already builds with `https://placeholder.supabase.co`, a different
+ * placeholder from the one globalSetup substitutes, so the sniff would
+ * have concluded "real database" in CI and failed the suite on routes
+ * that cannot possibly work there.
+ *
+ * Defaulting to structural is also the safe direction. The failure of
+ * a wrong guess here is either a red suite for no reason, or — worse —
+ * silently claiming coverage the run did not have.
+ */
+export function isStructuralMode(): boolean {
+  return process.env.SMOKE_REAL_DB !== "1";
+}

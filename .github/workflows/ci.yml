@@ -38,3 +38,21 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
+
+      # Route-level smoke tests — OPEN_ITEMS item 0.
+      #
+      # Reuses the .next produced by the step above rather than
+      # rebuilding, so this costs the request time and nothing more.
+      #
+      # Runs in STRUCTURAL mode: no SMOKE_REAL_DB, so database-backed
+      # routes are checked for a response rather than for correctness,
+      # and the run says so in its output. Full coverage needs a real
+      # project and a session cookie; the suite prints exactly what is
+      # uncovered rather than letting a green tick imply more than it
+      # means.
+      - name: Route smoke tests
+        run: npm run test:smoke:only
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
