@@ -11,10 +11,43 @@ it. Delete an entry when it is done.
 
 ## 0. Route-level smoke tests — hit every route, assert it works
 
-**Status:** SCHEDULED. Next work item after the Shopify and
-WooCommerce connects are verified live. Decided 2026-09-04, after the
-third incident in a week.
-**Unblocked by:** nothing
+**Status:** BUILT 2026-09-05. Parts 1 and 3 done and running in CI.
+Part 2 is built but DOES NOT RUN — see "what is still uncovered".
+**Runs as:** `npm run test:smoke` (builds first) or
+`npm run test:smoke:only`; CI runs it after the production build.
+
+### What it does
+
+Boots a real production server and requests all 355 routes derived
+from the filesystem. GET only — 255 API routes include destructive
+handlers, and a route with no GET export answering 405 still proves
+the module loaded and routing worked.
+
+Asserts two things, and the second is the one that gets forgotten:
+nothing 5xx's, and nothing redirects somewhere it should not.
+Incident 4 was a 307.
+
+### What is still uncovered — read this before trusting a green run
+
+**Authenticated rendering (part 2) does not run.** It needs a real
+Supabase session cookie, which cannot be fabricated — it is a JWT
+signed by Supabase and verified per request. Set
+`SMOKE_SESSION_COOKIE` (from a logged-in browser, DevTools →
+Application → Cookies) and it runs against all 79 dashboard pages.
+Until then the suite prints, on every run, that this is uncovered.
+
+**This is the gap that matters most.** Incident 2 — thirteen
+dashboard pages returning 500 for weeks — was behind auth, so part 1
+cannot see it. Closing this needs a durable test user.
+
+**Database-backed routes are checked for a response, not for
+correctness**, unless `SMOKE_REAL_DB=1` and a real project are
+configured. 14 routes are explicitly exempted in structural mode; any
+route that starts 500ing without being on that list still fails.
+
+---
+
+**Original entry, kept for the reasoning:**
 
 THREE production incidents in three days got past a green build and a
 full test suite, because all three were RUNTIME failures the compiler
