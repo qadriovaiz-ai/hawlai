@@ -113,7 +113,23 @@ export async function setup() {
   // failure this whole effort exists to prevent.
   try { fs.rmSync(SESSION_FILE, { force: true }); } catch { /* first run */ }
 
-  const session = await mintSmokeSession();
+  // Wrapped, because "a failed sign-in costs part 2, not the whole
+  // run" was only half-implemented: mintSmokeSession's own try/catch
+  // did not cover the client CONSTRUCTION, so a throw there escaped,
+  // took globalSetup down, and vitest reported "No test files found"
+  // — a message that points nowhere near the real cause. All 361
+  // assertions were lost to a problem in the optional third of them.
+  //
+  // Belt and braces on purpose: mintSmokeSession now catches its own
+  // failures too. Setup for an OPTIONAL capability must never be able
+  // to abort the mandatory ones.
+  let session: Awaited<ReturnType<typeof mintSmokeSession>>;
+  try {
+    session = await mintSmokeSession();
+  } catch (err: any) {
+    session = { ok: false, reason: `unexpected error: ${err?.message ?? String(err)}` };
+  }
+
   if (session.ok) {
     fs.mkdirSync(path.dirname(SESSION_FILE), { recursive: true });
     fs.writeFileSync(SESSION_FILE, session.cookie, "utf8");

@@ -61,16 +61,44 @@ export async function mintSmokeSession(): Promise<SessionResult> {
   }
 
   const captured: { name: string; value: string }[] = [];
-  const client = createServerClient(url, anonKey, {
-    cookies: {
-      getAll: () => [],
-      setAll: (list: { name: string; value: string }[]) => {
-        for (const { name, value } of list) captured.push({ name, value });
-      },
-    },
-  });
 
   try {
+    // WEBSOCKET SHIM, and it is required — this crashed CI.
+    //
+    // createServerClient builds a full SupabaseClient, whose
+    // constructor EAGERLY constructs a RealtimeClient, which throws on
+    // Node < 22:
+    //
+    //   Error: Node.js 20 detected without native WebSocket support
+    //
+    // The runner is Node 20; this machine is Node 24, which has
+    // WebSocket natively — so the failure existed only in CI and was
+    // invisible locally. Exactly the "works on my machine" gap this
+    // whole suite exists to close, arriving in the suite's own setup.
+    //
+    // A stub is honest here rather than a cop-out: nothing in these
+    // tests uses realtime. The constructor only needs a reference to
+    // hold; no connection is attempted unless .channel() is called,
+    // and it never is. Shimming beats bumping the runner's Node,
+    // which would change the version the production build is verified
+    // against in order to fix a test helper.
+    if (typeof (globalThis as any).WebSocket === "undefined") {
+      (globalThis as any).WebSocket = class SmokeWebSocketStub {
+        constructor() {
+          throw new Error("[smoke] realtime is not used by the smoke tests and must not be opened");
+        }
+      };
+    }
+
+    const client = createServerClient(url, anonKey, {
+      cookies: {
+        getAll: () => [],
+        setAll: (list: { name: string; value: string }[]) => {
+          for (const { name, value } of list) captured.push({ name, value });
+        },
+      },
+    });
+
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) return { ok: false, reason: `sign-in failed: ${error.message}` };
     if (!data.session) return { ok: false, reason: "sign-in returned no session" };
