@@ -40,9 +40,23 @@ jobs:
       - name: Production build
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
-          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
+          # MUST match the smoke step's values exactly.
+          #
+          # Next INLINES NEXT_PUBLIC_* at BUILD time into the client and
+          # edge bundles — the middleware among them. Building with a
+          # placeholder and then serving with real credentials produces
+          # a split brain: server components read the real project at
+          # runtime, while the middleware still holds the placeholder
+          # compiled in. It then validates every session against a host
+          # that does not exist, finds no user, and redirects to login.
+          #
+          # That is exactly what happened: a correctly minted, correctly
+          # named session cookie was rejected on all 77 dashboard pages,
+          # which read as "77 broken pages" and was really one
+          # mismatched build variable.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SMOKE_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SMOKE_SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
 
       # Route-level smoke tests — OPEN_ITEMS item 0.
       #
