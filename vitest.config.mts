@@ -24,6 +24,12 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Smoke tests need a running production server and live in their
+    // own config (vitest.smoke.config.mts). Without this exclusion the
+    // `tests/**` glob picks them up and they fail against a port with
+    // nothing on it — which would look like a broken app rather than a
+    // misconfigured runner.
+    exclude: ["node_modules/**", "tests/smoke/**"],
     // A run must never pass because no assertion executed.
     passWithNoTests: false,
     reporters: process.env.CI ? ["dot"] : ["default"],

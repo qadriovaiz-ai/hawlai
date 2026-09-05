@@ -33,11 +33,11 @@ const SHOPIFY_ERRORS: Record<string, string> = {
   // Shopify issued a token it will then refuse on every API call.
   // Always our configuration, never the merchant's.
   non_expiring_token: "Shopify issued a token we can't use. That's a setup problem on our side, not yours.",
-  network: "Couldn't reach Shopify. Try again in a moment.",
-  // Distinct from `network`, which claimed a connectivity problem for
-  // every exception in the callback — including our own bugs. This one
-  // says plainly that it isn't the merchant's end, and the server log
-  // now carries the actual error.
+  // `network` was REMOVED, not renamed away and left behind. It
+  // claimed a connectivity problem for every exception in the callback
+  // — including our own bugs — and the callback no longer emits it.
+  // The dead-code test caught the leftover, which is exactly the
+  // failure mode it was written for.
   unexpected: "Something went wrong on our side while connecting. We've logged it — try again in a moment.",
   token_exchange_unparseable: "Shopify sent back something we couldn't read. That's on our side — we've logged it.",
 };

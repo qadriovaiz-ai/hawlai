@@ -1,0 +1,161 @@
+// Route-level smoke tests — OPEN_ITEMS item 0, parts 1 and 2.
+//
+// WHY THIS EXISTS. Four production failures shipped green:
+//
+//   1. 2026-09-02  redirect loop left the dashboard blank
+//   2. 2026-09-03  buttonClasses was a client export called from
+//                  thirteen server components — every one 500'd, for
+//                  weeks, with 263 tests passing
+//   3. 2026-09-04  both OAuth callbacks 307'd to /auth/login
+//   4. 2026-09-04  both cron routes 307'd on every invocation; the
+//                  event queue never drained and the daily autopilot
+//                  never ran
+//
+// All four were runtime failures the compiler cannot see, and none was
+// catchable by a unit test, because nothing in the repository ever
+// EXECUTED a route. `next build` prerenders only static routes;
+// everything behind auth is dynamic and never runs.
+//
+// TWO ASSERTIONS, and the second is the one people forget:
+//   - nothing returns 5xx
+//   - nothing redirects somewhere it should not
+// Incident 4 was a 307, not a 500. A smoke test checking only for
+// server errors would have passed it and taught us the wrong lesson
+// twice.
+//
+// GET ONLY, ALWAYS. 255 API routes include destructive handlers;
+// firing POST or DELETE at all of them to see what happens would be a
+// worse idea than the bugs this catches. A route with no GET export
+// answers 405, which is a pass — it proves the module loaded and the
+// framework routed to it.
+
+import { describe, it, expect } from "vitest";
+import { collectRoutes, shouldSkip, type Route } from "./routeInventory";
+import { SMOKE_BASE } from "./globalSetup";
+
+const routes = collectRoutes();
+
+/** Public prefixes, mirroring PUBLIC_PATH_PREFIXES in the middleware. */
+const PUBLIC_PREFIXES = ["/auth", "/p/", "/site/", "/collabs", "/affiliates", "/book/", "/report/", "/invite/", "/seo/", "/api/public/", "/api/admin/", "/admin-seed-knowledge", "/api/events/dispatch", "/api/autopilot/daily-run"];
+const isPublic = (url: string) => url === "/" || PUBLIC_PREFIXES.some((p) => url.startsWith(p));
+
+async function request(url: string, headers: Record<string, string> = {}) {
+  const res = await fetch(`${SMOKE_BASE}${url}`, {
+    method: "GET",
+    redirect: "manual",
+    headers,
+    signal: AbortSignal.timeout(30_000),
+  });
+  return { status: res.status, location: res.headers.get("location") ?? "" };
+}
+
+describe("part 1 — every route is reachable and nothing 5xx's", () => {
+  const testable = routes.filter((r) => !shouldSkip(r.url));
+
+  it("found a realistic number of routes", () => {
+    // Vacuity guard. If the inventory ever returns nothing, every
+    // assertion below would pass over an empty list.
+    expect(testable.length).toBeGreaterThan(200);
+  });
+
+  it.each(testable.map((r) => [r.url, r] as [string, Route]))(
+    "%s does not 5xx",
+    async (_url, route) => {
+      const { status } = await request(route.url);
+      // THE CORE ASSERTION. A 404 on a dynamic route with a
+      // placeholder id is expected and fine; a 500 never is.
+      expect(status, `${route.file} returned ${status}`).toBeLessThan(500);
+    },
+    35_000
+  );
+});
+
+describe("part 1b — routes redirect where they should, and nowhere else", () => {
+  // Incident 4's shape: a correct-looking 307 to the wrong place.
+  const protectedPages = routes.filter((r) => r.kind === "page" && !isPublic(r.url) && !shouldSkip(r.url));
+  const publicPages = routes.filter((r) => r.kind === "page" && isPublic(r.url) && !r.dynamic && !shouldSkip(r.url));
+
+  it("protected pages send a logged-out visitor to the login page", async () => {
+    // Not merely "redirects somewhere" — to /auth/login specifically.
+    // A redirect loop (incident 1) or a redirect to a page that
+    // refuses the method (incident 4) both pass a looser check.
+    const wrong: string[] = [];
+    for (const route of protectedPages.slice(0, 40)) {
+      const { status, location } = await request(route.url);
+      if (status !== 307 && status !== 302) { wrong.push(`${route.url} → ${status}`); continue; }
+      if (!location.includes("/auth/login")) wrong.push(`${route.url} → ${location}`);
+    }
+    expect(wrong, `unexpected redirect targets: ${wrong.join(", ")}`).toEqual([]);
+  }, 120_000);
+
+  it("public pages render for a logged-out visitor", async () => {
+    // The buttonClasses class of bug: these RENDER, so a server-side
+    // throw shows up here as a 500 rather than staying invisible.
+    const broken: string[] = [];
+    for (const route of publicPages) {
+      const { status } = await request(route.url);
+      if (status >= 400) broken.push(`${route.url} → ${status}`);
+    }
+    expect(broken, `public pages not rendering: ${broken.join(", ")}`).toEqual([]);
+  }, 120_000);
+
+  it("self-authenticating routes reach their own auth instead of being redirected", async () => {
+    // Incident 4 exactly. These must NOT be 307'd — they authenticate
+    // their own caller and can never present a session cookie.
+    for (const url of ["/api/events/dispatch", "/api/autopilot/daily-run"]) {
+      const { status, location } = await request(url);
+      expect(location, `${url} was redirected to ${location}`).not.toContain("/auth/login");
+      expect(status, `${url} returned ${status}`).toBeLessThan(500);
+    }
+  }, 60_000);
+});
+
+// ---------------------------------------------------------------
+// PART 2 — rendering pages WITH a session.
+// ---------------------------------------------------------------
+// Needs a real Supabase session cookie, which cannot be fabricated
+// here: it is a JWT signed by Supabase and verified on every request.
+//
+// Set SMOKE_SESSION_COOKIE to the `sb-<ref>-auth-token` cookie from a
+// logged-in browser (DevTools → Application → Cookies) and this block
+// runs. Without it the tests SKIP LOUDLY rather than passing — a
+// silent pass here would be the worst outcome of all, since it would
+// report coverage of exactly the incident that started this.
+const sessionCookie = process.env.SMOKE_SESSION_COOKIE;
+
+describe.skipIf(!sessionCookie)("part 2 — authenticated pages actually render", () => {
+  const dashboardPages = collectRoutes().filter(
+    (r) => r.kind === "page" && r.url.startsWith("/dashboard") && !r.dynamic && !shouldSkip(r.url)
+  );
+
+  it("every dashboard page renders without a server error", async () => {
+    // THE INCIDENT-2 CHECK. Thirteen server components called a client
+    // export and threw at render. Only executing the render finds it.
+    const broken: string[] = [];
+    for (const route of dashboardPages) {
+      const { status, location } = await request(route.url, { cookie: sessionCookie! });
+      if (status >= 500) { broken.push(`${route.url} → ${status}`); continue; }
+      // A redirect back to login means the cookie is stale, not that
+      // the page is broken — say so rather than reporting a failure.
+      if (location.includes("/auth/login")) {
+        broken.push(`${route.url} → redirected to login (SMOKE_SESSION_COOKIE is expired?)`);
+      }
+    }
+    expect(broken, `pages failing to render: ${broken.join(", ")}`).toEqual([]);
+  }, 300_000);
+});
+
+describe("part 2 coverage is visible when it is absent", () => {
+  it("says plainly whether authenticated rendering was covered", () => {
+    if (!sessionCookie) {
+      console.warn(
+        "\n  [smoke] PART 2 DID NOT RUN — SMOKE_SESSION_COOKIE is not set.\n" +
+        "  Authenticated page rendering is UNCOVERED. This is the gap that let\n" +
+        "  thirteen dashboard pages 500 for weeks. Set the cookie in CI to close it.\n"
+      );
+    }
+    // Always passes. Its job is to make an absence visible in the
+    // output rather than let it look like coverage.
+    expect(true).toBe(true);
+  });
+});

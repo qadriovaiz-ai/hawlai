@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit -p .",
     "migrations:check": "tsx scripts/check-migrations.ts",
     "secrets:rekey": "tsx scripts/rekey-secrets.ts",
-    "secrets:backfill-oauth": "tsx scripts/backfill-oauth-tokens.ts"
+    "secrets:backfill-oauth": "tsx scripts/backfill-oauth-tokens.ts",
+    "test:smoke": "next build && vitest run --config vitest.smoke.config.mts",
+    "test:smoke:only": "vitest run --config vitest.smoke.config.mts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
