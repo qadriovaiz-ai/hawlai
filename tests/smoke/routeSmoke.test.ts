@@ -174,16 +174,28 @@ describe.skipIf(!sessionCookie)("part 2 — authenticated pages actually render"
     // THE INCIDENT-2 CHECK. Thirteen server components called a client
     // export and threw at render. Only executing the render finds it.
     const broken: string[] = [];
+    const redirected: string[] = [];
     for (const route of dashboardPages) {
       const { status, location } = await request(route.url, { cookie: sessionCookie! });
       if (status >= 500) { broken.push(`${route.url} → ${status}`); continue; }
       // A redirect back to login means the cookie is stale, not that
       // the page is broken — say so rather than reporting a failure.
       if (location.includes("/auth/login")) {
-        broken.push(`${route.url} → redirected to login (SMOKE_SESSION_COOKIE is expired?)`);
+        // Report ONCE with the reason, not 77 times with the same
+        // guess appended. A wall of identical messages buries the one
+        // fact that matters: the session was minted and rejected, so
+        // this is a cookie problem, not 77 broken pages.
+        redirected.push(route.url);
       }
     }
-    expect(broken, `pages failing to render: ${broken.join(", ")}`).toEqual([]);
+    // Two DIFFERENT failures, never merged. A 500 is a broken page; a
+    // redirect to login is a session the app would not accept, which
+    // says nothing about the page at all.
+    expect(
+      redirected.length,
+      `the session was minted but REJECTED by the app — ${redirected.length}/${dashboardPages.length} pages redirected to login. This is a cookie problem, not a page problem.`
+    ).toBe(0);
+    expect(broken, `pages returning 5xx: ${broken.join(", ")}`).toEqual([]);
   }, 300_000);
 });
 

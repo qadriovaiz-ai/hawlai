@@ -109,6 +109,18 @@ export async function mintSmokeSession(): Promise<SessionResult> {
     // Chunked cookies must ALL be sent; dropping `.1` yields a cookie
     // the app cannot decode, which presents as a logged-out session.
     const cookie = captured.map((c) => `${c.name}=${c.value}`).join("; ");
+
+    // NAMES ONLY, never values — a value here is a live session.
+    //
+    // Added because sign-in SUCCEEDED and all 77 dashboard pages still
+    // redirected to login, which means the cookie was minted and then
+    // not accepted. The two candidate explanations — wrong cookie
+    // name, or capturing only the PKCE code-verifier instead of the
+    // auth token — are distinguishable by the names alone, and
+    // guessing between them without looking is how the Shopify
+    // diagnosis went wrong three times.
+    console.log(`  [smoke] cookies captured: ${captured.map((c) => c.name).join(", ") || "(none)"}`);
+
     return { ok: true, cookie, userId: data.session.user.id };
   } catch (err: any) {
     return { ok: false, reason: err?.message ?? "could not reach Supabase" };
