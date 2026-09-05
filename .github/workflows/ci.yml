@@ -87,6 +87,12 @@ jobs:
           # regardless of how good the database is. Supplying it is what
           # takes the run from 346/360 to full coverage.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SMOKE_SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
+          # Present so the route reaches its own 401 instead of the
+          # "not configured" 500 it correctly returns when unset. A
+          # dummy value is right here: the smoke tests never send the
+          # header, so they exercise the rejection path, which is the
+          # behaviour worth asserting.
+          ADMIN_SEED_SECRET: smoke-not-a-real-secret
           SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
           SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
           # Full mode: the CI project has a real schema, so a 500 from

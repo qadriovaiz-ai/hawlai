@@ -7,12 +7,26 @@ import { NextResponse } from "next/server";
 // Account ID, and saves both automatically — the person never sees
 // or handles a token directly.
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+  const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const dealershipId = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const integrationsUrl = new URL("/dashboard/settings/integrations", process.env.NEXT_PUBLIC_SITE_URL);
+  // `?? origin` matches what the linkedin, pinterest and snapchat
+  // callbacks already do. This one was the only deviation, and it was
+  // a real 500: `new URL(path, undefined)` THROWS, and it threw on
+  // line 15 — before the error/code guards below could run — so a
+  // deployment without NEXT_PUBLIC_SITE_URL got an unexplained crash
+  // instead of the intended redirect, and the route could never
+  // report why because it died building the URL it would report with.
+  //
+  // The same file already knew this variable might be unset: the
+  // redirectUri a few lines down guards with `?? ""`. The
+  // inconsistency was the bug.
+  //
+  // Found by the route smoke tests, which is exactly the class of
+  // runtime-only failure they exist to catch.
+  const integrationsUrl = new URL("/dashboard/settings/integrations", process.env.NEXT_PUBLIC_SITE_URL ?? origin);
 
   if (error || !code || !dealershipId) {
     integrationsUrl.searchParams.set("instagram_error", error ?? "Connection was cancelled or incomplete");

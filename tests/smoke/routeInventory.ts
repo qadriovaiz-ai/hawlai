@@ -13,8 +13,20 @@ const APP_DIR = path.join(process.cwd(), "src", "app");
 export type RouteKind = "page" | "api";
 export type Route = { url: string; kind: RouteKind; file: string; dynamic: boolean };
 
-/** Placeholder for a dynamic segment. Deliberately obviously fake. */
-const PLACEHOLDER = "smoke-test-placeholder";
+/**
+ * Value substituted for a dynamic segment like [id] or [slug].
+ *
+ * A VALID UUID, and that matters. It was "smoke-test-placeholder",
+ * which is fine for a slug but not parseable as a uuid — so any route
+ * querying a uuid column got a Postgres 22P02 and returned 500, and
+ * the suite reported a defect that was purely an artefact of the
+ * value I chose. A uuid is well-formed for uuid columns AND perfectly
+ * acceptable as a slug, so it is strictly the better placeholder.
+ *
+ * Still obviously fake, and version 4 / variant 8 so it is valid
+ * rather than merely uuid-shaped. Nothing should ever match it.
+ */
+const PLACEHOLDER = "00000000-0000-4000-8000-000000000000";
 
 function toUrl(relativeDir: string): string | null {
   const segments = relativeDir.split(path.sep).filter(Boolean);
