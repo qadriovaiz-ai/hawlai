@@ -31,7 +31,8 @@
 
 import { describe, it, expect } from "vitest";
 import { collectRoutes, shouldSkip, isDbDependent, isStructuralMode, type Route } from "./routeInventory";
-import { SMOKE_BASE } from "./globalSetup";
+import fs from "fs";
+import { SMOKE_BASE, SESSION_FILE } from "./globalSetup";
 
 const routes = collectRoutes();
 
@@ -140,15 +141,29 @@ describe("part 1b — routes redirect where they should, and nowhere else", () =
 // ---------------------------------------------------------------
 // PART 2 — rendering pages WITH a session.
 // ---------------------------------------------------------------
-// Needs a real Supabase session cookie, which cannot be fabricated
-// here: it is a JWT signed by Supabase and verified on every request.
+// Needs a real Supabase session, which cannot be fabricated: it is a
+// JWT signed by Supabase and verified on every request.
 //
-// Set SMOKE_SESSION_COOKIE to the `sb-<ref>-auth-token` cookie from a
-// logged-in browser (DevTools → Application → Cookies) and this block
-// runs. Without it the tests SKIP LOUDLY rather than passing — a
-// silent pass here would be the worst outcome of all, since it would
-// report coverage of exactly the incident that started this.
-const sessionCookie = process.env.SMOKE_SESSION_COOKIE;
+// globalSetup mints one per run by signing in as a dedicated CI test
+// user (SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD against a real
+// NEXT_PUBLIC_SUPABASE_URL). Credentials are the durable secret; the
+// session itself is disposable and never stored.
+//
+// Without them this block SKIPS LOUDLY rather than passing. A silent
+// pass would be the worst outcome available — it would report
+// coverage of exactly the incident that started this.
+function readSessionCookie(): string | undefined {
+  // Written by globalSetup after a successful sign-in. Read from a
+  // file rather than process.env because globalSetup runs in the main
+  // process and tests run in workers.
+  try {
+    const value = fs.readFileSync(SESSION_FILE, "utf8").trim();
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
+const sessionCookie = readSessionCookie();
 
 describe.skipIf(!sessionCookie)("part 2 — authenticated pages actually render", () => {
   const dashboardPages = collectRoutes().filter(
@@ -188,9 +203,11 @@ describe("coverage is visible when it is absent", () => {
   it("says plainly whether authenticated rendering was covered", () => {
     if (!sessionCookie) {
       console.warn(
-        "\n  [smoke] PART 2 DID NOT RUN — SMOKE_SESSION_COOKIE is not set.\n" +
+        "\n  [smoke] PART 2 DID NOT RUN — no CI test user configured.\n" +
         "  Authenticated page rendering is UNCOVERED. This is the gap that let\n" +
-        "  thirteen dashboard pages 500 for weeks. Set the cookie in CI to close it.\n"
+        "  thirteen dashboard pages 500 for weeks.\n" +
+        "  Set SMOKE_USER_EMAIL, SMOKE_USER_PASSWORD and a real\n" +
+        "  NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY to close it.\n"
       );
     }
     // Always passes. Its job is to make an absence visible in the

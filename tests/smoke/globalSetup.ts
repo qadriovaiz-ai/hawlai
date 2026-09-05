@@ -13,6 +13,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "path";
+import { mintSmokeSession, hasSmokeCredentials } from "./session";
 
 export const SMOKE_PORT = Number(process.env.SMOKE_PORT ?? 3210);
 export const SMOKE_BASE = `http://127.0.0.1:${SMOKE_PORT}`;
@@ -34,6 +35,17 @@ async function waitForReady(timeoutMs = 120_000): Promise<void> {
   }
   throw new Error(`Smoke server did not become ready on ${SMOKE_BASE} within ${timeoutMs}ms`);
 }
+
+/**
+ * Where the minted session cookie is handed to the test file.
+ *
+ * A FILE, not process.env. globalSetup runs in the main process while
+ * tests run in workers, so an env var set here is not reliably visible
+ * there — and the failure mode is silent: part 2 would skip, print
+ * "not configured", and look exactly like a correct opt-out while
+ * credentials were sitting right there.
+ */
+export const SESSION_FILE = path.join(process.cwd(), ".next", "cache", "smoke-session");
 
 export async function setup() {
   const buildId = path.join(process.cwd(), ".next", "BUILD_ID");
@@ -89,9 +101,31 @@ export async function setup() {
     console.error("--- smoke server output ---\n" + log.join(""));
     throw err;
   }
+
+  // Part 2's session, minted fresh each run rather than read from a
+  // stored secret.
+  //
+  // A failed sign-in does NOT stop the run: parts 1 and 3 are still
+  // worth having, and a bad credential should cost one third of the
+  // coverage, not all of it. But when credentials were SUPPLIED and
+  // did not work, that is shouted about — CI would otherwise believe
+  // it has part 2 coverage while having none, which is the precise
+  // failure this whole effort exists to prevent.
+  try { fs.rmSync(SESSION_FILE, { force: true }); } catch { /* first run */ }
+
+  const session = await mintSmokeSession();
+  if (session.ok) {
+    fs.mkdirSync(path.dirname(SESSION_FILE), { recursive: true });
+    fs.writeFileSync(SESSION_FILE, session.cookie, "utf8");
+    console.log(`  [smoke] signed in as CI test user ${session.userId} — part 2 will run`);
+  } else if (hasSmokeCredentials()) {
+    console.error(`  [smoke] PART 2 CREDENTIALS SUPPLIED BUT FAILED: ${session.reason}`);
+  }
 }
 
 export async function teardown() {
+  // The cookie is a live credential; it does not outlive the run.
+  try { fs.rmSync(SESSION_FILE, { force: true }); } catch { /* nothing to remove */ }
   if (!server) return;
   // Windows needs the tree killed; a bare kill leaves next's child.
   if (process.platform === "win32" && server.pid) {
