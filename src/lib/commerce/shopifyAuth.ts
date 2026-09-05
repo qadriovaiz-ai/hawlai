@@ -82,7 +82,20 @@ export function missingScopes(required: string, grantedScope: string): string[] 
     .filter((scope) => !scopeSatisfied(scope, granted));
 }
 
-export const SHOPIFY_API_VERSION = "2024-01";
+/**
+ * The Admin API version every Shopify call uses.
+ *
+ * Was 2024-01, hardcoded here AND twice more in shopifyAgent.ts — a
+ * constant that two of its three call sites ignored. 2024-01 stopped
+ * being supported in January 2025, so every call was against a dead
+ * version for over eighteen months.
+ *
+ * 2026-07 is the newest stable release, supported until 16 July 2027.
+ * Shopify ships quarterly and supports each version for at least
+ * twelve months, so this needs revisiting roughly annually — sooner
+ * if a mutation used here changes shape.
+ */
+export const SHOPIFY_API_VERSION = "2026-07";
 
 export type ShopDomainResult = { ok: true; shop: string } | { ok: false; reason: string };
 

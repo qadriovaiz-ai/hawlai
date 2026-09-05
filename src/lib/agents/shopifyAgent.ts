@@ -9,6 +9,8 @@
 // generated Admin API access token here.
 // ------------------------------------------------------------------
 
+import { shopifyGraphQL } from "@/lib/commerce/shopifyGraphQL";
+
 function normalizeStoreUrl(storeUrl: string): string {
   let url = storeUrl.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
   if (!url.includes(".myshopify.com") && !url.includes(".")) {
@@ -50,18 +52,56 @@ export interface ShopifyProduct {
   product_url: string | null;
 }
 
+// GraphQL, because REST /products is DEPRECATED for public apps
+// (deadline 1 Feb 2025, long past) — not a modernisation, the only
+// door left open to an app like this one.
+//
+// The response SHAPE differs, and that is the substance of this
+// migration rather than the endpoint swap. REST embedded variants and
+// images as plain arrays on the product; GraphQL nests them as
+// connections, so `p.variants[0].price` becomes
+// `p.variants.edges[0].node.price`. Reading the old shape off the new
+// response yields undefined everywhere, silently — a product list
+// that renders with every price blank rather than failing.
+const PRODUCTS_QUERY = `
+  query SmokeProducts($first: Int!) {
+    products(first: $first) {
+      edges {
+        node {
+          id
+          title
+          handle
+          variants(first: 1) { edges { node { price } } }
+          images(first: 1) { edges { node { url } } }
+        }
+      }
+    }
+  }
+`;
+
 export async function fetchShopifyProducts(storeUrl: string, accessToken: string, limit: number = 20): Promise<ShopifyProduct[]> {
   const domain = normalizeStoreUrl(storeUrl);
-  const res = await fetch(`https://${domain}/admin/api/2024-01/products.json?limit=${limit}`, {
-    headers: { "X-Shopify-Access-Token": accessToken },
-  });
-  if (!res.ok) throw new Error(`Shopify returned ${res.status}`);
-  const data = await res.json();
-  return (data.products ?? []).map((p: any) => ({
+  const result = await shopifyGraphQL<{ products: { edges: { node: any }[] } }>(
+    domain,
+    accessToken,
+    PRODUCTS_QUERY,
+    { first: limit }
+  );
+  // Throwing preserves the existing contract — both call sites already
+  // wrap this in try/catch and treat a throw as "connected, no
+  // products". Returning a Result here would silently change that to
+  // "no products" with no error logged anywhere.
+  if (!result.ok) throw new Error(result.reason);
+
+  return (result.data.products?.edges ?? []).map(({ node: p }: { node: any }) => ({
+    // A GraphQL id is "gid://shopify/Product/123", not a bare number.
+    // Kept whole: it is what every mutation takes as input, and
+    // stripping it to a number would mean reconstructing it later
+    // from a format that is Shopify's to change.
     id: String(p.id),
     title: p.title,
-    price: p.variants?.[0]?.price ?? null,
-    image_url: p.images?.[0]?.src ?? null,
+    price: p.variants?.edges?.[0]?.node?.price ?? null,
+    image_url: p.images?.edges?.[0]?.node?.url ?? null,
     // Uses the .myshopify.com domain by default — if the store has a
     // custom domain connected, that would need to be entered
     // separately since Shopify's API doesn't expose it here.
