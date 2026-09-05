@@ -70,17 +70,20 @@ export function createShopifyPlatform(deps: {
   const fetchImpl = deps.fetchImpl ?? fetch;
 
   /**
-   * Shopify's capabilities, and NOT a copy of the full ActionKey list.
+   * Shopify's capabilities — what is BUILT, not what is planned.
    *
-   * publish_post and update_post are absent because Shopify is not a
-   * CMS in the sense those mean. Declaring them would produce a tool
-   * the assistant offers on a Shopify store and that fails when used.
+   * update_product_description and create_discount_code were briefly
+   * listed here with preview() returning an honest "not built yet".
+   * Removed: a declared capability is a promise the tool layer reads,
+   * and an honest failure at the end of a flow is still a flow the
+   * assistant should never have offered. They come back when they
+   * work.
+   *
+   * publish_post and update_post are absent for a different reason —
+   * Shopify is not a CMS in the sense those mean, so they are not
+   * planned here at all.
    */
-  const supports: readonly ActionKey[] = [
-    "update_product_price",
-    "update_product_description",
-    "create_discount_code",
-  ];
+  const supports: readonly ActionKey[] = ["update_product_price"];
 
   async function readVariant(shop: string, token: string, variantId: string): Promise<VariantNode | null> {
     const result = await shopifyGraphQL<{ productVariant: VariantNode | null }>(
@@ -106,14 +109,6 @@ export function createShopifyPlatform(deps: {
       if (!supports.includes(action.actionKey)) {
         return { ok: false, reason: `Shopify cannot do "${action.actionKey}".` };
       }
-      if (action.actionKey !== "update_product_price") {
-        // Honest rather than silently doing nothing. The other two
-        // supported keys are declared but not implemented in this
-        // pass, and a preview that returned an empty diff would look
-        // like "no changes needed".
-        return { ok: false, reason: `Preview for "${action.actionKey}" is not built yet.` };
-      }
-
       const creds = await deps.getCredentials(action.dealershipId);
       if (!creds) return { ok: false, reason: "Shopify isn't connected." };
       if (!action.targetRef) return { ok: false, reason: "No product variant was specified." };
