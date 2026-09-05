@@ -53,6 +53,21 @@ jobs:
       - name: Route smoke tests
         run: npm run test:smoke:only
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+          # Points at the dedicated CI Supabase project when the
+          # secrets are set, and falls back to placeholders when they
+          # are not — so a fork or a clone still gets parts 1 and 3
+          # rather than a red suite it cannot fix.
+          #
+          # SMOKE_* names deliberately differ from the production
+          # variable names. Nothing here should ever be able to reach
+          # the production project by a copy-paste accident.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SMOKE_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+          # Full mode: the CI project has a real schema, so a 500 from
+          # a database-backed route is a genuine defect, not a missing
+          # database. This is what makes the run assert on all 355
+          # routes rather than exempting 14.
+          SMOKE_REAL_DB: ${{ secrets.SMOKE_SUPABASE_URL && '1' || '' }}
