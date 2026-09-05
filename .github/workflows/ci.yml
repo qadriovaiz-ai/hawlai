@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual re-run from the Actions tab. Added because the smoke tests
+  # depend on repository SECRETS, and a secret added after a run cannot
+  # be picked up without re-triggering — previously that meant pushing
+  # an empty commit just to re-read configuration.
+  workflow_dispatch:
 
 jobs:
   verify:
