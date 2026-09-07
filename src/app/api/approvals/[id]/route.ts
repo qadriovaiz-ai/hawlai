@@ -60,7 +60,12 @@ export async function PATCH(
   // even if the original (lower or unrelated) amount would've passed.
   if (status === "approved") {
     const checkAmount = hasValidModification && approval.action_type === "change_campaign_budget" ? modified_details.new_budget : (approval.amount ?? null);
-    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, checkAmount);
+    // action_type is passed so the critical-no-amount rule can apply.
+    // WITHOUT IT this call silently reverts to "null amount = routine",
+    // and a marketing manager can approve a live price change — the
+    // exact bypass approvalGating.test.ts warns about: every policy
+    // test stays green while the call site skips the policy.
+    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, checkAmount, approval.action_type);
     if (!authority.canApprove) {
       return NextResponse.json({ error: authority.reason ?? "You don't have authority to approve this." }, { status: 403 });
     }

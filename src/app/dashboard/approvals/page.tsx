@@ -192,7 +192,7 @@ export default async function ApprovalsPage() {
                 <div className="flex justify-end -mx-5 px-5 pt-3 border-t border-slate-200/80">
                   <ApprovalActions
                     approvalId={approval.id}
-                    authority={checkApprovalAuthority(viewerRole, approvalThreshold, approval.amount ?? null)}
+                    authority={checkApprovalAuthority(viewerRole, approvalThreshold, approval.amount ?? null, approval.action_type)}
                     amount={approval.amount ?? null}
                     modifiableBudget={approval.action_type === "change_campaign_budget" ? (details.new_budget ?? approval.amount ?? null) : undefined}
                   />

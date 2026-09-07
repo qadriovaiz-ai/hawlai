@@ -67,7 +67,9 @@ export async function PATCH(
       const { data: teamMember } = await supabase.from("team_members").select("role").eq("user_id", user.id).eq("dealership_id", dealershipId).eq("status", "active").maybeSingle();
       role = (teamMember?.role as ApprovalRole) ?? "viewer";
     }
-    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, creative.daily_budget ?? null);
+    // Named explicitly — this route only ever activates a campaign, and
+    // the policy key has to match ACTION_POLICIES for the rule to find it.
+    const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, creative.daily_budget ?? null, "activate_ad_campaign");
     if (!authority.canApprove) {
       // P0 11b — a blocked activation doesn't just dead-end: it becomes
       // a real request in the Approvals queue (same pending_approvals
