@@ -3,6 +3,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { executePublishAction } from "@/lib/publish/executor";
+import { createShopifyPlatform } from "@/lib/publish/platforms/shopify";
+import { shopifyCredentialsAdapter } from "@/lib/publish/platforms/shopifyCredentials";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
@@ -165,6 +168,52 @@ export async function PATCH(
     summary: `${humanizeActionType(approval.action_type)} — ${status}${hasValidModification ? " (modified)" : ""}`,
     details: { action_type: approval.action_type, amount: approval.amount, modified_details: hasValidModification ? modified_details : null, rejection_reason: status === "rejected" ? (rejection_reason ?? null) : null },
   });
+
+  // ---- Publish actions execute HERE, after the approval is recorded --
+  //
+  // Ordering is load-bearing and differs from the Meta branches above,
+  // which apply their effect BEFORE this update. It has to: the
+  // executor re-verifies pending_approvals.status === 'approved'
+  // rather than trusting the action's own column, so running it any
+  // earlier would refuse its own approval.
+  //
+  // Inline rather than on a cron (the agreed trigger): the owner sees
+  // the outcome on the click that caused it, and Hobby's two-cron
+  // ceiling is already spent on the autopilot groups.
+  //
+  // A failure here does NOT unwind the approval. The human decision
+  // was real and is recorded; what failed is the attempt to carry it
+  // out, and that distinction is exactly what publish_actions.status
+  // exists to keep.
+  if (status === "approved") {
+    const { data: publishAction } = await service
+      .from("publish_actions")
+      .select("id")
+      .eq("approval_id", id)
+      .maybeSingle();
+
+    if (publishAction) {
+      const outcome = await executePublishAction(
+        { supabase: service, platforms: { shopify: createShopifyPlatform({ getCredentials: shopifyCredentialsAdapter }) } },
+        publishAction.id
+      );
+
+      if (outcome.status !== "executed") {
+        return NextResponse.json({
+          ...data,
+          publish: {
+            status: outcome.status,
+            message:
+              outcome.status === "stale"
+                ? "Approved, but the item changed after you reviewed it — nothing was applied. Ask again to see the current values."
+                : `Approved, but the change couldn't be applied: ${"error" in outcome ? outcome.error : outcome.reason}`,
+          },
+        });
+      }
+
+      return NextResponse.json({ ...data, publish: { status: "executed" } });
+    }
+  }
 
   return NextResponse.json(data);
 }
