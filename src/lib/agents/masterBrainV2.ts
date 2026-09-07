@@ -327,6 +327,34 @@ const TOOLS = [
     },
   },
   {
+    // Named propose_* to match propose_campaign_budget_change: the
+    // prefix already means "this goes to Approvals, it does not
+    // happen now", and the person reading the tool list should not
+    // have to learn a second convention.
+    name: "propose_price_change",
+    description:
+      "Request a price change on a product in the connected Shopify store. This NEVER changes the price directly — it resolves which product is meant, shows a preview, and sends it to the Approvals queue for the owner to review. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product_description: {
+          type: "string",
+          description: "How the person referred to the product, in their own words, e.g. 'the blue kurta' or 'the large size shirt'",
+        },
+        new_price: {
+          type: "string",
+          description: "The price they want, as a plain number without a currency symbol, e.g. '999'",
+        },
+        variant_id: {
+          type: "string",
+          description:
+            "Only on a FOLLOW-UP call, after this tool returned candidates and the person picked one. Pass that candidate's variant_id exactly as given. Never invent one.",
+        },
+      },
+      required: ["product_description", "new_price"],
+    },
+  },
+  {
     name: "get_follow_up_reminders",
     description: "Get real leads that need attention right now — stuck 2+ days with no follow-up, and today's scheduled appointments.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -842,6 +870,108 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       if (error) return { error: error.message };
       return { success: true, toggle: input.toggle, enabled: !!input.enabled };
     }
+    case "propose_price_change": {
+      // Resolution, preview and the approval request all live behind
+      // createPublishAction — this case only decides WHICH product,
+      // and only ever by asking when it cannot tell.
+      const { resolveShopifyCredentials } = await import("../publish/platforms/shopifyCredentials");
+      const { searchShopifyVariants } = await import("../publish/platforms/shopifySearch");
+      const { interpretCandidates, userClarified } = await import("../publish/resolve");
+      const { createShopifyPlatform } = await import("../publish/platforms/shopify");
+      const { createPublishAction } = await import("../publish/create");
+      const { createServiceClient: makeService } = await import("../supabase/service");
+
+      const creds = await resolveShopifyCredentials(ctx.id);
+      if (!creds.ok) return { error: creds.reason };
+
+      const phrase = String(input.product_description ?? "").trim();
+      const newPrice = String(input.new_price ?? "").trim();
+      if (!newPrice || Number.isNaN(Number(newPrice)) || Number(newPrice) < 0) {
+        return { error: "That price isn't a number I can use — give it as a plain amount, e.g. 999." };
+      }
+
+      const search = await searchShopifyVariants(creds.shop, creds.accessToken, phrase);
+      if (!search.ok) return { error: search.reason };
+
+      // A variant_id means the model is on a follow-up turn, after it
+      // showed candidates and the person chose. Recorded as
+      // user_clarified rather than direct: a person decided, and the
+      // audit should say so.
+      //
+      // The id is NOT trusted — it must be one of the candidates this
+      // search just returned. A hallucinated id would otherwise reach
+      // preview and fail confusingly, and a REAL id for the wrong
+      // product would reprice something nobody looked at.
+      const chosenId = typeof input.variant_id === "string" ? input.variant_id.trim() : "";
+      let resolution;
+      if (chosenId) {
+        const chosen = search.candidates.find((c) => c.ref === chosenId);
+        if (!chosen) {
+          return { error: "That product choice doesn't match anything I found — show the options again and let them pick." };
+        }
+        resolution = userClarified(phrase, chosen, search.candidates);
+      } else {
+        resolution = interpretCandidates(phrase, search.candidates);
+      }
+
+      if (resolution.status === "not_found") {
+        return { error: `Couldn't find a product matching "${phrase}" in the store.` };
+      }
+
+      if (resolution.status === "ambiguous") {
+        // ASK. Deliberately not an error — the model needs to show
+        // these and wait, and an error phrasing makes it apologise
+        // instead. The candidate list carries price and variant name
+        // because the name alone cannot separate two similar rows.
+        return {
+          needs_clarification: true,
+          question: `Which one did you mean?`,
+          candidates: resolution.candidates.map((c) => ({
+            variant_id: c.ref,
+            title: c.title,
+            variant: c.variantTitle,
+            current_price: c.currentPrice,
+            image_url: c.imageUrl,
+            active: c.active,
+          })),
+        };
+      }
+
+      const created = await createPublishAction(
+        makeService(),
+        createShopifyPlatform({ getCredentials: async () => ({ shop: creds.shop, accessToken: creds.accessToken }) }),
+        {
+          dealershipId: ctx.id,
+          platform: "shopify",
+          actionKey: "update_product_price",
+          targetRef: resolution.target.ref,
+          targetLabel: `${resolution.target.title}${resolution.target.variantTitle ? ` — ${resolution.target.variantTitle}` : ""}`,
+          requestedChanges: { price: newPrice },
+          requestedBy: null,
+          resolutionPath: resolution.path,
+          resolutionDetail: resolution.detail,
+        }
+      );
+
+      if (!created.ok) return { error: created.reason };
+
+      return {
+        success: true,
+        already_pending: created.alreadyPending ?? false,
+        summary: created.preview.summary,
+        product: created.preview.target?.title ?? resolution.target.title,
+        variant: created.preview.target?.variantTitle ?? null,
+        current_price: created.preview.target?.currentPrice ?? null,
+        new_price: newPrice,
+        image_url: created.preview.target?.imageUrl ?? null,
+        warnings: created.preview.warnings,
+        resolution_path: resolution.path,
+        note: created.alreadyPending
+          ? "This exact change is already waiting in Approvals — nothing new was created."
+          : "Sent to Approvals — the owner reviews it there, and it applies the moment they approve.",
+      };
+    }
+
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change": {
       const { data: campaigns } = await supabase
@@ -1468,6 +1598,47 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       return { kind: "record", label: "Automation workflow created", fields: [{ label: "Status", value: result.enabled ? "Enabled" : "Created, not enabled yet" }], departmentHref };
     case "set_automation_toggle":
       return { kind: "record", label: "Automation setting changed", fields: [{ label: result.toggle.replace(/_/g, " "), value: result.enabled ? "Turned on" : "Turned off" }], departmentHref };
+    case "propose_price_change": {
+      // Two genuinely different cards, because the two outcomes ask
+      // different things of the person. A candidate list is a
+      // QUESTION — it needs price and variant beside each option, or
+      // they cannot tell two similar rows apart. A proposal is a
+      // RECEIPT — it needs the resolved product's real identity, so a
+      // wrong resolution is visible before anyone approves it.
+      if (result.needs_clarification) {
+        return {
+          kind: "record",
+          label: "Which product did you mean?",
+          summary: "Pick one and I'll send the price change for approval.",
+          groups: [
+            {
+              heading: `${(result.candidates ?? []).length} matches`,
+              items: (result.candidates ?? []).map((c: any) => ({
+                label: `${c.title}${c.variant ? ` — ${c.variant}` : ""}`,
+                note: [c.current_price ? `currently ${c.current_price}` : null, c.active ? null : "not active"]
+                  .filter(Boolean)
+                  .join(" · "),
+              })),
+            },
+          ],
+        };
+      }
+      return {
+        kind: "record",
+        label: result.already_pending ? "Already waiting for approval" : "Price change requested",
+        summary: `${result.summary} ${result.note}`,
+        // The RESOLVED product, not the phrase they typed. If
+        // resolution picked wrongly, this card is where it gets
+        // caught — before the owner approves, not after.
+        fields: [
+          { label: "Product", value: `${result.product}${result.variant ? ` — ${result.variant}` : ""}` },
+          { label: "Current price", value: String(result.current_price ?? "unknown") },
+          { label: "New price", value: String(result.new_price) },
+          ...(result.warnings ?? []).map((w: string) => ({ label: "Note", value: w })),
+        ],
+        url: result.image_url || undefined,
+      };
+    }
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change":
       return { kind: "record", label: `Change requested: ${result.campaign}`, summary: `${result.summary}${result.impact ? ` ${result.impact}` : ""} Waiting for approval.`, departmentHref };

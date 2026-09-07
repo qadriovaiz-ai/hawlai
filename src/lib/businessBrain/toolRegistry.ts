@@ -39,6 +39,25 @@ export interface BusinessBrainTool {
 
 export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   {
+    name: "propose_price_change",
+    description:
+      "Request a price change on a product in the connected Shopify store. Never applies it directly — resolves the product, previews the change, and sends it to Approvals.",
+    parameters: {
+      product_description: { type: "string", description: "How the person referred to the product, in their own words", required: true },
+      new_price: { type: "string", description: "The price they want, as a plain number", required: true },
+      variant_id: { type: "string", description: "Only on a follow-up call, after candidates were shown and one was picked" },
+    },
+    // CHAT ONLY, deliberately. On a voice call there is no way to show
+    // a candidate list with prices and images, and "which one did you
+    // mean?" over the phone against five similar variants is how the
+    // wrong product gets repriced. The resolution rule is never guess;
+    // a channel that cannot show the options cannot honour it.
+    channels: ["chat"],
+    handlerRef: "lib/publish/create.ts:createPublishAction",
+    status: "live",
+  },
+
+  {
     name: "add_lead",
     description: "Create a new lead/CRM record for this business.",
     parameters: {
