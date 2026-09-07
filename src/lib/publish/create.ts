@@ -14,6 +14,7 @@
 import crypto from "crypto";
 import { getActionPolicy } from "@/lib/executionPolicy";
 import type { PublishPlatform, ActionKey, PlatformId, PreviewDiff } from "./types";
+import type { ResolutionPath, ResolutionDetail } from "./resolve";
 import { toRecord } from "./executor";
 
 export type CreateInput = {
@@ -26,6 +27,13 @@ export type CreateInput = {
   targetLabel: string;
   requestedChanges: Record<string, unknown>;
   requestedBy: string | null;
+  /**
+   * How targetRef was arrived at. Recorded so that, if the wrong
+   * product is repriced, the row can answer "how did it pick that
+   * one?" — a question the preview alone cannot settle after the fact.
+   */
+  resolutionPath?: ResolutionPath;
+  resolutionDetail?: ResolutionDetail;
 };
 
 export type CreateResult =
@@ -119,6 +127,8 @@ export async function createPublishAction(
       status: "draft",
       idempotency_key: idempotencyKey,
       requested_by: input.requestedBy,
+      resolution_path: input.resolutionPath ?? null,
+      resolution_detail: input.resolutionDetail ?? null,
     })
     .select("*")
     .single();
@@ -165,6 +175,11 @@ export async function createPublishAction(
         changes: preview.preview.changes,
         warnings: preview.preview.warnings,
         publish_action_id: draft.id,
+        // Surfaced to the approver, not just stored. "You picked this
+        // from five" and "this was the only match" are different
+        // levels of confidence, and the person saying yes is entitled
+        // to know which one they are looking at.
+        resolution_path: input.resolutionPath ?? null,
       },
       // NULL on purpose. A price change has no rupee amount, and
       // inventing one would feed the threshold logic a number that

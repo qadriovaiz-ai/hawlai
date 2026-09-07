@@ -40,6 +40,7 @@ export function toRecord(row: Row): PublishActionRecord {
     previewedAt: row.previewed_at ?? null,
     status: row.status as PublishStatus,
     idempotencyKey: row.idempotency_key,
+    resolutionPath: row.resolution_path ?? null,
   };
 }
 

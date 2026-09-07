@@ -54,6 +54,26 @@ export type FieldChange = {
  */
 export type PreviewDiff = {
   summary: string;
+  /**
+   * WHO is being changed, in the platform's own words.
+   *
+   * The approver is confirming a RESOLVED product, not the phrase that
+   * was typed. "the blue kurta" became a specific variant id through a
+   * search, and if that search picked wrongly the only place it can be
+   * caught is here — so the preview carries the exact stored title,
+   * the current price and an image, not the merchant's original words.
+   *
+   * Optional so a platform with nothing meaningful to identify can
+   * omit it rather than fabricate one.
+   */
+  target?: {
+    title: string;
+    variantTitle: string | null;
+    currentPrice: string | null;
+    imageUrl: string | null;
+    /** How this target was arrived at — surfaced so the UI can say "you chose this". */
+    resolutionPath?: string;
+  };
   changes: FieldChange[];
   /**
    * Things true about this change that a reasonable person would want
@@ -78,6 +98,8 @@ export type PublishActionRecord = {
   previewedAt: string | null;
   status: PublishStatus;
   idempotencyKey: string;
+  /** How targetRef was arrived at — carried into the preview for the approver. */
+  resolutionPath?: string | null;
 };
 
 export type PublishStatus =

@@ -27,7 +27,7 @@ const VARIANT_QUERY = `
       id
       title
       price
-      product { id title status }
+      product { id title status featuredImage { url } }
     }
   }
 `;
@@ -50,7 +50,7 @@ type VariantNode = {
   id: string;
   title: string;
   price: string;
-  product: { id: string; title: string; status: string };
+  product: { id: string; title: string; status: string; featuredImage?: { url: string } | null };
 };
 
 /** Money comparison by VALUE, not by string. "999" and "999.00" are the same price. */
@@ -147,6 +147,18 @@ export function createShopifyPlatform(deps: {
         ok: true,
         preview: {
           summary: `Price of "${variant.product.title}${variant.title && variant.title !== "Default Title" ? ` — ${variant.title}` : ""}": ${variant.price} → ${nextPrice}`,
+          // WHO is being changed, from Shopify rather than from the
+          // merchant's phrase. If "the blue kurta" resolved to the
+          // wrong variant, this is the only place it can be caught —
+          // so the approver sees the exact stored title, the current
+          // price and the image, not the words they typed.
+          target: {
+            title: variant.product.title,
+            variantTitle: variant.title && variant.title !== "Default Title" ? variant.title : null,
+            currentPrice: variant.price,
+            imageUrl: variant.product.featuredImage?.url ?? null,
+            resolutionPath: action.resolutionPath ?? undefined,
+          },
           changes,
           warnings,
         },
