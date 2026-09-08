@@ -90,6 +90,17 @@ describe("PAUSED-on-create guarantee", () => {
     //
     // This catches exactly that edit. It does not verify the route
     // works.
+    //
+    // SUPERSEDED as the primary guarantee by adLaunchPaused.test.ts,
+    // which runs the handler and reads what was actually sent to the
+    // Graph API. Kept as a cheap canary — it needs no mocks and fails
+    // on a bare ACTIVE anywhere in the file — but it is now the weaker
+    // of the two, and the reason is worth recording: it is blind to
+    // every defect that does not change this one string. Verified
+    // against three mutations; it missed the budget being sent in
+    // rupees instead of paise (a ₹5/day campaign the merchant thinks
+    // is ₹500/day) and missed the external_status dual-write being
+    // dropped. The behavioural test caught both.
     const source = fs.readFileSync("src/app/api/ads/adlaunch/route.ts", "utf8");
     expect(source).toContain('status: "PAUSED"');
     expect(source).not.toContain('status: "ACTIVE"');

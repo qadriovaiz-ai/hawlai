@@ -169,9 +169,13 @@ describe("nothing reaches Meta in a spending state", () => {
     await POST(launchRequest());
     const update = writes.find((w) => w.op === "update" && w.meta_ad_id);
 
-    expect(update.meta_status).toBe("PAUSED");
-    expect(update.external_status).toBe("PAUSED");
-    expect(update.status).toBe("launched");
+    // Asserted before the fields are read: without it, a launch that
+    // never wrote the row at all would make every expect below
+    // silently operate on undefined.
+    expect(update, "no ad_creatives update carried the Meta ids").toBeDefined();
+    expect(update!.meta_status).toBe("PAUSED");
+    expect(update!.external_status).toBe("PAUSED");
+    expect(update!.status).toBe("launched");
   });
 });
 
