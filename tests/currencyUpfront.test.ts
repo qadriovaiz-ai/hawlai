@@ -130,11 +130,23 @@ describe("all three stages state the currency before any amount", () => {
       "src/lib/publish/money.ts",
       "src/lib/publish/create.ts",
     ]) {
+      // Targets the DEFECT SHAPE, not every occurrence of the symbol.
+      //
+      // money.ts legitimately maps "₹" to INR when READING what a
+      // merchant typed. That is input parsing, and banning it would
+      // mean refusing to understand someone who types ₹999 — the
+      // opposite of the fix.
+      //
+      // The bug was a rupee sign in OUTPUT: a literal glued to an
+      // amount, as in `₹${price}` or "₹" + price. That is what this
+      // looks for, so the check stays sharp instead of being
+      // whitelisted away file by file.
       const source = committed(file);
       const offending = source
         .split("\n")
-        .filter((l) => l.includes("₹") && !l.trim().startsWith("//") && !l.trim().startsWith("*"));
-      expect(offending, `${file} hardcodes a rupee symbol: ${offending.join(" | ")}`).toEqual([]);
+        .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+        .filter((l) => /₹\s*(\$\{|"\s*\+|\+)/.test(l) || /(\}|\+\s*")\s*₹/.test(l));
+      expect(offending, `${file} formats an amount with a hardcoded ₹: ${offending.join(" | ")}`).toEqual([]);
     }
   });
 });
