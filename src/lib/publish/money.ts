@@ -39,3 +39,52 @@ export function formatMoney(amount: string | number | null | undefined, currency
     return `${code} ${amount}`;
   }
 }
+
+/** A currency the merchant named, and the bare amount they meant. */
+export type StatedPrice = {
+  /** Digits only, ready to send to the platform. Null when unparseable. */
+  amount: string | null;
+  /** ISO code the merchant named, if they named one at all. */
+  statedCurrency: string | null;
+};
+
+const SYMBOLS: Record<string, string> = { "₹": "INR", $: "USD", "£": "GBP", "€": "EUR", "¥": "JPY" };
+const WORDS: Record<string, string> = {
+  rupee: "INR", rupees: "INR", rs: "INR", inr: "INR",
+  dollar: "USD", dollars: "USD", usd: "USD", buck: "USD", bucks: "USD",
+  pound: "GBP", pounds: "GBP", gbp: "GBP",
+  euro: "EUR", euros: "EUR", eur: "EUR",
+  yen: "JPY", jpy: "JPY",
+};
+
+/**
+ * Read "999", "₹999", "$999", "999 rupees", "rs 1,299" the same way.
+ *
+ * A STORE'S CURRENCY IS NOT A USER CHOICE. It is fixed in Shopify's
+ * settings, so asking "which currency did you mean?" presents a
+ * decision the merchant does not actually have. The number is the
+ * instruction; any currency word is context, not a parameter.
+ *
+ * NO EXCHANGE-RATE CONVERSION, deliberately — see the caller. This
+ * only reports what was said.
+ */
+export function parseStatedPrice(input: string): StatedPrice {
+  const raw = (input ?? "").trim().toLowerCase();
+  if (!raw) return { amount: null, statedCurrency: null };
+
+  let statedCurrency: string | null = null;
+  for (const [symbol, code] of Object.entries(SYMBOLS)) {
+    if (raw.includes(symbol)) { statedCurrency = code; break; }
+  }
+  if (!statedCurrency) {
+    for (const word of raw.split(/[^a-z]+/).filter(Boolean)) {
+      if (WORDS[word]) { statedCurrency = WORDS[word]; break; }
+    }
+  }
+
+  // Commas are thousands separators in every locale this product
+  // serves; stripping them before parsing is why "1,299" is 1299 and
+  // not 1.
+  const match = raw.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  return { amount: match ? match[0] : null, statedCurrency };
+}

@@ -101,7 +101,11 @@ export async function createPublishAction(
     .eq("idempotency_key", key)
     .maybeSingle();
 
-  if (existing && !TERMINAL.has(existing.status)) {
+  // A row is only genuinely "already waiting" if it HAS a preview. A
+  // draft is non-terminal but has none — returning it would hand the
+  // caller preview: null, and every field read off it throws. That is
+  // a crash on a path nobody exercises until two requests collide.
+  if (existing && !TERMINAL.has(existing.status) && existing.preview) {
     return {
       ok: true,
       actionId: existing.id,
@@ -114,6 +118,9 @@ export async function createPublishAction(
   // A previous attempt for this same intent finished. The merchant is
   // entitled to ask again — a price they set last week is a fair thing
   // to set again — so the key is salted to clear the unique index.
+  // Salted when a row already holds this key — whether it finished, or
+  // is an abandoned previewless draft. Either way the unique index
+  // must not block a merchant asking again.
   const idempotencyKey = existing ? `${key}:${Date.now().toString(36)}` : key;
 
   const { data: draft, error: insertError } = await supabase

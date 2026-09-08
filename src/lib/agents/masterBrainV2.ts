@@ -885,9 +885,15 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       if (!creds.ok) return { error: creds.reason };
 
       const phrase = String(input.product_description ?? "").trim();
-      const newPrice = String(input.new_price ?? "").trim();
+      // "999", "$999", "999 rupees", "rs 1,299" all mean the same
+      // instruction: set the price to that number. A store's currency
+      // is fixed in Shopify's settings, so asking "which currency?"
+      // offers the merchant a decision they do not actually have.
+      const { parseStatedPrice: parsePrice } = await import("../publish/money");
+      const stated = parsePrice(String(input.new_price ?? ""));
+      const newPrice = stated.amount ?? "";
       if (!newPrice || Number.isNaN(Number(newPrice)) || Number(newPrice) < 0) {
-        return { error: "That price isn't a number I can use — give it as a plain amount, e.g. 999." };
+        return { error: "I couldn't read a price in that — give me an amount, e.g. 999." };
       }
 
       const { formatMoney: fmtMoney } = await import("../publish/money");
@@ -960,7 +966,11 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           actionKey: "update_product_price",
           targetRef: resolution.target.ref,
           targetLabel: `${resolution.target.title}${resolution.target.variantTitle ? ` — ${resolution.target.variantTitle}` : ""}`,
-          requestedChanges: { price: newPrice },
+          // statedCurrency travels so the PREVIEW can warn when the
+          // merchant named a currency their store does not use. A
+          // warning, never a question — the preview is the safety net,
+          // and this is exactly the sort of thing it exists to surface.
+          requestedChanges: { price: newPrice, statedCurrency: stated.statedCurrency },
           requestedBy: null,
           resolutionPath: resolution.path,
           resolutionDetail: resolution.detail,
@@ -987,9 +997,13 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         image_url: created.preview.target?.imageUrl ?? null,
         warnings: created.preview.warnings,
         resolution_path: resolution.path,
+        // NEITHER note points at a page. The decision is on the card
+        // right here — telling someone to go elsewhere is the bug that
+        // came back through the duplicate path after being fixed once
+        // on the happy path.
         note: created.alreadyPending
-          ? "This exact change is already waiting in Approvals — nothing new was created."
-          : "Sent to Approvals — the owner reviews it there, and it applies the moment they approve.",
+          ? "You already asked for this exact change — here it is again, still waiting on your approval."
+          : "Ready for your approval below — nothing changes in your store until you approve it.",
       };
     }
 

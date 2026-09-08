@@ -74,3 +74,63 @@ describe("the store currency is actually fetched", () => {
     expect(read("src/lib/publish/platforms/shopifySearch.ts")).toContain("shop { currencyCode }");
   });
 });
+
+describe("parseStatedPrice — the store's currency is not a user choice", () => {
+  it("reads a bare number", async () => {
+    const { parseStatedPrice } = await import("@/lib/publish/money");
+    expect(parseStatedPrice("999")).toEqual({ amount: "999", statedCurrency: null });
+  });
+
+  it("reads symbols and words as the SAME instruction", async () => {
+    const { parseStatedPrice } = await import("@/lib/publish/money");
+    // Every one of these means "set it to 999". A store's currency is
+    // fixed in Shopify's settings, so asking "which currency?" offers
+    // a decision the merchant does not have.
+    for (const said of ["₹999", "$999", "999 rupees", "rs 999", "999 dollars", "USD 999", "£999"]) {
+      expect(parseStatedPrice(said).amount, said).toBe("999");
+    }
+  });
+
+  it("records WHICH currency was named, for the preview warning", async () => {
+    const { parseStatedPrice } = await import("@/lib/publish/money");
+    expect(parseStatedPrice("₹999").statedCurrency).toBe("INR");
+    expect(parseStatedPrice("$999").statedCurrency).toBe("USD");
+    expect(parseStatedPrice("999 rupees karo").statedCurrency).toBe("INR");
+    expect(parseStatedPrice("999").statedCurrency).toBeNull();
+  });
+
+  it("strips thousands separators", async () => {
+    const { parseStatedPrice } = await import("@/lib/publish/money");
+    // "1,299" is 1299, not 1 — the difference between a price and a
+    // catastrophe.
+    expect(parseStatedPrice("₹1,299").amount).toBe("1299");
+    expect(parseStatedPrice("1,00,000").amount).toBe("100000");
+  });
+
+  it("keeps decimals", async () => {
+    const { parseStatedPrice } = await import("@/lib/publish/money");
+    expect(parseStatedPrice("$749.95").amount).toBe("749.95");
+  });
+
+  it("returns null rather than guessing when there is no number", async () => {
+    const { parseStatedPrice } = await import("@/lib/publish/money");
+    for (const junk of ["", "   ", "cheaper please", "rupees"]) {
+      expect(parseStatedPrice(junk).amount, junk).toBeNull();
+    }
+  });
+});
+
+describe("no page-pointing in the price-change notes", () => {
+  it("neither note tells the person to go somewhere else", async () => {
+    const { execFileSync } = await import("child_process");
+    const src = execFileSync("git", ["show", "HEAD:src/lib/agents/masterBrainV2.ts"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const handler = src.slice(src.indexOf('case "propose_price_change": {'), src.indexOf('case "propose_campaign_budget_change":'));
+    // The decision is on the card. Sending someone to a separate page
+    // is the bug that came back through the duplicate path after being
+    // fixed once on the happy path — so both notes are asserted, not
+    // just the one that was reported.
+    expect(handler).not.toMatch(/go to \/dashboard|waiting in Approvals|review it there/i);
+    expect(handler).toMatch(/still waiting on your approval/);
+    expect(handler).toMatch(/Ready for your approval below/);
+  });
+});

@@ -152,6 +152,25 @@ export function createShopifyPlatform(deps: {
       if (variant.product.status !== "ACTIVE") {
         warnings.push(`This product is ${variant.product.status.toLowerCase()} — the change won't be visible to customers until it's active.`);
       }
+      // The merchant named a currency their store does not use. NOT a
+      // question — the number is the instruction and the store's
+      // currency is fixed in Shopify. Surfaced here because the
+      // preview is where a misunderstanding gets caught, and "you said
+      // rupees, this store prices in USD" is exactly what an approver
+      // needs to see before saying yes.
+      //
+      // Deliberately NO exchange-rate conversion. A merchant saying
+      // "999 rupees" about their own USD store has almost certainly
+      // misspoken, not asked for ~$12 at today's rate — and silently
+      // applying an FX rate to a live price is a worse failure than
+      // showing them the number they actually said.
+      const statedCurrency = typeof action.requestedChanges.statedCurrency === "string" ? action.requestedChanges.statedCurrency : null;
+      if (statedCurrency && variant.currencyCode && statedCurrency !== variant.currencyCode) {
+        warnings.push(
+          `You said ${statedCurrency}, but this store prices in ${variant.currencyCode} — this sets ${formatMoney(nextPrice, variant.currencyCode)}, not a converted amount.`
+        );
+      }
+
       if (samePrice(variant.price, nextPrice)) {
         warnings.push("The price is already this value — approving will change nothing.");
       }
