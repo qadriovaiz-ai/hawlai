@@ -41,7 +41,7 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   {
     name: "propose_price_change",
     description:
-      "Request a price change on a product in the connected Shopify store. Never applies it directly — resolves the product, previews the change, and sends it to Approvals.",
+      "Request a price change on a product in the connected Shopify store. Never applies it directly — resolves the product and shows a preview with Approve/Reject buttons inline in the chat, where the person decides. Never directs them to a separate page.",
     parameters: {
       product_description: { type: "string", description: "How the person referred to the product, in their own words", required: true },
       new_price: { type: "string", description: "The price they want, as a plain number", required: true },
