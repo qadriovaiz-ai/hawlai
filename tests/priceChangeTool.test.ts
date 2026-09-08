@@ -109,9 +109,17 @@ describe("the handler's safety rules, read from the committed source", () => {
     expect(handler).toMatch(/createPublishAction/);
   });
 
-  it("tells the person when the request was already waiting", () => {
-    // Asking twice returns the existing action. Silently reporting
-    // "sent!" a second time would leave them expecting two approvals.
-    expect(handler).toContain("already waiting in Approvals");
+  it("tells the person when the request was already waiting, WITHOUT sending them away", () => {
+    // Asking twice returns the existing action, and saying "sent!" a
+    // second time would leave them expecting two approvals.
+    //
+    // This test used to assert the string "already waiting in
+    // Approvals" — which was itself the bug. The duplicate path told
+    // people to go to a separate page while the card sat right there
+    // with its buttons, and the assertion locked that in. Asserting
+    // the INTENT rather than the wording is what lets the wording be
+    // fixed.
+    expect(handler).toMatch(/already asked for this/i);
+    expect(handler).not.toMatch(/in Approvals|go to \/dashboard/i);
   });
 });
