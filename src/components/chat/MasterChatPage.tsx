@@ -18,6 +18,17 @@ const EXAMPLES = [
 
 interface Artifact {
   kind: "visual" | "document" | "record" | "metric" | "link" | "aeo_report";
+  /**
+   * A decision the person can take WITHOUT leaving the chat.
+   *
+   * Set when a tool created a pending_approvals row. The first live
+   * test sent the merchant to a separate Approvals page to find the
+   * request they had just been shown — most people will not know to
+   * go there, and it defeats the point of a chat-first product. The
+   * Approvals page stays as the audit view; it is no longer the only
+   * way to say yes.
+   */
+  approval?: { id: string; publishActionId?: string };
   type?: "image" | "website" | "3d_scene" | "canvas_design";
   label: string;
   summary?: string;
@@ -222,7 +233,7 @@ export default function MasterChatPage({
                         <ExternalLink className="w-2.5 h-2.5" /> View {artifact.label}
                       </button>
                     ) : (
-                      <ArtifactCard key={ai} artifact={artifact} />
+                      <ArtifactCard key={ai} artifact={artifact} onEdit={(text) => setMessage(text)} />
                     )
                   )}
                 </div>
@@ -377,9 +388,93 @@ function flattenDraftBody(raw: Record<string, any>): { heading: string | null; b
   return { heading: headingField ? raw[headingField] : null, body: parts.join("\n\n") };
 }
 
-function ArtifactCard({ artifact }: { artifact: Artifact }) {
+function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [editingDraft, setEditingDraft] = useState(false);
+
+  // Inline approval state. Local to the card because the decision is
+  // about THIS message — hoisting it would mean the parent tracking a
+  // list of pending approvals it otherwise has no reason to know about.
+  const [decision, setDecision] = useState<"idle" | "working" | "approved" | "rejected" | "error">("idle");
+  const [decisionNote, setDecisionNote] = useState<string | null>(null);
+
+  async function decide(status: "approved" | "rejected") {
+    if (!artifact.approval) return;
+    setDecision("working");
+    setDecisionNote(null);
+    try {
+      const res = await fetch(`/api/approvals/${artifact.approval.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDecision("error");
+        setDecisionNote(data?.error ?? "Couldn't record that.");
+        return;
+      }
+      // Approving runs the change inline, and it can succeed as a
+      // DECISION while failing as an ACTION — a stale price, a
+      // rejected write. The route says which; reporting only
+      // "approved" would claim something the store never received.
+      if (status === "approved" && data?.publish && data.publish.status !== "executed") {
+        setDecision("error");
+        setDecisionNote(data.publish.message ?? "Approved, but the change couldn't be applied.");
+        return;
+      }
+      setDecision(status);
+      setDecisionNote(status === "approved" ? "Applied to your store." : "Rejected — nothing was changed.");
+    } catch {
+      setDecision("error");
+      setDecisionNote("Couldn't reach the server.");
+    }
+  }
+
+  const approvalStrip = artifact.approval ? (
+    <div className="border-t border-slate-100 px-3 py-2">
+      {decision === "approved" || decision === "rejected" ? (
+        <p className={`text-[11px] font-medium ${decision === "approved" ? "text-emerald-600" : "text-slate-500"}`}>
+          {decisionNote}
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => decide("approved")}
+              disabled={decision === "working"}
+              className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              {decision === "working" ? "Applying..." : "Approve"}
+            </button>
+            <button
+              onClick={() => {
+                // Edit is not a modal. In a chat the natural way to
+                // change an amount is to say a different one, so this
+                // prefills the composer rather than inventing a second
+                // editing surface with its own validation.
+                onEdit?.("Change it to ");
+              }}
+              disabled={decision === "working"}
+              className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => decide("rejected")}
+              disabled={decision === "working"}
+              className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50 transition-colors"
+            >
+              Reject
+            </button>
+          </div>
+          {decision === "error" && decisionNote && (
+            <p className="mt-1.5 text-[11px] text-red-600 leading-snug">{decisionNote}</p>
+          )}
+        </>
+      )}
+    </div>
+  ) : null;
   const [draftEdit, setDraftEdit] = useState<any>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -477,12 +572,13 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
           <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
         </div>
         {complianceWarning}
+          {approvalStrip}
         {artifact.departmentHref && (
           <a
             href={artifact.departmentHref}
             className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium text-brand-600 bg-brand-500/5 border-t border-slate-100 hover:bg-brand-500/10 transition-colors"
           >
-            Open in department <ExternalLink className="w-2.5 h-2.5" />
+            {artifact.approval ? "See it in Approvals" : "Open in department"} <ExternalLink className="w-2.5 h-2.5" />
           </a>
         )}
       </div>

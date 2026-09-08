@@ -29,6 +29,8 @@ export type ResolvedTarget = {
   /** Variant name where a product has several ("Large / Blue"). */
   variantTitle: string | null;
   currentPrice: string | null;
+  /** ISO code of the store's currency. Never assumed — see money.ts. */
+  currency?: string | null;
   imageUrl: string | null;
   /** Whether the platform considers it visible to customers. */
   active: boolean;

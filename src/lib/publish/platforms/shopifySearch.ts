@@ -24,6 +24,10 @@ import type { ResolvedTarget } from "@/lib/publish/resolve";
  */
 const SEARCH_QUERY = `
   query PublishSearch($query: String!, $first: Int!) {
+    # Candidate prices are shown to a person choosing between similar
+    # products, so they need the store's real currency for exactly the
+    # same reason the preview does.
+    shop { currencyCode }
     products(first: $first, query: $query) {
       edges {
         node {
@@ -62,7 +66,7 @@ export async function searchShopifyVariants(
   // rather than an implicit OR across words — unquoted, "blue kurta"
   // matches everything blue AND everything kurta, which is a longer
   // list that is mostly noise.
-  const result = await shopifyGraphQL<{ products: { edges: { node: any }[] } }>(
+  const result = await shopifyGraphQL<{ products: { edges: { node: any }[] }; shop: { currencyCode: string } }>(
     shop,
     accessToken,
     SEARCH_QUERY,
@@ -71,6 +75,7 @@ export async function searchShopifyVariants(
   );
   if (!result.ok) return { ok: false, reason: result.reason };
 
+  const currencyCode = result.data.shop?.currencyCode ?? null;
   const candidates: ResolvedTarget[] = [];
   for (const { node: product } of result.data.products?.edges ?? []) {
     for (const { node: variant } of product.variants?.edges ?? []) {
@@ -82,6 +87,7 @@ export async function searchShopifyVariants(
         // version" wherever it is displayed.
         variantTitle: variant.title && variant.title !== "Default Title" ? variant.title : null,
         currentPrice: variant.price ?? null,
+        currency: currencyCode,
         imageUrl: product.featuredImage?.url ?? null,
         active: product.status === "ACTIVE",
       });

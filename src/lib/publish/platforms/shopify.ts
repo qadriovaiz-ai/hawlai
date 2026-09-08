@@ -20,10 +20,15 @@ import {
 } from "@/lib/publish/types";
 import { shopifyGraphQL, shopifyMutation } from "@/lib/commerce/shopifyGraphQL";
 import { publishLog, publishError } from "@/lib/publish/log";
+import { formatMoney } from "@/lib/publish/money";
 
 /** One variant's current state — the before-values a preview is built from. */
 const VARIANT_QUERY = `
   query PublishVariant($id: ID!) {
+    # The store's own currency. Without it the preview emits a bare
+    # number and the model supplies a symbol from context — which
+    # showed a USD store's price as rupees on the first live test.
+    shop { currencyCode }
     productVariant(id: $id) {
       id
       title
@@ -46,6 +51,8 @@ const PRICE_MUTATION = `
     }
   }
 `;
+
+type ShopNode = { currencyCode: string };
 
 type VariantNode = {
   id: string;
@@ -86,8 +93,12 @@ export function createShopifyPlatform(deps: {
    */
   const supports: readonly ActionKey[] = ["update_product_price"];
 
-  async function readVariant(shop: string, token: string, variantId: string): Promise<VariantNode | null> {
-    const result = await shopifyGraphQL<{ productVariant: VariantNode | null }>(
+  async function readVariant(
+    shop: string,
+    token: string,
+    variantId: string
+  ): Promise<(VariantNode & { currencyCode: string | null }) | null> {
+    const result = await shopifyGraphQL<{ productVariant: VariantNode | null; shop: ShopNode }>(
       shop,
       token,
       VARIANT_QUERY,
@@ -95,7 +106,8 @@ export function createShopifyPlatform(deps: {
       fetchImpl
     );
     if (!result.ok) return null;
-    return result.data.productVariant ?? null;
+    if (!result.data.productVariant) return null;
+    return { ...result.data.productVariant, currencyCode: result.data.shop?.currencyCode ?? null };
   }
 
   return {
@@ -147,7 +159,10 @@ export function createShopifyPlatform(deps: {
       return {
         ok: true,
         preview: {
-          summary: `Price of "${variant.product.title}${variant.title && variant.title !== "Default Title" ? ` — ${variant.title}` : ""}": ${variant.price} → ${nextPrice}`,
+          // BOTH sides formatted in the store's own currency. A bare
+          // number here is what let a USD store's price render as
+          // rupees — the model was filling in a symbol we never gave it.
+          summary: `Price of "${variant.product.title}${variant.title && variant.title !== "Default Title" ? ` — ${variant.title}` : ""}": ${formatMoney(variant.price, variant.currencyCode)} → ${formatMoney(nextPrice, variant.currencyCode)}`,
           // WHO is being changed, from Shopify rather than from the
           // merchant's phrase. If "the blue kurta" resolved to the
           // wrong variant, this is the only place it can be caught —
@@ -156,7 +171,8 @@ export function createShopifyPlatform(deps: {
           target: {
             title: variant.product.title,
             variantTitle: variant.title && variant.title !== "Default Title" ? variant.title : null,
-            currentPrice: variant.price,
+            currentPrice: formatMoney(variant.price, variant.currencyCode),
+            currency: variant.currencyCode,
             imageUrl: variant.product.featuredImage?.url ?? null,
             resolutionPath: action.resolutionPath ?? undefined,
           },

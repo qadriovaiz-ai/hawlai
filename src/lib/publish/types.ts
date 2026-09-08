@@ -69,7 +69,15 @@ export type PreviewDiff = {
   target?: {
     title: string;
     variantTitle: string | null;
+    /** Already formatted in `currency` — never a bare number. */
     currentPrice: string | null;
+    /**
+     * ISO code of the STORE's currency, carried so nothing downstream
+     * has to infer one. A live test showed a USD store's price as
+     * rupees because the path emitted a bare number and the model
+     * supplied a symbol from its own context.
+     */
+    currency?: string | null;
     imageUrl: string | null;
     /** How this target was arrived at — surfaced so the UI can say "you chose this". */
     resolutionPath?: string;

@@ -890,6 +890,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         return { error: "That price isn't a number I can use — give it as a plain amount, e.g. 999." };
       }
 
+      const { formatMoney: fmtMoney } = await import("../publish/money");
       const search = await searchShopifyVariants(creds.shop, creds.accessToken, phrase);
       if (!search.ok) return { error: search.reason };
 
@@ -943,7 +944,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
             variant_id: c.ref,
             title: c.title,
             variant: c.variantTitle,
-            current_price: c.currentPrice,
+            current_price: fmtMoney(c.currentPrice, c.currency),
             image_url: c.imageUrl,
             active: c.active,
           })),
@@ -971,11 +972,18 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return {
         success: true,
         already_pending: created.alreadyPending ?? false,
+        // Returned so the chat card can carry the decision inline.
+        approval_id: created.approvalId,
+        action_id: created.actionId,
         summary: created.preview.summary,
         product: created.preview.target?.title ?? resolution.target.title,
         variant: created.preview.target?.variantTitle ?? null,
+        // Both already formatted in the STORE's currency. The bare
+        // number is what let a USD store's price render as rupees —
+        // the model filled in a symbol nobody gave it.
         current_price: created.preview.target?.currentPrice ?? null,
-        new_price: newPrice,
+        new_price: fmtMoney(newPrice, created.preview.target?.currency),
+        currency: created.preview.target?.currency ?? null,
         image_url: created.preview.target?.imageUrl ?? null,
         warnings: created.preview.warnings,
         resolution_path: resolution.path,
@@ -1339,6 +1347,15 @@ export interface ChatTurnResult {
 }
 
 export interface Artifact {
+  /**
+   * A decision the person can take inline, without leaving the chat.
+   *
+   * Mirrored in MasterChatPage's own Artifact interface — the two are
+   * separate declarations, and the first live test found this one
+   * missing the field entirely, which is exactly the drift that
+   * duplication invites.
+   */
+  approval?: { id: string; publishActionId?: string };
   // "visual" = renders in the side workspace panel (image/website/3d/canvas,
   // unchanged from before). Everything else renders as an inline summary
   // card directly under the assistant's message in the chat feed — the
@@ -1643,6 +1660,10 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
         // The RESOLVED product, not the phrase they typed. If
         // resolution picked wrongly, this card is where it gets
         // caught — before the owner approves, not after.
+        // Carries the approval id so the card can offer Approve /
+        // Edit / Reject inline. Without it the merchant is sent to a
+        // separate page to find the request they were just shown.
+        approval: result.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
         fields: [
           { label: "Product", value: `${result.product}${result.variant ? ` — ${result.variant}` : ""}` },
           { label: "Current price", value: String(result.current_price ?? "unknown") },
