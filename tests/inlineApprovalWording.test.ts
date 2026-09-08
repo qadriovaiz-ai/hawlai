@@ -90,6 +90,16 @@ describe("the price-change path never points away from the inline card", () => {
       if (/propose_campaign_(budget|targeting)_change/.test(line)) continue;
       if (/Ads Manager/.test(line)) continue;
 
+      // A PROHIBITION quotes the banned phrasing in order to forbid
+      // it — `NEVER add "sent to Approvals"` is the fix, not the bug.
+      //
+      // Matched literally rather than by a cleverer regex: the first
+      // attempt used regex word boundaries, a heredoc turned them into
+      // literal backspace bytes, and the exemption silently never
+      // fired. A plain substring cannot fail that way, and anything
+      // it lets through is a line that explicitly forbids the phrase.
+      if (/NEVER add|never tell|do not tell|never direct/i.test(line)) continue;
+
       for (const pattern of SENDS_THEM_AWAY) {
         if (pattern.test(line)) {
           offenders.push(trimmed.slice(0, 160));

@@ -48,12 +48,21 @@ describe("the tool is registered honestly", () => {
     expect(tool!.channels).toEqual(["chat"]);
   });
 
-  it("says plainly that it does not apply the change", () => {
+  it("says plainly that it does not apply the change, and where the decision happens", () => {
     // The description is what the model reads to decide whether this
     // is the right tool. If it implied the price changes immediately,
     // the model would describe the outcome wrongly to the person.
-    expect(tool!.description.toLowerCase()).toContain("never applies it directly");
-    expect(tool!.description.toLowerCase()).toContain("approvals");
+    //
+    // This used to require the word "approvals" — which locked in the
+    // wording that caused the bug, since the decision is on an inline
+    // card and NOT on the Approvals page. Asserting the intent (it
+    // does not apply directly; the decision is in the chat) is what
+    // lets the wording be corrected. Second time a test of mine has
+    // pinned a string it should have pinned a meaning.
+    const description = tool!.description.toLowerCase();
+    expect(description).toContain("never applies it directly");
+    expect(description).toMatch(/inline in the chat|buttons in the chat/);
+    expect(description).not.toMatch(/approvals page|go to \/dashboard/);
   });
 });
 
