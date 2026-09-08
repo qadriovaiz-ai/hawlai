@@ -19,6 +19,7 @@ import {
   type ActionKey,
 } from "@/lib/publish/types";
 import { shopifyGraphQL, shopifyMutation } from "@/lib/commerce/shopifyGraphQL";
+import { publishLog, publishError } from "@/lib/publish/log";
 
 /** One variant's current state — the before-values a preview is built from. */
 const VARIANT_QUERY = `
@@ -204,12 +205,14 @@ export function createShopifyPlatform(deps: {
       // write is both correct and the only answer that survives a
       // retry.
       if (samePrice(current.price, expected.after)) {
+          publishLog("shopify.noop", { action: action.id, variant: current.id, price: current.price, why: "already_at_target" });
         return { ok: true, platformResponse: { skipped: "already at the requested price" } };
       }
 
       if (!samePrice(current.price, expected.before)) {
         // Not a failure — the human's decision is simply out of date.
         // Nothing is written.
+        publishError("shopify.stale", { action: action.id, variant: current.id, expectedBefore: expected.before, actualNow: current.price, wanted: expected.after });
         return {
           ok: false,
           stale: true,
@@ -217,6 +220,10 @@ export function createShopifyPlatform(deps: {
         };
       }
 
+        // Logged BEFORE the write as well as after: if the request
+        // times out there is otherwise no record that a price change
+        // was ever attempted, and "did it land?" becomes unanswerable.
+        publishLog("shopify.write", { action: action.id, product: current.product.id, variant: current.id, from: current.price, to: expected.after });
       const result = await shopifyMutation<{ productVariants: { id: string; price: string }[] }>(
         creds.shop,
         creds.accessToken,
@@ -232,7 +239,14 @@ export function createShopifyPlatform(deps: {
         fetchImpl
       );
 
-      if (!result.ok) return { ok: false, reason: result.reason };
+      if (!result.ok) {
+        // shopifyMutation already logged Shopify's own words; this
+        // line ties that message to the action id, which is what makes
+        // one filter tell the whole story.
+        publishError("shopify.write_failed", { action: action.id, detail: result.reason });
+        return { ok: false, reason: result.reason };
+      }
+      publishLog("shopify.write_ok", { action: action.id, variant: current.id, price: expected.after });
       return { ok: true, platformResponse: result.data };
     },
   };

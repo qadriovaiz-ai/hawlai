@@ -16,6 +16,7 @@ import { getActionPolicy } from "@/lib/executionPolicy";
 import type { PublishPlatform, ActionKey, PlatformId, PreviewDiff } from "./types";
 import type { ResolutionPath, ResolutionDetail } from "./resolve";
 import { toRecord } from "./executor";
+import { publishLog, publishError } from "./log";
 
 export type CreateInput = {
   dealershipId: string;
@@ -141,8 +142,11 @@ export async function createPublishAction(
   // product was deleted, the connection lapsed — and those are not
   // errors to hide. The draft is marked failed so the attempt stays
   // visible rather than vanishing.
+  publishLog("create.draft", { action: draft.id, dealership: input.dealershipId, key: input.actionKey, target: input.targetRef, path: input.resolutionPath ?? null });
+
   const preview = await platform.preview(toRecord(draft));
   if (!preview.ok) {
+    publishError("create.preview_failed", { action: draft.id, detail: preview.reason });
     await supabase.from("publish_actions").update({ status: "failed", error: preview.reason }).eq("id", draft.id);
     return { ok: false, reason: preview.reason };
   }
@@ -207,5 +211,6 @@ export async function createPublishAction(
     .update({ status: "awaiting_approval", approval_id: approval.id })
     .eq("id", draft.id);
 
+  publishLog("create.awaiting_approval", { action: draft.id, approval: approval.id, summary: preview.preview.summary, warnings: preview.preview.warnings.length });
   return { ok: true, actionId: draft.id, preview: preview.preview, approvalId: approval.id };
 }

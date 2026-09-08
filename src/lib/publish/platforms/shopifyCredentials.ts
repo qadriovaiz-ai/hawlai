@@ -15,6 +15,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
 import { getValidShopifyAccessToken } from "@/lib/commerce/shopifyToken";
+import { publishError } from "@/lib/publish/log";
 
 export type CredentialResult =
   | { ok: true; shop: string; accessToken: string }
@@ -56,6 +57,9 @@ export async function resolveShopifyCredentials(dealershipId: string): Promise<C
   const token = await getValidShopifyAccessToken(service, data as any, data.shopify_store_url);
 
   if (token.ok) return { ok: true, shop: data.shopify_store_url, accessToken: token.accessToken };
+
+  // The token itself is NEVER logged — only why it could not be used.
+  publishError("credentials.unusable", { dealership: dealershipId, shop: data.shopify_store_url, reason: token.reason, detail: token.detail ?? null });
 
   switch (token.reason) {
     case "busy":

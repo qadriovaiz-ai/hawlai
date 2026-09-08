@@ -26,6 +26,7 @@
 // to userErrors. Forgetting is not possible; it is a type error.
 
 import { SHOPIFY_API_VERSION } from "./shopifyAuth";
+import { publishError } from "@/lib/publish/log";
 
 export type UserError = { field?: string[] | null; message: string };
 
@@ -72,17 +73,24 @@ export async function shopifyGraphQL<T = unknown>(
     try {
       body = JSON.parse(raw);
     } catch {
+      publishError("shopify.non_json", { shop, status: res.status, detail: raw.slice(0, 300) });
       return { ok: false, reason: `Shopify returned a non-JSON response (${res.status}): ${raw.slice(0, 200)}` };
     }
 
     // Layer 1.
     if (!res.ok) {
+      publishError("shopify.http_error", { shop, status: res.status, detail: firstMessage(body?.errors) ?? raw.slice(0, 300) });
       return { ok: false, reason: firstMessage(body?.errors) ?? `Shopify returned ${res.status}` };
     }
 
-    // Layer 2 — HTTP 200, but the query itself was rejected.
+    // Layer 2 — HTTP 200 with a rejected query. Logged because a 200
+    // that is actually a failure is the trap this whole helper exists
+    // for, and it leaves no trace anywhere else.
     const topLevel = firstMessage(body?.errors);
-    if (topLevel) return { ok: false, reason: topLevel };
+    if (topLevel) {
+      publishError("shopify.graphql_error", { shop, detail: topLevel });
+      return { ok: false, reason: topLevel };
+    }
 
     if (body?.data === undefined || body?.data === null) {
       return { ok: false, reason: "Shopify returned no data" };
@@ -90,6 +98,7 @@ export async function shopifyGraphQL<T = unknown>(
 
     return { ok: true, data: body.data as T };
   } catch (err: any) {
+    publishError("shopify.threw", { shop, detail: err?.message ?? String(err) });
     return { ok: false, reason: err?.message ?? "Couldn't reach Shopify" };
   }
 }
@@ -126,6 +135,10 @@ export async function shopifyMutation<T = unknown>(
   const userErrors: UserError[] = Array.isArray(payload?.userErrors) ? payload.userErrors : [];
   if (userErrors.length > 0) {
     const detail = userErrors.map((e) => (e.field?.length ? `${e.field.join(".")}: ${e.message}` : e.message)).join("; ");
+    // Layer 3. Shopify accepted the request and DECLINED the write —
+    // HTTP 200, empty errors array. Without this line a refused price
+    // change leaves no trace at all.
+    publishError("shopify.user_errors", { shop, mutation: mutationName, detail });
     return { ok: false, reason: detail, userErrors };
   }
 

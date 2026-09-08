@@ -914,6 +914,19 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         resolution = interpretCandidates(phrase, search.candidates);
       }
 
+      const { publishLog: plog } = await import("../publish/log");
+      plog("resolve", {
+        dealership: ctx.id,
+        phrase,
+        candidates: search.candidates.length,
+        status: resolution.status,
+        path: resolution.status === "resolved" ? resolution.path : null,
+        chosen: resolution.status === "resolved" ? resolution.target.ref : null,
+      });
+
+      // The resolution decision, logged before it is acted on. If the
+      // wrong product is repriced, this line says how it was picked —
+      // the phrase, how many candidates matched, and which path won.
       if (resolution.status === "not_found") {
         return { error: `Couldn't find a product matching "${phrase}" in the store.` };
       }

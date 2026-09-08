@@ -11,6 +11,7 @@
 //   3. A crash mid-execute must not wedge an action forever.
 
 import { getActionPolicy } from "@/lib/executionPolicy";
+import { publishLog, publishError } from "./log";
 import type { PublishPlatform, PublishActionRecord, PublishStatus } from "./types";
 
 /** How long a claim is honoured before another worker may take it over. */
@@ -119,6 +120,7 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
 
   const cleared = isClearedToExecute(action, approval);
   if (!cleared.cleared) {
+    publishError("execute.refused", { action: actionId, detail: cleared.reason, approval: action.approval_id ?? null, approvalStatus: approval?.status ?? null });
     await finish(supabase, actionId, "failed", { error: cleared.reason });
     return { status: "failed", error: cleared.reason! };
   }
@@ -141,7 +143,11 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
     .select("id")
     .maybeSingle();
 
-  if (!claimed) return { status: "skipped", reason: "Another worker is already executing this action." };
+  if (!claimed) {
+    publishLog("execute.skipped", { action: actionId, why: "claimed_elsewhere" });
+    return { status: "skipped", reason: "Another worker is already executing this action." };
+  }
+  publishLog("execute.claimed", { action: actionId, platform: action.platform, key: action.action_key, target: action.target_ref });
 
   const platform = deps.platforms[action.platform];
   if (!platform) {
@@ -157,6 +163,7 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
     // Every other worker would then skip it until the TTL lapses, and
     // the reason would be nowhere.
     const error = `Platform threw: ${err?.message ?? String(err)}`;
+    publishError("execute.threw", { action: actionId, detail: err?.message ?? String(err), stack: String(err?.stack ?? "").slice(0, 300) });
     await finish(supabase, actionId, "failed", { error });
     return { status: "failed", error };
   }
@@ -166,6 +173,7 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
       platform_response: result.platformResponse ?? null,
       executed_at: new Date(now()).toISOString(),
     });
+    publishLog("execute.done", { action: actionId });
     return { status: "executed", platformResponse: result.platformResponse };
   }
 
@@ -178,9 +186,11 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
       error: "The item changed after this was approved, so nothing was applied.",
       platform_response: { changed: result.changed },
     });
+    publishLog("execute.stale", { action: actionId, detail: JSON.stringify(result.changed).slice(0, 200) });
     return { status: "stale", changed: result.changed };
   }
 
+  publishError("execute.failed", { action: actionId, detail: result.reason });
   await finish(supabase, actionId, "failed", { error: result.reason });
   return { status: "failed", error: result.reason };
 }
