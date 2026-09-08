@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
-import { executePublishAction } from "@/lib/publish/executor";
+import { releaseApprovedAction } from "@/lib/publish/release";
 import { createShopifyPlatform } from "@/lib/publish/platforms/shopify";
 import { shopifyCredentialsAdapter } from "@/lib/publish/platforms/shopifyCredentials";
 import { humanizeActionType } from "@/lib/approvalLabels";
@@ -186,17 +186,17 @@ export async function PATCH(
   // out, and that distinction is exactly what publish_actions.status
   // exists to keep.
   if (status === "approved") {
-    const { data: publishAction } = await service
-      .from("publish_actions")
-      .select("id")
-      .eq("approval_id", id)
-      .maybeSingle();
+    // releaseApprovedAction performs the awaiting_approval → approved
+    // transition this block used to skip entirely, then runs the
+    // executor. Both halves live together because the bug was in the
+    // gap between them, not in either one.
+    const released = await releaseApprovedAction(
+      { supabase: service, platforms: { shopify: createShopifyPlatform({ getCredentials: shopifyCredentialsAdapter }) } },
+      id
+    );
 
-    if (publishAction) {
-      const outcome = await executePublishAction(
-        { supabase: service, platforms: { shopify: createShopifyPlatform({ getCredentials: shopifyCredentialsAdapter }) } },
-        publishAction.id
-      );
+    if (released.kind === "ran") {
+      const { outcome } = released;
 
       if (outcome.status !== "executed") {
         return NextResponse.json({
