@@ -20,7 +20,7 @@ import {
 } from "@/lib/publish/types";
 import { shopifyGraphQL, shopifyMutation } from "@/lib/commerce/shopifyGraphQL";
 import { publishLog, publishError } from "@/lib/publish/log";
-import { formatMoney } from "@/lib/publish/money";
+import { formatMoney, describeCurrency } from "@/lib/publish/money";
 
 /** One variant's current state — the before-values a preview is built from. */
 const VARIANT_QUERY = `
@@ -134,6 +134,7 @@ export function createShopifyPlatform(deps: {
         return { ok: false, reason: "That price isn't a valid amount." };
       }
 
+      const currencyLabel = describeCurrency(variant.currencyCode);
       const changes: FieldChange[] = [{ field: "price", before: variant.price, after: nextPrice }];
 
       // Warnings inform the decision; they never block it. The person
@@ -166,8 +167,10 @@ export function createShopifyPlatform(deps: {
       // showing them the number they actually said.
       const statedCurrency = typeof action.requestedChanges.statedCurrency === "string" ? action.requestedChanges.statedCurrency : null;
       if (statedCurrency && variant.currencyCode && statedCurrency !== variant.currencyCode) {
+        // Kept, but demoted in importance: with the currency stated up
+        // front this confirms rather than surprises.
         warnings.push(
-          `You said ${statedCurrency}, but this store prices in ${variant.currencyCode} — this sets ${formatMoney(nextPrice, variant.currencyCode)}, not a converted amount.`
+          `You said ${statedCurrency} — this store prices in ${variant.currencyCode}, so this sets ${formatMoney(nextPrice, variant.currencyCode)} (not converted).`
         );
       }
 
@@ -181,7 +184,12 @@ export function createShopifyPlatform(deps: {
           // BOTH sides formatted in the store's own currency. A bare
           // number here is what let a USD store's price render as
           // rupees — the model was filling in a symbol we never gave it.
-          summary: `Price of "${variant.product.title}${variant.title && variant.title !== "Default Title" ? ` — ${variant.title}` : ""}": ${formatMoney(variant.price, variant.currencyCode)} → ${formatMoney(nextPrice, variant.currencyCode)}`,
+          // The store's currency comes FIRST, before any number.
+          // Stating it up front is what removes the ambiguity at
+          // source — the merchant sees which currency they are
+          // confirming in before they see the amount, so there is no
+          // gap between what they agree to and what gets applied.
+          summary: `${currencyLabel ? `Store currency: ${currencyLabel}. ` : ""}"${variant.product.title}${variant.title && variant.title !== "Default Title" ? ` — ${variant.title}` : ""}": ${formatMoney(variant.price, variant.currencyCode)} → ${formatMoney(nextPrice, variant.currencyCode)}`,
           // WHO is being changed, from Shopify rather than from the
           // merchant's phrase. If "the blue kurta" resolved to the
           // wrong variant, this is the only place it can be caught —
@@ -192,6 +200,7 @@ export function createShopifyPlatform(deps: {
             variantTitle: variant.title && variant.title !== "Default Title" ? variant.title : null,
             currentPrice: formatMoney(variant.price, variant.currencyCode),
             currency: variant.currencyCode,
+            currencyLabel,
             imageUrl: variant.product.featuredImage?.url ?? null,
             resolutionPath: action.resolutionPath ?? undefined,
           },

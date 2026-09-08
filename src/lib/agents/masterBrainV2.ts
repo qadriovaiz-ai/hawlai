@@ -333,7 +333,7 @@ const TOOLS = [
     // have to learn a second convention.
     name: "propose_price_change",
     description:
-      "Request a price change on a product in the connected Shopify store. This NEVER changes the price directly — it resolves which product is meant, shows a preview, and sends it to the Approvals queue for the owner to review. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
+      "Request a price change on a product in the connected Shopify store. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant, shows a preview, and sends it to the Approvals queue for the owner to review. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
     input_schema: {
       type: "object",
       properties: {
@@ -896,7 +896,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         return { error: "I couldn't read a price in that — give me an amount, e.g. 999." };
       }
 
-      const { formatMoney: fmtMoney } = await import("../publish/money");
+      const { formatMoney: fmtMoney, describeCurrency: describeCcy } = await import("../publish/money");
       const search = await searchShopifyVariants(creds.shop, creds.accessToken, phrase);
       if (!search.ok) return { error: search.reason };
 
@@ -943,9 +943,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         // these and wait, and an error phrasing makes it apologise
         // instead. The candidate list carries price and variant name
         // because the name alone cannot separate two similar rows.
+        const listCurrency = describeCcy(resolution.candidates[0]?.currency ?? null);
         return {
           needs_clarification: true,
-          question: `Which one did you mean?`,
+          // Stated here as well as on the final card. A candidate list
+          // is where the merchant first sees prices, so it is the
+          // first place the currency has to be unambiguous.
+          store_currency: listCurrency,
+          question: listCurrency
+            ? `Your store's currency is ${listCurrency}. Which product did you mean?`
+            : `Which product did you mean?`,
           candidates: resolution.candidates.map((c) => ({
             variant_id: c.ref,
             title: c.title,
@@ -994,6 +1001,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         current_price: created.preview.target?.currentPrice ?? null,
         new_price: fmtMoney(newPrice, created.preview.target?.currency),
         currency: created.preview.target?.currency ?? null,
+        store_currency: created.preview.target?.currencyLabel ?? describeCcy(created.preview.target?.currency ?? null),
+        // Read by the model when it composes the confirmation
+        // question. Naming the currency BEFORE the amount is what
+        // closes the gap between what the merchant agrees to and what
+        // gets applied — there is then nothing to reinterpret.
+        state_currency_first: true,
         image_url: created.preview.target?.imageUrl ?? null,
         warnings: created.preview.warnings,
         resolution_path: resolution.path,
@@ -1656,7 +1669,9 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
           summary: "Pick one and I'll send the price change for approval.",
           groups: [
             {
-              heading: `${(result.candidates ?? []).length} matches`,
+              heading: result.store_currency
+                ? `${(result.candidates ?? []).length} matches · prices in ${result.store_currency}`
+                : `${(result.candidates ?? []).length} matches`,
               items: (result.candidates ?? []).map((c: any) => ({
                 label: `${c.title}${c.variant ? ` — ${c.variant}` : ""}`,
                 note: [c.current_price ? `currently ${c.current_price}` : null, c.active ? null : "not active"]
@@ -1679,6 +1694,10 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
         // separate page to find the request they were just shown.
         approval: result.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
         fields: [
+          // FIRST field, deliberately. The merchant reads the currency
+          // before either number, so there is no moment where they are
+          // looking at an amount without knowing its unit.
+          ...(result.store_currency ? [{ label: "Store currency", value: String(result.store_currency) }] : []),
           { label: "Product", value: `${result.product}${result.variant ? ` — ${result.variant}` : ""}` },
           { label: "Current price", value: String(result.current_price ?? "unknown") },
           { label: "New price", value: String(result.new_price) },

@@ -78,6 +78,8 @@ export type PreviewDiff = {
      * supplied a symbol from its own context.
      */
     currency?: string | null;
+    /** "USD ($)" — said plainly, so every surface can lead with it. */
+    currencyLabel?: string | null;
     imageUrl: string | null;
     /** How this target was arrived at — surfaced so the UI can say "you chose this". */
     resolutionPath?: string;

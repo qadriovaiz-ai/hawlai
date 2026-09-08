@@ -88,3 +88,32 @@ export function parseStatedPrice(input: string): StatedPrice {
   const match = raw.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
   return { amount: match ? match[0] : null, statedCurrency };
 }
+
+/**
+ * The store's currency, said plainly: "USD ($)".
+ *
+ * STATED UP FRONT, at every stage, rather than reconciled afterwards.
+ * The earlier design showed a price and then explained a mismatch if
+ * one turned up — which leaves a gap between what the merchant thinks
+ * they are confirming and what will actually be applied. Naming the
+ * currency BEFORE the number closes that gap: nothing needs
+ * reinterpreting, because the number they gave is simply applied in
+ * the currency they were shown.
+ *
+ * Falls back to the bare code when no symbol can be derived, and to
+ * null when there is no currency to name — an honest silence rather
+ * than a guessed symbol.
+ */
+export function describeCurrency(code: string | null | undefined): string | null {
+  const iso = (code ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(iso)) return null;
+  try {
+    const symbol = new Intl.NumberFormat("en", { style: "currency", currency: iso })
+      .formatToParts(0)
+      .find((p) => p.type === "currency")?.value;
+    // A symbol identical to the code adds nothing — "USD (USD)".
+    return symbol && symbol !== iso ? `${iso} (${symbol})` : iso;
+  } catch {
+    return iso;
+  }
+}
