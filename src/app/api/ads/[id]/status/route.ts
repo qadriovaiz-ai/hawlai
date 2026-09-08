@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { metaLog } from "@/lib/ads/metaLog";
 import { getValidGoogleAdsAccessToken, setGoogleCampaignStatus } from "@/lib/ads/googleAds";
 import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/ads/pinterestAds";
 import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ads/snapchatAds";
@@ -70,6 +71,25 @@ export async function PATCH(
     // Named explicitly — this route only ever activates a campaign, and
     // the policy key has to match ACTION_POLICIES for the rule to find it.
     const authority = checkApprovalAuthority(role, dealership?.approval_threshold ?? 50000, creative.daily_budget ?? null, "activate_ad_campaign");
+
+    // THE REAL-MONEY MOMENT, and the one most worth being able to
+    // reconstruct. Records the role the decision was made under and
+    // whether the gate applied at all — an owner short-circuits
+    // checkApprovalAuthority regardless of amount, so "no approval
+    // appeared" is expected behaviour for an owner and a defect for
+    // anyone else. Without this line those two are indistinguishable
+    // afterwards.
+    metaLog("activate", {
+      dealership: dealershipId,
+      campaign: id,
+      platform,
+      role,
+      is_owner: isOwner,
+      budget: creative.daily_budget ?? null,
+      threshold: dealership?.approval_threshold ?? 50000,
+      gated: !authority.canApprove,
+    });
+
     if (!authority.canApprove) {
       // P0 11b — a blocked activation doesn't just dead-end: it becomes
       // a real request in the Approvals queue (same pending_approvals
@@ -95,6 +115,7 @@ export async function PATCH(
           amount: creative.daily_budget,
         });
       }
+      metaLog("activate.queued_for_approval", { dealership: dealershipId, campaign: id, reused_existing: Boolean(existing) });
       return NextResponse.json(
         { pendingApproval: true, message: authority.reason ? `${authority.reason} Sent to Approvals for review.` : "Sent to Approvals for review — you don't have authority to activate this yourself." },
         { status: 202 }

@@ -189,9 +189,19 @@ export function buildTextOverlaySvg(width: number, height: number, headline: str
 // hammering the endpoint again a few hundred ms later, and ad launch
 // already makes 5 sequential calls (image, creative, campaign, adset,
 // ad) — every extra attempt here multiplies across all of them.
+import { metaLog, metaError } from "@/lib/ads/metaLog";
+
 const META_RETRYABLE_ERROR_CODES = new Set([1, 2, 4, 17, 613]);
 
 export async function metaPost(path: string, params: Record<string, any>, token: string, _attempt = 0): Promise<any> {
+  // Logged BEFORE the call, so a timeout or a cold-start kill still
+  // leaves a record of which of the five sequential calls was in
+  // flight. Same reasoning as [publish]'s shopify.write.
+  //
+  // `params` is NEVER passed to the logger: it carries access_token
+  // once this function spreads it in. Only named, chosen fields.
+  metaLog("call", { path, attempt: _attempt, status: params.status ?? undefined });
+
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -202,11 +212,25 @@ export async function metaPost(path: string, params: Record<string, any>, token:
     const e = data.error ?? {};
     const isTransient = res.status >= 500 || META_RETRYABLE_ERROR_CODES.has(e.code);
     if (isTransient && _attempt === 0) {
+      metaLog("retry", { path, http: res.status, code: e.code ?? null, why: "transient" });
       await new Promise((resolve) => setTimeout(resolve, 1000));
       return metaPost(path, params, token, _attempt + 1);
     }
+    // Meta's own words. error_user_msg is the one a merchant can act
+    // on ("your ad account is disabled"), and the subcode is what
+    // makes a Graph error searchable in Meta's docs.
+    metaError("call.failed", {
+      path,
+      http: res.status,
+      code: e.code ?? null,
+      subcode: e.error_subcode ?? null,
+      detail: e.message ?? "Meta API error",
+      user_msg: e.error_user_msg ?? null,
+      attempt: _attempt,
+    });
     throw new Error(`[${path}] ${e.message ?? "Meta API error"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}${e.error_subcode ? ` (subcode ${e.error_subcode})` : ""}`);
   }
+  metaLog("call.ok", { path, id: data.id ?? null });
   return data;
 }
 

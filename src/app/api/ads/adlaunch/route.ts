@@ -8,6 +8,7 @@ import {
   GRAPH_VERSION,
 } from "@/lib/adEngine";
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
+import { metaLog, metaError } from "@/lib/ads/metaLog";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -35,6 +36,14 @@ export async function POST(request: Request) {
   const leadFormId: string | undefined = dealership?.fb_lead_form_id ?? process.env.META_LEAD_FORM_ID;
 
   if (!pageAccessToken || !rawAdAccountId || !pageId) {
+    // The most common launch failure, and previously invisible: it
+    // returns 400 before any Graph call, so nothing downstream logged.
+    metaError("launch.not_connected", {
+      dealership: dealershipId,
+      has_token: Boolean(pageAccessToken),
+      has_ad_account: Boolean(rawAdAccountId),
+      has_page: Boolean(pageId),
+    });
     return NextResponse.json(
       { error: "Facebook Page isn't connected. Go to Settings and connect your Facebook Page first, then launch the ad." },
       { status: 400 }
@@ -164,6 +173,17 @@ export async function POST(request: Request) {
     const separator = destinationUrl.includes("?") ? "&" : "?";
     destinationUrl = `${destinationUrl}${separator}utm_source=facebook&utm_medium=paid_social&utm_campaign=${draft.id}`;
   }
+
+  metaLog("launch.start", {
+    dealership: dealershipId,
+    ad_account: adAccount,
+    page: pageId,
+    destination: adDestination,
+    from_draft: Boolean(draft_id),
+    draft: draft?.id ?? null,
+    budget: plan?.daily_budget ?? 500,
+    city: plan?.targeting_city ?? null,
+  });
 
   try {
     // Step 2: build the image — unless launching from an already-
@@ -321,6 +341,20 @@ export async function POST(request: Request) {
       .select()
       .single();
 
+    // Every id needed to find this campaign in Ads Manager, plus the
+    // status it was created with — the PAUSED guarantee, recorded at
+    // the moment it happened rather than inferred later.
+    metaLog("launch.done", {
+      dealership: dealershipId,
+      draft: draft.id,
+      campaign: campaignRes.id,
+      adset: adsetRes.id,
+      ad: adRes.id,
+      creative: creativeRes.id,
+      status: "PAUSED",
+      budget_paise: Math.round((plan.daily_budget ?? 500) * 100),
+    });
+
     return NextResponse.json({
       success: true,
       creative: updated,
@@ -329,6 +363,10 @@ export async function POST(request: Request) {
       targetingSummary: built.summary,
     });
   } catch (err: any) {
+    // metaPost already logged the Graph-level detail; this says which
+    // LAUNCH died, so the two lines together identify both the call
+    // and the campaign it belonged to.
+    metaError("launch.failed", { dealership: dealershipId, draft: draft?.id ?? null, detail: err?.message ?? String(err) });
     await serviceClient.from("ad_creatives").update({ status: "failed", error_message: err.message }).eq("id", draft.id);
     return NextResponse.json({ error: err.message, plan }, { status: 500 });
   }
