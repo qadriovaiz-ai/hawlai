@@ -46,7 +46,14 @@ function priceChangeInputs(): { name: string; text: string }[] {
     brain.indexOf('case "propose_campaign_budget_change":')
   );
 
-  const cardStart = brain.indexOf('case "propose_price_change": {', brain.indexOf("function toArtifact") > -1 ? brain.indexOf("function toArtifact") : 0);
+  // The card lives in extractArtifact. The anchor here USED to be
+  // "function toArtifact", a function that does not exist — indexOf
+  // returned -1, the fallback searched from 0, and the slice silently
+  // became a second copy of the handler. It passed, it looked like
+  // four inputs were scanned, and the real card was never read once.
+  // Exactly the vacuity the test below was written to prevent, in the
+  // test that prevents it.
+  const cardStart = brain.indexOf('case "propose_price_change": {', brain.indexOf("function extractArtifact"));
   const card = brain.slice(cardStart, cardStart + 3000);
 
   // The system prompt is the shared step: it applies to EVERY
@@ -74,6 +81,19 @@ describe("the price-change path never points away from the inline card", () => {
     // the same failure that let this bug survive two fixes.
     for (const input of inputs) {
       expect(input.text.length, `${input.name} came back empty — its anchor moved`).toBeGreaterThan(100);
+    }
+  });
+
+  it("no two slices are the same text, so none is a duplicate standing in for a missing one", () => {
+    // Non-empty was not a strong enough check. A broken anchor fell
+    // back to offset 0 and produced a DUPLICATE of another slice —
+    // long, plausible, and covering nothing new. Distinctness is what
+    // actually catches that.
+    const seen = new Map<string, string>();
+    for (const input of inputs) {
+      const prior = seen.get(input.text);
+      expect(prior, `${input.name} is byte-identical to ${prior} — one anchor is resolving to the other's region`).toBeUndefined();
+      seen.set(input.text, input.name);
     }
   });
 
@@ -122,5 +142,59 @@ describe("the price-change path never points away from the inline card", () => {
     const prompt = inputs.find((i) => i.name === "system prompt")!.text;
     expect(prompt).toMatch(/buttons directly in the chat|Approve\/Reject buttons in the chat/i);
     expect(prompt).toMatch(/propose_price_change/);
+  });
+});
+
+// FOURTH TIME, and the reason the first three scans could not have
+// caught it: the offending instruction contains none of the banned
+// phrasings. It COMMANDS the behaviour generically —
+//
+//   "ALWAYS end your reply with one short line ... Name the exact
+//    page/tab it landed on"
+//
+// — and the model, required to name a page and forbidden from naming
+// the Approvals page, named it anyway because it is the only page that
+// fits a pending price change. Banning output phrasings cannot reach a
+// rule that produces them; the rule itself needs the exception.
+//
+// So this is a different check from the scan above: not "does any line
+// say the bad thing", but "does every blanket instruction that would
+// produce it carve out the inline-approval case".
+describe("blanket prompt rules carve out the inline-approval and choose-from cases", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const prompt = brain.slice(brain.indexOf("const systemPrompt = "));
+
+  function ruleContaining(needle: string): string {
+    const line = prompt.split("\n").find((l) => l.includes(needle));
+    expect(line, `no prompt rule contains "${needle}" — it was reworded, so this check is no longer reading the rule it was written for`).toBeDefined();
+    return line!;
+  }
+
+  it("the saved-to-a-page rule is not unconditional", () => {
+    // Nothing is saved when a price change is awaiting approval, so
+    // the confirming line is not merely misplaced — it is untrue.
+    const rule = ruleContaining("its normal dashboard page");
+    expect(rule).not.toMatch(/ALWAYS end your reply/);
+    expect(rule).toMatch(/EXCEPTION/);
+    expect(rule).toMatch(/propose_price_change|inline approval card/i);
+  });
+
+  it("the don't-enumerate-lists rule exempts a list the person must choose from", () => {
+    // THE DISAMBIGUATION REGRESSION. candidates[] is an array result,
+    // so the blanket rule suppressed it — leaving "I found 3 matches"
+    // and no way to answer. A list that IS the question has to be
+    // written out.
+    const rule = ruleContaining("don't enumerate a tool's list/array results");
+    expect(rule).toMatch(/EXCEPTION/);
+    expect(rule).toMatch(/needs_clarification|choose from|CHOOSE FROM/);
+    expect(rule).toMatch(/number(ed)? (them|list)/i);
+  });
+
+  it("the candidate card numbers its options, matching the numbered list", () => {
+    // "The second one" refers to nothing if only one of the two
+    // surfaces counts.
+    const cardStart = brain.indexOf('case "propose_price_change": {', brain.indexOf("function extractArtifact"));
+    const card = brain.slice(cardStart, cardStart + 3000);
+    expect(card).toMatch(/\$\{i \+ 1\}\./);
   });
 });
