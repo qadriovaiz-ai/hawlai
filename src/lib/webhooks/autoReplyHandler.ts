@@ -3,6 +3,7 @@ import { resolveDmLead } from "@/lib/leads/dmLeadLinking";
 import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -63,7 +64,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
 
   let dealership = (await supabase
     .from("dealerships")
-    .select("id, dealership_name, business_category, fb_page_access_token, dm_auto_reply_enabled, comment_auto_reply_enabled")
+    .select("id, dealership_name, business_category, fb_page_access_token, fb_page_access_token_encrypted, dm_auto_reply_enabled, comment_auto_reply_enabled")
     .eq("fb_page_id", entryId)
     .maybeSingle()).data;
 
@@ -81,7 +82,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
   }
 
   if (!dealership) return;
-  const replyToken = channel === "instagram" ? dealership.instagram_access_token : dealership.fb_page_access_token;
+  const replyToken = channel === "instagram" ? dealership.instagram_access_token : readMetaPageToken(dealership);
   if (!replyToken) return;
   if (!dealership.dm_auto_reply_enabled && !dealership.comment_auto_reply_enabled) return;
 

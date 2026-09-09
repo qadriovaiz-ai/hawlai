@@ -5,12 +5,20 @@
 //   gmail, youtube, google_ads, linkedin, pinterest, snapchat
 //   (access + refresh token for each)
 //
-// NOT IN SCOPE, deliberately: fb_page_access_token and
-// instagram_access_token. Neither ever refreshes, and the Meta token
-// spans 13 files across lead ingestion, ad launch and analytics.
-// Touching that surface immediately before the pending live tests
-// would make any regression there impossible to attribute to a cause.
-// Scheduled for after those tests pass.
+// fb_page_access_token WAS out of scope for the reason recorded here
+// originally: it never refreshes, it spans 13 files across lead
+// ingestion, ad launch and analytics, and touching that surface right
+// before the live tests would make a regression there unattributable.
+//
+// It is now in scope, and the reason it can be is that the surface
+// stopped being opaque: the [meta] tag covers the launch and activate
+// paths, and adLaunchPaused.test.ts runs the launch handler end to
+// end. A regression is now attributable. It is also the only
+// ad-platform credential left in the clear, and the only one that can
+// spend money — see META_PAGE_TOKEN_SELECT below.
+//
+// STILL NOT IN SCOPE: instagram_access_token. Same treatment, next
+// pass; it is read at exactly one site and never spends.
 //
 // WHY A BACKFILL IS THE WHOLE JOB, not a remainder. The original plan
 // assumed most values would migrate naturally as tokens refreshed.
@@ -98,4 +106,61 @@ export function tokenClear(provider: OAuthProvider) {
 /** True when a token is stored in either column — for "is this connected" checks that must not decrypt. */
 export function hasToken(row: Row, provider: OAuthProvider, kind: TokenKind = "access_token"): boolean {
   return Boolean(row?.[encryptedColumn(provider, kind)] || row?.[plainColumn(provider, kind)]);
+}
+
+// ---------------------------------------------------------------
+// Meta Page access token.
+//
+// Kept separate from the provider table above because the column is
+// not `${provider}_${kind}` — it is fb_page_access_token, named before
+// that convention existed, and renaming it would mean a data migration
+// on the one credential that can spend money. The read rule is
+// identical; only the column names differ.
+// ---------------------------------------------------------------
+
+/**
+ * Both columns, for a SELECT.
+ *
+ * MUST be used by every query that reads the Meta token. Selecting
+ * only the plaintext column works today and returns null the moment
+ * the backfill runs — a failure that would look like "Facebook
+ * disconnected itself" across lead ingestion, ad launch, autopilot
+ * posting and analytics at once. metaTokenSelect.test.ts enforces it.
+ */
+export const META_PAGE_TOKEN_SELECT = "fb_page_access_token, fb_page_access_token_encrypted";
+
+/** Encrypted first, plaintext fallback. Null when neither column holds a value. */
+export function readMetaPageToken(row: Row): string | null {
+  return resolveSecret(
+    row?.fb_page_access_token_encrypted,
+    row?.fb_page_access_token,
+    "marketing",
+    "meta page access token"
+  );
+}
+
+/**
+ * True when a token is stored, WITHOUT decrypting it.
+ *
+ * For "is Facebook connected?" checks. Decrypting to answer a boolean
+ * would turn a key-ring misconfiguration into "you are not connected",
+ * which is both wrong and the sort of thing someone reconnects to fix
+ * — overwriting a perfectly good token.
+ */
+export function hasMetaPageToken(row: Row): boolean {
+  return Boolean(row?.fb_page_access_token_encrypted || row?.fb_page_access_token);
+}
+
+/**
+ * Update payload for storing the Meta token.
+ *
+ * Writes encrypted and NULLS plaintext in the same statement, so from
+ * this deploy forward no connect writes a token in the clear again,
+ * whenever the backfill happens to run.
+ */
+export function metaPageTokenWrite(value: string) {
+  return {
+    fb_page_access_token_encrypted: encryptSecret(value, "marketing"),
+    fb_page_access_token: null,
+  };
 }

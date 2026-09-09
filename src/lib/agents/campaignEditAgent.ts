@@ -15,6 +15,7 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -156,8 +157,8 @@ export async function applyTargetingChange(
   if (!campaign?.meta_adset_id) return { success: false, error: "This campaign has no ad set to update" };
 
   const { data: dealership } = await supabase
-    .from("dealerships").select("fb_page_access_token").eq("id", dealershipId).single();
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+    .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", dealershipId).single();
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) return { success: false, error: "Facebook Page isn't connected" };
 
   // Fetch current targeting so we only change age/gender, not location.
@@ -192,8 +193,8 @@ export async function setCampaignStatus(
   if (!campaign.meta_ad_id) return { success: false, error: "This campaign hasn't been launched on Meta yet" };
 
   const { data: dealership } = await supabase
-    .from("dealerships").select("fb_page_access_token").eq("id", dealershipId).single();
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+    .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", dealershipId).single();
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) return { success: false, error: "Facebook Page isn't connected" };
 
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${campaign.meta_ad_id}`, {

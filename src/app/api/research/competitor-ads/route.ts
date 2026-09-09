@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { searchCompetitorAds } from "@/lib/agents/researchAgent";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -19,11 +20,11 @@ export async function GET(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token")
+    .select("fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
   }

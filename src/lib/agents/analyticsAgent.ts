@@ -11,6 +11,7 @@
 // ------------------------------------------------------------------
 
 import type { Loaded } from "@/lib/dataState";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -78,11 +79,11 @@ export async function getCampaignPerformanceState(
 ): Promise<Loaded<CampaignPerformanceResult>> {
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token")
+    .select("fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
   // Checked BEFORE the campaign query. Without a token the campaign
   // list is irrelevant — we could not read performance for it either
@@ -141,11 +142,11 @@ async function getCampaignPerformance(
 ): Promise<CampaignPerformanceResult> {
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token")
+    .select("fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
   const { data: launchedAds } = await supabase
     .from("ad_creatives")

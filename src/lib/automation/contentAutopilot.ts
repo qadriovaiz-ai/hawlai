@@ -2,6 +2,7 @@ import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
 import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
 import { createServiceClient } from "@/lib/supabase/service";
+import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 // Runs daily as part of the autopilot cron. Fully automatic — no
 // human touches the generated content before it's posted. This is
@@ -11,12 +12,17 @@ import { createServiceClient } from "@/lib/supabase/service";
 export async function runContentAutopilot(supabase: any, dealershipId: string) {
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("dealership_name, business_category, fb_page_id, fb_page_access_token, content_autopilot_enabled, content_autopilot_frequency_days, content_autopilot_last_posted_at")
+    .select("dealership_name, business_category, fb_page_id, fb_page_access_token, fb_page_access_token_encrypted, content_autopilot_enabled, content_autopilot_frequency_days, content_autopilot_last_posted_at")
     .eq("id", dealershipId)
     .single();
 
   if (!dealership?.content_autopilot_enabled) return { skipped: "disabled" };
-  if (!dealership.fb_page_id || !dealership.fb_page_access_token) return { skipped: "facebook not connected" };
+  if (!dealership.fb_page_id || !hasMetaPageToken(dealership)) return { skipped: "facebook not connected" };
+
+  // Decrypted ONCE for the whole run. Six call sites below used the
+  // raw column; resolving per use would decrypt six times and give six
+  // places for a future edit to miss one.
+  const pageToken = readMetaPageToken(dealership)!;
 
   // A pre-approved queued post takes priority over fresh generation —
   // this is what lets a business say "here's my week, post exactly
@@ -36,7 +42,7 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     .maybeSingle();
 
   if (queuedPost) {
-    return postQueuedItem(supabase, dealershipId, dealership, queuedPost);
+    return postQueuedItem(supabase, dealershipId, dealership, pageToken, queuedPost);
   }
 
   const frequencyDays = dealership.content_autopilot_frequency_days ?? 3;
@@ -78,7 +84,7 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
     imageUrl = publicUrlData.publicUrl;
 
-    const result = await postPhotoToPage(dealership.fb_page_id, dealership.fb_page_access_token, imageUrl, caption);
+    const result = await postPhotoToPage(dealership.fb_page_id, pageToken, imageUrl, caption);
     postId = result.id;
 
     // Instagram is best-effort and independent of Facebook's outcome
@@ -86,9 +92,9 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     // here (no IG account connected, expired permission, etc.)
     // shouldn't be reported as if the whole autopilot run failed.
     try {
-      const igUserId = await getConnectedInstagramAccountId(dealership.fb_page_id, dealership.fb_page_access_token);
+      const igUserId = await getConnectedInstagramAccountId(dealership.fb_page_id, pageToken);
       if (igUserId) {
-        const igResult = await postPhotoToInstagram(igUserId, dealership.fb_page_access_token, imageUrl, caption);
+        const igResult = await postPhotoToInstagram(igUserId, pageToken, imageUrl, caption);
         instagramPostId = igResult.id;
       } else {
         instagramError = "No Instagram Business account connected to this Facebook Page";
@@ -111,7 +117,11 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   return { posted: success, postedToInstagram: Boolean(instagramPostId) };
 }
 
-async function postQueuedItem(supabase: any, dealershipId: string, dealership: any, queuedPost: any) {
+// pageToken is PASSED, not re-derived from the row. This function
+// receives `dealership` and could call readMetaPageToken itself, but
+// that would decrypt a second time and, more importantly, create a
+// second place that has to know the read rule.
+async function postQueuedItem(supabase: any, dealershipId: string, dealership: any, pageToken: string, queuedPost: any) {
   let facebookPostId: string | null = null;
   let instagramPostId: string | null = null;
   let instagramError: string | null = null;
@@ -119,13 +129,13 @@ async function postQueuedItem(supabase: any, dealershipId: string, dealership: a
   let error: string | null = null;
 
   try {
-    const result = await postPhotoToPage(dealership.fb_page_id, dealership.fb_page_access_token, queuedPost.image_url, queuedPost.caption);
+    const result = await postPhotoToPage(dealership.fb_page_id, pageToken, queuedPost.image_url, queuedPost.caption);
     facebookPostId = result.id;
 
     try {
-      const igUserId = await getConnectedInstagramAccountId(dealership.fb_page_id, dealership.fb_page_access_token);
+      const igUserId = await getConnectedInstagramAccountId(dealership.fb_page_id, pageToken);
       if (igUserId) {
-        const igResult = await postPhotoToInstagram(igUserId, dealership.fb_page_access_token, queuedPost.image_url, queuedPost.caption);
+        const igResult = await postPhotoToInstagram(igUserId, pageToken, queuedPost.image_url, queuedPost.caption);
         instagramPostId = igResult.id;
       } else {
         instagramError = "No Instagram Business account connected to this Facebook Page";

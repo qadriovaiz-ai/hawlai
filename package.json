@@ -14,7 +14,8 @@
     "secrets:rekey": "tsx scripts/rekey-secrets.ts",
     "secrets:backfill-oauth": "tsx scripts/backfill-oauth-tokens.ts",
     "test:smoke": "next build && vitest run --config vitest.smoke.config.mts",
-    "test:smoke:only": "vitest run --config vitest.smoke.config.mts"
+    "test:smoke:only": "vitest run --config vitest.smoke.config.mts",
+    "secrets:backfill-meta": "tsx scripts/backfill-meta-token.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -9,6 +9,7 @@ import {
 } from "@/lib/adEngine";
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -25,11 +26,11 @@ export async function POST(request: Request) {
   // eventually go through Settings -> Connect Facebook).
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category")
+    .select("fb_page_access_token, fb_page_access_token_encrypted, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category")
     .eq("id", dealershipId)
     .single();
 
-  const pageAccessToken: string | undefined = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const pageAccessToken: string | undefined = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
   const rawAdAccountId: string = dealership?.fb_ad_account_id ?? process.env.META_AD_ACCOUNT_ID ?? "";
   const adAccount = rawAdAccountId.startsWith("act_") ? rawAdAccountId : `act_${rawAdAccountId}`;
   const pageId: string | undefined = dealership?.fb_page_id ?? process.env.META_PAGE_ID;

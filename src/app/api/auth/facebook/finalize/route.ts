@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolvePixel } from "@/lib/meta/resolvePixel";
 import { NextResponse } from "next/server";
+import { metaPageTokenWrite } from "@/lib/crypto/oauthSecrets";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
   const update: Record<string, any> = {
     fb_page_id: page.id,
     fb_page_name: page.name,
-    fb_page_access_token: page.access_token,
+    ...metaPageTokenWrite(page.access_token),
     fb_ad_account_id: ad_account_id.startsWith("act_") ? ad_account_id : `act_${ad_account_id}`,
     fb_lead_form_id: leadForm?.id ?? null,
     fb_lead_form_name: leadForm?.name ?? null,

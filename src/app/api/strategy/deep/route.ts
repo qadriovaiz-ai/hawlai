@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateDeepStrategy } from "@/lib/agents/deepStrategyAgent";
 import { searchCompetitorAds } from "@/lib/agents/researchAgent";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
   }
 
   const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, city, business_category, fb_page_access_token").eq("id", dealershipId).single(),
+    supabase.from("dealerships").select("dealership_name, city, business_category, fb_page_access_token, fb_page_access_token_encrypted").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
   // Meta Ad Library search on the dealer's own business category and
   // city, not a made-up example.
   let competitorContext: string | null = null;
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (token && dealership?.business_category) {
     try {
       const query = `${dealership.business_category}${dealership.city ? ` ${dealership.city}` : ""}`;

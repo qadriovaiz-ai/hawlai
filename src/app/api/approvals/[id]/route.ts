@@ -8,6 +8,7 @@ import { createShopifyPlatform } from "@/lib/publish/platforms/shopify";
 import { shopifyCredentialsAdapter } from "@/lib/publish/platforms/shopifyCredentials";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -80,8 +81,8 @@ export async function PATCH(
     if (approval?.action_type === "change_campaign_budget") {
       const details = hasValidModification ? { ...approval.action_details, new_budget: modified_details.new_budget } : (approval.action_details as any);
       const { data: dealership } = await service
-        .from("dealerships").select("fb_page_access_token").eq("id", approval.dealership_id).single();
-      const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+        .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", approval.dealership_id).single();
+      const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
       const { data: campaign } = await service
         .from("ad_creatives").select("meta_adset_id").eq("id", details.campaign_id).single();
@@ -123,8 +124,8 @@ export async function PATCH(
       const { data: campaign } = await service
         .from("ad_creatives").select("meta_ad_id").eq("id", details.campaign_id).single();
       const { data: dealership } = await service
-        .from("dealerships").select("fb_page_access_token").eq("id", approval.dealership_id).single();
-      const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+        .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", approval.dealership_id).single();
+      const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
       if (!token || !campaign?.meta_ad_id) {
         return NextResponse.json({ error: "Can't apply this — the campaign or Facebook connection is missing" }, { status: 400 });

@@ -8,6 +8,7 @@ import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/
 import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ads/snapchatAds";
 import { getValidLinkedInAccessToken, setLinkedInCampaignStatus } from "@/lib/ads/linkedinAds";
 import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -51,7 +52,7 @@ export async function PATCH(
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, owner_id, approval_threshold, google_ads_access_token, google_ads_access_token_encrypted, google_ads_refresh_token, google_ads_refresh_token_encrypted, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_access_token_encrypted, pinterest_refresh_token, pinterest_refresh_token_encrypted, pinterest_token_expiry, pinterest_ad_account_id, snapchat_access_token, snapchat_access_token_encrypted, snapchat_refresh_token, snapchat_refresh_token_encrypted, snapchat_token_expiry, snapchat_ad_account_id, linkedin_access_token, linkedin_access_token_encrypted, linkedin_refresh_token, linkedin_refresh_token_encrypted, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
+    .select("fb_page_access_token, fb_page_access_token_encrypted, owner_id, approval_threshold, google_ads_access_token, google_ads_access_token_encrypted, google_ads_refresh_token, google_ads_refresh_token_encrypted, google_ads_token_expiry, google_ads_customer_id, pinterest_access_token, pinterest_access_token_encrypted, pinterest_refresh_token, pinterest_refresh_token_encrypted, pinterest_token_expiry, pinterest_ad_account_id, snapchat_access_token, snapchat_access_token_encrypted, snapchat_refresh_token, snapchat_refresh_token_encrypted, snapchat_token_expiry, snapchat_ad_account_id, linkedin_access_token, linkedin_access_token_encrypted, linkedin_refresh_token, linkedin_refresh_token_encrypted, linkedin_token_expiry, linkedin_ad_account_id, linkedin_organization_id")
     .eq("id", dealershipId)
     .single();
 
@@ -253,7 +254,7 @@ export async function PATCH(
     return NextResponse.json(updated);
   }
 
-  const token = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
   }

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -18,12 +19,12 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, fb_page_access_token")
+    .select("fb_page_id, fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
   const pageId = dealership?.fb_page_id;
-  const pageAccessToken = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const pageAccessToken = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
   if (!pageId || !pageAccessToken) {
     return NextResponse.json(

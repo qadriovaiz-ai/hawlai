@@ -10,6 +10,7 @@ import {
   type AudienceResult,
 } from "@/lib/ads/metaCustomAudiences";
 import { buildSuppressionList, hashPhone, hashEmail, isSuppressed } from "@/lib/ads/audienceHashing";
+import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 // Meta Custom Audience sync — retargeting piece 5/7.
 //
@@ -65,7 +66,7 @@ export async function GET() {
 
   const [{ data: rows }, { data: dealership }] = await Promise.all([
     supabase.from("meta_custom_audiences").select("*").eq("dealership_id", resolved.dealershipId),
-    supabase.from("dealerships").select("fb_ad_account_id, meta_pixel_id, fb_page_access_token").eq("id", resolved.dealershipId).single(),
+    supabase.from("dealerships").select("fb_ad_account_id, meta_pixel_id, fb_page_access_token, fb_page_access_token_encrypted").eq("id", resolved.dealershipId).single(),
   ]);
 
   const byKey = new Map((rows ?? []).map((r: any) => [r.audience_key, r]));
@@ -73,11 +74,11 @@ export async function GET() {
   return NextResponse.json({
     // Reports readiness rather than silently offering a sync that
     // can't work — both a pixel and an ad account are required.
-    ready: !!(dealership?.fb_ad_account_id && dealership?.meta_pixel_id && dealership?.fb_page_access_token),
+    ready: !!(dealership?.fb_ad_account_id && dealership?.meta_pixel_id && hasMetaPageToken(dealership)),
     missing: {
       adAccount: !dealership?.fb_ad_account_id,
       pixel: !dealership?.meta_pixel_id,
-      connection: !dealership?.fb_page_access_token,
+      connection: !hasMetaPageToken(dealership),
     },
     audiences: (Object.keys(DEFINITIONS) as AudienceKey[]).map((key) => {
       const row = byKey.get(key);
@@ -108,11 +109,11 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_ad_account_id, meta_pixel_id, fb_page_access_token")
+    .select("fb_ad_account_id, meta_pixel_id, fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
-  const token = dealership?.fb_page_access_token;
+  const token = readMetaPageToken(dealership);
   const rawAccount = dealership?.fb_ad_account_id;
   if (!token || !rawAccount) {
     return NextResponse.json({ error: "Connect your Facebook Page and ad account first, in Integrations." }, { status: 400 });

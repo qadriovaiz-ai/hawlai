@@ -7,6 +7,7 @@ import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
 import { emitNotification } from "@/lib/notifications/emit";
 import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 async function fetchLeadFromMeta(leadgenId: string, token: string) {
   const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${token}`;
@@ -97,11 +98,11 @@ export async function POST(request: Request) {
     // dealers' pages land in the right place with the right token.
     const pageId: string | undefined = entry?.id;
     const { data: dealership } = pageId
-      ? await supabase.from("dealerships").select("id, fb_page_access_token").eq("fb_page_id", pageId).maybeSingle()
+      ? await supabase.from("dealerships").select("id, fb_page_access_token, fb_page_access_token_encrypted").eq("fb_page_id", pageId).maybeSingle()
       : { data: null };
 
     const dealershipId: string | undefined = dealership?.id ?? process.env.META_DEFAULT_DEALERSHIP_ID;
-    const pageAccessToken: string | undefined = dealership?.fb_page_access_token ?? process.env.META_PAGE_ACCESS_TOKEN;
+    const pageAccessToken: string | undefined = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
     if (!dealershipId) {
       console.error("[meta-leads] Could not resolve a dealership for page:", pageId);
