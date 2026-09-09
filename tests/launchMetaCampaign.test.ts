@@ -363,11 +363,18 @@ describe("the real product photo comes first", () => {
     expect(handler).toMatch(/I couldn't find \$\{productPhrase\}|I couldn't find "\$\{productPhrase\}"/);
   });
 
-  it("builds from the real photo through the background-restyling path", () => {
-    // ai_generate keeps the product unchanged and restyles only the
-    // background — which is what an ad featuring the merchant's own
-    // product needs. buildCreativeWithoutPhoto is the other branch.
-    expect(handler).toMatch(/buildFinalCreative\("ai_generate"/);
+  it("builds from the real photo WITHOUT regenerating it", () => {
+    // THIS TEST ASSERTED THE BUG — the second in this file to do so.
+    // It required buildFinalCreative("ai_generate"), which is exactly
+    // the call that sent the photo to Gemini and got back a different
+    // product. The comment even repeated the vendor's claim that the
+    // product is kept unchanged, which the live output disproved.
+    //
+    // Both times the shape was the same: an assertion written from what
+    // the code did rather than from what the feature owes the user. A
+    // test that pins the implementation cannot notice the
+    // implementation is wrong.
+    expect(handler).toMatch(/buildCreativeFromPhoto/);
     expect(handler).toMatch(/buildCreativeWithoutPhoto/);
   });
 

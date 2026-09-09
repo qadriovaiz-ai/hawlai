@@ -27,8 +27,24 @@ describe("the renderer draws the picture", () => {
   });
 
   it("renders an <img> for it, not a link", () => {
-    expect(page).toMatch(/artifact\.imageUrl && \(/);
-    expect(page).toMatch(/src=\{artifact\.imageUrl\}/);
+    // Asserts the MEANING: imageUrl is passed to something that draws
+    // an <img>. The first version pinned the exact JSX -- `imageUrl &&
+    // (` and `src={artifact.imageUrl}` -- and broke the moment the
+    // markup moved into a CardImage component that adds a visible
+    // failure state. The picture was still rendered; only the shape
+    // changed. Pinning shape makes a correct refactor look like a
+    // regression, which is the same trap as pinning a message string.
+    expect(page).toMatch(/artifact\.imageUrl &&/);
+    expect(page).toMatch(/<CardImage src=\{artifact\.imageUrl\}|src=\{artifact\.imageUrl\}/);
+    expect(page).toMatch(/<img\s/);
+  });
+
+  it("shows a VISIBLE failure when the image cannot load", () => {
+    // A broken <img> renders as nothing, which is indistinguishable
+    // from no image having been attached -- the ambiguity that cost
+    // three rounds of diagnosis.
+    expect(page).toMatch(/onError=\{\(\) => setFailed\(true\)\}/);
+    expect(page).toMatch(/didn&apos;t load|didn't load/);
   });
 
   it("draws it ABOVE the fields — the picture is the thing being approved", () => {
