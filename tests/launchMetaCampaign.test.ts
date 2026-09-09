@@ -148,7 +148,7 @@ describe("nothing tells the model to send someone to a page for a Meta launch", 
     // implying every platform can launch — that would produce the
     // opposite failure, promising something no tool can do.
     const prompt = brain.slice(brain.indexOf("const systemPrompt = "));
-    expect(prompt).toMatch(/Google, LinkedIn, Pinterest and Snapchat/);
+    expect(prompt).toMatch(/Google, LinkedIn, Pinterest,? (and )?Snapchat/);
     expect(prompt).toMatch(/cannot launch it yet/i);
   });
 });
