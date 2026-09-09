@@ -7,6 +7,7 @@ import { cn, titleCaseFromSnake } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
+import { isSimpleConfirmation } from "@/lib/chat/cardLayout";
 
 const EXAMPLES = [
   "Build my brand kit — logo colors, tagline, brand story",
@@ -622,7 +623,24 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
   // (create_discount_code, assign_task, trigger_call, etc.) read better
   // as a single checkmark + sentence than the generic icon-box + small
   // label + separate fields list used for every other artifact kind.
-  if (artifact.kind === "record" && artifact.summary) {
+  // THE EARLY RETURN THAT ATE THE PICTURE.
+  //
+  // This branch renders a checkmark and a sentence — no fields, no
+  // image — and every record card with a summary took it. The Meta
+  // approval card is exactly that shape, so the imageUrl block further
+  // down NEVER RAN for it, through five rounds of diagnosis. The
+  // approvalStrip is rendered here too, which is why the buttons
+  // appeared and made the card look complete.
+  //
+  // The branch is right for what it was written for: "Added to your
+  // Products tab" reads better as one sentence than an icon box with a
+  // label and a fields list. It is wrong for anything carrying a
+  // DECISION — a picture to inspect, values to check, an approval to
+  // give. Those go to the full renderer.
+  //
+  // Same shape as the rest of this run: correct where written, carried
+  // unexamined onto a card that needs more.
+  if (isSimpleConfirmation(artifact)) {
     return (
       <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
         <div className="flex items-start gap-2 px-3 py-3">
