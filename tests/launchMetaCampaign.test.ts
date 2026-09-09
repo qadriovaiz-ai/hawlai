@@ -112,7 +112,15 @@ describe("the card carries the decision inline", () => {
   });
 
   it("shows the creative — the picture is most of what is being approved", () => {
-    expect(card).toMatch(/url: result\.image_url/);
+    // THIS TEST ASSERTED THE BUG. It required `url: result.image_url`,
+    // which is exactly what rendered nothing: a record card ignores
+    // `url` unless kind === "link". The test passed for as long as the
+    // feature was broken, and only failed once the feature was fixed.
+    //
+    // A green test over a field the renderer never reads is worse than
+    // no test — it is a claim that the picture is covered. The
+    // assertion now names the field that actually draws it.
+    expect(card).toMatch(/imageUrl: result\.image_url/);
   });
 
   it("states that nothing runs until activated", () => {
