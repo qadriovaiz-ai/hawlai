@@ -32,6 +32,14 @@ export type ResolvedTarget = {
   /** ISO code of the store's currency. Never assumed — see money.ts. */
   currency?: string | null;
   imageUrl: string | null;
+  /**
+   * The public storefront URL for this product, when it has one.
+   *
+   * Null when the product is not published to the online store — which
+   * is a real state, not a lookup failure, and the difference matters:
+   * an ad must never point at a page a customer cannot open.
+   */
+  productUrl?: string | null;
   /** Whether the platform considers it visible to customers. */
   active: boolean;
 };

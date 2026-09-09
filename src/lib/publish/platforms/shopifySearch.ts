@@ -34,6 +34,11 @@ const SEARCH_QUERY = `
           id
           title
           status
+          # Where a customer can actually buy this. onlineStoreUrl is
+          # null when the product is not published to the storefront,
+          # which is exactly the case an ad must not link to.
+          handle
+          onlineStoreUrl
           featuredImage { url }
           variants(first: 20) {
             edges { node { id title price } }
@@ -89,6 +94,7 @@ export async function searchShopifyVariants(
         currentPrice: variant.price ?? null,
         currency: currencyCode,
         imageUrl: product.featuredImage?.url ?? null,
+        productUrl: product.onlineStoreUrl ?? null,
         active: product.status === "ACTIVE",
       });
     }

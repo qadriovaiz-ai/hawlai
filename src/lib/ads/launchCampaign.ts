@@ -19,6 +19,7 @@ import { metaPost } from "@/lib/adEngine";
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 import { metaLog } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
+import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
 export type LaunchContext = {
   serviceClient: any;
@@ -40,8 +41,12 @@ export type LaunchContext = {
   /** Where that image lives in our own storage. */
   publicUrl: string;
 
-  adDestination: "instant_form" | "website";
-  destinationUrl: string | null;
+  /**
+   * Where the ad points AND what the campaign optimises for — one
+   * decision, resolved together. See destination.ts: a lead-gen
+   * objective aimed at a product page is refused or mis-optimised.
+   */
+  destination: ResolvedDestination;
   targetingLocation?: any;
   retargetAudienceIds?: string[];
   scheduledStart?: string | null;
@@ -58,14 +63,21 @@ export type LaunchResult = {
   budget: { minor: number; raised: boolean; from: number };
   targetingSummary: string;
   targetingJson: Record<string, any>;
+  destination: ResolvedDestination;
+  linkUrl: string | null;
 };
 
 export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchResult> {
   const {
     serviceClient, dealershipId, dealership, adAccount, pageAccessToken,
     pageId, leadFormId, brandProfile, plan, draft, finalBuffer, publicUrl,
-    adDestination, destinationUrl,
+    destination,
   } = ctx;
+
+  // Tagged here rather than at each call site, so a chat launch is as
+  // attributable as a page launch. draft.id is the one stable per-ad
+  // identifier that exists before Meta hands back its own.
+  const linkUrl = destination.url ? withCampaignTag(destination.url, draft.id) : null;
 
   // Step 3: upload the image to Meta and get an image_hash
   const uploadRes = await metaPost(`${adAccount}/adimages`, {
@@ -85,11 +97,14 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
         image_hash: imageHash,
         message: plan.body,
         name: plan.headline,
-        link: adDestination === "website" ? destinationUrl! : `https://fb.me/${pageId}`,
-        call_to_action:
-          adDestination === "website"
-            ? { type: "LEARN_MORE", value: { link: destinationUrl } }
-            : { type: "LEARN_MORE", value: { lead_gen_form_id: leadFormId } },
+        // No `!` assertion. destination.url is null only for
+        // instant_form, and that branch does not read it — the previous
+        // version asserted non-null on a value the caller hardcoded as
+        // null, and sent link: null to Meta.
+        link: linkUrl ?? `https://fb.me/${pageId}`,
+        call_to_action: linkUrl
+          ? { type: "LEARN_MORE", value: { link: linkUrl } }
+          : { type: "LEARN_MORE", value: { lead_gen_form_id: destination.leadFormId ?? leadFormId } },
       },
     },
   }, pageAccessToken);
@@ -106,7 +121,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
   // Step 5: campaign
   const campaignRes = await metaPost(`${adAccount}/campaigns`, {
     name: `Hawlai - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
-    objective: "OUTCOME_LEADS",
+    objective: destination.objective,
     status: "PAUSED",
     special_ad_categories: [built.specialAdCategory],
     is_adset_budget_sharing_enabled: false,
@@ -134,11 +149,14 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     campaign_id: campaignRes.id,
     daily_budget: budget.minor,
     billing_event: "IMPRESSIONS",
-    optimization_goal: "LEAD_GENERATION",
+    optimization_goal: destination.optimizationGoal,
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
     targeting: built.targeting,
     status: "PAUSED",
-    promoted_object: { page_id: pageId },
+    // Required by LEAD_GENERATION, and rejected on some objectives
+    // where it does not apply — so it is sent only when the resolved
+    // destination actually calls for it.
+    ...(destination.promotedObject ? { promoted_object: destination.promotedObject } : {}),
     ...(ctx.scheduledStart ? { start_time: new Date(ctx.scheduledStart).toISOString() } : {}),
   }, pageAccessToken);
 
@@ -186,6 +204,8 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
 
   metaLog("launch.done", {
     dealership: dealershipId,
+    destination: destination.kind,
+    objective: destination.objective,
     draft: draft.id,
     campaign: campaignRes.id,
     adset: adsetRes.id,
@@ -204,5 +224,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     budget,
     targetingSummary: built.summary,
     targetingJson,
+    destination,
+    linkUrl,
   };
 }

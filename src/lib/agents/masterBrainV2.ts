@@ -1161,6 +1161,11 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const { interpretCandidates: interpret, userClarified: clarified } = await import("../publish/resolve");
 
       let productPhotoUrl: string | null = null;
+      // The page a customer can actually buy this on. Resolved at the
+      // same moment as the photo because it comes from the same
+      // product — and an ad showing a candle should link to that
+      // candle, not to a homepage.
+      let productPageUrl: string | null = null;
       let photoSource: "shopify_product" | "ai_generated" = "ai_generated";
       let photoProduct: string | null = null;
       let photoReason: string | null = null;
@@ -1233,9 +1238,11 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
             // product is what makes this actionable — "add a photo to
             // that listing" is a thing they can do.
             photoProduct = resolution.target.title;
+            productPageUrl = resolution.target.productUrl ?? null;
             photoReason = `"${resolution.target.title}" has no photo on its listing, so I generated an image instead.`;
           } else {
             productPhotoUrl = resolution.target.imageUrl;
+            productPageUrl = resolution.target.productUrl ?? null;
             photoSource = "shopify_product";
             photoProduct = `${resolution.target.title}${resolution.target.variantTitle ? ` — ${resolution.target.variantTitle}` : ""}`;
           }
@@ -1294,7 +1301,15 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         actionKey: "launch_ad_campaign",
         targetRef: draftId,
         targetLabel: plan.headline ?? "Ad campaign",
-        requestedChanges: { description: askedFor, daily_budget: plan.daily_budget },
+        requestedChanges: {
+          description: askedFor,
+          daily_budget: plan.daily_budget,
+          // Read by the platform module to decide the destination AND
+          // the campaign objective. Part of the intent fingerprint, so
+          // the same ad pointed somewhere else is a different request.
+          product_url: productPageUrl,
+          product_label: photoProduct,
+        },
         requestedBy: null,
       });
 
@@ -1316,6 +1331,10 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         photo_source: photoSource,
         photo_product: photoProduct,
         photo_reason: photoReason,
+        // Pulled off the preview the platform module built, so the card
+        // shows what was actually resolved rather than a second guess.
+        destination: created.preview.changes.find((c) => c.field === "Sends people to")?.after ?? null,
+        objective: created.preview.changes.find((c) => c.field === "Optimising for")?.after ?? null,
         audience: plan.targeting_city ? `${plan.targeting_city} and nearby` : "Your usual audience",
         daily_budget: fmtMinor(budgetMinor.minor, limits.currency),
         budget_raised: budgetMinor.raised,
@@ -2065,6 +2084,8 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
                 ? `Using the real photo from your "${result.photo_product}" listing`
                 : `AI-generated image — ${result.photo_reason ?? "no product photo available"}`,
           },
+          ...(result.destination ? [{ label: "Sends people to", value: String(result.destination) }] : []),
+          ...(result.objective ? [{ label: "Optimising for", value: String(result.objective) }] : []),
           { label: "Status on Meta", value: "Paused until you activate it" },
         ],
         // The creative itself. The picture is most of what the person

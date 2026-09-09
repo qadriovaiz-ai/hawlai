@@ -287,3 +287,60 @@ describe("the account's own floor is applied before Meta can reject it", () => {
     expect(call("/adsets")!.params.daily_budget).toBe(50000);
   });
 });
+
+describe("the destination and objective actually reach Meta", () => {
+  it("a product-page ad is created as TRAFFIC, not lead-gen", async () => {
+    // The mismatch that made this worth wiring: a LEAD_GENERATION ad
+    // set aimed at a storefront is refused or optimises for an event
+    // that never fires.
+    serverRows.dealerships = { ...connection, fb_lead_form_id: null, external_website_url: "https://candlesbyqaaf.com" };
+    await POST(launchRequest({ destination: "website" }));
+
+    expect(call("/campaigns")!.params.objective).toBe("OUTCOME_TRAFFIC");
+    expect(call("/adsets")!.params.optimization_goal).toBe("LINK_CLICKS");
+    // promoted_object belongs to LEAD_GENERATION and is rejected on
+    // some other objectives.
+    expect(call("/adsets")!.params.promoted_object).toBeUndefined();
+    expect(call("/adcreatives")!.params.object_story_spec.link_data.link).toContain("candlesbyqaaf.com");
+  });
+
+  it("an Instant Form ad stays lead-gen, with its promoted_object", async () => {
+    await POST(launchRequest());
+    expect(call("/campaigns")!.params.objective).toBe("OUTCOME_LEADS");
+    expect(call("/adsets")!.params.optimization_goal).toBe("LEAD_GENERATION");
+    expect(call("/adsets")!.params.promoted_object).toEqual({ page_id: "page_1" });
+  });
+
+  it("NEVER sends a null link", async () => {
+    // The bug: destinationUrl was hardcoded null with a `!` assertion,
+    // so Meta received link: null and the launch died at step 4 of 7.
+    await POST(launchRequest());
+    const link = call("/adcreatives")!.params.object_story_spec.link_data.link;
+    expect(link).toBeTruthy();
+    expect(String(link)).toMatch(/^https?:\/\//);
+  });
+
+  it("tags the outbound link so the visit is attributable", async () => {
+    serverRows.dealerships = { ...connection, fb_lead_form_id: null, external_website_url: "https://candlesbyqaaf.com" };
+    await POST(launchRequest({ destination: "website" }));
+    expect(call("/adcreatives")!.params.object_story_spec.link_data.link).toContain("utm_source=facebook");
+  });
+
+  it("refuses, before any Graph call, when there is nowhere to send people", async () => {
+    // Previously this launched with link: null and failed opaquely
+    // five calls in.
+    serverRows.dealerships = { ...connection, fb_lead_form_id: null, external_website_url: null };
+    const res = await POST(launchRequest({ destination: "website" }));
+
+    expect(res.status).toBe(400);
+    // The ROUTE has its own earlier, more specific guard ("add your
+    // website URL or publish your landing page in the Website tab"),
+    // which is better wording for someone already on that page. The
+    // resolver's refusal is the backstop for callers without one — the
+    // chat path. Either way the meaning asserted here is the same and
+    // is the part that matters: nothing reaches Meta.
+    const body = await res.json();
+    expect(body.error).toMatch(/nowhere to send people|no website set up/i);
+    expect(metaCalls).toEqual([]);
+  });
+});

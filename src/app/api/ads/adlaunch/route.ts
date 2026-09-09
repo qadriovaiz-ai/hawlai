@@ -12,6 +12,7 @@ import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { isAccountUsable, clampBudgetToMinimum, describeMinimum, limitsFromRow } from "@/lib/ads/adAccountLimits";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
+import { resolveAdDestination } from "@/lib/ads/destination";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -245,6 +246,21 @@ export async function POST(request: Request) {
       retargetAudienceIds = [audience.meta_audience_id];
     }
 
+    // The page already resolved a URL above (product link, the
+    // dealership's own site, or a published landing page). Run it
+    // through the shared resolver so the OBJECTIVE is chosen the same
+    // way for both entry points — a lead-gen campaign aimed at a
+    // product page is the mismatch this exists to prevent.
+    const routeChoice = resolveAdDestination(
+      adDestination === "website"
+        ? { externalWebsiteUrl: destinationUrl }
+        : { leadFormId, pageId }
+    );
+    if (!routeChoice.ok) {
+      return NextResponse.json({ error: routeChoice.reason }, { status: 400 });
+    }
+    const routeDestination = routeChoice.destination;
+
     // Steps 3-7 and the row update live in launchCampaign.ts, shared
     // with the Master Chat tool so there is one implementation of the
     // PAUSED guarantee and the budget clamp rather than two.
@@ -261,8 +277,7 @@ export async function POST(request: Request) {
       draft,
       finalBuffer,
       publicUrl: publicUrlData.publicUrl,
-      adDestination,
-      destinationUrl,
+      destination: routeDestination,
       targetingLocation: targeting_location ?? null,
       retargetAudienceIds,
       scheduledStart: scheduled_start ?? null,
