@@ -17,7 +17,7 @@
 
 import { metaPost } from "@/lib/adEngine";
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
-import { metaLog } from "@/lib/ads/metaLog";
+import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
@@ -179,7 +179,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     specialAdCategory: built.specialAdCategory,
   };
 
-  const { data: updated } = await serviceClient
+  const { data: updated, error: updateError } = await serviceClient
     .from("ad_creatives")
     .update({
       generated_image_url: publicUrl,
@@ -206,10 +206,39 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     .select()
     .single();
 
+  // THE LOCAL RECORD IS THE DASHBOARD'S ONLY SOURCE. Both campaign
+  // queries filter on status = 'launched', so if this update does not
+  // land the row stays a draft and the merchant sees "No campaigns
+  // launched yet" beside a campaign that genuinely exists on Meta —
+  // with launch.done in the log saying it worked.
+  //
+  // The error was previously not even destructured. Same shape as the
+  // unchecked storage upload: Supabase returns { data, error } and does
+  // not throw, so a failed write read as a successful one.
+  //
+  // Thrown, not swallowed: the objects on Meta are real and paused, and
+  // an executor that reports success while the row says draft leaves
+  // nobody able to find or stop them.
+  if (updateError || !updated) {
+    metaError("launch.row_not_saved", {
+      dealership: dealershipId,
+      draft: draft.id,
+      campaign: campaignRes.id,
+      ad: adRes.id,
+      detail: updateError?.message ?? "the update matched no row",
+    });
+    throw new Error(
+      `The campaign was created on Meta (${campaignRes.id}) but couldn't be saved to your dashboard: ${updateError?.message ?? "the record was not found"}`
+    );
+  }
+
   metaLog("launch.done", {
     dealership: dealershipId,
     destination: destination.kind,
     objective: destination.objective,
+    // Whether the local record actually saved. Its absence is what
+    // makes a live campaign invisible in the product.
+    row_saved: true,
     draft: draft.id,
     campaign: campaignRes.id,
     adset: adsetRes.id,
