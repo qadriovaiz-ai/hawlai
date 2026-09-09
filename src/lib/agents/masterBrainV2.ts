@@ -1316,10 +1316,29 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         // had been used.
         let buffer: Buffer;
         if (productPhotoUrl) {
-          const photoRes = await fetch(productPhotoUrl);
-          if (!photoRes.ok) throw new Error(`product photo fetch returned ${photoRes.status}`);
-          const photoBuf = Buffer.from(await photoRes.arrayBuffer());
-          buffer = await buildCreativeFromPhoto(photoBuf, plan);
+          // FALLS BACK RATHER THAN FAILING. A product photo can be a
+          // format sharp cannot decode, an image behind a redirect, a
+          // dead CDN link — none of which is a reason to produce no ad
+          // at all. Erroring here returned { error }, extractArtifact
+          // returned null for it, and the merchant got NO CARD while
+          // the model narrated the campaign it had planned as though
+          // it existed. A degraded card that says why beats a
+          // confident sentence with nothing behind it.
+          try {
+            const photoRes = await fetch(productPhotoUrl);
+            if (!photoRes.ok) throw new Error(`the photo link returned ${photoRes.status}`);
+            const photoBuf = Buffer.from(await photoRes.arrayBuffer());
+            buffer = await buildCreativeFromPhoto(photoBuf, plan);
+          } catch (photoErr: any) {
+            const why = photoErr?.message ?? String(photoErr);
+            merr("chat.photo_unusable", { dealership: ctx.id, url: productPhotoUrl, detail: why });
+            buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
+            // The card must stop claiming the real photo the moment we
+            // stop using it.
+            photoSource = "ai_generated";
+            photoReason = `couldn't use your product photo (${why}), so I generated an image instead`;
+            productPhotoUrl = null;
+          }
         } else {
           buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
         }
@@ -1361,7 +1380,10 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         await service.from("ad_creatives").update({ generated_image_url: imageUrl }).eq("id", draft.id);
       } catch (err: any) {
         merr("chat.creative_failed", { dealership: ctx.id, photo_source: photoSource, detail: err?.message ?? String(err) });
-        return { error: "I wrote the ad but couldn't generate the picture for it. Try again in a moment." };
+        // The cause, not just the symptom. "Couldn't generate the
+        // picture" with no reason is the exact shape this whole run has
+        // been spent removing from other paths.
+        return { error: `I wrote the ad but couldn't produce the image: ${err?.message ?? String(err)}` };
       }
 
       const created = await createPublishAction(service, createMetaPlatform({ supabase: service }), {
@@ -2066,7 +2088,17 @@ function extractDraft(result: Record<string, any>, fallbackHeading: string): { h
 // Turns a raw tool-execution result into something the chat feed can
 // show inline (or the workspace panel, for visual kinds), without the
 // frontend needing to know each tool's individual response shape.
-function extractArtifact(toolName: string, input: any, result: any): Artifact | null {
+/**
+ * EXPORTED FOR TESTS, and the reason is worth recording.
+ *
+ * Every test of this function so far has read its SOURCE TEXT and
+ * asserted that certain lines appear. Four separate card bugs survived
+ * that: a field the renderer never reads, a test that required the bug
+ * in order to pass, a pinned JSX shape, and a pinned message string.
+ * Grepping source cannot tell you what the function RETURNS for a real
+ * payload — only running it can.
+ */
+export function extractArtifact(toolName: string, input: any, result: any): Artifact | null {
   if (!result || result.error) return null;
   const departmentHref = DEPARTMENT_HREF[toolName];
 

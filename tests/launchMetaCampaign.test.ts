@@ -517,3 +517,27 @@ describe("buildCreativeFromPhoto keeps the photo intact", () => {
     expect(fn).toMatch(/buildTextOverlaySvg/);
   });
 });
+
+describe("a photo that cannot be used degrades instead of failing", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const handler = brain.slice(
+    brain.indexOf('case "launch_meta_campaign": {'),
+    brain.indexOf('case "propose_campaign_budget_change":')
+  );
+
+  it("falls back to a generated image rather than erroring the whole action", () => {
+    expect(handler).toMatch(/chat\.photo_unusable/);
+    expect(handler).toMatch(/photoSource = "ai_generated"/);
+  });
+
+  it("stops claiming the real photo once it stops using it", () => {
+    expect(handler).toMatch(/productPhotoUrl = null/);
+    expect(handler).toMatch(/couldn't use your product photo/);
+  });
+
+  it("a genuinely fatal error names its cause", () => {
+    // "Couldn't generate the picture" with no reason is the exact shape
+    // this run has been spent removing from other paths.
+    expect(handler).toMatch(/couldn't produce the image: \$\{err\?\.message/);
+  });
+});
