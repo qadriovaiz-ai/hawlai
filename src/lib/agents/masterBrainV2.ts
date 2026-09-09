@@ -1115,7 +1115,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       // in the platform module for the same reason variant resolution
       // is — it is the conversational half, and it must exist and be
       // seen before anyone can say yes to it.
-      const { generateAdPlan: makePlan, buildCreativeWithoutPhoto, buildFinalCreativeImage: buildFinalCreative } = await import("../adEngine");
+      const { generateAdPlan: makePlan, buildCreativeWithoutPhoto, buildCreativeFromPhoto } = await import("../adEngine");
       const { createMetaPlatform } = await import("../publish/platforms/meta");
       const { createPublishAction } = await import("../publish/create");
       const { createServiceClient: makeService } = await import("../supabase/service");
@@ -1306,17 +1306,20 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         if (!draft) return { error: "Couldn't start the ad draft. Try again in a moment." };
         draftId = draft.id;
 
-        // With a real photo the existing ai_generate path applies —
-        // it restyles the BACKGROUND and is prompted to keep the
-        // product itself unchanged, which is exactly what an ad
-        // featuring the merchant's own product needs.
+        // The real photo is used AS the creative, not as a reference
+        // for a generator. ai_generate was tried here first and sent
+        // the photo to Gemini with "keep the product unchanged, only
+        // change the background" — which Gemini treated as a
+        // suggestion and returned a different arrangement of similar-
+        // looking candles. The card then showed a product the merchant
+        // does not sell, while the text correctly said the real photo
+        // had been used.
         let buffer: Buffer;
         if (productPhotoUrl) {
           const photoRes = await fetch(productPhotoUrl);
           if (!photoRes.ok) throw new Error(`product photo fetch returned ${photoRes.status}`);
           const photoBuf = Buffer.from(await photoRes.arrayBuffer());
-          const mime = photoRes.headers.get("content-type")?.split(";")[0] || "image/jpeg";
-          buffer = await buildFinalCreative("ai_generate", photoBuf, photoBuf.toString("base64"), mime, plan, conn.business_category ?? "small business");
+          buffer = await buildCreativeFromPhoto(photoBuf, plan);
         } else {
           buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
         }
@@ -1347,6 +1350,11 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           dealership: ctx.id,
           draft: draftId,
           photo_source: photoSource,
+          // The SOURCE photo beside the creative built from it. A
+          // future divergence between what was resolved and what
+          // reached the card is then one log line, not a trace.
+          product_photo: productPhotoUrl,
+          ai_generated: !productPhotoUrl,
           image_bytes: buffer.length,
           image_verified: true,
         });

@@ -457,3 +457,56 @@ describe("the card is honest when there is no image", () => {
     expect(card).toMatch(/don't approve this until you can see it/i);
   });
 });
+
+// ---------------------------------------------------------------
+// The creative IS the product photo, not a picture inspired by it.
+// ---------------------------------------------------------------
+describe("a real product photo is used, not regenerated", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const handler = brain.slice(
+    brain.indexOf('case "launch_meta_campaign": {'),
+    brain.indexOf('case "propose_campaign_budget_change":')
+  );
+
+  it("does NOT send the product photo through the AI image generator", () => {
+    // THE BUG. ai_generate sends the photo to Gemini with "keep the
+    // product unchanged, only change the background" — a request, not
+    // a guarantee. A real photo of pink candles on pink satin came
+    // back as candles on a wooden tray against a beige couch:
+    // recognisably the same category of thing, not the same product.
+    // The card then showed something the merchant does not sell while
+    // correctly stating the real photo had been used.
+    expect(handler).not.toMatch(/buildFinalCreative\("ai_generate"/);
+    expect(handler).toMatch(/buildCreativeFromPhoto\(photoBuf, plan\)/);
+  });
+
+  it("still generates an image when there is NO product photo", () => {
+    // The fallback is untouched — a generated backdrop is right when
+    // there is genuinely nothing to show.
+    expect(handler).toMatch(/buildCreativeWithoutPhoto\(plan/);
+  });
+
+  it("logs the source photo beside the creative built from it", () => {
+    // So a future divergence between what was resolved and what
+    // reached the card is one log line rather than a trace.
+    expect(handler).toMatch(/product_photo: productPhotoUrl/);
+    expect(handler).toMatch(/ai_generated: !productPhotoUrl/);
+  });
+});
+
+describe("buildCreativeFromPhoto keeps the photo intact", () => {
+  const engine = committed("src/lib/adEngine.ts");
+  const fn = engine.slice(
+    engine.indexOf("export async function buildCreativeFromPhoto"),
+    engine.indexOf("export async function buildFinalCreativeImage")
+  );
+
+  it("calls no image generator at all", () => {
+    expect(fn).not.toMatch(/generateAIImage|generateAdImageFromDescription|gemini|generativelanguage/i);
+  });
+
+  it("composites the copy over the merchant's own pixels", () => {
+    expect(fn).toMatch(/sharp\(photoBuffer\)/);
+    expect(fn).toMatch(/buildTextOverlaySvg/);
+  });
+});

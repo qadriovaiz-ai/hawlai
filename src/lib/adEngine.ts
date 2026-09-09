@@ -345,6 +345,33 @@ export async function buildCreativeWithoutPhoto(plan: any, businessCategory: str
     .toBuffer();
 }
 
+/**
+ * The merchant's ACTUAL product photo, with the ad copy over it.
+ *
+ * WHY THIS EXISTS RATHER THAN ai_generate. That mode sends the photo to
+ * Gemini with "keep the product unchanged, only change the background".
+ * That is a request, not a guarantee, and Gemini regenerates the scene:
+ * a real photo of pink candles on pink satin came back as candles on a
+ * wooden tray against a beige couch. Recognisably the same CATEGORY of
+ * thing, not the same product.
+ *
+ * Restyling made sense where it was written — a dealership photographs
+ * a car in a car park and wants it on a sunset highway, and the car is
+ * still the car. For a shop whose product photo is already styled, the
+ * photo IS the creative, and replacing it with a plausible imitation
+ * means the ad advertises something the merchant does not sell.
+ *
+ * So: no AI in this path at all. Crop, overlay, done — what they see is
+ * what is on their listing.
+ */
+export async function buildCreativeFromPhoto(photoBuffer: Buffer, plan: any): Promise<Buffer> {
+  return sharp(photoBuffer)
+    .resize(1080, 1080, { fit: "cover" })
+    .composite([{ input: Buffer.from(buildTextOverlaySvg(1080, 1080, plan.headline, plan.body)), top: 0, left: 0 }])
+    .png()
+    .toBuffer();
+}
+
 export async function buildFinalCreativeImage(
   imageMode: string,
   inputBuffer: Buffer,
