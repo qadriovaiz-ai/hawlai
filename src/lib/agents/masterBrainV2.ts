@@ -1321,9 +1321,35 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
         }
         const filePath = `${ctx.id}/${draft.id}.png`;
-        await service.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
+        // THE SILENT ONE. Supabase's storage client returns { data,
+        // error } and does NOT throw. Unchecked, a failed upload fell
+        // through to getPublicUrl, which returns a perfectly
+        // well-formed URL for an object that was never written — so
+        // the card carried an imageUrl, the text said "real product
+        // photo used", and the <img> 404'd into nothing. The data did
+        // not back up what the text claimed, which is the worst shape
+        // for a preview step to fail in.
+        const { error: uploadError } = await service.storage
+          .from("ad-creatives")
+          .upload(filePath, buffer, { contentType: "image/png", upsert: true });
+        if (uploadError) throw new Error(`couldn't save the creative: ${uploadError.message}`);
+
         const { data: pub } = service.storage.from("ad-creatives").getPublicUrl(filePath);
+
+        // And verified, because "the upload reported success" is still
+        // not "the browser can load it". The bucket is public, so this
+        // is the same request the card will make.
+        const check = await fetch(pub.publicUrl, { method: "HEAD" });
+        if (!check.ok) throw new Error(`the saved creative isn't readable (${check.status})`);
+
         imageUrl = pub.publicUrl;
+        mlog("chat.creative", {
+          dealership: ctx.id,
+          draft: draftId,
+          photo_source: photoSource,
+          image_bytes: buffer.length,
+          image_verified: true,
+        });
         await service.from("ad_creatives").update({ generated_image_url: imageUrl }).eq("id", draft.id);
       } catch (err: any) {
         merr("chat.creative_failed", { dealership: ctx.id, photo_source: photoSource, detail: err?.message ?? String(err) });
@@ -2175,8 +2201,12 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
             // Any real catalogue, not just Shopify's. The merchant does
             // not care which system it came from; they care that it is
             // their actual product.
-            value:
-              result.photo_source && result.photo_source !== "ai_generated"
+            // Gated on the image ACTUALLY being there. Claiming a real
+            // photo beside a blank space is worse than saying nothing:
+            // it invites approval of something unseen.
+            value: !result.image_url
+              ? "Couldn't produce a preview image — don't approve this until you can see it."
+              : result.photo_source && result.photo_source !== "ai_generated"
                 ? `Using the real photo from your "${result.photo_product}" listing`
                 : `AI-generated image — ${result.photo_reason ?? "no product photo available"}`,
           },

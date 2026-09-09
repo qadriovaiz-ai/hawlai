@@ -405,3 +405,55 @@ describe("the card says which photo it is", () => {
     expect(card).toMatch(/no photo on this listing/);
   });
 });
+
+// ---------------------------------------------------------------
+// The preview must never claim a picture it cannot show.
+// ---------------------------------------------------------------
+describe("the creative is verified, not assumed", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const handler = brain.slice(
+    brain.indexOf('case "launch_meta_campaign": {'),
+    brain.indexOf('case "propose_campaign_budget_change":')
+  );
+
+  it("checks the storage upload's error instead of ignoring it", () => {
+    // Supabase's storage client returns { data, error } and does NOT
+    // throw. Unchecked, a failed upload fell through to getPublicUrl,
+    // which returns a well-formed URL for an object that was never
+    // written — so the card carried an imageUrl, the text said "real
+    // product photo used", and the <img> 404'd into nothing.
+    expect(handler).toMatch(/const \{ error: uploadError \}/);
+    expect(handler).toMatch(/if \(uploadError\) throw/);
+  });
+
+  it("VERIFIES the saved image is actually readable", () => {
+    // "The upload reported success" is not "the browser can load it".
+    // This is the same request the card will make.
+    expect(handler).toMatch(/method: "HEAD"/);
+    expect(handler).toMatch(/isn't readable/);
+  });
+
+  it("logs whether the creative was produced and verified", () => {
+    // So the next time a picture is missing, the log says whether one
+    // was ever made — rather than leaving it to be inferred from a
+    // blank space in a card.
+    expect(handler).toMatch(/mlog\("chat\.creative"/);
+    expect(handler).toMatch(/image_verified: true/);
+  });
+});
+
+describe("the card is honest when there is no image", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const card = brain.slice(
+    brain.indexOf('case "launch_meta_campaign": {', brain.indexOf("function extractArtifact")),
+    brain.indexOf('case "propose_campaign_budget_change":', brain.indexOf("function extractArtifact"))
+  );
+
+  it("does NOT claim a real photo when no image url reached the card", () => {
+    // Claiming a real photo beside a blank space is worse than saying
+    // nothing: it invites approval of something unseen, which is the
+    // one thing the preview step exists to prevent.
+    expect(card).toMatch(/!result\.image_url/);
+    expect(card).toMatch(/don't approve this until you can see it/i);
+  });
+});
