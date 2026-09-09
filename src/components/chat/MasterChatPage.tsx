@@ -442,6 +442,55 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
     }
   }
 
+
+/**
+ * The creative on an approval card — and a VISIBLE failure when it
+ * cannot be shown.
+ *
+ * A broken <img> renders as nothing or a sliver of alt text, which is
+ * indistinguishable from "no image was attached". That ambiguity cost
+ * three rounds of diagnosis: the card said a real product photo was
+ * used, the picture was absent, and nothing on screen said which of the
+ * two had gone wrong.
+ *
+ * So a load failure now says so, in the card, with the URL — because
+ * the person about to approve an ad is the one who needs to know the
+ * preview is not real, and they should not have to read a server log to
+ * find that out.
+ */
+function CardImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="mt-2 w-full max-w-[260px] rounded-lg border border-amber-300 bg-amber-50 p-2.5">
+        <p className="text-[11px] font-semibold text-amber-900">Preview image didn&apos;t load</p>
+        <p className="text-[10.5px] text-amber-800 mt-0.5">
+          Don&apos;t approve this until you can see the creative — the ad would run with an image nobody checked.
+        </p>
+        <a href={src} target="_blank" rel="noreferrer" className="text-[10px] text-amber-700 underline break-all mt-1 inline-block">
+          {src}
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    // ABOVE the fields on purpose: on an approval card the picture IS
+    // the thing being approved, and a preview that only describes an
+    // image in words is not a preview.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="mt-2 w-full max-w-[260px] rounded-lg border border-slate-200 bg-slate-50"
+    />
+  );
+}
+
+
   const approvalStrip = artifact.approval ? (
     <div className="border-t border-slate-100 px-3 py-2">
       {decision === "approved" || decision === "rejected" ? (
@@ -673,18 +722,7 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-slate-800 capitalize truncate">{artifact.label}</p>
           {artifact.summary && !artifact.columns && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{artifact.summary}</p>}
-          {artifact.imageUrl && (
-            // ABOVE the fields on purpose: on an approval card the
-            // picture IS the thing being approved, and a preview that
-            // only describes an image in words is not a preview.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={artifact.imageUrl}
-              alt={artifact.label}
-              loading="lazy"
-              className="mt-2 w-full max-w-[260px] rounded-lg border border-slate-200 bg-slate-50"
-            />
-          )}
+          {artifact.imageUrl && <CardImage src={artifact.imageUrl} alt={artifact.label} />}
           {artifact.fields && artifact.fields.length > 0 && (
             <dl className="mt-1.5 space-y-0.5">
               {artifact.fields.map((f, i) => (
