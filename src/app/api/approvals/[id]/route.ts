@@ -4,8 +4,7 @@ import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 import { releaseApprovedAction } from "@/lib/publish/release";
-import { createShopifyPlatform } from "@/lib/publish/platforms/shopify";
-import { shopifyCredentialsAdapter } from "@/lib/publish/platforms/shopifyCredentials";
+import { createPlatformRegistry } from "@/lib/publish/registry";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
@@ -192,7 +191,7 @@ export async function PATCH(
     // executor. Both halves live together because the bug was in the
     // gap between them, not in either one.
     const released = await releaseApprovedAction(
-      { supabase: service, platforms: { shopify: createShopifyPlatform({ getCredentials: shopifyCredentialsAdapter }) } },
+      { supabase: service, platforms: createPlatformRegistry(service) },
       id
     );
 
