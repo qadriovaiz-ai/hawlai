@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { resolvePixel } from "@/lib/meta/resolvePixel";
 import { NextResponse } from "next/server";
 import { metaPageTokenWrite } from "@/lib/crypto/oauthSecrets";
+import { fetchAdAccountLimits, limitsToRow } from "@/lib/ads/adAccountLimits";
+import { metaLog, metaError } from "@/lib/ads/metaLog";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -55,6 +57,30 @@ export async function POST(request: Request) {
   // are deliberately not treated this way: they describe the
   // connection being replaced, and staleness there is the bug.
   if (chosenPixel) update.meta_pixel_id = chosenPixel.id;
+
+  // LAYER 1 — cache the account's spending limits at connect time.
+  //
+  // One extra Graph call, on the one request where a fresh, known-good
+  // token is already in hand. Doing it here means the very first ad
+  // preview can state the minimum instead of discovering it as a
+  // rejected ad set five Graph calls into a launch.
+  //
+  // Failure is NOT fatal: a connect that works must not be undone
+  // because a limits lookup timed out. The columns stay null, and
+  // getAdAccountLimits refreshes them on first use.
+  const limits = await fetchAdAccountLimits(update.fb_ad_account_id, page.access_token);
+  if (limits.ok) {
+    Object.assign(update, limitsToRow(limits.limits));
+    metaLog("connect.limits", {
+      dealership: dealershipId,
+      ad_account: update.fb_ad_account_id,
+      currency: limits.limits.currency,
+      min_daily_budget: limits.limits.minDailyBudget,
+      account_status: limits.limits.accountStatus,
+    });
+  } else {
+    metaError("connect.limits_failed", { dealership: dealershipId, detail: limits.reason });
+  }
 
   const { error } = await serviceClient
     .from("dealerships")

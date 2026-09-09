@@ -10,6 +10,7 @@ import {
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { isAccountUsable, clampBudgetToMinimum, describeMinimum, limitsFromRow } from "@/lib/ads/adAccountLimits";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   // eventually go through Settings -> Connect Facebook).
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, fb_page_access_token_encrypted, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category")
+    .select("fb_page_access_token, fb_page_access_token_encrypted, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
     .eq("id", dealershipId)
     .single();
 
@@ -49,6 +50,16 @@ export async function POST(request: Request) {
       { error: "Facebook Page isn't connected. Go to Settings and connect your Facebook Page first, then launch the ad." },
       { status: 400 }
     );
+  }
+
+  // LAYER 3a — refuse a dead ad account BEFORE generating an image or
+  // calling Claude. Meta would reject the campaign anyway, but only
+  // after the whole flow has run, and with an error naming neither the
+  // cause nor the fix.
+  const accountState = isAccountUsable(dealership?.fb_account_status);
+  if (!accountState.usable) {
+    metaError("launch.account_unusable", { dealership: dealershipId, status: dealership?.fb_account_status ?? null });
+    return NextResponse.json({ error: accountState.reason }, { status: 400 });
   }
 
   const body = await request.json();
@@ -286,10 +297,29 @@ export async function POST(request: Request) {
     // Step 6: ad set (targeting + budget)
     const targeting = built.targeting;
 
+    // LAYER 3b — raise the budget to the account's real floor.
+    //
+    // The plan proposes a number with no knowledge of the account. Meta
+    // rejects anything under min_daily_budget at THIS point, five calls
+    // in, having already created a campaign and uploaded a creative.
+    // Raising is recoverable and reported; failing here is not.
+    const budget = clampBudgetToMinimum(
+      Math.round((plan.daily_budget ?? 500) * 100),
+      dealership?.fb_min_daily_budget
+    );
+    if (budget.raised) {
+      metaLog("launch.budget_raised", {
+        dealership: dealershipId,
+        from_minor: budget.from,
+        to_minor: budget.minor,
+        currency: dealership?.fb_currency ?? null,
+      });
+    }
+
     const adsetRes = await metaPost(`${adAccount}/adsets`, {
       name: `${plan.headline} - AdSet`,
       campaign_id: campaignRes.id,
-      daily_budget: Math.round((plan.daily_budget ?? 500) * 100),
+      daily_budget: budget.minor,
       billing_event: "IMPRESSIONS",
       optimization_goal: "LEAD_GENERATION",
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
@@ -324,7 +354,7 @@ export async function POST(request: Request) {
         external_campaign_id: campaignRes.id,
         external_adset_id: adsetRes.id,
         external_status: "PAUSED",
-        daily_budget: plan.daily_budget ?? 500,
+        daily_budget: budget.minor / 100,
         targeting_city: plan.targeting_city ?? null,
         // Migration 151 — the full resolved targeting spec (location
         // mode, age/gender/interests actually applied, and the
@@ -361,6 +391,16 @@ export async function POST(request: Request) {
       creative: updated,
       plan,
       meta: { campaign_id: campaignRes.id, adset_id: adsetRes.id, ad_id: adRes.id, creative_id: creativeRes.id },
+      // Surfaced so the UI can say "we raised this to your account's
+      // minimum" rather than the merchant noticing a different number
+      // later and not knowing why.
+      budget: {
+        applied_minor: budget.minor,
+        raised: budget.raised,
+        requested_minor: budget.from,
+        minimum: describeMinimum(limitsFromRow(dealership)),
+        currency: dealership?.fb_currency ?? null,
+      },
       targetingSummary: built.summary,
     });
   } catch (err: any) {

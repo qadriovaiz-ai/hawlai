@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateAdPlan, buildFinalCreativeImage } from "@/lib/adEngine";
 import { previewPersonaSummary } from "@/lib/ads/metaTargeting";
+import { getAdAccountLimits, clampBudgetToMinimum, describeMinimum, isAccountUsable } from "@/lib/ads/adAccountLimits";
+import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 // Phase 1 of the two-phase launch flow (Block 2 — Plan Card): generates
 // the ad copy + finished creative image and saves it as a draft, WITHOUT
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("business_category")
+    .select("business_category, fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
     .eq("id", dealershipId)
     .single();
 
@@ -84,7 +86,37 @@ export async function POST(request: Request) {
     // interest names comes back from /api/ads/adlaunch instead.
     const targetingPreview = previewPersonaSummary(brandProfile?.target_persona ?? null, businessCategory);
 
-    return NextResponse.json({ draft: updated, plan, targetingPreview });
+    // LAYER 3c — the merchant sees the account's real floor HERE, on
+    // the card they approve, not as a rejected ad set later and never
+    // by going to look it up on Meta.
+    //
+    // getAdAccountLimits refreshes only when the cached reading is
+    // stale, and returns the cached one if Meta cannot be reached —
+    // this route's Meta-free design (see the header) is preserved in
+    // the common case, and a lookup failure never blocks a preview.
+    const limits = await getAdAccountLimits(supabase, dealershipId, {
+      row: dealership ?? undefined,
+      token: readMetaPageToken(dealership),
+    });
+    const requestedMinor = Math.round((plan.daily_budget ?? 500) * 100);
+    const budget = clampBudgetToMinimum(requestedMinor, limits.minDailyBudget);
+    const account = isAccountUsable(limits.accountStatus);
+
+    return NextResponse.json({
+      draft: updated,
+      plan,
+      targetingPreview,
+      // Everything the approver needs to judge the spend, stated before
+      // they approve rather than discovered after.
+      budget: {
+        proposed_minor: requestedMinor,
+        will_apply_minor: budget.minor,
+        raised_to_minimum: budget.raised,
+        account_minimum: describeMinimum(limits),
+        currency: limits.currency,
+      },
+      account: { usable: account.usable, reason: account.reason },
+    });
   } catch (err: any) {
     await serviceClient.from("ad_creatives").update({ status: "failed", error_message: err.message }).eq("id", draft.id);
     return NextResponse.json({ error: err.message }, { status: 500 });

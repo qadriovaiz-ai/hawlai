@@ -676,7 +676,40 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           : null;
       const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
-      return withBrandVoiceCheck(output, resolvedBrandVoice);
+
+      // LAYER 4 — the real floor, from the merchant's OWN ad account.
+      //
+      // Without this the model answers "what's the least I can spend?"
+      // from its own training data, which is exactly how a merchant got
+      // sent to Meta's site to look it up by hand. Published figures for
+      // INR span ₹40 to ₹100 and the real value here is ₹94.91 — the
+      // most commonly cited one is below the floor and would be
+      // rejected. A number this specific must come from the account.
+      const { getAdAccountLimits: getLimits, describeMinimum: describeMin, isAccountUsable: acctUsable } = await import("../ads/adAccountLimits");
+      const { readMetaPageToken: readTok } = await import("../crypto/oauthSecrets");
+      const { data: adAcct } = await supabase
+        .from("dealerships")
+        .select("fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
+        .eq("id", ctx.id)
+        .maybeSingle();
+      const adLimits = adAcct
+        ? await getLimits(supabase, ctx.id, { row: adAcct, token: readTok(adAcct) })
+        : null;
+
+      return withBrandVoiceCheck(
+        adLimits
+          ? {
+              ...output,
+              // Read by the model when it talks about budget. Named
+              // plainly so it states the figure rather than paraphrasing
+              // one from memory.
+              account_minimum_daily_budget: describeMin(adLimits),
+              account_currency: adLimits.currency,
+              account_can_run_ads: acctUsable(adLimits.accountStatus).usable,
+            }
+          : output,
+        resolvedBrandVoice
+      );
     }
     case "generate_video_task": {
       const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);

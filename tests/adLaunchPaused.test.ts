@@ -229,3 +229,61 @@ describe("an unconnected business cannot launch", () => {
     expect(metaCalls).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------
+// Account limits (item 1). The merchant never looks these up on Meta.
+// ---------------------------------------------------------------
+const REAL_MIN = 9491; // paise — the real observed floor for act_1568276064894949
+
+describe("the account's own floor is applied before Meta can reject it", () => {
+  it("RAISES a plan budget that would fall under the account minimum", async () => {
+    // Meta rejects an under-floor ad set at step 6 of 7, after a
+    // campaign exists and a creative has been uploaded, with an error
+    // naming neither the floor nor the fix. Raising is recoverable and
+    // reported; failing there is not.
+    serverRows.dealerships = { ...connection, fb_min_daily_budget: REAL_MIN, fb_currency: "INR", fb_account_status: 1 };
+    // A plan that proposes ₹50/day — under the ₹94.91 floor.
+    vi.mocked((await import("@/lib/adEngine")).generateAdPlan).mockResolvedValueOnce({
+      headline: "Cheap", body: "x", daily_budget: 50, targeting_city: "Lucknow", background_style: "studio_white",
+    });
+
+    const res = await POST(launchRequest());
+    expect(res.status).toBe(200);
+
+    expect(call("/adsets")!.params.daily_budget).toBe(REAL_MIN);
+    const body = await res.json();
+    expect(body.budget.raised).toBe(true);
+    expect(body.budget.requested_minor).toBe(5000);
+    expect(body.budget.minimum).toMatch(/94\.91/);
+  });
+
+  it("leaves a budget already above the floor exactly as planned", async () => {
+    serverRows.dealerships = { ...connection, fb_min_daily_budget: REAL_MIN, fb_currency: "INR", fb_account_status: 1 };
+    const res = await POST(launchRequest());
+
+    expect(call("/adsets")!.params.daily_budget).toBe(50000);
+    expect((await res.json()).budget.raised).toBe(false);
+  });
+
+  it("REFUSES to launch on a disabled account, before any Graph call", async () => {
+    // Before the image is built and before Claude is called — the
+    // expensive half of the flow is skipped entirely.
+    serverRows.dealerships = { ...connection, fb_account_status: 2 };
+
+    const res = await POST(launchRequest());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/disabled/i);
+    expect(metaCalls).toEqual([]);
+  });
+
+  it("launches normally when the limits have never been fetched", async () => {
+    // Not knowing must not become a blocker. The columns are null until
+    // the first connect or refresh, and a merchant mid-setup should not
+    // be stopped by a cache we have not filled yet.
+    serverRows.dealerships = { ...connection, fb_min_daily_budget: null, fb_account_status: null };
+    const res = await POST(launchRequest());
+
+    expect(res.status).toBe(200);
+    expect(call("/adsets")!.params.daily_budget).toBe(50000);
+  });
+});
