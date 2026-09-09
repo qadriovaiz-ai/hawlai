@@ -4,13 +4,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { getNavGroups } from "@/lib/navGroups";
+import { Suspense } from "react";
+import NavTree from "./NavTree";
+import { getNavTree } from "@/lib/navTree";
 import type { ProductMode } from "@/lib/onboarding/intentRouter";
 import DealershipSwitcher from "@/components/agency/DealershipSwitcher";
 
-export default function Sidebar({ dealershipName, productMode }: { dealershipName: string; productMode?: ProductMode | null }) {
+export default function Sidebar({ dealershipName, productMode, isAgency }: { dealershipName: string; productMode?: ProductMode | null; isAgency?: boolean }) {
   const pathname = usePathname();
-  const navGroups = getNavGroups(productMode);
+  // useSearchParams inside NavTree needs a Suspense boundary in the
+  // app router; the tree itself is plain data.
+  const sections = getNavTree({ mode: productMode, isAgency });
 
   return (
     <div className="hidden md:flex w-64 bg-slate-100 border-r border-slate-200 flex-col h-full shrink-0">
@@ -27,27 +31,13 @@ export default function Sidebar({ dealershipName, productMode }: { dealershipNam
         <DealershipSwitcher />
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-3 space-y-4">
-        {navGroups.map((group) => (
-          <div key={group.label}>
-            {group.label && (
-              <p className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                {group.label}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {group.items.map(({ href, label, icon: Icon }) => {
-                const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
-                return (
-                  <Link key={href} href={href} className={cn("sidebar-link", isActive ? "sidebar-link-active" : "sidebar-link-inactive")}>
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="flex-1">{label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <nav className="flex-1 overflow-y-auto p-3">
+        {/* The accordion. Sections with children expand in place; a
+            leaf navigates, carrying ?tab= where the destination is a
+            hub tab rather than a page of its own. */}
+        <Suspense fallback={<div className="h-8" />}>
+          <NavTree sections={sections} />
+        </Suspense>
       </nav>
 
       <div className="p-3 border-t border-slate-100">

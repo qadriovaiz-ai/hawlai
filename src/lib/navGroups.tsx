@@ -22,7 +22,7 @@ export const NAV_GROUPS = [
   {
     label: "",
     items: [
-      { href: "/dashboard/overview", label: "Home", icon: Home },
+      { href: "/dashboard/overview", label: "Overview", icon: Home },
       { href: "/chat", label: "AI Employee", icon: Brain },
       // Route stays /dashboard/tasks — every existing deep link points
       // there. Only the label changed, because the page now shows

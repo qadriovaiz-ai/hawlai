@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { getTheme } from "@/lib/landingThemes";
 import { FONT_PRESETS } from "@/lib/fontPresets";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
 // Undo/redo history is capped and debounced per page: a burst of rapid
 // edits (e.g. dragging blocks around, or typing into a text block)
@@ -34,7 +35,20 @@ const THEME_PREVIEWS: Record<string, { label: string; dark: string; accent: stri
 };
 
 export default function WebsiteBuilderView() {
-  const [tab, setTab] = useState<"website" | "products" | "orders" | "domain" | "offers" | "shipping" | "payments">("website");
+  // THE URL IS THE SOURCE OF TRUTH. This was local useState with no
+  // query param at all, which is why Orders could only be reached by
+  // clicking the tab -- a sidebar link, a bookmark or a shared URL had
+  // no way to name it. Deriving it also means a sidebar click while
+  // already on this page actually changes the panel, which seeding
+  // state from a param would not.
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const TAB_KEYS = ["website", "products", "orders", "domain", "offers", "shipping", "payments"] as const;
+  const requested = params.get("tab");
+  const tab = (TAB_KEYS as readonly string[]).includes(requested ?? "") ? (requested as "website" | "products" | "orders" | "domain" | "offers" | "shipping" | "payments") : "website";
+  // replace, not push: switching tabs should not fill the back stack.
+  const setTab = (key: "website" | "products" | "orders" | "domain" | "offers" | "shipping" | "payments") => router.replace(`${pathname}?tab=${key}`, { scroll: false });
   const [website, setWebsite] = useState<any>(null);
   const [pages, setPages] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);

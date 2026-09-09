@@ -8,6 +8,7 @@ import MasterBrainWidget from "@/components/dashboard/MasterBrainWidget";
 import MobileTabBar from "@/components/dashboard/MobileTabBar";
 import { resolveActiveMembership } from "@/lib/teamMembership";
 import { resolveOnboardingState, shouldSendToOnboarding } from "@/lib/onboardingState";
+import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 
 export default async function DashboardLayout({
   children,
@@ -81,6 +82,12 @@ export default async function DashboardLayout({
   // ownership context pending_approvals' owner-only RLS expects, no
   // extra check needed. Only used for the mobile tab bar's Approvals
   // dot; cheap head-count query, not fetching any rows.
+  // Agency sections are hidden for accounts that cannot use them, the
+  // same gate the Business page applied to those five cards. Read here
+  // because the SIDEBAR now owns that navigation.
+  const planLimits = profile?.dealership_id ? await getDealershipPlanLimits(supabase, profile.dealership_id) : null;
+  const isAgency = planLimits ? hasFeature(planLimits, "multiBusiness") : false;
+
   const { count: pendingApprovalsCount } = await supabase
     .from("pending_approvals")
     .select("id", { count: "exact", head: true })
@@ -89,7 +96,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <Sidebar dealershipName={dealershipName} productMode={profile?.dealerships?.product_mode ?? null} />
+      <Sidebar dealershipName={dealershipName} productMode={profile?.dealerships?.product_mode ?? null} isAgency={isAgency} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar user={user} profile={profile} />
         <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">

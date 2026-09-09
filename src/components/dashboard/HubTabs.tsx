@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState, ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, ReactNode } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Tab {
@@ -35,11 +35,26 @@ function HubTabsInner({ title, description, icon, tabs }: HubTabsProps) {
   // tabs[0] — used by Home's "Launch New Ad" CTA and the retired
   // crm-marketing redirect, so the destination actually matches what
   // the link promised.
-  const requestedTab = useSearchParams().get("tab");
-  const [activeKey, setActiveKey] = useState(
-    tabs.some((t) => t.key === requestedTab) ? (requestedTab as string) : tabs[0]?.key
-  );
+  // THE URL IS THE SOURCE OF TRUTH, not local state.
+  //
+  // This used to seed useState from the param. That works on first
+  // load and fails the moment a SIDEBAR link points at another tab of
+  // the page you are already on: client-side navigation keeps the
+  // component mounted, so the initialiser never runs again, the URL
+  // changes and the content does not. Deriving it instead means a
+  // sidebar click, a back button and a pasted link all behave the same.
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const requestedTab = params.get("tab");
+  const activeKey = tabs.some((t) => t.key === requestedTab) ? (requestedTab as string) : tabs[0]?.key;
   const active = tabs.find((t) => t.key === activeKey) ?? tabs[0];
+
+  // replace, not push: flipping between tabs should not build a back
+  // stack the person has to click through to leave the page.
+  const setActiveKey = (key: string) =>
+    router.replace(`${pathname}?tab=${key}`, { scroll: false });
 
   return (
     <div className="space-y-5">

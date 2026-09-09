@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Layout } from "lucide-react";
+import { Suspense } from "react";
 import WebsiteBuilderView from "@/components/website-builder/WebsiteBuilderView";
 
 export default async function WebsiteBuilderPage() {
@@ -19,7 +20,7 @@ export default async function WebsiteBuilderPage() {
           <p className="text-sm text-slate-500">A real multi-page website — Home, About, Services/Products, Contact and more, chosen by business type.</p>
         </div>
       </div>
-      <WebsiteBuilderView />
+      <Suspense fallback={null}><WebsiteBuilderView /></Suspense>
     </div>
   );
 }
