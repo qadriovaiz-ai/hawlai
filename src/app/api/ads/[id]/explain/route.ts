@@ -47,6 +47,6 @@ export async function POST(
   const thisPerf = performance.campaigns.find((c) => c.id === id) ?? null;
   const comparisons = await getComparisonCampaigns(supabase, dealershipId, campaign, performance.campaigns);
 
-  const explanation = await explainCampaign(campaign, thisPerf, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, comparisons);
+  const explanation = await explainCampaign(campaign, thisPerf, dealership?.business_category ?? "small business", { supabase, dealershipId }, comparisons);
   return NextResponse.json({ explanation });
 }

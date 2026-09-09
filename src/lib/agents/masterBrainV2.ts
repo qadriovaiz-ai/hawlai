@@ -1107,7 +1107,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const service = makeService();
       const { data: conn } = await supabase
         .from("dealerships")
-        .select("business_category, fb_page_id, fb_lead_form_id, fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
+        .select("business_category, city, fb_page_id, fb_lead_form_id, fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
         .eq("id", ctx.id)
         .maybeSingle();
 
@@ -1136,7 +1136,11 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         .eq("dealership_id", ctx.id)
         .maybeSingle();
 
-      const plan = await makePlan(askedFor, brand, conn.business_category ?? "small business", { supabase, dealershipId: ctx.id });
+      // The business's OWN city, never a hardcoded one. ctx.city is what
+      // onboarding captured; when it is empty the plan returns null and
+      // targeting falls back to All India — broad, but never the wrong
+      // city.
+      const plan = await makePlan(askedFor, brand, conn.business_category ?? "small business", { supabase, dealershipId: ctx.id }, conn.city ?? ctx.city ?? null);
 
       // A budget the person actually said beats the model's guess.
       const statedBudget = Number(String(input.daily_budget ?? "").replace(/[^\d.]/g, ""));

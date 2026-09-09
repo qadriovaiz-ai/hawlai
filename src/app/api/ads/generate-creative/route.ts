@@ -50,7 +50,7 @@ async function applyTemplateBackground(inputBuffer: Buffer, style: string): Prom
 // AI mode: sends the car photo + prompt to Gemini 2.5 Flash Image
 // to regenerate the background/scene around the (unchanged) car.
 // ------------------------------------------------------------------
-async function generateAIImage(prompt: string, base64Data: string, mimeType: string, businessCategory: string = "car dealership"): Promise<Buffer> {
+async function generateAIImage(prompt: string, base64Data: string, mimeType: string, businessCategory: string = "small business"): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set in environment variables");
 
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships").select("business_category").eq("id", dealershipId).single();
-  const businessCategory = dealership?.business_category ?? "car dealership";
+  const businessCategory = dealership?.business_category ?? "small business";
 
   const body = await request.json();
   const { photo_base64, mode, prompt, background_style, headline, body_copy, price_text } = body;

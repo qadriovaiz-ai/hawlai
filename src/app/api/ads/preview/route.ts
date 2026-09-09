@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("business_category, fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
+    .select("business_category, city, fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
     .eq("id", dealershipId)
     .single();
 
@@ -41,8 +41,8 @@ export async function POST(request: Request) {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
-  const businessCategory = dealership?.business_category ?? "car dealership";
-  const plan = await generateAdPlan(prompt, brandProfile, businessCategory, { supabase, dealershipId });
+  const businessCategory = dealership?.business_category ?? "small business";
+  const plan = await generateAdPlan(prompt, brandProfile, businessCategory, { supabase, dealershipId }, dealership?.city ?? null);
 
   const serviceClient = createServiceClient();
 

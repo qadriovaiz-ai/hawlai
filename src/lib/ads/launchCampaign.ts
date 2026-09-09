@@ -120,7 +120,11 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
 
   // Step 5: campaign
   const campaignRes = await metaPost(`${adAccount}/campaigns`, {
-    name: `Hawlai - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
+    // Named after what is actually being advertised. The fallback used
+    // to be "Cars", so a candle shop's campaign appeared in Ads Manager
+    // as "Hawlai - Cars - 09/09/2026". Cosmetic, but it is the name the
+    // merchant navigates by.
+    name: `Hawlai - ${plan.car_type || dealership?.business_category || "Campaign"} - ${new Date().toLocaleDateString("en-IN")}`,
     objective: destination.objective,
     status: "PAUSED",
     special_ad_categories: [built.specialAdCategory],

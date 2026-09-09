@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   // eventually go through Settings -> Connect Facebook).
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, fb_page_access_token_encrypted, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
+    .select("fb_page_access_token, fb_page_access_token_encrypted, fb_ad_account_id, fb_page_id, fb_lead_form_id, business_category, city, external_website_url, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
     .eq("id", dealershipId)
     .single();
 
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
     plan = existingDraft.plan_json;
     draft = existingDraft;
   } else {
-    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "small business", { supabase, dealershipId }, dealership?.city ?? null);
 
     const { data: newDraft } = await serviceClient
       .from("ad_creatives")
@@ -213,7 +213,7 @@ export async function POST(request: Request) {
       publicUrlData = { publicUrl: draft.generated_image_url };
     } else {
       finalBuffer = await buildFinalCreativeImage(
-        image_mode, inputBuffer, rawBase64, mimeType, plan, dealership?.business_category ?? "car dealership"
+        image_mode, inputBuffer, rawBase64, mimeType, plan, dealership?.business_category ?? "small business"
       );
 
       // Save a copy in our own storage for preview/records
