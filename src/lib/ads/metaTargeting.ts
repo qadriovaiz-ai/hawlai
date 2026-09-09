@@ -281,7 +281,7 @@ export async function buildMetaTargeting(input: BuildTargetingInput): Promise<Bu
   // policy risk at worst if the category is misdeclared.
   if (specialAdCategory) {
     return {
-      targeting: { ...location.geo_locations, targeting_automation: { advantage_audience: 1 } },
+      targeting: { geo_locations: location.geo_locations, targeting_automation: { advantage_audience: 1 } },
       specialAdCategory,
       summary: `Location only (${location.summaryLabel}) — required for ${input.businessCategory} ads under Meta's housing ad policy.`,
       personaApplied: false,
@@ -302,7 +302,7 @@ export async function buildMetaTargeting(input: BuildTargetingInput): Promise<Bu
   if (retargetIds.length > 0) {
     return {
       targeting: {
-        ...location.geo_locations, // Meta still requires a geo
+        geo_locations: location.geo_locations, // Meta still requires a geo
         custom_audiences: retargetIds.map((id) => ({ id })),
         targeting_automation: { advantage_audience: 0 },
       },
@@ -338,7 +338,20 @@ export async function buildMetaTargeting(input: BuildTargetingInput): Promise<Bu
   // off when there's real persona data to apply — an ad with no
   // persona set behaves byte-identical to before this feature existed.
   const targeting: Record<string, any> = {
-    ...location.geo_locations,
+    // NESTED, not spread. resolveLocation returns
+    // { geo_locations: { countries|cities|regions } }, and spreading it
+    // put `countries` / `cities` at the TOP level of targeting — where
+    // Meta's spec has no such field — while the geo_locations key it
+    // does require was never sent at all. Every adset creation was
+    // rejected with "Add at least one location or choose a custom
+    // audience" (subcode 1885364).
+    //
+    // Not a regression from removing the Lucknow default: that changed
+    // WHICH branch of resolveLocation runs, and all three branches were
+    // flattened identically. A campaign with a city set failed the same
+    // way. It was never reachable before, because the executor had
+    // never run a launch to completion in production.
+    geo_locations: location.geo_locations,
     ...(age ? { age_min: age.min, age_max: age.max } : { age_min: 21 }), // unchanged fallback
     ...(genders ? { genders } : {}),
     ...(flexible_spec.length > 0 ? { flexible_spec } : {}),
