@@ -278,3 +278,102 @@ describe("execute uses the approved creative, never a fresh one", () => {
     expect(execute).toMatch(/plan: draft\.plan_json/);
   });
 });
+
+// ---------------------------------------------------------------
+// The creative's source photo (the real gap found in live testing).
+//
+// A generated backdrop is a fallback, not the product. An ad running
+// with a generic image instead of the real thing performs worse and
+// misrepresents what is being sold — so the real photo is tried first,
+// and when it can't be used the card says so in words rather than
+// leaving the merchant to notice.
+// ---------------------------------------------------------------
+describe("the real product photo comes first", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const handler = brain.slice(
+    brain.indexOf('case "launch_meta_campaign": {'),
+    brain.indexOf('case "propose_campaign_budget_change":')
+  );
+
+  it("reuses the price path's resolver rather than a second one", () => {
+    // interpretCandidates never guesses. A bespoke matcher here would
+    // be a second resolution rule with its own opinion about ties —
+    // and the losing side of that tie is which product gets advertised.
+    expect(handler).toMatch(/interpretCandidates: interpret/);
+    expect(handler).toMatch(/searchShopifyVariants/);
+  });
+
+  it("validates a supplied variant_id against what the search returned", () => {
+    // Same hazard as the price path: a hallucinated id, or a real id
+    // for the wrong product, would put someone else's photo in the ad.
+    expect(handler).toMatch(/found\.candidates\.find/);
+    expect(handler).toMatch(/doesn't match anything I found/);
+  });
+
+  it("ASKS when the phrase is ambiguous instead of picking one", () => {
+    expect(handler).toMatch(/needs_clarification: true/);
+    expect(handler).toMatch(/Which product's photo should I use/);
+  });
+
+  it("ASKS when no product was named at all", () => {
+    // Which product this advertises decides the picture. Guessing it is
+    // exactly the silent choice that ends up on a live ad.
+    expect(handler).toMatch(/needs_product: true/);
+  });
+
+  it("falls back ONLY for the three honest reasons", () => {
+    // No store connected, the product has no photo, or they asked for
+    // a generated one. Never as a shortcut around asking.
+    expect(handler).toMatch(/No online store is connected/);
+    expect(handler).toMatch(/has no photo on its listing/);
+    expect(handler).toMatch(/You asked for a generated image/);
+  });
+
+  it("does not silently fall back when the product simply wasn't found", () => {
+    // not_found means the phrase matched nothing — the merchant should
+    // see that sentence, not an unexplained generated image.
+    expect(handler).toMatch(/I couldn't find .*in your store/);
+  });
+
+  it("builds from the real photo through the background-restyling path", () => {
+    // ai_generate keeps the product unchanged and restyles only the
+    // background — which is what an ad featuring the merchant's own
+    // product needs. buildCreativeWithoutPhoto is the other branch.
+    expect(handler).toMatch(/buildFinalCreative\("ai_generate"/);
+    expect(handler).toMatch(/buildCreativeWithoutPhoto/);
+  });
+
+  it("carries the photo source out to the card", () => {
+    expect(handler).toMatch(/photo_source: photoSource/);
+    expect(handler).toMatch(/photo_product: photoProduct/);
+  });
+});
+
+describe("the card says which photo it is", () => {
+  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const card = brain.slice(
+    brain.indexOf('case "launch_meta_campaign": {', brain.indexOf("function extractArtifact")),
+    brain.indexOf('case "propose_campaign_budget_change":', brain.indexOf("function extractArtifact"))
+  );
+
+  it("names the listing when a real photo was used", () => {
+    expect(card).toMatch(/Using the real photo from your/);
+    expect(card).toMatch(/result\.photo_product/);
+  });
+
+  it("says plainly when the image was generated, and why", () => {
+    // "AI-generated image" alone invites the merchant to wonder what
+    // went wrong. The reason is what makes it actionable — "add a photo
+    // to that listing" is something they can go and do.
+    expect(card).toMatch(/AI-generated image/);
+    expect(card).toMatch(/result\.photo_reason/);
+  });
+
+  it("numbers the product candidates, matching the numbered list in the reply", () => {
+    expect(card).toMatch(/\$\{i \+ 1\}\./);
+  });
+
+  it("flags candidates that have no photo, so a useless pick is visible first", () => {
+    expect(card).toMatch(/no photo on this listing/);
+  });
+});

@@ -360,7 +360,7 @@ const TOOLS = [
     // paused; activation is a separate, separately-gated step.
     name: "launch_meta_campaign",
     description:
-      "Create a Facebook/Instagram ad campaign in the connected Meta ad account. USE THIS whenever someone asks to run, launch, start or set up an ad or campaign on Facebook, Instagram or Meta — you CAN do this, end to end, right here. It writes the ad copy, generates the creative image (no photo upload needed), and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open Ads Manager, a Paid Ads page, or anywhere else — the decision is already in front of them. Nothing is created on Meta until they approve, and everything is created PAUSED, so approving still spends nothing; activating is a separate step they take afterwards. If they name a daily budget, pass it; if it is below their ad account's minimum it is raised automatically and the preview says so.",
+      "Create a Facebook/Instagram ad campaign in the connected Meta ad account. USE THIS whenever someone asks to run, launch, start or set up an ad or campaign on Facebook, Instagram or Meta — you CAN do this, end to end, right here. It writes the ad copy and builds the creative around the REAL product photo from their connected store whenever there is one — pass product_description with the product they mentioned so it can find it, and if it's ambiguous the tool returns candidates to choose from rather than guessing. Only when no store is connected, the product has no photo, or they ask for a generated image does it fall back to an AI-generated backdrop, and the preview says which was used. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open Ads Manager, a Paid Ads page, or anywhere else — the decision is already in front of them. Nothing is created on Meta until they approve, and everything is created PAUSED, so approving still spends nothing; activating is a separate step they take afterwards. If they name a daily budget, pass it; if it is below their ad account's minimum it is raised automatically and the preview says so.",
     input_schema: {
       type: "object",
       properties: {
@@ -371,6 +371,21 @@ const TOOLS = [
         daily_budget: {
           type: "string",
           description: "Daily budget in rupees if they named one, as a plain number without a symbol, e.g. '100'",
+        },
+        product_description: {
+          type: "string",
+          description:
+            "Which product the ad is for, in their own words, e.g. 'lavender candle'. Used to pull the REAL product photo from their store. Pass this whenever they name or imply a product — an ad with the actual product photo is worth far more than a generated one.",
+        },
+        variant_id: {
+          type: "string",
+          description:
+            "Only on a FOLLOW-UP call, after this tool returned product candidates and the person picked one. Pass that candidate's variant_id exactly as given. Never invent one.",
+        },
+        use_generated_image: {
+          type: "boolean",
+          description:
+            "Only when the person has explicitly said to use a generated/AI image rather than a product photo, or has said they have no product photo. Never set this to avoid asking them.",
         },
       },
       required: ["description"],
@@ -1081,7 +1096,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       // in the platform module for the same reason variant resolution
       // is — it is the conversational half, and it must exist and be
       // seen before anyone can say yes to it.
-      const { generateAdPlan: makePlan, buildCreativeWithoutPhoto } = await import("../adEngine");
+      const { generateAdPlan: makePlan, buildCreativeWithoutPhoto, buildFinalCreativeImage: buildFinalCreative } = await import("../adEngine");
       const { createMetaPlatform } = await import("../publish/platforms/meta");
       const { createPublishAction } = await import("../publish/create");
       const { createServiceClient: makeService } = await import("../supabase/service");
@@ -1129,6 +1144,104 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
 
       mlog("chat.plan", { dealership: ctx.id, headline: plan.headline, budget: plan.daily_budget, city: plan.targeting_city ?? null });
 
+      // ---- The creative's SOURCE PHOTO ----
+      //
+      // A generated backdrop is a fallback, not the product. An ad
+      // running with a generic image instead of the real thing performs
+      // worse and misrepresents what is being sold, so the real photo
+      // is tried first and the generated one is only reached when there
+      // genuinely is not one.
+      //
+      // Resolution reuses propose_price_change's machinery exactly —
+      // interpretCandidates never guesses, so an ambiguous phrase
+      // becomes a question with pictures rather than a coin flip about
+      // which product gets advertised.
+      const { resolveShopifyCredentials: shopCreds } = await import("../publish/platforms/shopifyCredentials");
+      const { searchShopifyVariants: searchVariants } = await import("../publish/platforms/shopifySearch");
+      const { interpretCandidates: interpret, userClarified: clarified } = await import("../publish/resolve");
+
+      let productPhotoUrl: string | null = null;
+      let photoSource: "shopify_product" | "ai_generated" = "ai_generated";
+      let photoProduct: string | null = null;
+      let photoReason: string | null = null;
+
+      const wantsGenerated = input.use_generated_image === true;
+      const creds = wantsGenerated ? { ok: false as const, reason: "skipped" } : await shopCreds(ctx.id);
+
+      if (wantsGenerated) {
+        photoReason = "You asked for a generated image.";
+      } else if (!creds.ok) {
+        photoReason = "No online store is connected, so there is no product photo to use.";
+      } else {
+        const productPhrase = String(input.product_description ?? "").trim();
+        if (!productPhrase) {
+          // ASK. Which product this advertises decides the picture, and
+          // guessing it is exactly the kind of silent choice that ends
+          // up on a live ad.
+          mlog("chat.needs_product", { dealership: ctx.id });
+          return {
+            needs_product: true,
+            question:
+              "Which product is this ad for? Tell me the name and I'll use its real photo from your store — or say \"just generate an image\" if you'd rather I make one.",
+          };
+        }
+
+        const found = await searchVariants(creds.shop, creds.accessToken, productPhrase);
+        if (!found.ok) {
+          photoReason = "Couldn't reach your store for the product photo, so I generated an image instead.";
+        } else {
+          const chosenId = typeof input.variant_id === "string" ? input.variant_id.trim() : "";
+          let resolution;
+          if (chosenId) {
+            const picked = found.candidates.find((c) => c.ref === chosenId);
+            if (!picked) {
+              return { error: "That product choice doesn't match anything I found — show the options again and let them pick." };
+            }
+            resolution = clarified(productPhrase, picked, found.candidates);
+          } else {
+            resolution = interpret(productPhrase, found.candidates);
+          }
+
+          mlog("chat.photo_resolve", {
+            dealership: ctx.id,
+            phrase: productPhrase,
+            candidates: found.candidates.length,
+            status: resolution.status,
+          });
+
+          if (resolution.status === "ambiguous") {
+            // Same shape as the price path: the candidate list lives in
+            // chat history and the follow-up call passes a variant_id
+            // back out of it. No new state to manage.
+            return {
+              needs_clarification: true,
+              question: `Which product's photo should I use for this ad?`,
+              candidates: resolution.candidates.map((c) => ({
+                variant_id: c.ref,
+                title: c.title,
+                variant: c.variantTitle,
+                image_url: c.imageUrl,
+                has_photo: Boolean(c.imageUrl),
+              })),
+            };
+          }
+
+          if (resolution.status === "not_found") {
+            photoReason = `I couldn't find "${productPhrase}" in your store, so I generated an image instead.`;
+          } else if (!resolution.target.imageUrl) {
+            // Resolved, but the listing has no picture. Naming the
+            // product is what makes this actionable — "add a photo to
+            // that listing" is a thing they can do.
+            photoProduct = resolution.target.title;
+            photoReason = `"${resolution.target.title}" has no photo on its listing, so I generated an image instead.`;
+          } else {
+            productPhotoUrl = resolution.target.imageUrl;
+            photoSource = "shopify_product";
+            photoProduct = `${resolution.target.title}${resolution.target.variantTitle ? ` — ${resolution.target.variantTitle}` : ""}`;
+          }
+        }
+      }
+
       let imageUrl: string;
       let draftId: string;
       try {
@@ -1151,14 +1264,27 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         if (!draft) return { error: "Couldn't start the ad draft. Try again in a moment." };
         draftId = draft.id;
 
-        const buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
+        // With a real photo the existing ai_generate path applies —
+        // it restyles the BACKGROUND and is prompted to keep the
+        // product itself unchanged, which is exactly what an ad
+        // featuring the merchant's own product needs.
+        let buffer: Buffer;
+        if (productPhotoUrl) {
+          const photoRes = await fetch(productPhotoUrl);
+          if (!photoRes.ok) throw new Error(`product photo fetch returned ${photoRes.status}`);
+          const photoBuf = Buffer.from(await photoRes.arrayBuffer());
+          const mime = photoRes.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+          buffer = await buildFinalCreative("ai_generate", photoBuf, photoBuf.toString("base64"), mime, plan, conn.business_category ?? "small business");
+        } else {
+          buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
+        }
         const filePath = `${ctx.id}/${draft.id}.png`;
         await service.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
         const { data: pub } = service.storage.from("ad-creatives").getPublicUrl(filePath);
         imageUrl = pub.publicUrl;
         await service.from("ad_creatives").update({ generated_image_url: imageUrl }).eq("id", draft.id);
       } catch (err: any) {
-        merr("chat.creative_failed", { dealership: ctx.id, detail: err?.message ?? String(err) });
+        merr("chat.creative_failed", { dealership: ctx.id, photo_source: photoSource, detail: err?.message ?? String(err) });
         return { error: "I wrote the ad but couldn't generate the picture for it. Try again in a moment." };
       }
 
@@ -1184,6 +1310,12 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
         headline: plan.headline,
         ad_copy: plan.body,
         image_url: imageUrl,
+        // Stated so the card can say WHICH photo this is. A merchant
+        // approving an ad needs to know whether they are looking at
+        // their own product or a generated stand-in.
+        photo_source: photoSource,
+        photo_product: photoProduct,
+        photo_reason: photoReason,
         audience: plan.targeting_city ? `${plan.targeting_city} and nearby` : "Your usual audience",
         daily_budget: fmtMinor(budgetMinor.minor, limits.currency),
         budget_raised: budgetMinor.raised,
@@ -1890,6 +2022,24 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
       };
     }
     case "launch_meta_campaign": {
+      // Asking which product's photo to use — a list to CHOOSE from,
+      // numbered so "the second one" refers to something.
+      if (result.needs_clarification) {
+        return {
+          kind: "record",
+          label: "Which product's photo should I use?",
+          summary: "Pick one and I'll build the ad around its real photo.",
+          groups: [
+            {
+              heading: `${(result.candidates ?? []).length} matches`,
+              items: (result.candidates ?? []).map((c: any, i: number) => ({
+                label: `${i + 1}. ${c.title}${c.variant ? ` — ${c.variant}` : ""}`,
+                note: c.has_photo ? "has a photo" : "no photo on this listing",
+              })),
+            },
+          ],
+        };
+      }
       return {
         kind: "record",
         label: result.already_pending ? "Already waiting for approval" : "Ad campaign ready for approval",
@@ -1908,6 +2058,13 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
             : result.account_minimum
             ? [{ label: "Account minimum", value: String(result.account_minimum) }]
             : []),
+          {
+            label: "Photo",
+            value:
+              result.photo_source === "shopify_product"
+                ? `Using the real photo from your "${result.photo_product}" listing`
+                : `AI-generated image — ${result.photo_reason ?? "no product photo available"}`,
+          },
           { label: "Status on Meta", value: "Paused until you activate it" },
         ],
         // The creative itself. The picture is most of what the person

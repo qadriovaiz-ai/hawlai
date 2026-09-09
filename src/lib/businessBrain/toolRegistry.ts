@@ -60,10 +60,12 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   {
     name: "launch_meta_campaign",
     description:
-      "Create a Facebook/Instagram ad campaign in the connected Meta ad account. Never launches it directly — writes the ad copy, generates the creative image, and shows a preview with Approve/Reject buttons inline in the chat, where the person decides. Everything is created paused, so approving spends nothing. Never directs them to a separate page.",
+      "Create a Facebook/Instagram ad campaign in the connected Meta ad account. Never launches it directly — writes the ad copy, builds the creative around the real product photo from the connected store (falling back to a generated image only when there isn't one), and shows a preview with Approve/Reject buttons inline in the chat, where the person decides. Everything is created paused, so approving spends nothing. Never directs them to a separate page.",
     parameters: {
       description: { type: "string", description: "What the person wants to advertise, in their own words", required: true },
       daily_budget: { type: "string", description: "Daily budget if they named one, as a plain number of rupees" },
+      product_description: { type: "string", description: "Which product the ad is for, so its real store photo can be used" },
+      variant_id: { type: "string", description: "Only on a follow-up call, after product candidates were shown and one was picked" },
     },
     // CHAT ONLY. The decision rests on seeing the creative image and
     // the copy; read aloud on a call, "approve this ad?" is a question
