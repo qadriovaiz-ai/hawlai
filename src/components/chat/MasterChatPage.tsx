@@ -949,6 +949,22 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
         </div>
       </div>
       {complianceWarning}
+      {/*
+        The Approve / Edit / Reject row.
+        
+        It used to live ONLY in the compact branch, because every card
+        carrying an approval was diverted there before reaching this
+        renderer — so this one never needed it and never had it.
+        Splitting the routing so decision cards get the full layout
+        moved those cards here and left the buttons behind: the picture
+        and the fields appeared, and the thing that acts on them did
+        not.
+        
+        Gated on artifact.approval, exactly as the compact branch gates
+        it. Placed after the body and before the department link, so the
+        action sits under what it acts on.
+      */}
+      {approvalStrip}
       {(artifact.kind === "link" && artifact.url) || artifact.departmentHref ? (
         <a
           href={artifact.kind === "link" && artifact.url ? artifact.url : artifact.departmentHref}

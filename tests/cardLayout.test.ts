@@ -14,6 +14,7 @@
 // THIS artifact, which layout does it get?
 
 import { describe, it, expect } from "vitest";
+import { execFileSync } from "child_process";
 import { isSimpleConfirmation } from "@/lib/chat/cardLayout";
 import { extractArtifact } from "@/lib/agents/masterBrainV2";
 
@@ -100,5 +101,48 @@ describe("the compact layout survives for what it was built for", () => {
     // An empty array is not "has fields" — otherwise every confirmation
     // that happens to build an empty list loses the compact layout.
     expect(isSimpleConfirmation({ kind: "record", summary: "Done.", fields: [] })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------
+// Wherever an approval card can land, the buttons must be there.
+// ---------------------------------------------------------------
+describe("the approval buttons follow the card to whichever layout it gets", () => {
+  const page = execFileSync("git", ["show", "HEAD:src/components/chat/MasterChatPage.tsx"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+
+  // Two halves, and only one of them can be checked by running code —
+  // there is no DOM environment installed, so the JSX itself cannot be
+  // rendered here. Said plainly rather than dressed up: the runtime
+  // half proves WHICH layout an approval card reaches, the structural
+  // half proves that layout draws the buttons. Neither is sufficient
+  // alone, which is exactly how the gap opened.
+
+  it("RUNTIME: a card with an approval never gets the compact layout", () => {
+    expect(isSimpleConfirmation({ kind: "record", summary: "x", approval: { id: "a1" } })).toBe(false);
+  });
+
+  it("STRUCTURAL: the full-field renderer draws the approval strip", () => {
+    // It did not, and that is this bug. The strip lived only in the
+    // compact branch, because every card carrying an approval was
+    // diverted there before reaching the full renderer — so it never
+    // needed one. Splitting the routing moved those cards across and
+    // left the buttons behind.
+    const compactStart = page.indexOf("if (isSimpleConfirmation(artifact)) {");
+    const mainStart = page.indexOf("\n  return (", compactStart);
+    expect(compactStart).toBeGreaterThan(-1);
+    expect(mainStart).toBeGreaterThan(compactStart);
+
+    const compactBranch = page.slice(compactStart, mainStart);
+    const mainBranch = page.slice(mainStart);
+
+    expect(compactBranch, "compact branch lost its approval strip").toContain("{approvalStrip}");
+    expect(mainBranch, "full-field branch has no approval strip — a card can show what is being approved with no way to approve it").toContain("{approvalStrip}");
+  });
+
+  it("the strip is gated on the approval existing, so ordinary cards get no buttons", () => {
+    expect(page).toMatch(/const approvalStrip = artifact\.approval \?/);
   });
 });
