@@ -206,7 +206,18 @@ export async function PATCH(
             message:
               outcome.status === "stale"
                 ? "Approved, but the item changed after you reviewed it — nothing was applied. Ask again to see the current values."
-                : `Approved, but the change couldn't be applied: ${"error" in outcome ? outcome.error : outcome.reason}`,
+                : outcome.status === "skipped"
+                  // NOT "approved, but". A skip means this card was
+                  // already spent — the action finished, failed or was
+                  // rejected in an earlier attempt — so nothing was
+                  // approved just now and saying so would be wrong.
+                  // The reason already explains itself and says what to
+                  // do next.
+                  ? outcome.reason
+                  // Only "failed" can reach here — stale and skipped are
+                  // handled above and executed never enters this block —
+                  // so the error field is the one that exists.
+                  : `Approved, but the change couldn't be applied: ${outcome.error}`,
           },
         });
       }

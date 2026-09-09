@@ -89,6 +89,33 @@ export interface ExecutorDeps {
  * 'executing' because a branch forgot to write. That is the failure
  * mode that makes an operator distrust the whole table.
  */
+/**
+ * Why this action will not run, in words a merchant can act on.
+ *
+ * Every branch ends with what to DO. A refusal that only names a state
+ * leaves someone staring at a card with a dead button.
+ */
+export function explainRefusal(action: Row): string {
+  const detail = action.error ? ` It failed with: ${action.error}` : "";
+  switch (action.status) {
+    case "executed":
+      return "This one already went through — nothing more to do.";
+    case "failed":
+      return `This request failed earlier, so approving it again won't retry it.${detail} Ask me again and I'll set it up fresh.`;
+    case "rejected":
+      return "This request was rejected. Ask me again if you've changed your mind.";
+    case "stale":
+      return "Things changed after this was approved, so it wasn't applied. Ask me again and I'll rebuild it against what's there now.";
+    case "executing":
+      return "This one is running right now — give it a moment.";
+    case "draft":
+    case "previewed":
+      return "This request never finished being prepared. Ask me again and I'll set it up fresh.";
+    default:
+      return `This request is "${action.status}" and can't be approved from here. Ask me again and I'll set it up fresh.`;
+  }
+}
+
 export async function executePublishAction(deps: ExecutorDeps, actionId: string): Promise<ExecutionOutcome> {
   const { supabase } = deps;
   const now = deps.now ?? Date.now;
@@ -101,9 +128,19 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
 
   if (!action) return { status: "skipped", reason: "No such action." };
   if (action.status !== "approved") {
-    // Includes anything already executing, executed or failed —
-    // re-running a finished action is exactly what must not happen.
-    return { status: "skipped", reason: `Action is "${action.status}", not approved.` };
+    // Re-running a finished action is exactly what must not happen, so
+    // this refusal stays. What changed is the SENTENCE.
+    //
+    // "Action is 'failed', not approved" is a status field read aloud.
+    // It reached a merchant who had clicked Approve on a card in their
+    // chat history whose action had died in an earlier attempt, and it
+    // told them nothing they could act on — not what failed, not that
+    // asking again works, not that the card was stale.
+    //
+    // create.ts already treats these four as terminal and salts the
+    // idempotency key so a fresh request goes through. The person just
+    // has to be told that.
+    return { status: "skipped", reason: explainRefusal(action) };
   }
 
   // Re-verify the approval BEFORE claiming, so a forged status cannot
