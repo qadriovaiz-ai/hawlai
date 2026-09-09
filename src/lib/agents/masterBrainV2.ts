@@ -1813,7 +1813,8 @@ export interface Artifact {
   url?: string; // visual: direct viewable src. link: the URL to open.
   html?: string; // 3d_scene inline content, avoids a second fetch
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
-  groups?: { heading: string; items: { label: string; note?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
+  imageUrl?: string; // a picture rendered INSIDE the card. Separate from `url`, which on a record card means a link and is ignored — an ad creative passed as `url` rendered nothing at all
+  groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
   draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string }; // a single piece of generated long-form content — caption, email, script, blog post. id/raw/patchUrl present only when the row was actually saved — lets the chat card edit and PATCH it in place instead of only linking to the department page
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
   variants?: { label: string; heading?: string; body?: string; cta?: string }[]; // side-by-side ad copy variants
@@ -1900,7 +1901,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
 // for a proper "Informational" / "Transactional" / "Navigational" card
 // instead of a flat dump. Anything without a recognized intent lands in
 // "Other" rather than being silently dropped.
-function groupKeywordsByIntent(keywords: { keyword?: string; intent?: string; note?: string }[]): { heading: string; items: { label: string; note?: string }[] }[] {
+function groupKeywordsByIntent(keywords: { keyword?: string; intent?: string; note?: string }[]): { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[] {
   const buckets: Record<"informational" | "transactional" | "navigational" | "other", { label: string; note?: string }[]> = {
     informational: [], transactional: [], navigational: [], other: [],
   };
@@ -1910,7 +1911,7 @@ function groupKeywordsByIntent(keywords: { keyword?: string; intent?: string; no
     const bucket = intent.startsWith("info") ? "informational" : intent.startsWith("trans") ? "transactional" : intent.startsWith("nav") ? "navigational" : "other";
     buckets[bucket].push({ label: k.keyword, note: k.note });
   }
-  const groups: { heading: string; items: { label: string; note?: string }[] }[] = [];
+  const groups: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[] = [];
   if (buckets.informational.length) groups.push({ heading: "Informational", items: buckets.informational });
   if (buckets.transactional.length) groups.push({ heading: "Transactional", items: buckets.transactional });
   if (buckets.navigational.length) groups.push({ heading: "Navigational", items: buckets.navigational });
@@ -2143,6 +2144,9 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
               items: (result.candidates ?? []).map((c: any, i: number) => ({
                 label: `${i + 1}. ${c.title}${c.variant ? ` — ${c.variant}` : ""}`,
                 note: c.has_photo ? "has a photo" : "no photo on this listing",
+                // Picking WHICH PHOTO to advertise, from a list that
+                // showed no photos, was the same defect in miniature.
+                imageUrl: c.image_url || undefined,
               })),
             },
           ],
@@ -2180,9 +2184,12 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
           ...(result.objective ? [{ label: "Optimising for", value: String(result.objective) }] : []),
           { label: "Status on Meta", value: "Paused until you activate it" },
         ],
-        // The creative itself. The picture is most of what the person
-        // is actually approving.
-        url: result.image_url || undefined,
+        // The creative itself, as an IMAGE rather than a link. Passing
+        // it as `url` rendered nothing: a record card ignores `url`
+        // unless kind === "link". The only reason a picture ever showed
+        // was the model writing markdown into its reply, which made
+        // "can I see what I am approving?" depend on the model's mood.
+        imageUrl: result.image_url || undefined,
       };
     }
     case "update_website_url":

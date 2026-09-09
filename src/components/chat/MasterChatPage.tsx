@@ -30,12 +30,23 @@ interface Artifact {
    */
   approval?: { id: string; publishActionId?: string };
   type?: "image" | "website" | "3d_scene" | "canvas_design";
+  /**
+   * A picture to render INSIDE the card.
+   *
+   * Deliberately separate from `url`. On a record card `url` means "a
+   * link to open" and is ignored unless kind === "link" — so an ad
+   * creative passed as `url` rendered nothing at all, and the only
+   * reason an image ever appeared was the model happening to write
+   * markdown into its reply. That made "can I see what I am approving?"
+   * depend on the model's mood.
+   */
+  imageUrl?: string;
   label: string;
   summary?: string;
   url?: string;
   html?: string;
   fields?: { label: string; value: string }[];
-  groups?: { heading: string; items: { label: string; note?: string }[] }[];
+  groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[];
   draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string };
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
   variants?: { label: string; heading?: string; body?: string; cta?: string }[];
@@ -662,6 +673,18 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-slate-800 capitalize truncate">{artifact.label}</p>
           {artifact.summary && !artifact.columns && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{artifact.summary}</p>}
+          {artifact.imageUrl && (
+            // ABOVE the fields on purpose: on an approval card the
+            // picture IS the thing being approved, and a preview that
+            // only describes an image in words is not a preview.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={artifact.imageUrl}
+              alt={artifact.label}
+              loading="lazy"
+              className="mt-2 w-full max-w-[260px] rounded-lg border border-slate-200 bg-slate-50"
+            />
+          )}
           {artifact.fields && artifact.fields.length > 0 && (
             <dl className="mt-1.5 space-y-0.5">
               {artifact.fields.map((f, i) => (
@@ -679,9 +702,15 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">{g.heading}</p>
                   <div className="space-y-1">
                     {g.items.map((item, ii) => (
-                      <div key={ii} className="text-[11px] bg-slate-50 rounded-md px-2 py-1.5">
-                        <p className="font-medium text-slate-700">{item.label}</p>
-                        {item.note && <p className="text-slate-500 mt-0.5">{item.note}</p>}
+                      <div key={ii} className="text-[11px] bg-slate-50 rounded-md px-2 py-1.5 flex items-center gap-2">
+                        {item.imageUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.imageUrl} alt="" loading="lazy" className="w-10 h-10 rounded object-cover border border-slate-200 shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-700">{item.label}</p>
+                          {item.note && <p className="text-slate-500 mt-0.5">{item.note}</p>}
+                        </div>
                       </div>
                     ))}
                   </div>
