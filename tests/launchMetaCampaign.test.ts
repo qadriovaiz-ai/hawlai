@@ -347,7 +347,12 @@ describe("the real product photo comes first", () => {
   it("does not silently fall back when the product simply wasn't found", () => {
     // not_found means the phrase matched nothing — the merchant should
     // see that sentence, not an unexplained generated image.
-    expect(handler).toMatch(/I couldn't find .*in your store/);
+    // Asserts the MEANING, not the phrasing. The wording moved from
+    // "in your store" to "in your products" when a second catalogue was
+    // added -- "your store" had quietly meant Shopify. Pinning the old
+    // string would have made a correct improvement look like a
+    // regression, which is the third time that trap has come up here.
+    expect(handler).toMatch(/I couldn't find \$\{productPhrase\}|I couldn't find "\$\{productPhrase\}"/);
   });
 
   it("builds from the real photo through the background-restyling path", () => {
