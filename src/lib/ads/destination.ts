@@ -70,7 +70,25 @@ const FORM_OBJECTIVE = {
   objectiveLabel: "Collecting enquiries (leads)",
 } as const;
 
-/** A URL an ad can actually point at. Rejects blanks and non-http schemes. */
+/**
+ * A URL an ad can actually point at. Rejects blanks and non-http
+ * schemes.
+ *
+ * Exported so the place a merchant SETS their website URL validates it
+ * the same way the ad path READS it. Two definitions of "usable" is how
+ * a value gets accepted at the settings step and silently dropped at
+ * the launch step, leaving an ad with nowhere to go and no explanation.
+ *
+ * A bare domain ("candlesbyqaaf.com") is what people actually type, so
+ * it is upgraded to https rather than rejected.
+ */
+export function normalizeAdUrl(value: string | null | undefined): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) ? raw : `https://${raw}`;
+  return usableUrl(withScheme);
+}
+
 function usableUrl(value: string | null | undefined): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;

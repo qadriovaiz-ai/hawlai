@@ -76,6 +76,21 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   },
 
   {
+    name: "update_website_url",
+    description:
+      "Save the business's website address to their settings, from the chat. Confirmed in two steps — shows what will change, writes only after the person agrees — because this address is what ads fall back to when there is no specific product page.",
+    parameters: {
+      url: { type: "string", description: "The website address as they gave it; a bare domain is fine", required: true },
+      confirmed: { type: "boolean", description: "Only on the second call, after they have agreed in chat" },
+    },
+    // Usable on a call too: it is a short spoken value with a spoken
+    // confirmation, and nothing about the decision needs to be seen.
+    channels: ["chat", "call"],
+    handlerRef: "lib/agents/masterBrainV2.ts:update_website_url",
+    status: "live",
+  },
+
+  {
     name: "add_lead",
     description: "Create a new lead/CRM record for this business.",
     parameters: {

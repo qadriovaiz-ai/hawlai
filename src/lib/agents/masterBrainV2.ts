@@ -392,6 +392,25 @@ const TOOLS = [
     },
   },
   {
+    name: "update_website_url",
+    description:
+      "Save the business's website address to their settings. USE THIS when someone tells you their website in chat — you CAN save it for them, and there is no reason to send them to a settings page for one field. Two steps, deliberately: call it with just the url to see what will change, tell the person exactly what it will be set to and what it is now, and only call again with confirmed=true once they say yes. Never set confirmed on the first call. The saved address is what ads fall back to when there is no specific product page, so a typo here quietly sends ad traffic to a domain that does not exist — which is why it is confirmed rather than written silently.",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The website address exactly as they gave it. A bare domain like 'candlesbyqaaf.com' is fine.",
+        },
+        confirmed: {
+          type: "boolean",
+          description: "Only true on the SECOND call, after the person has seen the change and agreed to it in the chat.",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
     name: "get_follow_up_reminders",
     description: "Get real leads that need attention right now — stuck 2+ days with no follow-up, and today's scheduled appointments.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -1353,6 +1372,60 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       };
     }
 
+    case "update_website_url": {
+      // An ordinary field on the business's own row, written under the
+      // same session the rest of chat already writes under. There is no
+      // security boundary here and never was — the model previously
+      // invented one to explain a tool that did not exist.
+      //
+      // Confirmed rather than silent for a different reason: this
+      // address is what ads fall back to when there is no specific
+      // product page, so a typo becomes an ad campaign pointing at a
+      // domain that does not resolve, and nothing downstream can tell.
+      const { normalizeAdUrl: normalizeUrl } = await import("../ads/destination");
+
+      const normalized = normalizeUrl(input.url);
+      if (!normalized) {
+        return { error: `"${String(input.url ?? "").slice(0, 80)}" doesn't look like a web address. Give me something like candlesbyqaaf.com and I'll save it.` };
+      }
+
+      const { data: current } = await supabase
+        .from("dealerships")
+        .select("external_website_url")
+        .eq("id", ctx.id)
+        .maybeSingle();
+      const previous = current?.external_website_url ?? null;
+
+      if (input.confirmed !== true) {
+        return {
+          needs_confirmation: true,
+          url: normalized,
+          previous,
+          // Said plainly because the normaliser may have changed what
+          // they typed — adding https://, adding a trailing slash. They
+          // should confirm the value that will actually be stored.
+          question: previous
+            ? `Change your website from ${previous} to ${normalized}?`
+            : `Save ${normalized} as your website address?`,
+        };
+      }
+
+      const { error: saveError } = await supabase
+        .from("dealerships")
+        .update({ external_website_url: normalized })
+        .eq("id", ctx.id);
+
+      if (saveError) return { error: "Couldn't save that just now — try again in a moment." };
+
+      return {
+        success: true,
+        url: normalized,
+        previous,
+        changed: previous !== normalized,
+        note: "Saved. Ads will send people here when there's no specific product page to link to.",
+      };
+    }
+
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change": {
       const { data: campaigns } = await supabase
@@ -2097,6 +2170,16 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
         url: result.image_url || undefined,
       };
     }
+    case "update_website_url":
+      return {
+        kind: "record",
+        label: "Website address saved",
+        summary: result.note,
+        fields: [
+          ...(result.previous ? [{ label: "Was", value: String(result.previous) }] : []),
+          { label: "Now", value: String(result.url ?? "") },
+        ],
+      };
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change":
       return { kind: "record", label: `Change requested: ${result.campaign}`, summary: `${result.summary}${result.impact ? ` ${result.impact}` : ""} Waiting for approval.`, departmentHref };
