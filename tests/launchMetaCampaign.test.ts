@@ -321,12 +321,27 @@ describe("the real product photo comes first", () => {
     expect(handler).toMatch(/needs_product: true/);
   });
 
-  it("falls back ONLY for the three honest reasons", () => {
-    // No store connected, the product has no photo, or they asked for
-    // a generated one. Never as a shortcut around asking.
-    expect(handler).toMatch(/No online store is connected/);
+  it("searches BOTH catalogues, not just Shopify", () => {
+    // The gap found live: photo resolution searched Shopify only, so a
+    // business using Hawlai's own shop — the default state of a new
+    // account — had a real catalogue the ad path could not see.
+    expect(handler).toMatch(/searchAllProductSources/);
+  });
+
+  it("falls back ONLY for honest reasons", () => {
+    // The product has no photo, nothing matched, the catalogue could
+    // not be read, or they asked for a generated image. Never as a
+    // shortcut around asking.
     expect(handler).toMatch(/has no photo on its listing/);
     expect(handler).toMatch(/You asked for a generated image/);
+    expect(handler).toMatch(/Couldn't read your product list/);
+  });
+
+  it("records WHICH catalogue answered", () => {
+    // "No photo found" and "no photo found in the store we searched"
+    // are different diagnoses, and only one of them is actionable.
+    expect(handler).toMatch(/source: found\.source/);
+    expect(handler).toMatch(/found\.source === "shopify" \? "shopify_product" : "hawlai_product"/);
   });
 
   it("does not silently fall back when the product simply wasn't found", () => {

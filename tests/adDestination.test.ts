@@ -29,7 +29,7 @@ describe("priority order", () => {
       leadFormId: "form_1",
       pageId: "page_1",
     });
-    expect(r.ok && r.destination.kind).toBe("shopify_product");
+    expect(r.ok && r.destination.kind).toBe("product_page");
     expect(r.ok && r.destination.url).toBe(PRODUCT);
   });
 

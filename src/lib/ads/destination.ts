@@ -15,7 +15,10 @@
 // pure module with the choice written down, rather than another
 // literal further downstream.
 
-export type DestinationKind = "shopify_product" | "external_website" | "landing_page" | "instant_form";
+// "product_page" rather than "shopify_product": a product page can
+// now come from Shopify OR from Hawlai's own shop, and the ad does
+// not behave differently for either.
+export type DestinationKind = "product_page" | "external_website" | "landing_page" | "instant_form";
 
 export type ResolvedDestination = {
   kind: DestinationKind;
@@ -117,7 +120,7 @@ export function resolveAdDestination(input: DestinationInput): { ok: true; desti
     return {
       ok: true,
       destination: {
-        kind: "shopify_product",
+        kind: "product_page",
         url: product,
         leadFormId: null,
         promotedObject: null,

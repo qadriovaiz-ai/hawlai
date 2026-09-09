@@ -1182,6 +1182,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       const { resolveShopifyCredentials: shopCreds } = await import("../publish/platforms/shopifyCredentials");
       const { searchShopifyVariants: searchVariants } = await import("../publish/platforms/shopifySearch");
       const { interpretCandidates: interpret, userClarified: clarified } = await import("../publish/resolve");
+      const { searchAllProductSources: searchProducts } = await import("../ads/productSource");
 
       let productPhotoUrl: string | null = null;
       // The page a customer can actually buy this on. Resolved at the
@@ -1189,7 +1190,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       // product — and an ad showing a candle should link to that
       // candle, not to a homepage.
       let productPageUrl: string | null = null;
-      let photoSource: "shopify_product" | "ai_generated" = "ai_generated";
+      let photoSource: "shopify_product" | "hawlai_product" | "ai_generated" = "ai_generated";
       let photoProduct: string | null = null;
       let photoReason: string | null = null;
 
@@ -1198,8 +1199,6 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
 
       if (wantsGenerated) {
         photoReason = "You asked for a generated image.";
-      } else if (!creds.ok) {
-        photoReason = "No online store is connected, so there is no product photo to use.";
       } else {
         const productPhrase = String(input.product_description ?? "").trim();
         if (!productPhrase) {
@@ -1214,9 +1213,21 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           };
         }
 
-        const found = await searchVariants(creds.shop, creds.accessToken, productPhrase);
+        // BOTH catalogues, in priority order. Searching only Shopify
+        // meant a business using Hawlai's own shop — which is most of
+        // them, and the default state of a new account — had a real
+        // catalogue with real photos that the ad path could not see.
+        const found = await searchProducts({
+          supabase,
+          dealershipId: ctx.id,
+          phrase: productPhrase,
+          shopify: creds.ok ? { shop: creds.shop, accessToken: creds.accessToken } : null,
+          searchShopify: (shop, token, phrase) => searchVariants(shop, token, phrase),
+        });
         if (!found.ok) {
-          photoReason = "Couldn't reach your store for the product photo, so I generated an image instead.";
+          photoReason = "Couldn't read your product list, so I generated an image instead.";
+        } else if (found.candidates.length === 0) {
+          photoReason = `I couldn't find "${productPhrase}" in your products, so I generated an image instead.`;
         } else {
           const chosenId = typeof input.variant_id === "string" ? input.variant_id.trim() : "";
           let resolution;
@@ -1233,6 +1244,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           mlog("chat.photo_resolve", {
             dealership: ctx.id,
             phrase: productPhrase,
+            source: found.source,
             candidates: found.candidates.length,
             status: resolution.status,
           });
@@ -1255,7 +1267,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           }
 
           if (resolution.status === "not_found") {
-            photoReason = `I couldn't find "${productPhrase}" in your store, so I generated an image instead.`;
+            photoReason = `I couldn't find "${productPhrase}" in your products, so I generated an image instead.`;
           } else if (!resolution.target.imageUrl) {
             // Resolved, but the listing has no picture. Naming the
             // product is what makes this actionable — "add a photo to
@@ -1266,7 +1278,7 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
           } else {
             productPhotoUrl = resolution.target.imageUrl;
             productPageUrl = resolution.target.productUrl ?? null;
-            photoSource = "shopify_product";
+            photoSource = found.source === "shopify" ? "shopify_product" : "hawlai_product";
             photoProduct = `${resolution.target.title}${resolution.target.variantTitle ? ` — ${resolution.target.variantTitle}` : ""}`;
           }
         }
@@ -2156,8 +2168,11 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
             : []),
           {
             label: "Photo",
+            // Any real catalogue, not just Shopify's. The merchant does
+            // not care which system it came from; they care that it is
+            // their actual product.
             value:
-              result.photo_source === "shopify_product"
+              result.photo_source && result.photo_source !== "ai_generated"
                 ? `Using the real photo from your "${result.photo_product}" listing`
                 : `AI-generated image — ${result.photo_reason ?? "no product photo available"}`,
           },
