@@ -182,13 +182,35 @@ async function getCampaignPerformance(
     .not("meta_campaign_id", "is", null)
     .not("deal_value", "is", null);
 
+  // ORDERS TOO, not just converted leads.
+  //
+  // Revenue used to come only from leads, which meant a lead-gen ad
+  // could show ROAS and a traffic ad never could: a
+  // traffic-to-product-page campaign creates no lead row, so it read as
+  // zero revenue no matter how much it sold. Every campaign this
+  // chat-launch flow creates is a traffic campaign, so without this the
+  // feature would have looked like it produced nothing.
+  //
+  // Paid orders only. An unpaid COD order is a stated intention, and
+  // counting it as revenue would flatter ROAS on exactly the campaigns
+  // most likely to attract abandoned orders.
+  const { data: attributedOrders } = await supabase
+    .from("orders")
+    .select("meta_campaign_id, total")
+    .eq("dealership_id", dealershipId)
+    .not("meta_campaign_id", "is", null)
+    .in("status", ["confirmed", "shipped", "delivered"]);
+
   const revenueByCampaign: Record<string, { revenue: number; conversions: number }> = {};
-  for (const lead of convertedLeads ?? []) {
-    const cid = lead.meta_campaign_id;
+  const credit = (cid: string | null, amount: unknown) => {
+    if (!cid) return;
     if (!revenueByCampaign[cid]) revenueByCampaign[cid] = { revenue: 0, conversions: 0 };
-    revenueByCampaign[cid].revenue += Number(lead.deal_value ?? 0);
+    revenueByCampaign[cid].revenue += Number(amount ?? 0);
     revenueByCampaign[cid].conversions += 1;
-  }
+  };
+
+  for (const lead of convertedLeads ?? []) credit(lead.meta_campaign_id, lead.deal_value);
+  for (const order of attributedOrders ?? []) credit(order.meta_campaign_id, order.total);
 
   const campaigns: CampaignPerformance[] = await Promise.all(
     launchedAds.map(async (ad: any) => {

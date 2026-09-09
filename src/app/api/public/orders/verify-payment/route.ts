@@ -4,6 +4,7 @@ import { resolveOrderPricing } from "@/lib/orderPricing";
 import { applyOrderSideEffects } from "@/lib/orderFulfillment";
 import { verifyRazorpaySignature } from "@/lib/payments/razorpay";
 import { razorpaySecret, RAZORPAY_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { resolveOrderAttribution } from "@/lib/storefront/resolveAttribution";
 
 // Confirms a Razorpay payment and only then commits the order. The
 // order is deliberately NOT written by /api/public/orders for the
@@ -55,9 +56,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
   }
 
+  // Which ad brought this buyer. Resolved here rather than at read
+  // time: the row is the record of what happened, and a campaign
+  // deleted later should not silently un-attribute a sale that really
+  // came from it. Never throws — a sale must not fail on a lookup.
+  const attribution = await resolveOrderAttribution(supabase, website.dealership_id, (body as any)?.attribution);
+
   const { data: order, error } = await supabase.from("orders").insert({
     dealership_id: website.dealership_id,
     website_id: website.id,
+    utm_campaign: attribution.utm_campaign,
+    utm_source: attribution.utm_source,
+    meta_campaign_id: attribution.meta_campaign_id,
     customer_name: String(customerName).trim(),
     customer_phone: String(customerPhone).trim(),
     customer_email: customerEmail ? String(customerEmail).trim() : null,

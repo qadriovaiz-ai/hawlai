@@ -8,6 +8,7 @@ import PageTracker from "@/components/website/PageTracker";
 import ConsentBanner from "@/components/website/ConsentBanner";
 import TrackingScripts from "@/components/website/TrackingScripts";
 import { TrackingConfigProvider } from "@/components/website/TrackingConfigProvider";
+import { CaptureAttribution } from "@/components/storefront/CaptureAttribution";
 
 // Same stale-cache risk as the page routes under this layout (see
 // src/app/site/[slug]/page.tsx) — this specifically renders the nav
@@ -82,6 +83,11 @@ export default async function SiteLayout({ children, params }: { children: React
         © {new Date().getFullYear()} {dealershipName}
       </footer>
       <PageTracker slug={slug} />
+      {/* In the LAYOUT, not on each page, because an ad can land on any
+          of them — a product page, the shop, a custom page — and the
+          visitor may arrive on one and buy from another. One mount
+          covers every route under /site/[slug], including checkout. */}
+      <CaptureAttribution />
       {/* The root-cause fix: the storefront — where every real
           e-commerce event happens — had no pixel at all. */}
       <TrackingScripts

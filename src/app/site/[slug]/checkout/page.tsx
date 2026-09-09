@@ -10,6 +10,7 @@ import { readConsent } from "@/lib/consent";
 import { trackInitiateCheckout, trackPurchase } from "@/lib/pixelEvents";
 import { trackGoogleConversion, trackRemarketing } from "@/lib/googleAdsEvents";
 import { useTrackingConfig } from "@/components/website/TrackingConfigProvider";
+import { getAttribution } from "@/lib/storefront/attribution";
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -181,6 +182,12 @@ export default function CheckoutPage() {
       // Conversions API shares hashed customer identifiers with Meta
       // — the sale is still reported either way.
       trackingConsent: readConsent() === "granted",
+      // Which ad brought them, captured on landing. In orderPayload()
+      // rather than at each call site because all three — COD, the
+      // Razorpay initiate and the Razorpay verify that actually commits
+      // the row — spread this, and attribution attached to only some of
+      // them would credit a campaign for cash sales and not card ones.
+      attribution: getAttribution(),
     };
   }
 
