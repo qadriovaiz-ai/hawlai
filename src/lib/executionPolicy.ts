@@ -74,6 +74,11 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   update_product_description: { actionType: "edit", riskLevel: "medium", description: "Change a product's public description in the merchant's store", requiresApproval: true },
   publish_post: { actionType: "publish", riskLevel: "high", description: "Publish a post or page to the merchant's live site", requiresApproval: true },
   update_post: { actionType: "edit", riskLevel: "medium", description: "Change a post or page already live on the merchant's site", requiresApproval: true },
+  // Creates a campaign, ad set and ad on Meta, all PAUSED. Spends
+  // nothing by itself -- activation is a separate, separately-gated
+  // step (ad_campaign_activate). Gated anyway because these are real
+  // public objects in the merchant's own account, under their brand.
+  launch_ad_campaign: { actionType: "create", riskLevel: "high", description: "Create a paused ad campaign in the merchant's Meta account -- real objects, no spend until activated", requiresApproval: true },
 };
 
 export function getActionPolicy(actionKey: string): ActionPolicy | null {

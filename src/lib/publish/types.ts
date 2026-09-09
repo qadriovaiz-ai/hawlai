@@ -10,7 +10,7 @@
 
 import type { RiskLevel } from "@/lib/executionPolicy";
 
-export type PlatformId = "shopify" | "wordpress" | "woocommerce";
+export type PlatformId = "shopify" | "wordpress" | "woocommerce" | "meta";
 
 /**
  * What a platform can be asked to do.
@@ -32,7 +32,18 @@ export type ActionKey =
   | "update_product_description"
   | "create_discount_code"
   | "publish_post"
-  | "update_post";
+  | "update_post"
+  /**
+   * Create a Meta campaign, ad set and ad — all PAUSED.
+   *
+   * Approving this spends nothing. Meta bills on the ad's effective
+   * status and every object is created paused, so the money decision
+   * is the SEPARATE activation step. It is still approval-gated:
+   * creating real ad objects in a merchant's account under their
+   * brand is not something an assistant should do unasked, and the
+   * creative and audience are exactly what a human needs to check.
+   */
+  | "launch_ad_campaign";
 
 /**
  * One field changing, in terms a person can check.
@@ -201,6 +212,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "publish_post",
   "update_post",
   "update_product_description",
+  "launch_ad_campaign",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -210,4 +222,7 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   update_product_description: "medium",
   publish_post: "high",
   update_post: "medium",
+  // Nothing spends on creation — but the objects are real, public and
+  // in the merchant's own ad account, and activation is one click away.
+  launch_ad_campaign: "high",
 };

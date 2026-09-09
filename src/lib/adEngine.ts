@@ -267,6 +267,67 @@ export async function resolveRegionKey(regionName: string, token: string): Promi
 // Composites a finished, ready-to-upload ad image: background
 // (template or AI) + text overlay, resized to Meta's expected 1080x1080.
 // ------------------------------------------------------------------
+/**
+ * A creative built from WORDS ALONE — no product photo.
+ *
+ * The existing ai_generate mode restyles a photo's background and
+ * sends the photo as inline_data with "keep the product unchanged".
+ * That is the right thing when someone uploads a picture, and useless
+ * in Master Chat, where there is no upload step and asking for one
+ * would reintroduce exactly the "go to a page first" detour this tool
+ * exists to remove.
+ *
+ * So this is the same model with no image part: a scene described,
+ * not a scene edited. The result is a generic-but-on-brand backdrop
+ * that the headline and body are composited onto, which is honest
+ * about what it is — nobody should believe this is a photo of their
+ * actual product.
+ */
+export async function generateAdImageFromDescription(
+  plan: any,
+  businessCategory: string = "small business"
+): Promise<Buffer> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not set");
+
+  const scene = plan?.image_scene_prompt || plan?.background_style || "clean professional product backdrop";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `A square photorealistic advertising background image for an Indian ${businessCategory} business. Scene: ${scene}. Professional advertisement lighting, rich colour, no text, no logos, no words anywhere in the image, leave the upper third and lower third relatively uncluttered so text can be placed there.`,
+          }],
+        }],
+      }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message ?? "Gemini request failed");
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  const imagePart = parts.find((p: any) => p.inlineData || p.inline_data);
+  const inline = imagePart?.inlineData ?? imagePart?.inline_data;
+  if (!inline?.data) throw new Error("Gemini did not return an image");
+  return Buffer.from(inline.data, "base64");
+}
+
+/**
+ * The full creative when there is no photo: generated backdrop plus
+ * the same headline/body overlay every other creative gets, so a
+ * chat-launched ad looks like the others rather than a lesser variant.
+ */
+export async function buildCreativeWithoutPhoto(plan: any, businessCategory: string): Promise<Buffer> {
+  const background = await generateAdImageFromDescription(plan, businessCategory);
+  return sharp(background)
+    .resize(1080, 1080, { fit: "cover" })
+    .composite([{ input: Buffer.from(buildTextOverlaySvg(1080, 1080, plan.headline, plan.body)), top: 0, left: 0 }])
+    .png()
+    .toBuffer();
+}
+
 export async function buildFinalCreativeImage(
   imageMode: string,
   inputBuffer: Buffer,

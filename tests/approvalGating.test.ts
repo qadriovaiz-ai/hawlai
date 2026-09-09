@@ -101,7 +101,15 @@ describe("PAUSED-on-create guarantee", () => {
     // rupees instead of paise (a ₹5/day campaign the merchant thinks
     // is ₹500/day) and missed the external_status dual-write being
     // dropped. The behavioural test caught both.
-    const source = fs.readFileSync("src/app/api/ads/adlaunch/route.ts", "utf8");
+    // REPOINTED. The five Graph calls moved out of the route into
+    // launchCampaign.ts when Master Chat needed to launch too. This
+    // check went green-to-red on that move, which is the honest
+    // behaviour for a grep — it was reading a file that no longer
+    // contains the thing it asserts. Worth noting the failure mode:
+    // had the strings moved to a file this still pointed at for some
+    // OTHER reason, it would have stayed green over nothing.
+    // adLaunchPaused.test.ts, which runs the handler, did not move.
+    const source = fs.readFileSync("src/lib/ads/launchCampaign.ts", "utf8");
     expect(source).toContain('status: "PAUSED"');
     expect(source).not.toContain('status: "ACTIVE"');
   });

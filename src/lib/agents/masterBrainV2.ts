@@ -181,7 +181,7 @@ const TOOLS = [
   },
   {
     name: "generate_ad_plan",
-    description: `Generate a PLANNING document (not a live launch) for a non-Meta ad platform. Valid platform values: ${AD_PLATFORMS.map((p) => p.key).join(", ")}. Valid taskType values: ${AD_TASKS.map((t) => t.key).join(", ")}. For Meta/Facebook ad launches, don't use this — tell the person to use the Ads Manager page since that spends real money and needs their explicit review there.`,
+    description: `Generate a PLANNING document (not a live launch) for a non-Meta ad platform. Valid platform values: ${AD_PLATFORMS.map((p) => p.key).join(", ")}. Valid taskType values: ${AD_TASKS.map((t) => t.key).join(", ")}. For Meta/Facebook ad launches use launch_meta_campaign instead — that one actually creates the campaign (paused, with an approval card in the chat). NEVER tell the person to go to Ads Manager or a Paid Ads page for a Meta launch.`,
     input_schema: {
       type: "object",
       properties: { platform: { type: "string", enum: AD_PLATFORMS.map((p) => p.key) }, taskType: { type: "string", enum: AD_TASKS.map((t) => t.key) } },
@@ -352,6 +352,28 @@ const TOOLS = [
         },
       },
       required: ["product_description", "new_price"],
+    },
+  },
+  {
+    // Named launch_* rather than propose_* because it genuinely
+    // creates something — but nothing SPENDS. Every object is created
+    // paused; activation is a separate, separately-gated step.
+    name: "launch_meta_campaign",
+    description:
+      "Create a Facebook/Instagram ad campaign in the connected Meta ad account. USE THIS whenever someone asks to run, launch, start or set up an ad or campaign on Facebook, Instagram or Meta — you CAN do this, end to end, right here. It writes the ad copy, generates the creative image (no photo upload needed), and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open Ads Manager, a Paid Ads page, or anywhere else — the decision is already in front of them. Nothing is created on Meta until they approve, and everything is created PAUSED, so approving still spends nothing; activating is a separate step they take afterwards. If they name a daily budget, pass it; if it is below their ad account's minimum it is raised automatically and the preview says so.",
+    input_schema: {
+      type: "object",
+      properties: {
+        description: {
+          type: "string",
+          description: "What they want to advertise, in their own words, e.g. 'diwali sale on scented candles'",
+        },
+        daily_budget: {
+          type: "string",
+          description: "Daily budget in rupees if they named one, as a plain number without a symbol, e.g. '100'",
+        },
+      },
+      required: ["description"],
     },
   },
   {
@@ -1053,6 +1075,129 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       };
     }
 
+    case "launch_meta_campaign": {
+      // Same spine as propose_price_change: resolve, preview, inline
+      // approval, execute. The creative is generated HERE rather than
+      // in the platform module for the same reason variant resolution
+      // is — it is the conversational half, and it must exist and be
+      // seen before anyone can say yes to it.
+      const { generateAdPlan: makePlan, buildCreativeWithoutPhoto } = await import("../adEngine");
+      const { createMetaPlatform } = await import("../publish/platforms/meta");
+      const { createPublishAction } = await import("../publish/create");
+      const { createServiceClient: makeService } = await import("../supabase/service");
+      const { readMetaPageToken: readTok } = await import("../crypto/oauthSecrets");
+      const { getAdAccountLimits: getLimits, isAccountUsable: usable, describeMinimum: descMin, clampBudgetToMinimum: clampBudget, formatMinorAmount: fmtMinor } = await import("../ads/adAccountLimits");
+      const { metaLog: mlog, metaError: merr } = await import("../ads/metaLog");
+
+      const service = makeService();
+      const { data: conn } = await supabase
+        .from("dealerships")
+        .select("business_category, fb_page_id, fb_lead_form_id, fb_ad_account_id, fb_page_access_token, fb_page_access_token_encrypted, fb_min_daily_budget, fb_currency, fb_account_status, fb_limits_checked_at")
+        .eq("id", ctx.id)
+        .maybeSingle();
+
+      const metaToken = readTok(conn);
+      if (!metaToken || !conn?.fb_ad_account_id || !conn?.fb_page_id) {
+        merr("chat.not_connected", { dealership: ctx.id, has_ad_account: Boolean(conn?.fb_ad_account_id), has_page: Boolean(conn?.fb_page_id) });
+        return { error: "Facebook isn't connected yet. Open Settings → Integrations and connect your Facebook Page — it takes about a minute, and then I can run ads for you from here." };
+      }
+
+      // Checked BEFORE the expensive half. Generating a plan and an
+      // image costs two model calls; doing that for an account that
+      // cannot run ads wastes them and delays the real answer.
+      const limits = await getLimits(supabase, ctx.id, { row: conn, token: metaToken });
+      const acct = usable(limits.accountStatus);
+      if (!acct.usable) {
+        merr("chat.account_unusable", { dealership: ctx.id, status: limits.accountStatus ?? null });
+        return { error: acct.reason };
+      }
+
+      const askedFor = String(input.description ?? "").trim();
+      if (askedFor.length < 3) return { error: "Tell me what you'd like to advertise and I'll put a campaign together." };
+
+      const { data: brand } = await supabase
+        .from("brand_profiles")
+        .select("tone_of_voice, target_persona, messaging_pillars, preferred_language")
+        .eq("dealership_id", ctx.id)
+        .maybeSingle();
+
+      const plan = await makePlan(askedFor, brand, conn.business_category ?? "small business", { supabase, dealershipId: ctx.id });
+
+      // A budget the person actually said beats the model's guess.
+      const statedBudget = Number(String(input.daily_budget ?? "").replace(/[^\d.]/g, ""));
+      if (Number.isFinite(statedBudget) && statedBudget > 0) plan.daily_budget = statedBudget;
+
+      mlog("chat.plan", { dealership: ctx.id, headline: plan.headline, budget: plan.daily_budget, city: plan.targeting_city ?? null });
+
+      let imageUrl: string;
+      let draftId: string;
+      try {
+        const { data: draft } = await service
+          .from("ad_creatives")
+          .insert({
+            dealership_id: ctx.id,
+            mode: "ai_generate",
+            prompt: askedFor,
+            background_style: plan.background_style,
+            headline: plan.headline,
+            body_copy: plan.body,
+            creative_score: plan.confidence_score ?? null,
+            score_reasoning: plan.score_reasoning ?? null,
+            plan_json: plan,
+            status: "draft",
+          })
+          .select()
+          .single();
+        if (!draft) return { error: "Couldn't start the ad draft. Try again in a moment." };
+        draftId = draft.id;
+
+        const buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
+        const filePath = `${ctx.id}/${draft.id}.png`;
+        await service.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
+        const { data: pub } = service.storage.from("ad-creatives").getPublicUrl(filePath);
+        imageUrl = pub.publicUrl;
+        await service.from("ad_creatives").update({ generated_image_url: imageUrl }).eq("id", draft.id);
+      } catch (err: any) {
+        merr("chat.creative_failed", { dealership: ctx.id, detail: err?.message ?? String(err) });
+        return { error: "I wrote the ad but couldn't generate the picture for it. Try again in a moment." };
+      }
+
+      const created = await createPublishAction(service, createMetaPlatform({ supabase: service }), {
+        dealershipId: ctx.id,
+        platform: "meta",
+        actionKey: "launch_ad_campaign",
+        targetRef: draftId,
+        targetLabel: plan.headline ?? "Ad campaign",
+        requestedChanges: { description: askedFor, daily_budget: plan.daily_budget },
+        requestedBy: null,
+      });
+
+      if (!created.ok) return { error: created.reason };
+
+      const budgetMinor = clampBudget(Math.round((plan.daily_budget ?? 500) * 100), limits.minDailyBudget);
+      return {
+        success: true,
+        already_pending: created.alreadyPending ?? false,
+        approval_id: created.approvalId,
+        action_id: created.actionId,
+        summary: created.preview.summary,
+        headline: plan.headline,
+        ad_copy: plan.body,
+        image_url: imageUrl,
+        audience: plan.targeting_city ? `${plan.targeting_city} and nearby` : "Your usual audience",
+        daily_budget: fmtMinor(budgetMinor.minor, limits.currency),
+        budget_raised: budgetMinor.raised,
+        account_minimum: descMin(limits),
+        store_currency: limits.currency,
+        warnings: created.preview.warnings,
+        // NEITHER note points at a page. The Approve / Reject buttons
+        // are on this very card.
+        note: created.alreadyPending
+          ? "You already asked for this exact campaign — here it is again, still waiting on your approval."
+          : "Ready for your approval below. Nothing is created on Meta until you approve, and even then it stays paused until you activate it.",
+      };
+    }
+
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change": {
       const { data: campaigns } = await supabase
@@ -1744,6 +1889,32 @@ function extractArtifact(toolName: string, input: any, result: any): Artifact | 
         url: result.image_url || undefined,
       };
     }
+    case "launch_meta_campaign": {
+      return {
+        kind: "record",
+        label: result.already_pending ? "Already waiting for approval" : "Ad campaign ready for approval",
+        summary: `${result.summary} ${result.note}`,
+        // Carries the approval id so Approve / Edit / Reject render on
+        // this card. Without it the person is sent to another page to
+        // find the thing they are already looking at.
+        approval: result.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
+        fields: [
+          { label: "Headline", value: String(result.headline ?? "") },
+          { label: "Ad copy", value: String(result.ad_copy ?? "") },
+          { label: "Audience", value: String(result.audience ?? "") },
+          { label: "Daily budget", value: String(result.daily_budget ?? "") },
+          ...(result.budget_raised && result.account_minimum
+            ? [{ label: "Note", value: `Raised to your ad account's minimum of ${result.account_minimum}` }]
+            : result.account_minimum
+            ? [{ label: "Account minimum", value: String(result.account_minimum) }]
+            : []),
+          { label: "Status on Meta", value: "Paused until you activate it" },
+        ],
+        // The creative itself. The picture is most of what the person
+        // is actually approving.
+        url: result.image_url || undefined,
+      };
+    }
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change":
       return { kind: "record", label: `Change requested: ${result.campaign}`, summary: `${result.summary}${result.impact ? ` ${result.impact}` : ""} Waiting for approval.`, departmentHref };
@@ -2111,7 +2282,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - generate_graphic and generate_logo produce real images that render directly in this chat — use markdown image syntax ![description](url) with the returned URL so the person sees it immediately, in addition to confirming it's saved on its dashboard page.
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
-- You CANNOT launch real ads or spend money — that needs the person's explicit approval in Ads Manager. If asked, generate the plan/draft with your tools and clearly tell them where to go review and approve it. This "tell them where to go" applies ONLY to ad spend, which genuinely lives in Ads Manager — never to actions that already show their own Approve/Reject buttons in the chat.
+- You CAN launch Meta (Facebook/Instagram) ad campaigns from this chat — use launch_meta_campaign. It writes the copy, generates the creative, and shows an approval card with buttons right here; everything is created PAUSED so approving spends nothing, and activation is a separate step afterwards. NEVER tell someone to go to Ads Manager or a Paid Ads page to launch a Meta ad — that instruction was written when this tool did not exist, and repeating it now sends them away from a card that can do the job. Other ad platforms (Google, LinkedIn, Pinterest, Snapchat) still only have planning tools; for those, say plainly that you can draft the plan but cannot launch it yet.
 - Some actions render an approval card with buttons directly in the chat (propose_price_change is one). For those, NEVER add "sent to Approvals", "review it on the Approvals page", or any other instruction to go elsewhere — the buttons are in the same message, and pointing at a page contradicts what they are looking at. Say what will change and let the card do the rest.
 - If the person wants to change the budget or targeting on a campaign that's already launched, use propose_campaign_budget_change / propose_campaign_targeting_change — these send the request to the Approvals queue rather than changing anything directly, so use them instead of just telling the person to go do it manually.
 - Be conversational and concise — you're texting with a business owner, not writing a report. Don't dump raw JSON at them, and don't enumerate a tool's list/array results (keywords, suggestions, checklist items, etc.) in your text either — those already render as a proper card right under your reply. Just say how many you found and the one-line takeaway (e.g. "Found 10 competitor keywords, split evenly between research and buy-intent — see the card below"), never spell out each item's fields as key: value text. EXCEPTION — a list the person has to CHOOSE FROM is not a result, it is a question, and you MUST write it out as a numbered list in your text. When a tool returns needs_clarification with candidates (propose_price_change does this), number them 1., 2., 3. and give each one its title, variant and current price, then ask which number they want. Summarising it as "I found 3 matches" is useless: they cannot answer without seeing the options, and "the second one" only means something if you numbered them. Concise doesn't mean shallow — a sharp two-sentence read of the situation beats a bland five-paragraph one.

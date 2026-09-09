@@ -11,6 +11,7 @@ import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { isAccountUsable, clampBudgetToMinimum, describeMinimum, limitsFromRow } from "@/lib/ads/adAccountLimits";
+import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -221,43 +222,11 @@ export async function POST(request: Request) {
       publicUrlData = data;
     }
 
-    // Step 3: upload the image to Meta and get an image_hash
-    const uploadRes = await metaPost(`${adAccount}/adimages`, {
-      bytes: finalBuffer.toString("base64"),
-    }, pageAccessToken);
-    const imageHash = Object.values(uploadRes.images ?? {})[0] && (Object.values(uploadRes.images ?? {})[0] as any).hash;
-    if (!imageHash) throw new Error("Meta didn't return an image hash");
-
-    // Step 4: create the ad creative — links to either the Instant Form
-    // (stays inside Facebook) or an external website/landing page.
-    const creativeRes = await metaPost(`${adAccount}/adcreatives`, {
-      name: `${plan.headline} - Creative`,
-      object_story_spec: {
-        page_id: pageId,
-        link_data: {
-          image_hash: imageHash,
-          message: plan.body,
-          name: plan.headline,
-          link: adDestination === "website" ? destinationUrl! : `https://fb.me/${pageId}`,
-          call_to_action:
-            adDestination === "website"
-              ? { type: "LEARN_MORE", value: { link: destinationUrl } }
-              : { type: "LEARN_MORE", value: { lead_gen_form_id: leadFormId } },
-        },
-      },
-    }, pageAccessToken);
-
-    // Real-persona-targeting piece — real brand persona (age/gender/
-    // income/interests) now reaches actual Meta targeting instead of
-    // only informing ad copy, and business_category drives Meta's
-    // legally-required Special Ad Category declaration (Real Estate ->
-    // HOUSING, which strips demographic targeting to geo-only — see
-    // metaTargeting.ts's header for what was verified before writing this).
-    // Retargeting (piece 6): resolve the saved audience to its real
-    // Meta id. Looked up server-side from audience_key rather than
-    // accepting an id from the client — a raw id in the request body
-    // would let a caller target an arbitrary audience id, including
-    // one belonging to another business's ad account.
+    // Retargeting: resolve the saved audience to its real Meta id.
+    // Looked up server-side from audience_key rather than accepting an
+    // id from the client — a raw id in the request body would let a
+    // caller target an arbitrary audience, including one belonging to
+    // another business's ad account.
     let retargetAudienceIds: string[] = [];
     if (retarget_audience_key) {
       const { data: audience } = await serviceClient
@@ -276,132 +245,47 @@ export async function POST(request: Request) {
       retargetAudienceIds = [audience.meta_audience_id];
     }
 
-    const built = await buildMetaTargeting({
-      businessCategory: dealership?.business_category,
-      persona: brandProfile?.target_persona ?? null,
-      location: targeting_location ?? null,
-      aiSuggestedCity: plan.targeting_city,
-      accessToken: pageAccessToken!,
-      customAudienceIds: retargetAudienceIds,
-    });
-
-    // Step 5: campaign
-    const campaignRes = await metaPost(`${adAccount}/campaigns`, {
-      name: `Hawlai - ${plan.car_type ?? "Cars"} - ${new Date().toLocaleDateString("en-IN")}`,
-      objective: "OUTCOME_LEADS",
-      status: "PAUSED",
-      special_ad_categories: [built.specialAdCategory],
-      is_adset_budget_sharing_enabled: false,
-    }, pageAccessToken);
-
-    // Step 6: ad set (targeting + budget)
-    const targeting = built.targeting;
-
-    // LAYER 3b — raise the budget to the account's real floor.
-    //
-    // The plan proposes a number with no knowledge of the account. Meta
-    // rejects anything under min_daily_budget at THIS point, five calls
-    // in, having already created a campaign and uploaded a creative.
-    // Raising is recoverable and reported; failing here is not.
-    const budget = clampBudgetToMinimum(
-      Math.round((plan.daily_budget ?? 500) * 100),
-      dealership?.fb_min_daily_budget
-    );
-    if (budget.raised) {
-      metaLog("launch.budget_raised", {
-        dealership: dealershipId,
-        from_minor: budget.from,
-        to_minor: budget.minor,
-        currency: dealership?.fb_currency ?? null,
-      });
-    }
-
-    const adsetRes = await metaPost(`${adAccount}/adsets`, {
-      name: `${plan.headline} - AdSet`,
-      campaign_id: campaignRes.id,
-      daily_budget: budget.minor,
-      billing_event: "IMPRESSIONS",
-      optimization_goal: "LEAD_GENERATION",
-      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-      targeting,
-      status: "PAUSED",
-      promoted_object: { page_id: pageId },
-      ...(scheduled_start ? { start_time: new Date(scheduled_start).toISOString() } : {}),
-    }, pageAccessToken);
-
-    // Step 7: the ad itself
-    const adRes = await metaPost(`${adAccount}/ads`, {
-      name: plan.headline,
-      adset_id: adsetRes.id,
-      creative: { creative_id: creativeRes.id },
-      status: "PAUSED",
-    }, pageAccessToken);
-
-    const { data: updated } = await serviceClient
-      .from("ad_creatives")
-      .update({
-        generated_image_url: publicUrlData.publicUrl,
-        status: "launched",
-        meta_ad_id: adRes.id,
-        meta_campaign_id: campaignRes.id,
-        meta_adset_id: adsetRes.id,
-        meta_status: "PAUSED",
-        // Dual-write during the multi-platform transition (migration
-        // 140) — meta_* stays authoritative for existing Meta code,
-        // external_* is what new/generic code reads.
-        platform: "meta",
-        external_ad_id: adRes.id,
-        external_campaign_id: campaignRes.id,
-        external_adset_id: adsetRes.id,
-        external_status: "PAUSED",
-        daily_budget: budget.minor / 100,
-        targeting_city: plan.targeting_city ?? null,
-        // Migration 151 — the full resolved targeting spec (location
-        // mode, age/gender/interests actually applied, and the
-        // customer-facing summary), alongside targeting_city which is
-        // kept for existing display code and as a fallback.
-        targeting_json: { ...built.targeting, summary: built.summary, personaApplied: built.personaApplied, specialAdCategory: built.specialAdCategory },
-        scheduled_start: scheduled_start ? new Date(scheduled_start).toISOString() : null,
-        // Creative variant testing — master audit Part D. Both fields
-        // are optional and null for every ordinary single-ad launch;
-        // only set when this launch was started as a test against an
-        // existing campaign (see /api/ads/campaigns/[id]/variant-group).
-        ...(variant_group_id && { variant_group_id, variant_label: variant_label ?? null }),
-      })
-      .eq("id", draft.id)
-      .select()
-      .single();
-
-    // Every id needed to find this campaign in Ads Manager, plus the
-    // status it was created with — the PAUSED guarantee, recorded at
-    // the moment it happened rather than inferred later.
-    metaLog("launch.done", {
-      dealership: dealershipId,
-      draft: draft.id,
-      campaign: campaignRes.id,
-      adset: adsetRes.id,
-      ad: adRes.id,
-      creative: creativeRes.id,
-      status: "PAUSED",
-      budget_paise: Math.round((plan.daily_budget ?? 500) * 100),
+    // Steps 3-7 and the row update live in launchCampaign.ts, shared
+    // with the Master Chat tool so there is one implementation of the
+    // PAUSED guarantee and the budget clamp rather than two.
+    const launched = await launchPausedCampaign({
+      serviceClient,
+      dealershipId,
+      dealership,
+      adAccount,
+      pageAccessToken: pageAccessToken!,
+      pageId: pageId!,
+      leadFormId,
+      brandProfile,
+      plan,
+      draft,
+      finalBuffer,
+      publicUrl: publicUrlData.publicUrl,
+      adDestination,
+      destinationUrl,
+      targetingLocation: targeting_location ?? null,
+      retargetAudienceIds,
+      scheduledStart: scheduled_start ?? null,
+      variantGroupId: variant_group_id ?? null,
+      variantLabel: variant_label ?? null,
     });
 
     return NextResponse.json({
       success: true,
-      creative: updated,
+      creative: launched.updated,
       plan,
-      meta: { campaign_id: campaignRes.id, adset_id: adsetRes.id, ad_id: adRes.id, creative_id: creativeRes.id },
+      meta: { campaign_id: launched.campaignId, adset_id: launched.adsetId, ad_id: launched.adId, creative_id: launched.creativeId },
       // Surfaced so the UI can say "we raised this to your account's
       // minimum" rather than the merchant noticing a different number
       // later and not knowing why.
       budget: {
-        applied_minor: budget.minor,
-        raised: budget.raised,
-        requested_minor: budget.from,
+        applied_minor: launched.budget.minor,
+        raised: launched.budget.raised,
+        requested_minor: launched.budget.from,
         minimum: describeMinimum(limitsFromRow(dealership)),
         currency: dealership?.fb_currency ?? null,
       },
-      targetingSummary: built.summary,
+      targetingSummary: launched.targetingSummary,
     });
   } catch (err: any) {
     // metaPost already logged the Graph-level detail; this says which
