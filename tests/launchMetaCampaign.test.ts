@@ -210,8 +210,11 @@ describe("the Meta platform module", () => {
     requestedChanges: {}, preview: null, previewedAt: null, status: "draft" as const, idempotencyKey: "k",
   };
 
-  it("supports exactly one action", async () => {
-    expect((await platform()).supports).toEqual(["launch_ad_campaign"]);
+  // Pinned as an exact list so adding a Meta action is a deliberate
+  // change here, not something that slips in. Activation was added so
+  // chat can start a campaign through the approval spine.
+  it("supports exactly launch and activation", async () => {
+    expect((await platform()).supports).toEqual(["launch_ad_campaign", "activate_ad_campaign"]);
   });
 
   it("preview describes the campaign and NEVER calls Meta to create anything", async () => {
