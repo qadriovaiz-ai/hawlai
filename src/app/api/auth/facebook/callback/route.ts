@@ -1,3 +1,4 @@
+import { metaUserTokenWrite } from "@/lib/crypto/oauthSecrets";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
@@ -32,6 +33,20 @@ export async function GET(request: Request) {
     const longData = await longRes.json();
     if (!longRes.ok) throw new Error(longData?.error?.message ?? "Long-lived token exchange failed");
     const userToken = longData.access_token;
+
+    // KEEP the user token — encrypted. It is the credential that can read
+    // campaigns and ad sets (ads_read / ads_management). The Page tokens
+    // chosen in finalize cannot, which is why the Analytics Status column
+    // and the activation check got "(#100) Missing Ads or Marketing
+    // Messages permission". Written straight to its encrypted column,
+    // never into fb_connect_pending (plaintext jsonb). A separate write:
+    // if migration 177 hasn't run, connecting still works on the Page
+    // token exactly as before.
+    const { error: userTokenError } = await createServiceClient()
+      .from("dealerships")
+      .update(metaUserTokenWrite(userToken, longData.expires_in))
+      .eq("id", dealershipId);
+    if (userTokenError) console.error("[facebook-connect] user token not stored (migration 177 run?):", userTokenError.message);
 
     // Step 3: fetch the Pages this user manages, with a page-specific access token for each
     const pagesRes = await fetch(

@@ -8,8 +8,8 @@ import { rejectPublishAction } from "@/lib/publish/reject";
 import { createPlatformRegistry } from "@/lib/publish/registry";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
-import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { setCampaignStatus } from "@/lib/ads/campaignStatus";
+import { adsTokenFor } from "@/lib/ads/metaToken";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -83,7 +83,7 @@ export async function PATCH(
       const details = hasValidModification ? { ...approval.action_details, new_budget: modified_details.new_budget } : (approval.action_details as any);
       const { data: dealership } = await service
         .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", approval.dealership_id).single();
-      const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
+      const token = (await adsTokenFor(service, approval.dealership_id, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
       const { data: campaign } = await service
         .from("ad_creatives").select("meta_adset_id").eq("id", details.campaign_id).single();
@@ -133,7 +133,7 @@ export async function PATCH(
         .from("ad_creatives").select("meta_ad_id, meta_adset_id, meta_campaign_id").eq("id", details.campaign_id).single();
       const { data: dealership } = await service
         .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", approval.dealership_id).single();
-      const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
+      const token = (await adsTokenFor(service, approval.dealership_id, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
       if (!token || !campaign?.meta_ad_id) {
         return NextResponse.json({ error: "Can't apply this — the campaign or Facebook connection is missing" }, { status: 400 });

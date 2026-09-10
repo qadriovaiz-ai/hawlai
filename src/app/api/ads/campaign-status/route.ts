@@ -9,11 +9,17 @@
 // A campaign Meta can't be read for comes back "unknown" with
 // checkedAt: null, and the table falls back to the last recorded status
 // with its date. It is never guessed.
+//
+// The token comes from loadMetaAdsToken, the same place every other
+// campaign-status path gets it: the user token when stored, which can
+// read campaigns and ad sets, else the Page token, which cannot.
 
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { META_PAGE_TOKEN_SELECT } from "@/lib/crypto/oauthSecrets";
+import { adsTokenFor } from "@/lib/ads/metaToken";
 import { readCampaignState } from "@/lib/ads/campaignStatus";
+import { readCampaignBudget, describeBudget } from "@/lib/ads/campaignBudget";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
 import type { LiveDelivery } from "@/lib/ads/campaignDeliveryDisplay";
 import { metaError } from "@/lib/ads/metaLog";
@@ -41,6 +47,9 @@ export async function POST(request: Request) {
   const ids: string[] = Array.isArray(body?.ids)
     ? [...new Set<string>(body.ids.filter((x: unknown): x is string => typeof x === "string"))].slice(0, MAX_IDS)
     : [];
+  // For the On/Off switch's confirmation: activating must show the
+  // amount Meta will spend, read from Meta, never a local column.
+  const includeBudget = body?.includeBudget === true;
   if (ids.length === 0) return NextResponse.json({ statuses: {} });
 
   // Scoped to this business: an id from anyone else's account simply
@@ -54,16 +63,16 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_access_token, fb_page_access_token_encrypted")
+    .select(`${META_PAGE_TOKEN_SELECT}, fb_currency`)
     .eq("id", dealershipId)
     .maybeSingle();
-  const token = readMetaPageToken(dealership);
+  const token = await adsTokenFor(supabase, dealershipId, dealership);
 
   const statuses: Record<string, LiveDelivery> = {};
 
   if (!token) {
     for (const r of rows ?? []) {
-      statuses[r.id] = { state: "unknown", label: "Couldn't check", detail: "Facebook isn't connected", checkedAt: null };
+      statuses[r.id] = { state: "unknown", label: "Couldn't check", detail: "Facebook isn't connected", checkedAt: null, action: "reconnect_facebook" };
     }
     return NextResponse.json({ statuses });
   }
@@ -79,7 +88,12 @@ export async function POST(request: Request) {
         dealershipId
       );
       const delivery = describeDelivery(state);
-      statuses[r.id] = { ...delivery, checkedAt: delivery.state === "unknown" ? null : checkedAt };
+      const live: LiveDelivery = { ...delivery, checkedAt: delivery.state === "unknown" ? null : checkedAt };
+      if (includeBudget) {
+        const budget = await readCampaignBudget({ adsetId: r.meta_adset_id ?? null, campaignId: r.meta_campaign_id ?? null }, token!);
+        live.budget = budget ? describeBudget(budget, dealership?.fb_currency ?? null) : null;
+      }
+      statuses[r.id] = live;
 
       // Keep Hawlai's own record honest while we're here. meta_status is
       // what the rest of the product shows as "last recorded" (the chat

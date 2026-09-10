@@ -8,8 +8,8 @@ import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/
 import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ads/snapchatAds";
 import { getValidLinkedInAccessToken, setLinkedInCampaignStatus } from "@/lib/ads/linkedinAds";
 import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
-import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { setCampaignStatus } from "@/lib/ads/campaignStatus";
+import { adsTokenFor } from "@/lib/ads/metaToken";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -255,7 +255,8 @@ export async function PATCH(
     return NextResponse.json(updated);
   }
 
-  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
+  // Same token source as every campaign-status path (metaToken.ts).
+  const token = (await adsTokenFor(supabase, dealershipId, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
   }

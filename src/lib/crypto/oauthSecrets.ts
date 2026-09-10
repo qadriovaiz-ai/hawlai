@@ -164,3 +164,41 @@ export function metaPageTokenWrite(value: string) {
     fb_page_access_token: null,
   };
 }
+
+// ---------------------------------------------------------------
+// Meta USER access token (migration 177).
+//
+// The Page token used to be the only Meta credential kept, and a Page
+// token cannot read an ad account's objects: reading a campaign's or ad
+// set's status with it gets "(#100) Missing Ads or Marketing Messages
+// permission". The long-lived user token carries ads_read and
+// ads_management, both requested at connect. It expires (~60 days) and
+// the Page token does not, so the Page token stays the fallback
+// (lib/ads/metaToken.ts decides which one a call uses).
+// ---------------------------------------------------------------
+
+/** Both columns, for a SELECT. */
+export const META_USER_TOKEN_SELECT = "fb_user_access_token_encrypted, fb_user_token_expires_at";
+
+/** A day's margin, so a token isn't handed out moments before it dies mid-request. */
+const USER_TOKEN_MARGIN_MS = 24 * 60 * 60 * 1000;
+
+/** The stored user token, or null when absent, expired, or about to expire. */
+export function readMetaUserToken(row: Row, now: number = Date.now()): string | null {
+  if (!row?.fb_user_access_token_encrypted) return null;
+  const expires = row.fb_user_token_expires_at ? new Date(row.fb_user_token_expires_at).getTime() : null;
+  if (expires !== null && Number.isFinite(expires) && expires - USER_TOKEN_MARGIN_MS <= now) return null;
+  return resolveSecret(row.fb_user_access_token_encrypted, null, "marketing", "meta user access token");
+}
+
+/**
+ * Update payload for storing the user token. Encrypted only — there is
+ * no plaintext column for it, and it must never go into
+ * fb_connect_pending, which is plaintext jsonb.
+ */
+export function metaUserTokenWrite(value: string, expiresInSeconds: number | null | undefined) {
+  return {
+    fb_user_access_token_encrypted: encryptSecret(value, "marketing"),
+    fb_user_token_expires_at: expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000).toISOString() : null,
+  };
+}

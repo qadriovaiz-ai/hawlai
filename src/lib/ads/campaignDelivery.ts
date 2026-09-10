@@ -20,6 +20,19 @@ function isGoneFromMeta(e: { code: number | null; subcode: number | null } | und
   return !!e && ((e.code === 100 && e.subcode === 33) || e.code === 803);
 }
 
+/**
+ * The CONNECTION can't do this, as opposed to Meta being briefly
+ * unavailable. "(#100) Missing Ads or Marketing Messages permission" is
+ * the one seen in production: a Page token reading a campaign. Also an
+ * expired or revoked token (190) and the permission codes 10, 200, 294.
+ * Retrying cannot fix any of these; reconnecting Facebook can.
+ */
+function isPermissionProblem(e: { code: number | null; subcode: number | null; message: string } | undefined): boolean {
+  if (!e) return false;
+  if (e.code === 190 || e.code === 10 || e.code === 200 || e.code === 294) return true;
+  return e.code === 100 && e.subcode !== 33 && /permission/i.test(e.message);
+}
+
 const PAUSED_EFFECTIVE = new Set(["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]);
 
 export function describeDelivery(s: CampaignState): Delivery {
@@ -27,6 +40,9 @@ export function describeDelivery(s: CampaignState): Delivery {
     if (s.problem === "missing") return d("not_on_meta");
     if (s.problem === "mismatch") return d("mismatch", "The ad on file sits under a different campaign on Meta.");
     if (isGoneFromMeta(s.error)) return d("not_found", "Deleted, or no longer visible to this Facebook connection.");
+    if (isPermissionProblem(s.error)) {
+      return { ...d("unknown", "Hawlai's Facebook connection can't read this campaign's status."), action: "reconnect_facebook" };
+    }
     return d("unknown", s.error ? `Meta: ${s.error.message}` : null);
   }
 

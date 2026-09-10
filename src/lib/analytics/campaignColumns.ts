@@ -3,12 +3,12 @@
 // Preferences live in localStorage (a per-person display setting, not
 // business data). The first version saved a bare array of visible keys.
 // Read naively, that array HIDES every column added later: anyone who
-// ever customised the table would never see Status or Campaign ID,
-// because their saved list predates them. So the saved value now also
-// records which columns existed when it was saved; a column the person
-// has never been offered gets its default.
+// ever customised the table would never see Status, Campaign ID or the
+// On/Off switch, because their saved list predates them. So the saved
+// value now also records which columns existed when it was saved; a
+// column the person has never been offered gets its default.
 
-export const ALL_COLUMN_KEYS = ["status", "campaignId", "days", "spend", "leads", "costPerLead", "conversions", "revenue", "roas"] as const;
+export const ALL_COLUMN_KEYS = ["onOff", "status", "campaignId", "days", "spend", "leads", "costPerLead", "conversions", "revenue", "roas"] as const;
 export type ColumnKey = (typeof ALL_COLUMN_KEYS)[number];
 
 export const DEFAULT_VISIBLE: ColumnKey[] = [...ALL_COLUMN_KEYS];

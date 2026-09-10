@@ -14,6 +14,7 @@ import type { Loaded } from "@/lib/dataState";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { readCampaignState } from "@/lib/ads/campaignStatus";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
+import { adsTokenFor } from "@/lib/ads/metaToken";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -315,7 +316,8 @@ async function recordDeliveryStatus(supabase: any, dealershipId: string, adCreat
     .select("fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", dealershipId)
     .maybeSingle();
-  const token = readMetaPageToken(dealership);
+  // The user token when stored: the Page token can't read campaigns or ad sets (metaToken.ts).
+  const token = await adsTokenFor(supabase, dealershipId, dealership);
   if (!token || adCreativeIds.length === 0) return;
 
   const { data: creatives, error } = await supabase

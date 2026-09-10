@@ -34,6 +34,7 @@ import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { setCampaignStatus, readCampaignState } from "@/lib/ads/campaignStatus";
 import { readCampaignBudget, describeBudget } from "@/lib/ads/campaignBudget";
+import { adsTokenFor } from "@/lib/ads/metaToken";
 import { resolveAdDestination, type ResolvedDestination } from "@/lib/ads/destination";
 import {
   getAdAccountLimits,
@@ -116,7 +117,8 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
   async function previewActivation(action: PublishActionRecord): Promise<PreviewResult> {
     const row = await connection(action.dealershipId);
     if (!row) return { ok: false, reason: "This business has no Meta connection." };
-    const token = readMetaPageToken(row);
+    // The user token when stored: the Page token can't read campaigns or ad sets (metaToken.ts).
+    const token = await adsTokenFor(supabase, action.dealershipId, row);
     if (!token) return { ok: false, reason: "Connect your Facebook Page before starting a campaign." };
     const account = isAccountUsable(row.fb_account_status);
     if (!account.usable) return { ok: false, reason: account.reason };
@@ -192,7 +194,8 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     // between the card appearing and the click.
     const row = await connection(action.dealershipId);
     if (!row) return { ok: false, reason: "This business has no Meta connection." };
-    const token = readMetaPageToken(row);
+    // The user token when stored: the Page token can't read campaigns or ad sets (metaToken.ts).
+    const token = await adsTokenFor(supabase, action.dealershipId, row);
     if (!token) return { ok: false, reason: "The Facebook connection is missing." };
     const account = isAccountUsable(row.fb_account_status);
     if (!account.usable) return { ok: false, reason: account.reason };

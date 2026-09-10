@@ -50,7 +50,7 @@ const C = "120254652336640260", S = "120254652336770260", A = "12025465233729026
 function seed(opts: { token?: boolean; metaStatus?: string } = {}) {
   tables = {
     profiles: [{ id: "owner-1", dealership_id: "d1" }],
-    dealerships: [{ id: "d1", fb_page_access_token: opts.token === false ? null : "PAGE_TOKEN", fb_page_access_token_encrypted: null }],
+    dealerships: [{ id: "d1", fb_page_access_token: opts.token === false ? null : "PAGE_TOKEN", fb_page_access_token_encrypted: null, fb_currency: "INR" }],
     ad_creatives: [
       { id: "row-1", dealership_id: "d1", meta_campaign_id: C, meta_adset_id: S, meta_ad_id: A, meta_status: opts.metaStatus ?? "PAUSED" },
       // Another business's campaign — must never be returned.
@@ -67,6 +67,10 @@ function graph(levels: { campaign: Level; adset: Level; ad: Level }) {
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const node = String(url).split("/v23.0/")[1].split("?")[0];
+    // Budget reads: Graph's shape, minor units as strings, on the ad set.
+    if (String(url).includes("fields=daily_budget")) {
+      return { ok: true, status: 200, json: async () => ({ id: node, daily_budget: node === S ? "10000" : "0", lifetime_budget: "0" }) };
+    }
     calls.push(node);
     const lv = node === C ? levels.campaign : node === S ? levels.adset : node === A ? levels.ad : "gone";
     if (lv === "down") {
@@ -140,6 +144,21 @@ describe("live status per campaign", () => {
     const { body } = await ask();
     expect(body.statuses["row-1"]).toMatchObject({ state: "unknown", detail: "Facebook isn't connected" });
     expect(calls).toEqual([]);
+  });
+});
+
+describe("the On/Off switch's confirmation", () => {
+  it("includeBudget → Meta's budget in words, for the 'Start?' confirmation", async () => {
+    graph({ campaign: { status: "PAUSED", effective_status: "PAUSED" }, adset: { status: "ACTIVE", effective_status: "CAMPAIGN_PAUSED" }, ad: { status: "ACTIVE", effective_status: "CAMPAIGN_PAUSED" } });
+    const res = await POST(new Request("https://hawlai.online/api/ads/campaign-status", { method: "POST", body: JSON.stringify({ ids: ["row-1"], includeBudget: true }) }));
+    const body = await res.json();
+    expect(body.statuses["row-1"]).toMatchObject({ state: "paused", budget: "₹100.00/day" });
+  });
+
+  it("without includeBudget, no budget is read", async () => {
+    graph({ campaign: on, adset: on, ad: on });
+    const { body } = await ask(["row-1"]);
+    expect(body.statuses["row-1"]).not.toHaveProperty("budget");
   });
 });
 

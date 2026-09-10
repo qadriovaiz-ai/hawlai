@@ -2160,7 +2160,7 @@ async function campaignsUnreadable(dealershipId: string, err: { message?: string
 // Exported for tests: the lookup has to be exercised against a
 // database that rejects unknown columns, which is how this broke.
 export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, supabase: any, input: any) {
-  const { readMetaPageToken: readTok } = await import("../crypto/oauthSecrets");
+  const { adsTokenFor } = await import("../ads/metaToken");
   const { resolveCampaign } = await import("../ads/resolveCampaign");
   const { metaLog: mlog } = await import("../ads/metaLog");
 
@@ -2169,7 +2169,8 @@ export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, s
     .select("fb_page_access_token, fb_page_access_token_encrypted")
     .eq("id", ctx.id)
     .maybeSingle();
-  const token = readTok(conn);
+  // The user token when stored: the Page token can't read campaigns or ad sets (metaToken.ts).
+  const token = await adsTokenFor(supabase, ctx.id, conn);
   if (!token) {
     return { error: "Facebook isn't connected yet. Open Settings → Integrations and connect your Facebook Page, then I can do this from here." };
   }
