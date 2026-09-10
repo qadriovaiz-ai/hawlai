@@ -392,6 +392,32 @@ const TOOLS = [
     },
   },
   {
+    name: "activate_meta_campaign",
+    description:
+      "Turn ON a paused Meta (Facebook/Instagram) campaign so it starts delivering and spending. USE THIS when someone asks to activate, start, go live, run, resume or switch on a campaign — you CAN do this from chat. It shows an approval card with Approve / Reject buttons INLINE IN THE CHAT and nothing spends until they approve. It switches on the campaign, ad set and ad, then confirms with Meta that the ad is genuinely delivering before saying it worked. NEVER say the go-live switch is only on Meta's platform, and NEVER send them to Ads Manager to turn a campaign on. If it's unclear which campaign they mean, the tool returns a numbered list — show it and call again with the campaign_id they pick.",
+    input_schema: {
+      type: "object",
+      properties: {
+        campaign_description: { type: "string", description: "Which campaign, in their words, e.g. 'the lavender candle ad'" },
+        campaign_id: { type: "string", description: "Only on a FOLLOW-UP call, after a numbered list was shown and they picked one. Pass that campaign_id exactly. Never invent one." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "pause_meta_campaign",
+    description:
+      "Pause a running Meta campaign IMMEDIATELY, stopping spend. USE THIS when someone asks to pause, stop, turn off, halt or kill an ad. No approval card — stopping spend is reversible and must never wait on a click. It pauses the campaign, ad set and ad, then confirms with Meta that delivery has actually stopped. NEVER send them to Ads Manager for this. If it's unclear which campaign they mean, the tool returns a numbered list — show it and call again with the campaign_id they pick.",
+    input_schema: {
+      type: "object",
+      properties: {
+        campaign_description: { type: "string", description: "Which campaign, in their words" },
+        campaign_id: { type: "string", description: "Only on a FOLLOW-UP call, after a numbered list was shown. Pass it exactly. Never invent one." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "update_website_url",
     description:
       "Save the business's website address to their settings. USE THIS when someone tells you their website in chat — you CAN save it for them, and there is no reason to send them to a settings page for one field. Two steps, deliberately: call it with just the url to see what will change, tell the person exactly what it will be set to and what it is now, and only call again with confirmed=true once they say yes. Never set confirmed on the first call. The saved address is what ads fall back to when there is no specific product page, so a typo here quietly sends ad traffic to a domain that does not exist — which is why it is confirmed rather than written silently.",
@@ -1440,6 +1466,10 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       };
     }
 
+    case "activate_meta_campaign":
+      return switchMetaCampaign("activate", ctx, supabase, input);
+    case "pause_meta_campaign":
+      return switchMetaCampaign("pause", ctx, supabase, input);
     case "update_website_url": {
       // An ordinary field on the business's own row, written under the
       // same session the rest of chat already writes under. There is no
@@ -2089,6 +2119,134 @@ function extractDraft(result: Record<string, any>, fallbackHeading: string): { h
 // show inline (or the workspace panel, for visual kinds), without the
 // frontend needing to know each tool's individual response shape.
 /**
+ * Start or stop a Meta campaign from chat.
+ *
+ * WHY THIS EXISTS: asked to activate a campaign, chat said "Meta's final
+ * go-live switch is on their platform" and pointed at Ads Manager. That
+ * was invented — the same failure as the fabricated "security
+ * restriction" on saving a website URL. Meta's API sets campaign status
+ * like any other field; there was simply no tool.
+ *
+ * The two directions are deliberately asymmetric. STARTING spends
+ * money, so it goes through the approval card like every other
+ * publish action. STOPPING spend is reversible and urgent — gating it
+ * would leave a merchant watching money burn while waiting on a click —
+ * so it runs immediately, matching auto_paused_campaign's ungated
+ * policy.
+ *
+ * Both re-read campaigns from the database on every call, and both
+ * confirm against Meta's effective_status through setCampaignStatus
+ * rather than trusting what was sent.
+ */
+async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, supabase: any, input: any) {
+  const { readMetaPageToken: readTok } = await import("../crypto/oauthSecrets");
+  const { resolveCampaign } = await import("../ads/resolveCampaign");
+  const { metaLog: mlog } = await import("../ads/metaLog");
+
+  const { data: conn } = await supabase
+    .from("dealerships")
+    .select("fb_page_access_token, fb_page_access_token_encrypted")
+    .eq("id", ctx.id)
+    .maybeSingle();
+  const token = readTok(conn);
+  if (!token) {
+    return { error: "Facebook isn't connected yet. Open Settings → Integrations and connect your Facebook Page, then I can do this from here." };
+  }
+
+  // Fresh every call, and NOT filtered on the local meta_status: rows
+  // activated through the old ad-only path say ACTIVE here while Meta
+  // has them paused. Filtering on the column would hide exactly the
+  // campaigns that most need fixing. Meta's own effective_status is
+  // checked downstream.
+  const { data: rows } = await supabase
+    .from("ad_creatives")
+    .select("id, headline, car_type, daily_budget, meta_status, meta_campaign_id, meta_adset_id, meta_ad_id, generated_image_url")
+    .eq("dealership_id", ctx.id)
+    .eq("status", "launched")
+    .not("meta_ad_id", "is", null)
+    .order("created_at", { ascending: false });
+
+  const res = resolveCampaign(rows ?? [], { campaignId: input?.campaign_id, description: input?.campaign_description });
+  if (res.status === "none") return { error: "You don't have any campaigns on Meta yet — ask me to launch one first." };
+  if (res.status === "invalid_id") return { error: "That campaign choice doesn't match any of your campaigns — show the list again and let them pick." };
+  if (res.status === "ambiguous") {
+    return {
+      needs_clarification: true,
+      action: kind,
+      question: `Which campaign should I ${kind === "activate" ? "start" : "pause"}?`,
+      candidates: res.candidates.map((c) => ({
+        campaign_id: c.id,
+        headline: c.headline,
+        daily_budget: c.daily_budget,
+        status: c.meta_status,
+        image_url: c.generated_image_url,
+      })),
+    };
+  }
+  const campaign = res.campaign;
+
+  if (kind === "pause") {
+    const { setCampaignStatus: setStatus } = await import("../ads/campaignStatus");
+    const result = await setStatus({
+      objects: { campaignId: campaign.meta_campaign_id ?? null, adsetId: campaign.meta_adset_id ?? null, adId: campaign.meta_ad_id ?? null },
+      token,
+      status: "PAUSED",
+      dealershipId: ctx.id,
+    });
+    if (!result.ok) return { error: result.reason };
+
+    const { createServiceClient: makeService } = await import("../supabase/service");
+    const { error: saveErr } = await makeService()
+      .from("ad_creatives")
+      .update({ meta_status: "PAUSED", external_status: "PAUSED" })
+      .eq("id", campaign.id)
+      .eq("dealership_id", ctx.id);
+    mlog("chat.paused", { dealership: ctx.id, campaign: campaign.meta_campaign_id, effective: result.effectiveStatus, row_saved: !saveErr });
+
+    return {
+      success: true,
+      paused: true,
+      headline: campaign.headline,
+      effective_status: result.effectiveStatus,
+      image_url: campaign.generated_image_url,
+      note: "Paused on Meta and confirmed — it has stopped spending. Ask me any time to start it again.",
+    };
+  }
+
+  const { createMetaPlatform } = await import("../publish/platforms/meta");
+  const { createPublishAction } = await import("../publish/create");
+  const { createServiceClient: makeService } = await import("../supabase/service");
+  const service = makeService();
+  const created = await createPublishAction(service, createMetaPlatform({ supabase: service }), {
+    dealershipId: ctx.id,
+    platform: "meta",
+    actionKey: "activate_ad_campaign",
+    targetRef: campaign.id,
+    targetLabel: campaign.headline ?? "Campaign",
+    requestedChanges: { status: "ACTIVE" },
+    requestedBy: null,
+  });
+  if (!created.ok) return { error: created.reason };
+
+  return {
+    success: true,
+    activation: true,
+    already_pending: created.alreadyPending ?? false,
+    approval_id: created.approvalId,
+    action_id: created.actionId,
+    headline: campaign.headline,
+    summary: created.preview.summary,
+    daily_budget: created.preview.changes.find((c) => c.field === "Daily budget")?.after ?? null,
+    current_status: created.preview.changes.find((c) => c.field === "Status on Meta")?.before ?? null,
+    image_url: campaign.generated_image_url,
+    warnings: created.preview.warnings,
+    note: created.alreadyPending
+      ? "You already asked to start this — here it is again, still waiting on your approval."
+      : "Ready for your approval below. Nothing spends until you approve.",
+  };
+}
+
+/**
  * EXPORTED FOR TESTS, and the reason is worth recording.
  *
  * Every test of this function so far has read its SOURCE TEXT and
@@ -2260,6 +2418,51 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
         // was the model writing markdown into its reply, which made
         // "can I see what I am approving?" depend on the model's mood.
         imageUrl: result.image_url || undefined,
+      };
+    }
+    case "activate_meta_campaign":
+    case "pause_meta_campaign": {
+      const plainStatus = (s: unknown) => (s === "ACTIVE" ? "running" : s === "PAUSED" ? "paused" : String(s ?? "").toLowerCase());
+      if (result.needs_clarification) {
+        return {
+          kind: "record",
+          label: result.question ?? "Which campaign?",
+          summary: "Pick one by number.",
+          groups: [
+            {
+              heading: `${(result.candidates ?? []).length} campaigns`,
+              items: (result.candidates ?? []).map((c: any, i: number) => ({
+                label: `${i + 1}. ${c.headline ?? "Untitled"}`,
+                note: [c.daily_budget ? `${c.daily_budget}/day` : null, c.status ? plainStatus(c.status) : null].filter(Boolean).join(" · "),
+              })),
+            },
+          ],
+        };
+      }
+      if (result.paused) {
+        return {
+          kind: "record",
+          label: "Campaign paused",
+          summary: result.note,
+          imageUrl: result.image_url || undefined,
+          fields: [
+            { label: "Campaign", value: String(result.headline ?? "") },
+            { label: "Meta confirms", value: "Stopped — not spending" },
+          ],
+        };
+      }
+      return {
+        kind: "record",
+        label: result.already_pending ? "Already waiting for approval" : "Start this campaign?",
+        summary: `${result.summary} ${result.note}`,
+        approval: result.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
+        imageUrl: result.image_url || undefined,
+        fields: [
+          { label: "Campaign", value: String(result.headline ?? "") },
+          ...(result.daily_budget ? [{ label: "Daily budget", value: String(result.daily_budget) }] : []),
+          ...(result.current_status ? [{ label: "Right now", value: plainStatus(result.current_status) }] : []),
+          { label: "After you approve", value: "Running — spending up to the daily budget until you pause it" },
+        ],
       };
     }
     case "update_website_url":
@@ -2640,6 +2843,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
 - You CAN launch Meta (Facebook/Instagram) ad campaigns from this chat — use launch_meta_campaign. It writes the copy, generates the creative, and shows an approval card with buttons right here; everything is created PAUSED so approving spends nothing, and activation is a separate step afterwards. NEVER tell someone to go to Ads Manager or a Paid Ads page to launch a Meta ad — that instruction was written when this tool did not exist, and repeating it now sends them away from a card that can do the job. Other ad platforms (Google, LinkedIn, Pinterest, Snapchat) still only have planning tools; for those, say plainly that you can draft the plan but cannot launch it yet.
+- You CAN also start and pause Meta campaigns from this chat: activate_meta_campaign shows an approval card and only reports success once Meta confirms the ad is actually delivering; pause_meta_campaign stops spend immediately with no approval. NEVER say the go-live switch is only on Meta's platform, and NEVER send them to Ads Manager to turn a campaign on or off — that is false; you have both tools.
 - Some actions render an approval card with buttons directly in the chat (propose_price_change is one). For those, NEVER add "sent to Approvals", "review it on the Approvals page", or any other instruction to go elsewhere — the buttons are in the same message, and pointing at a page contradicts what they are looking at. Say what will change and let the card do the rest.
 - If the person wants to change the budget or targeting on a campaign that's already launched, use propose_campaign_budget_change / propose_campaign_targeting_change — these send the request to the Approvals queue rather than changing anything directly, so use them instead of just telling the person to go do it manually.
 - Be conversational and concise — you're texting with a business owner, not writing a report. Don't dump raw JSON at them, and don't enumerate a tool's list/array results (keywords, suggestions, checklist items, etc.) in your text either — those already render as a proper card right under your reply. Just say how many you found and the one-line takeaway (e.g. "Found 10 competitor keywords, split evenly between research and buy-intent — see the card below"), never spell out each item's fields as key: value text. EXCEPTION — a list the person has to CHOOSE FROM is not a result, it is a question, and you MUST write it out as a numbered list in your text. When a tool returns needs_clarification with candidates (propose_price_change does this), number them 1., 2., 3. and give each one its title, variant and current price, then ask which number they want. Summarising it as "I found 3 matches" is useless: they cannot answer without seeing the options, and "the second one" only means something if you numbered them. Concise doesn't mean shallow — a sharp two-sentence read of the situation beats a bland five-paragraph one.

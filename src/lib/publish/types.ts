@@ -43,7 +43,13 @@ export type ActionKey =
    * brand is not something an assistant should do unasked, and the
    * creative and audience are exactly what a human needs to check.
    */
-  | "launch_ad_campaign";
+  | "launch_ad_campaign"
+  /**
+   * Turn a paused campaign ON — campaign, ad set and ad — and verify
+   * Meta will actually deliver it. THE money step: nothing spends until
+   * this runs, so it is always approval-gated and critical.
+   */
+  | "activate_ad_campaign";
 
 /**
  * One field changing, in terms a person can check.
@@ -213,6 +219,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "update_post",
   "update_product_description",
   "launch_ad_campaign",
+  "activate_ad_campaign",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -225,4 +232,6 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   // Nothing spends on creation — but the objects are real, public and
   // in the merchant's own ad account, and activation is one click away.
   launch_ad_campaign: "high",
+  // The one action that starts real spend.
+  activate_ad_campaign: "critical",
 };

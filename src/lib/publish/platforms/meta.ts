@@ -32,6 +32,7 @@ import {
 import { publishLog, publishError } from "@/lib/publish/log";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { setCampaignStatus, readEffectiveStatus } from "@/lib/ads/campaignStatus";
 import { resolveAdDestination, type ResolvedDestination } from "@/lib/ads/destination";
 import {
   getAdAccountLimits,
@@ -104,9 +105,97 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     return data ?? null;
   }
 
+  // ---- ACTIVATION: the step that starts real spend ------------------
+  //
+  // targetRef is the ad_creatives row. Preview reads Meta's EFFECTIVE
+  // status rather than the local column: campaigns activated through the
+  // old ad-only path are marked ACTIVE here while Meta has them
+  // CAMPAIGN_PAUSED, and trusting the column would refuse to fix them.
+
+  async function previewActivation(action: PublishActionRecord): Promise<PreviewResult> {
+    const row = await connection(action.dealershipId);
+    if (!row) return { ok: false, reason: "This business has no Meta connection." };
+    const token = readMetaPageToken(row);
+    if (!token) return { ok: false, reason: "Connect your Facebook Page before starting a campaign." };
+    const account = isAccountUsable(row.fb_account_status);
+    if (!account.usable) return { ok: false, reason: account.reason };
+
+    const ad = await draftFor(action);
+    if (!ad || ad.status !== "launched" || !ad.meta_ad_id) {
+      return { ok: false, reason: "That campaign hasn't been created on Meta yet, so there's nothing to start." };
+    }
+
+    const effective = await readEffectiveStatus(ad.meta_ad_id, token);
+    if (effective === "ACTIVE") return { ok: false, reason: `"${ad.headline}" is already running on Meta.` };
+
+    const dailyMinor = Math.round(Number(ad.daily_budget ?? 0) * 100);
+    const daily = formatMinorAmount(dailyMinor, row.fb_currency) ?? String(ad.daily_budget ?? "");
+    return {
+      ok: true,
+      preview: {
+        summary: `Start "${ad.headline}" at ${daily}/day — this begins real spend.`,
+        target: {
+          title: ad.headline ?? "Campaign",
+          variantTitle: null,
+          currentPrice: null,
+          currency: row.fb_currency ?? null,
+          currencyLabel: null,
+          imageUrl: ad.generated_image_url ?? null,
+          resolutionPath: "named_in_chat",
+        },
+        changes: [
+          { field: "Status on Meta", before: effective ?? ad.meta_status ?? "PAUSED", after: "ACTIVE" },
+          { field: "Daily budget", before: null, after: `${daily}/day` },
+        ],
+        warnings: [
+          `Money starts moving as soon as you approve — up to ${daily} a day until you pause it.`,
+          "You can pause it any time by asking me.",
+        ],
+      },
+    };
+  }
+
+  async function executeActivation(action: PublishActionRecord): Promise<ExecuteResult> {
+    // Everything re-read at execution: the account can be disabled, the
+    // token revoked, or the campaign already started in Ads Manager
+    // between the card appearing and the click.
+    const row = await connection(action.dealershipId);
+    if (!row) return { ok: false, reason: "This business has no Meta connection." };
+    const token = readMetaPageToken(row);
+    if (!token) return { ok: false, reason: "The Facebook connection is missing." };
+    const account = isAccountUsable(row.fb_account_status);
+    if (!account.usable) return { ok: false, reason: account.reason };
+
+    const ad = await draftFor(action);
+    if (!ad?.meta_ad_id) return { ok: false, reason: "That campaign no longer exists on Meta." };
+
+    const result = await setCampaignStatus({
+      objects: { campaignId: ad.meta_campaign_id ?? null, adsetId: ad.meta_adset_id ?? null, adId: ad.meta_ad_id },
+      token,
+      status: "ACTIVE",
+      dealershipId: action.dealershipId,
+    });
+    if (!result.ok) return { ok: false, reason: result.reason };
+
+    // Meta is the truth and it says running. If this local write fails
+    // the campaign IS spending — reporting failure would be the false
+    // statement, so it succeeds and logs the drift instead.
+    const { error } = await supabase
+      .from("ad_creatives")
+      .update({ meta_status: "ACTIVE", external_status: "ACTIVE" })
+      .eq("id", ad.id);
+    if (error) publishError("meta.activation_row_not_saved", { action: action.id, detail: error.message });
+
+    publishLog("meta.activated", { action: action.id, campaign: ad.meta_campaign_id, effective: result.effectiveStatus });
+    return {
+      ok: true,
+      platformResponse: { campaign_id: ad.meta_campaign_id, effective_status: result.effectiveStatus, local_record_saved: !error },
+    };
+  }
+
   return {
     id: "meta",
-    supports: ["launch_ad_campaign"] as readonly ActionKey[],
+    supports: ["launch_ad_campaign", "activate_ad_campaign"] as readonly ActionKey[],
 
     async isConnected(dealershipId: string) {
       const row = await connection(dealershipId);
@@ -121,6 +210,7 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
      * anything.
      */
     async preview(action: PublishActionRecord): Promise<PreviewResult> {
+      if (action.actionKey === "activate_ad_campaign") return previewActivation(action);
       const row = await connection(action.dealershipId);
       if (!row) return { ok: false, reason: "This business has no Meta connection." };
 
@@ -204,6 +294,7 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
      * which only lets one worker through.
      */
     async execute(action: PublishActionRecord): Promise<ExecuteResult> {
+      if (action.actionKey === "activate_ad_campaign") return executeActivation(action);
       const row = await connection(action.dealershipId);
       if (!row) return { ok: false, reason: "This business has no Meta connection." };
 

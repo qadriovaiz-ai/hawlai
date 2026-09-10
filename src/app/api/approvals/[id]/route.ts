@@ -119,7 +119,14 @@ export async function PATCH(
     // P0 11b — same real-spend-activation Meta call as /api/ads/[id]/status,
     // reused here for the case that route deferred to this queue because
     // the requester lacked authority.
-    if (approval?.action_type === "activate_ad_campaign") {
+    // Only the LEGACY activation approvals (raised by the dashboard
+    // button when the requester lacked authority) are applied here.
+    // A chat-raised activation is backed by a publish_action and runs
+    // through releaseApprovedAction below. Without this guard both
+    // would fire: this branch would look up action_details.campaign_id,
+    // which a publish-action approval does not carry, and fail the
+    // approval with "the campaign or Facebook connection is missing".
+    if (approval?.action_type === "activate_ad_campaign" && !(approval.action_details as any)?.publish_action_id) {
       const details = approval.action_details as any;
       const { data: campaign } = await service
         .from("ad_creatives").select("meta_ad_id, meta_adset_id, meta_campaign_id").eq("id", details.campaign_id).single();

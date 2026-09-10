@@ -76,6 +76,34 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   },
 
   {
+    name: "activate_meta_campaign",
+    description:
+      "Start a paused Meta campaign from chat. Approval-gated: shows Approve / Reject inline, and only reports success once Meta confirms the ad is genuinely delivering. Never directs them to Ads Manager.",
+    parameters: {
+      campaign_description: { type: "string", description: "Which campaign, in their words" },
+      campaign_id: { type: "string", description: "Only on a follow-up, after a numbered list was shown" },
+    },
+    // CHAT ONLY: the person is approving real spend and should see the
+    // campaign, its creative and its budget, not hear them read out.
+    channels: ["chat"],
+    handlerRef: "lib/agents/masterBrainV2.ts:switchMetaCampaign",
+    status: "live",
+  },
+  {
+    name: "pause_meta_campaign",
+    description:
+      "Pause a running Meta campaign immediately, stopping spend. No approval — stopping spend is reversible and urgent. Confirms with Meta that delivery stopped.",
+    parameters: {
+      campaign_description: { type: "string", description: "Which campaign, in their words" },
+      campaign_id: { type: "string", description: "Only on a follow-up, after a numbered list was shown" },
+    },
+    // Voice too: "pause my ad" on a call should work, and nothing about
+    // stopping spend needs to be seen.
+    channels: ["chat", "call"],
+    handlerRef: "lib/agents/masterBrainV2.ts:switchMetaCampaign",
+    status: "live",
+  },
+  {
     name: "update_website_url",
     description:
       "Save the business's website address to their settings, from the chat. Confirmed in two steps — shows what will change, writes only after the person agrees — because this address is what ads fall back to when there is no specific product page.",
