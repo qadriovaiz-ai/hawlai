@@ -146,7 +146,9 @@ describe("the Meta module runs activation for real", () => {
     const posts: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => {
       if (init?.method === "POST") { posts.push(String(url).split("/").pop()!); return { ok: true, status: 200, json: async () => ({ success: true }) }; }
-      return { ok: true, status: 200, json: async () => ({ effective_status: effective }) };
+      // One answer for every read: the ad reads effective_status, the
+      // ad set reads its budget (₹100/day, in paise, as Meta returns it).
+      return { ok: true, status: 200, json: async () => ({ effective_status: effective, daily_budget: "10000" }) };
     }));
     return posts;
   }
@@ -166,7 +168,8 @@ describe("the Meta module runs activation for real", () => {
     const r = await (await platform(updates)).execute(action);
     expect(r.ok).toBe(true);
     expect(posts).toEqual(["C", "S", "A"]);
-    expect(updates[0]).toEqual({ meta_status: "ACTIVE", external_status: "ACTIVE" });
+    // meta_status only: production has no external_status column.
+    expect(updates[0]).toEqual({ meta_status: "ACTIVE" });
   });
 
   it("FAILS, and leaves the row alone, when Meta still says CAMPAIGN_PAUSED", async () => {

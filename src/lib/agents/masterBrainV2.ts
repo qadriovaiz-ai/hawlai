@@ -2227,7 +2227,10 @@ export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, s
     const { createServiceClient: makeService } = await import("../supabase/service");
     const { error: saveErr } = await makeService()
       .from("ad_creatives")
-      .update({ meta_status: "PAUSED", external_status: "PAUSED" })
+      // meta_status only. external_status comes from migration 140, which
+      // production does not have, and writing it fails the whole update.
+      // Nothing on the Meta path reads external_status.
+      .update({ meta_status: "PAUSED" })
       .eq("id", campaign.id)
       .eq("dealership_id", ctx.id);
     mlog("chat.paused", { dealership: ctx.id, campaign: campaign.meta_campaign_id, effective: result.effectiveStatus, row_saved: !saveErr });
@@ -2265,7 +2268,7 @@ export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, s
     action_id: created.actionId,
     headline: campaign.headline,
     summary: created.preview.summary,
-    daily_budget: created.preview.changes.find((c) => c.field === "Daily budget")?.after ?? null,
+    daily_budget: created.preview.changes.find((c) => /budget/i.test(c.field))?.after ?? null,
     current_status: created.preview.changes.find((c) => c.field === "Status on Meta")?.before ?? null,
     image_url: campaign.generated_image_url,
     warnings: created.preview.warnings,
@@ -2488,7 +2491,9 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
         imageUrl: result.image_url || undefined,
         fields: [
           { label: "Campaign", value: String(result.headline ?? "") },
-          ...(result.daily_budget ? [{ label: "Daily budget", value: String(result.daily_budget) }] : []),
+          // Read from Meta by the preview. Labelled "Budget" because the
+          // value itself says "/day" or "total".
+          ...(result.daily_budget ? [{ label: "Budget", value: String(result.daily_budget) }] : []),
           ...(result.current_status ? [{ label: "Right now", value: plainStatus(result.current_status) }] : []),
           { label: "After you approve", value: "Running — spending up to the daily budget until you pause it" },
         ],

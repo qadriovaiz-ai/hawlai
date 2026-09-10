@@ -33,6 +33,7 @@ import { publishLog, publishError } from "@/lib/publish/log";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { setCampaignStatus, readEffectiveStatus } from "@/lib/ads/campaignStatus";
+import { readCampaignBudget, describeBudget } from "@/lib/ads/campaignBudget";
 import { resolveAdDestination, type ResolvedDestination } from "@/lib/ads/destination";
 import {
   getAdAccountLimits,
@@ -128,12 +129,25 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     const effective = await readEffectiveStatus(ad.meta_ad_id, token);
     if (effective === "ACTIVE") return { ok: false, reason: `"${ad.headline}" is already running on Meta.` };
 
-    const dailyMinor = Math.round(Number(ad.daily_budget ?? 0) * 100);
-    const daily = formatMinorAmount(dailyMinor, row.fb_currency) ?? String(ad.daily_budget ?? "");
+    // The budget Meta will spend against, read from META. Never from
+    // ad_creatives.daily_budget: that is NULL on every production row
+    // (campaignBudget.ts explains why), and NULL → 0 → "₹0.00/day" is
+    // what this card showed for a ₹100/day campaign. If Meta can't tell
+    // us, there is no card — an approval for spend must never show an
+    // amount we do not actually have.
+    const budget = await readCampaignBudget({ adsetId: ad.meta_adset_id ?? null, campaignId: ad.meta_campaign_id ?? null }, token);
+    if (!budget) {
+      return {
+        ok: false,
+        reason: `I couldn't confirm the budget for "${ad.headline}" with Meta, so I won't ask you to approve spend without it. Nothing has been started — try again in a moment.`,
+      };
+    }
+    const spend = describeBudget(budget, row.fb_currency);
+    const amount = formatMinorAmount(budget.minor, row.fb_currency) ?? spend;
     return {
       ok: true,
       preview: {
-        summary: `Start "${ad.headline}" at ${daily}/day — this begins real spend.`,
+        summary: `Start "${ad.headline}" at ${spend} — this begins real spend.`,
         target: {
           title: ad.headline ?? "Campaign",
           variantTitle: null,
@@ -145,10 +159,12 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
         },
         changes: [
           { field: "Status on Meta", before: effective ?? ad.meta_status ?? "PAUSED", after: "ACTIVE" },
-          { field: "Daily budget", before: null, after: `${daily}/day` },
+          { field: budget.kind === "daily" ? "Daily budget" : "Lifetime budget", before: null, after: spend },
         ],
         warnings: [
-          `Money starts moving as soon as you approve — up to ${daily} a day until you pause it.`,
+          budget.kind === "daily"
+            ? `Money starts moving as soon as you approve — up to ${amount} a day until you pause it.`
+            : `Money starts moving as soon as you approve — up to ${amount} in total over the campaign's run.`,
           "You can pause it any time by asking me.",
         ],
       },
@@ -169,6 +185,20 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     const ad = await draftFor(action);
     if (!ad?.meta_ad_id) return { ok: false, reason: "That campaign no longer exists on Meta." };
 
+    // WHAT THEY APPROVED IS WHAT RUNS. Activation only flips status and
+    // never writes a budget, but the budget it starts spending against
+    // can be changed in Ads Manager between the card and the click. If
+    // it moved, the approval was for a different amount: stale, nothing
+    // flipped, ask again.
+    const budget = await readCampaignBudget({ adsetId: ad.meta_adset_id ?? null, campaignId: ad.meta_campaign_id ?? null }, token);
+    if (!budget) return { ok: false, reason: "I couldn't confirm the campaign's budget with Meta, so nothing was started. Try again in a moment." };
+    const spendNow = describeBudget(budget, row.fb_currency);
+    const shown = action.preview?.changes.find((c) => /budget/i.test(c.field))?.after ?? null;
+    if (shown && shown !== spendNow) {
+      publishError("meta.activation_budget_moved", { action: action.id, shown, now: spendNow });
+      return { ok: false, stale: true, changed: [{ field: "Budget", before: shown, after: spendNow }] };
+    }
+
     const result = await setCampaignStatus({
       objects: { campaignId: ad.meta_campaign_id ?? null, adsetId: ad.meta_adset_id ?? null, adId: ad.meta_ad_id },
       token,
@@ -182,7 +212,9 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     // statement, so it succeeds and logs the drift instead.
     const { error } = await supabase
       .from("ad_creatives")
-      .update({ meta_status: "ACTIVE", external_status: "ACTIVE" })
+      // meta_status only: production has no external_status column
+      // (migration 140 never applied), and writing it failed the update.
+      .update({ meta_status: "ACTIVE" })
       .eq("id", ad.id);
     if (error) publishError("meta.activation_row_not_saved", { action: action.id, detail: error.message });
 
