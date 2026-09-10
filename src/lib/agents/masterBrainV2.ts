@@ -407,7 +407,7 @@ const TOOLS = [
   {
     name: "pause_meta_campaign",
     description:
-      "Pause a running Meta campaign IMMEDIATELY, stopping spend. USE THIS when someone asks to pause, stop, turn off, halt or kill an ad. No approval card — stopping spend is reversible and must never wait on a click. It pauses the campaign, ad set and ad, then confirms with Meta that delivery has actually stopped. NEVER send them to Ads Manager for this. If it's unclear which campaign they mean, the tool returns a numbered list — show it and call again with the campaign_id they pick.",
+      "Pause a running Meta campaign IMMEDIATELY, stopping spend. USE THIS when someone asks to pause, stop, turn off, halt or kill an ad. No approval card — stopping spend is reversible and must never wait on a click. It pauses the campaign, ad set and ad, then confirms with Meta that delivery has actually stopped. If the result has confirmed: false, Meta ACCEPTED the pause and only the read-back failed — say the pause was sent and suggest checking Ads Manager; never call it a network failure or say it didn't work. NEVER send them to Ads Manager for this. If it's unclear which campaign they mean, the tool returns a numbered list — show it and call again with the campaign_id they pick.",
     input_schema: {
       type: "object",
       properties: {
@@ -2224,26 +2224,35 @@ export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, s
       status: "PAUSED",
       dealershipId: ctx.id,
     });
-    if (!result.ok) return { error: result.reason };
+    // A pause Meta ACCEPTED but that couldn't be read back is not a
+    // failed pause. Both "couldn't confirm" reports in one evening were
+    // exactly that — the pause had worked, only the read-back failed —
+    // and chat called it a network problem. Reported as sent-but-
+    // unconfirmed instead.
+    if (!result.ok && !result.unconfirmed) return { error: result.reason };
+    const confirmed = result.ok;
 
     const { createServiceClient: makeService } = await import("../supabase/service");
     const { error: saveErr } = await makeService()
       .from("ad_creatives")
-      // meta_status only. external_status comes from migration 140, which
-      // production does not have, and writing it fails the whole update.
-      // Nothing on the Meta path reads external_status.
+      // meta_status only. external_status is not read on the Meta path.
+      // Written when unconfirmed too: Meta accepted the pause, and this
+      // column is only ever the last RECORDED status.
       .update({ meta_status: "PAUSED" })
       .eq("id", campaign.id)
       .eq("dealership_id", ctx.id);
-    mlog("chat.paused", { dealership: ctx.id, campaign: campaign.meta_campaign_id, effective: result.effectiveStatus, row_saved: !saveErr });
+    mlog("chat.paused", { dealership: ctx.id, campaign: campaign.meta_campaign_id, effective: result.ok ? result.effectiveStatus : null, confirmed, row_saved: !saveErr });
 
     return {
       success: true,
       paused: true,
+      confirmed,
       headline: campaign.headline,
-      effective_status: result.effectiveStatus,
+      effective_status: result.ok ? result.effectiveStatus : null,
       image_url: campaign.generated_image_url,
-      note: "Paused on Meta and confirmed — it has stopped spending. Ask me any time to start it again.",
+      note: result.ok
+        ? "Paused on Meta and confirmed — it has stopped spending. Ask me any time to start it again."
+        : result.reason,
     };
   }
 
@@ -2474,14 +2483,18 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
         };
       }
       if (result.paused) {
+        // confirmed: false means Meta ACCEPTED the pause and only the
+        // read-back failed. Labelled as sent, not as stopped, and not as
+        // failed.
+        const confirmed = result.confirmed !== false;
         return {
           kind: "record",
-          label: "Campaign paused",
+          label: confirmed ? "Campaign paused" : "Pause sent — not yet confirmed",
           summary: result.note,
           imageUrl: result.image_url || undefined,
           fields: [
             { label: "Campaign", value: String(result.headline ?? "") },
-            { label: "Meta confirms", value: "Stopped — not spending" },
+            { label: "Meta confirms", value: confirmed ? "Stopped — not spending" : "Couldn't read it back — check Ads Manager" },
           ],
         };
       }

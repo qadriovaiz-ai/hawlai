@@ -144,12 +144,16 @@ describe("effective_status is verified, not assumed", () => {
     expect(!r.ok && r.reason).toMatch(/couldn't read/i);
   });
 
-  it("fails when the verification after switching cannot be read", async () => {
-    // "We sent it and cannot confirm" is not success.
+  it("a start Meta accepted but that can't be read back is UNCONFIRMED — not success, not 'nothing happened'", async () => {
+    // "We sent it and cannot confirm" is not success. But every write
+    // was accepted, so the campaign may already be spending, and saying
+    // it failed would be just as false.
     meta({ verifyFailsAfterFlip: true });
     const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
     expect(r.ok).toBe(false);
-    expect(!r.ok && r.reason).toMatch(/confirmed/i);
+    expect(!r.ok && r.unconfirmed).toBe(true);
+    expect(!r.ok && r.reason).toMatch(/accepted the start request/i);
+    expect(!r.ok && r.reason).toMatch(/may already be spending/i);
   });
 
   it("accepts a genuine pause, where a paused effective status IS the goal", async () => {

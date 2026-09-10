@@ -30,6 +30,9 @@ export default defineConfig({
     // nothing on it — which would look like a broken app rather than a
     // misconfigured runner.
     exclude: ["node_modules/**", "tests/smoke/**"],
+    // Zeroes the Meta retry waits (attempts unchanged) so retry tests
+    // don't sleep. Not a *.test.ts file, so `include` never runs it as one.
+    setupFiles: ["tests/setup/metaRetryTiming.ts"],
     // A run must never pass because no assertion executed.
     passWithNoTests: false,
     reporters: process.env.CI ? ["dot"] : ["default"],

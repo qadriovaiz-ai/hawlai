@@ -3,19 +3,21 @@
 // WHY: the activation card showed "Daily budget: ₹0.00/day" for a
 // campaign set to ₹100/day. It read ad_creatives.daily_budget, which is
 // NULL on every row in production: the only write to it is the launch's
-// local-save update, and production rejects that whole update because
-// it also writes columns production does not have (migration 140 was
-// never applied there). NULL became 0, 0 became "₹0.00", and a card
-// asking someone to approve spend showed a plausible, wrong amount.
+// local-save update, and production rejected that whole update because
+// it also wrote columns production did not have (migration 140 had not
+// been applied). NULL became 0, 0 became "₹0.00", and a card asking
+// someone to approve spend showed a plausible, wrong amount.
 //
 // Meta holds the budget that will actually be spent. For campaigns
 // Hawlai launches it is on the ad set (launchCampaign.ts sets
 // daily_budget there), but it moves to the campaign if someone turns on
 // campaign budget optimisation in Ads Manager, so both are checked.
+//
+// Reads go through metaRead, so a single transient Graph error is
+// retried rather than turned into "couldn't confirm the budget".
 
 import { formatMinorAmount } from "@/lib/ads/adAccountLimits";
-
-const GRAPH_VERSION = "v23.0";
+import { metaRead } from "@/lib/ads/metaRead";
 
 export type CampaignBudget = {
   kind: "daily" | "lifetime";
@@ -25,18 +27,11 @@ export type CampaignBudget = {
 };
 
 async function readNode(id: string, token: string): Promise<{ daily: number; lifetime: number } | null> {
-  try {
-    const res = await fetch(
-      `https://graph.facebook.com/${GRAPH_VERSION}/${id}?fields=daily_budget,lifetime_budget&access_token=${encodeURIComponent(token)}`
-    );
-    const data = await res.json();
-    if (!res.ok || data.error) return null;
-    // Meta returns budgets as strings of minor units, and "0" or nothing
-    // when the budget lives on the other level.
-    return { daily: Number(data.daily_budget ?? 0) || 0, lifetime: Number(data.lifetime_budget ?? 0) || 0 };
-  } catch {
-    return null;
-  }
+  const r = await metaRead(id, "daily_budget,lifetime_budget", token, { stage: "budget.read" });
+  if (!r.ok) return null;
+  // Meta returns budgets as strings of minor units, and "0" or nothing
+  // when the budget lives on the other level.
+  return { daily: Number(r.data.daily_budget ?? 0) || 0, lifetime: Number(r.data.lifetime_budget ?? 0) || 0 };
 }
 
 /**

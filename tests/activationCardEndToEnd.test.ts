@@ -165,6 +165,17 @@ const EXPIRED_TOKEN = {
   },
 };
 
+/** Graph's transient error: "retry your request later", flagged is_transient. */
+const TRANSIENT_ERROR = {
+  error: {
+    message: "An unexpected error has occurred. Please retry your request later.",
+    type: "OAuthException",
+    is_transient: true,
+    code: 2,
+    fbtrace_id: "A7xYzTransient",
+  },
+};
+
 type Node = Row | "expired";
 
 /**
@@ -177,8 +188,18 @@ const PAUSED_ON_META: Record<"campaign" | "adset" | "ad", Node> = {
   ad: { status: "PAUSED", effective_status: "CAMPAIGN_PAUSED", campaign_id: CAMPAIGN, adset_id: ADSET },
 };
 
-function graph(opts: { adset?: Node; campaign?: Node; state?: Partial<typeof PAUSED_ON_META> }) {
+function graph(opts: {
+  adset?: Node;
+  campaign?: Node;
+  state?: Partial<typeof PAUSED_ON_META>;
+  /** The first N status reads fail with Graph's transient error. */
+  flakyReads?: number;
+  /** Every status read after a write fails transiently: the write is accepted, the read-back never lands. */
+  readsFailAfterPost?: boolean;
+}) {
   const calls: string[] = [];
+  let posted = false;
+  let flaky = opts.flakyReads ?? 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => {
     const u = new URL(url);
     const node = u.pathname.split("/").pop()!;
@@ -187,7 +208,10 @@ function graph(opts: { adset?: Node; campaign?: Node; state?: Partial<typeof PAU
     calls.push(`${method} ${node}${fields ? ` ${fields}` : ""}`);
     const reply = (status: number, body: Row) => ({ ok: status < 400, status, json: async () => body });
 
-    if (method === "POST") return reply(200, { success: true });
+    if (method === "POST") { posted = true; return reply(200, { success: true }); }
+    if (fields.includes("effective_status") && (flaky-- > 0 || (opts.readsFailAfterPost && posted))) {
+      return reply(500, TRANSIENT_ERROR);
+    }
     if (fields.includes("effective_status")) {
       const state = { ...PAUSED_ON_META, ...(opts.state ?? {}) };
       const level = node === CAMPAIGN ? state.campaign : node === ADSET ? state.adset : node === AD ? state.ad : undefined;
@@ -541,5 +565,54 @@ describe("'already running' is said only when Meta says every level is deliverin
     expect(result.candidates![0]).not.toHaveProperty("status");
     const card = extractArtifact("activate_meta_campaign", {}, result)!;
     expect(card.groups![0].items.map((i: any) => i.note).join(" ")).toMatch(/last recorded/);
+  });
+});
+
+describe("one transient Meta error is retried, not reported", () => {
+  // THE REPORTED CASES. "Meta abhi status confirm nahi kar pa raha" about
+  // a campaign that was running, and "Meta ne pause confirm nahi kiya"
+  // about a pause that had worked. Meta was right both times; our single
+  // read attempt was not.
+
+  it("status check: the first read fails transiently → retried, and the card appears", async () => {
+    const calls = graph({ adset: ADSET_100_A_DAY, campaign: {}, flakyReads: 1 });
+    const { result, card } = await askToActivate();
+
+    expect(result.error).toBeUndefined();
+    expect(card!.approval?.id).toBeTruthy();
+    expect(calls.filter((c) => c.startsWith(`GET ${AD} `)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("pause: the read-back fails once → retried, and it reports paused AND confirmed", async () => {
+    graph({ adset: ADSET_100_A_DAY, campaign: {}, flakyReads: 1 });
+    const result = await switchMetaCampaign("pause", { id: DEALERSHIP }, store, { campaign_description: "lavender" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.paused).toBe(true);
+    expect(result.confirmed).toBe(true);
+    const card = extractArtifact("pause_meta_campaign", {}, result)!;
+    expect(card.label).toBe("Campaign paused");
+  });
+
+  it("pause: Meta accepts it but no read-back ever lands → 'sent, not yet confirmed', never 'failed'", async () => {
+    const calls = graph({ adset: ADSET_100_A_DAY, campaign: {}, readsFailAfterPost: true });
+    const result = await switchMetaCampaign("pause", { id: DEALERSHIP }, store, { campaign_description: "lavender" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.paused).toBe(true);
+    expect(result.confirmed).toBe(false);
+    expect(result.note).toMatch(/accepted the pause/i);
+    expect(result.note).not.toMatch(/network|didn't work|failed/i);
+    // The three pause writes really went out.
+    expect(calls.filter((c) => c.startsWith("POST"))).toHaveLength(3);
+    const card = extractArtifact("pause_meta_campaign", {}, result)!;
+    expect(card.label).toMatch(/not yet confirmed/i);
+    expect(card.fields!.find((f: any) => f.label === "Meta confirms")!.value).toMatch(/check Ads Manager/i);
+  });
+
+  it("a permanent error (expired token) is NOT retried", async () => {
+    const calls = graph({ adset: ADSET_100_A_DAY, campaign: {}, state: { ad: "expired" } });
+    await askToActivate();
+    expect(calls.filter((c) => c.startsWith(`GET ${AD} `))).toHaveLength(1);
   });
 });
