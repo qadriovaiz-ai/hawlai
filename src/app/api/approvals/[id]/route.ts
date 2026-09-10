@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
 import { releaseApprovedAction } from "@/lib/publish/release";
+import { rejectPublishAction } from "@/lib/publish/reject";
 import { createPlatformRegistry } from "@/lib/publish/registry";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
@@ -184,6 +185,17 @@ export async function PATCH(
     summary: `${humanizeActionType(approval.action_type)} — ${status}${hasValidModification ? " (modified)" : ""}`,
     details: { action_type: approval.action_type, amount: approval.amount, modified_details: hasValidModification ? modified_details : null, rejection_reason: status === "rejected" ? (rejection_reason ?? null) : null },
   });
+
+  // A rejection ends the publish action too. Without this the action
+  // stayed 'awaiting_approval', and the next identical request re-served
+  // its stored preview as though nobody had decided. That is how a
+  // rejected "₹0.00/day" activation card came back (see reject.ts). A
+  // failure here is logged inside; the rejection itself is already
+  // recorded, and create.ts independently refuses to re-serve a card
+  // whose approval was rejected.
+  if (status === "rejected") {
+    await rejectPublishAction(service, id);
+  }
 
   // ---- Publish actions execute HERE, after the approval is recorded --
   //

@@ -71,6 +71,100 @@ export function intentKey(input: CreateInput): string {
 /** Statuses where an action is finished and a fresh request is legitimate. */
 const TERMINAL = new Set(["executed", "failed", "rejected", "stale"]);
 
+/** Nobody has decided yet. The only statuses this file may close. */
+const UNDECIDED = ["draft", "previewed", "awaiting_approval"];
+
+type Row = Record<string, any>;
+
+type Verdict =
+  | { kind: "reuse"; preview: PreviewDiff }
+  | { kind: "retired" }
+  | { kind: "error"; reason: string };
+
+const CANT_CHECK = "I couldn't check whether your earlier request is still waiting. Nothing was changed — try again in a moment.";
+
+function sameChanges(a: PreviewDiff["changes"] | undefined, b: PreviewDiff["changes"] | undefined): boolean {
+  const flat = (cs: PreviewDiff["changes"] | undefined) => JSON.stringify((cs ?? []).map((c) => [c.field, c.before ?? null, c.after]));
+  return flat(a) === flat(b);
+}
+
+/**
+ * May this waiting action be shown to the person again?
+ *
+ * WHY THIS EXISTS: re-serving a waiting action used to return its
+ * stored preview untouched. A card for a ₹100/day campaign read
+ * "₹0.00/day", computed by preview code that had since been fixed, and
+ * it kept coming back: after it was rejected, because a rejection never
+ * reached publish_actions (reject.ts), and while it was still pending,
+ * because nothing re-read the platform. An approval card must show
+ * what is true now, not what was true when it was first drawn.
+ */
+async function checkWaiting(supabase: any, platform: PublishPlatform, row: Row): Promise<Verdict> {
+  if (row.approval_id) {
+    const { data: approval, error } = await supabase
+      .from("pending_approvals")
+      .select("status")
+      .eq("id", row.approval_id)
+      .maybeSingle();
+    // Can't tell whether it was decided: neither re-serve a possibly
+    // decided card nor stack a second one beside it.
+    if (error) return { kind: "error", reason: CANT_CHECK };
+
+    // Approved and released: the executor owns it. "Already in
+    // progress" is true, and there is nothing to re-decide.
+    if (approval?.status === "approved") return { kind: "reuse", preview: row.preview };
+
+    if (approval?.status !== "pending") {
+      // Rejected, or the approval row is gone. Before reject.ts a
+      // rejection never reached publish_actions, so production holds
+      // rows exactly like this. Closed here so they stop resurfacing.
+      const { error: closeError } = await supabase
+        .from("publish_actions")
+        .update({ status: "rejected", updated_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .in("status", UNDECIDED);
+      if (closeError) return { kind: "error", reason: CANT_CHECK };
+      publishLog("create.closed_rejected", { action: row.id, approval: row.approval_id });
+      return { kind: "retired" };
+    }
+  }
+
+  // Genuinely waiting. Re-read the platform: only an unchanged preview
+  // is shown again.
+  const fresh = await platform.preview(toRecord(row));
+  if (!fresh.ok) return { kind: "error", reason: fresh.reason };
+  if (sameChanges(fresh.preview.changes, row.preview?.changes)) return { kind: "reuse", preview: row.preview };
+
+  // Out of date. Retire it, so the queue never holds two decisions for
+  // one intent and the old values can't be approved later.
+  const at = new Date().toISOString();
+  const { error: staleError } = await supabase
+    .from("publish_actions")
+    .update({ status: "stale", updated_at: at })
+    .eq("id", row.id)
+    .in("status", UNDECIDED);
+  if (staleError) return { kind: "error", reason: CANT_CHECK };
+  if (row.approval_id) {
+    const { error: approvalError } = await supabase
+      .from("pending_approvals")
+      .update({
+        status: "rejected",
+        reviewed_at: at,
+        rejection_reason: "Superseded: the details changed before anyone decided, so a fresh request replaced it.",
+      })
+      .eq("id", row.approval_id)
+      .eq("status", "pending");
+    if (approvalError) return { kind: "error", reason: CANT_CHECK };
+  }
+  publishError("create.superseded", {
+    action: row.id,
+    approval: row.approval_id ?? null,
+    was: JSON.stringify(row.preview?.changes ?? []).slice(0, 200),
+    now: JSON.stringify(fresh.preview.changes).slice(0, 200),
+  });
+  return { kind: "retired" };
+}
+
 export async function createPublishAction(
   supabase: any,
   platform: PublishPlatform,
@@ -90,38 +184,54 @@ export async function createPublishAction(
 
   const key = intentKey(input);
 
-  // Is this exact change already waiting? Checked BEFORE inserting so
-  // the unique index is a backstop rather than the mechanism — an
-  // index violation would surface as a database error to a merchant
-  // who simply asked twice.
-  const { data: existing } = await supabase
+  // Is this change already waiting? Checked BEFORE inserting so the
+  // unique index is a backstop rather than the mechanism — an index
+  // violation would surface as a database error to a merchant who
+  // simply asked twice.
+  //
+  // Every earlier attempt at this intent: the original key AND its
+  // salted repeats. The lookup used to match the exact key only, so
+  // once one attempt finished, every later repeat was salted and never
+  // matched again — asking twice after a rejection stacked two
+  // approvals for one decision.
+  const { data: earlier, error: earlierError } = await supabase
     .from("publish_actions")
-    .select("id, status, preview, approval_id")
+    .select("*")
     .eq("dealership_id", input.dealershipId)
-    .eq("idempotency_key", key)
-    .maybeSingle();
+    .like("idempotency_key", `${key}%`);
+  if (earlierError) {
+    return { ok: false, reason: "I couldn't check for an earlier copy of this request. Nothing was changed — try again in a moment." };
+  }
+  // Newest first, sorted here rather than by the query so this does not
+  // depend on a column the table might not have.
+  const attempts: Row[] = [...(earlier ?? [])].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
 
   // A row is only genuinely "already waiting" if it HAS a preview. A
   // draft is non-terminal but has none — returning it would hand the
   // caller preview: null, and every field read off it throws. That is
   // a crash on a path nobody exercises until two requests collide.
-  if (existing && !TERMINAL.has(existing.status) && existing.preview) {
-    return {
-      ok: true,
-      actionId: existing.id,
-      preview: existing.preview,
-      approvalId: existing.approval_id ?? null,
-      alreadyPending: true,
-    };
+  const waiting = attempts.find((r) => !TERMINAL.has(r.status) && r.preview) ?? null;
+  if (waiting) {
+    const verdict = await checkWaiting(supabase, platform, waiting);
+    if (verdict.kind === "error") return { ok: false, reason: verdict.reason };
+    if (verdict.kind === "reuse") {
+      return {
+        ok: true,
+        actionId: waiting.id,
+        preview: verdict.preview,
+        approvalId: waiting.approval_id ?? null,
+        alreadyPending: true,
+      };
+    }
+    // "retired": it was rejected or out of date, and is now closed.
+    // Fall through to a fresh request.
   }
 
-  // A previous attempt for this same intent finished. The merchant is
-  // entitled to ask again — a price they set last week is a fair thing
-  // to set again — so the key is salted to clear the unique index.
-  // Salted when a row already holds this key — whether it finished, or
-  // is an abandoned previewless draft. Either way the unique index
-  // must not block a merchant asking again.
-  const idempotencyKey = existing ? `${key}:${Date.now().toString(36)}` : key;
+  // A previous attempt for this same intent exists — finished, retired
+  // just now, or an abandoned previewless draft. The merchant is
+  // entitled to ask again, so the key is salted to clear the unique
+  // index.
+  const idempotencyKey = attempts.length > 0 ? `${key}:${Date.now().toString(36)}` : key;
 
   const { data: draft, error: insertError } = await supabase
     .from("publish_actions")

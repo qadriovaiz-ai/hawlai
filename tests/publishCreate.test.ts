@@ -21,6 +21,8 @@ const input = (over: Partial<CreateInput> = {}): CreateInput => ({
   ...over,
 });
 
+const PRICE_PREVIEW = { summary: "Price: 1299 → 999", changes: [{ field: "price", before: "1299", after: "999" }], warnings: [] };
+
 const platform = (over: Partial<PublishPlatform> = {}): PublishPlatform => ({
   id: "shopify",
   supports: ["update_product_price"],
@@ -34,7 +36,12 @@ const platform = (over: Partial<PublishPlatform> = {}): PublishPlatform => ({
 });
 
 /** Records every insert and update so the test can assert the sequence. */
-function fakeDb(opts: { existing?: Record<string, any> | null } = {}) {
+function fakeDb(opts: {
+  existing?: Record<string, any> | null;
+  /** The linked approval as pending_approvals holds it. Defaults to still pending. */
+  approval?: Record<string, any> | null;
+  approvalReadFails?: boolean;
+} = {}) {
   const writes: Record<string, any>[] = [];
   let approvalId = "app-1";
 
@@ -44,10 +51,20 @@ function fakeDb(opts: { existing?: Record<string, any> | null } = {}) {
       _fields: null as Record<string, any> | null,
       select: () => api,
       eq: () => api,
+      in: () => api,
+      like: () => api,
       insert: (fields: Record<string, any>) => { api._op = "insert"; api._fields = fields; writes.push({ table, op: "insert", ...fields }); return api; },
       update: (fields: Record<string, any>) => { api._op = "update"; api._fields = fields; writes.push({ table, op: "update", ...fields }); return api; },
+      // The earlier-attempts lookup is awaited as a list.
+      then: (resolve: any) => {
+        if (api._op === null && table === "publish_actions") return resolve({ data: opts.existing ? [opts.existing] : [], error: null });
+        return resolve({ data: null, error: null });
+      },
       maybeSingle: async () => {
-        if (api._op === null && table === "publish_actions") return { data: opts.existing ?? null };
+        if (api._op === null && table === "pending_approvals") {
+          if (opts.approvalReadFails) return { data: null, error: { message: "connection reset" } };
+          return { data: opts.approval === undefined ? { status: "pending" } : opts.approval, error: null };
+        }
         return { data: null };
       },
       single: async () => {
@@ -93,7 +110,10 @@ describe("asking twice does not stack two decisions", () => {
   it("returns the pending action instead of creating a second", async () => {
     // Two rows saying "set this price to 999" is not two decisions —
     // it is one decision and a confusing queue.
-    const db = fakeDb({ existing: { id: "act-existing", status: "awaiting_approval", preview: { summary: "s", changes: [], warnings: [] }, approval_id: "app-existing" } });
+    // The stored preview is what the platform produced when it was
+    // created. Re-serving now re-reads the platform and requires a match,
+    // so the fixture holds a real preview rather than an empty one.
+    const db = fakeDb({ existing: { id: "act-existing", status: "awaiting_approval", preview: PRICE_PREVIEW, approval_id: "app-existing" } });
     const result = await createPublishAction(db.client, platform(), input());
     expect(result.ok && result.alreadyPending).toBe(true);
     expect(result.ok && result.actionId).toBe("act-existing");
@@ -109,6 +129,51 @@ describe("asking twice does not stack two decisions", () => {
       expect(result.ok, `${status} should permit a new request`).toBe(true);
       expect(db.writes.some((w) => w.op === "insert" && w.table === "publish_actions")).toBe(true);
     }
+  });
+});
+
+describe("a waiting card is only shown again if it is still true", () => {
+  const waiting = (over: Record<string, any> = {}) => ({ id: "act-old", status: "awaiting_approval", preview: PRICE_PREVIEW, approval_id: "app-old", ...over });
+
+  it("a card whose approval was REJECTED is closed, never re-served", async () => {
+    // The ₹0.00 activation card came back after it was rejected: the
+    // rejection never reached publish_actions, so this lookup saw an
+    // undecided row and handed back its stored preview.
+    const db = fakeDb({ existing: waiting(), approval: { status: "rejected" } });
+    const result = await createPublishAction(db.client, platform(), input());
+    expect(result.ok && result.alreadyPending).toBeFalsy();
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "publish_actions", op: "update", status: "rejected" }));
+    expect(db.writes.some((w) => w.op === "insert" && w.table === "publish_actions")).toBe(true);
+  });
+
+  it("a card whose approval row is gone is closed too", async () => {
+    const db = fakeDb({ existing: waiting(), approval: null });
+    const result = await createPublishAction(db.client, platform(), input());
+    expect(result.ok && result.alreadyPending).toBeFalsy();
+  });
+
+  it("a PENDING card whose details changed is retired and replaced", async () => {
+    const db = fakeDb({ existing: waiting({ preview: { summary: "old", changes: [{ field: "price", before: "1099", after: "999" }], warnings: [] } }) });
+    const result = await createPublishAction(db.client, platform(), input());
+    expect(result.ok && result.alreadyPending).toBeFalsy();
+    expect(result.ok && result.preview.changes[0].before).toBe("1299");
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "publish_actions", op: "update", status: "stale" }));
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "pending_approvals", op: "update", status: "rejected" }));
+  });
+
+  it("if the approval can't be checked, it neither re-serves nor stacks", async () => {
+    const db = fakeDb({ existing: waiting(), approvalReadFails: true });
+    const result = await createPublishAction(db.client, platform(), input());
+    expect(result.ok).toBe(false);
+    expect(db.writes.filter((w) => w.op === "insert")).toEqual([]);
+  });
+
+  it("an approved, in-flight action is reported as such without re-previewing", async () => {
+    const preview = vi.fn();
+    const db = fakeDb({ existing: waiting({ status: "executing" }), approval: { status: "approved" } });
+    const result = await createPublishAction(db.client, platform({ preview } as any), input());
+    expect(result.ok && result.alreadyPending).toBe(true);
+    expect(preview).not.toHaveBeenCalled();
   });
 });
 
