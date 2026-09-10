@@ -72,17 +72,82 @@ describe("a refusal says what happened and what to do", () => {
   });
 });
 
+// ---------------------------------------------------------------
+// Asking again, run for real.
+//
+// These two used to grep the committed create.ts for its exact wording
+// (`!TERMINAL.has(existing.status)`, `idempotencyKey = existing ? …`).
+// When the lookup was rewritten to find salted repeats too, the
+// behaviour held and the greps failed on a variable rename. They now
+// call createPublishAction against a table that already holds a
+// finished row with the SAME key and a stored preview — the case where
+// a wrong short-circuit would re-serve a spent card.
+// ---------------------------------------------------------------
+
+const PREVIEW = { summary: "Price: 1299 → 999", changes: [{ field: "price", before: "1299", after: "999" }], warnings: [] };
+
+async function askAgainAfter(existingStatus: string) {
+  const { createPublishAction, intentKey } = await import("@/lib/publish/create");
+  const input = {
+    dealershipId: "d1",
+    platform: "shopify" as const,
+    actionKey: "update_product_price" as const,
+    targetRef: "gid://shopify/ProductVariant/1",
+    targetLabel: "Blue Kurta",
+    requestedChanges: { price: "999" },
+    requestedBy: null,
+  };
+  const key = intentKey(input);
+  const existing = { id: "old", status: existingStatus, preview: PREVIEW, approval_id: "app-old", idempotency_key: key };
+  const inserts: Record<string, any>[] = [];
+
+  const db = {
+    from: (table: string) => {
+      const api: any = {
+        _op: null as string | null,
+        _fields: null as Record<string, any> | null,
+        select: () => api,
+        eq: () => api,
+        in: () => api,
+        like: () => api,
+        insert: (fields: Record<string, any>) => { api._op = "insert"; api._fields = fields; inserts.push({ table, ...fields }); return api; },
+        update: () => { api._op = "update"; return api; },
+        // The earlier-attempts lookup, awaited as a list.
+        then: (resolve: any) =>
+          resolve(api._op === null && table === "publish_actions" ? { data: [existing], error: null } : { data: null, error: null }),
+        maybeSingle: async () => ({ data: { status: "pending" }, error: null }),
+        single: async () => ({
+          data: api._op === "insert" ? { id: table === "publish_actions" ? "act-new" : "app-new", ...api._fields } : null,
+          error: null,
+        }),
+      };
+      return api;
+    },
+  };
+
+  const platform = {
+    id: "shopify",
+    supports: ["update_product_price"],
+    isConnected: async () => true,
+    preview: async () => ({ ok: true, preview: PREVIEW }),
+    execute: async () => ({ ok: true, platformResponse: {} }),
+  };
+
+  const result = await createPublishAction(db, platform as any, input);
+  const action = inserts.find((i) => i.table === "publish_actions");
+  return { result, key, action };
+}
+
 describe("asking again is genuinely a way forward, not just advice", () => {
-  it("create.ts treats failed as terminal so a fresh request is not blocked", async () => {
+  it("after a FAILED action, a fresh request goes through under a salted key", async () => {
     // The advice above is only honest if a second request actually
-    // works. It does: a terminal row does not short-circuit as
-    // "already pending", and the idempotency key is salted so the
-    // unique index cannot reject the retry.
-    const { execFileSync } = await import("child_process");
-    const src = execFileSync("git", ["show", "HEAD:src/lib/publish/create.ts"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    expect(src).toMatch(/const TERMINAL = new Set\(\["executed", "failed", "rejected", "stale"\]\)/);
-    expect(src).toMatch(/!TERMINAL\.has\(existing\.status\)/);
-    expect(src).toMatch(/idempotencyKey = existing \? `\$\{key\}:\$\{Date\.now\(\)/);
+    // works: the failed row must not come back as "already pending",
+    // and the unique index must not reject the retry.
+    const { result, key, action } = await askAgainAfter("failed");
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.alreadyPending).toBeFalsy();
+    expect(result.ok && result.actionId).toBe("act-new");
+    expect(action?.idempotency_key).toMatch(new RegExp(`^${key}:`));
   });
 });
 
@@ -143,12 +208,15 @@ describe("two identical requests get independent actions", () => {
       .not.toBe(intentKey({ ...base, requestedChanges: { daily_budget: 200 } }));
   });
 
-  it("a terminal row never short-circuits a retry even when keys DO match", async () => {
-    // The belt-and-braces half, for the paths where targetRef is
-    // stable: create.ts only returns "already pending" for a
-    // non-terminal row, and salts the key otherwise.
-    const { execFileSync } = await import("child_process");
-    const src = execFileSync("git", ["show", "HEAD:src/lib/publish/create.ts"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    expect(src).toMatch(/if \(existing && !TERMINAL\.has\(existing\.status\) && existing\.preview\)/);
-  });
+  it.each(["executed", "failed", "rejected", "stale"])(
+    "a %s row never short-circuits a retry, even with the same key and a stored preview",
+    async (status) => {
+      // The belt-and-braces half, for the paths where targetRef is
+      // stable. A stored preview must not make a finished row look
+      // "already pending" — that is how a spent card gets re-served.
+      const { result, key, action } = await askAgainAfter(status);
+      expect(result.ok && result.alreadyPending, `${status} was re-served`).toBeFalsy();
+      expect(action?.idempotency_key).toMatch(new RegExp(`^${key}:`));
+    }
+  );
 });
