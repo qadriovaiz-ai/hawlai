@@ -111,19 +111,27 @@ describe("live status per campaign", () => {
     expect(body.statuses["row-1"].state).toBe("deleted");
   });
 
-  it("gone from Meta entirely (100/33) → Not found on Meta, and nothing written back", async () => {
+  // Both seeded with a local "ACTIVE": the harmful case is overwriting —
+  // or keeping as if confirmed — a status Meta hasn't given. With a
+  // local PAUSED these passed even when the route wrote PAUSED on every
+  // failure; a mutation check caught that they asserted nothing.
+  it("gone from Meta entirely (100/33) → Not found on Meta, and Hawlai's record left alone", async () => {
+    seed({ metaStatus: "ACTIVE" });
     graph({ campaign: "gone", adset: "gone", ad: "gone" });
     const { body } = await ask();
     expect(body.statuses["row-1"].state).toBe("not_found");
     expect(updates).toEqual([]);
+    expect(tables.ad_creatives.find((r) => r.id === "row-1")!.meta_status).toBe("ACTIVE");
   });
 
   it("Meta down (after retries) → unknown with no checkedAt, and Hawlai's record left alone", async () => {
+    seed({ metaStatus: "ACTIVE" });
     const calls = graph({ campaign: "down", adset: "down", ad: "down" });
     const { body } = await ask();
     expect(body.statuses["row-1"]).toMatchObject({ state: "unknown", checkedAt: null });
     expect(calls.filter((n) => n === A).length).toBe(3); // retried, not reported on the first failure
     expect(updates).toEqual([]);
+    expect(tables.ad_creatives.find((r) => r.id === "row-1")!.meta_status).toBe("ACTIVE");
   });
 
   it("no Facebook connection → every row unknown, saying why, without calling Meta", async () => {
