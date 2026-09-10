@@ -8,6 +8,7 @@ import { createPlatformRegistry } from "@/lib/publish/registry";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { setCampaignStatus } from "@/lib/ads/campaignStatus";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -121,7 +122,7 @@ export async function PATCH(
     if (approval?.action_type === "activate_ad_campaign") {
       const details = approval.action_details as any;
       const { data: campaign } = await service
-        .from("ad_creatives").select("meta_ad_id").eq("id", details.campaign_id).single();
+        .from("ad_creatives").select("meta_ad_id, meta_adset_id, meta_campaign_id").eq("id", details.campaign_id).single();
       const { data: dealership } = await service
         .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", approval.dealership_id).single();
       const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
@@ -130,14 +131,22 @@ export async function PATCH(
         return NextResponse.json({ error: "Can't apply this — the campaign or Facebook connection is missing" }, { status: 400 });
       }
 
-      const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${campaign.meta_ad_id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "ACTIVE", access_token: token }),
+      // SAME THREE-LEVEL FIX as /api/ads/[id]/status. This branch had
+      // the identical bug: it POSTed ACTIVE to the ad alone, so an
+      // approval could be granted, Meta could accept it, and the ad
+      // still would not deliver because its campaign was paused.
+      const activation = await setCampaignStatus({
+        objects: {
+          campaignId: campaign.meta_campaign_id ?? null,
+          adsetId: campaign.meta_adset_id ?? null,
+          adId: campaign.meta_ad_id ?? null,
+        },
+        token,
+        status: "ACTIVE",
+        dealershipId: approval.dealership_id,
       });
-      const metaData = await metaRes.json();
-      if (!metaRes.ok || metaData.error) {
-        return NextResponse.json({ error: metaData.error?.message ?? "Meta API error while activating the campaign" }, { status: 500 });
+      if (!activation.ok) {
+        return NextResponse.json({ error: activation.reason }, { status: 500 });
       }
 
       await service.from("ad_creatives").update({ meta_status: "ACTIVE" }).eq("id", details.campaign_id);

@@ -9,6 +9,7 @@ import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ad
 import { getValidLinkedInAccessToken, setLinkedInCampaignStatus } from "@/lib/ads/linkedinAds";
 import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { setCampaignStatus } from "@/lib/ads/campaignStatus";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -34,7 +35,7 @@ export async function PATCH(
   // RLS makes sure this creative actually belongs to this dealer's dealership.
   const { data: creative, error: fetchError } = await supabase
     .from("ad_creatives")
-    .select("id, meta_ad_id, dealership_id, daily_budget, headline, platform, external_campaign_id, external_ad_id")
+    .select("id, meta_ad_id, meta_adset_id, meta_campaign_id, dealership_id, daily_budget, headline, platform, external_campaign_id, external_ad_id")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();
@@ -259,19 +260,30 @@ export async function PATCH(
     return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
   }
 
-  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${creative.meta_ad_id}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, access_token: token }),
+  // ALL THREE LEVELS, THEN VERIFIED.
+  //
+  // This used to POST status to the AD alone. Meta accepted it and
+  // returned success while the campaign and ad set from the launch flow
+  // were still PAUSED — so the ad's effective_status stayed
+  // CAMPAIGN_PAUSED and it delivered nothing, with the dashboard
+  // showing ACTIVE. setCampaignStatus flips campaign → ad set → ad and
+  // then asks Meta what it will ACTUALLY do before anyone is told this
+  // worked.
+  const outcome = await setCampaignStatus({
+    objects: {
+      campaignId: creative.meta_campaign_id ?? null,
+      adsetId: creative.meta_adset_id ?? null,
+      adId: creative.meta_ad_id ?? null,
+    },
+    token,
+    status: status as "ACTIVE" | "PAUSED",
+    dealershipId,
   });
-  const data = await res.json();
 
-  if (!res.ok || data.error) {
-    const e = data.error ?? {};
-    return NextResponse.json(
-      { error: `${e.message ?? "Meta API error"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}` },
-      { status: 500 }
-    );
+  if (!outcome.ok) {
+    // The local row is NOT updated on failure. Marking it ACTIVE while
+    // Meta says otherwise is the state this whole fix exists to remove.
+    return NextResponse.json({ error: outcome.reason, effectiveStatus: outcome.effectiveStatus ?? null }, { status: 500 });
   }
 
   // Dual-write during the multi-platform transition (migration 140):
@@ -284,5 +296,5 @@ export async function PATCH(
     .select()
     .single();
 
-  return NextResponse.json(updated);
+  return NextResponse.json({ ...updated, effectiveStatus: outcome.effectiveStatus });
 }
