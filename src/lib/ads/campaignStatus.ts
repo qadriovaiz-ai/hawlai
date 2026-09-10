@@ -33,7 +33,7 @@
 // and "accepted but not read back" is its own outcome: unconfirmed.
 
 import { metaLog, metaError } from "@/lib/ads/metaLog";
-import { metaRead, metaWriteIdempotent, metaRetryTiming, describeGraphFailure, waitMs } from "@/lib/ads/metaRead";
+import { metaRead, metaWriteIdempotent, metaRetryTiming, describeGraphFailure, waitMs, type GraphFailure } from "@/lib/ads/metaRead";
 
 export type CampaignObjects = {
   campaignId: string | null;
@@ -77,7 +77,7 @@ const PAUSED_STATES = new Set([
 ]);
 
 /** Says what a not-delivering state means, in words a merchant can act on. */
-function explainEffective(status: string): string {
+export function explainEffective(status: string): string {
   switch (status) {
     case "CAMPAIGN_PAUSED": return "the campaign above it is still paused";
     case "ADSET_PAUSED": return "the ad set above it is still paused";
@@ -116,7 +116,13 @@ export type LevelState = {
 
 export type CampaignState =
   | { ok: true; levels: LevelState[]; ad: LevelState; running: boolean }
-  | { ok: false; reason: string; problem: "missing" | "unreadable" | "mismatch" };
+  | {
+      ok: false;
+      reason: string;
+      problem: "missing" | "unreadable" | "mismatch";
+      /** Meta's own error when unreadable — tells "gone from Meta" (100/33) apart from a hiccup. */
+      error?: GraphFailure;
+    };
 
 const UNREADABLE =
   "I couldn't read this campaign's status from Meta, so I can't tell whether it's running. Nothing was changed — try again in a moment.";
@@ -146,7 +152,7 @@ export async function readCampaignState(
   if (!adId) return { ok: false, reason: "This campaign hasn't been created on Meta yet.", problem: "missing" };
 
   const adRead = await metaRead(adId, "effective_status,status,campaign_id,adset_id", token, { stage: "status.read.ad", dealershipId });
-  if (!adRead.ok) return { ok: false, reason: UNREADABLE, problem: "unreadable" };
+  if (!adRead.ok) return { ok: false, reason: UNREADABLE, problem: "unreadable", error: adRead.error };
   const adNode = adRead.data;
 
   // Required, not optional: Graph always returns the parents when asked.
@@ -168,7 +174,7 @@ export async function readCampaignState(
   for (const [level, id] of [["campaign", campaignId], ["adset", adsetId]] as const) {
     if (!id) continue; // an older row that only stored an ad id
     const read = await metaRead(id, "effective_status,status", token, { stage: `status.read.${level}`, dealershipId });
-    if (!read.ok) return { ok: false, reason: UNREADABLE, problem: "unreadable" };
+    if (!read.ok) return { ok: false, reason: UNREADABLE, problem: "unreadable", error: read.error };
     levels.push({ level, id, status: read.data.status ?? null, effective: read.data.effective_status ?? null });
   }
   const ad: LevelState = { level: "ad", id: adId, status: adNode.status ?? null, effective: adNode.effective_status ?? null };

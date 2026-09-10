@@ -12,6 +12,8 @@
 
 import type { Loaded } from "@/lib/dataState";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { readCampaignState } from "@/lib/ads/campaignStatus";
+import { describeDelivery } from "@/lib/ads/campaignDelivery";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -264,10 +266,11 @@ export async function snapshotCampaignPerformance(supabase: any, dealershipId: s
   const performance = await getCampaignPerformance(supabase, dealershipId);
   if (performance.campaigns.length === 0) return 0;
 
+  const snapshotDate = new Date().toISOString().slice(0, 10);
   const rows = performance.campaigns.map((c) => ({
     dealership_id: dealershipId,
     ad_creative_id: c.id,
-    snapshot_date: new Date().toISOString().slice(0, 10),
+    snapshot_date: snapshotDate,
     headline: c.headline,
     spend: c.spend,
     impressions: c.impressions,
@@ -287,5 +290,59 @@ export async function snapshotCampaignPerformance(supabase: any, dealershipId: s
     console.error("[analytics-agent] snapshotCampaignPerformance error:", error.message);
     return 0;
   }
+
+  // AFTER the snapshot is saved, never inside it: see recordDeliveryStatus.
+  await recordDeliveryStatus(supabase, dealershipId, rows.map((r) => r.ad_creative_id), snapshotDate);
   return rows.length;
+}
+
+/**
+ * Stamp today's snapshots with each campaign's delivery status, so the
+ * history keeps the LAST KNOWN status after a campaign is deleted on
+ * Meta or access is lost.
+ *
+ * A SEPARATE, best-effort write. The columns come from migration 176,
+ * and production has run a migration late before (140): a column in
+ * the upsert above that production lacked would fail the whole
+ * snapshot, every day, silently. Here a failure costs only the status.
+ *
+ * Uses readCampaignState, so "active" means what it means everywhere
+ * else: all three levels delivering, the ids on file matching Meta.
+ */
+async function recordDeliveryStatus(supabase: any, dealershipId: string, adCreativeIds: string[], snapshotDate: string): Promise<void> {
+  const { data: dealership } = await supabase
+    .from("dealerships")
+    .select("fb_page_access_token, fb_page_access_token_encrypted")
+    .eq("id", dealershipId)
+    .maybeSingle();
+  const token = readMetaPageToken(dealership);
+  if (!token || adCreativeIds.length === 0) return;
+
+  const { data: creatives, error } = await supabase
+    .from("ad_creatives")
+    .select("id, meta_campaign_id, meta_adset_id, meta_ad_id")
+    .eq("dealership_id", dealershipId)
+    .in("id", adCreativeIds);
+  if (error || !creatives) return;
+
+  for (const c of creatives) {
+    const delivery = describeDelivery(
+      await readCampaignState(
+        { campaignId: c.meta_campaign_id ?? null, adsetId: c.meta_adset_id ?? null, adId: c.meta_ad_id ?? null },
+        token,
+        dealershipId
+      )
+    );
+    const { error: writeError } = await supabase
+      .from("campaign_performance_history")
+      .update({ delivery_status: delivery.state, delivery_detail: delivery.detail })
+      .eq("ad_creative_id", c.id)
+      .eq("snapshot_date", snapshotDate);
+    if (writeError) {
+      // Most likely migration 176 hasn't been run. The snapshot itself
+      // is already saved; stop rather than fail the same way N times.
+      console.error("[analytics-agent] delivery status not recorded (migration 176 run?):", writeError.message);
+      return;
+    }
+  }
 }

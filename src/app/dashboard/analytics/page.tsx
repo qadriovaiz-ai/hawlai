@@ -166,17 +166,47 @@ export default async function AnalyticsPage({
   // history — this survives even if a campaign is later paused,
   // deleted on Meta, or Facebook access is ever lost, since it's our
   // own stored copy, not a live re-fetch from Meta each time.
-  const campaignTotals = new Map<string, { headline: string; spend: number; leads: number; revenue: number; conversions: number; days: number }>();
+  const campaignTotals = new Map<string, { id: string; headline: string; spend: number; leads: number; revenue: number; conversions: number; days: number; recorded: { state: string; date: string } | null }>();
   for (const row of perfHistory ?? []) {
-    const existing = campaignTotals.get(row.ad_creative_id) ?? { headline: row.headline ?? "Untitled", spend: 0, leads: 0, revenue: 0, conversions: 0, days: 0 };
+    const existing = campaignTotals.get(row.ad_creative_id) ?? { id: row.ad_creative_id, headline: row.headline ?? "Untitled", spend: 0, leads: 0, revenue: 0, conversions: 0, days: 0, recorded: null };
     existing.spend += Number(row.spend ?? 0);
     existing.leads += Number(row.leads ?? 0);
     existing.revenue += Number(row.revenue ?? 0);
     existing.conversions += Number(row.conversions ?? 0);
     existing.days += 1;
+    // The LAST KNOWN delivery status, as recorded on a daily snapshot
+    // (migration 176). perfHistory is newest-first, so the first
+    // definitive one seen is the latest. "unknown" means that day's
+    // check failed, so it is skipped rather than allowed to hide an
+    // earlier real answer. Snapshots from before 176 simply have none.
+    if (!existing.recorded && row.delivery_status && row.delivery_status !== "unknown") {
+      existing.recorded = { state: row.delivery_status, date: row.snapshot_date };
+    }
     campaignTotals.set(row.ad_creative_id, existing);
   }
-  const campaignTotalsList = Array.from(campaignTotals.values()).sort((a, b) => b.spend - a.spend);
+
+  // Meta campaign ids, to cross-reference with Ads Manager, and Hawlai's
+  // own last-recorded status as the Status column's final fallback. The
+  // LIVE status is read by the table itself after the page has drawn,
+  // so Analytics never waits on Meta.
+  const creativeIds = Array.from(campaignTotals.keys());
+  let creatives: { id: string; meta_campaign_id: string | null; meta_status: string | null }[] = [];
+  if (creativeIds.length > 0) {
+    const { data } = await supabase
+      .from("ad_creatives")
+      .select("id, meta_campaign_id, meta_status")
+      .eq("dealership_id", dealershipId)
+      .in("id", creativeIds);
+    creatives = data ?? [];
+  }
+  const creativeById = new Map(creatives.map((c) => [c.id, c]));
+  const campaignTotalsList = Array.from(campaignTotals.values())
+    .map((c) => ({
+      ...c,
+      metaCampaignId: creativeById.get(c.id)?.meta_campaign_id ?? null,
+      localStatus: creativeById.get(c.id)?.meta_status ?? null,
+    }))
+    .sort((a, b) => b.spend - a.spend);
 
   // Aggregate the same permanent history by date (summed across all
   // campaigns) for the time-series charts — same data source as the
@@ -260,7 +290,7 @@ export default async function AnalyticsPage({
           <p className="text-sm font-semibold text-slate-700">Campaign Performance History</p>
         </div>
         <p className="text-xs text-slate-400">
-          Saved permanently in Hawlai — this survives even if a campaign is later paused, deleted on Meta, or Facebook access changes. Updates once a day automatically.
+          Saved permanently in Hawlai — this survives even if a campaign is later paused, deleted on Meta, or Facebook access changes. Updates once a day automatically. Status is checked with Meta when you open this page; if Meta can&apos;t be reached, the last recorded status is shown with its date.
         </p>
         {campaignTotalsList.length === 0 ? (
           <p className="text-sm text-slate-400 py-6 text-center">No history recorded yet — this fills in once a launched campaign has run for at least a day.</p>
