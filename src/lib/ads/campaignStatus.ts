@@ -16,6 +16,16 @@
 // second is what Meta will actually do. Writing the first and reporting
 // success is the same class of failure as an unchecked database error —
 // the call succeeded, the outcome did not happen.
+//
+// AND ONE LEVEL IS NOT THE CAMPAIGN. Chat once told someone a campaign
+// was "already live" while Ads Manager showed it Off. The check read
+// the AD's effective_status alone, for the ad id stored on the row, and
+// never asked whether that ad belonged to the campaign on the row. A
+// hand-repaired row, beside duplicate campaigns left on Meta by
+// launches whose local save failed, can point at an ad that runs under
+// a different campaign. Everything that decides "running" now goes
+// through readCampaignState: all three levels, and the ids on file
+// checked against Meta's own hierarchy.
 
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 
@@ -83,18 +93,115 @@ async function post(node: string, body: Record<string, unknown>, token: string) 
   return data;
 }
 
-/** Ask Meta what it will ACTUALLY do, not what we asked for. */
-export async function readEffectiveStatus(adId: string, token: string): Promise<string | null> {
+/** One Graph read. Null on any failure — never a guessed value. */
+async function readNode(id: string, fields: string, token: string): Promise<Record<string, any> | null> {
   try {
     const res = await fetch(
-      `https://graph.facebook.com/${GRAPH_VERSION}/${adId}?fields=effective_status,status&access_token=${encodeURIComponent(token)}`
+      `https://graph.facebook.com/${GRAPH_VERSION}/${id}?fields=${fields}&access_token=${encodeURIComponent(token)}`
     );
     const data = await res.json();
     if (!res.ok || data.error) return null;
-    return data.effective_status ?? null;
+    return data;
   } catch {
     return null;
   }
+}
+
+/** Ask Meta what the AD will actually do. Prefer readCampaignState: one level is not the campaign. */
+export async function readEffectiveStatus(adId: string, token: string): Promise<string | null> {
+  const data = await readNode(adId, "effective_status,status", token);
+  return data?.effective_status ?? null;
+}
+
+export type LevelState = {
+  level: "campaign" | "adset" | "ad";
+  id: string;
+  /** What was asked for — the Ads Manager toggle. */
+  status: string | null;
+  /** What Meta will actually do. */
+  effective: string | null;
+};
+
+export type CampaignState =
+  | { ok: true; levels: LevelState[]; ad: LevelState; running: boolean }
+  | { ok: false; reason: string };
+
+const UNREADABLE =
+  "I couldn't read this campaign's status from Meta, so I can't tell whether it's running. Nothing was changed — try again in a moment.";
+
+const MISMATCH =
+  "The ad on file for this campaign sits under a different campaign on Meta, so this record doesn't match Ads Manager. I won't switch anything on until it's fixed — it could start the wrong ad.";
+
+/**
+ * Meta's live state for a campaign, at every level, or a refusal.
+ *
+ * THE ONE DEFINITION OF "RUNNING": the campaign, the ad set and the ad
+ * all report effective_status ACTIVE. The activation preview uses it to
+ * decide "already running", and setCampaignStatus uses it to verify an
+ * activation, so the two cannot disagree.
+ *
+ * The ad is read with its parents' ids and they must match the ids on
+ * file. A mismatch is not a detail: it means the row points at objects
+ * from two different campaigns, and switching them on would start an
+ * ad nobody meant to start.
+ */
+export async function readCampaignState(
+  objects: CampaignObjects,
+  token: string,
+  dealershipId?: string
+): Promise<CampaignState> {
+  const { campaignId, adsetId, adId } = objects;
+  if (!adId) return { ok: false, reason: "This campaign hasn't been created on Meta yet." };
+
+  const adNode = await readNode(adId, "effective_status,status,campaign_id,adset_id", token);
+  if (!adNode) {
+    metaError("status.unreadable", { dealership: dealershipId, level: "ad", id: adId });
+    return { ok: false, reason: UNREADABLE };
+  }
+
+  // Required, not optional: Graph always returns the parents when asked.
+  // Missing counts as not matching — an unconfirmed hierarchy is not a
+  // confirmed one.
+  if ((campaignId && adNode.campaign_id !== campaignId) || (adsetId && adNode.adset_id !== adsetId)) {
+    metaError("status.hierarchy_mismatch", {
+      dealership: dealershipId,
+      ad: adId,
+      stored_campaign: campaignId,
+      stored_adset: adsetId,
+      meta_campaign: adNode.campaign_id ?? null,
+      meta_adset: adNode.adset_id ?? null,
+    });
+    return { ok: false, reason: MISMATCH };
+  }
+
+  const levels: LevelState[] = [];
+  for (const [level, id] of [["campaign", campaignId], ["adset", adsetId]] as const) {
+    if (!id) continue; // an older row that only stored an ad id
+    const node = await readNode(id, "effective_status,status", token);
+    if (!node) {
+      metaError("status.unreadable", { dealership: dealershipId, level, id });
+      return { ok: false, reason: UNREADABLE };
+    }
+    levels.push({ level, id, status: node.status ?? null, effective: node.effective_status ?? null });
+  }
+  const ad: LevelState = { level: "ad", id: adId, status: adNode.status ?? null, effective: adNode.effective_status ?? null };
+  levels.push(ad);
+
+  return { ok: true, levels, ad, running: levels.every((l) => l.effective === "ACTIVE") };
+}
+
+/** Why a campaign that should be running is not, in plain words. */
+function whyNotRunning(state: Extract<CampaignState, { ok: true }>): string {
+  // The ad's own effective status carries the reason (CAMPAIGN_PAUSED,
+  // PENDING_REVIEW…). Only if the ad claims ACTIVE while a parent does
+  // not is the parent named directly.
+  if (state.ad.effective !== "ACTIVE") return explainEffective(state.ad.effective ?? "UNKNOWN");
+  const parent = state.levels.find((l) => l.effective !== "ACTIVE");
+  if (!parent) return "Meta reports it as not delivering";
+  const name = parent.level === "adset" ? "ad set" : "campaign";
+  return parent.effective === "PAUSED"
+    ? `the ${name} above it is still paused`
+    : `the ${name} above it reports "${parent.effective ?? "unknown"}"`;
 }
 
 /**
@@ -123,12 +230,18 @@ export async function setCampaignStatus(input: {
 
   if (!adId) return { ok: false, reason: "This campaign hasn't been created on Meta yet." };
 
+  // BEFORE SWITCHING ANYTHING ON: the ids on file must be one real
+  // campaign on Meta. Otherwise this would start the parents of one
+  // campaign and the ad of another. Not done for PAUSE: stopping spend
+  // must never wait on a read, and pausing the wrong ad spends nothing.
+  if (status === "ACTIVE") {
+    const before = await readCampaignState(objects, token, dealershipId);
+    if (!before.ok) return { ok: false, reason: before.reason };
+  }
+
   // Campaign and ad set are optional so an older row that only stored
   // an ad id still works — it just cannot guarantee the parents.
-  const levels: [string, string | null][] =
-    status === "ACTIVE"
-      ? [["campaign", campaignId], ["adset", adsetId], ["ad", adId]]
-      : [["campaign", campaignId], ["adset", adsetId], ["ad", adId]];
+  const levels: [string, string | null][] = [["campaign", campaignId], ["adset", adsetId], ["ad", adId]];
 
   const flipped: string[] = [];
   for (const [level, id] of levels) {
@@ -150,24 +263,32 @@ export async function setCampaignStatus(input: {
 
   // THE VERIFICATION. Every flip above can succeed while the ad still
   // does not deliver — that is precisely what happened before.
-  const effective = await readEffectiveStatus(adId, token);
-  if (!effective) {
+  const after = await readCampaignState(objects, token, dealershipId);
+  if (!after.ok || !after.ad.effective) {
     metaError("status.unverified", { dealership: dealershipId, ad: adId, status });
     return {
       ok: false,
       reason: `The change was sent to Meta but couldn't be confirmed. Check the campaign in Ads Manager before relying on it.`,
     };
   }
+  const effective = after.ad.effective;
 
   // ALLOW-LISTS IN BOTH DIRECTIONS. The first version computed
   // "delivering" as "not in the paused list", so a state Meta adds
-  // tomorrow read as ACTIVE — the test for exactly that caught it,
-  // contradicting this file's own header. Running means Meta says
-  // ACTIVE; paused means Meta says one of the known paused states;
-  // anything else is unconfirmed either way.
-  const wanted = status === "ACTIVE" ? effective === "ACTIVE" : PAUSED_STATES.has(effective);
+  // tomorrow read as ACTIVE — the test for exactly that caught it.
+  // Running means every level says ACTIVE (readCampaignState); paused
+  // means the ad reports one of the known paused states; anything else
+  // is unconfirmed either way.
+  const wanted = status === "ACTIVE" ? after.running : PAUSED_STATES.has(effective);
 
-  metaLog("status.verified", { dealership: dealershipId, ad: adId, requested: status, effective, matched: wanted });
+  metaLog("status.verified", {
+    dealership: dealershipId,
+    ad: adId,
+    requested: status,
+    effective,
+    levels: after.levels.map((l) => `${l.level}:${l.effective}`).join(","),
+    matched: wanted,
+  });
 
   if (!wanted) {
     return {
@@ -175,7 +296,7 @@ export async function setCampaignStatus(input: {
       effectiveStatus: effective,
       reason:
         status === "ACTIVE"
-          ? `Meta accepted the change but the ad still isn't running — ${explainEffective(effective)}. Nothing is being spent.`
+          ? `Meta accepted the change but the ad still isn't running — ${whyNotRunning(after)}. Nothing is being spent.`
           : `Meta accepted the change but the ad still shows as running (${effective}). Check it in Ads Manager.`,
     };
   }

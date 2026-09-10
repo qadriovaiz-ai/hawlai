@@ -32,7 +32,7 @@ import {
 import { publishLog, publishError } from "@/lib/publish/log";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
-import { setCampaignStatus, readEffectiveStatus } from "@/lib/ads/campaignStatus";
+import { setCampaignStatus, readCampaignState } from "@/lib/ads/campaignStatus";
 import { readCampaignBudget, describeBudget } from "@/lib/ads/campaignBudget";
 import { resolveAdDestination, type ResolvedDestination } from "@/lib/ads/destination";
 import {
@@ -126,8 +126,23 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
       return { ok: false, reason: "That campaign hasn't been created on Meta yet, so there's nothing to start." };
     }
 
-    const effective = await readEffectiveStatus(ad.meta_ad_id, token);
-    if (effective === "ACTIVE") return { ok: false, reason: `"${ad.headline}" is already running on Meta.` };
+    // Meta's live state at ALL THREE levels, with the ids on file checked
+    // against Meta's own hierarchy. This used to read the AD alone and
+    // call the campaign "already running" if that one said ACTIVE — and
+    // chat told someone their campaign was live while Ads Manager showed
+    // it Off. "Running" is decided by readCampaignState, the same check
+    // an activation's success is verified with, so they cannot disagree.
+    const state = await readCampaignState(
+      { campaignId: ad.meta_campaign_id ?? null, adsetId: ad.meta_adset_id ?? null, adId: ad.meta_ad_id },
+      token,
+      action.dealershipId
+    );
+    if (!state.ok) return { ok: false, reason: state.reason };
+    if (state.running) {
+      return { ok: false, reason: `"${ad.headline}" is already running on Meta — the campaign, ad set and ad all report ACTIVE.` };
+    }
+    // What Ads Manager shows on the campaign row.
+    const effective = (state.levels.find((l) => l.level === "campaign") ?? state.ad).effective;
 
     // The budget Meta will spend against, read from META. Never from
     // ad_creatives.daily_budget: that is NULL on every production row
@@ -158,7 +173,7 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
           resolutionPath: "named_in_chat",
         },
         changes: [
-          { field: "Status on Meta", before: effective ?? ad.meta_status ?? "PAUSED", after: "ACTIVE" },
+          { field: "Status on Meta", before: effective ?? "unknown", after: "ACTIVE" },
           { field: budget.kind === "daily" ? "Daily budget" : "Lifetime budget", before: null, after: spend },
         ],
         warnings: [

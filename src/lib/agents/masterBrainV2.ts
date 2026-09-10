@@ -394,7 +394,7 @@ const TOOLS = [
   {
     name: "activate_meta_campaign",
     description:
-      "Turn ON a paused Meta (Facebook/Instagram) campaign so it starts delivering and spending. USE THIS when someone asks to activate, start, go live, run, resume or switch on a campaign — you CAN do this from chat. It shows an approval card with Approve / Reject buttons INLINE IN THE CHAT and nothing spends until they approve. It switches on the campaign, ad set and ad, then confirms with Meta that the ad is genuinely delivering before saying it worked. NEVER say the go-live switch is only on Meta's platform, and NEVER send them to Ads Manager to turn a campaign on. If it's unclear which campaign they mean, the tool returns a numbered list — show it and call again with the campaign_id they pick.",
+      "Turn ON a paused Meta (Facebook/Instagram) campaign so it starts delivering and spending. USE THIS when someone asks to activate, start, go live, run, resume or switch on a campaign — you CAN do this from chat. ALWAYS call it to find out whether a campaign is running: it reads Meta live. NEVER tell someone a campaign is already live from a campaign list, performance numbers, the dashboard or an earlier message — those hold the last RECORDED status, which can be wrong. It shows an approval card with Approve / Reject buttons INLINE IN THE CHAT and nothing spends until they approve. It switches on the campaign, ad set and ad, then confirms with Meta that the ad is genuinely delivering before saying it worked. NEVER say the go-live switch is only on Meta's platform, and NEVER send them to Ads Manager to turn a campaign on. If it's unclear which campaign they mean, the tool returns a numbered list — show it and call again with the campaign_id they pick.",
     input_schema: {
       type: "object",
       properties: {
@@ -2207,7 +2207,9 @@ export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, s
         campaign_id: c.id,
         headline: c.headline,
         daily_budget: c.daily_budget,
-        status: c.meta_status,
+        // The local column, NOT Meta's live state — named so the model
+        // cannot mistake it for "is running".
+        last_recorded_status: c.meta_status,
         image_url: c.generated_image_url,
       })),
     };
@@ -2465,7 +2467,7 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
               heading: `${(result.candidates ?? []).length} campaigns`,
               items: (result.candidates ?? []).map((c: any, i: number) => ({
                 label: `${i + 1}. ${c.headline ?? "Untitled"}`,
-                note: [c.daily_budget ? `${c.daily_budget}/day` : null, c.status ? plainStatus(c.status) : null].filter(Boolean).join(" · "),
+                note: [c.daily_budget ? `${c.daily_budget}/day` : null, (c.last_recorded_status ?? c.status) ? `last recorded ${plainStatus(c.last_recorded_status ?? c.status)}` : null].filter(Boolean).join(" · "),
               })),
             },
           ],
@@ -2877,7 +2879,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
 - You CAN launch Meta (Facebook/Instagram) ad campaigns from this chat — use launch_meta_campaign. It writes the copy, generates the creative, and shows an approval card with buttons right here; everything is created PAUSED so approving spends nothing, and activation is a separate step afterwards. NEVER tell someone to go to Ads Manager or a Paid Ads page to launch a Meta ad — that instruction was written when this tool did not exist, and repeating it now sends them away from a card that can do the job. Other ad platforms (Google, LinkedIn, Pinterest, Snapchat) still only have planning tools; for those, say plainly that you can draft the plan but cannot launch it yet.
-- You CAN also start and pause Meta campaigns from this chat: activate_meta_campaign shows an approval card and only reports success once Meta confirms the ad is actually delivering; pause_meta_campaign stops spend immediately with no approval. NEVER say the go-live switch is only on Meta's platform, and NEVER send them to Ads Manager to turn a campaign on or off — that is false; you have both tools.
+- You CAN also start and pause Meta campaigns from this chat: activate_meta_campaign shows an approval card and only reports success once Meta confirms the ad is actually delivering; pause_meta_campaign stops spend immediately with no approval. NEVER say the go-live switch is only on Meta's platform, and NEVER send them to Ads Manager to turn a campaign on or off — that is false; you have both tools. Whether a campaign is running is ONLY known from these tools, which read Meta live: never say a campaign is already live (or off) based on a campaign list, performance data, the dashboard or an earlier message — call activate_meta_campaign and report what it returns.
 - Some actions render an approval card with buttons directly in the chat (propose_price_change is one). For those, NEVER add "sent to Approvals", "review it on the Approvals page", or any other instruction to go elsewhere — the buttons are in the same message, and pointing at a page contradicts what they are looking at. Say what will change and let the card do the rest.
 - If the person wants to change the budget or targeting on a campaign that's already launched, use propose_campaign_budget_change / propose_campaign_targeting_change — these send the request to the Approvals queue rather than changing anything directly, so use them instead of just telling the person to go do it manually.
 - Be conversational and concise — you're texting with a business owner, not writing a report. Don't dump raw JSON at them, and don't enumerate a tool's list/array results (keywords, suggestions, checklist items, etc.) in your text either — those already render as a proper card right under your reply. Just say how many you found and the one-line takeaway (e.g. "Found 10 competitor keywords, split evenly between research and buy-intent — see the card below"), never spell out each item's fields as key: value text. EXCEPTION — a list the person has to CHOOSE FROM is not a result, it is a question, and you MUST write it out as a numbered list in your text. When a tool returns needs_clarification with candidates (propose_price_change does this), number them 1., 2., 3. and give each one its title, variant and current price, then ask which number they want. Summarising it as "I found 3 matches" is useless: they cannot answer without seeing the options, and "the second one" only means something if you numbered them. Concise doesn't mean shallow — a sharp two-sentence read of the situation beats a bland five-paragraph one.

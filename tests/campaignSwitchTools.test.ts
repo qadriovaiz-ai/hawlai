@@ -119,6 +119,8 @@ describe("the tools exist and do not claim a false limit", () => {
     expect(prompt).toMatch(/activate_meta_campaign/);
     expect(prompt).toMatch(/pause_meta_campaign/);
     expect(prompt).toMatch(/NEVER say the go-live switch is only on Meta's platform/);
+    // Chat once said "already live" while Ads Manager showed Off.
+    expect(prompt).toMatch(/Whether a campaign is running is ONLY known from these tools/);
   });
 });
 
@@ -148,7 +150,7 @@ describe("the Meta module runs activation for real", () => {
       if (init?.method === "POST") { posts.push(String(url).split("/").pop()!); return { ok: true, status: 200, json: async () => ({ success: true }) }; }
       // One answer for every read: the ad reads effective_status, the
       // ad set reads its budget (₹100/day, in paise, as Meta returns it).
-      return { ok: true, status: 200, json: async () => ({ effective_status: effective, daily_budget: "10000" }) };
+      return { ok: true, status: 200, json: async () => ({ effective_status: effective, status: effective === "ACTIVE" ? "ACTIVE" : "PAUSED", campaign_id: "C", adset_id: "S", daily_budget: "10000" }) };
     }));
     return posts;
   }

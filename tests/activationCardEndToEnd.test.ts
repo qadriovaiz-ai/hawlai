@@ -167,7 +167,17 @@ const EXPIRED_TOKEN = {
 
 type Node = Row | "expired";
 
-function graph(opts: { adset?: Node; campaign?: Node; effective?: string }) {
+/**
+ * Each level of a launched, never-started campaign, as Graph reports it
+ * when asked for effective_status,status (and, for the ad, its parents).
+ */
+const PAUSED_ON_META: Record<"campaign" | "adset" | "ad", Node> = {
+  campaign: { status: "PAUSED", effective_status: "PAUSED" },
+  adset: { status: "PAUSED", effective_status: "CAMPAIGN_PAUSED" },
+  ad: { status: "PAUSED", effective_status: "CAMPAIGN_PAUSED", campaign_id: CAMPAIGN, adset_id: ADSET },
+};
+
+function graph(opts: { adset?: Node; campaign?: Node; state?: Partial<typeof PAUSED_ON_META> }) {
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => {
     const u = new URL(url);
@@ -179,7 +189,13 @@ function graph(opts: { adset?: Node; campaign?: Node; effective?: string }) {
 
     if (method === "POST") return reply(200, { success: true });
     if (fields.includes("effective_status")) {
-      return reply(200, { effective_status: opts.effective ?? "CAMPAIGN_PAUSED", status: "PAUSED", id: node });
+      const state = { ...PAUSED_ON_META, ...(opts.state ?? {}) };
+      const level = node === CAMPAIGN ? state.campaign : node === ADSET ? state.adset : node === AD ? state.ad : undefined;
+      if (level === undefined) {
+        return reply(400, { error: { message: "Unsupported get request. Object does not exist.", type: "GraphMethodException", code: 100 } });
+      }
+      if (level === "expired") return reply(400, EXPIRED_TOKEN);
+      return reply(200, { id: node, ...level });
     }
     if (fields.includes("daily_budget")) {
       const src = node === ADSET ? opts.adset : node === CAMPAIGN ? opts.campaign : undefined;
@@ -421,5 +437,109 @@ describe("a rejection never rewrites what already happened", () => {
     );
     expect(res.status).toBe(200);
     expect(action.status).toBe("executed");
+  });
+});
+
+describe("'already running' is said only when Meta says every level is delivering", () => {
+  // THE REPORTED CASE. After adding funds, "lavender candle wala campaign
+  // activate karo" got "pehle se live chal raha hai Meta pe" — while
+  // Ads Manager, freshly refreshed, showed the campaign Off with ₹0.00
+  // spent. The check read the ad alone.
+
+  it("an earlier failed attempt left the ad on under a paused campaign → it offers to start, never 'already live'", async () => {
+    // The old dashboard button switched the ad alone and wrote
+    // meta_status ACTIVE locally — so the local column AND the ad's own
+    // status both say ACTIVE, while the campaign is off.
+    store.rows("ad_creatives")[0].meta_status = "ACTIVE";
+    graph({
+      adset: ADSET_100_A_DAY, campaign: {},
+      state: { ad: { status: "ACTIVE", effective_status: "CAMPAIGN_PAUSED", campaign_id: CAMPAIGN, adset_id: ADSET } },
+    });
+    const { result, card } = await askToActivate();
+
+    expect(result.error).toBeUndefined();
+    expect(JSON.stringify(result)).not.toMatch(/already running/i);
+    expect(card!.approval?.id).toBeTruthy();
+    expect(card!.fields!.find((f: any) => f.label === "Right now")!.value).toBe("paused");
+  });
+
+  it("the ad on file runs under a DIFFERENT campaign → refuses; never 'already live', no card", async () => {
+    // A hand-repaired row beside duplicate campaigns from failed launches.
+    graph({
+      adset: ADSET_100_A_DAY, campaign: {},
+      state: { ad: { status: "ACTIVE", effective_status: "ACTIVE", campaign_id: "120254999999999999", adset_id: "120254999999999998" } },
+    });
+    const { result, card } = await askToActivate();
+
+    expect(card).toBeNull();
+    expect(result.error).toMatch(/different campaign/i);
+    expect(result.error).not.toMatch(/already running/i);
+    expect(store.rows("pending_approvals")).toEqual([]);
+  });
+
+  it("campaign on, ad set off → not running; it offers to start", async () => {
+    graph({
+      adset: ADSET_100_A_DAY, campaign: {},
+      state: {
+        campaign: { status: "ACTIVE", effective_status: "ACTIVE" },
+        adset: { status: "PAUSED", effective_status: "PAUSED" },
+        ad: { status: "ACTIVE", effective_status: "ADSET_PAUSED", campaign_id: CAMPAIGN, adset_id: ADSET },
+      },
+    });
+    const { card } = await askToActivate();
+    expect(card!.approval?.id).toBeTruthy();
+  });
+
+  it("all three genuinely ACTIVE → it says so, and raises nothing", async () => {
+    graph({
+      adset: ADSET_100_A_DAY, campaign: {},
+      state: {
+        campaign: { status: "ACTIVE", effective_status: "ACTIVE" },
+        adset: { status: "ACTIVE", effective_status: "ACTIVE" },
+        ad: { status: "ACTIVE", effective_status: "ACTIVE", campaign_id: CAMPAIGN, adset_id: ADSET },
+      },
+    });
+    const { result, card } = await askToActivate();
+    expect(card).toBeNull();
+    expect(result.error).toMatch(/already running/i);
+    expect(store.rows("pending_approvals")).toEqual([]);
+  });
+
+  it("status unreadable → says so; neither claims live nor raises a card", async () => {
+    graph({ adset: ADSET_100_A_DAY, campaign: {}, state: { campaign: "expired" } });
+    const { result, card } = await askToActivate();
+    expect(card).toBeNull();
+    expect(result.error).toMatch(/couldn't read this campaign's status/i);
+    expect(result.error).not.toMatch(/already running/i);
+  });
+
+  it("the ad alone reporting ACTIVE is not 'already running' — the campaign above it decides too", async () => {
+    // The exact old check: it read the ad and nothing else. Pinned with
+    // matching ids, so only the "every level" rule can make this pass.
+    graph({
+      adset: ADSET_100_A_DAY, campaign: {},
+      state: {
+        campaign: { status: "PAUSED", effective_status: "PAUSED" },
+        adset: { status: "ACTIVE", effective_status: "CAMPAIGN_PAUSED" },
+        ad: { status: "ACTIVE", effective_status: "ACTIVE", campaign_id: CAMPAIGN, adset_id: ADSET },
+      },
+    });
+    const { result, card } = await askToActivate();
+    expect(JSON.stringify(result)).not.toMatch(/already running/i);
+    expect(card!.approval?.id).toBeTruthy();
+    expect(card!.fields!.find((f: any) => f.label === "Right now")!.value).toBe("paused");
+  });
+
+  it("the picker labels the local status as last recorded, not live", async () => {
+    // Two campaigns, no clear match: the model gets a list. Its status
+    // is the local column, and must not read as "is running".
+    store.rows("ad_creatives").push({ ...store.rows("ad_creatives")[0], id: "row-2", headline: "Diwali diyas", plan_json: { car_type: "Diya set" }, meta_status: "ACTIVE" });
+    graph({ adset: ADSET_100_A_DAY, campaign: {} });
+    const result = await switchMetaCampaign("activate", { id: DEALERSHIP }, store, { campaign_description: "campaign activate karo" });
+    expect(result.needs_clarification).toBe(true);
+    expect(result.candidates![0]).toHaveProperty("last_recorded_status");
+    expect(result.candidates![0]).not.toHaveProperty("status");
+    const card = extractArtifact("activate_meta_campaign", {}, result)!;
+    expect(card.groups![0].items.map((i: any) => i.note).join(" ")).toMatch(/last recorded/);
   });
 });

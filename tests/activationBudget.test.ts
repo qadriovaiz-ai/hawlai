@@ -61,7 +61,8 @@ function meta(budgets: Budgets, effective = "CAMPAIGN_PAUSED") {
       if (b === "error") return { ok: false, status: 400, json: async () => ({ error: { message: "Unsupported get request" } }) };
       return { ok: true, status: 200, json: async () => ({ id: node, ...(b ?? {}) }) };
     }
-    return { ok: true, status: 200, json: async () => ({ effective_status: effective }) };
+    // Every level answers; the ad names its parents, as Graph does.
+    return { ok: true, status: 200, json: async () => ({ id: node, effective_status: effective, status: effective === "ACTIVE" ? "ACTIVE" : "PAUSED", campaign_id: "C", adset_id: "S" }) };
   }));
   return posts;
 }
