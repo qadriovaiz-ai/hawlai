@@ -12,7 +12,9 @@
 export type CampaignRow = {
   id: string;
   headline: string | null;
+  /** The product, read from plan_json.car_type — there is no such column. */
   car_type?: string | null;
+  body_copy?: string | null;
   daily_budget?: number | null;
   meta_status?: string | null;
   meta_campaign_id?: string | null;
@@ -29,6 +31,29 @@ export type CampaignResolution =
 
 function norm(s: string | null | undefined): string {
   return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Words that say what to DO, or are grammar, not which campaign. People
+// describe campaigns in Hinglish and by product, not by headline:
+// "lavender candle wala campaign activate karo" has to match on
+// "lavender" and "candle" alone. The first version compared the whole
+// phrase to the headline, so "lavender candle wala" never matched
+// "Ghar ko do lavender ki shanti".
+const FILLER = new Set([
+  "campaign", "campaigns", "wala", "wali", "wale", "vala", "vali", "vale",
+  "karo", "kardo", "karna", "karde", "kar", "hai", "haan", "please", "plz",
+  "the", "and", "for", "that", "this", "one", "mera", "meri", "mere", "apna", "apni",
+  "activate", "start", "resume", "chalu", "chala", "chalao", "run", "live", "turn",
+  "pause", "stop", "band", "off", "halt", "kill",
+  "advert", "ads",
+]);
+
+function significantWords(s: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  for (const w of norm(s).split(/[^\p{L}\p{N}]+/u)) {
+    if (w.length >= 3 && !FILLER.has(w)) seen.add(w);
+  }
+  return [...seen];
 }
 
 export function resolveCampaign(
@@ -48,15 +73,22 @@ export function resolveCampaign(
 
   if (rows.length === 1) return { status: "resolved", campaign: rows[0] };
 
-  const phrase = norm(opts.description);
-  if (phrase) {
-    const matches = rows.filter((r) => {
-      const h = norm(r.headline);
-      const t = norm(r.car_type);
-      return (h && (h.includes(phrase) || phrase.includes(h))) || (t && (t.includes(phrase) || phrase.includes(t)));
+  // Score each campaign by how many of their words it contains. Substring
+  // on purpose, so "candle" finds "candles". Only a SINGLE top scorer
+  // resolves; a tie is a question, never a pick. Nothing is spent on a
+  // resolve either — activation still shows the campaign on an approval
+  // card first.
+  const words = significantWords(opts.description);
+  if (words.length > 0) {
+    const scored = rows.map((r) => {
+      const text = norm([r.headline, r.car_type, r.body_copy].filter(Boolean).join(" "));
+      return { r, score: words.filter((w) => text.includes(w)).length };
     });
-    if (matches.length === 1) return { status: "resolved", campaign: matches[0] };
-    if (matches.length > 1) return { status: "ambiguous", candidates: matches };
+    const best = Math.max(...scored.map((s) => s.score));
+    if (best > 0) {
+      const top = scored.filter((s) => s.score === best).map((s) => s.r);
+      return top.length === 1 ? { status: "resolved", campaign: top[0] } : { status: "ambiguous", candidates: top };
+    }
   }
 
   return { status: "ambiguous", candidates: rows };

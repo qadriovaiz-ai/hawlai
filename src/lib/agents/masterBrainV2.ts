@@ -1526,12 +1526,17 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
 
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change": {
-      const { data: campaigns } = await supabase
+      // car_type is NOT a column — it lives in plan_json. Selecting it
+      // failed the whole query, and reading only `data` turned that
+      // failure into "You don't have any launched campaigns yet."
+      const { data: rawCampaigns, error: campaignsErr } = await supabase
         .from("ad_creatives")
-        .select("id, headline, car_type, targeting_city, daily_budget, meta_status, meta_ad_id")
+        .select("id, headline, plan_json, targeting_city, daily_budget, meta_status, meta_ad_id")
         .eq("dealership_id", ctx.id)
         .not("meta_ad_id", "is", null);
-      const campaign = await matchCampaign(campaigns ?? [], input.campaign_description, { supabase, dealershipId: ctx.id });
+      if (campaignsErr) return campaignsUnreadable(ctx.id, campaignsErr);
+      const campaigns = (rawCampaigns ?? []).map((c: any) => ({ ...c, car_type: c.plan_json?.car_type ?? null }));
+      const campaign = await matchCampaign(campaigns, input.campaign_description, { supabase, dealershipId: ctx.id });
       if (!campaign) {
         return { error: (campaigns ?? []).length === 0 ? "You don't have any launched campaigns yet." : "Couldn't tell which campaign you meant — can you name it more specifically?" };
       }
@@ -2138,7 +2143,23 @@ function extractDraft(result: Record<string, any>, fallbackHeading: string): { h
  * confirm against Meta's effective_status through setCampaignStatus
  * rather than trusting what was sent.
  */
-async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, supabase: any, input: any) {
+/**
+ * The campaign list couldn't be read. Said as exactly that: reporting
+ * it as "you have no campaigns" is false, and invites the model to
+ * offer launching a duplicate of one that is already on Meta.
+ */
+async function campaignsUnreadable(dealershipId: string, err: { message?: string; code?: string }) {
+  const { metaError } = await import("../ads/metaLog");
+  metaError("chat.campaigns_unreadable", { dealership: dealershipId, code: err?.code, detail: err?.message });
+  return {
+    error:
+      "I couldn't load your campaigns just now, so I can't see which ones exist. Nothing was changed. This is a fault on our side, not a missing campaign — do NOT offer to create a new campaign; ask them to try again in a moment.",
+  };
+}
+
+// Exported for tests: the lookup has to be exercised against a
+// database that rejects unknown columns, which is how this broke.
+export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, supabase: any, input: any) {
   const { readMetaPageToken: readTok } = await import("../crypto/oauthSecrets");
   const { resolveCampaign } = await import("../ads/resolveCampaign");
   const { metaLog: mlog } = await import("../ads/metaLog");
@@ -2158,15 +2179,23 @@ async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, supabase
   // has them paused. Filtering on the column would hide exactly the
   // campaigns that most need fixing. Meta's own effective_status is
   // checked downstream.
-  const { data: rows } = await supabase
+  //
+  // The product name is read from plan_json: there is no car_type
+  // column. Selecting one made PostgREST reject the query, and because
+  // only `data` was read, a real campaign became "no campaigns" and chat
+  // offered to launch a duplicate. A failed read is now reported as a
+  // failed read — never as absence.
+  const { data: rawRows, error: rowsErr } = await supabase
     .from("ad_creatives")
-    .select("id, headline, car_type, daily_budget, meta_status, meta_campaign_id, meta_adset_id, meta_ad_id, generated_image_url")
+    .select("id, headline, body_copy, plan_json, daily_budget, meta_status, meta_campaign_id, meta_adset_id, meta_ad_id, generated_image_url")
     .eq("dealership_id", ctx.id)
     .eq("status", "launched")
     .not("meta_ad_id", "is", null)
     .order("created_at", { ascending: false });
+  if (rowsErr) return campaignsUnreadable(ctx.id, rowsErr);
+  const rows = (rawRows ?? []).map((r: any) => ({ ...r, car_type: r.plan_json?.car_type ?? null }));
 
-  const res = resolveCampaign(rows ?? [], { campaignId: input?.campaign_id, description: input?.campaign_description });
+  const res = resolveCampaign(rows, { campaignId: input?.campaign_id, description: input?.campaign_description });
   if (res.status === "none") return { error: "You don't have any campaigns on Meta yet — ask me to launch one first." };
   if (res.status === "invalid_id") return { error: "That campaign choice doesn't match any of your campaigns — show the list again and let them pick." };
   if (res.status === "ambiguous") {
