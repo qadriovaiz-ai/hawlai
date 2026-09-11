@@ -1,12 +1,17 @@
-// Landing-page-specific CRO. The existing croAgent.ts covers general
-// ad-campaign conversion signals (SEO page) — this covers the actual
-// landing page: its real headline/offer copy and its REAL visitor
-// numbers (views, chat opens, form submits) from page_events, so
-// suggestions are grounded in what's actually happening on this
-// specific page, not generic CRO advice.
+// Website CRO suggestions, built from the real live site and checked
+// against it.
+//
+// Suggestions used to be generated from the landing_pages record — empty
+// for anyone who built their site with the Website Builder — and the
+// prompt invited "social proof" with nothing to base it on. The result
+// told a one-order candle business to publish "Loved by 500+ homes
+// across India". Now: the model is given only verified facts
+// (siteFacts.ts) and truth rules, and every suggestion is checked
+// against those facts before anyone sees it.
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { formatFactsForPrompt, scrubCroOutput, CRO_TRUTH_RULES, type CroFacts } from "../cro/siteFacts";
 
 export interface CroTaskMeta {
   key: string;
@@ -20,60 +25,22 @@ export const CRO_TASKS: CroTaskMeta[] = [
   { key: "ux", label: "UX Suggestions" },
 ];
 
-interface PageContext {
-  headline?: string | null;
-  subheadline?: string | null;
-  offerText?: string | null;
-  views: number;
-  chatOpens: number;
-  formSubmits: number;
-  orders?: number;
-  conversionRate?: number | null; // orders / views, only computed with enough traffic to be meaningful
-  cartAbandonmentRate?: number | null; // abandoned carts / (abandoned carts + orders)
-}
-
 export async function generateCroSuggestions(
   taskKey: string,
-  dealershipName: string,
-  businessCategory: string,
-  page: PageContext,
+  facts: CroFacts,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; removed?: string[] }> {
   const meta = CRO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
   const fallback = { output: { text: "Couldn't generate suggestions right now — try again shortly." }, _fallback: true };
 
-  const conversionRate = page.views > 0 ? ((page.formSubmits / page.views) * 100).toFixed(1) : null;
-  const engagementRate = page.views > 0 ? (((page.chatOpens + page.formSubmits) / page.views) * 100).toFixed(1) : null;
-
-  const realCommerceContext = (page.orders !== undefined)
-    ? `\nReal purchase data (last 30 days): ${page.orders} orders. ${
-        page.conversionRate !== null && page.conversionRate !== undefined
-          ? `View-to-order conversion: ${page.conversionRate}%.`
-          : "(Not enough traffic yet to compute a reliable view-to-order conversion rate.)"
-      } ${
-        page.cartAbandonmentRate !== null && page.cartAbandonmentRate !== undefined
-          ? `Cart abandonment rate: ${page.cartAbandonmentRate}% — this is the real signal for whether the issue is getting people to add to cart, or getting them through checkout.`
-          : ""
-      }`
-    : "";
-
-  const pageContext = `Current landing page:
-Headline: ${page.headline ?? "(not set)"}
-Subheadline: ${page.subheadline ?? "(not set)"}
-Offer text: ${page.offerText ?? "(not set)"}
-
-Real visitor data (last 30 days): ${page.views} views, ${page.chatOpens} chat opens, ${page.formSubmits} leads captured.${realCommerceContext}
-${conversionRate ? `Conversion rate (view → lead): ${conversionRate}%` : "Not enough traffic yet to calculate a conversion rate."}
-${engagementRate ? `Engagement rate (view → any interaction): ${engagementRate}%` : ""}`;
-
   const instructions: Record<string, string> = {
-    landing_page: `Suggest 4-5 specific improvements to this landing page's headline, subheadline, and offer copy. Return {"suggestions": [{"issue": "...", "fix": "...", "reasoning": "..."}]}. If conversion data is available, reference it directly (e.g. "with only a X% conversion rate, the headline may not be..."); if not, base suggestions on copywriting best practice for this business type.`,
-    cta: `Suggest 5 alternative call-to-action button/headline phrasings for this landing page, each with a different angle (urgency, curiosity, value, social proof, direct offer). Return {"ctaOptions": [{"text": "...", "angle": "..."}]}.`,
-    form: `Review the lead capture form (name, phone, and one optional interest field) for this business type and suggest concrete improvements — field order, what to make optional vs required, microcopy, trust signals near the submit button. Return {"suggestions": [{"issue": "...", "fix": "..."}]}. Note: this form is the final conversion action on this page (there's no separate checkout flow), so form friction directly affects conversion rate.`,
-    ux: `Suggest 5 UX improvements for this landing page relevant to a ${businessCategory} business — layout, trust signals, mobile experience, page speed considerations, visual hierarchy. Return {"suggestions": [{"issue": "...", "fix": "..."}]}.`,
+    landing_page: `Suggest 4-5 specific improvements to the home page's headline, supporting copy and call to action. Return {"suggestions": [{"issue": "...", "fix": "...", "reasoning": "..."}]}. Refer to the real headline, copy and numbers above where they matter; if traffic is too low to judge, say so.`,
+    cta: `Suggest 5 alternative call-to-action phrasings for the site, each with a different angle (urgency, curiosity, value, trust, direct offer). Any offer in them must be one listed in the facts. Return {"ctaOptions": [{"text": "...", "angle": "..."}]}.`,
+    form: `Review the lead capture form (name, phone, and one optional interest field) and suggest concrete improvements — field order, what to make optional vs required, microcopy, and trust signals near the submit button that are TRUE per the facts. Return {"suggestions": [{"issue": "...", "fix": "..."}]}.`,
+    ux: `Suggest 5 UX improvements for this site relevant to a ${facts.category} business — layout, mobile experience, page speed, visual hierarchy, and trust signals that are TRUE per the facts. Return {"suggestions": [{"issue": "...", "fix": "..."}]}.`,
   };
 
   try {
@@ -83,17 +50,21 @@ ${engagementRate ? `Engagement rate (view → any interaction): ${engagementRate
       body: JSON.stringify({
         model: getModel("standard"),
         max_tokens: 1800,
-        messages: [{
-          role: "user",
-          content: `You are a conversion rate optimization specialist reviewing the real landing page for "${dealershipName}", a ${businessCategory} business in India.${groundingContext ?? ""}
+        messages: [
+          {
+            role: "user",
+            content: `You are a conversion rate optimization specialist reviewing the real, live website of "${facts.businessName}", a ${facts.category} business in India.${groundingContext ?? ""}
 
-${pageContext}
+${formatFactsForPrompt(facts)}
+
+${CRO_TRUTH_RULES}
 
 Task: ${meta.label}
 ${instructions[taskKey]}
 
-Return JSON only, no markdown, no preamble. Be specific to this page's actual content and real numbers above — never generic filler advice.`,
-        }],
+Return JSON only, no markdown, no preamble. Be specific to this business's actual site and real numbers — never generic filler.`,
+          },
+        ],
       }),
     });
     if (!response.ok) return fallback;
@@ -105,7 +76,13 @@ Return JSON only, no markdown, no preamble. Be specific to this page's actual co
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    return { output: JSON.parse(clean) };
+
+    // The rules above are instructions; this is the check. Anything that
+    // still claims something the facts don't support is removed, and
+    // the output says so.
+    const { output, removed } = scrubCroOutput(JSON.parse(clean), facts);
+    if (removed.length) console.warn("[cro-agent-v2] removed unsupported claims:", removed.join(" | "));
+    return { output, removed };
   } catch (err: any) {
     console.error("[cro-agent-v2] error:", err.message);
     return fallback;

@@ -809,16 +809,11 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return output;
     }
     case "generate_cro_suggestions": {
-      const { data: page } = await supabase.from("landing_pages").select("headline, subheadline, offer_text").eq("dealership_id", ctx.id).maybeSingle();
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: events } = await supabase.from("page_events").select("event_type").eq("dealership_id", ctx.id).gte("created_at", thirtyDaysAgo);
-      const all = events ?? [];
-      const { output, _fallback } = await generateCroSuggestions(input.taskType, ctx.name, ctx.category, {
-        headline: page?.headline, subheadline: page?.subheadline, offerText: page?.offer_text,
-        views: all.filter((e: any) => e.event_type === "view").length,
-        chatOpens: all.filter((e: any) => e.event_type === "chat_open").length,
-        formSubmits: all.filter((e: any) => e.event_type === "form_submit").length,
-      }, { supabase, dealershipId: ctx.id }, groundingContext);
+      // Same facts and same checks as the CRO page (siteFacts.ts): the
+      // live site, real products/offers/shipping and real counts.
+      const { gatherCroFacts } = await import("../cro/siteFacts");
+      const facts = await gatherCroFacts(supabase, ctx.id);
+      const { output, _fallback } = await generateCroSuggestions(input.taskType, facts, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "cro_items", { task_type: input.taskType, output });
       return output;
     }

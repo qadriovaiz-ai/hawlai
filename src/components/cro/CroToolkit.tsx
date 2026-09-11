@@ -172,10 +172,15 @@ export default function CroToolkit() {
 }
 
 function OutputRenderer({ output }: { output: any }) {
+  // Set when suggestions were removed for relying on details Hawlai
+  // couldn't verify (siteFacts.ts) — said out loud, not silently hidden.
+  const note = typeof output?.note === "string" ? output.note : null;
   const arrayKey = Object.keys(output).find((k) => Array.isArray(output[k]));
   if (arrayKey) {
     return (
       <div className="space-y-1.5">
+        {note && <p className="text-xs text-amber-500">{note}</p>}
+        {output[arrayKey].length === 0 && <p className="text-sm text-slate-500">No suggestions could be made from verified details alone.</p>}
         {output[arrayKey].map((item: any, i: number) => (
           <div key={i} className="bg-slate-200 rounded-lg p-2.5 text-sm text-slate-700">
             {typeof item === "string" ? item : (
