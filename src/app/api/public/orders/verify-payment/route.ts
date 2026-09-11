@@ -2,8 +2,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { applyOrderSideEffects } from "@/lib/orderFulfillment";
-import { verifyRazorpaySignature } from "@/lib/payments/razorpay";
-import { razorpaySecret, RAZORPAY_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { verifyRazorpaySignature, fetchRazorpayOrder } from "@/lib/payments/razorpay";
+import { loadRazorpayConnection } from "@/lib/payments/razorpayConnection";
 import { resolveOrderAttribution } from "@/lib/storefront/resolveAttribution";
 
 // Confirms a Razorpay payment and only then commits the order. The
@@ -47,13 +47,36 @@ export async function POST(request: Request) {
   if (!pricing.ok) return NextResponse.json({ error: pricing.error }, { status: pricing.status });
   const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
 
-  const { data: dealership } = await supabase
-    .from("dealerships")
-    .select(RAZORPAY_SECRET_SELECT)
-    .eq("id", website.dealership_id)
-    .maybeSingle();
-  if (!verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature, razorpaySecret(dealership))) {
+  const razorpay = await loadRazorpayConnection(supabase, website.dealership_id);
+  if (!verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature, razorpay.signingSecret)) {
     return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
+  }
+
+  // The signature proves Razorpay took A payment for this order id. It
+  // doesn't prove the order is THIS business's, or that it was for this
+  // cart: the items are re-sent by the browser. Businesses on Connect
+  // Razorpay share one signing secret (the partner app's), so without
+  // this a payment on one store could be replayed as paying for another
+  // — and on any connection a ₹10 payment could be replayed against a
+  // ₹10,000 cart. Reading the order with this business's own
+  // credentials settles both: another account's order isn't visible to
+  // them, and the amount must be this cart's.
+  const rzp = await fetchRazorpayOrder(razorpayOrderId, razorpay.credentials);
+  if (!rzp.ok) {
+    if (rzp.reason === "not_found") return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
+    // The payment may well be real — never "failed", and never "pay again".
+    console.error(`[razorpay] couldn't confirm order ${razorpayOrderId} (payment ${razorpayPaymentId}) for ${website.dealership_id}: ${rzp.reason}`);
+    return NextResponse.json(
+      { error: `Your payment went through, but it couldn't be confirmed just now. Please don't pay again — contact the business with payment ID ${razorpayPaymentId}.` },
+      { status: 502 }
+    );
+  }
+  if (Number(rzp.order.amount) !== Math.round(total * 100)) {
+    console.error(`[razorpay] amount mismatch on ${razorpayOrderId}: Razorpay order ${rzp.order.amount} paise, cart ${Math.round(total * 100)} paise`);
+    return NextResponse.json(
+      { error: `The payment amount didn't match this order. Please contact the business with payment ID ${razorpayPaymentId}.` },
+      { status: 409 }
+    );
   }
 
   // Which ad brought this buyer. Resolved here rather than at read

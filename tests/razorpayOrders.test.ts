@@ -20,7 +20,7 @@
 // module has no tests at all — see the note at the end of this file.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createRazorpayOrder, createRazorpayRefund, isRazorpayConfigured } from "@/lib/payments/razorpay";
+import { createRazorpayOrder, createRazorpayRefund, isRazorpayConfigured, keyCredentials } from "@/lib/payments/razorpay";
 
 const KEY_ID = "rzp_test_abc123";
 const KEY_SECRET = "secret_xyz";
@@ -51,7 +51,7 @@ function sentBody(spy: ReturnType<typeof vi.fn>) {
 describe("the request Razorpay actually receives", () => {
   it("posts to the orders endpoint with the amount, currency and receipt", async () => {
     const spy = stubFetch(orderOk());
-    await createRazorpayOrder(102995, "site_myshop_1757000000000", KEY_ID, KEY_SECRET);
+    await createRazorpayOrder(102995, "site_myshop_1757000000000", keyCredentials(KEY_ID, KEY_SECRET));
 
     const [url, init] = spy.mock.calls[0];
     expect(url).toBe("https://api.razorpay.com/v1/orders");
@@ -70,7 +70,7 @@ describe("the request Razorpay actually receives", () => {
     // signature check later would then fail against a secret that
     // never made the order.
     const spy = stubFetch(orderOk());
-    await createRazorpayOrder(50000, "receipt_1", KEY_ID, KEY_SECRET);
+    await createRazorpayOrder(50000, "receipt_1", keyCredentials(KEY_ID, KEY_SECRET));
 
     const header = spy.mock.calls[0][1].headers.Authorization;
     expect(header.startsWith("Basic ")).toBe(true);
@@ -79,13 +79,13 @@ describe("the request Razorpay actually receives", () => {
 
   it("never sends the key secret anywhere but the Authorization header", async () => {
     const spy = stubFetch(orderOk());
-    await createRazorpayOrder(50000, "receipt_1", KEY_ID, KEY_SECRET);
+    await createRazorpayOrder(50000, "receipt_1", keyCredentials(KEY_ID, KEY_SECRET));
     expect(JSON.stringify(sentBody(spy))).not.toContain(KEY_SECRET);
   });
 
   it("returns the order Razorpay created, not the input", async () => {
     stubFetch(orderOk({ id: "order_REAL", amount: 102995 }));
-    const order = await createRazorpayOrder(102995, "r", KEY_ID, KEY_SECRET);
+    const order = await createRazorpayOrder(102995, "r", keyCredentials(KEY_ID, KEY_SECRET));
     expect(order.id).toBe("order_REAL");
     expect(order.amount).toBe(102995);
   });
@@ -186,13 +186,13 @@ describe("a failed order creation is never mistaken for a successful one", () =>
       text: async () => '{"error":{"description":"Amount must be at least INR 1.00"}}',
     });
 
-    await expect(createRazorpayOrder(50, "r", KEY_ID, KEY_SECRET)).rejects.toThrow(/400/);
-    await expect(createRazorpayOrder(50, "r", KEY_ID, KEY_SECRET)).rejects.toThrow(/Amount must be at least/);
+    await expect(createRazorpayOrder(50, "r", keyCredentials(KEY_ID, KEY_SECRET))).rejects.toThrow(/400/);
+    await expect(createRazorpayOrder(50, "r", keyCredentials(KEY_ID, KEY_SECRET))).rejects.toThrow(/Amount must be at least/);
   });
 
   it("throws on a 401, rather than returning an order-shaped nothing", async () => {
     stubFetch({ ok: false, status: 401, json: async () => ({}), text: async () => "Unauthorized" });
-    await expect(createRazorpayOrder(1000, "r", "wrong", "wrong")).rejects.toThrow(/401/);
+    await expect(createRazorpayOrder(1000, "r", keyCredentials("wrong", "wrong"))).rejects.toThrow(/401/);
   });
 
   it("still throws when the error body cannot be read", async () => {
@@ -204,12 +204,12 @@ describe("a failed order creation is never mistaken for a successful one", () =>
       json: async () => ({}),
       text: async () => { throw new Error("stream already consumed"); },
     });
-    await expect(createRazorpayOrder(1000, "r", KEY_ID, KEY_SECRET)).rejects.toThrow(/500/);
+    await expect(createRazorpayOrder(1000, "r", keyCredentials(KEY_ID, KEY_SECRET))).rejects.toThrow(/500/);
   });
 
   it("lets a network error surface instead of swallowing it", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
-    await expect(createRazorpayOrder(1000, "r", KEY_ID, KEY_SECRET)).rejects.toThrow(/ECONNRESET/);
+    await expect(createRazorpayOrder(1000, "r", keyCredentials(KEY_ID, KEY_SECRET))).rejects.toThrow(/ECONNRESET/);
   });
 });
 
@@ -224,7 +224,7 @@ describe("an unconnected merchant cannot reach Razorpay at all", () => {
     // nobody, and Razorpay answers 401. Failing early gives the
     // merchant "not connected yet" instead of "unauthorized".
     const spy = stubFetch(orderOk());
-    await expect(createRazorpayOrder(1000, "r", id, secret)).rejects.toThrow(/not connected/i);
+    await expect(createRazorpayOrder(1000, "r", keyCredentials(id, secret))).rejects.toThrow(/not connected/i);
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -251,7 +251,7 @@ describe("refunds", () => {
 
   it("refunds the named payment, in paise", async () => {
     const spy = stubFetch(refundOk);
-    await createRazorpayRefund("pay_XYZ", 50000, KEY_ID, KEY_SECRET);
+    await createRazorpayRefund("pay_XYZ", 50000, keyCredentials(KEY_ID, KEY_SECRET));
 
     expect(spy.mock.calls[0][0]).toBe("https://api.razorpay.com/v1/payments/pay_XYZ/refund");
     expect(sentBody(spy)).toEqual({ amount: 50000 });
@@ -261,12 +261,12 @@ describe("refunds", () => {
     // A refund that silently "succeeds" leaves a customer told they
     // were refunded and a merchant who never sent the money.
     stubFetch({ ok: false, status: 400, json: async () => ({}), text: async () => "The payment has been fully refunded already" });
-    await expect(createRazorpayRefund("pay_1", 50000, KEY_ID, KEY_SECRET)).rejects.toThrow(/fully refunded already/);
+    await expect(createRazorpayRefund("pay_1", 50000, keyCredentials(KEY_ID, KEY_SECRET))).rejects.toThrow(/fully refunded already/);
   });
 
   it("refuses without credentials, before any network call", async () => {
     const spy = stubFetch(refundOk);
-    await expect(createRazorpayRefund("pay_1", 50000, "", "")).rejects.toThrow(/not connected/i);
+    await expect(createRazorpayRefund("pay_1", 50000, keyCredentials("", ""))).rejects.toThrow(/not connected/i);
     expect(spy).not.toHaveBeenCalled();
   });
 });

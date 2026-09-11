@@ -57,6 +57,16 @@ export function razorpaySecret(row: Row): string | null {
   return read(row?.razorpay_key_secret_encrypted, "Razorpay key secret");
 }
 
+/** Connect Razorpay's access token (Bearer, 90 days). */
+export function razorpayOAuthAccessToken(row: Row): string | null {
+  return read(row?.razorpay_oauth_access_token_encrypted, "Razorpay OAuth access token");
+}
+
+/** Connect Razorpay's refresh token — mints access tokens for 180 days. */
+export function razorpayOAuthRefreshToken(row: Row): string | null {
+  return read(row?.razorpay_oauth_refresh_token_encrypted, "Razorpay OAuth refresh token");
+}
+
 export function shopifyAccessToken(row: Row): string | null {
   return read(row?.shopify_access_token_encrypted, "Shopify access token");
 }
@@ -76,6 +86,8 @@ export function woocommerceConsumerSecret(row: Row): string | null {
 
 export type CommerceSecretColumn =
   | "razorpay_key_secret"
+  | "razorpay_oauth_access_token"
+  | "razorpay_oauth_refresh_token"
   | "shopify_access_token"
   | "shopify_refresh_token"
   | "woocommerce_consumer_secret";

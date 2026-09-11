@@ -2,8 +2,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { resolveOrderPricing } from "@/lib/orderPricing";
 import { applyOrderSideEffects } from "@/lib/orderFulfillment";
-import { isRazorpayConfigured, createRazorpayOrder } from "@/lib/payments/razorpay";
-import { razorpaySecret, RAZORPAY_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { createRazorpayOrder } from "@/lib/payments/razorpay";
+import { loadRazorpayConnection } from "@/lib/payments/razorpayConnection";
 import { resolveOrderAttribution } from "@/lib/storefront/resolveAttribution";
 
 // Public, unauthenticated endpoint — the storefront checkout page posts
@@ -37,20 +37,16 @@ export async function POST(request: Request) {
   const { website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total } = pricing;
 
   if (paymentMethod === "razorpay") {
-    const { data: dealership } = await supabase
-      .from("dealerships")
-      .select(`razorpay_key_id, ${RAZORPAY_SECRET_SELECT}`)
-      .eq("id", website.dealership_id)
-      .maybeSingle();
-    const keySecret = razorpaySecret(dealership);
-    if (!isRazorpayConfigured(dealership?.razorpay_key_id, keySecret)) {
+    // Connect Razorpay or pasted keys — whichever the business has.
+    const { credentials } = await loadRazorpayConnection(supabase, website.dealership_id);
+    if (!credentials) {
       return NextResponse.json({ error: "Online payment isn't available right now — please choose Cash on Delivery" }, { status: 400 });
     }
     try {
-      const razorpayOrder = await createRazorpayOrder(Math.round(total * 100), `site_${slug}_${Date.now()}`, dealership!.razorpay_key_id!, keySecret!);
+      const razorpayOrder = await createRazorpayOrder(Math.round(total * 100), `site_${slug}_${Date.now()}`, credentials);
       return NextResponse.json({
         success: true,
-        razorpay: { orderId: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, keyId: dealership!.razorpay_key_id },
+        razorpay: { orderId: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, keyId: credentials.checkoutKey },
         subtotal,
         discountAmount,
         shippingAmount,
