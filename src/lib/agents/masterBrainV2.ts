@@ -607,7 +607,8 @@ async function saveGenerated(supabase: any, dealershipId: string, table: string,
   }
 }
 
-async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
+// Exported for tests: every chat tool's real behaviour runs through here.
+export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
   const gatedFeature: GatedFeatureKey | undefined =
     toolName === "manage_watch" && input?.kind === "competitor" ? "competitorIntel" : TOOL_FEATURE_MAP[toolName];
   if (gatedFeature) {
@@ -934,14 +935,29 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       try {
         const { data: existingKit } = await supabase.from("brand_kits").select("kit").eq("dealership_id", ctx.id).maybeSingle();
         const existingColors = existingKit?.kit?.colors ?? null;
-        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, input.prompt ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice);
+        // The image model paints the brief's words onto the picture, and in
+        // chat that brief is written by the AI, not the owner — so it gets
+        // the same claims check as copy (src/lib/claims). "Sirf ₹550 mein.
+        // Free shipping." must never be drawn for a store that charges
+        // shipping.
+        const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
+        const { stripUnsupported, claimsNote } = await import("../claims/claimCheck");
+        const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+        const brief = facts ? stripUnsupported(input.prompt ?? "", facts) : { text: input.prompt ?? "", removed: [] as string[] };
+        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, brief.text, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice);
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `graphic-designs/${ctx.id}/${input.designType}-${Date.now()}.png`;
         await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
         const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
-        await supabase.from("graphic_designs").insert({ dealership_id: ctx.id, design_type: input.designType, prompt: input.prompt ?? "", image_url: publicUrlData.publicUrl });
-        return { success: true, imageUrl: publicUrlData.publicUrl, note: `Saved to Graphic Design. Show it to the person directly in your reply using markdown image syntax: ![Generated image](${publicUrlData.publicUrl}) — it will render inline in the chat, don't just tell them to go check another tab.` };
+        await supabase.from("graphic_designs").insert({ dealership_id: ctx.id, design_type: input.designType, prompt: brief.text, image_url: publicUrlData.publicUrl });
+        const leftOut = brief.removed.length ? ` Left out of the image because Hawlai couldn't verify it: ${brief.removed.join("; ")} — tell the person in one short line.` : "";
+        return {
+          success: true,
+          imageUrl: publicUrlData.publicUrl,
+          ...(brief.removed.length ? { _claimsNote: claimsNote(brief.removed) } : {}),
+          note: `Saved to Graphic Design. Show it to the person directly in your reply using markdown image syntax: ![Generated image](${publicUrlData.publicUrl}) — it will render inline in the chat, don't just tell them to go check another tab.${leftOut}`,
+        };
       } catch (err: any) {
         return { error: err.message };
       }
@@ -2872,7 +2888,24 @@ export async function runMasterBrainChat(
   // itself reasons with.
   const groundingContext = `${brandVoiceSection}${memorySection}${businessFactsSection}${knowledgeSection}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}
+  // The chat AI writes copy too — its own replies, and the briefs it
+  // hands to tools (an image prompt is painted straight onto the
+  // picture). It gets the same verified store facts and truth rules the
+  // generators do (src/lib/claims), so it can't say "free shipping" for a
+  // store that charges ₹60.
+  const { gatherBusinessFactsSafely, formatFactsForCopy, COPY_TRUTH_RULES } = await import("../claims/businessFacts");
+  const storeFacts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const storeFactsSection = storeFacts
+    ? `
+
+## Verified store facts — what you, and any brief you write for a tool, may claim
+${formatFactsForCopy(storeFacts)}
+
+${COPY_TRUTH_RULES}
+- These rules cover your own replies and every tool brief, image prompts included.`
+    : "";
+
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}
 
 ## How you think, not just what you generate
 

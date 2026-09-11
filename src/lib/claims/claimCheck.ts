@@ -15,6 +15,7 @@
 // persuasive copy passes untouched.
 
 import { describeShipping, knownText, normalise, type BusinessFacts } from "./businessFacts";
+import { computeShippingAmount } from "@/lib/shipping";
 
 const NOUNS = "homes|customers|families|buyers|people|clients|orders|reviews|ratings|shoppers|users|households|students|patients|members|subscribers";
 const SOCIAL_PROOF = new RegExp(
@@ -33,8 +34,12 @@ const PRICE = /\b(?:at|for|only|just|starting\s+(?:at|from)|from|priced\s+at|now
 // Product-attribute claims a business must be able to substantiate.
 const CLAIM_TERMS = [
   "phthalate free", "paraben free", "sulphate free", "sulfate free", "all natural", "100% natural", "vegan", "cruelty free", "organic",
-  "non toxic", "chemical free", "eco friendly", "award winning", "warranty", "certified", "handcrafted in",
+  "non toxic", "chemical free", "toxin free", "clean burning", "soot free", "eco friendly", "award winning", "warranty", "certified", "handcrafted in",
 ];
+
+// Every way copy says shipping costs nothing — English and Hinglish.
+const FREE_SHIPPING =
+  /\bfree\s+(?:home\s+|doorstep\s+)?(?:shipping|delivery)\b|\b(?:shipping|delivery)\s+(?:is\s+|bilkul\s+|ekdum\s+)?(?:free|muft)\b|\bno\s+(?:shipping|delivery)\s+(?:charges?|fees?|cost)\b|\b(?:zero|₹\s?0)\s+(?:shipping|delivery)\b|\bships?\s+free\b/i;
 
 const RANKING = /(?<![\w#])(?:no\.?\s?1|number\s?one|#\s?1)(?![\w])/gi;
 const PLACE = "india|the\\s+world|the\\s+country|the\\s+city|town|the\\s+market|the\\s+region|the\\s+state";
@@ -112,8 +117,20 @@ export function findUnsupportedClaims(text: string, f: BusinessFacts): string[] 
   if (years && !known.includes(`${years[1]} year`)) reasons.push(`"${years[0].trim()}" — no years-in-business figure on record`);
 
   // Offers, prices, shipping and packaging that must match the store
-  if (/free\s+(shipping|delivery)/i.test(text) && !(f.shipping && (f.shipping.mode === "free" || f.shipping.mode === "free_above"))) {
-    reasons.push(`free shipping — the store's shipping is ${describeShipping(f.shipping)}`);
+  // "Free shipping" is true only if CHECKOUT charges ₹0 — decided by the
+  // same function checkout uses (lib/shipping), on the cheapest product
+  // alone. A free-above-₹X store may say it only alongside its real
+  // threshold ("free shipping above ₹999").
+  const freeShipping = text.match(FREE_SHIPPING);
+  if (freeShipping && !said(freeShipping[0])) {
+    const s = f.shipping;
+    const cheapest = f.products.length ? Math.min(...f.products.map((p) => p.price)) : 0;
+    const charged = !s || computeShippingAmount({ shipping_mode: s.mode, shipping_rate: s.rate, shipping_free_threshold: s.freeThreshold }, cheapest) > 0;
+    const t = s?.freeThreshold;
+    const namesThreshold =
+      s?.mode === "free_above" && t != null &&
+      new RegExp(`(?:above|over|from|orders?\\s+of)\\s*₹\\s?${t}\\b|₹\\s?${t}\\s*(?:\\+|or\\s+more|and\\s+above|se\\s+upar|ke\\s+upar)`, "i").test(text);
+    if (charged && !namesThreshold) reasons.push(`free shipping ("${freeShipping[0]}") — the store's shipping is ${describeShipping(s)}`);
   }
   each(PACKAGING, (m) => `"${m[0]}" — not mentioned anywhere on the site or in the products`);
   each(PERCENT_OFF, (m) => (f.offers.some((o) => o.percent === Number(m[1])) ? null : `"${m[0]}" — no active discount code gives ${m[1]}% off`));
