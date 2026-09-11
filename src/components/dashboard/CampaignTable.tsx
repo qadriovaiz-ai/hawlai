@@ -35,6 +35,9 @@ export interface CampaignRow {
   revenue: number;
   conversions: number;
   days: number;
+  /** From Meta's insights, as recorded on the daily snapshots. */
+  impressions?: number;
+  clicks?: number;
   /** Meta's campaign id, to find it in Ads Manager. */
   metaCampaignId?: string | null;
   /** Latest definitive status recorded on a daily snapshot, and its date. */
@@ -178,6 +181,27 @@ const COLUMNS: Column[] = [
   },
   { key: "days", label: "Days", value: (r) => r.days, render: (r) => <span className="text-slate-500">{r.days}</span> },
   { key: "spend", label: "Spend", value: (r) => r.spend, render: (r) => formatCurrency(r.spend) },
+  {
+    key: "impressions",
+    label: "Impressions",
+    value: (r) => r.impressions ?? null,
+    render: (r) => (r.impressions != null ? r.impressions.toLocaleString("en-IN") : "—"),
+  },
+  {
+    key: "cpc",
+    label: "CPC",
+    // No clicks → no cost per click, which is not the same as ₹0.
+    value: (r) => (r.clicks ? r.spend / r.clicks : null),
+    render: (r) => (r.clicks ? formatCurrency(r.spend / r.clicks) : "—"),
+  },
+  {
+    key: "ctr",
+    label: "CTR",
+    // Derived from the range's own clicks and impressions, not Meta's
+    // lifetime ctr, so it matches whatever dates are selected.
+    value: (r) => (r.impressions ? ((r.clicks ?? 0) / r.impressions) * 100 : null),
+    render: (r) => (r.impressions ? `${(((r.clicks ?? 0) / r.impressions) * 100).toFixed(2)}%` : "—"),
+  },
   { key: "leads", label: "Leads", value: (r) => r.leads, render: (r) => r.leads },
   {
     key: "costPerLead",
@@ -221,7 +245,18 @@ async function fetchStatuses(ids: string[], includeBudget = false): Promise<Reco
   }
 }
 
-export default function CampaignTable({ rows }: { rows: CampaignRow[] }) {
+export default function CampaignTable({
+  rows,
+  allIds,
+}: {
+  rows: CampaignRow[];
+  /**
+   * Every campaign whose live status to fetch. Passed by the history
+   * section so moving the date slider — which changes which rows show —
+   * doesn't send a fresh round of status reads to Meta on every drag.
+   */
+  allIds?: string[];
+}) {
   // Default matches the previous hardcoded sort exactly, so the table
   // looks unchanged until someone actually interacts with it.
   const [sortKey, setSortKey] = useState<ColumnKey>("spend");
@@ -246,11 +281,12 @@ export default function CampaignTable({ rows }: { rows: CampaignRow[] }) {
 
   // The switch needs the live status too, so either column asks Meta.
   const needsLive = visible.includes("status") || visible.includes("onOff");
-  const idsKey = rows.map((r) => r.id ?? "").join(",");
+  const statusIds = allIds ?? rows.map((r) => r.id).filter((id): id is string => !!id);
+  const idsKey = statusIds.join(",");
 
   useEffect(() => {
     if (!needsLive) return;
-    const ids = rows.map((r) => r.id).filter((id): id is string => !!id);
+    const ids = statusIds;
     if (ids.length === 0) {
       setLive({});
       return;

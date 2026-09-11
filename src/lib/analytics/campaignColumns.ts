@@ -8,7 +8,7 @@
 // value now also records which columns existed when it was saved; a
 // column the person has never been offered gets its default.
 
-export const ALL_COLUMN_KEYS = ["onOff", "status", "campaignId", "days", "spend", "leads", "costPerLead", "conversions", "revenue", "roas"] as const;
+export const ALL_COLUMN_KEYS = ["onOff", "status", "campaignId", "days", "spend", "impressions", "cpc", "ctr", "leads", "costPerLead", "conversions", "revenue", "roas"] as const;
 export type ColumnKey = (typeof ALL_COLUMN_KEYS)[number];
 
 export const DEFAULT_VISIBLE: ColumnKey[] = [...ALL_COLUMN_KEYS];

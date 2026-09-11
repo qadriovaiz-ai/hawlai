@@ -11,10 +11,10 @@
 // ------------------------------------------------------------------
 
 import type { Loaded } from "@/lib/dataState";
-import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { readCampaignState } from "@/lib/ads/campaignStatus";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
 import { adsTokenFor } from "@/lib/ads/metaToken";
+import { metaRead } from "@/lib/ads/metaRead";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -32,23 +32,30 @@ export interface CampaignPerformance {
   revenue: number;
   conversions: number;
   roas: number | null;
+  /** False when Meta's insights couldn't be read; spend/impressions/clicks are then 0 for display, and null in a snapshot. */
+  insights_ok?: boolean;
 }
 
-async function fetchInsights(campaignId: string, token: string) {
-  try {
-    const url = `https://graph.facebook.com/${GRAPH_VERSION}/${campaignId}/insights?fields=spend,impressions,clicks,ctr&date_preset=maximum&access_token=${token}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      console.error("[analytics-agent] insights error for", campaignId, data.error?.message);
-      return null;
-    }
-    // Insights returns an array (usually one row for the whole date_preset range)
-    return data.data?.[0] ?? null;
-  } catch (err: any) {
-    console.error("[analytics-agent] fetchInsights failed:", campaignId, err.message);
-    return null;
-  }
+/**
+ * A campaign's LIFETIME insights, or null when Meta can't be read.
+ *
+ * Through metaRead: transient errors retried, Meta's error code logged,
+ * and read with the ads token (the user token when stored — the Page
+ * token can't read an ad account's objects). A failure is null, never
+ * zeros: the daily snapshot is a RUNNING TOTAL, and a zero written on a
+ * failed read shows up the next day as the campaign's whole spend
+ * arriving at once.
+ */
+async function fetchInsights(campaignId: string, token: string, dealershipId?: string): Promise<Record<string, any> | null> {
+  const r = await metaRead(`${campaignId}/insights`, "spend,impressions,clicks,ctr", token, {
+    stage: "insights.read",
+    dealershipId,
+    params: { date_preset: "maximum" },
+  });
+  if (!r.ok) return null;
+  // One row for the whole date_preset range. An empty list is a real
+  // answer — nothing delivered yet — so it is {}, not null.
+  return r.data.data?.[0] ?? {};
 }
 
 export interface CampaignPerformanceResult {
@@ -86,7 +93,8 @@ export async function getCampaignPerformanceState(
     .eq("id", dealershipId)
     .single();
 
-  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
+  // The user token when stored (metaToken.ts): the Page token can't read insights on an ad account's campaigns.
+  const token = (await adsTokenFor(supabase, dealershipId, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
   // Checked BEFORE the campaign query. Without a token the campaign
   // list is irrelevant — we could not read performance for it either
@@ -149,7 +157,8 @@ async function getCampaignPerformance(
     .eq("id", dealershipId)
     .single();
 
-  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
+  // The user token when stored (metaToken.ts): the Page token can't read insights on an ad account's campaigns.
+  const token = (await adsTokenFor(supabase, dealershipId, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN;
 
   const { data: launchedAds } = await supabase
     .from("ad_creatives")
@@ -217,7 +226,7 @@ async function getCampaignPerformance(
 
   const campaigns: CampaignPerformance[] = await Promise.all(
     launchedAds.map(async (ad: any) => {
-      const insights = await fetchInsights(ad.meta_campaign_id, token);
+      const insights = await fetchInsights(ad.meta_campaign_id, token, dealershipId);
       const spend = insights?.spend ? Number(insights.spend) : 0;
       const impressions = insights?.impressions ? Number(insights.impressions) : 0;
       const clicks = insights?.clicks ? Number(insights.clicks) : 0;
@@ -238,6 +247,7 @@ async function getCampaignPerformance(
         revenue: revenueByCampaign[ad.meta_campaign_id]?.revenue ?? 0,
         conversions: revenueByCampaign[ad.meta_campaign_id]?.conversions ?? 0,
         roas: spend > 0 && revenueByCampaign[ad.meta_campaign_id]?.revenue ? revenueByCampaign[ad.meta_campaign_id].revenue / spend : null,
+        insights_ok: insights !== null,
       };
     })
   );
@@ -273,14 +283,17 @@ export async function snapshotCampaignPerformance(supabase: any, dealershipId: s
     ad_creative_id: c.id,
     snapshot_date: snapshotDate,
     headline: c.headline,
-    spend: c.spend,
-    impressions: c.impressions,
-    clicks: c.clicks,
+    // Meta's figures are null, not 0, when insights couldn't be read:
+    // every snapshot is a running total (campaignHistory.ts), and a 0
+    // would read as the whole lifetime spend vanishing and reappearing.
+    spend: c.insights_ok === false ? null : c.spend,
+    impressions: c.insights_ok === false ? null : c.impressions,
+    clicks: c.insights_ok === false ? null : c.clicks,
     leads: c.leads,
-    cost_per_lead: c.cost_per_lead,
+    cost_per_lead: c.insights_ok === false ? null : c.cost_per_lead,
     revenue: c.revenue,
     conversions: c.conversions,
-    roas: c.roas,
+    roas: c.insights_ok === false ? null : c.roas,
   }));
 
   const { error } = await supabase

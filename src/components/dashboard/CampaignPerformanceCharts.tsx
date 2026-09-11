@@ -4,6 +4,7 @@ import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from "recharts";
+import { shortDate } from "@/lib/ads/campaignDeliveryDisplay";
 
 const AXIS_COLOR = "#8c8c98";
 const GRID_COLOR = "#232329";
@@ -25,15 +26,16 @@ export default function CampaignPerformanceCharts({ data }: { data: DailyPoint[]
     );
   }
 
-  const formatted = data.map((d) => ({
-    ...d,
-    dateLabel: new Date(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-  }));
+  // Each point is what was spent / earned THAT day (campaignHistory.ts
+  // turns the snapshots' running totals into daily changes). Dates via
+  // shortDate: toLocaleDateString gives "Sept" on the server and "Sep"
+  // in many browsers, a hydration mismatch.
+  const formatted = data.map((d) => ({ ...d, dateLabel: shortDate(d.date) }));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-slate-900 mb-4">Spend Over Time</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-4">Daily Spend</h3>
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={formatted} margin={{ left: -20 }}>
             <defs>
@@ -52,7 +54,7 @@ export default function CampaignPerformanceCharts({ data }: { data: DailyPoint[]
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-slate-900 mb-4">Leads Over Time</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-4">Daily Leads</h3>
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={formatted} margin={{ left: -20 }}>
             <defs>
@@ -71,7 +73,7 @@ export default function CampaignPerformanceCharts({ data }: { data: DailyPoint[]
       </div>
 
       <div className="card p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-slate-900 mb-4">Spend vs Revenue</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-4">Daily Spend vs Revenue</h3>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={formatted} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />

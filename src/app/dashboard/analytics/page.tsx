@@ -1,17 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AnalyticsCharts from "@/components/dashboard/AnalyticsCharts";
-import CampaignPerformanceCharts from "@/components/dashboard/CampaignPerformanceCharts";
 import GrowthMetricsCard from "@/components/dashboard/GrowthMetricsCard";
 import WebsiteAnalyticsCard from "@/components/dashboard/WebsiteAnalyticsCard";
-import { History } from "lucide-react";
 import { computeAttribution } from "@/lib/analytics/attribution";
 import { computeLtv, computeCohorts } from "@/lib/analytics/ltvCohorts";
 import AdvancedAnalyticsSection from "@/components/dashboard/AdvancedAnalyticsSection";
 import AnalyticsToolbar from "@/components/dashboard/AnalyticsToolbar";
 import MetricOverlayChart from "@/components/dashboard/MetricOverlayChart";
 import PeriodComparison from "@/components/dashboard/PeriodComparison";
-import CampaignTable from "@/components/dashboard/CampaignTable";
+import CampaignHistorySection from "@/components/dashboard/CampaignHistorySection";
+import { fetchAllHistory, dailySeries, historyDates } from "@/lib/analytics/campaignHistory";
+import { shortDate } from "@/lib/ads/campaignDeliveryDisplay";
 import { resolveRange, RANGE_EXEMPT, previousPeriod, buildTrendBuckets, computeDelta } from "@/lib/analytics/dateRange";
 
 export default async function AnalyticsPage({
@@ -47,7 +47,10 @@ export default async function AnalyticsPage({
     supabase.from("leads").select("*").eq("dealership_id", dealershipId),
     supabase.from("calls").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
     supabase.from("appointments").select("*").eq("dealership_id", dealershipId).gte("created_at", range.from).lt("created_at", range.to),
-    supabase.from("campaign_performance_history").select("*").eq("dealership_id", dealershipId).gte("snapshot_date", range.from.slice(0, 10)).lte("snapshot_date", range.to.slice(0, 10)).order("snapshot_date", { ascending: false }),
+    // The WHOLE history, paged past Supabase's 1,000-row cap: the
+    // performance section's date slider spans all of it, and a range's
+    // figures need the snapshot just before the range (campaignHistory.ts).
+    fetchAllHistory(supabase, dealershipId),
     // P3 8a — lead_touchpoints (migration 112) has been collecting
     // real multi-touch data all along; nothing ever read it for
     // attribution until now.
@@ -162,75 +165,42 @@ export default async function AnalyticsPage({
     appointments: computeDelta(appointments?.length ?? 0, priorAppointmentCount ?? 0),
   };
 
-  // Lifetime totals per campaign from the permanent daily-snapshot
-  // history — this survives even if a campaign is later paused,
-  // deleted on Meta, or Facebook access is ever lost, since it's our
-  // own stored copy, not a live re-fetch from Meta each time.
-  const campaignTotals = new Map<string, { id: string; headline: string; spend: number; leads: number; revenue: number; conversions: number; days: number; recorded: { state: string; date: string } | null }>();
-  for (const row of perfHistory ?? []) {
-    const existing = campaignTotals.get(row.ad_creative_id) ?? { id: row.ad_creative_id, headline: row.headline ?? "Untitled", spend: 0, leads: 0, revenue: 0, conversions: 0, days: 0, recorded: null };
-    existing.spend += Number(row.spend ?? 0);
-    existing.leads += Number(row.leads ?? 0);
-    existing.revenue += Number(row.revenue ?? 0);
-    existing.conversions += Number(row.conversions ?? 0);
-    existing.days += 1;
-    // The LAST KNOWN delivery status, as recorded on a daily snapshot
-    // (migration 176). perfHistory is newest-first, so the first
-    // definitive one seen is the latest. "unknown" means that day's
-    // check failed, so it is skipped rather than allowed to hide an
-    // earlier real answer. Snapshots from before 176 simply have none.
-    if (!existing.recorded && row.delivery_status && row.delivery_status !== "unknown") {
-      existing.recorded = { state: row.delivery_status, date: row.snapshot_date };
-    }
-    campaignTotals.set(row.ad_creative_id, existing);
-  }
+  // Campaign performance history. Every snapshot is a RUNNING TOTAL
+  // (lifetime insights and all-time leads/revenue, once a day), so the
+  // figures for any dates are differences between snapshots, never sums
+  // — summing them counted a campaign's lifetime once per recorded day.
+  // campaignHistory.ts does the arithmetic; CampaignHistorySection
+  // applies the date slider in the browser.
+  const history = perfHistory ?? [];
 
   // Meta campaign ids, to cross-reference with Ads Manager, and Hawlai's
   // own last-recorded status as the Status column's final fallback. The
   // LIVE status is read by the table itself after the page has drawn,
   // so Analytics never waits on Meta.
-  const creativeIds = Array.from(campaignTotals.keys());
-  let creatives: { id: string; meta_campaign_id: string | null; meta_status: string | null }[] = [];
+  const creativeIds = Array.from(new Set(history.map((r) => r.ad_creative_id)));
+  const creativeInfo: Record<string, { metaCampaignId: string | null; localStatus: string | null }> = {};
   if (creativeIds.length > 0) {
     const { data } = await supabase
       .from("ad_creatives")
       .select("id, meta_campaign_id, meta_status")
       .eq("dealership_id", dealershipId)
       .in("id", creativeIds);
-    creatives = data ?? [];
+    for (const c of data ?? []) creativeInfo[c.id] = { metaCampaignId: c.meta_campaign_id ?? null, localStatus: c.meta_status ?? null };
   }
-  const creativeById = new Map(creatives.map((c) => [c.id, c]));
-  const campaignTotalsList = Array.from(campaignTotals.values())
-    .map((c) => ({
-      ...c,
-      metaCampaignId: creativeById.get(c.id)?.meta_campaign_id ?? null,
-      localStatus: creativeById.get(c.id)?.meta_status ?? null,
-    }))
-    .sort((a, b) => b.spend - a.spend);
 
-  // Aggregate the same permanent history by date (summed across all
-  // campaigns) for the time-series charts — same data source as the
-  // per-campaign table below, just grouped differently.
-  const dailyTotals = new Map<string, { date: string; spend: number; leads: number; revenue: number }>();
-  for (const row of perfHistory ?? []) {
-    const existing = dailyTotals.get(row.snapshot_date) ?? { date: row.snapshot_date, spend: 0, leads: 0, revenue: 0 };
-    existing.spend += Number(row.spend ?? 0);
-    existing.leads += Number(row.leads ?? 0);
-    existing.revenue += Number(row.revenue ?? 0);
-    dailyTotals.set(row.snapshot_date, existing);
-  }
-  const dailyChartData = Array.from(dailyTotals.values()).sort((a, b) => a.date.localeCompare(b.date));
-
-  // Overlay series — the same daily snapshot rows, shaped for the
-  // multi-metric chart. Reuses dailyChartData rather than re-querying:
-  // spend/leads/revenue already sit together on each row, which is
-  // exactly what makes overlaying them meaningful.
-  const overlayData = dailyChartData.map((d) => ({
-    date: new Date(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-    spend: Math.round(d.spend),
-    leads: d.leads,
-    revenue: Math.round(d.revenue),
-  }));
+  // The overlay chart stays on the page's date picker. Daily changes,
+  // like the charts below, clipped to the days the history covers.
+  const historyDays = historyDates(history);
+  const overlayFrom = historyDays.length ? (range.from.slice(0, 10) > historyDays[0] ? range.from.slice(0, 10) : historyDays[0]) : null;
+  const overlayTo = historyDays.length ? (range.to.slice(0, 10) < historyDays[historyDays.length - 1] ? range.to.slice(0, 10) : historyDays[historyDays.length - 1]) : null;
+  const overlayData = overlayFrom && overlayTo && overlayFrom <= overlayTo
+    ? dailySeries(history, overlayFrom, overlayTo).map((d) => ({
+        date: shortDate(d.date),
+        spend: Math.round(d.spend),
+        leads: d.leads,
+        revenue: Math.round(d.revenue),
+      }))
+    : [];
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -279,25 +249,9 @@ export default async function AnalyticsPage({
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-3">Campaign Performance — Meta-style graphs</p>
         <MetricOverlayChart data={overlayData} rangeLabel={range.label} />
-        <div className="mt-6">
-          <CampaignPerformanceCharts data={dailyChartData} />
-        </div>
       </div>
 
-      <div className="card p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <History className="w-4 h-4 text-slate-400" />
-          <p className="text-sm font-semibold text-slate-700">Campaign Performance History</p>
-        </div>
-        <p className="text-xs text-slate-400">
-          Saved permanently in Hawlai — this survives even if a campaign is later paused, deleted on Meta, or Facebook access changes. Updates once a day automatically. Status is checked with Meta when you open this page; if Meta can&apos;t be reached, the last recorded status is shown with its date.
-        </p>
-        {campaignTotalsList.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center">No history recorded yet — this fills in once a launched campaign has run for at least a day.</p>
-        ) : (
-          <CampaignTable rows={campaignTotalsList} />
-        )}
-      </div>
+      <CampaignHistorySection history={history} creatives={creativeInfo} />
 
       <GrowthMetricsCard />
       <WebsiteAnalyticsCard />

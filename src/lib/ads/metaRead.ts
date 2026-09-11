@@ -130,9 +130,10 @@ export function metaRead(
   node: string,
   fields: string,
   token: string,
-  ctx: { stage: string; dealershipId?: string }
+  ctx: { stage: string; dealershipId?: string; params?: Record<string, string> }
 ): Promise<GraphResult> {
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${node}?fields=${fields}&access_token=${encodeURIComponent(token)}`;
+  const extra = ctx.params ? `&${new URLSearchParams(ctx.params).toString()}` : "";
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${node}?fields=${fields}${extra}&access_token=${encodeURIComponent(token)}`;
   return withRetry(ctx.stage, node, ctx.dealershipId, () => once(url));
 }
 
