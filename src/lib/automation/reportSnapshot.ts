@@ -1,5 +1,4 @@
-import { generateExecutiveReport } from "@/lib/agents/reportingAgent";
-import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
+import { generateReportBundle } from "@/lib/reports/reportBundle";
 
 // Saves a point-in-time snapshot of the executive + growth report so
 // "Weekly Reports" and "Monthly Reports" are real historical records,
@@ -13,10 +12,7 @@ export async function runReportSnapshots(supabase: any, dealershipId: string, bu
   const isFirstOfMonth = today.getDate() === 1;
   if (!isMonday && !isFirstOfMonth) return { saved: [] };
 
-  const [report, growth] = await Promise.all([
-    generateExecutiveReport(supabase, dealershipId),
-    generateGrowthReport(supabase, dealershipId, businessCategory),
-  ]);
+  const { report, growth } = await generateReportBundle(supabase, dealershipId, businessCategory);
   const stats = { ...report.stats, healthScore: growth.healthScore, headline: growth.headline, strengths: growth.strengths, risks: growth.risks, nextActions: growth.nextActions };
 
   const saved: string[] = [];

@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { FileText, Flame, ShieldCheck, Megaphone, IndianRupee, CheckCircle2, ListChecks, TrendingUp, Gauge, ArrowUpRight, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { generateExecutiveReport } from "@/lib/agents/reportingAgent";
-import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
+import { generateReportBundle } from "@/lib/reports/reportBundle";
 import ReportToolsCard from "@/components/reports/ReportToolsCard";
 
 export default async function ReportsPage() {
@@ -18,10 +17,9 @@ export default async function ReportsPage() {
 
   const { data: dealershipInfo } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).single();
 
-  const [report, growth] = await Promise.all([
-    generateExecutiveReport(supabase, dealershipId),
-    generateGrowthReport(supabase, dealershipId, dealershipInfo?.business_category ?? "car dealership"),
-  ]);
+  // One set of numbers for the cards, the summary and the health-score
+  // narrative — they used to disagree on the same page (reportBundle.ts).
+  const { report, growth } = await generateReportBundle(supabase, dealershipId, dealershipInfo?.business_category ?? "business");
   const { stats } = report;
 
   const scoreColor = growth.healthScore >= 70 ? "text-green-400" : growth.healthScore >= 40 ? "text-amber-400" : "text-red-400";

@@ -1,7 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
-import { generateExecutiveReport } from "@/lib/agents/reportingAgent";
-import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
+import { generateReportBundle } from "@/lib/reports/reportBundle";
 import { getAgencyBranding, reportFooterText, reportAccentColor, reportLogoUrl } from "@/lib/agents/agencyBrandingAgent";
 import { formatCurrency } from "@/lib/utils";
 
@@ -16,9 +15,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ t
     .maybeSingle();
   if (!dealership) notFound();
 
-  const [report, growth, branding] = await Promise.all([
-    generateExecutiveReport(supabase, dealership.id),
-    generateGrowthReport(supabase, dealership.id, dealership.business_category ?? "business"),
+  const [{ report, growth }, branding] = await Promise.all([
+    generateReportBundle(supabase, dealership.id, dealership.business_category ?? "business"),
     getAgencyBranding(supabase, dealership.owner_id),
   ]);
   const { stats } = report;

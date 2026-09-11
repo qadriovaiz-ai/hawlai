@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { generateExecutiveReport } from "@/lib/agents/reportingAgent";
-import { generateGrowthReport } from "@/lib/agents/growthAdvisorAgent";
+import { generateReportBundle } from "@/lib/reports/reportBundle";
 import { getAgencyBranding, reportFooterText, reportAccentColor, reportLogoUrl, fetchLogoBuffer } from "@/lib/agents/agencyBrandingAgent";
 import { formatCurrency } from "@/lib/utils";
 import PDFDocument from "pdfkit";
@@ -16,9 +15,8 @@ export async function GET() {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category, owner_id").eq("id", dealershipId).single();
-  const [report, growth, branding] = await Promise.all([
-    generateExecutiveReport(supabase, dealershipId),
-    generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "business"),
+  const [{ report, growth }, branding] = await Promise.all([
+    generateReportBundle(supabase, dealershipId, dealership?.business_category ?? "business"),
     getAgencyBranding(supabase, dealership?.owner_id),
   ]);
   const { stats } = report;

@@ -1,35 +1,20 @@
 // ------------------------------------------------------------------
-// Reporting Agent — Phase 1 basic version
+// Reporting Agent
 // ------------------------------------------------------------------
-// Pulls together what every other agent has produced (leads, pipeline
-// stages, campaigns, approvals, spend) and asks Claude to turn it into
-// a short, plain-language summary — the kind of update a human CMO
-// would give a founder who doesn't have time to read every dashboard.
+// Turns the business's numbers into a short, plain-language summary —
+// the kind of update a human CMO would give a founder.
+//
+// The numbers come from gatherBusinessNumbers — the same object the
+// Reports page's cards show and the health-score narrative is written
+// from — and the summary is checked against them (narrativeCheck.ts).
 // ------------------------------------------------------------------
 
-import { getCampaignPerformanceState } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
-
-export interface ReportStats {
-  totalLeads: number;
-  hotLeads: number;
-  warmLeads: number;
-  coldLeads: number;
-  leadsByStage: Record<string, number>;
-  pendingApprovals: number;
-  campaignsLaunched: number;
-  /** null when ad data couldn't be read — see adDataReadable. Never conflate with 0. */
-  totalSpend: number | null;
-  costPerLead: number | null;
-  /** false when the Meta account is disconnected or the load failed, so consumers can label the gap instead of printing zeros. */
-  adDataReadable: boolean;
-  totalRevenue: number;
-  roas: number | null;
-  appointmentsScheduled: number;
-  appointmentsCompleted: number;
-  callsMade: number;
-}
+import { gatherBusinessNumbers, type BusinessNumbers } from "@/lib/reports/businessNumbers";
+import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
+/** The report's numbers — one definition, shared with the health-score narrative. */
+export type ReportStats = BusinessNumbers;
 
 export interface ExecutiveReport {
   stats: ReportStats;
@@ -37,63 +22,14 @@ export interface ExecutiveReport {
   priorities: string[];
 }
 
-async function gatherStats(supabase: any, dealershipId: string): Promise<ReportStats> {
-  const [
-    { data: leads },
-    { data: approvals },
-    { data: campaigns },
-    { data: appointments },
-    { data: calls },
-    performance,
-  ] = await Promise.all([
-    supabase.from("leads").select("lead_temperature, status, deal_value").eq("dealership_id", dealershipId),
-    supabase.from("pending_approvals").select("id").eq("dealership_id", dealershipId).eq("status", "pending"),
-    supabase.from("ad_creatives").select("id").eq("dealership_id", dealershipId).eq("status", "launched"),
-    supabase.from("appointments").select("status").eq("dealership_id", dealershipId),
-    supabase.from("calls").select("id").eq("dealership_id", dealershipId),
-    getCampaignPerformanceState(supabase, dealershipId),
-  ]);
-
-  const leadsByStage: Record<string, number> = {};
-  for (const lead of leads ?? []) {
-    leadsByStage[lead.status] = (leadsByStage[lead.status] ?? 0) + 1;
-  }
-
-  const totalRevenue = (leads ?? []).reduce((sum: number, l: any) => sum + (Number(l.deal_value) || 0), 0);
-
-  // Ad figures are reported as null, not 0, when they can't be read.
-  // A report stating "Total spend: Rs 0" to a business that spent real
-  // money is worse than one that says the number is unavailable — the
-  // zero looks authoritative and gets acted on.
-  const adDataReadable = performance.state === "ok";
-  const perf = adDataReadable ? performance.value : null;
-  const spend = perf?.totals.spend ?? null;
-
-  return {
-    adDataReadable,
-    totalLeads: leads?.length ?? 0,
-    hotLeads: leads?.filter((l: any) => l.lead_temperature === "hot").length ?? 0,
-    warmLeads: leads?.filter((l: any) => l.lead_temperature === "warm").length ?? 0,
-    coldLeads: leads?.filter((l: any) => l.lead_temperature === "cold").length ?? 0,
-    leadsByStage,
-    pendingApprovals: approvals?.length ?? 0,
-    campaignsLaunched: campaigns?.length ?? 0,
-    totalSpend: spend,
-    costPerLead: perf?.totals.cost_per_lead ?? null,
-    totalRevenue,
-    roas: spend !== null && spend > 0 ? totalRevenue / spend : null,
-    appointmentsScheduled: appointments?.filter((a: any) => a.status === "scheduled").length ?? 0,
-    appointmentsCompleted: appointments?.filter((a: any) => a.status === "completed").length ?? 0,
-    callsMade: calls?.length ?? 0,
-  };
+function deterministicSummary(stats: ReportStats): string {
+  if (stats.totalLeads === 0 && stats.paidOrders === 0) return "No leads or paid orders yet — once your campaigns and website start bringing people in, this summary will track them.";
+  return `You have ${stats.totalLeads} lead${stats.totalLeads === 1 ? "" : "s"} (${stats.hotLeads} hot) and ${stats.paidOrders} paid order${stats.paidOrders === 1 ? "" : "s"}, with ${stats.pendingApprovals} action${stats.pendingApprovals === 1 ? "" : "s"} waiting for your approval.`;
 }
 
 async function summarizeWithClaude(stats: ReportStats, businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ summary: string; priorities: string[] }> {
   const fallback = {
-    summary:
-      stats.totalLeads === 0
-        ? "No activity yet — launch your first ad to start generating leads."
-        : `You have ${stats.totalLeads} total leads (${stats.hotLeads} hot), with ${stats.pendingApprovals} action(s) waiting for your approval.`,
+    summary: deterministicSummary(stats),
     priorities: stats.pendingApprovals > 0 ? ["Review pending approvals"] : [],
   };
 
@@ -111,11 +47,13 @@ async function summarizeWithClaude(stats: ReportStats, businessCategory: string,
         messages: [
           {
             role: "user",
-            content: `You are writing a short executive summary for a ${businessCategory} business owner, based on this data from their marketing dashboard:
-${JSON.stringify(stats, null, 2)}
+            content: `You are writing a short executive summary for a ${businessCategory} business owner. The real numbers from their dashboard:
+${describeNumbersForPrompt(stats)}
+
+${NARRATIVE_RULES}
 
 Write it like a sharp marketing manager briefing a busy founder — plain language, no jargon, no fluff. Return JSON only (no markdown):
-{"summary":"2-3 sentence overview of where things stand, in plain English","priorities":["1-3 short, specific, actionable next steps — only include ones that actually matter given the data. Empty array if genuinely nothing needs attention."]}`,
+{"summary":"2-3 sentence overview of where things stand, in plain English","priorities":["1-3 short, specific, actionable next steps — only ones that matter given the data. Empty array if nothing needs attention."]}`,
           },
         ],
       }),
@@ -129,9 +67,19 @@ Write it like a sharp marketing manager briefing a busy founder — plain langua
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
+
+    // The check: the summary and priorities sit beside the cards, so any
+    // figure they state must be one of the cards' figures. A sentence
+    // that disagrees is replaced or dropped — never shown.
+    const allowed = allowedNumbers(stats);
+    const summaryOk = typeof parsed.summary === "string" && narrativeProblems(parsed.summary, allowed).length === 0;
+    const priorities = keepConsistent(parsed.priorities, allowed);
+    const dropped = [...(summaryOk || !parsed.summary ? [] : [`summary: ${parsed.summary}`]), ...priorities.dropped];
+    if (dropped.length) console.warn("[reporting-agent] dropped narrative that disagreed with the numbers:", dropped.join(" | "));
+
     return {
-      summary: parsed.summary ?? fallback.summary,
-      priorities: Array.isArray(parsed.priorities) ? parsed.priorities : fallback.priorities,
+      summary: summaryOk ? parsed.summary : fallback.summary,
+      priorities: Array.isArray(parsed.priorities) ? priorities.kept : fallback.priorities,
     };
   } catch (err: any) {
     console.error("[reporting-agent] summarizeWithClaude error:", err.message);
@@ -139,12 +87,12 @@ Write it like a sharp marketing manager briefing a busy founder — plain langua
   }
 }
 
-export async function generateExecutiveReport(supabase: any, dealershipId: string): Promise<ExecutiveReport> {
+export async function generateExecutiveReport(supabase: any, dealershipId: string, numbers?: BusinessNumbers): Promise<ExecutiveReport> {
   const [stats, { data: dealership }] = await Promise.all([
-    gatherStats(supabase, dealershipId),
+    numbers ? Promise.resolve(numbers) : gatherBusinessNumbers(supabase, dealershipId),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
-  const businessCategory = dealership?.business_category ?? "car dealership";
+  const businessCategory = dealership?.business_category ?? "business";
   const { summary, priorities } = await summarizeWithClaude(stats, businessCategory, { supabase, dealershipId });
   return { stats, summary, priorities };
 }

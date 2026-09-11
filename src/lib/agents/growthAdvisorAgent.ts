@@ -2,15 +2,20 @@
 // CEO Growth Advisor Agent
 // ------------------------------------------------------------------
 // Synthesizes what every other agent already knows (leads, campaign
-// performance, revenue, optimization recommendations) into one
-// high-level "how is my business doing and what should I do next"
-// view — the genuinely new thing here is the synthesis, not new data
-// collection, since all the underlying numbers already exist.
+// performance, revenue) into one high-level "how is my business doing
+// and what should I do next" view.
+//
+// Its numbers come from gatherBusinessNumbers — the same object the
+// Reports page's cards and executive summary use — and its narrative is
+// checked against them (narrativeCheck.ts). It used to read its own
+// revenue figure and told a business to "trace where the ₹550 revenue
+// came from" beside a Revenue card showing ₹0.
 // ------------------------------------------------------------------
 
-import { getCampaignPerformanceState } from "./analyticsAgent";
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { gatherBusinessNumbers, type BusinessNumbers } from "@/lib/reports/businessNumbers";
+import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
 
 export interface GrowthReport {
   healthScore: number; // 0-100
@@ -20,38 +25,23 @@ export interface GrowthReport {
   nextActions: string[];
 }
 
-export async function generateGrowthReport(supabase: any, dealershipId: string, businessCategory: string = "car dealership"): Promise<GrowthReport> {
-  const [{ data: leads }, performanceState, { data: dealership }] = await Promise.all([
-    supabase.from("leads").select("lead_temperature, status, created_at, deal_value").eq("dealership_id", dealershipId),
-    getCampaignPerformanceState(supabase, dealershipId),
-    supabase.from("dealerships").select("dealership_name, onboarding_completed").eq("id", dealershipId).single(),
-  ]);
+export async function generateGrowthReport(
+  supabase: any,
+  dealershipId: string,
+  businessCategory: string = "business",
+  /** Pass the report's own numbers so the narrative and the cards can't diverge (reportBundle.ts). */
+  numbers?: BusinessNumbers
+): Promise<GrowthReport> {
+  const n = numbers ?? (await gatherBusinessNumbers(supabase, dealershipId));
 
-  // This was the most consequential of the four: spend and campaign
-  // counts feed the HEALTH SCORE, not just a label. With a missing Meta
-  // token the old code read zeros and scored the business as though it
-  // ran no campaigns — a dealer spending real money could be marked
-  // 30/100 for "no live campaigns" and told to launch their first ad.
-  // Unreadable is now distinguished from absent, and the score is
-  // withheld rather than computed on data we don't have.
-  const totalLeads = leads?.length ?? 0;
-
-  // Returns early when ad data is UNREADABLE — not connected, or the
-  // query failed. "no_data" deliberately falls through instead: no
-  // campaigns launched genuinely means zero spend and zero live
-  // campaigns, so the normal scoring below is correct for it.
-  //
-  // This matters beyond the score. totalSpend is interpolated straight
-  // into the prompt below, so falling through on unreadable data would
-  // tell Claude the business spent ₹0 and ask it to advise on that.
-  if (performanceState.state === "not_connected" || performanceState.state === "error") {
-    const notConnected = performanceState.state === "not_connected";
+  // Ad data UNREADABLE — not connected, or the load failed. Scored on
+  // leads alone and never presented as a measurement of ad performance.
+  // "no_data" (no campaigns launched) falls through: that genuinely
+  // means zero spend.
+  if (n.adDataState === "not_connected" || n.adDataState === "error") {
+    const notConnected = n.adDataState === "not_connected";
     return {
-      // Scored on leads alone, and deliberately never the 30 that
-      // "liveCampaigns === 0" would have produced — we don't know
-      // whether campaigns are running, and guessing low is still a
-      // guess presented as a measurement.
-      healthScore: totalLeads === 0 ? 10 : 50,
+      healthScore: n.totalLeads === 0 ? 10 : 50,
       headline: notConnected
         ? "Your Meta ad account isn't connected, so ad performance is missing from this."
         : "Ad performance couldn't be loaded, so this is based on leads only.",
@@ -63,23 +53,12 @@ export async function generateGrowthReport(supabase: any, dealershipId: string, 
     };
   }
 
-  const performance =
-    performanceState.state === "ok"
-      ? performanceState.value
-      : { campaigns: [], totals: { spend: 0, leads: 0, cost_per_lead: null } };
-
-  const hotLeads = leads?.filter((l: any) => l.lead_temperature === "hot").length ?? 0;
-  const converted = leads?.filter((l: any) => l.status === "converted").length ?? 0;
-  const totalRevenue = performance.campaigns.reduce((s, c) => s + c.revenue, 0);
-  const totalSpend = performance.totals.spend;
-  const liveCampaigns = performance.campaigns.filter((c) => c.meta_status === "ACTIVE").length;
-
   const fallback: GrowthReport = {
-    healthScore: totalLeads === 0 ? 10 : liveCampaigns === 0 ? 30 : 60,
-    headline: totalLeads === 0 ? "Just getting started — no leads yet." : "Building momentum.",
+    healthScore: n.totalLeads === 0 ? 10 : n.liveCampaigns === 0 ? 30 : 60,
+    headline: n.totalLeads === 0 ? "Just getting started — no leads yet." : "Building momentum.",
     strengths: [],
-    risks: totalLeads === 0 ? ["No leads yet — launch your first campaign"] : [],
-    nextActions: totalLeads === 0 ? ["Launch your first ad in Marketing → Launch Ad"] : ["Check Optimization for campaign recommendations"],
+    risks: n.totalLeads === 0 ? ["No leads yet — launch your first campaign"] : [],
+    nextActions: n.totalLeads === 0 ? ["Launch your first ad in Marketing → Launch Ad"] : ["Check Optimization for campaign recommendations"],
   };
 
   try {
@@ -96,16 +75,14 @@ export async function generateGrowthReport(supabase: any, dealershipId: string, 
         messages: [
           {
             role: "user",
-            content: `You are a blunt, experienced growth advisor reviewing this Indian ${businessCategory} business's marketing health. Real data — don't invent numbers:
-Total leads: ${totalLeads} (${hotLeads} currently Hot)
-Converted to sales: ${converted}
-Live campaigns right now: ${liveCampaigns}
-Total ad spend so far: ₹${totalSpend}
-Total revenue attributed to ads: ₹${totalRevenue}
-Onboarding complete: ${dealership?.onboarding_completed ? "yes" : "no"}
+            content: `You are an experienced growth advisor reviewing this Indian ${businessCategory} business's marketing health. The real numbers:
+${describeNumbersForPrompt(n)}
+Onboarding complete: ${n.onboardingCompleted ? "yes" : "no"}
+
+${NARRATIVE_RULES}
 
 Return JSON only:
-{"healthScore":integer 0-100 (be honest — a business with 0 leads or 0 live campaigns should score low, not a participation-trophy number),"headline":"one blunt sentence summarizing where they stand","strengths":["1-2 honest positives, or empty array if none yet"],"risks":["1-3 real risks/gaps, most urgent first"],"nextActions":["1-3 concrete next actions, most impactful first, specific enough to act on today"]}`,
+{"healthScore":integer 0-100 (honest — a business with 0 leads or 0 live campaigns should score low),"headline":"one honest sentence summarizing where they stand","strengths":["1-2 honest positives, or empty array if none yet"],"risks":["1-3 real risks/gaps, most urgent first"],"nextActions":["1-3 concrete next actions, most impactful first, specific enough to act on today"]}`,
           },
         ],
       }),
@@ -120,12 +97,23 @@ Return JSON only:
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
+
+    // The check: anything that disagrees with the page's own numbers is
+    // dropped, not shown.
+    const allowed = allowedNumbers(n);
+    const headlineOk = typeof parsed.headline === "string" && narrativeProblems(parsed.headline, allowed).length === 0;
+    const strengths = keepConsistent(parsed.strengths, allowed);
+    const risks = keepConsistent(parsed.risks, allowed);
+    const nextActions = keepConsistent(parsed.nextActions, allowed);
+    const dropped = [...(headlineOk || !parsed.headline ? [] : [`headline: ${parsed.headline}`]), ...strengths.dropped, ...risks.dropped, ...nextActions.dropped];
+    if (dropped.length) console.warn("[growth-advisor-agent] dropped narrative that disagreed with the numbers:", dropped.join(" | "));
+
     return {
       healthScore: typeof parsed.healthScore === "number" ? parsed.healthScore : fallback.healthScore,
-      headline: parsed.headline ?? fallback.headline,
-      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
-      risks: Array.isArray(parsed.risks) ? parsed.risks : [],
-      nextActions: Array.isArray(parsed.nextActions) ? parsed.nextActions : fallback.nextActions,
+      headline: headlineOk ? parsed.headline : fallback.headline,
+      strengths: strengths.kept,
+      risks: risks.kept,
+      nextActions: nextActions.kept.length ? nextActions.kept : fallback.nextActions,
     };
   } catch (err: any) {
     console.error("[growth-advisor-agent] error:", err.message);
