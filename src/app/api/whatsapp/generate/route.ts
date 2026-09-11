@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWhatsappContent } from "@/lib/agents/whatsappMarketingAgent";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -17,9 +18,11 @@ export async function POST(request: Request) {
   const { taskType, topic } = await request.json();
   if (!taskType) return NextResponse.json({ error: "taskType required" }, { status: 400 });
 
-  const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
+  const [{ data: dealership }, { data: brandProfile }, facts] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
+    // Written from, and checked against, what the business can back up (src/lib/claims).
+    gatherBusinessFactsSafely(supabase, dealershipId),
   ]);
 
   const { output, _fallback } = await generateWhatsappContent(
@@ -28,7 +31,9 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "car dealership",
     topic ?? "",
     brandProfile,
-    { supabase, dealershipId }
+    { supabase, dealershipId },
+    undefined,
+    facts
   );
 
   let saved = null;

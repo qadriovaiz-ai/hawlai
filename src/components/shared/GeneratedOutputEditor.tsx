@@ -56,7 +56,8 @@ export function OutputRenderer({ output }: { output: any }) {
 
   return (
     <div className="space-y-3 text-sm text-slate-700">
-      {Object.entries(output).map(([key, val]) => (
+      {/* "_" keys are metadata (a saved id, the claims note) — not content. */}
+      {Object.entries(output).filter(([key]) => !key.startsWith("_")).map(([key, val]) => (
         <div key={key}>
           {key !== "text" && <p className="text-xs font-semibold text-slate-400 capitalize mb-1">{humanizeKey(key)}</p>}
           <FieldValue value={val} />
@@ -175,7 +176,7 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
 
   return (
     <div className="space-y-2.5">
-      {Object.entries(output).map(([key, val]) => (
+      {Object.entries(output).filter(([key]) => !key.startsWith("_")).map(([key, val]) => (
         <div key={key}>
           {key !== "text" && <p className="text-xs font-semibold text-slate-400 capitalize mb-1">{humanizeKey(key)}</p>}
           <EditableFieldValue value={val} onChange={(v) => setPath([key], v)} />

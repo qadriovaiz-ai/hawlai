@@ -9,6 +9,8 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { guardGenerated } from "@/lib/claims/claimCheck";
 
 export interface ContentTypeMeta {
   key: string;
@@ -35,8 +37,8 @@ export const CONTENT_TYPES: ContentTypeMeta[] = [
   { key: "youtube_script", label: "YouTube Script", group: "Video", instructions: "A YouTube video script outline: title, hook (first 15 seconds), 3-4 main talking-point sections, and an outro CTA." },
   { key: "shorts_script", label: "Shorts / Reels Script", group: "Video", instructions: "A 15-30 second Shorts/Reels script: on-screen hook text, spoken line, 2-3 quick beats, and a closing CTA — punchy, fast-paced." },
   { key: "reel_ideas", label: "Reel Ideas", group: "Quick Wins", instructions: "5 distinct reel/short-form video concept ideas, each with a one-line concept and a one-line hook." },
-  { key: "hooks", label: "Hook Generation", group: "Quick Wins", instructions: "8 scroll-stopping opening hooks (first-line only) for social posts or videos, varied in style (question, bold claim, stat, story-opener)." },
-  { key: "ctas", label: "CTA Generation", group: "Quick Wins", instructions: "10 varied call-to-action lines, mixing urgency, curiosity, and direct-offer styles, suitable for ads, posts and emails." },
+  { key: "hooks", label: "Hook Generation", group: "Quick Wins", instructions: "8 scroll-stopping opening hooks (first-line only) for social posts or videos, varied in style (question, bold statement, surprising-but-true observation, story-opener) — never an invented statistic." },
+  { key: "ctas", label: "CTA Generation", group: "Quick Wins", instructions: "10 varied call-to-action lines, mixing curiosity, benefit-led and direct styles — urgency or an offer only when the facts contain a real one — suitable for ads, posts and emails." },
   { key: "content_calendar", label: "Content Calendar", group: "Quick Wins", instructions: "A 7-day content calendar — but this must be real, ready-to-post content for each day, not just a topic list. Return an array of 7 items, each with day, contentType (pick from Instagram/LinkedIn/Reel/Blog/Email etc.), topic, angle (1 line), AND caption — the full, actual, ready-to-copy-paste caption/post text for that day (write it exactly as it should be posted, including a hook and a natural close — for a Reel/video format, write the actual on-screen hook line and caption, not just a scene description). The person should be able to copy each day's caption straight into the app and post it, not have to write it themselves from the topic/angle." },
 ];
 
@@ -53,8 +55,10 @@ export async function generateContent(
   topic: string,
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+  groundingContext?: string,
+  /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
+  facts?: BusinessFacts | null
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[] }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
 
@@ -84,7 +88,7 @@ export async function generateContent(
           {
             role: "user",
             content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}
+${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Topic/product/context: "${topic || "general brand content, use good judgement for this business type"}"
 
 Content type: ${meta.label}
@@ -105,7 +109,11 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
-    return { output: parsed };
+    if (!facts) return { output: parsed };
+    // Sentences making claims the facts don't support are removed, and
+    // the owner is told (output._claimsNote) — never silently kept.
+    const guarded = guardGenerated(parsed, facts);
+    return { output: guarded.output, claimsRemoved: guarded.removed };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;

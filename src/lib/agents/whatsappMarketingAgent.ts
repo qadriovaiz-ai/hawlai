@@ -23,9 +23,9 @@ export const WHATSAPP_TASKS: WhatsappTaskMeta[] = [
   { key: "chatbot_flow", label: "AI Chatbot Flow", instructions: "A WhatsApp chatbot conversation flow script for handling common inbound questions for this business: return {flow: [{trigger, response}]} — 6 common triggers (e.g. 'pricing', 'hours', 'location', greeting) each with the exact response text the bot/agent should send." },
   { key: "follow_up", label: "Follow-up Message", instructions: "A WhatsApp follow-up message for a lead who hasn't replied, casual and low-pressure, under 200 characters, gives an easy out. Return {message}." },
   { key: "order_update", label: "Order Update", instructions: "A WhatsApp order/booking status update message, clear and reassuring, under 200 characters, includes a placeholder like {status} or {date} where the real detail would be inserted. Return {message}." },
-  { key: "promotion", label: "Promotion", instructions: "A WhatsApp promotional message for an offer, under 250 characters, WhatsApp formatting, genuine urgency if applicable, clear CTA. Return {message}." },
+  { key: "promotion", label: "Promotion", instructions: "A WhatsApp promotional message, under 250 characters, WhatsApp formatting, clear CTA. Feature an offer only if the facts list an active one (use its code and terms exactly); otherwise promote the product itself. Return {message}." },
   { key: "cart_recovery", label: "Cart Recovery", instructions: "A WhatsApp message for someone who showed interest but didn't follow through, gentle nudge addressing likely hesitation, under 200 characters, soft CTA. Return {message}." },
-  { key: "lead_nurturing", label: "Lead Nurturing Sequence", instructions: "A 3-message WhatsApp nurture sequence for a warm lead, each message short (under 150 characters) with a distinct angle (value, social proof, gentle CTA), meant to be sent a few days apart. Return {messages: [{step, message}]}." },
+  { key: "lead_nurturing", label: "Lead Nurturing Sequence", instructions: "A 3-message WhatsApp nurture sequence for a warm lead, each message short (under 150 characters) with a distinct angle (value, trust built only from real facts, gentle CTA), meant to be sent a few days apart. Return {messages: [{step, message}]}." },
 ];
 
 interface BrandProfile {
@@ -35,6 +35,8 @@ interface BrandProfile {
 import { logClaudeUsage } from "../usage/logUsage";
 import { CLAUDE_MODELS } from "../models";
 import { modelForTask } from "../aiTaskRouter";
+import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { guardGenerated } from "@/lib/claims/claimCheck";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -43,8 +45,10 @@ export async function generateWhatsappContent(
   topic: string,
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+  groundingContext?: string,
+  /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
+  facts?: BusinessFacts | null
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[] }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
 
@@ -71,7 +75,7 @@ export async function generateWhatsappContent(
         messages: [{
           role: "user",
           content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}
+${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Topic/context: "${topic || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}
@@ -90,7 +94,12 @@ Return JSON only, no markdown, no preamble. WhatsApp messages should read like a
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    return { output: JSON.parse(clean) };
+    const parsed = JSON.parse(clean);
+    if (!facts) return { output: parsed };
+    // Sentences making claims the facts don't support are removed, and
+    // the owner is told (output._claimsNote) — never silently kept.
+    const guarded = guardGenerated(parsed, facts);
+    return { output: guarded.output, claimsRemoved: guarded.removed };
   } catch (err: any) {
     console.error("[whatsapp-marketing-agent] error:", err.message);
     return fallback;

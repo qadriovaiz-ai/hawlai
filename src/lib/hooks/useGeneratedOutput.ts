@@ -100,7 +100,7 @@ export function useGeneratedOutput({ endpoint, query = "" }: UseGeneratedOutputO
 
   function copyOutput() {
     if (!output) return;
-    navigator.clipboard.writeText(JSON.stringify(output, null, 2).replace(/[{}"[\],]/g, "").trim());
+    navigator.clipboard.writeText(JSON.stringify(output, (key, value) => (key.startsWith("_") ? undefined : value), 2).replace(/[{}"[\],]/g, "").trim());
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }

@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { claimsNote } from "@/lib/claims/claimCheck";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 
 async function getDealership(supabase: any, userId: string) {
@@ -42,6 +44,9 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single();
   const { data: brandProfile } = await supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle();
+  // Queued posts go out on their date without another look — so the
+  // caption is written from, and checked against, the business's facts.
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
 
   const name = dealership?.dealership_name ?? "the business";
   const category = dealership?.business_category ?? "business";
@@ -58,12 +63,16 @@ export async function POST(request: Request) {
 
   const [imageBuffer, contentResult] = await Promise.all([
     generateGraphic("social_graphic", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }),
-    generateContent("instagram_post", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }),
+    generateContent("instagram_post", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }, undefined, facts),
   ]);
 
   if (contentResult._fallback) return NextResponse.json({ error: "Content generation didn't work right now — try again shortly." }, { status: 500 });
   const caption = contentResult.output.text ?? (Object.values(contentResult.output)[0] as string) ?? "";
-  if (!caption) return NextResponse.json({ error: "Couldn't generate a caption" }, { status: 500 });
+  if (!caption) {
+    return contentResult.claimsRemoved?.length
+      ? NextResponse.json({ error: "Every line of that caption relied on claims Hawlai couldn't verify — try a different topic." }, { status: 422 })
+      : NextResponse.json({ error: "Couldn't generate a caption" }, { status: 500 });
+  }
 
   const serviceClient = createServiceClient();
   const filePath = `content-queue/${dealershipId}/${Date.now()}.png`;
@@ -78,7 +87,7 @@ export async function POST(request: Request) {
   }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ success: true, item: saved });
+  return NextResponse.json({ success: true, item: saved, note: claimsNote(contentResult.claimsRemoved ?? []) });
 }
 
 export async function PATCH(request: Request) {

@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSocialCaption } from "@/lib/agents/socialMediaAgent";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { claimsNote } from "@/lib/claims/claimCheck";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -16,11 +18,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Describe the post in a few words" }, { status: 400 });
   }
 
-  const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
+  const [{ data: brandProfile }, { data: dealership }, facts] = await Promise.all([
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+    gatherBusinessFactsSafely(supabase, dealershipId),
   ]);
 
-  const caption = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
-  return NextResponse.json({ caption });
+  // The owner posts this straight to their Page, so it's written from,
+  // and checked against, what the business can back up (src/lib/claims).
+  const { caption, claimsRemoved } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, facts);
+  return NextResponse.json({ caption, note: claimsNote(claimsRemoved) });
 }

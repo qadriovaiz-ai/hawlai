@@ -1,5 +1,19 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
 import { sendDealerEmail } from "@/lib/email/sendDealerEmail";
+import { gatherBusinessFactsSafely, type BusinessFacts } from "@/lib/claims/businessFacts";
+
+// Sent with no human in between, so an email goes out only if it needed
+// NO claims removed (src/lib/claims) — a stripped email can read oddly
+// and nobody is checking it. One fresh attempt, then the lead simply
+// waits for the next run; nothing is marked sent.
+async function verifiedEmail(task: string, name: string, category: string, topic: string, brandProfile: any, facts: BusinessFacts) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await generateEmailContent(task, name, category, topic, brandProfile, undefined, undefined, facts);
+    if (r._fallback) return null;
+    if (!r.claimsRemoved?.length && r.output?.body) return r.output;
+  }
+  return null;
+}
 
 // Runs once per day per dealership as part of the existing autopilot
 // cron. Handles two REAL auto-send triggers (as opposed to the
@@ -30,6 +44,9 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  if (!facts) return { welcomesSent: 0, followUpsSent: 0, skipped: "business facts unreadable" };
+
   let welcomesSent = 0;
   let followUpsSent = 0;
 
@@ -44,15 +61,16 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       .limit(50); // safety cap per run
 
     for (const lead of newLeads ?? []) {
-      const { output, _fallback } = await generateEmailContent(
+      const output = await verifiedEmail(
         "welcome_email",
         dealership.dealership_name ?? "our business",
         dealership.business_category ?? "business",
         lead.name ? `New lead named ${lead.name}` : "",
-        brandProfile
+        brandProfile,
+        facts
       );
-      if (_fallback) continue; // don't send a placeholder email
-      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject ?? "Welcome!", output.body ?? "");
+      if (!output) continue; // a placeholder or an unverifiable claim — never sent
+      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject || "Welcome!", output.body);
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "welcome",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,
@@ -80,15 +98,16 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       .limit(50);
 
     for (const lead of staleLeads ?? []) {
-      const { output, _fallback } = await generateEmailContent(
+      const output = await verifiedEmail(
         "follow_up",
         dealership.dealership_name ?? "our business",
         dealership.business_category ?? "business",
         lead.name ? `Following up with ${lead.name}, who hasn't responded in a few days` : "",
-        brandProfile
+        brandProfile,
+        facts
       );
-      if (_fallback) continue;
-      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject ?? "Following up", output.body ?? "");
+      if (!output) continue;
+      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject || "Following up", output.body);
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "follow_up",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,

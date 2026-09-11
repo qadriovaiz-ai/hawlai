@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -17,9 +18,11 @@ export async function POST(request: Request) {
   const { contentType, topic } = await request.json();
   if (!contentType) return NextResponse.json({ error: "contentType required" }, { status: 400 });
 
-  const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
+  const [{ data: dealership }, { data: brandProfile }, facts] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
+    // Written from, and checked against, what the business can back up (src/lib/claims).
+    gatherBusinessFactsSafely(supabase, dealershipId),
   ]);
 
   const { output, _fallback } = await generateContent(
@@ -28,7 +31,9 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "car dealership",
     topic ?? "",
     brandProfile,
-    { supabase, dealershipId }
+    { supabase, dealershipId },
+    undefined,
+    facts
   );
 
   // Only save real generations to history — a fallback shouldn't

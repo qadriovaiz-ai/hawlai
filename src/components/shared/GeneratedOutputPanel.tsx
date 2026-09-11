@@ -68,6 +68,8 @@ export function GeneratedOutputPanel({
           )}
         </div>
       </div>
+      {/* Lines removed for claims Hawlai couldn't verify (src/lib/claims) — said out loud, never silently. */}
+      {typeof output?._claimsNote === "string" && <p className="text-xs text-amber-500">{output._claimsNote}</p>}
       {editing ? <EditableOutput output={draft} onChange={onDraftChange} /> : <OutputRenderer output={output} />}
     </Card>
   );

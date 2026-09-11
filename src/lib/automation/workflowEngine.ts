@@ -1,5 +1,6 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
 import { sendEmail } from "@/lib/agents/gmailAgent";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 interface TriggeredLead {
   leadId: string;
@@ -86,6 +87,12 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
+  // AI-written steps are emailed with no human in between, so they're
+  // written from, and checked against, the business's facts
+  // (src/lib/claims). Custom steps are the owner's own words and send as
+  // written.
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+
   let stepsSent = 0;
 
   for (const workflow of workflows) {
@@ -141,16 +148,23 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
         let subject = step.custom_subject ?? "";
         let body = step.custom_body ?? "";
         if (step.email_task_type && step.email_task_type !== "custom") {
-          const { output, _fallback } = await generateEmailContent(
+          if (!facts) break; // facts unreadable — nothing unverified is sent; try again next run
+          const { output, _fallback, claimsRemoved } = await generateEmailContent(
             step.email_task_type,
             dealership.dealership_name ?? "our business",
             dealership.business_category ?? "business",
             lead.name ? `For lead ${lead.name}` : "",
-            brandProfile
+            brandProfile,
+            undefined,
+            undefined,
+            facts
           );
           if (_fallback) break; // don't send placeholder content, try again next run
-          subject = output.subject ?? subject;
-          body = output.body ?? body;
+          // Only an email that needed NO claims removed is sent — a
+          // stripped one can read oddly and nobody is checking it.
+          if (claimsRemoved?.length) break;
+          subject = output.subject || subject;
+          body = output.body || body;
         }
         if (!subject || !body) break;
 

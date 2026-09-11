@@ -15,6 +15,7 @@
 // successfully "done".
 
 import { generateContent } from "../agents/contentMarketingAgent";
+import { gatherBusinessFactsSafely } from "../claims/businessFacts";
 
 export type TaskExecutor = (supabase: any, task: { id: string; dealership_id: string; action_type: string; action_details: Record<string, any>; title: string }) => Promise<any>;
 
@@ -28,7 +29,9 @@ export const TASK_EXECUTORS: Record<string, TaskExecutor> = {
     const { output, _fallback } = await generateContent(
       contentType, businessName, businessCategory, topic ?? "",
       { tone_of_voice: toneOfVoice ?? null, messaging_pillars: [] },
-      { supabase, dealershipId: task.dealership_id }
+      { supabase, dealershipId: task.dealership_id },
+      undefined,
+      await gatherBusinessFactsSafely(supabase, task.dealership_id)
     );
     if (_fallback) throw new Error("Content generation fell back to a generic template — not saved, treated as a failed attempt.");
     const { data, error } = await supabase.from("content_pieces").insert({

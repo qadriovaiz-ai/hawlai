@@ -14,6 +14,8 @@ export default function SocialPostPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [caption, setCaption] = useState("");
+  // Set when lines were removed for making claims Hawlai couldn't verify (src/lib/claims).
+  const [claimsNote, setClaimsNote] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export default function SocialPostPage() {
 
   async function handleGenerateCaption() {
     setError(null);
+    setClaimsNote(null);
     if (prompt.trim().length < 3) return setError("Describe the post in a few words");
     setGenerating(true);
     try {
@@ -45,6 +48,7 @@ export default function SocialPostPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setCaption(data.caption);
+      setClaimsNote(data.note ?? null);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -115,6 +119,7 @@ export default function SocialPostPage() {
           {!generating && <Sparkles className="w-4 h-4" />}
           Generate Caption
         </Button>
+        {claimsNote && <p className="text-xs text-amber-500">{claimsNote}</p>}
         {caption && (
           <Textarea
             value={caption}

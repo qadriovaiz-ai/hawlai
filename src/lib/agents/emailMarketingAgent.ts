@@ -9,6 +9,8 @@
 // honest guidance instead of fabricating numbers.
 
 import { getModel } from "../models";
+import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { guardGenerated } from "@/lib/claims/claimCheck";
 
 export interface EmailTaskMeta {
   key: string;
@@ -19,9 +21,9 @@ export interface EmailTaskMeta {
 export const EMAIL_TASKS: EmailTaskMeta[] = [
   { key: "welcome_email", label: "Welcome Email", instructions: "A welcome email for a new lead/customer: return {subject, previewText, body} — warm, sets expectations for what happens next, no hard sell." },
   { key: "abandoned_cart", label: "Abandoned Cart", instructions: "An abandoned-cart/inquiry follow-up email for someone who showed interest but didn't convert: return {subject, previewText, body} — gentle nudge, addresses likely hesitation, soft CTA to continue." },
-  { key: "promotional", label: "Promotional Email", instructions: "A promotional email for an offer or product: return {subject, previewText, body} — clear offer, urgency where genuine, strong CTA." },
+  { key: "promotional", label: "Promotional Email", instructions: "A promotional email for an offer or product: return {subject, previewText, body} — if the facts list an active offer, feature it exactly as listed (code and terms); if not, promote the product itself and never invent a discount. Strong CTA." },
   { key: "newsletter", label: "Newsletter", instructions: "A newsletter email: return {subject, previewText, sections: [{heading, body}]} — 3 short sections (e.g. update, tip, spotlight), casual and value-first, not salesy." },
-  { key: "sales_sequence", label: "Sales Sequence", instructions: "A 3-email sales sequence for nurturing a warm lead toward a decision: return {emails: [{step, subject, body}]} — each email should have a distinct angle (value, social proof, urgency) and escalate naturally." },
+  { key: "sales_sequence", label: "Sales Sequence", instructions: "A 3-email sales sequence for nurturing a warm lead toward a decision: return {emails: [{step, subject, body}]} — each email should have a distinct angle (value, trust built only from real facts — never invented testimonials or numbers — and a clear next step) and escalate naturally." },
   { key: "follow_up", label: "Follow-up Email", instructions: "A follow-up email for a lead who went quiet after initial contact: return {subject, previewText, body} — low-pressure, easy to reply to, gives an easy out ('let me know if now isn't the right time')." },
   { key: "personalization", label: "Personalization Tips", instructions: "5 practical personalization tactics for making emails feel individually written rather than mass-blasted, specific to this business type: return {tips: [{tactic, howTo}]}." },
 ];
@@ -39,8 +41,10 @@ export async function generateEmailContent(
   topic: string,
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+  groundingContext?: string,
+  /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
+  facts?: BusinessFacts | null
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[] }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -61,7 +65,7 @@ export async function generateEmailContent(
         messages: [{
           role: "user",
           content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}
+${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Topic/context: "${topic || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}
@@ -80,7 +84,12 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    return { output: JSON.parse(clean) };
+    const parsed = JSON.parse(clean);
+    if (!facts) return { output: parsed };
+    // Sentences making claims the facts don't support are removed, and
+    // the owner is told (output._claimsNote) — never silently kept.
+    const guarded = guardGenerated(parsed, facts);
+    return { output: guarded.output, claimsRemoved: guarded.removed };
   } catch (err: any) {
     console.error("[email-marketing-agent] error:", err.message);
     return fallback;

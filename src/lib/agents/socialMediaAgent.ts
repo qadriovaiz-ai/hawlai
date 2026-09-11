@@ -10,6 +10,8 @@
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { stripUnsupported } from "@/lib/claims/claimCheck";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -17,11 +19,15 @@ export async function generateSocialCaption(
   prompt: string,
   brandProfile?: { tone_of_voice?: string | null; messaging_pillars?: string[] | null; preferred_language?: string | null } | null,
   businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
-): Promise<string> {
+  logContext?: { supabase: any; dealershipId: string },
+  /** Verified business facts (src/lib/claims). When given, the caption is written from them and checked against them. */
+  facts?: BusinessFacts | null
+): Promise<{ caption: string; claimsRemoved: string[] }> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
     : "No brand profile set — default to a warm, professional tone in Hinglish.";
+  // The owner's own words come back unchanged when generation fails.
+  const unchanged = { caption: prompt, claimsRemoved: [] as string[] };
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -39,26 +45,29 @@ export async function generateSocialCaption(
             role: "user",
             content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
 What the post is about: "${prompt}"
-${brandContext}
+${brandContext}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end. Return JSON only: {"caption":"the caption text"}`,
           },
         ],
       }),
     });
-    if (!response.ok) return prompt;
+    if (!response.ok) return unchanged;
     const bodyText = await response.text();
-    if (!bodyText.trim()) return prompt;
+    if (!bodyText.trim()) return unchanged;
     const data = JSON.parse(bodyText);
     if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "social_caption", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
     const text = data.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return prompt;
+    if (!clean) return unchanged;
     const parsed = JSON.parse(clean);
-    return parsed.caption ?? prompt;
+    const caption: string = parsed.caption ?? prompt;
+    if (!facts) return { caption, claimsRemoved: [] };
+    const r = stripUnsupported(caption, facts);
+    return { caption: r.text, claimsRemoved: r.removed };
   } catch (err: any) {
     console.error("[social-media-agent] generateSocialCaption error:", err.message);
-    return prompt;
+    return unchanged;
   }
 }
 

@@ -708,7 +708,9 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       }
     }
     case "generate_content": {
-      const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext);
+      const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
+      const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+      const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext, facts);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
@@ -739,12 +741,16 @@ async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, 
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_email": {
-      const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
+      const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
+      const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+      const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_whatsapp": {
-      const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
+      const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
+      const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+      const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }

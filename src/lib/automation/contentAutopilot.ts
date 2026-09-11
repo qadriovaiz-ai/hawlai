@@ -3,6 +3,7 @@ import { generateContent } from "@/lib/agents/contentMarketingAgent";
 import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 // Runs daily as part of the autopilot cron. Fully automatic — no
 // human touches the generated content before it's posted. This is
@@ -60,6 +61,15 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   const pillars = brandProfile?.messaging_pillars ?? [];
   const topic = pillars.length > 0 ? pillars[Math.floor(Math.random() * pillars.length)] : "";
 
+  // Posted publicly with nobody reading it first, so the caption is
+  // written from, and checked against, the business's real facts. No
+  // facts, no post: unverifiable copy is exactly what must not go out
+  // under the owner's name unreviewed.
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  if (!facts) return { skipped: "business facts unreadable" };
+  const name = dealership.dealership_name ?? "the business";
+  const category = dealership.business_category ?? "business";
+
   let imageUrl: string | null = null;
   let caption: string | null = null;
   let postId: string | null = null;
@@ -69,12 +79,24 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   let instagramError: string | null = null;
 
   try {
-    const [imageBuffer, contentResult] = await Promise.all([
-      generateGraphic("social_graphic", dealership.dealership_name ?? "the business", dealership.business_category ?? "business", topic, brandProfile),
-      generateContent("instagram_post", dealership.dealership_name ?? "the business", dealership.business_category ?? "business", topic, brandProfile),
+    const [imageBuffer, firstAttempt] = await Promise.all([
+      generateGraphic("social_graphic", name, category, topic, brandProfile),
+      generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts),
     ]);
 
+    // A caption goes out only if it needed NO claims removed — a
+    // stripped caption can read oddly, and nobody is checking it. One
+    // fresh attempt, then the run is skipped: a post a day late beats a
+    // false claim published under the owner's name.
+    let contentResult = firstAttempt;
+    if (!contentResult._fallback && contentResult.claimsRemoved?.length) {
+      contentResult = await generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts);
+    }
+
     if (contentResult._fallback) throw new Error("Content generation fell back to placeholder — skipping this run rather than posting generic text");
+    if (contentResult.claimsRemoved?.length) {
+      throw new Error(`Skipped: the caption made claims Hawlai couldn't verify (${contentResult.claimsRemoved.slice(0, 2).join("; ")}) — nothing was posted`);
+    }
     caption = contentResult.output.text ?? (Object.values(contentResult.output)[0] as string) ?? "";
     if (!caption) throw new Error("No caption text generated");
 
