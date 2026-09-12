@@ -230,7 +230,18 @@ export default function AutopilotCommandCenter() {
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${!health ? "bg-slate-300" : health.lastSuccess ? "bg-green-500" : "bg-red-500"}`} />
                   <span className="text-slate-600">{label}</span>
                 </div>
-                {health ? (
+                {health && key === "content_autopilot" ? (
+                  // Posts that reached the Page, not cron runs — see the
+                  // settings route for why those two diverged.
+                  <span className={`text-right ${health.postsAttempted === 0 ? "text-amber-500" : "text-slate-400"}`}>
+                    {health.postsAttempted === 0
+                      ? "No posts in the last 7 days"
+                      : `${health.postsPublished} of ${health.postsAttempted} posts published (7d)${health.lastRunAt ? ` · last ${new Date(health.lastRunAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}`}
+                    {health.lastError && !health.lastSuccess && (
+                      <span className="block text-[11px] text-red-400 max-w-[22rem] truncate" title={health.lastError}>{health.lastError}</span>
+                    )}
+                  </span>
+                ) : health ? (
                   <span className="text-slate-400">{health.successRatePct}% success (7d) · last {new Date(health.lastRunAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
                 ) : (
                   <span className="text-slate-400">Not run yet</span>

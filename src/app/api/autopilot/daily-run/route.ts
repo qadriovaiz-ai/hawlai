@@ -16,6 +16,7 @@ import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runAndLog } from "@/lib/automation/runAndLog";
 import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
+import { GROUPS, ALL, type SubsystemKey } from "@/lib/automation/cronGroups";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET` automatically when CRON_SECRET
@@ -43,29 +44,9 @@ import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
 // tenant with enough data to exhaust a single budget. Grouping gives
 // the slow work its own budget so it cannot starve the fast work,
 // which is what the finding is about.
-type SubsystemKey =
-  | "daily_autopilot" | "content_autopilot" | "report_snapshots"
-  | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
-  | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
-  | "lead_scoring" | "stale_approvals";
+// The groups and their ORDER live in cronGroups.ts — order is budget on
+// a 60-second plan, and a killed invocation records nothing.
 
-// TWO groups, not three: this project is on Vercel Hobby, which allows
-// exactly two cron entries. The slow work (LLM-backed and third-party
-// APIs) is merged into one group rather than dropping a group
-// entirely, so nothing stops running.
-const GROUPS: Record<string, SubsystemKey[]> = {
-  // Database-only and fast, and what surfaces work waiting on a human
-  // — so it runs FIRST and never queues behind LLM calls.
-  signals: ["budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "stale_approvals"],
-  // Everything slow: LLM-backed work plus third-party APIs.
-  heavy: [
-    "daily_autopilot", "content_autopilot", "report_snapshots",
-    "email_automation", "workflows", "competitor_alerts", "topic_alerts", "google_reviews",
-  ],
-};
-
-/** Every subsystem, for a manual "run everything" invocation. */
-const ALL: SubsystemKey[] = [...GROUPS.signals, ...GROUPS.heavy];
 
 // 60, not the 300 used by other long routes here: Vercel Hobby caps
 // function duration at 60 seconds. Setting 300 would be aspirational

@@ -15,7 +15,7 @@ export async function GET() {
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: dealership }, { data: workflows }, activityResults, { data: runLogRows }] = await Promise.all([
+  const [{ data: dealership }, { data: workflows }, activityResults, { data: runLogRows }, { data: postLog7d }] = await Promise.all([
     supabase.from("dealerships").select(`
       dm_auto_reply_enabled, comment_auto_reply_enabled,
       welcome_email_auto_enabled, follow_up_email_auto_enabled, follow_up_inactive_days,
@@ -36,6 +36,10 @@ export async function GET() {
     // subsystems x ~7 daily rows is small enough that fetching and
     // reducing here is simpler than adding a view/RPC for it.
     supabase.from("automation_run_log").select("subsystem, success, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
+    // What auto-posting actually PUBLISHED in the last 7 days. The run log
+    // above says whether the cron job ran; this says whether a post reached
+    // the Page — the only thing "success" should mean for this row.
+    supabase.from("content_autopilot_log").select("success, error, post_id, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
   ]);
 
   // P1 18b — event_queue/agent_tasks track their own status directly
@@ -65,12 +69,39 @@ export async function GET() {
     bySubsystem[row.subsystem].total += 1;
     if (row.success) bySubsystem[row.subsystem].successCount += 1;
   }
-  const automationHealth = Object.entries(bySubsystem).map(([subsystem, stats]) => ({
+  const automationHealth: any[] = Object.entries(bySubsystem).map(([subsystem, stats]) => ({
     subsystem,
     lastRunAt: stats.lastRunAt,
     lastSuccess: stats.lastSuccess,
     successRatePct: Math.round((stats.successCount / stats.total) * 100),
   }));
+
+  // SOCIAL AUTO-POSTING IS JUDGED BY WHAT WAS POSTED. The row above, from
+  // automation_run_log, only says the cron job ran without throwing —
+  // including every run that skipped, failed to generate, or posted an
+  // image with no caption. That is how this line read "100% success" while
+  // one captionless post reached Facebook in 28 days.
+  const postRows = (postLog7d ?? []) as { success: boolean; error: string | null; post_id: string | null; created_at: string }[];
+  const cronRow = automationHealth.find((h) => h.subsystem === "content_autopilot");
+  if (cronRow || postRows.length > 0 || dealership?.content_autopilot_enabled) {
+    const succeeded = postRows.filter((r) => r.success).length;
+    const lastFailure = postRows.find((r) => !r.success);
+    const postHealth = {
+      subsystem: "content_autopilot",
+      lastRunAt: postRows[0]?.created_at ?? cronRow?.lastRunAt ?? null,
+      lastSuccess: postRows.length ? postRows[0].success : false,
+      // null, not 100, when nothing was attempted: "no posts" is not a
+      // success rate.
+      successRatePct: postRows.length ? Math.round((succeeded / postRows.length) * 100) : null,
+      postsAttempted: postRows.length,
+      postsPublished: succeeded,
+      lastError: lastFailure?.error ?? null,
+      lastCronRunAt: cronRow?.lastRunAt ?? null,
+    };
+    const idx = automationHealth.findIndex((h) => h.subsystem === "content_autopilot");
+    if (idx >= 0) automationHealth[idx] = postHealth;
+    else automationHealth.push(postHealth);
+  }
 
   // Same {subsystem, lastRunAt, lastSuccess, successRatePct} shape as
   // above, computed directly rather than via bySubsystem — rows arrive

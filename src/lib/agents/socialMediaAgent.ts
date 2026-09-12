@@ -142,6 +142,32 @@ export async function postTextToPage(
   return { id: data.id };
 }
 
+/**
+ * The words Facebook actually shows on a post.
+ *
+ * "" when the post exists but carries no text; undefined when it could
+ * not be read at all. The two must never be confused: undefined is "we
+ * don't know", and must not be reported as a missing caption.
+ *
+ * Exists because a post can publish successfully WITHOUT its caption —
+ * the API returns an id either way — and the only way to know the words
+ * landed is to ask for them back.
+ */
+export async function readPostMessage(postId: string, pageAccessToken: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${postId}?fields=message,name&access_token=${encodeURIComponent(pageAccessToken)}`);
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    if (!data || data.error) return undefined;
+    // A Page post carries `message`; a photo object carries its caption
+    // as `name`. Either counts.
+    const text = typeof data.message === "string" ? data.message : typeof data.name === "string" ? data.name : "";
+    return text.trim();
+  } catch {
+    return undefined;
+  }
+}
+
 // Finds the Instagram Business Account connected to this Facebook
 // Page — Instagram posting always goes through a linked Page's own
 // access token, there's no separate Instagram-only auth needed if

@@ -243,6 +243,9 @@ vi.mock("@/lib/agents/socialMediaAgent", async (orig) => ({
   ...(await orig<typeof import("@/lib/agents/socialMediaAgent")>()),
   postPhotoToPage: (...a: any[]) => (postPhotoToPage as any)(...a),
   getConnectedInstagramAccountId: async () => null,
+  // Facebook shows the caption that was sent — these tests are about the
+  // claims guard, not the read-back (tests/autopostHonesty.test.ts).
+  readPostMessage: async () => "caption as posted",
 }));
 vi.mock("@/lib/agents/graphicDesignAgent", () => ({ generateGraphic: async () => Buffer.from("png") }));
 vi.mock("@/lib/crypto/oauthSecrets", () => ({ readMetaPageToken: () => "PAGE_TOKEN", hasMetaPageToken: () => true }));

@@ -16,22 +16,16 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 
+import { GROUPS } from "@/lib/automation/cronGroups";
+
 const ROUTE = "src/app/api/autopilot/daily-run/route.ts";
 const source = fs.readFileSync(ROUTE, "utf8");
 const vercelConfig = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
 
-/** The subsystem keys as declared in the route's GROUPS map. */
-function groupsFromSource(): Record<string, string[]> {
-  const block = source.slice(source.indexOf("const GROUPS"), source.indexOf("/** Every subsystem"));
-  const groups: Record<string, string[]> = {};
-  for (const match of block.matchAll(/(\w+):\s*\[([^\]]*)\]/g)) {
-    groups[match[1]] = [...match[2].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
-  }
-  return groups;
-}
-
 describe("subsystem grouping", () => {
-  const groups = groupsFromSource();
+  // The real constant the route imports (src/lib/automation/cronGroups.ts)
+  // — it used to be parsed out of the route's source text.
+  const groups: Record<string, string[]> = GROUPS;
 
   it("declares exactly two groups — Vercel Hobby allows two cron entries", () => {
     expect(Object.keys(groups).sort()).toEqual(["heavy", "signals"]);
@@ -66,7 +60,7 @@ describe("subsystem grouping", () => {
 });
 
 describe("cron configuration", () => {
-  const groups = groupsFromSource();
+  const groups: Record<string, string[]> = GROUPS;
 
   it("schedules one cron per group", () => {
     expect(vercelConfig.crons).toHaveLength(Object.keys(groups).length);

@@ -1,9 +1,37 @@
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
-import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
+import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram, readPostMessage } from "@/lib/agents/socialMediaAgent";
+import { captionFrom } from "@/lib/chat/publishActions";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+
+/**
+ * The words to post, from whatever shape the model returned.
+ *
+ * THE BUG THIS REPLACES: the caption was
+ *   output.text ?? Object.values(output)[0]
+ * — whatever value the model happened to put FIRST, cast to a string.
+ * For { hashtags: [...], caption: "..." } that was an ARRAY; for
+ * { post: { caption } } an OBJECT. Both are truthy, so "No caption text
+ * generated" never fired, and the image went to Facebook with a caption
+ * it could not use. A post on the business's Page showed an image and
+ * "No text content".
+ *
+ * Now the caption is a real string or nothing, and nothing means nothing
+ * is posted.
+ */
+export function captionForPost(output: any): string {
+  const caption = captionFrom(output);
+  if (!caption) return "";
+  const tags: string[] = Array.isArray(output?.hashtags)
+    ? output.hashtags
+        .filter((t: unknown): t is string => typeof t === "string" && t.trim().length > 0)
+        .map((t: string) => (t.trim().startsWith("#") ? t.trim() : `#${t.trim()}`))
+    : [];
+  if (tags.length === 0 || tags.every((t) => caption.includes(t))) return caption;
+  return `${caption}\n\n${tags.join(" ")}`;
+}
 
 // Runs daily as part of the autopilot cron. Fully automatic — no
 // human touches the generated content before it's posted. This is
@@ -97,8 +125,11 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     if (contentResult.claimsRemoved?.length) {
       throw new Error(`Skipped: the caption made claims Hawlai couldn't verify (${contentResult.claimsRemoved.slice(0, 2).join("; ")}) — nothing was posted`);
     }
-    caption = contentResult.output.text ?? (Object.values(contentResult.output)[0] as string) ?? "";
-    if (!caption) throw new Error("No caption text generated");
+    caption = captionForPost(contentResult.output);
+    if (!caption) {
+      caption = null;
+      throw new Error("The generated post had no usable caption text — nothing was posted rather than publishing an image with no words.");
+    }
 
     const serviceClient = createServiceClient();
     const filePath = `content-autopilot/${dealershipId}/${Date.now()}.png`;
@@ -108,6 +139,19 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
 
     const result = await postPhotoToPage(dealership.fb_page_id, pageToken, imageUrl, caption);
     postId = result.id;
+    // It IS live from here, so the cadence clock moves regardless of
+    // what the read-back finds — otherwise tomorrow's run would publish
+    // a second post on top of this one.
+    await supabase.from("dealerships").update({ content_autopilot_last_posted_at: new Date().toISOString() }).eq("id", dealershipId);
+
+    // Facebook returns an id whether or not the words made it. Ask for
+    // them back: "" means the post is live with no caption, which is a
+    // failure the owner needs to see. undefined means we couldn't read
+    // it, which is NOT evidence of anything and is not reported as one.
+    const landed = await readPostMessage(result.id, pageToken);
+    if (landed === "") {
+      throw new Error("Facebook published the image but shows no caption on it — the post is live without its text. Check it on your Page.");
+    }
 
     // Instagram is best-effort and independent of Facebook's outcome
     // above — Facebook already succeeded by this point, so a failure
@@ -125,7 +169,6 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
       instagramError = igErr.message;
     }
 
-    await supabase.from("dealerships").update({ content_autopilot_last_posted_at: new Date().toISOString() }).eq("id", dealershipId);
   } catch (err: any) {
     success = false;
     error = err.message;
@@ -136,7 +179,12 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     instagram_post_id: instagramPostId, instagram_error: instagramError,
   });
 
-  return { posted: success, postedToInstagram: Boolean(instagramPostId) };
+  // A failure is RETURNED as { error } so the cron's run log records it
+  // as one (runAndLog.ts). Returning { posted: false } alone let every
+  // failed post count toward a "100% success" health line.
+  return success
+    ? { posted: true, postedToInstagram: Boolean(instagramPostId), ...(instagramError ? { instagramError } : {}) }
+    : { posted: false, error };
 }
 
 // pageToken is PASSED, not re-derived from the row. This function

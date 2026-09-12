@@ -20,7 +20,12 @@ export async function runAndLog<T>(
   const start = Date.now();
   try {
     const result = await fn();
-    await logRun(supabase, dealershipId, subsystem, true, JSON.stringify(result ?? null).slice(0, 500), Date.now() - start);
+    // A subsystem that CATCHES its own failure and returns { error }
+    // did not succeed just because it didn't throw. Recording those as
+    // success is how the health panel showed Social Media Auto-Posting
+    // at "100% success" while almost nothing reached Facebook.
+    const reportedError = result && typeof result === "object" && "error" in (result as any) && (result as any).error;
+    await logRun(supabase, dealershipId, subsystem, !reportedError, JSON.stringify(result ?? null).slice(0, 500), Date.now() - start);
     return result;
   } catch (err: any) {
     await logRun(supabase, dealershipId, subsystem, false, err.message, Date.now() - start);
