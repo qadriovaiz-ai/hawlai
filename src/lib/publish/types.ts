@@ -10,7 +10,7 @@
 
 import type { RiskLevel } from "@/lib/executionPolicy";
 
-export type PlatformId = "shopify" | "wordpress" | "woocommerce" | "meta";
+export type PlatformId = "shopify" | "wordpress" | "woocommerce" | "meta" | "hawlai_shop";
 
 /**
  * What a platform can be asked to do.
@@ -30,6 +30,8 @@ export type PlatformId = "shopify" | "wordpress" | "woocommerce" | "meta";
 export type ActionKey =
   | "update_product_price"
   | "update_product_description"
+  /** Rename a product in the merchant's own storefront — what customers see. */
+  | "update_product_name"
   | "create_discount_code"
   | "publish_post"
   | "update_post"
@@ -218,6 +220,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "publish_post",
   "update_post",
   "update_product_description",
+  "update_product_name",
   "launch_ad_campaign",
   "activate_ad_campaign",
 ];
@@ -225,6 +228,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
 /** Risk classification, for the approval UI and the audit trail. */
 export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   update_product_price: "critical",
+  update_product_name: "medium",
   create_discount_code: "high",
   update_product_description: "medium",
   publish_post: "high",

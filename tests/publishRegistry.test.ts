@@ -37,8 +37,8 @@ function producedPlatforms(): string[] {
 describe("the registry is complete", () => {
   const registry = createPlatformRegistry({} as any);
 
-  it("RUNTIME: registers shopify and meta", () => {
-    expect(Object.keys(registry).sort()).toEqual(["meta", "shopify"]);
+  it("RUNTIME: registers shopify, meta and the business's own storefront", () => {
+    expect(Object.keys(registry).sort()).toEqual(["hawlai_shop", "meta", "shopify"]);
   });
 
   it("RUNTIME: every registered module declares what it supports", () => {

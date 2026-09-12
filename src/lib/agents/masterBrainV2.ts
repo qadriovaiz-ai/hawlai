@@ -334,13 +334,21 @@ const TOOLS = [
     // have to learn a second convention.
     name: "propose_price_change",
     description:
-      "Request a price change on a product in the connected Shopify store. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open a page, visit Approvals, or go anywhere else to confirm; the decision is already in front of them. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
+      "Request a change to one product — its price, name or description. Looks in the business's OWN Hawlai storefront first (where most businesses sell), then a connected Shopify store, which supports price only. Ask for ONE field per call: each change gets its own approval card. Nothing changes until the owner approves. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open a page, visit Approvals, or go anywhere else to confirm; the decision is already in front of them. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
     input_schema: {
       type: "object",
       properties: {
         product_description: {
           type: "string",
           description: "How the person referred to the product, in their own words, e.g. 'the blue kurta' or 'the large size shirt'",
+        },
+        new_name: {
+          type: "string",
+          description: "A new public product name, if renaming is what they asked for. Works on the business's own Hawlai storefront only.",
+        },
+        new_description: {
+          type: "string",
+          description: "New public product description text, if that is what they asked to change. Works on the business's own Hawlai storefront only.",
         },
         new_price: {
           type: "string",
@@ -1065,13 +1073,112 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const { createPublishAction } = await import("../publish/create");
       const { createServiceClient: makeService } = await import("../supabase/service");
 
-      const creds = await resolveShopifyCredentials(ctx.id);
-      if (!creds.ok) {
-        const own = await hawlaiStoreProduct(supabase, ctx.id, String(input.product_description ?? "").trim());
-        return { error: own ? hawlaiStorePriceMessage(own) : creds.reason };
+      const phrase = String(input.product_description ?? "").trim();
+
+      // ONE FIELD PER CARD. Each has its own risk level and its own
+      // approval; a single card mixing a price cut with a rename would
+      // hide one decision behind the other.
+      const askedFields = (
+        [
+          ["price", input.new_price],
+          ["name", input.new_name],
+          ["description", input.new_description],
+        ] as const
+      ).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "");
+      if (askedFields.length === 0) return { error: "Tell me what to change — a new price, name or description." };
+      if (askedFields.length > 1) {
+        return { error: "One change at a time, so each gets its own approval — ask me for the price first, then the name or description." };
+      }
+      const field = askedFields[0][0] as "price" | "name" | "description";
+      const ACTION_FOR_FIELD = { price: "update_product_price", name: "update_product_name", description: "update_product_description" } as const;
+
+      // THE BUSINESS'S OWN STORE FIRST. It is the store nearly every
+      // Hawlai business sells from, and the one chat lists products
+      // from — searching only Shopify is what made this tool report
+      // "couldn't find that product" seconds after naming it.
+      const { fetchCatalog: catalogFor, matchProducts: matchOwn } = await import("../claims/businessFacts");
+      const { createHawlaiShopPlatform } = await import("../publish/platforms/hawlaiShop");
+      const ownMatches = matchOwn(await catalogFor(supabase, ctx.id, { includeInactive: true }), phrase);
+      const chosenRef = typeof input.variant_id === "string" ? input.variant_id.trim() : "";
+      const chosenOwn = chosenRef ? ownMatches.find((p) => p.id === chosenRef) ?? null : null;
+
+      if (ownMatches.length > 1 && !chosenOwn) {
+        return {
+          needs_clarification: true,
+          store_currency: "Indian rupees",
+          question: "Which product did you mean?",
+          candidates: ownMatches.map((p) => ({
+            variant_id: p.id,
+            title: p.name,
+            variant: null,
+            current_price: `₹${p.price}`,
+            image_url: p.images[0] ?? null,
+            active: p.active,
+          })),
+        };
       }
 
-      const phrase = String(input.product_description ?? "").trim();
+      if (ownMatches.length === 1 || chosenOwn) {
+        const product = chosenOwn ?? ownMatches[0];
+        const { parseStatedPrice: parseOwnPrice } = await import("../publish/money");
+        const ownStated = parseOwnPrice(String(input.new_price ?? ""));
+        if (field === "price" && (!ownStated.amount || Number.isNaN(Number(ownStated.amount)) || Number(ownStated.amount) < 0)) {
+          return { error: "I couldn't read a price in that — give me an amount, e.g. 999." };
+        }
+        const requestedChanges =
+          field === "price"
+            ? { price: ownStated.amount ?? "", statedCurrency: ownStated.statedCurrency }
+            : field === "name"
+              ? { name: String(input.new_name ?? "").trim() }
+              : { description: String(input.new_description ?? "").trim() };
+
+        const service = makeService();
+        const ownCreated = await createPublishAction(service, createHawlaiShopPlatform({ supabase: service }), {
+          dealershipId: ctx.id,
+          platform: "hawlai_shop",
+          actionKey: ACTION_FOR_FIELD[field],
+          targetRef: String(product.id),
+          targetLabel: product.name,
+          requestedChanges,
+          requestedBy: null,
+          resolutionPath: chosenOwn ? "user_clarified" : "exact",
+          resolutionDetail: { query: phrase, candidateCount: ownMatches.length, matchType: chosenOwn ? "direct" : "exact" },
+        });
+        if (!ownCreated.ok) return { error: ownCreated.reason };
+
+        return {
+          success: true,
+          already_pending: ownCreated.alreadyPending ?? false,
+          approval_id: ownCreated.approvalId,
+          action_id: ownCreated.actionId,
+          store: "your Hawlai storefront",
+          field,
+          summary: ownCreated.preview.summary,
+          product: ownCreated.preview.target?.title ?? product.name,
+          variant: null,
+          current_price: ownCreated.preview.target?.currentPrice ?? null,
+          new_price: field === "price" ? `₹${ownStated.amount}` : null,
+          currency: "INR",
+          store_currency: "Indian rupees",
+          state_currency_first: true,
+          image_url: ownCreated.preview.target?.imageUrl ?? null,
+          warnings: ownCreated.preview.warnings,
+          resolution_path: chosenOwn ? "user_clarified" : "exact",
+          note: ownCreated.alreadyPending
+            ? "You already asked for this exact change — here it is again, still waiting on your approval."
+            : "Ready for your approval below — nothing in your store changes until you approve it.",
+        };
+      }
+
+      // Not in their own store: try the connected Shopify store.
+      const creds = await resolveShopifyCredentials(ctx.id);
+      if (!creds.ok) {
+        const own = await hawlaiStoreProduct(supabase, ctx.id, phrase);
+        return { error: own ? hawlaiStorePriceMessage(own) : creds.reason };
+      }
+      if (field !== "price") {
+        return { error: `Changing a product's ${field} in a connected Shopify store isn't built yet — only price. Change it in Shopify directly.` };
+      }
       // "999", "$999", "999 rupees", "rs 1,299" all mean the same
       // instruction: set the price to that number. A store's currency
       // is fixed in Shopify's settings, so asking "which currency?"

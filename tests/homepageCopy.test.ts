@@ -77,6 +77,20 @@ let shopifyConnected = false;
 // at the credentials: the store is connected, and simply has no product
 // by that name because the product lives in the Hawlai store.
 let shopifySearch: any = { ok: true, candidates: [] };
+let created: any = null;
+vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
+vi.mock("@/lib/publish/create", () => ({
+  intentKey: () => "k",
+  createPublishAction: async (_svc: any, _platform: any, input: any) => {
+    created = input;
+    return {
+      ok: true,
+      actionId: "act1",
+      approvalId: "ap1",
+      preview: { summary: "summary", target: { title: "Lavender candle", currentPrice: "₹550.00", currency: "INR", imageUrl: null }, changes: [], warnings: [] },
+    };
+  },
+}));
 vi.mock("@/lib/publish/platforms/shopifySearch", () => ({
   searchShopifyVariants: async () => shopifySearch,
 }));
@@ -108,6 +122,7 @@ beforeEach(() => {
   writes = [];
   shopifyConnected = false;
   shopifySearch = { ok: true, candidates: [] };
+  created = null;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
@@ -253,41 +268,84 @@ describe("the chat tool proposes — it no longer writes", () => {
   });
 });
 
-describe("a price change for a product chat can see but the price tool cannot", () => {
-  const priceChange = (phrase: string) =>
-    executeTool(db(), CTX, "propose_price_change", { product_description: phrase, new_price: "999" }, "");
+describe("a price change goes to the store the product is actually in", () => {
+  const propose = (input: Row) => executeTool(db(), CTX, "propose_price_change", input, "");
 
-  it("THE LIVE CASE — Shopify is connected but has no such product: names the store it is actually in", async () => {
-    shopifyConnected = true; // credentials resolve fine
-    shopifySearch = { ok: true, candidates: [] }; // Shopify simply doesn't have it
-    const result = await priceChange("lavender candle");
+  it("THE LIVE CASE — the product is in the Hawlai store, so the card is raised against THAT store", async () => {
+    shopifyConnected = true; // Shopify is connected but has no such product
+    const result = await propose({ product_description: "lavender candle", new_price: "999" });
 
-    expect(result.error).toMatch(/"Lavender candle" \(₹550\) is in your own Hawlai store/);
-    expect(result.error).toMatch(/Website Builder → Products/);
-    // The old message, which read as "that product doesn't exist".
-    expect(result.error).not.toMatch(/Couldn't find a product matching/);
+    expect(created).toMatchObject({
+      platform: "hawlai_shop",
+      actionKey: "update_product_price",
+      targetRef: "p1",
+      targetLabel: "Lavender candle",
+      requestedChanges: { price: "999" },
+    });
+    expect(result).toMatchObject({ success: true, approval_id: "ap1", store: "your Hawlai storefront", field: "price" });
+    expect(result.note).toMatch(/nothing in your store changes until you approve it/i);
   });
 
-  it("a Shopify search that fails outright says the same thing when the product is ours", async () => {
+  it("a rename and a description change route to their own action keys", async () => {
+    await propose({ product_description: "lavender", new_name: "Lavender Nights candle" });
+    expect(created).toMatchObject({ actionKey: "update_product_name", requestedChanges: { name: "Lavender Nights candle" } });
+
+    await propose({ product_description: "lavender", new_description: "Soy wax, 40 hour burn." });
+    expect(created).toMatchObject({ actionKey: "update_product_description", requestedChanges: { description: "Soy wax, 40 hour burn." } });
+  });
+
+  it("two changes at once are refused, so each keeps its own approval", async () => {
+    const result = await propose({ product_description: "lavender", new_price: "999", new_name: "Lavender Nights" });
+    expect(result.error).toMatch(/One change at a time/);
+    expect(created).toBeNull();
+  });
+
+  it("asking for no change at all is refused", async () => {
+    expect((await propose({ product_description: "lavender" })).error).toMatch(/Tell me what to change/);
+  });
+
+  it("two products matching the phrase is a question, not a guess", async () => {
+    tables.products = [
+      { id: "p1", name: "Lavender candle", price: 550, images: [], inventory_count: 5, is_active: true, order_index: 0 },
+      { id: "p2", name: "Lavender diffuser", price: 800, images: [], inventory_count: 2, is_active: true, order_index: 1 },
+    ];
+    const result = await propose({ product_description: "lavender", new_price: "999" });
+    expect(result.needs_clarification).toBe(true);
+    expect(result.candidates.map((c: any) => c.variant_id)).toEqual(["p1", "p2"]);
+    expect(created).toBeNull();
+  });
+
+  it("once they pick one, that product is what the card is raised against", async () => {
+    tables.products = [
+      { id: "p1", name: "Lavender candle", price: 550, images: [], inventory_count: 5, is_active: true, order_index: 0 },
+      { id: "p2", name: "Lavender diffuser", price: 800, images: [], inventory_count: 2, is_active: true, order_index: 1 },
+    ];
+    await propose({ product_description: "lavender", new_price: "999", variant_id: "p2" });
+    expect(created).toMatchObject({ targetRef: "p2", targetLabel: "Lavender diffuser", resolutionPath: "user_clarified" });
+  });
+
+  it("an amount that isn't one is refused before any card is raised", async () => {
+    expect((await propose({ product_description: "lavender", new_price: "cheap" })).error).toMatch(/couldn't read a price/i);
+    expect(created).toBeNull();
+  });
+
+  it("a product in neither store reports the Shopify problem, not a missing product", async () => {
     shopifyConnected = true;
-    shopifySearch = { ok: false, reason: "Shopify search failed (429)." };
-    expect((await priceChange("lavender candle")).error).toMatch(/is in your own Hawlai store/);
-  });
-
-  it("with Shopify unconnected, it still names the store the product is in", async () => {
-    shopifyConnected = false;
-    expect((await priceChange("Lavender candle")).error).toMatch(/is in your own Hawlai store/);
-  });
-
-  it("a product in NEITHER store reports the real problem for that store", async () => {
-    shopifyConnected = true;
-    const result = await priceChange("Sandalwood diffuser");
+    const result = await propose({ product_description: "Sandalwood diffuser", new_price: "650" });
     expect(result.error).toBe(`Couldn't find a product matching "Sandalwood diffuser" in your connected Shopify store.`);
+    expect(created).toBeNull();
   });
 
-  it("with Shopify unconnected and no such product anywhere, the connection problem is reported", async () => {
+  it("renaming a Shopify-only product says that isn't built yet", async () => {
+    shopifyConnected = true;
+    tables.products = [];
+    const result = await propose({ product_description: "Sandalwood diffuser", new_name: "Sandal & Cedar" });
+    expect(result.error).toMatch(/name in a connected Shopify store isn't built yet/);
+  });
+
+  it("with Shopify unconnected and nothing matching anywhere, the connection problem is reported", async () => {
     shopifyConnected = false;
-    expect((await priceChange("Sandalwood diffuser")).error).toBe("Shopify isn't connected for this business.");
+    tables.products = [];
+    expect((await propose({ product_description: "Sandalwood diffuser", new_price: "650" })).error).toBe("Shopify isn't connected for this business.");
   });
 });
-

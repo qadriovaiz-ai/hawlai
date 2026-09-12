@@ -20,11 +20,15 @@ import type { PlatformId, PublishPlatform } from "./types";
 import { createShopifyPlatform } from "./platforms/shopify";
 import { shopifyCredentialsAdapter } from "./platforms/shopifyCredentials";
 import { createMetaPlatform } from "./platforms/meta";
+import { createHawlaiShopPlatform } from "./platforms/hawlaiShop";
 
 export function createPlatformRegistry(supabase: any): Partial<Record<PlatformId, PublishPlatform>> {
   return {
     shopify: createShopifyPlatform({ getCredentials: shopifyCredentialsAdapter }),
     meta: createMetaPlatform({ supabase }),
+    // The business's own storefront (products table) — the store most
+    // Hawlai businesses actually sell from.
+    hawlai_shop: createHawlaiShopPlatform({ supabase }),
     // wordpress and woocommerce are declared in PlatformId but have no
     // producer — nothing calls createPublishAction with either, so no
     // card can reach approval for them. Deliberately ABSENT rather than
