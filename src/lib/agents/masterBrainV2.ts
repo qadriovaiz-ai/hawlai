@@ -454,8 +454,21 @@ const TOOLS = [
   },
   {
     name: "update_landing_page",
-    description: "Propose new wording for the business's homepage — headline, subheadline or button text — on the website they actually have. NOTHING changes when you call this: it returns a card in the chat showing the old and new wording, and the owner approves it there. On a published site, approving makes the new wording visible immediately. Only include the fields the person actually specified.",
-    input_schema: { type: "object", properties: { headline: { type: "string" }, subheadline: { type: "string" }, offerText: { type: "string" } }, required: [] },
+    description: "Propose new wording for one section of the business's homepage — its heading, its supporting paragraph, or its button. Defaults to the hero (the top of the page); pass `section` whenever the person names a different part, e.g. \"the Diwali Gifting section\". NOTHING changes when you call this: it returns a card showing the old wording beside the new, and the owner approves it there. On a published site, approving makes it visible immediately. Only include the fields the person actually specified. It cannot add, delete or reorder sections, or change images — say so plainly if that is what was asked.",
+    input_schema: {
+      type: "object",
+      properties: {
+        headline: { type: "string" },
+        subheadline: { type: "string" },
+        offerText: { type: "string", description: "New button text." },
+        section: {
+          type: "string",
+          description:
+            "The section of the page to change, when the person names one (e.g. \"the Diwali Gifting section\", \"the gifting block below the hero\"). ALWAYS pass this if they referred to any part of the page other than the top — leaving it out edits the hero, which would be the wrong part of the page.",
+        },
+      },
+      required: [],
+    },
   },
   {
     name: "generate_3d_scene",
@@ -1026,7 +1039,24 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const { createServiceClient: makeService } = await import("../supabase/service");
 
       const creds = await resolveShopifyCredentials(ctx.id);
-      if (!creds.ok) return { error: creds.reason };
+      if (!creds.ok) {
+        // THE CONFUSING FAILURE THIS REPLACES: chat lists "Lavender
+        // candle — ₹550" from the Hawlai store's own products table, then
+        // this tool — which only searches SHOPIFY — reports it cannot
+        // find that product. Two different stores, one of which this tool
+        // cannot write to at all. Say that, instead of implying the
+        // product does not exist.
+        const { fetchCatalog, matchProducts } = await import("../claims/businessFacts");
+        const phraseForLookup = String(input.product_description ?? "").trim();
+        const own = matchProducts(await fetchCatalog(supabase, ctx.id, { includeInactive: true }), phraseForLookup);
+        if (own.length > 0) {
+          const p = own[0];
+          return {
+            error: `"${p.name}" (₹${p.price}) is in your own Hawlai store, and price changes from chat currently only work for a connected Shopify store. Change it in Website Builder → Products — it takes effect on your live storefront immediately.`,
+          };
+        }
+        return { error: creds.reason };
+      }
 
       const phrase = String(input.product_description ?? "").trim();
       // "999", "$999", "999 rupees", "rs 1,299" all mean the same
@@ -1645,9 +1675,18 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       if (!page?.id) return { error: "Your site doesn't have a home page yet — open Website Builder and generate it first." };
 
       const { applyHomepageCopy } = await import("../chat/homepageCopy");
-      const { sections, changed } = applyHomepageCopy(page.sections, requested);
+      const { sections, changed, sectionHeading, sectionNotFound, available } = applyHomepageCopy(page.sections, requested, { section: input.section });
+      // Named a section that isn't on the page: say which sections ARE,
+      // rather than editing the hero and calling it done.
+      if (sectionNotFound) {
+        return {
+          error: `I couldn't find a "${input.section}" section on your home page. The sections I can see are: ${available.length ? available.map((h: string) => `"${h}"`).join(", ") : "(none with a heading)"}. Tell me which one to change, or edit it directly in Website Builder.`,
+        };
+      }
       if (changed.length === 0) {
-        return { error: "I couldn't find a headline, subheadline or button block on your home page to change — edit it directly in Website Builder." };
+        return {
+          error: `I couldn't find a heading, paragraph or button to change in ${sectionHeading ? `"${sectionHeading}"` : "that part of the page"}. I can only rewrite existing text — adding, removing or reordering sections has to be done in Website Builder.`,
+        };
       }
 
       return {
@@ -1659,7 +1698,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         published: Boolean(website.published),
         siteUrl: `/site/${website.slug}`,
         changed,
-        note: `Nothing has changed yet — the new wording is on the card below, waiting for your approval.${website.published ? " Your site is live, so approving makes it visible straight away." : ""}`,
+        sectionHeading,
+        note: `Nothing has changed yet — the new wording for ${sectionHeading ? `the "${sectionHeading}" section` : "your homepage"} is on the card below, waiting for your approval.${website.published ? " Your site is live, so approving makes it visible straight away." : ""}`,
       };
     }
     case "generate_3d_scene": {
@@ -2607,7 +2647,7 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       const FIELD_LABEL: Record<string, string> = { headline: "Headline", subheadline: "Subheadline", ctaText: "Button" };
       return {
         kind: "document",
-        label: result.published ? "Homepage copy — approve to make it live" : "Homepage copy — approve to update the draft",
+        label: `${result.sectionHeading ? `"${result.sectionHeading}"` : "Homepage"} — ${result.published ? "approve to make it live" : "approve to update the draft"}`,
         // The old wording beside the new one: approving replaces what a
         // visitor reads, so the card shows what is being replaced.
         fields: (result.changed ?? []).map((c: any) => ({ label: FIELD_LABEL[c.field] ?? c.field, value: `"${c.from || "(empty)"}" → "${c.to}"` })),
