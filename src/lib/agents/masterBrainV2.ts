@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { websitePublishAction, socialPublishAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { websitePublishAction, socialPublishAction, homepageCopyAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
 import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
@@ -454,7 +454,7 @@ const TOOLS = [
   },
   {
     name: "update_landing_page",
-    description: "Update the live landing page's headline, subheadline, or offer/CTA text. Only change fields the person actually specifies.",
+    description: "Propose new wording for the business's homepage — headline, subheadline or button text — on the website they actually have. NOTHING changes when you call this: it returns a card in the chat showing the old and new wording, and the owner approves it there. On a published site, approving makes the new wording visible immediately. Only include the fields the person actually specified.",
     input_schema: { type: "object", properties: { headline: { type: "string" }, subheadline: { type: "string" }, offerText: { type: "string" } }, required: [] },
   },
   {
@@ -1624,14 +1624,43 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       return { views, chatOpens: all.filter((e: any) => e.event_type === "chat_open").length, formSubmits, conversionRate: views > 0 ? (formSubmits / views) * 100 : null };
     }
     case "update_landing_page": {
-      const update: any = {};
-      if (input.headline) update.headline = input.headline;
-      if (input.subheadline) update.subheadline = input.subheadline;
-      if (input.offerText) update.offer_text = input.offerText;
-      if (Object.keys(update).length === 0) return { error: "Nothing to update" };
-      const { error } = await supabase.from("landing_pages").update(update).eq("dealership_id", ctx.id);
-      if (error) return { error: error.message };
-      return { success: true, updated: Object.keys(update) };
+      // WRITES NOTHING. This used to update the legacy `landing_pages`
+      // table and answer "changes are live immediately" — but
+      // /site/{slug} renders website_pages.sections, so the change could
+      // never appear there, and for a business with no landing_pages row
+      // the update matched ZERO rows, which Supabase reports as success
+      // with error: null. Reported live, actually nothing, twice over.
+      //
+      // Now it proposes an edit to the page the site really renders, and
+      // the owner approves it on the card (src/lib/chat/publishActions).
+      const requested = { headline: input.headline, subheadline: input.subheadline, ctaText: input.offerText };
+      if (!requested.headline && !requested.subheadline && !requested.ctaText) return { error: "Nothing to update" };
+
+      const { data: website, error: siteError } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
+      if (siteError) return { error: "Couldn't read your website just now — nothing was changed. Try again in a moment." };
+      if (!website?.id) return { error: "There's no website built yet, so there's no homepage to change — ask me to build your website first." };
+
+      const { data: page, error: pageError } = await supabase.from("website_pages").select("id, sections, updated_at").eq("website_id", website.id).eq("slug", "home").maybeSingle();
+      if (pageError) return { error: "Couldn't read your home page just now — nothing was changed. Try again in a moment." };
+      if (!page?.id) return { error: "Your site doesn't have a home page yet — open Website Builder and generate it first." };
+
+      const { applyHomepageCopy } = await import("../chat/homepageCopy");
+      const { sections, changed } = applyHomepageCopy(page.sections, requested);
+      if (changed.length === 0) {
+        return { error: "I couldn't find a headline, subheadline or button block on your home page to change — edit it directly in Website Builder." };
+      }
+
+      return {
+        success: true,
+        proposed: true,
+        pageId: page.id,
+        sections,
+        expectedUpdatedAt: page.updated_at ?? null,
+        published: Boolean(website.published),
+        siteUrl: `/site/${website.slug}`,
+        changed,
+        note: `Nothing has changed yet — the new wording is on the card below, waiting for your approval.${website.published ? " Your site is live, so approving makes it visible straight away." : ""}`,
+      };
     }
     case "generate_3d_scene": {
       const { data: scene, error: insertError } = await supabase.from("three_d_scenes").insert({
@@ -2573,8 +2602,26 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: "Watch added", departmentHref };
     case "remember_insight":
       return { kind: "record", label: "Remembered for next time", summary: result.note, departmentHref };
-    case "update_landing_page":
-      return { kind: "record", label: "Landing page updated", fields: (result.updated ?? []).map((f: string) => ({ label: f, value: "Updated" })), departmentHref };
+    case "update_landing_page": {
+      if (!result.proposed || !result.pageId) return { kind: "record", label: "Homepage copy", summary: result.note, departmentHref };
+      const FIELD_LABEL: Record<string, string> = { headline: "Headline", subheadline: "Subheadline", ctaText: "Button" };
+      return {
+        kind: "document",
+        label: result.published ? "Homepage copy — approve to make it live" : "Homepage copy — approve to update the draft",
+        // The old wording beside the new one: approving replaces what a
+        // visitor reads, so the card shows what is being replaced.
+        fields: (result.changed ?? []).map((c: any) => ({ label: FIELD_LABEL[c.field] ?? c.field, value: `"${c.from || "(empty)"}" → "${c.to}"` })),
+        summary: result.note,
+        departmentHref,
+        publish: homepageCopyAction({
+          pageId: result.pageId,
+          sections: result.sections,
+          expectedUpdatedAt: result.expectedUpdatedAt,
+          published: Boolean(result.published),
+          siteUrl: result.siteUrl,
+        }),
+      };
+    }
     case "publish_to_youtube":
       return { kind: "link", label: "Published to YouTube", url: result.url, departmentHref };
 

@@ -57,6 +57,32 @@ export function websitePublishAction(): PublishAction {
 }
 
 /**
+ * Changing the words on the homepage.
+ *
+ * There is no draft layer inside a published site: website_pages IS what
+ * /site/{slug} renders, so on a published site this edit is visible the
+ * moment it saves. The confirm says which of the two situations the
+ * owner is in rather than one vague sentence for both.
+ *
+ * expectedUpdatedAt rides along so an edit made elsewhere since the chat
+ * proposed this one is rejected by the endpoint instead of clobbered.
+ */
+export function homepageCopyAction(opts: { pageId: string; sections: unknown; expectedUpdatedAt?: string | null; published: boolean; siteUrl?: string | null }): PublishAction {
+  const where = opts.siteUrl ? ` at ${opts.siteUrl}` : "";
+  return {
+    target: "website",
+    label: "Approve & Publish",
+    confirm: opts.published
+      ? `This changes the words on your LIVE homepage${where} straight away — anyone visiting sees the new wording immediately. Nothing else on the site changes.`
+      : "This updates your homepage copy. Your site isn't published yet, so nothing becomes public until you publish it.",
+    endpoint: `/api/website-builder/pages/${opts.pageId}`,
+    method: "PATCH",
+    payload: { sections: opts.sections, ...(opts.expectedUpdatedAt ? { expectedUpdatedAt: opts.expectedUpdatedAt } : {}) },
+    done: opts.published ? "✅ Updated your live homepage" : "✅ Updated your homepage draft",
+  };
+}
+
+/**
  * Posting a generated caption.
  *
  * Instagram needs a picture — its API has no text-only post — so a
