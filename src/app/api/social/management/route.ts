@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   const { output, _fallback } = await generateSocialTask(
     taskType,
     dealership?.dealership_name ?? "the business",
-    dealership?.business_category ?? "car dealership",
+    dealership?.business_category ?? "business",
     inputText ?? "",
     brandProfile,
     { supabase, dealershipId },

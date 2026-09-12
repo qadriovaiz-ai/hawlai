@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const buffer = await generateGraphic(
       designType,
       dealership?.dealership_name ?? "the business",
-      dealership?.business_category ?? "car dealership",
+      dealership?.business_category ?? "business",
       prompt ?? "",
       brandProfile,
       { supabase, dealershipId }

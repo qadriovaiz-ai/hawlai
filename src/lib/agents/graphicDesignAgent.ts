@@ -49,6 +49,8 @@ export const GRAPHIC_TYPES: GraphicTypeMeta[] = [
 import { logGeminiImageUsage } from "../usage/logUsage";
 import type { BrandColor } from "./brandBuildingAgent";
 import { type BrandVoiceProfile, formatBrandVoiceVisualHint } from "./brandVoice";
+import { buildImageBrief, imageParts } from "@/lib/claims/imageBrief";
+import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -69,7 +71,9 @@ export async function generateGraphic(
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
   existingBrandColors?: BrandColor[] | null,
-  brandVoice?: BrandVoiceProfile | null
+  brandVoice?: BrandVoiceProfile | null,
+  /** The canonical facts (src/lib/claims). What anchors the picture to what the business actually sells. */
+  facts?: BusinessFacts | null
 ): Promise<Buffer> {
   const meta = GRAPHIC_TYPES.find((t) => t.key === designTypeKey);
   if (!meta) throw new Error("Unknown design type");
@@ -79,15 +83,21 @@ export async function generateGraphic(
 
   const toneHint = brandProfile?.tone_of_voice ? ` The brand feels: ${brandProfile.tone_of_voice}.` : "";
   const personalityHint = formatBrandVoiceVisualHint(brandVoice);
-  const colorHint = formatBrandColorsForGraphic(existingBrandColors);
-  const fullPrompt = meta.promptTemplate(dealershipName, businessCategory, userPrompt) + toneHint + personalityHint + colorHint;
+  const colorHint = formatBrandColorsForGraphic(existingBrandColors ?? facts?.brand.colors ?? null);
+  // Anchored to the real product, and shown the product's own photo when
+  // there is one (imageBrief.ts). Without this the model gets a category
+  // word and the theme decides the picture — a "Diwali post" for a candle
+  // business came back as diyas and no candle.
+  const brief = buildImageBrief(userPrompt, facts);
+  const fullPrompt = meta.promptTemplate(dealershipName, businessCategory, brief.prompt) + toneHint + personalityHint + colorHint;
+  const promptParts = await imageParts(brief, fullPrompt);
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }] }),
+      body: JSON.stringify({ contents: [{ parts: promptParts }] }),
     }
   );
   const data = await res.json();

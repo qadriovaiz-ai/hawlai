@@ -127,7 +127,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
       const comparisons = await getComparisonCampaigns(supabase, dealershipId, campaign, performanceCache.campaigns);
       const thisPerf = performanceCache.campaigns.find((p) => p.id === campaign.id) ?? null;
       const explainedReason = comparisons.length > 0
-        ? await explainCampaign(campaign, thisPerf, dealership.business_category ?? "car dealership", { supabase, dealershipId }, comparisons)
+        ? await explainCampaign(campaign, thisPerf, dealership.business_category ?? "business", { supabase, dealershipId }, comparisons)
         : rec.reason;
 
       // Transparent log — always explainable, never silent.
@@ -166,7 +166,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
 
       // AI-Intelligence Pillar 2 — auto-iteration. Draft-only: this
       // never launches anything or spends money by itself.
-      await maybeGenerateVariantOnPause(supabase, dealershipId, dealership.business_category ?? "car dealership", campaign);
+      await maybeGenerateVariantOnPause(supabase, dealershipId, dealership.business_category ?? "business", campaign);
     }
   }
   return pausedCount;

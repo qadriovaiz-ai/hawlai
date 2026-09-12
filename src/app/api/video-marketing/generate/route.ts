@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateVideoTask } from "@/lib/agents/videoMarketingAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -22,14 +23,16 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const { output, _fallback } = await generateVideoTask(
     taskType,
     dealership?.dealership_name ?? "the business",
-    dealership?.business_category ?? "car dealership",
+    dealership?.business_category ?? "business",
     topic ?? "",
     brandProfile,
     { supabase, dealershipId }
-  );
+  , factsPrompt(facts));
 
   let saved = null;
   if (!_fallback) {

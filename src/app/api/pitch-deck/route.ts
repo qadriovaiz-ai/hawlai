@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateDeckContent, buildPitchDeckPptx, type DeckBrandKit, type DeckProduct } from "@/lib/agents/pitchDeckAgent";
 import { fetchLogoBuffer } from "@/lib/agents/agencyBrandingAgent";
+import { fetchCatalog } from "@/lib/claims/businessFacts";
 
 const DEFAULT_ACCENT = "7C3AED";
 const DARK = "1E293B";
@@ -15,11 +16,12 @@ export async function GET() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const [{ data: dealership }, { data: brandKitRow }, { data: brandProfile }, { data: products }] = await Promise.all([
+  const [{ data: dealership }, { data: brandKitRow }, { data: brandProfile }, products] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, city, business_category").eq("id", dealershipId).single(),
     supabase.from("brand_kits").select("kit, logo_url").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
-    supabase.from("products").select("name, description, price").eq("dealership_id", dealershipId).eq("is_active", true).order("order_index", { ascending: true }).limit(4),
+    // The shared catalogue (src/lib/claims), not a fourth copy of this query.
+    fetchCatalog(supabase, dealershipId, { limit: 4 }),
   ]);
 
   const name = dealership?.dealership_name ?? "Your Business";

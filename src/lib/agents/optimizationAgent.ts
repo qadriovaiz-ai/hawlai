@@ -82,7 +82,7 @@ export async function analyzeCampaigns(supabase: any, dealershipId: string): Pro
     getCampaignPerformanceState(supabase, dealershipId),
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
-  const businessCategory = dealership?.business_category ?? "car dealership";
+  const businessCategory = dealership?.business_category ?? "business";
 
   // Previously this said "No launched campaigns yet — nothing to
   // optimize until you launch one" whenever the result was empty,

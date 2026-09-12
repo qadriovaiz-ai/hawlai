@@ -36,15 +36,17 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
   return {
     businessName: "candle_by_qaaf",
     category: "Home fragrance",
+    categoryKnown: true,
     city: "Pune",
     site: { url: "/site/candle-by-qaaf", published: true, pages: [HOME] },
     home: HOME,
-    products: [{ name: "Lavender candle", price: 550, description: "Hand-poured soy wax, 40 hour burn" }],
+    products: [{ id: "p1", name: "Lavender candle", price: 550, description: "Hand-poured soy wax, 40 hour burn", images: [], inventory: null, category: null, active: true }],
     offers: [],
     shipping: { mode: "flat", rate: 60, freeThreshold: null },
     last30: { views: 13, chatOpens: 0, leads: 0, orders: 1, abandonedCarts: 0, conversionRate: 7.7, cartAbandonmentRate: null },
     allTime: { paidOrders: 1, leads: 0 },
     ownerFacts: [],
+    brand: { tone: null, voice: null, persona: null, language: null, pillars: ["Hand-poured in small batches"], description: null, colors: [], logoUrl: null },
     pillars: ["Hand-poured in small batches"],
     unreadable: [],
     ...over,
@@ -131,7 +133,7 @@ describe("4 — health and efficacy claims need evidence", () => {
 describe("the owner's own claims are theirs to make", () => {
   it("a claim in Business Knowledge is allowed; the same claim without it is not", () => {
     expect(flagged("Award-winning candles, poured in Pune")).toBe(true);
-    const owned = facts({ ownerFacts: [{ title: "Awards", content: "Award-winning at Pune Design Week 2025" }] });
+    const owned = facts({ ownerFacts: [{ category: "about", title: "Awards", content: "Award-winning at Pune Design Week 2025" }] });
     expect(flagged("Award-winning candles, poured in Pune", owned)).toBe(false);
   });
 

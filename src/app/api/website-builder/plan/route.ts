@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { planWebsite } from "@/lib/agents/websiteBuilderAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 // Planning-only step: takes the owner's free-form prompt and returns a
 // proposed page structure + theme for confirmation. Nothing is written
@@ -23,6 +24,8 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const plan = await planWebsite(
     prompt.trim(),
     dealership?.dealership_name ?? "the business",
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
     dealership?.city ?? null,
     brandProfile,
     { supabase, dealershipId }
-  );
+  , factsPrompt(facts));
 
   return NextResponse.json({ plan, prompt: prompt.trim() });
 }

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getVideoAdapter, isModelConfigured, getFallbackModelKey } from "@/lib/videoModels";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 import { isFeatureEnabled, unavailableMessage } from "@/lib/featureFlags";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { buildImageBrief } from "@/lib/claims/imageBrief";
 
 export async function POST(request: Request) {
   // Video generation has no plan-gate boolean to hang a kill switch on
@@ -35,15 +37,22 @@ export async function POST(request: Request) {
   const usage = await checkAndRecordGenerationUsage(dealershipId, "video");
   if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
 
+  // Anchored to the real catalogue, like every other generated visual
+  // (src/lib/claims/imageBrief.ts) — a video model given only "Diwali
+  // sale" invents a product. Stored as sent, so the record matches what
+  // the model was actually asked for.
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const videoPrompt = buildImageBrief(prompt.trim(), facts).prompt;
+
   const { data: draft, error: insertError } = await supabase
     .from("video_generations")
-    .insert({ dealership_id: dealershipId, prompt: prompt.trim(), status: "pending", model_key: modelKey })
+    .insert({ dealership_id: dealershipId, prompt: videoPrompt, status: "pending", model_key: modelKey })
     .select()
     .single();
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
   try {
-    const taskId = await getVideoAdapter(modelKey).start(prompt.trim(), modelKey);
+    const taskId = await getVideoAdapter(modelKey).start(videoPrompt, modelKey);
     await supabase.from("video_generations").update({ task_id: taskId, operation_name: taskId }).eq("id", draft.id);
     return NextResponse.json({ id: draft.id });
   } catch (err: any) {
@@ -56,7 +65,7 @@ export async function POST(request: Request) {
     const fallbackKey = getFallbackModelKey(modelKey);
     if (fallbackKey) {
       try {
-        const taskId = await getVideoAdapter(fallbackKey).start(prompt.trim(), fallbackKey);
+        const taskId = await getVideoAdapter(fallbackKey).start(videoPrompt, fallbackKey);
         await supabase.from("video_generations").update({ task_id: taskId, operation_name: taskId, model_key: fallbackKey }).eq("id", draft.id);
         console.warn(`[video] ${modelKey} failed (${err.message}) — switched to ${fallbackKey}.`);
         return NextResponse.json({ id: draft.id, switchedTo: fallbackKey, requestedModel: modelKey });

@@ -16,6 +16,6 @@ export async function GET() {
   if (!gate.allowed) return gate.response;
 
   const { data: dealership } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).single();
-  const report = await analyzeCro(supabase, dealershipId, dealership?.business_category ?? "car dealership");
+  const report = await analyzeCro(supabase, dealershipId, dealership?.business_category ?? "business");
   return NextResponse.json(report);
 }

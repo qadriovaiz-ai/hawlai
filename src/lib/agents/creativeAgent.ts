@@ -80,8 +80,10 @@ async function callClaude(prompt: string, maxTokens: number, operation: string, 
 export async function generateVideoScript(
   topic: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  businessCategory: string = "business",
+  logContext?: { supabase: any; dealershipId: string },
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<VideoScript> {
   const fallback: VideoScript = {
     title: topic,
@@ -99,7 +101,8 @@ Topic: "${topic}"
 ${brandContextFor(brandProfile)}
 
 Write a 15-30 second video script, 3-6 scenes. Return JSON only:
-{"title":"short title for the video","total_duration_seconds":number,"scenes":[{"scene_number":1,"visual":"what the camera shows, one short sentence","voiceover_or_caption":"what's said or shown as on-screen text, one short sentence","duration_seconds":number}]}`,
+{"title":"short title for the video","total_duration_seconds":number,"scenes":[{"scene_number":1,"visual":"what the camera shows, one short sentence","voiceover_or_caption":"what's said or shown as on-screen text, one short sentence","duration_seconds":number}]}
+${grounding ?? ""}`,
     600,
     "video_script",
     logContext
@@ -117,8 +120,10 @@ export async function generateCopyVariations(
   topic: string,
   brandProfile?: BrandProfile | null,
   count: number = 3,
-  businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  businessCategory: string = "business",
+  logContext?: { supabase: any; dealershipId: string },
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<CopyVariation[]> {
   const fallback: CopyVariation[] = [
     { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today.", score: 50 },
@@ -130,7 +135,8 @@ Topic: "${topic}"
 ${brandContextFor(brandProfile)}
 
 Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian customers — be genuinely critical and vary the scores based on real strength, not uniformly high. Return JSON only:
-{"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}`,
+{"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}
+${grounding ?? ""}`,
     700,
     "copy_variations",
     logContext
@@ -156,8 +162,10 @@ export async function generateProductDescription(
   itemName: string,
   details: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  businessCategory: string = "business",
+  logContext?: { supabase: any; dealershipId: string },
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<ProductDescription> {
   const fallback: ProductDescription = {
     title: itemName,
@@ -170,7 +178,8 @@ Item: "${itemName}"
 Details provided: "${details}"
 ${brandContextFor(brandProfile)}
 Return JSON only:
-{"title":"short listing title","description":"2-3 sentence description, honest and specific to what was given, not generic","highlights":["4-5 short bullet-point features, based on the details given"]}`,
+{"title":"short listing title","description":"2-3 sentence description, honest and specific to what was given, not generic","highlights":["4-5 short bullet-point features, based on the details given"]}
+${grounding ?? ""}`,
     500,
     "product_description",
     logContext

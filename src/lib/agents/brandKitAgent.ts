@@ -76,7 +76,7 @@ function formatBrandColors(colors?: BrandColor[] | null): string {
 export async function generateLogoConcept(
   dealershipName: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   existingBrandColors?: BrandColor[] | null,
   brandVoice?: BrandVoiceProfile | null

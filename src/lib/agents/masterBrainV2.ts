@@ -597,6 +597,19 @@ const TOOLS = [
   },
 ];
 
+/**
+ * The canonical facts for this turn (src/lib/claims).
+ *
+ * Gathered once with the business context, so tools share one read —
+ * but re-read if that failed, because a tool whose facts are missing
+ * silently loses its grounding and its claims check.
+ */
+async function factsFor(supabase: any, ctx: DealershipCtx) {
+  if (ctx.facts) return ctx.facts;
+  const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
+  return gatherBusinessFactsSafely(supabase, ctx.id);
+}
+
 async function saveGenerated(supabase: any, dealershipId: string, table: string, extra: Record<string, any>): Promise<string | null> {
   try {
     const { data } = await supabase.from(table).insert({ dealership_id: dealershipId, ...extra }).select("id").single();
@@ -709,8 +722,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       }
     }
     case "generate_content": {
-      const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
-      const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+      const facts = await factsFor(supabase, ctx);
       const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext, facts);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
@@ -742,15 +754,13 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_email": {
-      const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
-      const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+      const facts = await factsFor(supabase, ctx);
       const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_whatsapp": {
-      const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
-      const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+      const facts = await factsFor(supabase, ctx);
       const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
@@ -940,11 +950,12 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // the same claims check as copy (src/lib/claims). "Sirf ₹550 mein.
         // Free shipping." must never be drawn for a store that charges
         // shipping.
-        const { gatherBusinessFactsSafely } = await import("../claims/businessFacts");
         const { stripUnsupported, claimsNote } = await import("../claims/claimCheck");
-        const facts = await gatherBusinessFactsSafely(supabase, ctx.id);
+        // Already gathered for this turn (getBusinessContext) — one read per
+        // turn, not one per tool call.
+        const facts = await factsFor(supabase, ctx);
         const brief = facts ? stripUnsupported(input.prompt ?? "", facts) : { text: input.prompt ?? "", removed: [] as string[] };
-        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, brief.text, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice);
+        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, brief.text, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice, facts);
         const { createServiceClient } = await import("../supabase/service");
         const serviceClient = createServiceClient();
         const filePath = `graphic-designs/${ctx.id}/${input.designType}-${Date.now()}.png`;
@@ -1375,7 +1386,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           } catch (photoErr: any) {
             const why = photoErr?.message ?? String(photoErr);
             merr("chat.photo_unusable", { dealership: ctx.id, url: productPhotoUrl, detail: why });
-            buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
+            buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business", ctx.facts);
             // The card must stop claiming the real photo the moment we
             // stop using it.
             photoSource = "ai_generated";
@@ -1383,7 +1394,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             productPhotoUrl = null;
           }
         } else {
-          buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business");
+          buffer = await buildCreativeWithoutPhoto(plan, conn.business_category ?? "small business", ctx.facts);
         }
         const filePath = `${ctx.id}/${draft.id}.png`;
         // THE SILENT ONE. Supabase's storage client returns { data,
@@ -1660,17 +1671,20 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     }
     case "create_product_ad": {
       try {
-        const { data: matches } = await supabase.from("products").select("id, name, images, inventory_count, is_active").eq("dealership_id", ctx.id).ilike("name", `%${input.productName}%`).limit(5);
-        const withPhoto = (matches ?? []).filter((p: any) => Array.isArray(p.images) && p.images.length > 0);
+        // The shared catalogue (src/lib/claims), including unpublished
+        // products so the refusals below can say WHY.
+        const { fetchCatalog, matchProducts } = await import("../claims/businessFacts");
+        const matches = matchProducts(await fetchCatalog(supabase, ctx.id, { includeInactive: true }), input.productName).slice(0, 5);
+        const withPhoto = matches.filter((p) => p.images.length > 0);
         if (withPhoto.length === 0) return { error: `No product matching "${input.productName}" with an uploaded photo found — add a photo to it in Website & Products first.` };
         // Master audit Part C1.4 — don't spend ad budget/effort promoting
         // a product nobody can actually buy. inventory_count === 0 means
         // explicitly tracked and depleted; null means untracked/
         // unlimited, so that case is left alone.
-        const available = withPhoto.filter((p: any) => p.is_active !== false && p.inventory_count !== 0);
+        const available = withPhoto.filter((p) => p.active && p.inventory !== 0);
         if (available.length === 0) {
           const p = withPhoto[0];
-          const reason = p.is_active === false ? "unpublished" : "out of stock";
+          const reason = !p.active ? "unpublished" : "out of stock";
           return { error: `"${p.name}" is currently ${reason} — an ad can't be made promoting it until that's fixed in Website & Products.` };
         }
         const product = available[0];
@@ -2893,8 +2907,8 @@ export async function runMasterBrainChat(
   // picture). It gets the same verified store facts and truth rules the
   // generators do (src/lib/claims), so it can't say "free shipping" for a
   // store that charges ₹60.
-  const { gatherBusinessFactsSafely, formatFactsForCopy, COPY_TRUTH_RULES } = await import("../claims/businessFacts");
-  const storeFacts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const { formatFactsForCopy, COPY_TRUTH_RULES } = await import("../claims/businessFacts");
+  const storeFacts = await factsFor(supabase, ctx);
   const storeFactsSection = storeFacts
     ? `
 

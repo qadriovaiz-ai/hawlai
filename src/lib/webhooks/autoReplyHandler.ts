@@ -4,6 +4,7 @@ import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { fetchCatalog } from "@/lib/claims/businessFacts";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -101,13 +102,15 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
   // reasonable size; a seller with more than that is a genuine edge
   // case worth revisiting, not the common Insta-seller scenario this
   // is built for.
-  const { data: products } = await supabase
-    .from("products")
-    .select("name, price, description, inventory_count")
-    .eq("dealership_id", dealership.id)
-    .eq("is_active", true)
-    .limit(40);
-  const productCatalog = (products ?? []).map((p: any) => ({ name: p.name, price: p.price, description: p.description, inventoryCount: p.inventory_count }));
+  // The one catalogue every path shares (src/lib/claims) — same columns,
+  // same active rule, same shape as the facts the guard checks copy
+  // against. This used to be its own query with its own field list.
+  const productCatalog = (await fetchCatalog(supabase, dealership.id)).map((p) => ({
+    name: p.name,
+    price: p.price,
+    description: p.description,
+    inventoryCount: p.inventory,
+  }));
 
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {

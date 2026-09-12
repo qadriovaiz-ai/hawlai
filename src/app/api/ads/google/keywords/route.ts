@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeoIdeas } from "@/lib/agents/seoAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 // P3 piece 6 — AI-suggested keywords for a Google Search campaign,
 // reusing seoAgent's existing real keyword generation rather than a
@@ -25,12 +26,14 @@ export async function POST(request: Request) {
   const { data: dealership } = await supabase
     .from("dealerships").select("city, business_category").eq("id", dealershipId).single();
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const ideas = await generateSeoIdeas(
     String(topic).trim(),
     dealership?.city,
     dealership?.business_category ?? "business",
     { supabase, dealershipId }
-  );
+  , factsPrompt(facts));
 
   // Prefer the transactional/commercial ones — someone searching to
   // buy is worth more per click than someone reading up on a topic.

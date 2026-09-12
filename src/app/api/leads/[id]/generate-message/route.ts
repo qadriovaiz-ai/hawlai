@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateFollowUpMessage } from "@/lib/agents/contentAgent";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function POST(
   request: Request,
@@ -37,6 +38,8 @@ export async function POST(
     getLeadMemory(supabase, dealershipId, id),
   ]);
 
-  const result = await generateFollowUpMessage(lead, brandProfile, channel, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, pastInsights);
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const result = await generateFollowUpMessage(lead, brandProfile, channel, dealership?.business_category ?? "business", { supabase, dealershipId }, pastInsights, factsPrompt(facts));
   return NextResponse.json(result);
 }

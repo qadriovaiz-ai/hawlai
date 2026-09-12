@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateBrandKit } from "@/lib/agents/brandBuildingAgent";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -37,13 +38,15 @@ export async function GET(request: Request) {
     supabase.from("brand_kits").select("logo_url").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const kit = await generateBrandKit(
     dealership?.dealership_name ?? "the business",
     dealership?.city ?? null,
     brandProfile,
-    dealership?.business_category ?? "car dealership",
+    dealership?.business_category ?? "business",
     { supabase, dealershipId }
-  );
+  , factsPrompt(facts));
 
   // Never cache a fallback result — a transient API hiccup shouldn't
   // permanently stick the dealer with placeholder text until they

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateLandingPageCopy } from "@/lib/agents/websiteAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function POST() {
   const supabase = await createClient();
@@ -23,6 +24,8 @@ export async function POST() {
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
-  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
   return NextResponse.json(copy);
 }

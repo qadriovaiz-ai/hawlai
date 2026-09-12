@@ -23,7 +23,7 @@ export async function generateInfluencerPlan(
   productOrService: string,
   city: string | null,
   brandProfile: any,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
 ): Promise<InfluencerOutreachPlan> {

@@ -12,6 +12,6 @@ export async function GET() {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const { data: dealership } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).single();
-  const report = await generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "car dealership");
+  const report = await generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "business");
   return NextResponse.json(report);
 }

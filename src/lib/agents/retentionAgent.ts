@@ -26,11 +26,13 @@ export async function generateRetentionMessage(
   customer: CustomerInfo,
   brandProfile: BrandProfile | null,
   angle: "service_reminder" | "referral" | "upsell",
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   // P3 — real cross-interaction memory (getLeadMemory, P1 4a), same
   // addition as contentAgent.ts's generateFollowUpMessage.
-  pastInsights?: string[]
+  pastInsights?: string[],
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<string> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -62,7 +64,8 @@ export async function generateRetentionMessage(
 Customer: ${customer.name}${customer.vehicle ? `, bought/has: ${customer.vehicle}` : ""}.
 Goal: ${angleInstructions[angle]}
 ${brandContext}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this customer before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}
-2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}`,
+2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}
+${grounding ?? ""}`,
           },
         ],
       }),

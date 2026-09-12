@@ -41,7 +41,7 @@ export async function generateBrandKit(
   dealershipName: string,
   city: string | null,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
 ): Promise<BrandKit & { _fallback?: boolean }> {

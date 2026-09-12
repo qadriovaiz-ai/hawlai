@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWebsite, saveGeneratedWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 // Generating several pages (even with the per-page 8s internal
 // timeout below) across concurrent batches can still add up past
@@ -114,6 +115,8 @@ export async function POST(request: Request) {
       prompt,
     }));
 
+    // Written from what the business can actually back up (src/lib/claims).
+    const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
     const { pages: generatedPages, fallbackWarnings } = await generateWebsite(
       dealership?.dealership_name ?? "the business",
       dealership?.business_category ?? "business",
@@ -123,7 +126,7 @@ export async function POST(request: Request) {
       brandProfile,
       prompt ?? null,
       { supabase, dealershipId }
-    );
+    , factsPrompt(facts));
 
     const resolvedTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(themeKey) ? themeKey : "navy_amber";
 

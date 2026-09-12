@@ -34,7 +34,7 @@ export async function generateMarketingStrategy(
   monthlyBudget: number,
   goal: string,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   // Structured refinement on top of the free-text goal above — a
   // specific number the business owner wants ("100 leads"), not a
@@ -43,7 +43,9 @@ export async function generateMarketingStrategy(
   // This dealer's own real average cost-per-lead, computed by the
   // caller from campaign_performance_history — only ever a genuine
   // historical figure, never estimated here.
-  historicalCostPerLead?: number | null
+  historicalCostPerLead?: number | null,
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<MarketingPlan> {
   const fallback: MarketingPlan & { _fallback?: boolean } = {
     _fallback: true,
@@ -100,7 +102,8 @@ Only recommend channels this platform can actually execute today: Meta Ads (paid
 
 Return JSON only:
 {"overview":"2-3 sentence strategic summary","budget_allocation":[{"channel":"channel name","percent":number,"reason":"short reason"}],"funnel_focus":"1 sentence on where the funnel needs the most attention this month","monthly_themes":[{"week":"Week 1","focus":"theme for the week","action":"specific action to take"}],"recommended_offers":["2-3 offer ideas that fit the budget and goal"],"estimated_leads":"integer, your honest estimate of total leads this budget should generate this month, or null if you genuinely can't estimate it responsibly"}
-budget_allocation percents must sum to 100. Give exactly 4 weekly themes.`,
+budget_allocation percents must sum to 100. Give exactly 4 weekly themes.
+${grounding ?? ""}`,
           },
         ],
       }),

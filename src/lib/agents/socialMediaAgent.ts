@@ -18,7 +18,7 @@ const GRAPH_VERSION = "v23.0";
 export async function generateSocialCaption(
   prompt: string,
   brandProfile?: { tone_of_voice?: string | null; messaging_pillars?: string[] | null; preferred_language?: string | null } | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   /** Verified business facts (src/lib/claims). When given, the caption is written from them and checked against them. */
   facts?: BusinessFacts | null

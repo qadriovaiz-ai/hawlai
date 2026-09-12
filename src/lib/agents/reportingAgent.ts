@@ -180,7 +180,7 @@ export async function getComparisonCampaigns(
 export async function explainCampaign(
   campaign: { headline: string; body_copy?: string; daily_budget?: number; targeting_city?: string; creative_score?: number; mode?: string | null; background_style?: string | null; scheduled_start?: string | null },
   performance: { spend: number; leads: number; impressions: number; clicks: number; cost_per_lead: number | null } | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   comparisons?: ComparisonCampaign[]
 ): Promise<string> {

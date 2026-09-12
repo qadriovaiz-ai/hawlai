@@ -44,13 +44,15 @@ export async function generateFollowUpMessage(
   lead: LeadInfo,
   brandProfile: BrandProfile | null,
   channel: "whatsapp" | "email",
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   // P3 — this lead's own business_memory history (getLeadMemory,
   // P1 4a) — real cross-interaction memory, not just this one row's
   // flat fields. Was already built and wired into live calls; this is
   // the first async/messaging generator to use it too.
-  pastInsights?: string[]
+  pastInsights?: string[],
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<GeneratedMessage> {
   const brandContext = brandProfile
     ? `Brand tone to match: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -89,7 +91,8 @@ export async function generateFollowUpMessage(
 ${leadContext}
 ${brandContext}
 ${channelInstructions}
-The goal: get them to book an appointment/demo/visit or reply. No markdown, no explanation, JSON only.`,
+The goal: get them to book an appointment/demo/visit or reply. No markdown, no explanation, JSON only.
+${grounding ?? ""}`,
           },
         ],
       }),

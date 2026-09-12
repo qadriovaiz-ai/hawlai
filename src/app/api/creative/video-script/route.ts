@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateVideoScript } from "@/lib/agents/creativeAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -19,6 +20,8 @@ export async function POST(request: Request) {
     supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
   ]);
 
-  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
   return NextResponse.json(script);
 }

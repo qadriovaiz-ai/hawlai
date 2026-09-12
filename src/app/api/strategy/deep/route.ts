@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateDeepStrategy } from "@/lib/agents/deepStrategyAgent";
 import { searchCompetitorAds } from "@/lib/agents/researchAgent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -49,14 +50,16 @@ export async function GET(request: Request) {
     }
   }
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const strategy = await generateDeepStrategy(
     dealership?.dealership_name ?? "the business",
     dealership?.city ?? null,
     brandProfile,
-    dealership?.business_category ?? "car dealership",
+    dealership?.business_category ?? "business",
     competitorContext,
     { supabase, dealershipId }
-  );
+  , factsPrompt(facts));
 
   // Never cache a fallback result — a transient API hiccup shouldn't
   // permanently stick the dealer with placeholder text until they

@@ -9,6 +9,8 @@
 // ------------------------------------------------------------------
 
 import sharp from "sharp";
+import { buildImageBrief, imageParts } from "@/lib/claims/imageBrief";
+import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { logClaudeUsage } from "./usage/logUsage";
 import { getModel } from "./models";
 
@@ -45,7 +47,7 @@ async function callAdPlanOnce(promptContent: string, logContext?: { supabase: an
 // Step 1: Claude reads the dealer's one-line prompt and extracts
 // everything needed — copy, budget, city, and an image scene idea.
 // ------------------------------------------------------------------
-export async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "small business", logContext?: { supabase: any; dealershipId: string }, businessCity?: string | null) {
+export async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "small business", logContext?: { supabase: any; dealershipId: string }, businessCity?: string | null, facts?: BusinessFacts | null) {
   try {
     const brandContext = brandProfile
       ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
@@ -58,7 +60,7 @@ export async function generateAdPlan(prompt: string, brandProfile?: any, busines
     // Null is a good answer: resolveLocation reads it as All India,
     // which is broad but never WRONG.
     const basePrompt = `You are an expert Facebook ad strategist for Indian ${businessCategory} businesses.
-Based on this dealer's requirement: "${prompt}"${brandContext}
+Based on this dealer's requirement: "${prompt}"${brandContext}${factsPrompt(facts)}
 Return JSON only (no markdown, no explanation):
 {"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"the city to advertise in — extract it from the request if they named one; otherwise use ${businessCity ? JSON.stringify(businessCity) : "null"}; NEVER invent or guess a city, null is correct when there is none","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`;
 
@@ -302,24 +304,29 @@ export async function resolveRegionKey(regionName: string, token: string): Promi
  */
 export async function generateAdImageFromDescription(
   plan: any,
-  businessCategory: string = "small business"
+  businessCategory: string = "small business",
+  /** The canonical facts (src/lib/claims) — what keeps the scene about the real product. */
+  facts?: BusinessFacts | null
 ): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
 
   const scene = plan?.image_scene_prompt || plan?.background_style || "clean professional product backdrop";
+  // The scene is described by the model from a one-line request, so left
+  // alone it drifts to whatever the occasion suggests. Anchored to the
+  // real catalogue, with the product's own photo attached when there is
+  // one (imageBrief.ts).
+  const brief = buildImageBrief(scene, facts);
+  const promptParts = await imageParts(
+    brief,
+    `A square photorealistic advertising background image for an Indian ${businessCategory} business. Scene: ${brief.prompt}. Professional advertisement lighting, rich colour, no text, no logos, no words anywhere in the image, leave the upper third and lower third relatively uncluttered so text can be placed there.`
+  );
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `A square photorealistic advertising background image for an Indian ${businessCategory} business. Scene: ${scene}. Professional advertisement lighting, rich colour, no text, no logos, no words anywhere in the image, leave the upper third and lower third relatively uncluttered so text can be placed there.`,
-          }],
-        }],
-      }),
+      body: JSON.stringify({ contents: [{ parts: promptParts }] }),
     }
   );
   const data = await res.json();
@@ -336,8 +343,8 @@ export async function generateAdImageFromDescription(
  * the same headline/body overlay every other creative gets, so a
  * chat-launched ad looks like the others rather than a lesser variant.
  */
-export async function buildCreativeWithoutPhoto(plan: any, businessCategory: string): Promise<Buffer> {
-  const background = await generateAdImageFromDescription(plan, businessCategory);
+export async function buildCreativeWithoutPhoto(plan: any, businessCategory: string, facts?: BusinessFacts | null): Promise<Buffer> {
+  const background = await generateAdImageFromDescription(plan, businessCategory, facts);
   return sharp(background)
     .resize(1080, 1080, { fit: "cover" })
     .composite([{ input: Buffer.from(buildTextOverlaySvg(1080, 1080, plan.headline, plan.body)), top: 0, left: 0 }])

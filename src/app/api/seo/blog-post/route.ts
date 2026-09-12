@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateBlogPost } from "@/lib/agents/seoAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -13,12 +14,14 @@ export async function POST(request: Request) {
   const { topic, city } = await request.json();
   if (!topic || topic.trim().length < 2) return NextResponse.json({ error: "Topic is too short" }, { status: 400 });
 
-  let businessCategory = "car dealership";
+  let businessCategory = "business";
   if (dealershipId) {
     const { data: dealership } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).single();
-    businessCategory = dealership?.business_category ?? "car dealership";
+    businessCategory = dealership?.business_category ?? "business";
   }
 
-  const post = await generateBlogPost(topic.trim(), city, businessCategory, dealershipId ? { supabase, dealershipId } : undefined);
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const post = await generateBlogPost(topic.trim(), city, businessCategory, dealershipId ? { supabase, dealershipId } : undefined, factsPrompt(facts));
   return NextResponse.json(post);
 }

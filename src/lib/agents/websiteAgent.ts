@@ -25,8 +25,10 @@ export async function generateLandingPageCopy(
   dealershipName: string,
   city: string | null,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
-  logContext?: { supabase: any; dealershipId: string }
+  businessCategory: string = "business",
+  logContext?: { supabase: any; dealershipId: string },
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<LandingPageCopy> {
   const fallback: LandingPageCopy = {
     headline: `${dealershipName} — Your Trusted Car Partner${city ? ` in ${city}` : ""}`,
@@ -54,7 +56,8 @@ export async function generateLandingPageCopy(
             role: "user",
             content: `Write landing page copy for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
 ${brandContext}
-Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 chars, builds trust","offer_text":"under 80 chars, a clear call-to-action like booking a test drive"}`,
+Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 chars, builds trust","offer_text":"under 80 chars, a clear call-to-action like booking a test drive"}
+${grounding ?? ""}`,
           },
         ],
       }),

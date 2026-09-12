@@ -63,7 +63,7 @@ export default async function DashboardOverviewPage({
     supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
     getCampaignPerformanceState(supabase, dealershipId),
     getOpenOpportunities(supabase, dealershipId),
-    generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "car dealership"),
+    generateGrowthReport(supabase, dealershipId, dealership?.business_category ?? "business"),
     supabase.from("pending_approvals").select("id").eq("dealership_id", dealershipId).eq("status", "pending"),
     supabase.from("brand_profiles").select("id").eq("dealership_id", dealershipId).maybeSingle(),
   ]);

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateInfluencerPlan } from "@/lib/agents/influencerAgent";
 import { requireFeature } from "@/lib/featureGate";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
-  const output = await generateInfluencerPlan(product.trim(), dealership?.city ?? null, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId });
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const output = await generateInfluencerPlan(product.trim(), dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
 
   const { data: saved } = await supabase
     .from("influencer_outreach_plans")

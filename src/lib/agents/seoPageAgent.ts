@@ -21,7 +21,9 @@ export async function generateSeoPage(
   dealershipName: string,
   businessCategory: string,
   city: string | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<{ output: SeoPageContent | null; _fallback?: boolean }> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -36,7 +38,8 @@ export async function generateSeoPage(
 
 Return JSON only: {"title": "SEO title tag, under 60 chars, includes the keyword", "metaDescription": "under 160 chars, click-worthy", "h1": "the on-page H1, can differ slightly from title", "sections": [{"heading": "...", "body": "2-4 sentences"}] (4-5 sections covering this topic thoroughly), "slug": "url-friendly-slug-for-this-topic"}
 
-Write real, specific, useful content for this topic and business — not generic filler. Never invent statistics, prices, or claims that aren't reasonable for this business type.`,
+Write real, specific, useful content for this topic and business — not generic filler. Never invent statistics, prices, or claims that aren't reasonable for this business type.
+${grounding ?? ""}`,
         }],
       }),
     });

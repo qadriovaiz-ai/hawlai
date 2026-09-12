@@ -48,7 +48,7 @@ export interface BlogPost {
 export async function generateBlogPost(
   topic: string,
   city?: string | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string,
   existingPages?: { slug: string; title: string }[] | null
@@ -133,7 +133,7 @@ Plan before you write:
 export async function generateSeoIdeas(
   topic: string,
   city?: string | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
 ): Promise<SeoIdeas> {

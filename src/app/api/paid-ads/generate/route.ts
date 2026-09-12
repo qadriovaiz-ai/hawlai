@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     platform,
     taskType,
     dealership?.dealership_name ?? "the business",
-    dealership?.business_category ?? "car dealership",
+    dealership?.business_category ?? "business",
     brandProfile,
     { supabase, dealershipId },
     performanceContext

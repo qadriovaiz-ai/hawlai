@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeoTask } from "@/lib/agents/seoToolkitAgent";
 import { generateAeoCheck } from "@/lib/agents/aeoAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -23,22 +24,25 @@ export async function POST(request: Request) {
     supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+
   const { output, _fallback } = taskType === "aeo_check"
     ? await generateAeoCheck(
         dealership?.dealership_name ?? "the business",
         dealership?.city ?? null,
-        dealership?.business_category ?? "car dealership",
+        dealership?.business_category ?? "business",
         brandProfile,
         { supabase, dealershipId }
-      )
+      , factsPrompt(facts))
     : await generateSeoTask(
         taskType,
         dealership?.dealership_name ?? "the business",
         dealership?.city ?? null,
-        dealership?.business_category ?? "car dealership",
+        dealership?.business_category ?? "business",
         brandProfile,
         { supabase, dealershipId }
-      );
+      , factsPrompt(facts));
 
   let saved = null;
   if (!_fallback) {

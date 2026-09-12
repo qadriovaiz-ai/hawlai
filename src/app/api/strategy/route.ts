@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateMarketingStrategy } from "@/lib/agents/strategyAgent";
 import { getCampaignPerformanceState, type CampaignPerformance } from "@/lib/agents/analyticsAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 export async function GET() {
   const supabase = await createClient();
@@ -57,17 +58,19 @@ export async function POST(request: Request) {
 
   const targetLeads = typeof target_leads === "number" && target_leads > 0 ? target_leads : null;
 
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const plan = await generateMarketingStrategy(
     dealership?.dealership_name ?? "the business",
     dealership?.city ?? null,
     monthly_budget,
     goal,
     brandProfile,
-    dealership?.business_category ?? "car dealership",
+    dealership?.business_category ?? "business",
     { supabase, dealershipId },
     targetLeads,
     historicalCostPerLead
-  );
+  , factsPrompt(facts));
 
   if ((plan as any)._fallback) {
     return NextResponse.json({ error: "Couldn't generate your plan right now — please try again in a moment." }, { status: 503 });

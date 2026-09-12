@@ -44,7 +44,7 @@ export async function generateDeepStrategy(
   dealershipName: string,
   city: string | null,
   brandProfile?: BrandProfile | null,
-  businessCategory: string = "car dealership",
+  businessCategory: string = "business",
   competitorContext?: string | null,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string,

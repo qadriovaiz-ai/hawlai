@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeoPage } from "@/lib/agents/seoPageAgent";
+import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -29,7 +30,9 @@ export async function POST(request: Request) {
   if (!topic) return NextResponse.json({ error: "topic required" }, { status: 400 });
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single();
-  const { output, _fallback } = await generateSeoPage(topic, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId });
+  // Written from what the business can actually back up (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const { output, _fallback } = await generateSeoPage(topic, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId }, factsPrompt(facts));
   if (_fallback || !output) return NextResponse.json({ error: "Couldn't generate this page right now — try again" }, { status: 500 });
 
   // Ensure slug uniqueness across all dealerships.

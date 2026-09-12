@@ -26,6 +26,6 @@ export async function POST(request: Request) {
 
   // The owner posts this straight to their Page, so it's written from,
   // and checked against, what the business can back up (src/lib/claims).
-  const { caption, claimsRemoved } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "car dealership", { supabase, dealershipId }, facts);
+  const { caption, claimsRemoved } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts);
   return NextResponse.json({ caption, note: claimsNote(claimsRemoved) });
 }

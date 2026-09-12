@@ -147,7 +147,9 @@ export async function planWebsite(
   businessCategory: string,
   city: string | null,
   brandProfile?: BrandProfile | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
+  grounding?: string
 ): Promise<WebsitePlan> {
   const fallback: WebsitePlan = {
     businessSummary: `${dealershipName} — ${businessCategory}`,
@@ -193,7 +195,8 @@ Decide three things:
 3. themeKey — pick exactly one from this list based on the mood/style the owner described:
 ${THEME_OPTIONS.map((t) => `   - ${t.key}: ${t.desc}`).join("\n")}
 
-Return JSON only, no markdown, no preamble: {"businessSummary":"...","themeKey":"...","pages":[{"slug":"...","title":"...","pageType":"..."}]}`,
+Return JSON only, no markdown, no preamble: {"businessSummary":"...","themeKey":"...","pages":[{"slug":"...","title":"...","pageType":"..."}]}
+${grounding ?? ""}`,
         }],
       }),
     });
