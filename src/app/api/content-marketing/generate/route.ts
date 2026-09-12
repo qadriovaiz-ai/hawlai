@@ -51,6 +51,24 @@ export async function POST(request: Request) {
   return NextResponse.json({ output, _fallback, id: saved?.id ?? null });
 }
 
+// Discarding a draft — what "Reject" does on a chat card. Scoped to the
+// dealership in the delete itself, so a mismatched id removes nothing
+// rather than ever touching another business's content.
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const dealershipId = await getDealership(supabase, user.id);
+  if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
+  const { id } = await request.json();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { error } = await supabase.from("content_pieces").delete().eq("id", id).eq("dealership_id", dealershipId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

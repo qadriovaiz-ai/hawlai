@@ -48,6 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
+import { websitePublishAction, socialPublishAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
 import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
@@ -1937,6 +1938,13 @@ export interface Artifact {
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
   imageUrl?: string; // a picture rendered INSIDE the card. Separate from `url`, which on a record card means a link and is ignored — an ad creative passed as `url` rendered nothing at all
   groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
+  /**
+   * Set when this artifact can be pushed live from the chat itself
+   * (src/lib/chat/publishActions.ts). Carries its own confirm
+   * sentence — publishing a site or a post is not undoable by a
+   * second click.
+   */
+  publish?: PublishAction;
   draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string }; // a single piece of generated long-form content — caption, email, script, blog post. id/raw/patchUrl present only when the row was actually saved — lets the chat card edit and PATCH it in place instead of only linking to the department page
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
   variants?: { label: string; heading?: string; body?: string; cta?: string }[]; // side-by-side ad copy variants
@@ -2342,7 +2350,9 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     case "generate_graphic":
       return result.imageUrl ? { kind: "visual", type: "image", label: "Generated Image", url: result.imageUrl, departmentHref } : null;
     case "build_website":
-      return { kind: "visual", type: "website", label: "Website Draft", url: departmentHref, summary: result.note, departmentHref };
+      // Built as a draft; publishing is the owner's call, made here
+      // rather than on another page.
+      return { kind: "visual", type: "website", label: "Website Draft", url: departmentHref, summary: result.note, departmentHref, publish: websitePublishAction() };
     case "generate_3d_scene":
       return result.sceneId ? { kind: "visual", type: "3d_scene", label: "3D Scene", url: departmentHref, departmentHref } : null;
     case "create_product_ad":
@@ -2670,8 +2680,16 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     // ---- Content generation: each has ~5-20 shapes depending on task
     // type, so these all route through deriveContentArtifact rather
     // than being hand-mapped one by one ----
-    case "generate_content":
-      return deriveContentArtifact(toolName, input?.contentType ? String(input.contentType).replace(/_/g, " ") : "Content", result, departmentHref);
+    case "generate_content": {
+      const artifact = deriveContentArtifact(toolName, input?.contentType ? String(input.contentType).replace(/_/g, " ") : "Content", result, departmentHref);
+      // A caption is something you POST; a blog outline is something
+      // you keep. Only the first gets a publish button.
+      if (SOCIAL_POST_TYPES.has(String(input?.contentType))) {
+        const publish = socialPublishAction({ caption: captionFrom(result), draftId: result?._savedId ?? null });
+        if (publish) artifact.publish = publish;
+      }
+      return artifact;
+    }
     case "generate_email":
       return deriveContentArtifact(toolName, input?.taskType ? String(input.taskType).replace(/_/g, " ") : "Email", result, departmentHref);
     case "generate_whatsapp":
@@ -2972,7 +2990,9 @@ A junior marketer takes a request literally and produces the thing asked for. A 
     if (toolUseBlocks.length === 0) {
       await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       const text = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
-      return { reply: text || "Done!", toolsUsed, artifacts };
+      // A caption generated beside an image belongs with it — that
+      // pairing also decides whether Instagram is offered.
+      return { reply: text || "Done!", toolsUsed, artifacts: attachTurnImages(artifacts) };
     }
 
     messages.push({ role: "assistant", content: blocks });
@@ -3029,5 +3049,5 @@ A junior marketer takes a request literally and produces the thing asked for. A 
   }
 
   await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
-  return { reply: "That took a lot of steps — here's what I've got so far, ask me to continue if you need more.", toolsUsed, artifacts };
+  return { reply: "That took a lot of steps — here's what I've got so far, ask me to continue if you need more.", toolsUsed, artifacts: attachTurnImages(artifacts) };
 }

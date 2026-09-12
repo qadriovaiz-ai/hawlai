@@ -108,6 +108,40 @@ export async function postPhotoToPage(
   return { id: data.post_id ?? data.id };
 }
 
+/**
+ * A text-only Page post.
+ *
+ * Facebook's /photos endpoint needs a picture; /feed does not. A caption
+ * generated in chat often has no image with it, and refusing to post it
+ * would send the person to the Social page to do by hand exactly what
+ * they just asked for. Instagram has no equivalent — its API cannot
+ * publish without media — so that stays refused rather than faked.
+ */
+export async function postTextToPage(
+  pageId: string,
+  pageAccessToken: string,
+  message: string,
+  scheduledPublishTime?: number
+): Promise<{ id: string }> {
+  const body: Record<string, any> = { message, access_token: pageAccessToken };
+  if (scheduledPublishTime) {
+    body.published = false;
+    body.scheduled_publish_time = scheduledPublishTime;
+  }
+
+  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${pageId}/feed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    const e = data.error ?? {};
+    throw new Error(`${e.message ?? "Facebook post failed"}${e.error_user_msg ? ` — ${e.error_user_msg}` : ""}`);
+  }
+  return { id: data.id };
+}
+
 // Finds the Instagram Business Account connected to this Facebook
 // Page — Instagram posting always goes through a linked Page's own
 // access token, there's no separate Instagram-only auth needed if

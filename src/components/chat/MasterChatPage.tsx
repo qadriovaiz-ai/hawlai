@@ -7,6 +7,7 @@ import { cn, titleCaseFromSnake } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
+import type { PublishAction } from "@/lib/chat/publishActions";
 import { isSimpleConfirmation } from "@/lib/chat/cardLayout";
 
 const EXAMPLES = [
@@ -30,6 +31,8 @@ interface Artifact {
    * way to say yes.
    */
   approval?: { id: string; publishActionId?: string };
+  /** Set when this can be pushed live from the chat (src/lib/chat/publishActions.ts). */
+  publish?: PublishAction;
   type?: "image" | "website" | "3d_scene" | "canvas_design";
   /**
    * A picture to render INSIDE the card.
@@ -237,13 +240,22 @@ export default function MasterChatPage({
                 <div className="w-full space-y-1.5">
                   {msg.artifacts.map((artifact, ai) =>
                     artifact.kind === "visual" ? (
-                      <button
-                        key={ai}
-                        onClick={() => { setActiveArtifact(artifact); setPanelClosed(false); }}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30 flex items-center gap-1"
-                      >
-                        <ExternalLink className="w-2.5 h-2.5" /> View {artifact.label}
-                      </button>
+                      <div key={ai} className="space-y-1">
+                        <button
+                          onClick={() => { setActiveArtifact(artifact); setPanelClosed(false); }}
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30 flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" /> View {artifact.label}
+                        </button>
+                        {/* A website draft is a visual artifact, and publishing it is
+                            the point of generating it — so the actions live here, not
+                            only on the department page. */}
+                        {artifact.publish && (
+                          <div className="rounded-lg border border-slate-200 bg-white">
+                            <PublishStrip artifact={artifact} onEdit={(text) => setMessage(text)} />
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <ArtifactCard key={ai} artifact={artifact} onEdit={(text) => setMessage(text)} />
                     )
@@ -400,6 +412,125 @@ function flattenDraftBody(raw: Record<string, any>): { heading: string | null; b
   return { heading: headingField ? raw[headingField] : null, body: parts.join("\n\n") };
 }
 
+
+/**
+ * Acting on generated content without leaving the chat.
+ *
+ * Publishing a site or posting to a Page is not undone by clicking
+ * again, and neither path has been verified in production yet — so the
+ * button ASKS first, in words naming exactly what goes live. The
+ * endpoints are the ones the department pages already use
+ * (src/lib/chat/publishActions.ts); chat never gets its own publish
+ * route.
+ */
+function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
+  const publish = artifact.publish!;
+  const [state, setState] = useState<"idle" | "confirming" | "working" | "done" | "rejected" | "error">("idle");
+  const [note, setNote] = useState<string | null>(null);
+
+  async function run(action: "publish" | "reject") {
+    const spec = action === "publish" ? publish : publish.discard;
+    // Nothing saved to throw away — rejecting just leaves it unpublished.
+    if (!spec) {
+      setState("rejected");
+      setNote("\u274c Rejected \u2014 nothing was published.");
+      return;
+    }
+    setState("working");
+    setNote(null);
+    try {
+      const res = await fetch(spec.endpoint, {
+        method: spec.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(spec.payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setState("error");
+        setNote(data?.error ?? "That did not go through \u2014 nothing was published.");
+        return;
+      }
+      setState(action === "publish" ? "done" : "rejected");
+      // Instagram is best-effort inside the same call: say so rather than
+      // letting "Posted" imply both channels got it.
+      const igError = action === "publish" ? (data?.instagram?.error as string | undefined) : undefined;
+      setNote(igError ? `${spec.done.replace(" and Instagram", "")} \u2014 Instagram skipped: ${igError}` : spec.done);
+    } catch {
+      setState("error");
+      setNote("Couldn't reach the server \u2014 nothing was published.");
+    }
+  }
+
+  if (state === "done" || state === "rejected") {
+    return (
+      <div className="border-t border-slate-100 px-3 py-2">
+        <p className={`text-[11px] font-medium ${state === "done" ? "text-emerald-600" : "text-slate-500"}`}>{note}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-slate-100 px-3 py-2">
+      {state === "confirming" ? (
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-slate-700 leading-snug">{publish.confirm}</p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => run("publish")}
+              className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+            >
+              {publish.target === "website" ? "Yes, publish the site" : "Yes, post it now"}
+            </button>
+            <button
+              onClick={() => setState("idle")}
+              className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setState("confirming")}
+              disabled={state === "working"}
+              className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              {state === "working" ? "Publishing..." : publish.label}
+            </button>
+            {!artifact.draft?.patchUrl &&
+              (artifact.departmentHref ? (
+                <a
+                  href={artifact.departmentHref}
+                  className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Edit
+                </a>
+              ) : (
+                <button
+                  onClick={() => onEdit?.("Change it to ")}
+                  disabled={state === "working"}
+                  className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                >
+                  Edit
+                </button>
+              ))}
+            <button
+              onClick={() => run("reject")}
+              disabled={state === "working"}
+              className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50 transition-colors"
+            >
+              Reject
+            </button>
+          </div>
+          {state === "error" && note && <p className="mt-1.5 text-[11px] text-red-600 leading-snug">{note}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [editingDraft, setEditingDraft] = useState(false);
@@ -536,6 +667,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
       )}
     </div>
   ) : null;
+  const publishStrip = artifact.publish ? <PublishStrip artifact={artifact} onEdit={onEdit} /> : null;
   const [draftEdit, setDraftEdit] = useState<any>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -651,6 +783,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
         </div>
         {complianceWarning}
           {approvalStrip}
+          {publishStrip}
         {artifact.departmentHref && (
           <a
             href={artifact.departmentHref}
@@ -965,6 +1098,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
         action sits under what it acts on.
       */}
       {approvalStrip}
+      {publishStrip}
       {(artifact.kind === "link" && artifact.url) || artifact.departmentHref ? (
         <a
           href={artifact.kind === "link" && artifact.url ? artifact.url : artifact.departmentHref}
