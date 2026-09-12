@@ -148,8 +148,20 @@ export default function AutopilotCommandCenter() {
         {!d.fb_page_id && <p className="text-xs text-red-400">Connect Facebook first (Settings → Integrations).</p>}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-700">Enabled</span>
-            <input type="checkbox" checked={d.content_autopilot_enabled} disabled={saving || !d.fb_page_id} onChange={(e) => toggle("content_autopilot_enabled", e.target.checked)} className="w-5 h-5 accent-purple-600" />
+            {/* The label states the REAL setting. It used to be a fixed
+                "Enabled" printed beside the checkbox whether or not it was
+                ticked — which was read as "on" while the database said off. */}
+            <span className={`text-sm ${d.content_autopilot_enabled ? "text-emerald-600 font-medium" : "text-slate-500"}`}>
+              Auto-posting is {d.content_autopilot_enabled ? "on" : "off"}
+            </span>
+            <input
+              type="checkbox"
+              aria-label={d.content_autopilot_enabled ? "Turn auto-posting off" : "Turn auto-posting on"}
+              checked={d.content_autopilot_enabled}
+              disabled={saving || !d.fb_page_id}
+              onChange={(e) => toggle("content_autopilot_enabled", e.target.checked)}
+              className="w-5 h-5 accent-purple-600"
+            />
           </div>
           <label className="text-xs text-slate-500 flex items-center gap-1.5">
             Post every
