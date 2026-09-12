@@ -34,11 +34,16 @@ let failing: Set<string>;
 
 function db() {
   const from = (table: string) => {
+    // .eq() filters are applied for real — otherwise "active products
+    // only" would pass whether or not the code filters at all.
+    const filters: [string, any][] = [];
+    const rows = () => (tables[table] ?? []).filter((r) => filters.every(([k, v]) => r[k] === undefined || r[k] === v));
     const api: any = {
-      select: () => api, eq: () => api, gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api,
-      maybeSingle: async () => result((tables[table] ?? [])[0] ?? null),
-      single: async () => result((tables[table] ?? [])[0] ?? null),
-      then: (res: any, rej: any) => Promise.resolve(result(tables[table] ?? [])).then(res, rej),
+      select: () => api, gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api,
+      eq: (k: string, v: any) => (filters.push([k, v]), api),
+      maybeSingle: async () => result(rows()[0] ?? null),
+      single: async () => result(rows()[0] ?? null),
+      then: (res: any, rej: any) => Promise.resolve(result(rows())).then(res, rej),
     };
     const result = (data: any) => (failing.has(table) ? { data: null, error: { message: `${table} is down` } } : { data, error: null });
     return api;
@@ -128,8 +133,10 @@ describe("the canonical facts carry everything a generation needs", () => {
   it("a business with no category saved is a 'business' — never a car dealership", async () => {
     tables.dealerships = [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "  " }];
     const f = await gatherBusinessFacts(db(), "d1");
-    expect(f.category).toBe(UNKNOWN_CATEGORY);
+    expect(f.category).toBe("business");
+    expect(UNKNOWN_CATEGORY).toBe("business");
     expect(f.categoryKnown).toBe(false);
+    expect(formatFactsForCopy(f)).not.toMatch(/car dealership/i);
     expect(formatFactsForCopy(f)).toMatch(/NOT SET by the owner.*don't assume an industry/);
     expect(describeBusiness(f)).toBe('"candle_by_qaaf", which sells Lavender candle, Mogra Nights candle');
   });

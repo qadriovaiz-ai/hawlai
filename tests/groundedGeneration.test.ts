@@ -21,13 +21,17 @@ function db() {
   const from = (table: string) => {
     let op = "select";
     let values: Row = {};
+    const filters: [string, any][] = [];
+    const rows = () => (tables[table] ?? []).filter((r) => filters.every(([k, v]) => r[k] === undefined || r[k] === v));
     const api: any = {
-      select: () => api, eq: () => api, gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api, ilike: () => api,
+      select: () => api, gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api, ilike: () => api,
+      // Real .eq() filtering, so "active only" is actually exercised.
+      eq: (k: string, v: any) => (filters.push([k, v]), api),
       update: (v: Row) => ((op = "update"), (values = v), api),
       insert: (v: Row) => ((op = "insert"), (values = v), inserted.push({ table, values: v }), api),
-      maybeSingle: async () => ({ data: op === "insert" ? { id: `${table}-1`, ...values } : (tables[table] ?? [])[0] ?? null, error: null }),
-      single: async () => ({ data: op === "insert" ? { id: `${table}-1`, ...values } : (tables[table] ?? [])[0] ?? null, error: null }),
-      then: (res: any, rej: any) => Promise.resolve({ data: op === "select" ? tables[table] ?? [] : [], error: null }).then(res, rej),
+      maybeSingle: async () => ({ data: op === "insert" ? { id: `${table}-1`, ...values } : rows()[0] ?? null, error: null }),
+      single: async () => ({ data: op === "insert" ? { id: `${table}-1`, ...values } : rows()[0] ?? null, error: null }),
+      then: (res: any, rej: any) => Promise.resolve({ data: op === "select" ? rows() : [], error: null }).then(res, rej),
     };
     return api;
   };
