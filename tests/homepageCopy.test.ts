@@ -73,6 +73,13 @@ const CANDLE = (published = true): Record<string, Row[]> => ({
 });
 
 let shopifyConnected = false;
+// What Shopify's own search answers. The live failure happens HERE, not
+// at the credentials: the store is connected, and simply has no product
+// by that name because the product lives in the Hawlai store.
+let shopifySearch: any = { ok: true, candidates: [] };
+vi.mock("@/lib/publish/platforms/shopifySearch", () => ({
+  searchShopifyVariants: async () => shopifySearch,
+}));
 vi.mock("@/lib/publish/platforms/shopifyCredentials", () => ({
   resolveShopifyCredentials: async () =>
     shopifyConnected
@@ -100,6 +107,7 @@ beforeEach(() => {
   tables = CANDLE();
   writes = [];
   shopifyConnected = false;
+  shopifySearch = { ok: true, candidates: [] };
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
@@ -246,15 +254,40 @@ describe("the chat tool proposes — it no longer writes", () => {
 });
 
 describe("a price change for a product chat can see but the price tool cannot", () => {
-  it("names the store the product is really in, instead of claiming it doesn't exist", async () => {
-    const result = await executeTool(db(), CTX, "propose_price_change", { product_description: "Lavender candle", new_price: "650" }, "");
+  const priceChange = (phrase: string) =>
+    executeTool(db(), CTX, "propose_price_change", { product_description: phrase, new_price: "999" }, "");
+
+  it("THE LIVE CASE — Shopify is connected but has no such product: names the store it is actually in", async () => {
+    shopifyConnected = true; // credentials resolve fine
+    shopifySearch = { ok: true, candidates: [] }; // Shopify simply doesn't have it
+    const result = await priceChange("lavender candle");
+
     expect(result.error).toMatch(/"Lavender candle" \(₹550\) is in your own Hawlai store/);
     expect(result.error).toMatch(/Website Builder → Products/);
-    expect(result.error).not.toMatch(/couldn't find|no product matching/i);
+    // The old message, which read as "that product doesn't exist".
+    expect(result.error).not.toMatch(/Couldn't find a product matching/);
   });
 
-  it("a product in neither store still reports the connection problem", async () => {
-    const result = await executeTool(db(), CTX, "propose_price_change", { product_description: "Sandalwood diffuser", new_price: "650" }, "");
-    expect(result.error).toBe("Shopify isn't connected for this business.");
+  it("a Shopify search that fails outright says the same thing when the product is ours", async () => {
+    shopifyConnected = true;
+    shopifySearch = { ok: false, reason: "Shopify search failed (429)." };
+    expect((await priceChange("lavender candle")).error).toMatch(/is in your own Hawlai store/);
+  });
+
+  it("with Shopify unconnected, it still names the store the product is in", async () => {
+    shopifyConnected = false;
+    expect((await priceChange("Lavender candle")).error).toMatch(/is in your own Hawlai store/);
+  });
+
+  it("a product in NEITHER store reports the real problem for that store", async () => {
+    shopifyConnected = true;
+    const result = await priceChange("Sandalwood diffuser");
+    expect(result.error).toBe(`Couldn't find a product matching "Sandalwood diffuser" in your connected Shopify store.`);
+  });
+
+  it("with Shopify unconnected and no such product anywhere, the connection problem is reported", async () => {
+    shopifyConnected = false;
+    expect((await priceChange("Sandalwood diffuser")).error).toBe("Shopify isn't connected for this business.");
   });
 });
+

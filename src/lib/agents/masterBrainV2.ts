@@ -624,6 +624,33 @@ async function factsFor(supabase: any, ctx: DealershipCtx) {
   return gatherBusinessFactsSafely(supabase, ctx.id);
 }
 
+/**
+ * The product as the HAWLAI store knows it — the catalogue chat lists
+ * from, and the one propose_price_change cannot write to.
+ *
+ * THE CONFUSING FAILURE THIS EXISTS FOR: chat answers "you have 1
+ * product: Lavender candle — ₹550" from the products table, then the
+ * price tool searches SHOPIFY, finds nothing, and says it couldn't find
+ * that product "in the store". Both sentences are true about different
+ * stores, and together they read as the product not existing. Every exit
+ * from the price tool that means "not in Shopify" checks here first, so
+ * the answer names the store the product is actually in.
+ */
+async function hawlaiStoreProduct(supabase: any, dealershipId: string, phrase: string) {
+  try {
+    const { fetchCatalog, matchProducts } = await import("../claims/businessFacts");
+    const matches = matchProducts(await fetchCatalog(supabase, dealershipId, { includeInactive: true }), phrase);
+    return matches[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Where to change it, since chat cannot. */
+function hawlaiStorePriceMessage(product: { name: string; price: number }): string {
+  return `"${product.name}" (₹${product.price}) is in your own Hawlai store, and price changes from chat currently only work for a connected Shopify store. Change it in Website Builder → Products — it takes effect on your live storefront immediately.`;
+}
+
 async function saveGenerated(supabase: any, dealershipId: string, table: string, extra: Record<string, any>): Promise<string | null> {
   try {
     const { data } = await supabase.from(table).insert({ dealership_id: dealershipId, ...extra }).select("id").single();
@@ -1040,22 +1067,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
 
       const creds = await resolveShopifyCredentials(ctx.id);
       if (!creds.ok) {
-        // THE CONFUSING FAILURE THIS REPLACES: chat lists "Lavender
-        // candle — ₹550" from the Hawlai store's own products table, then
-        // this tool — which only searches SHOPIFY — reports it cannot
-        // find that product. Two different stores, one of which this tool
-        // cannot write to at all. Say that, instead of implying the
-        // product does not exist.
-        const { fetchCatalog, matchProducts } = await import("../claims/businessFacts");
-        const phraseForLookup = String(input.product_description ?? "").trim();
-        const own = matchProducts(await fetchCatalog(supabase, ctx.id, { includeInactive: true }), phraseForLookup);
-        if (own.length > 0) {
-          const p = own[0];
-          return {
-            error: `"${p.name}" (₹${p.price}) is in your own Hawlai store, and price changes from chat currently only work for a connected Shopify store. Change it in Website Builder → Products — it takes effect on your live storefront immediately.`,
-          };
-        }
-        return { error: creds.reason };
+        const own = await hawlaiStoreProduct(supabase, ctx.id, String(input.product_description ?? "").trim());
+        return { error: own ? hawlaiStorePriceMessage(own) : creds.reason };
       }
 
       const phrase = String(input.product_description ?? "").trim();
@@ -1072,7 +1085,10 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
 
       const { formatMoney: fmtMoney, describeCurrency: describeCcy } = await import("../publish/money");
       const search = await searchShopifyVariants(creds.shop, creds.accessToken, phrase);
-      if (!search.ok) return { error: search.reason };
+      if (!search.ok) {
+        const own = await hawlaiStoreProduct(supabase, ctx.id, phrase);
+        return { error: own ? hawlaiStorePriceMessage(own) : search.reason };
+      }
 
       // A variant_id means the model is on a follow-up turn, after it
       // showed candidates and the person chose. Recorded as
@@ -1109,7 +1125,13 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // wrong product is repriced, this line says how it was picked —
       // the phrase, how many candidates matched, and which path won.
       if (resolution.status === "not_found") {
-        return { error: `Couldn't find a product matching "${phrase}" in the store.` };
+        // Shopify genuinely has nothing by that name. Before saying so,
+        // check the OTHER store — this is the exact path a Hawlai-store
+        // product falls down, and "couldn't find it" is read as "it
+        // doesn't exist" when chat just listed it.
+        const own = await hawlaiStoreProduct(supabase, ctx.id, phrase);
+        if (own) return { error: hawlaiStorePriceMessage(own) };
+        return { error: `Couldn't find a product matching "${phrase}" in your connected Shopify store.` };
       }
 
       if (resolution.status === "ambiguous") {
