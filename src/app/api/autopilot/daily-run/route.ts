@@ -8,7 +8,7 @@ import { checkTopicAlerts } from "@/lib/automation/topicMonitor";
 import { runReportSnapshots } from "@/lib/automation/reportSnapshot";
 import { runContentAutopilot } from "@/lib/automation/contentAutopilot";
 import { fetchGoogleReviewsSnapshot } from "@/lib/agents/reputationAgent";
-import { syncSeasonalCalendarEntries } from "@/lib/agents/seasonalityAgent";
+import { runSeasonalCalendar } from "@/lib/agents/seasonalityAgent";
 import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
 import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
 import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
@@ -135,7 +135,10 @@ export async function GET(request: Request) {
     if (only("report_snapshots")) results[id].reportSnapshots = await run(id, "report_snapshots", () => runReportSnapshots(supabase, id, category));
     if (only("content_autopilot")) results[id].contentAutopilot = await run(id, "content_autopilot", () => runContentAutopilot(supabase, id));
     if (only("google_reviews")) results[id].googleReviews = await run(id, "google_reviews", () => fetchGoogleReviewsSnapshot(supabase, id));
-    if (only("seasonal_calendar")) results[id].seasonalCalendarEntries = await run(id, "seasonal_calendar", () => syncSeasonalCalendarEntries(supabase, id));
+    // One run, one log row: planning entries (only when the business has
+    // Seasonal Campaigns on) plus the out-of-season warning, which runs
+    // for every business because it changes nothing.
+    if (only("seasonal_calendar")) results[id].seasonalCalendar = await run(id, "seasonal_calendar", () => runSeasonalCalendar(supabase, id));
     if (only("churn_detection")) results[id].atRiskNotifications = await run(id, "churn_detection", () => notifyAtRiskCustomers(supabase, id));
     if (only("cold_lead_detection")) results[id].coldLeadNotifications = await run(id, "cold_lead_detection", () => notifyColdLeads(supabase, id));
     if (only("lead_scoring")) results[id].leadScores = await run(id, "lead_scoring", () => scoreActiveLeads(supabase, id));

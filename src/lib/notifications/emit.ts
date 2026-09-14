@@ -29,7 +29,8 @@ export type NotificationKind =
   | "goal_completed"
   | "goal_task_failed"
   | "lead_merge_needs_review"
-  | "platform_spend_alert";
+  | "platform_spend_alert"
+  | "out_of_season_content";
 
 export interface EmitNotificationInput {
   dealershipId: string;
