@@ -2065,6 +2065,11 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       // chat writes this body itself, and once wrote a button to a
       // domain that doesn't exist. Refused before sending, with the real
       // link, so the next attempt can use it.
+      const { misleadingSubject } = await import("../expertise/channelRules");
+      const subjectProblem = misleadingSubject(input.subject);
+      if (subjectProblem) {
+        return { error: `Not sent: the subject "${input.subject}" ${subjectProblem}. Give it a subject that says what the email is about and send again.` };
+      }
       const facts = await factsFor(supabase, ctx);
       if (facts) {
         const { findUnsupportedLinks } = await import("../claims/claimCheck");
@@ -3170,8 +3175,13 @@ ${formatFactsForCopy(storeFacts)}
 ${COPY_TRUTH_RULES}
 - These rules cover your own replies and every tool brief, image prompts included.`
     : "";
+  const { CHANNEL_POLICY_FOR_CHAT } = await import("../expertise/channelRules");
+  const channelPolicySection = `
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}
+## Email and WhatsApp — rules for anything you write or send, and how to answer questions about them
+${CHANNEL_POLICY_FOR_CHAT}`;
+
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${channelPolicySection}
 
 ## How you think, not just what you generate
 

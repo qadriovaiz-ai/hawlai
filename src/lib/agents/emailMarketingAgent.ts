@@ -10,7 +10,8 @@
 
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
-import { guardGenerated } from "@/lib/claims/claimCheck";
+import { guardGenerated, claimsNote } from "@/lib/claims/claimCheck";
+import { EMAIL_RULES, fixSubjects } from "@/lib/expertise/channelRules";
 
 export interface EmailTaskMeta {
   key: string;
@@ -66,6 +67,8 @@ export async function generateEmailContent(
           role: "user",
           content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${EMAIL_RULES}
+
 Topic/context: "${topic || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}
@@ -85,11 +88,23 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
-    if (!facts) return { output: parsed };
+    // A subject that misleads about what's inside is fixed in code, not
+    // left to the prompt — and counts as a removed claim, so automation
+    // (which sends only untouched emails) regenerates instead of sending.
+    const subjectProblems = fixSubjects(parsed, dealershipName);
+    const subjectNote = subjectProblems.length ? `Hawlai changed the subject line so it doesn't mislead: ${subjectProblems.join(" ")}` : null;
+    if (!facts) {
+      if (subjectNote) parsed._claimsNote = subjectNote;
+      return { output: parsed, claimsRemoved: subjectProblems.length ? subjectProblems : undefined };
+    }
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
     const guarded = guardGenerated(parsed, facts);
-    return { output: guarded.output, claimsRemoved: guarded.removed };
+    const removed = [...guarded.removed, ...subjectProblems];
+    const output: any = guarded.output;
+    const note = [claimsNote(guarded.removed), subjectNote].filter(Boolean).join(" ");
+    if (note) output._claimsNote = note;
+    return { output, claimsRemoved: removed };
   } catch (err: any) {
     console.error("[email-marketing-agent] error:", err.message);
     return fallback;

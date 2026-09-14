@@ -313,7 +313,8 @@ describe("WhatsApp: a promotion can't invent an offer", () => {
     anthropic([{ message: "*Lavender candle* is back. Flat 20% off till Sunday! Reply YES to order." }]);
     const f = await gatherBusinessFacts(db(), "d1");
     const r = await generateWhatsappContent("promotion", "candle_by_qaaf", "Home fragrance", "", null, undefined, undefined, f);
-    expect(r.output.message).toBe("*Lavender candle* is back. Reply YES to order.");
+    // The opt-out line every WhatsApp promotion carries (lib/expertise/channelRules).
+    expect(r.output.message).toBe("*Lavender candle* is back. Reply YES to order.\n\nReply STOP to stop these messages.");
   });
 });
 

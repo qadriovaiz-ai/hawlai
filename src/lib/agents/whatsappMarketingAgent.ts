@@ -37,6 +37,7 @@ import { CLAUDE_MODELS } from "../models";
 import { modelForTask } from "../aiTaskRouter";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated } from "@/lib/claims/claimCheck";
+import { WHATSAPP_RULES, addWhatsappOptOut } from "@/lib/expertise/channelRules";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -76,6 +77,8 @@ export async function generateWhatsappContent(
           role: "user",
           content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${WHATSAPP_RULES}
+
 Topic/context: "${topic || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}
@@ -95,11 +98,13 @@ Return JSON only, no markdown, no preamble. WhatsApp messages should read like a
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
-    if (!facts) return { output: parsed };
+    // The opt-out line goes on after the claims check, so it can never
+    // be stripped as a "claim", and on in code so it's never forgotten.
+    if (!facts) return { output: addWhatsappOptOut(taskKey, parsed) };
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
     const guarded = guardGenerated(parsed, facts);
-    return { output: guarded.output, claimsRemoved: guarded.removed };
+    return { output: addWhatsappOptOut(taskKey, guarded.output), claimsRemoved: guarded.removed };
   } catch (err: any) {
     console.error("[whatsapp-marketing-agent] error:", err.message);
     return fallback;
