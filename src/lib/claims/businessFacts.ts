@@ -22,6 +22,7 @@
 import type { BrandVoiceProfile } from "@/lib/agents/brandVoice";
 import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
+import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 
 type Row = Record<string, any>;
 
@@ -102,6 +103,12 @@ export type BusinessFacts = {
    * hawlai.online/site/candle-by-qaaf.
    */
   links: { store: string | null; products: { name: string; url: string }[] };
+  /**
+   * Where today sits in India's festival calendar, and anything on the
+   * live site still selling a festival that's over. See
+   * lib/expertise/seasonalCalendar.ts.
+   */
+  season: Season;
   /** Facts that couldn't be read — stated as unknown to the model, never guessed. */
   unreadable: string[];
 };
@@ -252,7 +259,8 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     return (data ?? empty) as T;
   }
 
-  const [dealership, website, products, offers, events, orders, leads, carts, knowledge, brandProfile, brandKit] = await Promise.all([
+  const today = indiaToday();
+  const [dealership, website, products, offers, events, orders, leads, carts, knowledge, brandProfile, brandKit, festivals] = await Promise.all([
     read<Row | null>("business details", supabase.from("dealerships").select("*").eq("id", dealershipId).maybeSingle(), null),
     read<Row | null>(
       "website",
@@ -268,6 +276,13 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", dealershipId).eq("is_active", true), []),
     read<Row | null>("brand profile", supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
     read<Row | null>("brand kit", supabase.from("brand_kits").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
+    // Platform-wide, not per business. A window around today is enough
+    // for "just ended" through "plan ahead", plus the last loaded date.
+    read<SeasonalEventRow[]>(
+      "festival dates",
+      supabase.from("seasonal_events").select("name, event_date, lead_time_days").gte("event_date", addDaysYmd(today, -120)).order("event_date", { ascending: true }).limit(200),
+      []
+    ),
   ]);
 
   let pages: SitePage[] = [];
@@ -306,6 +321,19 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
   const category = String(dealership?.business_category ?? "").trim();
   const brand = brandIdentity(brandProfile, brandKit);
 
+  const season = seasonFor(festivals, today);
+  // Only the published site: a draft page reaches no customer.
+  if (website?.published) {
+    for (const page of pages) {
+      for (const text of [...page.headings, ...page.buttons, ...page.paragraphs]) {
+        const hit = outOfSeasonFestival(text, festivals, today);
+        if (hit && !season.outOfSeason.some((o) => o.where === `the ${page.title || page.slug} page` && o.festival === hit.festival)) {
+          season.outOfSeason.push({ ...hit, where: `the ${page.title || page.slug} page`, text });
+        }
+      }
+    }
+  }
+
   return {
     businessName: dealership?.dealership_name ?? "the business",
     category: category || UNKNOWN_CATEGORY,
@@ -339,6 +367,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
             products: products.filter((p) => p.id).map((p) => ({ name: String(p.name), url: hawlaiProductUrl(website.slug, String(p.id)) })),
           }
         : { store: null, products: [] },
+    season,
     brand,
     pillars: brand.pillars,
     unreadable,
@@ -362,6 +391,10 @@ export async function gatherBusinessFactsSafely(supabase: any, dealershipId: str
 export function storefrontUrl(slug: string): string {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.online";
   return `${base}/site/${slug}`;
+}
+
+function addDaysYmd(ymd: string, days: number): string {
+  return new Date(new Date(`${ymd}T00:00:00Z`).getTime() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export function describeShipping(s: BusinessFacts["shipping"]): string {
@@ -412,6 +445,7 @@ export function formatFactsForPrompt(f: BusinessFacts): string {
       (l.cartAbandonmentRate !== null ? ` Cart abandonment: ${l.cartAbandonmentRate}%.` : "")
   );
   lines.push(`All time: ${f.allTime.paidOrders} paid order(s), ${f.allTime.leads} lead(s).`);
+  for (const o of f.season?.outOfSeason ?? []) lines.push(`Out of season: ${o.where} still says "${o.text.slice(0, 80)}" — ${o.festival} was ${o.endedDaysAgo} days ago.`);
   if (f.unreadable.length) lines.push(`Couldn't be read right now (treat as unknown, do not guess): ${f.unreadable.join(", ")}.`);
   return lines.join("\n");
 }
@@ -446,6 +480,7 @@ export function formatFactsForCopy(f: BusinessFacts): string {
     const said = [f.home.headings[0], ...f.home.paragraphs.slice(0, 2)].filter(Boolean).join(" ").slice(0, 400);
     if (said) lines.push(`What the website says: "${said}"`);
   }
+  if (f.season) lines.push(formatSeason(f.season));
   if (f.unreadable.length) lines.push(`Couldn't be read right now (unknown — don't guess): ${f.unreadable.join(", ")}.`);
   return lines.join("\n");
 }
@@ -462,7 +497,8 @@ export const COPY_TRUTH_RULES = `TRUTH RULES — a small business owner may publ
 - NEVER call the business or a product the best, #1, top-rated, best-selling, cheapest, most trusted or better than competitors unless the facts say so. Say what makes it good instead.
 - NEVER make health, medical, safety or efficacy claims (cures, heals, relieves stress or anxiety, clinically proven, doctor recommended, 100% safe) unless the facts state them.
 - Hooks and calls to action follow the same rules: a bold hook is a bold idea, not an invented statistic.
-- NEVER invent a website address, domain or link. Use only the store and product links in the facts, exactly as written. If there is none, write the call to action without a link.`;
+- NEVER invent a website address, domain or link. Use only the store and product links in the facts, exactly as written. If there is none, write the call to action without a link.
+${SEASON_TRUTH_RULE}`;
 
 /** The facts block plus the rules — what a generation prompt appends. */
 export function factsPrompt(f: BusinessFacts | null | undefined): string {

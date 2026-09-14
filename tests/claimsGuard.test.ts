@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { findUnsupportedClaims, stripUnsupported, guardOutput, claimsNote } from "@/lib/claims/claimCheck";
+import { seasonFor } from "@/lib/expertise/seasonalCalendar";
 
 type Row = Record<string, any>;
 
@@ -49,6 +50,7 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     brand: { tone: null, voice: null, persona: null, language: null, pillars: ["Hand-poured in small batches"], description: null, colors: [], logoUrl: null },
     pillars: ["Hand-poured in small batches"],
     links: { store: "https://hawlai.online/site/candle-by-qaaf", products: [{ name: "Lavender candle", url: "https://hawlai.online/site/candle-by-qaaf/products/p1" }] },
+    season: seasonFor([], "2026-07-01"),
     unreadable: [],
     ...over,
   };
