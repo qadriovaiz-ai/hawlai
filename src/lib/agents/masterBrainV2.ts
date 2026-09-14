@@ -2061,9 +2061,27 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         if (matches.length > 1) return { error: `Multiple matches for "${input.recipient}" — ask the person to be more specific or give the exact email.` };
         toEmail = matches[0].email;
       }
+      // A link that goes nowhere is wrong in any email, to anyone. The
+      // chat writes this body itself, and once wrote a button to a
+      // domain that doesn't exist. Refused before sending, with the real
+      // link, so the next attempt can use it.
+      const facts = await factsFor(supabase, ctx);
+      if (facts) {
+        const { findUnsupportedLinks } = await import("../claims/claimCheck");
+        const badLinks = findUnsupportedLinks(`${input.subject ?? ""}\n${input.body ?? ""}`, facts);
+        if (badLinks.length) {
+          return { error: `Not sent: the email contains ${badLinks[0]}. Rewrite it with the real link and send again.` };
+        }
+      }
       const result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
       if (!result.success) return { error: result.error };
-      return { success: true, sentTo: toEmail, note: `Email sent to ${toEmail}.` };
+      // "Accepted", not "delivered": the provider taking the email is all
+      // this call knows. Bounces and spam rejections happen afterwards.
+      return {
+        success: true,
+        sentTo: toEmail,
+        note: `Accepted for delivery to ${toEmail} (via ${result.via}) — not yet confirmed as arrived in their inbox.`,
+      };
     }
     case "add_product": {
       const { data, error } = await supabase.from("products").insert({

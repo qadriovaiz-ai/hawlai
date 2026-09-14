@@ -48,6 +48,7 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     ownerFacts: [],
     brand: { tone: null, voice: null, persona: null, language: null, pillars: ["Hand-poured in small batches"], description: null, colors: [], logoUrl: null },
     pillars: ["Hand-poured in small batches"],
+    links: { store: "https://hawlai.online/site/candle-by-qaaf", products: [{ name: "Lavender candle", url: "https://hawlai.online/site/candle-by-qaaf/products/p1" }] },
     unreadable: [],
     ...over,
   };

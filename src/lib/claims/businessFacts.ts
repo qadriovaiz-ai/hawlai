@@ -21,6 +21,7 @@
 
 import type { BrandVoiceProfile } from "@/lib/agents/brandVoice";
 import { discountUsable } from "@/lib/discounts";
+import { hawlaiProductUrl } from "@/lib/ads/productSource";
 
 type Row = Record<string, any>;
 
@@ -90,6 +91,17 @@ export type BusinessFacts = {
   brand: BrandIdentity;
   /** Brand messaging pillars, kept at the top level because copy checks read them constantly. */
   pillars: string[];
+  /**
+   * The real, working addresses of the storefront and its products — the
+   * ONLY links copy may contain. Null / empty while the site isn't
+   * published, because a link to it would lead nowhere.
+   *
+   * Why this exists: with no store URL in the facts, the AI wrote a promo
+   * email whose button pointed to "candlebyqaaf.com/products/lavender-candle"
+   * — a domain that does not exist — while the real store was
+   * hawlai.online/site/candle-by-qaaf.
+   */
+  links: { store: string | null; products: { name: string; url: string }[] };
   /** Facts that couldn't be read — stated as unknown to the model, never guessed. */
   unreadable: string[];
 };
@@ -317,6 +329,16 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     },
     allTime: { paidOrders: orders.filter((o) => PAID_ORDER_STATUSES.has(o.status)).length, leads: leads.length },
     ownerFacts: knowledge.filter((k) => k?.title || k?.content).map((k) => ({ category: String(k.category ?? ""), title: String(k.title ?? ""), content: String(k.content ?? "") })),
+    // Always the Hawlai address, never websites.custom_domain: nothing in
+    // the app routes a custom domain to the site yet, so a link to one
+    // would be a link to nothing.
+    links:
+      website?.slug && website.published
+        ? {
+            store: storefrontUrl(website.slug),
+            products: products.filter((p) => p.id).map((p) => ({ name: String(p.name), url: hawlaiProductUrl(website.slug, String(p.id)) })),
+          }
+        : { store: null, products: [] },
     brand,
     pillars: brand.pillars,
     unreadable,
@@ -334,6 +356,12 @@ export async function gatherBusinessFactsSafely(supabase: any, dealershipId: str
     console.error("[business-facts] couldn't gather facts:", err?.message);
     return null;
   }
+}
+
+/** The storefront's public address — the same base the product links use. */
+export function storefrontUrl(slug: string): string {
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.online";
+  return `${base}/site/${slug}`;
 }
 
 export function describeShipping(s: BusinessFacts["shipping"]): string {
@@ -399,6 +427,12 @@ export function formatFactsForCopy(f: BusinessFacts): string {
   lines.push(f.products.length ? `Products (${f.products.length}): ${f.products.map(describeProduct).join("; ")}` : "Products: none listed in the store.");
   lines.push(f.offers.length ? `Active offers: ${f.offers.map((o) => `code ${o.code} — ${o.label}`).join("; ")}` : "Active offers: none — do not write any discount, sale or offer.");
   lines.push(`Shipping: ${describeShipping(f.shipping)}.`);
+  if (f.links?.store) {
+    lines.push(`Store link (the ONLY website address you may use): ${f.links.store}`);
+    if (f.links.products.length) lines.push(`Product links: ${f.links.products.map((p) => `${p.name} — ${p.url}`).join("; ")}`);
+  } else {
+    lines.push("Store link: none — the website isn't published, so do not include any website link at all.");
+  }
   lines.push(`Track record: ${f.allTime.paidOrders} paid order(s) and ${f.allTime.leads} lead(s) on record. No ratings or reviews on record.`);
   if (f.ownerFacts.length) {
     lines.push("What the owner says about the business:");
@@ -427,7 +461,8 @@ export const COPY_TRUTH_RULES = `TRUTH RULES — a small business owner may publ
 - NEVER write an offer, discount, sale price, free shipping, gift, guarantee, money-back promise or "selling fast / only 3 left" urgency unless it is in the facts. With no active offer, sell the product itself.
 - NEVER call the business or a product the best, #1, top-rated, best-selling, cheapest, most trusted or better than competitors unless the facts say so. Say what makes it good instead.
 - NEVER make health, medical, safety or efficacy claims (cures, heals, relieves stress or anxiety, clinically proven, doctor recommended, 100% safe) unless the facts state them.
-- Hooks and calls to action follow the same rules: a bold hook is a bold idea, not an invented statistic.`;
+- Hooks and calls to action follow the same rules: a bold hook is a bold idea, not an invented statistic.
+- NEVER invent a website address, domain or link. Use only the store and product links in the facts, exactly as written. If there is none, write the call to action without a link.`;
 
 /** The facts block plus the rules — what a generation prompt appends. */
 export function factsPrompt(f: BusinessFacts | null | undefined): string {
@@ -446,6 +481,8 @@ export function knownText(f: BusinessFacts): string {
   for (const o of f.offers) parts.push(o.label);
   for (const k of f.ownerFacts ?? []) parts.push(k.title, k.content);
   parts.push(...(f.brand?.pillars ?? f.pillars ?? []));
+  if (f.links?.store) parts.push(f.links.store);
+  for (const p of f.links?.products ?? []) parts.push(p.url);
   if (f.brand?.description) parts.push(f.brand.description);
   return normalise(parts.join(" \n "));
 }

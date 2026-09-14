@@ -85,6 +85,53 @@ function realAmounts(f: BusinessFacts): Set<number> {
   return out;
 }
 
+// A link: with a scheme, starting www., or a bare domain on a common TLD.
+// Never the domain half of an email address — "someone@gmail.com" is an
+// address, not a link to gmail.com.
+const LINK = /(?<![@\w.-])(?:https?:\/\/[^\s<>"'()\]]+|www\.[^\s<>"'()\]]+|[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com|in|co\.in|net|org|shop|store|online|io|co|app)(?![a-z0-9-])(?:\/[^\s<>"'()\]]*)?)/gi;
+
+function hostOf(link: string): string {
+  const withScheme = /^https?:\/\//i.test(link) ? link : `https://${link}`;
+  try {
+    return new URL(withScheme).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return link.toLowerCase().replace(/^www\./, "").split("/")[0];
+  }
+}
+
+/**
+ * Links in `text` that don't go to this business's own website.
+ *
+ * THE LIVE CASE: a promo email's button pointed to
+ * "candlebyqaaf.com/products/lavender-candle". That domain does not exist;
+ * the real store is hawlai.online/site/candle-by-qaaf. A broken link in
+ * copy sent to a customer is wrong whoever receives it.
+ *
+ * Allowed: the storefront's own host, and any link the owner has written
+ * into their own content (site, Business Knowledge) — their links are
+ * theirs to use.
+ */
+export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
+  const allowedHosts = new Set<string>();
+  if (f.links?.store) allowedHosts.add(hostOf(f.links.store));
+  for (const p of f.links?.products ?? []) allowedHosts.add(hostOf(p.url));
+  const known = knownText(f);
+
+  const reasons: string[] = [];
+  for (const m of text.matchAll(LINK)) {
+    const link = m[0].replace(/[.,;:!?]+$/, "");
+    const host = hostOf(link);
+    if (allowedHosts.has(host)) continue;
+    if (known.includes(normalise(link)) || known.includes(normalise(host))) continue;
+    reasons.push(
+      f.links?.store
+        ? `a link to "${link}" — that isn't this business's website; the store is ${f.links.store}`
+        : `a link to "${link}" — this business has no published website to link to`
+    );
+  }
+  return Array.from(new Set(reasons));
+}
+
 /**
  * Claims in `text` that the facts don't support. Each entry says what and why.
  *
@@ -160,6 +207,9 @@ export function findUnsupportedClaims(text: string, f: BusinessFacts): string[] 
   each(COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports`);
   each(GUARANTEE, (m) => `"${m[0]}" — a guarantee the business hasn't offered`);
   each(SCARCITY, (m) => `"${m[0]}" — urgency about stock that nothing on record supports`);
+
+  // Links to a website that isn't the business's own
+  reasons.push(...findUnsupportedLinks(text, f));
 
   // Health / efficacy and promised results
   each(HEALTH, (m) => `"${m[0]}" — a health or efficacy claim that needs real evidence`);
