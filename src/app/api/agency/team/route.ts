@@ -98,7 +98,8 @@ export async function POST(request: Request) {
     cleanEmail,
     `You've been invited to join ${target.dealership_name ?? "a team"} on Hawlai`,
     `You've been invited to join ${target.dealership_name ?? "a business"}'s team on Hawlai as a ${role.replace("_", " ")}.\n\nClick here to accept: ${inviteUrl}`,
-    target.dealership_name ?? "Hawlai"
+    target.dealership_name ?? "Hawlai",
+    { replyTo: user.email }
   );
 
   return NextResponse.json({ success: true, member, inviteUrl, emailSent: emailResult.success });

@@ -9,18 +9,48 @@ import { Resend } from "resend";
 // has to land in each business's own account — sending a marketing
 // email carries no equivalent requirement).
 //
-// Sends from Resend's shared test address until a business's own
-// domain is verified in Resend (a real follow-up item — verified
-// domains get real deliverability and a branded "from" address;
-// onboarding@resend.dev works today but looks generic and has a
-// lower daily cap).
-const FROM_ADDRESS = "onboarding@resend.dev";
+// Sends from Hawlai's own verified domain (mail.hawlai.online, verified
+// in Resend 2026-09-14). Until then it sent from Resend's shared
+// onboarding@resend.dev: a promo to candle_by_qaaf's customer was
+// "Delivered" by Resend and still never reached the inbox — Gmail
+// filtered it — and replies had nowhere to go. The business's name is
+// the display name; replies go to the business owner.
+export const SENDER_ADDRESS = "hello@mail.hawlai.online";
+
+const SMALL_WORDS = new Set(["a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"]);
+
+/**
+ * The name customers see in their inbox. A business saved as a handle
+ * ("candle_by_qaaf") reads as "Candle by Qaaf"; a name the owner typed
+ * with its own spacing or capitals is kept exactly. Characters that would
+ * break the From header are removed.
+ */
+export function senderDisplayName(name: string | null | undefined): string {
+  const clean = String(name ?? "").replace(/["<>\\\r\n]/g, "").replace(/\s+/g, " ").trim();
+  if (!clean) return "Hawlai";
+  const isHandle = !/\s/.test(clean) && /[_-]/.test(clean) && clean === clean.toLowerCase();
+  if (!isHandle) return clean;
+  return clean
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w[0].toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+/** The full From header — quoted only when the name holds characters an address header treats specially. */
+export function fromHeader(name: string | null | undefined): string {
+  const display = senderDisplayName(name);
+  return `${/[,;:()@.[\]]/.test(display) ? `"${display}"` : display} <${SENDER_ADDRESS}>`;
+}
+
+const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
 export async function sendViaResend(
   to: string,
   subject: string,
   body: string,
-  dealershipName: string
+  dealershipName: string,
+  options: { replyTo?: string | null } = {}
 ): Promise<{ success: boolean; error?: string; resendMessageId?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { success: false, error: "Email sending isn't configured yet (RESEND_API_KEY missing)." };
@@ -32,12 +62,15 @@ export async function sendViaResend(
       .map((para) => `<p style="margin:0 0 16px;line-height:1.6;">${para.replace(/\n/g, "<br/>")}</p>`)
       .join("");
 
+    const replyTo = options.replyTo?.trim();
     const { data, error } = await resend.emails.send({
-      from: `${dealershipName} via Hawlai <${FROM_ADDRESS}>`,
+      from: fromHeader(dealershipName),
       to,
       subject,
       html,
       text: body,
+      // Without it a customer's reply goes to an address nobody reads.
+      ...(replyTo && EMAIL.test(replyTo) ? { replyTo } : {}),
     });
 
     if (error) return { success: false, error: error.message };

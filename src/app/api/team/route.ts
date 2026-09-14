@@ -71,7 +71,8 @@ export async function POST(request: Request) {
     email.trim().toLowerCase(),
     `You've been invited to join ${dealership!.dealership_name ?? "a team"} on Hawlai`,
     `You've been invited to join ${dealership!.dealership_name ?? "a business"}'s team on Hawlai as a ${role.replace("_", " ")}.\n\nClick here to accept: ${inviteUrl}`,
-    dealership!.dealership_name ?? "Hawlai"
+    dealership!.dealership_name ?? "Hawlai",
+    { replyTo: user!.email }
   );
 
   return NextResponse.json({ success: true, member, inviteUrl, emailSent: emailResult.success });
