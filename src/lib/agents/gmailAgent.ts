@@ -66,8 +66,10 @@ function base64Lines(s: string): string {
  * it can. Both parts are base64, so long HTML lines and non-English text
  * survive transport.
  */
-export function buildMimeMessage(m: { from: string; to: string; subject: string; text: string; html?: string | null }): string {
-  const head = [`From: ${m.from}`, `To: ${m.to}`, `Subject: =?UTF-8?B?${Buffer.from(m.subject, "utf-8").toString("base64")}?=`, "MIME-Version: 1.0"];
+export function buildMimeMessage(m: { from: string; to: string; subject: string; text: string; html?: string | null; headers?: Record<string, string> }): string {
+  // Extra headers (List-Unsubscribe…) with line breaks stripped, so a value can never inject a header of its own.
+  const extra = Object.entries(m.headers ?? {}).map(([k, v]) => `${k.replace(/[^A-Za-z0-9-]/g, "")}: ${String(v).replace(/[\r\n]+/g, " ")}`);
+  const head = [`From: ${m.from}`, `To: ${m.to}`, `Subject: =?UTF-8?B?${Buffer.from(m.subject, "utf-8").toString("base64")}?=`, ...extra, "MIME-Version: 1.0"];
   if (!m.html) {
     return [...head, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", base64Lines(m.text)].join("\r\n");
   }
@@ -100,7 +102,7 @@ export async function sendEmail(
   to: string,
   subject: string,
   body: string,
-  options: { html?: string | null } = {}
+  options: { html?: string | null; headers?: Record<string, string> } = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const accessToken = await getValidAccessToken(supabase, dealershipId);
@@ -110,7 +112,7 @@ export async function sendEmail(
       ? `${dealership.dealership_name ?? "Hawlai"} <${dealership.gmail_email}>`
       : dealership?.dealership_name ?? "Hawlai";
 
-    const mimeMessage = buildMimeMessage({ from: fromLine, to, subject, text: body, html: options.html });
+    const mimeMessage = buildMimeMessage({ from: fromLine, to, subject, text: body, html: options.html, headers: options.headers });
 
     const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST",

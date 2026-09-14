@@ -23,6 +23,7 @@ function db() {
     const api: any = {
       select: () => api, gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api, ilike: () => api,
       eq: (k: string, v: any) => (filters.push([k, v]), api),
+      insert: () => api, upsert: () => api, update: () => api,
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       single: async () => ({ data: rows()[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
@@ -33,7 +34,8 @@ function db() {
 }
 
 const STORE = (published = true): Record<string, Row[]> => ({
-  dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Lucknow" }],
+  dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Lucknow", business_address: "12 Hazratganj, Lucknow" }],
+  leads: [{ id: "L1", dealership_id: "d1", email: "customer@example.com" }],
   websites: [{ id: "w1", slug: "candle-by-qaaf", published, shipping_mode: "flat", shipping_rate: 60, shipping_free_threshold: null }],
   website_pages: [],
   products: [{ id: "p1", name: "Lavender candle", price: 550, description: "Hand-poured soy wax", is_active: true }],
@@ -132,7 +134,11 @@ describe("send_email, through the real chat tool", () => {
   it("sends an email with the real product link, and reports it as accepted — not delivered", async () => {
     const body = `Light up your home with our Lavender candle.\n\nShop now: ${PRODUCT_URL}`;
     const result = await executeTool(db(), CTX, "send_email", { recipient: "customer@example.com", subject: "Diwali", body }, "");
-    expect(sendDealerEmail).toHaveBeenCalledWith(expect.anything(), "d1", "customer@example.com", "Diwali", body);
+    // A lead on record gets marketing email: the words as written, plus the address and unsubscribe footer.
+    const [, , to, subject, text, opts] = sendDealerEmail.mock.calls[0] as any[];
+    expect([to, subject]).toEqual(["customer@example.com", "Diwali"]);
+    expect(text.startsWith(`${body}\n\n—\nCandle by Qaaf · 12 Hazratganj, Lucknow\nUnsubscribe: https://hawlai.online/unsubscribe/`)).toBe(true);
+    expect(opts.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
     expect(result.success).toBe(true);
     expect(result.note).toBe("Accepted for delivery to customer@example.com (via resend) — not yet confirmed as arrived in their inbox.");
   });

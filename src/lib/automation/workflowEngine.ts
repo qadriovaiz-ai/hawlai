@@ -1,5 +1,5 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
-import { sendEmail } from "@/lib/agents/gmailAgent";
+import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 interface TriggeredLead {
@@ -148,11 +148,11 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
         let subject = step.custom_subject ?? "";
         let body = step.custom_body ?? "";
         // Generated steps go out as the visual email; an owner's own
-        // custom text is sent as they wrote it.
-        let html: string | null = null;
+        // custom text is sent as they wrote it. Both get the footer.
+        let draft: any = null;
         if (step.email_task_type && step.email_task_type !== "custom") {
           if (!facts) break; // facts unreadable — nothing unverified is sent; try again next run
-          const { output, _fallback, claimsRemoved, email } = await generateEmailContent(
+          const { output, _fallback, claimsRemoved } = await generateEmailContent(
             step.email_task_type,
             dealership.dealership_name ?? "our business",
             dealership.business_category ?? "business",
@@ -167,12 +167,17 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
           // stripped one can read oddly and nobody is checking it.
           if (claimsRemoved?.length) break;
           subject = output.subject || subject;
-          body = email?.text || output.body || body;
-          html = email?.html ?? null;
+          body = output.body || body;
+          draft = { ...output, subject };
         }
         if (!subject || !body) break;
 
-        const result = await sendEmail(supabase, dealershipId, lead.email, subject, body, { html });
+        const result = await sendMarketingEmail(
+          supabase,
+          dealershipId,
+          lead.email,
+          draft && facts ? { draft, facts } : { subject, text: body, businessName: dealership.dealership_name ?? "" }
+        );
         await supabase.from("workflow_step_runs").insert({
           workflow_id: workflow.id, step_id: step.id, lead_id: lead.leadId,
           success: result.success, error: result.success ? null : result.error,

@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data } = await supabase
     .from("dealerships")
-    .select("dealership_name, city, business_category, product_mode")
+    .select("dealership_name, city, business_category, product_mode, business_address")
     .eq("id", dealershipId)
     .single();
 
@@ -33,7 +33,11 @@ export async function PATCH(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { business_category, onboarding_completed, product_mode, onboarding_intent_text } = await request.json();
+  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address } = await request.json();
+
+  if (business_address !== undefined && business_address !== null && (typeof business_address !== "string" || business_address.trim().length > 300)) {
+    return NextResponse.json({ error: "Keep the address under 300 characters" }, { status: 400 });
+  }
 
   if (business_category !== undefined && business_category.trim().length < 2) {
     return NextResponse.json({ error: "Enter a business type" }, { status: 400 });
@@ -52,6 +56,9 @@ export async function PATCH(request: Request) {
       ...(business_category !== undefined && { business_category: business_category.trim() }),
       ...(onboarding_completed !== undefined && { onboarding_completed }),
       ...(product_mode !== undefined && { product_mode }),
+      // Printed in every marketing email's footer; blank clears it (and
+      // marketing email stops until it's set again).
+      ...(business_address !== undefined && { business_address: typeof business_address === "string" && business_address.trim() ? business_address.trim() : null }),
       ...(onboarding_intent_text !== undefined && {
         onboarding_intent_text: typeof onboarding_intent_text === "string" ? onboarding_intent_text.slice(0, 500) : null,
       }),

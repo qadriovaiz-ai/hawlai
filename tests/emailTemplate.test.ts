@@ -39,7 +39,7 @@ const STORE_URL = "https://hawlai.online/site/candle-by-qaaf";
 const PRODUCT_URL = `${STORE_URL}/products/p1`;
 
 const STORE = (): Record<string, Row[]> => ({
-  dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Lucknow", welcome_email_auto_enabled: true, gmail_email: "shop@gmail.com" }],
+  dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Lucknow", welcome_email_auto_enabled: true, gmail_email: "shop@gmail.com", business_address: "12 Hazratganj, Lucknow" }],
   websites: [{ id: "w1", slug: "candle-by-qaaf", published: true, shipping_mode: "flat", shipping_rate: 60 }],
   website_pages: [],
   products: [
@@ -66,6 +66,7 @@ function anthropic(reply: unknown) {
 
 const sendDealerEmail = vi.fn(async (..._a: any[]) => ({ success: true, via: "resend" as const }));
 vi.mock("@/lib/email/sendDealerEmail", () => ({ sendDealerEmail: (...a: any[]) => sendDealerEmail(...a) }));
+vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
 const gmailSend = vi.fn(async (..._a: any[]) => ({ success: true }));
 vi.mock("@/lib/agents/gmailAgent", async (orig) => ({
   ...(await orig<typeof import("@/lib/agents/gmailAgent")>()),
@@ -303,7 +304,7 @@ describe("automation sends the visual email", () => {
     expect(opts.html).toContain(STORE_URL);
   });
 
-  it("a generated workflow step goes out through Gmail as HTML; an owner's custom step goes as written", async () => {
+  it("a generated workflow step goes out as the visual email; an owner's custom step goes as written, with the footer", async () => {
     tables.leads = [{ id: "L1", name: "Asha", email: "asha@example.com", created_at: "2026-01-01T00:00:00Z", dealership_id: "d1", dnd_opt_out: false }];
     tables.workflows = [
       {
@@ -318,10 +319,11 @@ describe("automation sends the visual email", () => {
     anthropic(PROMO);
     await runWorkflows(db(), "d1");
 
-    const [first, second] = gmailSend.mock.calls as any[][];
+    const [first, second] = sendDealerEmail.mock.calls as any[][];
     expect(first[3]).toBe("Lavender candle is back");
     expect(first[5].html).toContain(PRODUCT_URL);
-    expect(second.slice(3, 5)).toEqual(["A note", "Hi Asha, just me."]);
-    expect(second[5]).toEqual({ html: null });
+    expect(second[3]).toBe("A note");
+    expect(second[4].startsWith("Hi Asha, just me.\n\n—\nCandle by Qaaf · 12 Hazratganj, Lucknow\nUnsubscribe: https://hawlai.online/unsubscribe/")).toBe(true);
+    expect(second[5].html).toBeUndefined();
   });
 });

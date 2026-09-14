@@ -50,7 +50,7 @@ export async function sendViaResend(
   subject: string,
   body: string,
   dealershipName: string,
-  options: { replyTo?: string | null; html?: string | null } = {}
+  options: { replyTo?: string | null; html?: string | null; headers?: Record<string, string> } = {}
 ): Promise<{ success: boolean; error?: string; resendMessageId?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { success: false, error: "Email sending isn't configured yet (RESEND_API_KEY missing)." };
@@ -71,6 +71,7 @@ export async function sendViaResend(
       text: body,
       // Without it a customer's reply goes to an address nobody reads.
       ...(replyTo && EMAIL.test(replyTo) ? { replyTo } : {}),
+      ...(options.headers ? { headers: options.headers } : {}),
     });
 
     if (error) return { success: false, error: error.message };

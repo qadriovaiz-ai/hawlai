@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import BrandProfileForm from "@/components/settings/BrandProfileForm";
 import BusinessCategoryField from "@/components/settings/BusinessCategoryField";
+import BusinessAddressField from "@/components/settings/BusinessAddressField";
 
 export default async function BrandProfilePage() {
   const supabase = await createClient();
@@ -15,7 +16,7 @@ export default async function BrandProfilePage() {
 
   const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
     supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(),
-    supabase.from("dealerships").select("business_category").eq("id", dealershipId).single(),
+    supabase.from("dealerships").select("business_category, business_address").eq("id", dealershipId).single(),
   ]);
 
   return (
@@ -31,6 +32,7 @@ export default async function BrandProfilePage() {
       </div>
 
       <BusinessCategoryField initial={dealership?.business_category ?? null} />
+      <BusinessAddressField initial={dealership?.business_address ?? null} />
       <BrandProfileForm initial={brandProfile} />
     </div>
   );

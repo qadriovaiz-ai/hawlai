@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
+import { CSV_CONSENT_SOURCES } from "@/lib/email/consent";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -28,13 +29,32 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { leads } = body;
+  const { leads, consent } = body;
 
   if (!Array.isArray(leads) || leads.length === 0) {
     return NextResponse.json({ error: "leads array required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase.from("leads").insert(leads).select();
+  // An uploaded list is only allowed when the owner confirms these people
+  // gave the business their details, and says how — never a bought or
+  // scraped list. Recorded on every lead; whatever consent fields the
+  // client sent are ignored.
+  const isCsv = leads.some((l: any) => l?.source === "csv_upload");
+  if (isCsv && (consent?.confirmed !== true || !CSV_CONSENT_SOURCES[consent?.source])) {
+    return NextResponse.json(
+      { error: "Confirm these people gave your business their details, and say how, before uploading." },
+      { status: 400 }
+    );
+  }
+  const now = new Date().toISOString();
+  const rows = leads.map((l: any) => {
+    const { consent_status, consent_source, consent_captured_at, dnd_opt_out, ...rest } = l ?? {};
+    return rest.source === "csv_upload"
+      ? { ...rest, consent_status: "granted", consent_source: `csv_upload:${consent.source}`, consent_captured_at: now }
+      : rest;
+  });
+
+  const { data, error } = await supabase.from("leads").insert(rows).select();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await Promise.all(

@@ -6,6 +6,7 @@ import Papa from "papaparse";
 import { Upload, Loader2, X, CheckCircle, AlertCircle } from "lucide-react";
 import { qualifyLead } from "@/lib/ai-engine";
 import { buttonClasses } from "@/components/ui";
+import { CSV_CONSENT_SOURCES } from "@/lib/email/consent";
 
 interface UploadResult {
   success: number;
@@ -17,6 +18,11 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
+  // An uploaded list is only accepted with the owner's confirmation of
+  // where these people's consent came from — the server enforces it too.
+  const [consentSource, setConsentSource] = useState("");
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
+  const consentReady = Boolean(consentSource) && consentConfirmed;
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -39,9 +45,11 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
           const vehicle = row["Vehicle"] ?? row["vehicle"] ?? "";
           const purchaseYearStr = row["Purchase Year"] ?? row["purchase_year"] ?? "";
           const budgetStr = row["Budget"] ?? row["budget"] ?? "";
+          const email = (row["Email"] ?? row["email"] ?? "").trim();
 
           if (!name) { errors.push(`Row ${i + 2}: Missing name`); continue; }
           if (!phone || phone.length < 10) { errors.push(`Row ${i + 2}: Invalid phone`); continue; }
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${i + 2}: Invalid email`); continue; }
 
           const purchaseYear = purchaseYearStr ? parseInt(purchaseYearStr) : null;
           const budget = budgetStr ? parseFloat(budgetStr.replace(/[^0-9.]/g, "")) : null;
@@ -51,6 +59,7 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
             dealership_id: dealershipId,
             name,
             phone,
+            email: email || null,
             vehicle: vehicle || null,
             purchase_year: purchaseYear,
             budget,
@@ -66,10 +75,11 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
           const res = await fetch("/api/leads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ leads }),
+            body: JSON.stringify({ leads, consent: { source: consentSource, confirmed: consentConfirmed } }),
           });
-          const data = await res.json();
-          setResult({ success: data.count ?? leads.length, errors });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) setResult({ success: 0, errors: [data.error ?? "Upload failed — nothing was imported.", ...errors] });
+          else setResult({ success: data.count ?? leads.length, errors });
         } else {
           setResult({ success: 0, errors });
         }
@@ -96,10 +106,13 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
             onChange={handleFileChange}
             className="hidden"
             id="csv-upload"
+            disabled={!consentReady || uploading}
           />
           <label
             htmlFor="csv-upload"
-            className={buttonClasses("primary", "md", "cursor-pointer")}
+            aria-disabled={!consentReady}
+            title={consentReady ? undefined : "Confirm where these contacts came from first"}
+            className={buttonClasses("primary", "md", consentReady ? "cursor-pointer" : "cursor-not-allowed opacity-50")}
           >
             {uploading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
@@ -110,11 +123,31 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
         </div>
       </div>
 
+      {/* Consent — required before a list can be uploaded */}
+      <div className="card p-4 mb-4 space-y-3">
+        <label htmlFor="csv-consent-source" className="text-sm font-semibold text-slate-700 block">Where did these contacts come from?</label>
+        <select
+          id="csv-consent-source"
+          value={consentSource}
+          onChange={(e) => setConsentSource(e.target.value)}
+          className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          <option value="">Choose one…</option>
+          {Object.entries(CSV_CONSENT_SOURCES).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+        <label className="flex items-start gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={consentConfirmed} onChange={(e) => setConsentConfirmed(e.target.checked)} className="mt-0.5" />
+          <span>Everyone in this file gave my business their details and agreed to hear from us. I didn&apos;t buy, rent or scrape this list.</span>
+        </label>
+      </div>
+
       {/* CSV Format hint */}
       <div className="bg-blue-500/10 border border-blue-700/40 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
         <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
         <p className="text-xs text-blue-300">
-          CSV format: <strong>Name, Phone, Vehicle, Purchase Year, Budget</strong> — All leads are automatically scored by the AI engine.
+          CSV format: <strong>Name, Phone, Email, Vehicle, Purchase Year, Budget</strong> (Email is optional) — All leads are automatically scored by the AI engine.
         </p>
       </div>
 

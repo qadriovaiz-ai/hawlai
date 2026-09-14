@@ -122,6 +122,11 @@ describe("the live case, through sendDealerEmail", () => {
     expect(sent[0].text).toBe("Plain version");
   });
 
+  it("the unsubscribe headers reach Resend", async () => {
+    await sendDealerEmail(db(), "d1", "customer@example.com", "Diwali", "Plain", { headers: { "List-Unsubscribe": "<https://hawlai.online/api/public/unsubscribe/t>" } });
+    expect(sent[0].headers).toEqual({ "List-Unsubscribe": "<https://hawlai.online/api/public/unsubscribe/t>" });
+  });
+
   it("a visual email for a Gmail-connected business is handed to Gmail with its HTML", async () => {
     tables.dealerships[0].gmail_email = "shop@gmail.com";
     await sendDealerEmail(db(), "d1", "customer@example.com", "Diwali", "Plain version", { html: "<h1>Visual version</h1>" });

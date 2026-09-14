@@ -216,6 +216,7 @@ const CANDLE_TABLES = (): Record<string, Row[]> => ({
       id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Pune",
       fb_page_id: "PAGE1", content_autopilot_enabled: true, content_autopilot_frequency_days: 3, content_autopilot_last_posted_at: null,
       welcome_email_auto_enabled: true, follow_up_email_auto_enabled: false, gmail_email: "owner@example.com",
+      business_address: "12 Hazratganj, Lucknow",
     },
   ],
   websites: [{ id: "w1", slug: "candle-by-qaaf", published: true, shipping_mode: "flat", shipping_rate: 60, shipping_free_threshold: null }],
@@ -254,6 +255,7 @@ vi.mock("@/lib/agents/graphicDesignAgent", () => ({ generateGraphic: async () =>
 vi.mock("@/lib/crypto/oauthSecrets", () => ({ readMetaPageToken: () => "PAGE_TOKEN", hasMetaPageToken: () => true }));
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => ({
+    from: (t: string) => db().from(t),
     storage: { from: () => ({ upload: async () => ({ error: null }), getPublicUrl: () => ({ data: { publicUrl: "https://cdn.example/img.png" } }) }) },
   }),
 }));

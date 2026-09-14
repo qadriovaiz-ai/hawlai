@@ -1,17 +1,16 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
-import { sendDealerEmail } from "@/lib/email/sendDealerEmail";
+import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
 import { gatherBusinessFactsSafely, type BusinessFacts } from "@/lib/claims/businessFacts";
-import type { ComposedEmail } from "@/lib/email/composeEmail";
 
 // Sent with no human in between, so an email goes out only if it needed
 // NO claims removed (src/lib/claims) — a stripped email can read oddly
 // and nobody is checking it. One fresh attempt, then the lead simply
 // waits for the next run; nothing is marked sent.
-async function verifiedEmail(task: string, name: string, category: string, topic: string, brandProfile: any, facts: BusinessFacts): Promise<ComposedEmail | null> {
+async function verifiedEmail(task: string, name: string, category: string, topic: string, brandProfile: any, facts: BusinessFacts) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await generateEmailContent(task, name, category, topic, brandProfile, undefined, undefined, facts);
     if (r._fallback) return null;
-    if (!r.claimsRemoved?.length && r.output?.body && r.email) return r.email;
+    if (!r.claimsRemoved?.length && r.output?.body) return r.output;
   }
   return null;
 }
@@ -71,7 +70,9 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
         facts
       );
       if (!output) continue; // a placeholder or an unverifiable claim — never sent
-      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject || "Welcome!", output.text, { html: output.html });
+      const result = await sendMarketingEmail(supabase, dealershipId, lead.email, { draft: { ...output, subject: output.subject || "Welcome!" }, facts });
+      // No address means no email can go today — stop, rather than log a refusal per lead.
+      if (!result.success && result.refused === "no_address") return { welcomesSent, followUpsSent, skipped: "business address missing" };
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "welcome",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,
@@ -108,7 +109,8 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
         facts
       );
       if (!output) continue;
-      const result = await sendDealerEmail(supabase, dealershipId, lead.email, output.subject || "Following up", output.text, { html: output.html });
+      const result = await sendMarketingEmail(supabase, dealershipId, lead.email, { draft: { ...output, subject: output.subject || "Following up" }, facts });
+      if (!result.success && result.refused === "no_address") return { welcomesSent, followUpsSent, skipped: "business address missing" };
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "follow_up",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,

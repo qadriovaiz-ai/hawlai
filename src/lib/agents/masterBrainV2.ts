@@ -572,7 +572,7 @@ const TOOLS = [
   },
   {
     name: "send_email",
-    description: "Send a real email right now to a specific recipient — a team member (by name or email) or a customer/lead (by email). Only use this when the person clearly wants it actually SENT, not just drafted (e.g. \"email Priya about the launch\", \"send a follow-up to this lead\") — for drafting content to review first, use generate_email instead.",
+    description: "Send a real email right now to a specific recipient — a team member (by name or email), or a lead or customer already on record (by email). Hawlai only emails people who gave this business their email: an address that isn't a lead, customer or team member is refused, and so is anyone who unsubscribed. Only use this when the person clearly wants it actually SENT, not just drafted (e.g. \"email Priya about the launch\", \"send a follow-up to this lead\") — for drafting content to review first, use generate_email instead.",
     input_schema: {
       type: "object",
       properties: {
@@ -2078,7 +2078,25 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
           return { error: `Not sent: the email contains ${badLinks[0]}. Rewrite it with the real link and send again.` };
         }
       }
-      const result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
+      const { recipientOnRecord } = await import("../email/consent");
+      let kind: Awaited<ReturnType<typeof recipientOnRecord>>;
+      try {
+        kind = await recipientOnRecord(supabase, ctx.id, toEmail);
+      } catch (err: any) {
+        return { error: `Not sent — ${err.message}.` };
+      }
+      if (!kind) {
+        return { error: `Not sent: ${toEmail} isn't a lead, customer or team member of this business. Hawlai only emails people who gave the business their email.` };
+      }
+      // A note to a team member is internal mail; a lead or customer
+      // gets marketing email — address, unsubscribe and suppression rules.
+      let result: { success: boolean; error?: string; via?: string };
+      if (kind === "team") {
+        result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
+      } else {
+        const { sendMarketingEmail } = await import("../email/sendMarketingEmail");
+        result = await sendMarketingEmail(supabase, ctx.id, toEmail, { subject: input.subject, text: input.body, businessName: ctx.name });
+      }
       if (!result.success) return { error: result.error };
       // "Accepted", not "delivered": the provider taking the email is all
       // this call knows. Bounces and spam rejections happen afterwards.
