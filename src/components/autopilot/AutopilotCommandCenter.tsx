@@ -239,7 +239,13 @@ export default function AutopilotCommandCenter() {
             return (
               <div key={key} className="flex items-center justify-between text-xs py-1">
                 <div className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${!health ? "bg-slate-300" : health.lastSuccess ? "bg-green-500" : "bg-red-500"}`} />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      !health ? "bg-slate-300"
+                      : health.kind === "sends" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
+                      : health.lastSuccess ? "bg-green-500" : "bg-red-500"
+                    }`}
+                  />
                   <span className="text-slate-600">{label}</span>
                 </div>
                 {health && key === "content_autopilot" ? (
@@ -250,6 +256,18 @@ export default function AutopilotCommandCenter() {
                       ? "No posts in the last 7 days"
                       : `${health.postsPublished} of ${health.postsAttempted} posts published (7d)${health.lastRunAt ? ` · last ${new Date(health.lastRunAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}`}
                     {health.lastError && !health.lastSuccess && (
+                      <span className="block text-[11px] text-red-400 max-w-[22rem] truncate" title={health.lastError}>{health.lastError}</span>
+                    )}
+                  </span>
+                ) : health && health.kind === "sends" ? (
+                  // Emails and workflow steps that actually went out, and what
+                  // happened to them — never "the daily job ran".
+                  <span className={`text-right ${health.state === "paused" ? "text-amber-500" : health.state === "failing" ? "text-red-400" : "text-slate-400"}`}>
+                    {health.attempted > 0
+                      ? `${health.succeeded} of ${health.attempted} ${health.unit === "emails" ? "emails sent" : "steps done"}${health.delivered ? ` · ${health.delivered} delivered` : ""}${health.problems ? ` · ${health.problems} bounced/spam/failed` : ""} (7d)`
+                      : health.note}
+                    {health.attempted > 0 && health.note && <span className="block text-[11px]">{health.note}</span>}
+                    {health.lastError && health.state === "failing" && (
                       <span className="block text-[11px] text-red-400 max-w-[22rem] truncate" title={health.lastError}>{health.lastError}</span>
                     )}
                   </span>

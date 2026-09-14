@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { buildSendHealth } from "@/lib/automation/sendHealth";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -35,7 +36,7 @@ export async function GET() {
     // aggregated in JS below rather than a SQL GROUP BY: 13
     // subsystems x ~7 daily rows is small enough that fetching and
     // reducing here is simpler than adding a view/RPC for it.
-    supabase.from("automation_run_log").select("subsystem, success, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
+    supabase.from("automation_run_log").select("subsystem, success, detail, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
     // What auto-posting actually PUBLISHED in the last 7 days. The run log
     // above says whether the cron job ran; this says whether a post reached
     // the Page — the only thing "success" should mean for this row.
@@ -47,6 +48,22 @@ export async function GET() {
   // needed automation_run_log), so their health is computed straight
   // from those tables and merged into the same automationHealth shape
   // below rather than building a second, parallel health surface.
+  // WELCOME/FOLLOW-UP EMAILS AND WORKFLOWS ARE JUDGED BY WHAT WAS SENT —
+  // the same reason as auto-posting below. Their run-log rows read
+  // "100% success" while every run had skipped with automation off.
+  const workflowIds = (workflows ?? []).map((w: any) => w.id);
+  const [{ data: emailSends7d }, { data: stepRuns7d }] = await Promise.all([
+    supabase.from("email_automation_log").select("success, error, resend_message_id, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).order("created_at", { ascending: false }),
+    workflowIds.length
+      ? supabase.from("workflow_step_runs").select("success, error, resend_message_id, sent_at").in("workflow_id", workflowIds).gte("sent_at", sevenDaysAgo).order("sent_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
+  const messageIds = [...(emailSends7d ?? []), ...(stepRuns7d ?? [])].map((r: any) => r.resend_message_id).filter(Boolean);
+  const { data: deliveries } = messageIds.length
+    ? await supabase.from("email_sends").select("resend_message_id, delivery_status").in("resend_message_id", messageIds)
+    : { data: [] as any[] };
+  const deliveryStatus = Object.fromEntries((deliveries ?? []).map((d: any) => [d.resend_message_id, d.delivery_status]));
+
   const [{ data: eventRows }, { data: taskRows }] = await Promise.all([
     supabase.from("event_queue").select("status, processed_at, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).in("status", ["done", "failed"]).order("processed_at", { ascending: false }),
     supabase.from("agent_tasks").select("status, completed_at, created_at").eq("dealership_id", dealershipId).gte("created_at", sevenDaysAgo).in("status", ["done", "failed"]).order("completed_at", { ascending: false }),
@@ -75,6 +92,30 @@ export async function GET() {
     lastSuccess: stats.lastSuccess,
     successRatePct: Math.round((stats.successCount / stats.total) * 100),
   }));
+
+  const lastRunOf = (subsystem: string) => (runLogRows ?? []).find((r: any) => r.subsystem === subsystem) ?? null;
+  for (const row of [
+    buildSendHealth({
+      subsystem: "email_automation",
+      unit: "emails",
+      attempts: (emailSends7d ?? []).map((r: any) => ({ success: r.success, error: r.error, at: r.created_at, messageId: r.resend_message_id })),
+      deliveryStatus,
+      lastRun: lastRunOf("email_automation"),
+    }),
+    buildSendHealth({
+      subsystem: "workflows",
+      unit: "steps",
+      attempts: (stepRuns7d ?? []).map((r: any) => ({ success: r.success, error: r.error, at: r.sent_at, messageId: r.resend_message_id })),
+      deliveryStatus,
+      lastRun: lastRunOf("workflows"),
+    }),
+  ]) {
+    // Shown only once the subsystem has run or sent something — same as every other row.
+    if (!row.lastCronRunAt && row.attempted === 0) continue;
+    const idx = automationHealth.findIndex((h) => h.subsystem === row.subsystem);
+    if (idx >= 0) automationHealth[idx] = row;
+    else automationHealth.push(row);
+  }
 
   // SOCIAL AUTO-POSTING IS JUDGED BY WHAT WAS POSTED. The row above, from
   // automation_run_log, only says the cron job ran without throwing —

@@ -94,6 +94,9 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
 
   let stepsSent = 0;
+  // Why email steps couldn't go out this run — reported instead of a bare
+  // { stepsSent: 0 }, which the health card used to read as success.
+  let blocked: string | null = null;
 
   for (const workflow of workflows) {
     const steps = (workflow.workflow_steps ?? []).sort((a: any, b: any) => a.step_order - b.step_order);
@@ -105,11 +108,14 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
       for (const step of steps) {
         const { data: alreadyRun } = await supabase
           .from("workflow_step_runs")
-          .select("id")
+          .select("id, success")
           .eq("step_id", step.id)
           .eq("lead_id", lead.leadId)
           .maybeSingle();
-        if (alreadyRun) continue; // already sent — steps are ordered so this also means earlier steps are done
+        // Only a step that SUCCEEDED is done. A failed one used to count
+        // too (one row per step and lead), so it was never retried and the
+        // lead moved on to the next step as if the email had gone out.
+        if (alreadyRun?.success) continue;
 
         const dueDate = new Date(lead.triggerDate);
         dueDate.setDate(dueDate.getDate() + (step.delay_days ?? 0));
@@ -134,16 +140,19 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
             title: `Workflow: ${workflow.name} — step ${step.step_order + 1}`,
             created_by: `workflow:${workflow.id}`,
           });
-          await supabase.from("workflow_step_runs").insert({
-            workflow_id: workflow.id, step_id: step.id, lead_id: lead.leadId,
-            success: !taskError, error: taskError?.message ?? null,
-          });
+          await supabase.from("workflow_step_runs").upsert(
+            { workflow_id: workflow.id, step_id: step.id, lead_id: lead.leadId, success: !taskError, error: taskError?.message ?? null, sent_at: new Date().toISOString() },
+            { onConflict: "step_id,lead_id" }
+          );
           if (!taskError) stepsSent++;
           if (taskError) break;
           continue;
         }
 
-        if (!dealership.gmail_email) break; // email step, but Gmail isn't connected — try again once it is
+        if (!dealership.gmail_email) {
+          blocked = "gmail not connected"; // email step, but Gmail isn't connected — try again once it is
+          break;
+        }
 
         let subject = step.custom_subject ?? "";
         let body = step.custom_body ?? "";
@@ -151,7 +160,10 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
         // custom text is sent as they wrote it. Both get the footer.
         let draft: any = null;
         if (step.email_task_type && step.email_task_type !== "custom") {
-          if (!facts) break; // facts unreadable — nothing unverified is sent; try again next run
+          if (!facts) {
+            blocked = "business facts unreadable"; // nothing unverified is sent; try again next run
+            break;
+          }
           const { output, _fallback, claimsRemoved } = await generateEmailContent(
             step.email_task_type,
             dealership.dealership_name ?? "our business",
@@ -178,15 +190,24 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
           lead.email,
           draft && facts ? { draft, facts } : { subject, text: body, businessName: dealership.dealership_name ?? "" }
         );
-        await supabase.from("workflow_step_runs").insert({
-          workflow_id: workflow.id, step_id: step.id, lead_id: lead.leadId,
-          success: result.success, error: result.success ? null : result.error,
-        });
+        // No address: no email can go today. Not recorded against the step,
+        // so it goes out once the address is added.
+        if (!result.success && result.refused === "no_address") return { stepsSent, skipped: "business address missing" };
+        await supabase.from("workflow_step_runs").upsert(
+          {
+            workflow_id: workflow.id, step_id: step.id, lead_id: lead.leadId,
+            success: result.success, error: result.success ? null : result.error,
+            resend_message_id: result.success ? result.resendMessageId ?? null : null,
+            sent_at: new Date().toISOString(),
+          },
+          { onConflict: "step_id,lead_id" }
+        );
         if (result.success) stepsSent++;
         if (!result.success) break; // don't attempt later steps this run if sending is failing
       }
     }
   }
 
+  if (blocked) return stepsSent === 0 ? { stepsSent, skipped: blocked } : { stepsSent, waiting: blocked };
   return { stepsSent };
 }

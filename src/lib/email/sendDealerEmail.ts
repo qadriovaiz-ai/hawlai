@@ -37,7 +37,7 @@ export async function sendDealerEmail(
   body: string,
   /** The visual version (lib/email/template.ts); `body` is then its plain-text part. */
   options: { html?: string | null; headers?: Record<string, string> } = {}
-): Promise<{ success: boolean; error?: string; via: "gmail" | "resend" }> {
+): Promise<{ success: boolean; error?: string; via: "gmail" | "resend"; resendMessageId?: string }> {
   const { data: dealership } = await supabase.from("dealerships").select("gmail_email, dealership_name, owner_id").eq("id", dealershipId).single();
 
   if (dealership?.gmail_email) {

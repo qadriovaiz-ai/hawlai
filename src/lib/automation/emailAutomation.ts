@@ -76,6 +76,7 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "welcome",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,
+        resend_message_id: result.success ? result.resendMessageId ?? null : null,
       });
       if (result.success) {
         await supabase.from("leads").update({ welcome_email_sent_at: new Date().toISOString() }).eq("id", lead.id);
@@ -114,6 +115,7 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       await supabase.from("email_automation_log").insert({
         dealership_id: dealershipId, lead_id: lead.id, email_type: "follow_up",
         recipient: lead.email, subject: output.subject, success: result.success, error: result.success ? null : result.error,
+        resend_message_id: result.success ? result.resendMessageId ?? null : null,
       });
       if (result.success) {
         await supabase.from("leads").update({ follow_up_email_sent_at: new Date().toISOString() }).eq("id", lead.id);

@@ -25,6 +25,7 @@ function db() {
       eq: (k: string, v: any) => (filters.push((r) => r[k] === undefined || r[k] === v), api),
       insert: (row: Row) => (writes.push({ table, op: "insert", row }), api),
       update: (row: Row) => (writes.push({ table, op: "update", row }), api),
+      upsert: (row: Row) => (writes.push({ table, op: "upsert", row }), api),
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       single: async () => ({ data: rows()[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),

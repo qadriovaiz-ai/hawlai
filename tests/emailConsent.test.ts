@@ -92,7 +92,7 @@ const STORE = (): Record<string, Row[]> => ({
   email_unsubscribe_tokens: [],
 });
 
-const sendDealerEmail = vi.fn(async (..._a: any[]) => ({ success: true, via: "resend" as const }));
+const sendDealerEmail = vi.fn(async (..._a: any[]) => ({ success: true, via: "resend" as const, resendMessageId: "re_1" }));
 vi.mock("@/lib/email/sendDealerEmail", () => ({ sendDealerEmail: (...a: any[]) => sendDealerEmail(...a) }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => db() }));
@@ -131,7 +131,8 @@ describe("sendMarketingEmail — every rule, before anything is sent", () => {
     const facts = await gatherBusinessFacts(db(), "d1");
     const r = await sendMarketingEmail(db(), "d1", "Asha@Example.com", { draft: { subject: "Slow evenings", headline: "Slow evenings", intro: "Hi" }, facts });
 
-    expect(r).toEqual({ success: true, via: "resend" });
+    // The Resend id comes back, so the send can be matched to its delivery status.
+    expect(r).toEqual({ success: true, via: "resend", resendMessageId: "re_1" });
     const token = tables.email_unsubscribe_tokens[0];
     expect(token).toMatchObject({ dealership_id: "d1", email: "asha@example.com" });
     expect(token.token).toMatch(/^[A-Za-z0-9_-]{32}$/);

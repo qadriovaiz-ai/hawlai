@@ -25,7 +25,7 @@ export type MarketingContent =
   | { subject: string; text: string; businessName: string };
 
 export type MarketingSendResult =
-  | { success: true; via: "gmail" | "resend" }
+  | { success: true; via: "gmail" | "resend"; resendMessageId?: string }
   | { success: false; refused: "no_address" | "suppressed" | "unsubscribe_unavailable"; error: string }
   | { success: false; refused?: undefined; error: string };
 
@@ -60,11 +60,11 @@ export async function sendMarketingEmail(supabase: any, dealershipId: string, to
   if ("draft" in content) {
     const email = composeMarketingEmail(content.draft, content.facts, { address, unsubscribeUrl: links.page });
     const result = await sendDealerEmail(supabase, dealershipId, to, email.subject, email.text, { html: email.html, headers });
-    return result.success ? { success: true, via: result.via } : { success: false, error: result.error ?? "Email couldn't be sent." };
+    return result.success ? { success: true, via: result.via, resendMessageId: result.resendMessageId } : { success: false, error: result.error ?? "Email couldn't be sent." };
   }
 
   const name = senderDisplayName(content.businessName);
   const text = `${content.text.trimEnd()}\n\n—\n${name} · ${address}\nUnsubscribe: ${links.page}`;
   const result = await sendDealerEmail(supabase, dealershipId, to, content.subject, text, { headers });
-  return result.success ? { success: true, via: result.via } : { success: false, error: result.error ?? "Email couldn't be sent." };
+  return result.success ? { success: true, via: result.via, resendMessageId: result.resendMessageId } : { success: false, error: result.error ?? "Email couldn't be sent." };
 }
