@@ -2077,6 +2077,11 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       }
       const facts = await factsFor(supabase, ctx);
       if (facts) {
+        const { vagueFestiveWording } = await import("../expertise/seasonalCalendar");
+        const vague = vagueFestiveWording([input.subject, input.headline, input.intro, input.body].filter(Boolean).join("\n"), facts.season);
+        if (vague) {
+          return { error: `Not sent: the email ${vague}. Rewrite it naming the festival, or ask the owner which festival they meant.` };
+        }
         const { findUnsupportedLinks } = await import("../claims/claimCheck");
         const badLinks = findUnsupportedLinks(`${input.subject ?? ""}\n${input.body ?? ""}`, facts);
         if (badLinks.length) {

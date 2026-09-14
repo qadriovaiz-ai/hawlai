@@ -38,6 +38,7 @@ import { modelForTask } from "../aiTaskRouter";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated } from "@/lib/claims/claimCheck";
 import { WHATSAPP_RULES, addWhatsappOptOut } from "@/lib/expertise/channelRules";
+import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -79,7 +80,7 @@ export async function generateWhatsappContent(
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 ${WHATSAPP_RULES}
 
-Topic/context: "${topic || "general, use good judgement for this business type"}"
+Topic/context: "${resolveFestiveTopic(topic, facts?.season) || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}
 Requirements: ${meta.instructions}

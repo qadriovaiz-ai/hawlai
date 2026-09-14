@@ -221,6 +221,65 @@ export function outOfSeasonFestival(text: string, rows: SeasonalEventRow[], toda
   return ended ? { festival: ended.name, endedDaysAgo: daysBetween(ended.date, today) } : null;
 }
 
+/**
+ * The festival a "festive" request means when it doesn't name one: the
+ * one happening now (the most recent, if several are), else the nearest
+ * whose campaign window is open. Null when nothing is on or about to be.
+ *
+ * THE LIVE CASE (2026-09-15): asked for "a festive promo email" during
+ * Ganesh Chaturthi, chat wrote "Iss Tyohaar Mein" — "this festival" —
+ * and never named it. The Season block listed Ganesh Chaturthi as
+ * happening now, but nothing said an unnamed festive request means it.
+ */
+export function featuredFestival(s: Season | null | undefined): { event: SeasonEvent; when: "now" | "window" } | null {
+  if (!s) return null;
+  const now = [...s.now].sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (now) return { event: now, when: "now" };
+  const next = [...s.launchNow].sort((a, b) => a.date.localeCompare(b.date))[0];
+  return next ? { event: next, when: "window" } : null;
+}
+
+// "Festive" without a festival: English, Hinglish and Hindi.
+const GENERIC_FESTIVE = /\b(?:festive|festivals?|festival season|tyoh?aa?r(?:on|o|ein)?|tyohar|tehwar|utsav)\b|त्योहार|त्यौहार|उत्सव/i;
+
+/** Whether the text names any festival or occasion Hawlai knows, by any of its names. */
+export function namesFestival(text: string): boolean {
+  const hay = normaliseText(text);
+  return FESTIVAL_GUIDE.some((g) => [g.name, ...g.aliases].some((a) => hay.includes(normaliseText(a))));
+}
+
+function featuredLabel(f: { event: SeasonEvent; when: "now" | "window" }): string {
+  return f.when === "now"
+    ? `${f.event.name} (happening now, ${prettyDate(f.event.date)})`
+    : `${f.event.name} (${prettyDate(f.event.date)}, campaign window open)`;
+}
+
+/**
+ * A request's topic, with the festival filled in when it asks for
+ * festive content without naming one — decided here, not left to the
+ * model's instinct.
+ */
+export function resolveFestiveTopic(topic: string, s: Season | null | undefined): string {
+  const t = String(topic ?? "");
+  if (!GENERIC_FESTIVE.test(t) || namesFestival(t)) return t;
+  const f = featuredFestival(s);
+  if (!f) return `${t} — no festival is on or in its campaign window right now, so don't write a vague festive message; write a regular promotion and mention the next festival only if it's in the Season facts`;
+  return `${t} — for ${featuredLabel(f)}. Name ${f.event.name} explicitly; never write a vague "this festival" / "iss tyohaar".`;
+}
+
+/**
+ * Why copy that talks about "the festival" without naming one isn't
+ * ready, when there is a festival it should name. Null when it's fine.
+ */
+export function vagueFestiveWording(text: string, s: Season | null | undefined): string | null {
+  const t = String(text ?? "");
+  const match = t.match(GENERIC_FESTIVE);
+  if (!match || namesFestival(t)) return null;
+  const f = featuredFestival(s);
+  if (!f) return null;
+  return `says "${match[0]}" without naming the festival — right now that's ${featuredLabel(f)}`;
+}
+
 function prettyDate(s: string): string {
   return parseYmd(s).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 }
@@ -233,6 +292,12 @@ export function formatSeason(s: Season): string {
   for (const e of s.planAhead.slice(0, 5)) lines.push(`- Plan ahead: ${e.name} on ${prettyDate(e.date)} (${e.daysAway} days away) — campaigns should launch from ${prettyDate(e.launchFrom)}.`);
   for (const e of s.justEnded) lines.push(`- Over — don't write for it: ${e.name} (${prettyDate(e.date)}).`);
   for (const o of s.outOfSeason) lines.push(`- OUT OF SEASON on this business's live website: ${o.where} says "${o.text.slice(0, 80)}" — ${o.festival} was ${o.endedDaysAgo} days ago. Suggest the owner updates it.`);
+  const featured = featuredFestival(s);
+  lines.push(
+    featured
+      ? `- A festive or festival request that doesn't name a festival means ${featuredLabel(featured)}: name ${featured.event.name} in the copy. Never write a vague "this festival" / "iss tyohaar".`
+      : "- No festival is on or in its campaign window: a festive request without a named festival gets a regular promotion, not a vague festive message."
+  );
   lines.push(
     s.datesKnownUntil
       ? `Festival dates are loaded up to ${prettyDate(s.datesKnownUntil)} ${s.datesKnownUntil.slice(0, 4)}; don't state a festival date beyond that.`
@@ -242,4 +307,4 @@ export function formatSeason(s: Season): string {
 }
 
 export const SEASON_TRUTH_RULE =
-  "- Festival timing: write for a festival only while it's happening or its campaign window is open (see Season) — never for one that's over, unless the owner explicitly asks to plan its next occurrence. Festive campaigns launch 2–3 weeks before the day, not on it. Never state a festival date that isn't in the facts.";
+  "- Festival timing: write for a festival only while it's happening or its campaign window is open (see Season) — never for one that's over, unless the owner explicitly asks to plan its next occurrence. Festive campaigns launch 2–3 weeks before the day, not on it. Never state a festival date that isn't in the facts. Festive copy always names its festival — when none was named, use the one the Season facts say a festive request means.";

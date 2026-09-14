@@ -12,6 +12,7 @@ import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, claimsNote } from "@/lib/claims/claimCheck";
 import { EMAIL_RULES, fixSubjects } from "@/lib/expertise/channelRules";
+import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { composeMarketingEmail, type ComposedEmail } from "@/lib/email/composeEmail";
 
 export interface EmailTaskMeta {
@@ -76,7 +77,7 @@ export async function generateEmailContent(
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 ${EMAIL_RULES}
 
-Topic/context: "${topic || "general, use good judgement for this business type"}"
+Topic/context: "${resolveFestiveTopic(topic, facts?.season) || "general, use good judgement for this business type"}"
 
 Task: ${meta.label}
 Requirements: ${meta.instructions}

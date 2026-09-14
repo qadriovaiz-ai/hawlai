@@ -12,6 +12,7 @@ import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { stripUnsupported } from "@/lib/claims/claimCheck";
+import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -44,7 +45,7 @@ export async function generateSocialCaption(
           {
             role: "user",
             content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
-What the post is about: "${prompt}"
+What the post is about: "${resolveFestiveTopic(prompt, facts?.season)}"
 ${brandContext}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end. Return JSON only: {"caption":"the caption text"}`,
           },

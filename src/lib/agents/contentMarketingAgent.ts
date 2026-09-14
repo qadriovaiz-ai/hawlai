@@ -11,6 +11,7 @@ import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated } from "@/lib/claims/claimCheck";
+import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 export interface ContentTypeMeta {
   key: string;
@@ -89,7 +90,7 @@ export async function generateContent(
             role: "user",
             content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
-Topic/product/context: "${topic || "general brand content, use good judgement for this business type"}"
+Topic/product/context: "${resolveFestiveTopic(topic, facts?.season) || "general brand content, use good judgement for this business type"}"
 
 Content type: ${meta.label}
 Output requirements: ${meta.instructions}
