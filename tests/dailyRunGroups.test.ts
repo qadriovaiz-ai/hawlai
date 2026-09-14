@@ -31,9 +31,9 @@ describe("subsystem grouping", () => {
     expect(Object.keys(groups).sort()).toEqual(["heavy", "signals"]);
   });
 
-  it("covers all fourteen per-dealership subsystems", () => {
+  it("covers all fifteen per-dealership subsystems", () => {
     const all = Object.values(groups).flat();
-    expect(all).toHaveLength(14);
+    expect(all).toHaveLength(15);
   });
 
   it("assigns every subsystem to exactly ONE group", () => {
@@ -55,6 +55,8 @@ describe("subsystem grouping", () => {
     expect(groups.heavy).toContain("email_automation");
     expect(groups.signals).toContain("lead_scoring");
     expect(groups.signals).toContain("stale_approvals");
+    // The scheduled leads export is a database read and one email — fast.
+    expect(groups.signals).toContain("lead_export");
     for (const key of groups.signals) expect(groups.heavy).not.toContain(key);
   });
 });

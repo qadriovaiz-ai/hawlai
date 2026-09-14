@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { buildSendHealth } from "@/lib/automation/sendHealth";
+import { buildExportHealth, EXPORT_FREQUENCIES } from "@/lib/leads/scheduledExport";
+import { exportRole, NOT_ALLOWED } from "@/lib/leads/exportLeads";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -24,7 +26,8 @@ export async function GET() {
       auto_call_new_leads,
       auto_pause_low_performers, auto_generate_variant_on_pause, seasonal_campaigns_enabled,
       auto_budget_reallocate_percent,
-      gmail_email, fb_page_id
+      gmail_email, fb_page_id,
+      lead_export_frequency
     `).eq("id", dealershipId).single(),
     supabase.from("workflows").select("id, name, enabled").eq("dealership_id", dealershipId),
     Promise.all([
@@ -94,6 +97,19 @@ export async function GET() {
   }));
 
   const lastRunOf = (subsystem: string) => (runLogRows ?? []).find((r: any) => r.subsystem === subsystem) ?? null;
+
+  // The scheduled export's last result, whenever it was — a monthly export
+  // is still worth showing three weeks later.
+  const { data: latestExport } = await supabase
+    .from("lead_export_log")
+    .select("created_at, success, error, row_count, new_count")
+    .eq("dealership_id", dealershipId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  automationHealth.push(
+    buildExportHealth({ frequency: (dealership?.lead_export_frequency ?? "off") as any, latest: latestExport ?? null, lastRun: lastRunOf("lead_export") })
+  );
   for (const row of [
     buildSendHealth({
       subsystem: "email_automation",
@@ -161,7 +177,8 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ dealership, workflows: workflows ?? [], activity, automationHealth });
+  const canExport = Boolean(await exportRole(dealershipId, user.id).catch(() => null));
+  return NextResponse.json({ dealership, workflows: workflows ?? [], activity, automationHealth, canExport });
 }
 
 export async function PATCH(request: Request) {
@@ -186,6 +203,13 @@ export async function PATCH(request: Request) {
   const update: any = {};
   for (const key of allowed) {
     if (body[key] !== undefined) update[key] = body[key];
+  }
+  // The scheduled leads export mails the whole lead list's download link —
+  // only the owner or an admin may switch it on, off or change it.
+  if (body.lead_export_frequency !== undefined) {
+    if (!EXPORT_FREQUENCIES.includes(body.lead_export_frequency)) return NextResponse.json({ error: "Choose off, weekly or monthly" }, { status: 400 });
+    if (!(await exportRole(dealershipId, user.id).catch(() => null))) return NextResponse.json({ error: NOT_ALLOWED }, { status: 403 });
+    update.lead_export_frequency = body.lead_export_frequency;
   }
   if (Object.keys(update).length === 0) return NextResponse.json({ error: "No valid fields" }, { status: 400 });
 

@@ -23,6 +23,7 @@ const SUBSYSTEM_LABELS: Record<string, string> = {
   cold_lead_detection: "Cold Lead Detection",
   lead_scoring: "Lead Scoring",
   stale_approvals: "Stale Approval Detection", // P1 19b
+  lead_export: "Scheduled Leads Export",
   // P1 18b — not cron subsystems, but the same health shape applies:
   // event_queue/agent_tasks track status directly on each row.
   event_bus: "Event Bus",
@@ -48,6 +49,21 @@ export default function AutopilotCommandCenter() {
     } finally {
       setSaving(false);
     }
+  }
+
+  const [exportError, setExportError] = useState<string | null>(null);
+  async function setExportFrequency(value: string) {
+    const previous = data.dealership.lead_export_frequency;
+    setExportError(null);
+    setData((prev: any) => ({ ...prev, dealership: { ...prev.dealership, lead_export_frequency: value } }));
+    const res = await fetch("/api/autopilot/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_export_frequency: value }) });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setData((prev: any) => ({ ...prev, dealership: { ...prev.dealership, lead_export_frequency: previous } }));
+      setExportError(body.error ?? "Couldn't save that — try again.");
+      return;
+    }
+    load();
   }
 
   async function setFrequency(field: string, value: number) {
@@ -197,6 +213,29 @@ export default function AutopilotCommandCenter() {
         </label>
       </div>
 
+      {/* Scheduled leads export */}
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor="lead-export-frequency" className="text-sm font-semibold text-slate-700">Email me my leads CSV</label>
+          <select
+            id="lead-export-frequency"
+            value={d.lead_export_frequency ?? "off"}
+            disabled={!data.canExport}
+            onChange={(e) => setExportFrequency(e.target.value)}
+            className="bg-slate-100 text-slate-900 text-sm border border-slate-200 rounded-lg px-2 py-1.5 disabled:opacity-50"
+          >
+            <option value="off">Off</option>
+            <option value="weekly">Every Monday</option>
+            <option value="monthly">On the 1st of each month</option>
+          </select>
+        </div>
+        <p className="text-xs text-slate-400">
+          Emails the business owner a sign-in download link for the full lead list at 8:30 AM IST, with how many are new. No lead data is put in the email itself.
+          {!data.canExport && " Only the owner or an admin can change this."}
+        </p>
+        {exportError && <p className="text-xs text-red-400">{exportError}</p>}
+      </div>
+
       {/* Workflows */}
       <Link href="/dashboard/marketing-automation" className="card p-4 flex items-center justify-between hover:border-purple-400 transition-colors">
         <span className="text-sm text-slate-700">{activeWorkflows} active workflow{activeWorkflows !== 1 ? "s" : ""} (multi-step email sequences)</span>
@@ -242,7 +281,7 @@ export default function AutopilotCommandCenter() {
                   <span
                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                       !health ? "bg-slate-300"
-                      : health.kind === "sends" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
+                      : health.kind === "sends" || health.kind === "export" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
                       : health.lastSuccess ? "bg-green-500" : "bg-red-500"
                     }`}
                   />
@@ -259,6 +298,8 @@ export default function AutopilotCommandCenter() {
                       <span className="block text-[11px] text-red-400 max-w-[22rem] truncate" title={health.lastError}>{health.lastError}</span>
                     )}
                   </span>
+                ) : health && health.kind === "export" ? (
+                  <span className={`text-right ${health.state === "failing" ? "text-red-400" : "text-slate-400"}`}>{health.note}</span>
                 ) : health && health.kind === "sends" ? (
                   // Emails and workflow steps that actually went out, and what
                   // happened to them — never "the daily job ran".

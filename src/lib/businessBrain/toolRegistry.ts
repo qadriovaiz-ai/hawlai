@@ -157,6 +157,16 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     status: "live",
   },
   {
+    name: "schedule_lead_export",
+    description: "Turn the weekly/monthly leads export email on or off (owner/admin only).",
+    parameters: {
+      frequency: { type: "string", description: "weekly / monthly / off", required: true },
+    },
+    channels: ["chat"],
+    handlerRef: "scheduledExport.ts:runScheduledLeadExport",
+    status: "live",
+  },
+  {
     name: "send_email",
     description: "Send an email on the business's behalf.",
     parameters: {

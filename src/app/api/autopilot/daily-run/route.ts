@@ -17,6 +17,7 @@ import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetect
 import { runAndLog } from "@/lib/automation/runAndLog";
 import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
 import { ensureResendWebhook } from "@/lib/email/resendWebhook";
+import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { GROUPS, ALL, type SubsystemKey } from "@/lib/automation/cronGroups";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
@@ -144,6 +145,7 @@ export async function GET(request: Request) {
     if (only("cold_lead_detection")) results[id].coldLeadNotifications = await run(id, "cold_lead_detection", () => notifyColdLeads(supabase, id));
     if (only("lead_scoring")) results[id].leadScores = await run(id, "lead_scoring", () => scoreActiveLeads(supabase, id));
     if (only("stale_approvals")) results[id].staleApprovals = await run(id, "stale_approvals", () => checkStalePendingApprovals(supabase, id));
+    if (only("lead_export")) results[id].leadExport = await run(id, "lead_export", () => runScheduledLeadExport(supabase, id));
   }
 
   // Platform-wide, so deliberately OUTSIDE the per-dealership loop —

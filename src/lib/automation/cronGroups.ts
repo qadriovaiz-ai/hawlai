@@ -21,13 +21,13 @@ export type SubsystemKey =
   | "daily_autopilot" | "content_autopilot" | "report_snapshots"
   | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
   | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
-  | "lead_scoring" | "stale_approvals";
+  | "lead_scoring" | "stale_approvals" | "lead_export";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
   // Database-only and fast, and what surfaces work waiting on a human —
   // so it runs FIRST and never queues behind LLM calls.
-  signals: ["budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "stale_approvals"],
+  signals: ["budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "stale_approvals", "lead_export"],
   // Everything slow: LLM-backed work plus third-party APIs.
   heavy: [
     "content_autopilot",

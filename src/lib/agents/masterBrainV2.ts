@@ -586,6 +586,17 @@ const TOOLS = [
     },
   },
   {
+    name: "schedule_lead_export",
+    description: "Turn the recurring leads export on, off, or change how often — e.g. \"send me my leads CSV every week\", \"monthly\", \"stop the leads export\". It emails the business owner's login email a sign-in download link for the full lead list (never the file, never any other address) every Monday or on the 1st at 8:30 AM IST. Only the owner or an admin can change it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        frequency: { type: "string", enum: ["weekly", "monthly", "off"] },
+      },
+      required: ["frequency"],
+    },
+  },
+  {
     name: "send_email",
     description: "Send a real email right now to a specific recipient — a team member (by name or email), or a lead or customer already on record (by email). Hawlai only emails people who gave this business their email: an address that isn't a lead, customer or team member is refused, and so is anyone who unsubscribed. Only use this when the person clearly wants it actually SENT, not just drafted (e.g. \"email Priya about the launch\", \"send a follow-up to this lead\") — for drafting content to review first, use generate_email instead.",
     input_schema: {
@@ -2106,6 +2117,38 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
           : `No leads match (${exporter.describeFilters(filters)}), so there's nothing to export. Say so plainly.`,
       };
     }
+    case "schedule_lead_export": {
+      const { exportRole, NOT_ALLOWED } = await import("../leads/exportLeads");
+      const { EXPORT_FREQUENCIES, describeSchedule, nextExportDay } = await import("../leads/scheduledExport");
+      const { indiaToday } = await import("../expertise/seasonalCalendar");
+      const frequency = String(input?.frequency ?? "");
+      if (!EXPORT_FREQUENCIES.includes(frequency as any)) return { error: "Choose weekly, monthly or off." };
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id ?? null;
+      if (!userId) return { error: "The leads export can be scheduled from the Hawlai app — open chat there and ask again." };
+      try {
+        if (!(await exportRole(ctx.id, userId))) return { error: NOT_ALLOWED };
+      } catch (err: any) {
+        return { error: `Couldn't change the export — ${err.message}.` };
+      }
+      const { createServiceClient } = await import("../supabase/service");
+      const { data: updated, error } = await createServiceClient()
+        .from("dealerships")
+        .update({ lead_export_frequency: frequency })
+        .eq("id", ctx.id)
+        .select("lead_export_frequency, owner_id")
+        .maybeSingle();
+      if (error || !updated) return { error: `Couldn't change the export — ${error?.message ?? "the setting wasn't saved"}.` };
+      if (frequency === "off") return { frequency, note: "Scheduled leads export turned off. No more export emails will be sent." };
+      const { ownerEmail } = await import("../email/sendDealerEmail");
+      const to = await ownerEmail(updated.owner_id);
+      const next = nextExportDay(frequency as any, indiaToday());
+      return {
+        frequency,
+        recipient: to,
+        note: `Scheduled leads export is on — ${describeSchedule(frequency as any)}, to ${to ?? "the owner's login email"}. The email has a sign-in download link for the full lead list and how many are new; the file isn't attached.${next ? ` First one: ${next}.` : ""}`,
+      };
+    }
     case "send_email": {
       let toEmail = input.recipient.trim();
       if (!toEmail.includes("@")) {
@@ -2374,6 +2417,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   trigger_call: "/dashboard/calls",
   send_email: "/dashboard/email",
   export_leads: "/dashboard/leads",
+  schedule_lead_export: "/dashboard/autopilot",
   add_product: "/dashboard/website-builder",
   create_discount_code: "/dashboard/website-builder",
   get_report_links: "/dashboard/reports",
@@ -2729,6 +2773,8 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: "Product added", summary: result.note, departmentHref };
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
+    case "schedule_lead_export":
+      return { kind: "record", label: result.frequency === "off" ? "Leads export turned off" : "Leads export scheduled", summary: result.note, departmentHref };
     case "export_leads":
       if (!result?.rowCount) return { kind: "record", label: "Nothing to export", summary: result.note, departmentHref };
       return {
