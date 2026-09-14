@@ -6,7 +6,7 @@ import Papa from "papaparse";
 import { Upload, Loader2, X, CheckCircle, AlertCircle } from "lucide-react";
 import { qualifyLead } from "@/lib/ai-engine";
 import { buttonClasses } from "@/components/ui";
-import { CSV_CONSENT_SOURCES } from "@/lib/email/consent";
+import { CSV_CONSENT_SOURCES } from "@/lib/email/consentSources";
 
 interface UploadResult {
   success: number;
