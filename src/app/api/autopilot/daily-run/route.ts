@@ -16,6 +16,7 @@ import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runAndLog } from "@/lib/automation/runAndLog";
 import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
+import { ensureResendWebhook } from "@/lib/email/resendWebhook";
 import { GROUPS, ALL, type SubsystemKey } from "@/lib/automation/cronGroups";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
@@ -151,7 +152,12 @@ export async function GET(request: Request) {
   // group, and is not counted in `expected` because it is one call for
   // the whole platform rather than one per dealership.
   let platformSpend: any = null;
+  let resendWebhook: any = null;
   if (!groupParam || groupParam === "signals") {
+    // Keeps Resend sending delivery events (bounces, spam complaints) to
+    // Hawlai — registered through the API, so no secret is copied by hand.
+    resendWebhook = await ensureResendWebhook();
+    if ("error" in resendWebhook) failures.push({ dealershipId: "-", subsystem: "resend_webhook", error: resendWebhook.error });
     try {
       platformSpend = await checkPlatformDailySpend(supabase);
     } catch (err: any) {
@@ -172,6 +178,7 @@ export async function GET(request: Request) {
     failures: failures.slice(0, 20),
     results,
     platformSpend,
+    resendWebhook,
   };
 
   if (partial) {

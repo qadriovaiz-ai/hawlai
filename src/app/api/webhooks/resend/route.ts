@@ -1,27 +1,25 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { applyResendEvent, verifyResendEvent } from "@/lib/email/resendWebhook";
 
-// Resend's webhook — configured once in the Resend dashboard to point
-// here. No signature verification (matches this repo's existing
-// webhook convention — see /api/webhooks/vapi) — a real hardening step
-// if this ever needs it is checking the `svix-signature` header Resend
-// sends, using the webhook secret from the Resend dashboard.
+// Resend's webhook — registered by Hawlai itself (ensureResendWebhook,
+// run daily). Every request's signature is checked before anything is
+// recorded: an unverified "bounced" event would unsubscribe a real
+// customer. See lib/email/resendWebhook.ts.
 export async function POST(request: Request) {
-  const body = await request.json();
-  const type = body?.type as string | undefined;
-  const messageId = body?.data?.email_id as string | undefined;
-  if (!messageId) return NextResponse.json({ received: true });
-
-  const supabase = createServiceClient();
-  const { data: existing } = await supabase.from("email_sends").select("id, open_count, click_count").eq("resend_message_id", messageId).maybeSingle();
-  if (!existing) return NextResponse.json({ received: true }); // event for a send we didn't log (e.g. sent outside Hawlai) — nothing to update
-
-  const now = new Date().toISOString();
-  if (type === "email.opened") {
-    await supabase.from("email_sends").update({ opened: true, open_count: existing.open_count + 1, last_event_at: now }).eq("id", existing.id);
-  } else if (type === "email.clicked") {
-    await supabase.from("email_sends").update({ clicked: true, click_count: existing.click_count + 1, last_event_at: now }).eq("id", existing.id);
+  const raw = await request.text();
+  const event = await verifyResendEvent(raw, request.headers);
+  if (!event) {
+    console.error("[resend-webhook] rejected an event whose signature couldn't be verified");
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  return NextResponse.json({ received: true });
+  try {
+    const result = await applyResendEvent(createServiceClient(), event);
+    return NextResponse.json({ received: true, ...result });
+  } catch (err: any) {
+    // A 5xx makes Resend retry, rather than the event being lost.
+    console.error("[resend-webhook] couldn't apply event:", err.message);
+    return NextResponse.json({ error: "couldn't record the event" }, { status: 500 });
+  }
 }
