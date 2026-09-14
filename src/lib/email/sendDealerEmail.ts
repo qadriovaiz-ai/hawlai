@@ -34,12 +34,14 @@ export async function sendDealerEmail(
   dealershipId: string,
   to: string,
   subject: string,
-  body: string
+  body: string,
+  /** The visual version (lib/email/template.ts); `body` is then its plain-text part. */
+  options: { html?: string | null } = {}
 ): Promise<{ success: boolean; error?: string; via: "gmail" | "resend" }> {
   const { data: dealership } = await supabase.from("dealerships").select("gmail_email, dealership_name, owner_id").eq("id", dealershipId).single();
 
   if (dealership?.gmail_email) {
-    const result = await sendViaGmail(supabase, dealershipId, to, subject, body);
+    const result = await sendViaGmail(supabase, dealershipId, to, subject, body, { html: options.html });
     if (result.success) {
       // Logged for real send-volume tracking, even though Gmail sends
       // can't be enriched with opens/clicks the way Resend sends can —
@@ -51,6 +53,7 @@ export async function sendDealerEmail(
 
   const result = await sendViaResend(to, subject, body, dealership?.dealership_name ?? "Hawlai", {
     replyTo: await ownerEmail(dealership?.owner_id),
+    html: options.html,
   });
   if (result.success) {
     await supabase.from("email_sends").insert({ dealership_id: dealershipId, to_email: to, subject, via: "resend", resend_message_id: result.resendMessageId ?? null });

@@ -50,14 +50,14 @@ export async function sendViaResend(
   subject: string,
   body: string,
   dealershipName: string,
-  options: { replyTo?: string | null } = {}
+  options: { replyTo?: string | null; html?: string | null } = {}
 ): Promise<{ success: boolean; error?: string; resendMessageId?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { success: false, error: "Email sending isn't configured yet (RESEND_API_KEY missing)." };
 
   try {
     const resend = new Resend(apiKey);
-    const html = body
+    const html = options.html || body
       .split("\n\n")
       .map((para) => `<p style="margin:0 0 16px;line-height:1.6;">${para.replace(/\n/g, "<br/>")}</p>`)
       .join("");

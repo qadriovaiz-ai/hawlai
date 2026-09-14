@@ -12,6 +12,7 @@ import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, claimsNote } from "@/lib/claims/claimCheck";
 import { EMAIL_RULES, fixSubjects } from "@/lib/expertise/channelRules";
+import { composeMarketingEmail, type ComposedEmail } from "@/lib/email/composeEmail";
 
 export interface EmailTaskMeta {
   key: string;
@@ -19,13 +20,19 @@ export interface EmailTaskMeta {
   instructions: string;
 }
 
+// The tasks that produce one customer-facing email, sent as the visual
+// template (lib/email/composeEmail.ts). The rest produce several emails
+// or advice for the owner.
+const VISUAL = `Return {subject, previewText, headline (under 60 characters), intro (1–2 short sentences), bullets (0–3 short points, only if they help), ctaLabel (2–4 words for the button), product (the exact name of the product it features from the facts, or ""), body (the same message as plain text, under 120 words)}. Never put a link or web address in any field — Hawlai adds the button link.`;
+export const VISUAL_EMAIL_TASKS = new Set(["welcome_email", "abandoned_cart", "promotional", "newsletter", "follow_up"]);
+
 export const EMAIL_TASKS: EmailTaskMeta[] = [
-  { key: "welcome_email", label: "Welcome Email", instructions: "A welcome email for a new lead/customer: return {subject, previewText, body} — warm, sets expectations for what happens next, no hard sell." },
-  { key: "abandoned_cart", label: "Abandoned Cart", instructions: "An abandoned-cart/inquiry follow-up email for someone who showed interest but didn't convert: return {subject, previewText, body} — gentle nudge, addresses likely hesitation, soft CTA to continue." },
-  { key: "promotional", label: "Promotional Email", instructions: "A promotional email for an offer or product: return {subject, previewText, body} — if the facts list an active offer, feature it exactly as listed (code and terms); if not, promote the product itself and never invent a discount. Strong CTA." },
-  { key: "newsletter", label: "Newsletter", instructions: "A newsletter email: return {subject, previewText, sections: [{heading, body}]} — 3 short sections (e.g. update, tip, spotlight), casual and value-first, not salesy." },
+  { key: "welcome_email", label: "Welcome Email", instructions: `A welcome email for a new lead/customer — warm, sets expectations for what happens next, no hard sell. ${VISUAL}` },
+  { key: "abandoned_cart", label: "Abandoned Cart", instructions: `An abandoned-cart/inquiry follow-up email for someone who showed interest but didn't convert — gentle nudge, addresses likely hesitation, soft call to action to continue. ${VISUAL}` },
+  { key: "promotional", label: "Promotional Email", instructions: `A promotional email for an offer or product — if the facts list an active offer, feature it exactly as listed (code and terms); if not, promote the product itself and never invent a discount. Strong call to action. ${VISUAL}` },
+  { key: "newsletter", label: "Newsletter", instructions: "A newsletter email: return {subject, previewText, headline (under 60 characters), sections: [{heading, body}], ctaLabel (2–4 words), product (a product name from the facts it spotlights, or \"\"), body (the whole newsletter as plain text)} — 3 short sections (e.g. update, tip, spotlight), each body 1–2 sentences, casual and value-first, not salesy. Never put a link or web address in any field." },
   { key: "sales_sequence", label: "Sales Sequence", instructions: "A 3-email sales sequence for nurturing a warm lead toward a decision: return {emails: [{step, subject, body}]} — each email should have a distinct angle (value, trust built only from real facts — never invented testimonials or numbers — and a clear next step) and escalate naturally." },
-  { key: "follow_up", label: "Follow-up Email", instructions: "A follow-up email for a lead who went quiet after initial contact: return {subject, previewText, body} — low-pressure, easy to reply to, gives an easy out ('let me know if now isn't the right time')." },
+  { key: "follow_up", label: "Follow-up Email", instructions: `A follow-up email for a lead who went quiet after initial contact — low-pressure, easy to reply to, gives an easy out ('let me know if now isn't the right time'). ${VISUAL}` },
   { key: "personalization", label: "Personalization Tips", instructions: "5 practical personalization tactics for making emails feel individually written rather than mass-blasted, specific to this business type: return {tips: [{tactic, howTo}]}." },
 ];
 
@@ -45,7 +52,7 @@ export async function generateEmailContent(
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
   facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[] }> {
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; email?: ComposedEmail }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -104,7 +111,11 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const output: any = guarded.output;
     const note = [claimsNote(guarded.removed), subjectNote].filter(Boolean).join(" ");
     if (note) output._claimsNote = note;
-    return { output, claimsRemoved: removed };
+    // The finished visual email, built from the checked words and the
+    // real links, photo and brand. Returned beside the output, never
+    // inside it — the output is saved and shown as the editable draft.
+    const email = VISUAL_EMAIL_TASKS.has(taskKey) ? composeMarketingEmail(output, facts) : undefined;
+    return { output, claimsRemoved: removed, email };
   } catch (err: any) {
     console.error("[email-marketing-agent] error:", err.message);
     return fallback;

@@ -116,6 +116,18 @@ describe("the live case, through sendDealerEmail", () => {
     expect("replyTo" in sent[0]).toBe(false);
   });
 
+  it("a visual email reaches Resend as that exact HTML, with the plain text alongside", async () => {
+    await sendDealerEmail(db(), "d1", "customer@example.com", "Diwali", "Plain version", { html: "<h1>Visual version</h1>" });
+    expect(sent[0].html).toBe("<h1>Visual version</h1>");
+    expect(sent[0].text).toBe("Plain version");
+  });
+
+  it("a visual email for a Gmail-connected business is handed to Gmail with its HTML", async () => {
+    tables.dealerships[0].gmail_email = "shop@gmail.com";
+    await sendDealerEmail(db(), "d1", "customer@example.com", "Diwali", "Plain version", { html: "<h1>Visual version</h1>" });
+    expect(gmailSend.mock.calls[0].slice(3)).toEqual(["Diwali", "Plain version", { html: "<h1>Visual version</h1>" }]);
+  });
+
   it("a business with its own Gmail connected still sends from Gmail, not Resend", async () => {
     tables.dealerships[0].gmail_email = "shop@gmail.com";
     const result = await sendDealerEmail(db(), "d1", "customer@example.com", "Diwali", "Hi");

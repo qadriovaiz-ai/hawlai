@@ -55,6 +55,41 @@ async function getValidAccessToken(supabase: any, dealershipId: string): Promise
   return data.access_token;
 }
 
+/** Base64 in 76-character lines, as MIME requires. */
+function base64Lines(s: string): string {
+  return (Buffer.from(s, "utf-8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
+}
+
+/**
+ * The raw message Gmail sends. With HTML it's multipart/alternative — the
+ * plain text first, the HTML second, so an inbox shows the best version
+ * it can. Both parts are base64, so long HTML lines and non-English text
+ * survive transport.
+ */
+export function buildMimeMessage(m: { from: string; to: string; subject: string; text: string; html?: string | null }): string {
+  const head = [`From: ${m.from}`, `To: ${m.to}`, `Subject: =?UTF-8?B?${Buffer.from(m.subject, "utf-8").toString("base64")}?=`, "MIME-Version: 1.0"];
+  if (!m.html) {
+    return [...head, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", base64Lines(m.text)].join("\r\n");
+  }
+  const boundary = `hawlai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+  return [
+    ...head,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Lines(m.text),
+    `--${boundary}`,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Lines(m.html),
+    `--${boundary}--`,
+  ].join("\r\n");
+}
+
 function base64UrlEncode(str: string): string {
   return Buffer.from(str, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -64,7 +99,8 @@ export async function sendEmail(
   dealershipId: string,
   to: string,
   subject: string,
-  body: string
+  body: string,
+  options: { html?: string | null } = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const accessToken = await getValidAccessToken(supabase, dealershipId);
@@ -74,15 +110,7 @@ export async function sendEmail(
       ? `${dealership.dealership_name ?? "Hawlai"} <${dealership.gmail_email}>`
       : dealership?.dealership_name ?? "Hawlai";
 
-    const mimeMessage = [
-      `From: ${fromLine}`,
-      `To: ${to}`,
-      `Subject: =?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`,
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=UTF-8",
-      "",
-      body,
-    ].join("\r\n");
+    const mimeMessage = buildMimeMessage({ from: fromLine, to, subject, text: body, html: options.html });
 
     const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST",
