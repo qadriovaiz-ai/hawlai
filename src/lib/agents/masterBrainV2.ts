@@ -571,6 +571,21 @@ const TOOLS = [
     input_schema: { type: "object", properties: { leadName: { type: "string", description: "The lead's name, as close as possible to how the person referred to them." } }, required: ["leadName"] },
   },
   {
+    name: "export_leads",
+    description: "Export this business's leads as a CSV the owner downloads straight from the chat. Use whenever they ask to export, download or get a spreadsheet/CSV/Excel of their leads — never tell them to find an export in the dashboard. Only the owner or an admin can export. Every lead is included (do-not-contact and unsubscribed ones are flagged in their own columns), narrowed only by the filters given.",
+    input_schema: {
+      type: "object",
+      properties: {
+        temperature: { type: "string", enum: ["hot", "warm", "cold"], description: "Only leads of this temperature." },
+        status: { type: "string", description: "Only leads in this status, e.g. new, called, converted." },
+        source: { type: "string", description: "Only leads from this source, e.g. csv_upload, meta_lead_ad, website." },
+        from: { type: "string", description: "Only leads created on or after this date, YYYY-MM-DD (India time)." },
+        to: { type: "string", description: "Only leads created on or before this date, YYYY-MM-DD (India time)." },
+        hasEmail: { type: "boolean", description: "Only leads that have an email address." },
+      },
+    },
+  },
+  {
     name: "send_email",
     description: "Send a real email right now to a specific recipient — a team member (by name or email), or a lead or customer already on record (by email). Hawlai only emails people who gave this business their email: an address that isn't a lead, customer or team member is refused, and so is anyone who unsubscribed. Only use this when the person clearly wants it actually SENT, not just drafted (e.g. \"email Priya about the launch\", \"send a follow-up to this lead\") — for drafting content to review first, use generate_email instead.",
     input_schema: {
@@ -2058,6 +2073,39 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       if (!result.success) return { error: result.error };
       return { success: true, calledLead: lead.name, note: `Call placed to ${lead.name}. Tell the person the call is in progress — the transcript and an updated lead score will appear once it ends.` };
     }
+    case "export_leads": {
+      // The CSV itself is built by the download route on request — the
+      // link only works for a signed-in owner or admin, and no lead data
+      // is stored or put in the chat. This checks access and counts rows
+      // so the card says what the file holds.
+      const exporter = await import("../leads/exportLeads");
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id ?? null;
+      if (!userId) return { error: "Leads can be exported from the Hawlai app — open chat there and ask again." };
+      let role: Awaited<ReturnType<typeof exporter.exportRole>>;
+      try {
+        role = await exporter.exportRole(ctx.id, userId);
+      } catch (err: any) {
+        return { error: `Couldn't export — ${err.message}.` };
+      }
+      if (!role) return { error: exporter.NOT_ALLOWED };
+      const filters = exporter.cleanFilters(input ?? {});
+      let count: number;
+      try {
+        count = (await exporter.fetchLeadsForExport(supabase, ctx.id, filters)).length;
+      } catch (err: any) {
+        return { error: `Couldn't export — ${err.message}.` };
+      }
+      return {
+        rowCount: count,
+        filters,
+        description: exporter.describeFilters(filters),
+        url: `/api/leads/export${exporter.filtersToQuery(filters)}`,
+        note: count
+          ? `CSV ready: ${count} lead${count === 1 ? "" : "s"} (${exporter.describeFilters(filters)}). The owner downloads it from the link on the card. Do-not-contact and unsubscribed leads are included and flagged.`
+          : `No leads match (${exporter.describeFilters(filters)}), so there's nothing to export. Say so plainly.`,
+      };
+    }
     case "send_email": {
       let toEmail = input.recipient.trim();
       if (!toEmail.includes("@")) {
@@ -2325,6 +2373,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   add_lead: "/dashboard/leads-hub",
   trigger_call: "/dashboard/calls",
   send_email: "/dashboard/email",
+  export_leads: "/dashboard/leads",
   add_product: "/dashboard/website-builder",
   create_discount_code: "/dashboard/website-builder",
   get_report_links: "/dashboard/reports",
@@ -2680,6 +2729,15 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: "Product added", summary: result.note, departmentHref };
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
+    case "export_leads":
+      if (!result?.rowCount) return { kind: "record", label: "Nothing to export", summary: result.note, departmentHref };
+      return {
+        kind: "link",
+        label: `Download leads CSV — ${result.rowCount} lead${result.rowCount === 1 ? "" : "s"}`,
+        url: result.url,
+        summary: `${result.description[0].toUpperCase()}${result.description.slice(1)}. Do-not-contact and unsubscribed leads are included and flagged.`,
+        departmentHref,
+      };
     case "send_email":
       if (result?.proposed) {
         return {

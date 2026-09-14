@@ -142,6 +142,21 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     status: "live",
   },
   {
+    name: "export_leads",
+    description: "Export the business's leads as a CSV downloaded from chat (owner/admin only).",
+    parameters: {
+      temperature: { type: "string", description: "hot / warm / cold", required: false },
+      status: { type: "string", description: "Lead status", required: false },
+      source: { type: "string", description: "Lead source", required: false },
+      from: { type: "string", description: "Created on or after, YYYY-MM-DD", required: false },
+      to: { type: "string", description: "Created on or before, YYYY-MM-DD", required: false },
+      hasEmail: { type: "boolean", description: "Only leads with an email", required: false },
+    },
+    channels: ["chat"],
+    handlerRef: "exportLeads.ts:fetchLeadsForExport",
+    status: "live",
+  },
+  {
     name: "send_email",
     description: "Send an email on the business's behalf.",
     parameters: {

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import LeadsTable from "@/components/leads/LeadsTable";
 import LeadsHeader from "@/components/leads/LeadsHeader";
+import { exportRole, filtersToQuery, cleanFilters } from "@/lib/leads/exportLeads";
 
 const SORTABLE_COLUMNS = ["created_at", "ai_score", "predicted_conversion_score"];
 
@@ -65,7 +66,10 @@ export default async function LeadsPage({
 
   return (
     <div className="space-y-5 max-w-7xl">
-      <LeadsHeader dealershipId={dealershipId} />
+      <LeadsHeader
+        dealershipId={dealershipId}
+        exportHref={(await exportRole(dealershipId, user.id).catch(() => null)) ? `/api/leads/export${filtersToQuery(cleanFilters({ temperature: params.temp, status: params.status }))}` : null}
+      />
       <LeadsTable
         leads={leads ?? []}
         total={count ?? 0}

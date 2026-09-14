@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
-import { Upload, Loader2, X, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, Download, Loader2, X, CheckCircle, AlertCircle } from "lucide-react";
 import { qualifyLead } from "@/lib/ai-engine";
 import { buttonClasses } from "@/components/ui";
 import { CSV_CONSENT_SOURCES } from "@/lib/email/consentSources";
@@ -13,7 +13,7 @@ interface UploadResult {
   errors: string[];
 }
 
-export default function LeadsHeader({ dealershipId }: { dealershipId: string }) {
+export default function LeadsHeader({ dealershipId, exportHref }: { dealershipId: string; exportHref?: string | null }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -99,6 +99,12 @@ export default function LeadsHeader({ dealershipId }: { dealershipId: string }) 
           <p className="text-slate-500 text-sm mt-0.5">Manage and qualify your leads</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Owners and admins only; carries the table's temperature and status filters. */}
+          {exportHref && (
+            <a href={exportHref} className={buttonClasses("secondary", "md")}>
+              <Download className="w-4 h-4" /> Export CSV
+            </a>
+          )}
           <input
             ref={fileRef}
             type="file"
