@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { websitePublishAction, socialPublishAction, homepageCopyAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { websitePublishAction, socialPublishAction, homepageCopyAction, emailSendAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
 import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
@@ -578,7 +578,12 @@ const TOOLS = [
       properties: {
         recipient: { type: "string", description: "An email address, or a team member's name/email to look up." },
         subject: { type: "string" },
-        body: { type: "string", description: "The full email body, in the business's tone of voice." },
+        body: { type: "string", description: "The full email as plain text, in the business's tone of voice. Always required — it's the plain-text version too." },
+        headline: { type: "string", description: "For a lead or customer: a short headline (under 60 characters) for the visual email. Give headline + intro to send the branded visual email with the product photo and a button; leave them out for a plain personal note." },
+        intro: { type: "string", description: "For the visual email: 1–2 short sentences." },
+        bullets: { type: "array", items: { type: "string" }, description: "For the visual email: up to 3 short points, only if they help." },
+        ctaLabel: { type: "string", description: "For the visual email: 2–4 words for the button. Never write a link anywhere — Hawlai adds the real one." },
+        product: { type: "string", description: "For the visual email: the exact name of the product it features, or leave out." },
       },
       required: ["recipient", "subject", "body"],
     },
@@ -2088,15 +2093,67 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       if (!kind) {
         return { error: `Not sent: ${toEmail} isn't a lead, customer or team member of this business. Hawlai only emails people who gave the business their email.` };
       }
-      // A note to a team member is internal mail; a lead or customer
-      // gets marketing email — address, unsubscribe and suppression rules.
-      let result: { success: boolean; error?: string; via?: string };
-      if (kind === "team") {
-        result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
-      } else {
-        const { sendMarketingEmail } = await import("../email/sendMarketingEmail");
-        result = await sendMarketingEmail(supabase, ctx.id, toEmail, { subject: input.subject, text: input.body, businessName: ctx.name });
+      // A lead or customer gets marketing email, and marketing email is
+      // never sent straight from a chat turn: the owner sees it exactly as
+      // it will arrive and confirms. The same rules that apply at send
+      // time are checked now, so the card never offers an email that
+      // would be refused.
+      if (kind !== "team") {
+        const { isSuppressed, siteUrl } = await import("../email/consent");
+        const { NO_ADDRESS_ERROR } = await import("../email/sendMarketingEmail");
+        const { createServiceClient } = await import("../supabase/service");
+        const service = createServiceClient();
+        const { data: biz, error: bizError } = await service.from("dealerships").select("business_address").eq("id", ctx.id).maybeSingle();
+        if (bizError) return { error: `Not sent — couldn't read the business address: ${bizError.message}.` };
+        const address = String(biz?.business_address ?? "").trim();
+        if (!address) return { error: NO_ADDRESS_ERROR };
+        try {
+          if (await isSuppressed(service, ctx.id, toEmail)) return { error: `Not sent: ${toEmail} has unsubscribed from this business's emails.` };
+        } catch (err: any) {
+          return { error: `Not sent — ${err.message}.` };
+        }
+
+        const { senderDisplayName } = await import("../email/resendClient");
+        const previewUnsubscribe = `${siteUrl()}/unsubscribe/preview`;
+        const visual = Boolean(input.headline && input.intro && facts);
+        let payload: Record<string, unknown>;
+        let previewHtml: string | null = null;
+        let previewText: string;
+        if (visual) {
+          const { composeMarketingEmail } = await import("../email/composeEmail");
+          const draft = {
+            subject: input.subject,
+            headline: input.headline,
+            intro: input.intro,
+            bullets: Array.isArray(input.bullets) ? input.bullets : [],
+            ctaLabel: input.ctaLabel,
+            product: input.product,
+            body: input.body,
+          };
+          const email = composeMarketingEmail(draft, facts!, { address, unsubscribeUrl: previewUnsubscribe });
+          payload = { draft };
+          previewHtml = email.html;
+          previewText = email.text;
+        } else {
+          payload = { subject: input.subject, body: input.body };
+          previewText = `${String(input.body).trimEnd()}\n\n—\n${senderDisplayName(ctx.name)} · ${address}\nUnsubscribe: ${previewUnsubscribe}`;
+        }
+        return {
+          proposed: true,
+          to: toEmail,
+          recipientKind: kind,
+          businessName: senderDisplayName(ctx.name),
+          subject: input.subject,
+          format: visual ? "visual" : "plain",
+          payload,
+          note: `NOT SENT YET. The owner is shown a preview of this email to ${toEmail} with a Send button — it goes out only when they press it. Don't say it was sent.`,
+          // Card-only: stripped before this result is shown to the model.
+          _emailPreview: { html: previewHtml, text: previewText },
+        };
       }
+
+      // A note to a team member is internal mail, sent as asked.
+      const result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
       if (!result.success) return { error: result.error };
       // "Accepted", not "delivered": the provider taking the email is all
       // this call knows. Bounces and spam rejections happen afterwards.
@@ -2184,6 +2241,8 @@ export interface Artifact {
    * second click.
    */
   publish?: PublishAction;
+  /** An email about to be sent: exactly what the recipient will see (HTML for the visual email, else the text). */
+  emailPreview?: { to: string; subject: string; html: string | null; text: string };
   draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string }; // a single piece of generated long-form content — caption, email, script, blog post. id/raw/patchUrl present only when the row was actually saved — lets the chat card edit and PATCH it in place instead of only linking to the department page
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] }; // a headline number worth a glance, e.g. revenue forecast, campaign totals
   variants?: { label: string; heading?: string; body?: string; cta?: string }[]; // side-by-side ad copy variants
@@ -2617,6 +2676,19 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
     case "send_email":
+      if (result?.proposed) {
+        return {
+          kind: "record",
+          label: "Email ready to send",
+          fields: [
+            { label: "To", value: result.to },
+            { label: "Subject", value: result.subject },
+          ],
+          emailPreview: { to: result.to, subject: result.subject, html: result._emailPreview?.html ?? null, text: result._emailPreview?.text ?? "" },
+          publish: emailSendAction({ to: result.to, businessName: result.businessName ?? "your business", payload: result.payload }),
+          departmentHref,
+        };
+      }
       return { kind: "record", label: "Email sent", summary: result.note, departmentHref };
     case "create_workflow":
       return { kind: "record", label: "Automation workflow created", fields: [{ label: "Status", value: result.enabled ? "Enabled" : "Created, not enabled yet" }], departmentHref };
@@ -3305,7 +3377,9 @@ A junior marketer takes a request literally and produces the thing asked for. A 
         }
       }
       if (artifact) artifacts.push(artifact);
-      toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result).slice(0, 4000) });
+      // _emailPreview is the rendered email for the card — kilobytes of
+      // HTML the model neither needs nor should have cut off mid-string.
+      toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result, (k, v) => (k === "_emailPreview" ? undefined : v)).slice(0, 4000) });
     }
     messages.push({ role: "user", content: toolResults });
   }

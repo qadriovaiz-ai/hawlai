@@ -18,7 +18,7 @@
 // first, in words that say exactly what is about to happen.
 
 export type PublishAction = {
-  target: "website" | "social_post";
+  target: "website" | "social_post" | "email";
   /** The button. */
   label: string;
   /** Shown after the button is pressed, before anything happens. */
@@ -32,6 +32,26 @@ export type PublishAction = {
   /** How to throw the draft away, when there's a saved row to throw away. */
   discard?: { endpoint: string; method: "DELETE"; payload: Record<string, unknown>; done: string };
 };
+
+/**
+ * Sending a marketing email chat wrote to a lead or customer.
+ *
+ * Chat shows the email exactly as it will arrive and sends nothing until
+ * the owner confirms. The endpoint is the same one a lead's page sends
+ * from, and it runs every rule again at send time — on record, not
+ * unsubscribed, business address present — so a confirm can't bypass them.
+ */
+export function emailSendAction(opts: { to: string; businessName: string; payload: Record<string, unknown> }): PublishAction {
+  return {
+    target: "email",
+    label: "Send email",
+    confirm: `This sends the email to ${opts.to} now, from ${opts.businessName}, with your business address and an unsubscribe link in the footer. It can't be unsent.`,
+    endpoint: "/api/email/send",
+    method: "POST",
+    payload: { to: opts.to, ...opts.payload },
+    done: `✅ Sent to ${opts.to} — accepted for delivery, not yet confirmed in their inbox`,
+  };
+}
 
 /** Content types that are a post someone publishes, not a document they keep. */
 export const SOCIAL_POST_TYPES = new Set(["instagram_post", "facebook_post", "threads_post"]);

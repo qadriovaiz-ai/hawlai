@@ -33,6 +33,8 @@ interface Artifact {
   approval?: { id: string; publishActionId?: string };
   /** Set when this can be pushed live from the chat (src/lib/chat/publishActions.ts). */
   publish?: PublishAction;
+  /** An email about to be sent, exactly as the recipient will see it. */
+  emailPreview?: { to: string; subject: string; html: string | null; text: string };
   type?: "image" | "website" | "3d_scene" | "canvas_design";
   /**
    * A picture to render INSIDE the card.
@@ -433,7 +435,7 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
     // Nothing saved to throw away — rejecting just leaves it unpublished.
     if (!spec) {
       setState("rejected");
-      setNote("\u274c Rejected \u2014 nothing was published.");
+      setNote(publish.target === "email" ? "\u274c Not sent." : "\u274c Rejected \u2014 nothing was published.");
       return;
     }
     setState("working");
@@ -447,7 +449,7 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setState("error");
-        setNote(data?.error ?? "That did not go through \u2014 nothing was published.");
+        setNote(data?.error ?? (publish.target === "email" ? "That did not go through \u2014 the email was not sent." : "That did not go through \u2014 nothing was published."));
         return;
       }
       setState(action === "publish" ? "done" : "rejected");
@@ -457,7 +459,7 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       setNote(igError ? `${spec.done.replace(" and Instagram", "")} \u2014 Instagram skipped: ${igError}` : spec.done);
     } catch {
       setState("error");
-      setNote("Couldn't reach the server \u2014 nothing was published.");
+      setNote(publish.target === "email" ? "Couldn't reach the server \u2014 the email was not sent." : "Couldn't reach the server \u2014 nothing was published.");
     }
   }
 
@@ -479,7 +481,7 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
               onClick={() => run("publish")}
               className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
             >
-              {publish.target === "website" ? "Yes, publish the site" : "Yes, post it now"}
+              {publish.target === "website" ? "Yes, publish the site" : publish.target === "email" ? "Yes, send it now" : "Yes, post it now"}
             </button>
             <button
               onClick={() => setState("idle")}
@@ -497,7 +499,7 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
               disabled={state === "working"}
               className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
             >
-              {state === "working" ? "Publishing..." : publish.label}
+              {state === "working" ? (publish.target === "email" ? "Sending..." : "Publishing...") : publish.label}
             </button>
             {!artifact.draft?.patchUrl &&
               (artifact.departmentHref ? (
@@ -772,6 +774,29 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
   //
   // Same shape as the rest of this run: correct where written, carried
   // unexamined onto a card that needs more.
+  // An email about to go to a customer: shown exactly as it will arrive,
+  // before the Send button. The HTML renders in a sandboxed frame — no
+  // scripts, and its links can't navigate this page.
+  if (artifact.emailPreview) {
+    const preview = artifact.emailPreview;
+    return (
+      <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white overflow-hidden">
+        <div className="px-3 py-2 border-b border-slate-100">
+          <p className="text-[11px] font-semibold text-slate-800">{artifact.label}</p>
+          <p className="text-[11px] text-slate-500 truncate">To: {preview.to}</p>
+          <p className="text-[11px] text-slate-500 truncate">Subject: {preview.subject}</p>
+        </div>
+        {preview.html ? (
+          <iframe title={`Preview of the email to ${preview.to}`} sandbox="" srcDoc={preview.html} className="w-full h-[480px] border-0 bg-slate-100" />
+        ) : (
+          <pre className="px-3 py-2 text-[11.5px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed max-h-[360px] overflow-y-auto">{preview.text}</pre>
+        )}
+        {complianceWarning}
+        {publishStrip}
+      </div>
+    );
+  }
+
   if (isSimpleConfirmation(artifact)) {
     return (
       <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">

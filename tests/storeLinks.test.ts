@@ -131,15 +131,12 @@ describe("send_email, through the real chat tool", () => {
     expect(result.error).toContain(STORE_URL);
   });
 
-  it("sends an email with the real product link, and reports it as accepted — not delivered", async () => {
+  it("an email with the real product link isn't refused — it's shown to the owner to confirm, with that link intact", async () => {
     const body = `Light up your home with our Lavender candle.\n\nShop now: ${PRODUCT_URL}`;
     const result = await executeTool(db(), CTX, "send_email", { recipient: "customer@example.com", subject: "Diwali", body }, "");
-    // A lead on record gets marketing email: the words as written, plus the address and unsubscribe footer.
-    const [, , to, subject, text, opts] = sendDealerEmail.mock.calls[0] as any[];
-    expect([to, subject]).toEqual(["customer@example.com", "Diwali"]);
-    expect(text.startsWith(`${body}\n\n—\nCandle by Qaaf · 12 Hazratganj, Lucknow\nUnsubscribe: https://hawlai.online/unsubscribe/`)).toBe(true);
-    expect(opts.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
-    expect(result.success).toBe(true);
-    expect(result.note).toBe("Accepted for delivery to customer@example.com (via resend) — not yet confirmed as arrived in their inbox.");
+    expect(result.error).toBeUndefined();
+    expect(result.proposed).toBe(true);
+    expect(result._emailPreview.text.startsWith(`${body}\n\n—\nCandle by Qaaf · 12 Hazratganj, Lucknow`)).toBe(true);
+    expect(sendDealerEmail).not.toHaveBeenCalled();
   });
 });
