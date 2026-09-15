@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 // — shown even before any run exists yet, so a newly-deployed
 // dealership sees "not run yet" rather than the row silently missing.
 const SUBSYSTEM_LABELS: Record<string, string> = {
+  daily_run: "Today's Automation Run",
   daily_autopilot: "Auto-pause & Variant Drafts",
   budget_alerts: "Budget Alerts",
   email_automation: "Welcome & Follow-up Emails",
@@ -281,7 +282,7 @@ export default function AutopilotCommandCenter() {
                   <span
                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                       !health ? "bg-slate-300"
-                      : health.kind === "sends" || health.kind === "export" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
+                      : health.kind === "sends" || health.kind === "export" || health.kind === "daily" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", running: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
                       : health.lastSuccess ? "bg-green-500" : "bg-red-500"
                     }`}
                   />
@@ -297,6 +298,23 @@ export default function AutopilotCommandCenter() {
                     {health.lastError && !health.lastSuccess && (
                       <span className="block text-[11px] text-red-400 max-w-[22rem] truncate" title={health.lastError}>{health.lastError}</span>
                     )}
+                  </span>
+                ) : health && health.kind === "daily" ? (
+                  // Whether every automation got its turn today — the daily
+                  // run works through a job list across several invocations.
+                  <span className={`text-right ${health.state === "failing" ? "text-red-400" : "text-slate-400"}`}>
+                    {health.state === "idle"
+                      ? "Not started yet today — runs from 8:30 AM IST"
+                      : health.state === "ok"
+                        ? `All ${health.total} jobs done today`
+                        : health.state === "running"
+                          ? `${health.done} of ${health.total} jobs done — still running`
+                          : `${health.done} of ${health.total} done · ${health.failed.length} failed`}
+                    {health.failed?.slice(0, 3).map((f: any, i: number) => (
+                      <span key={i} className="block text-[11px] text-red-400 max-w-[22rem] truncate" title={f.error ?? ""}>
+                        {SUBSYSTEM_LABELS[f.subsystem] ?? f.subsystem}: {f.error ?? "failed"}
+                      </span>
+                    ))}
                   </span>
                 ) : health && health.kind === "export" ? (
                   <span className={`text-right ${health.state === "failing" ? "text-red-400" : "text-slate-400"}`}>{health.note}</span>

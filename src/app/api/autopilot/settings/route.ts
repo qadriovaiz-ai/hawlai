@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { buildSendHealth } from "@/lib/automation/sendHealth";
 import { buildExportHealth, EXPORT_FREQUENCIES } from "@/lib/leads/scheduledExport";
 import { exportRole, NOT_ALLOWED } from "@/lib/leads/exportLeads";
+import { buildDailyRunHealth } from "@/lib/automation/dailyJobs";
+import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -181,6 +183,14 @@ export async function GET() {
       successRatePct: Math.round((successCount / rows.length) * 100),
     });
   }
+
+  // Today's job list for this business: did every automation get its turn?
+  const { data: todaysJobs } = await supabase
+    .from("daily_jobs")
+    .select("subsystem, status, error, started_at, finished_at")
+    .eq("dealership_id", dealershipId)
+    .eq("run_date", indiaToday());
+  automationHealth.unshift(buildDailyRunHealth(todaysJobs ?? []));
 
   const canExport = Boolean(await exportRole(dealershipId, user.id).catch(() => null));
   return NextResponse.json({ dealership, workflows: workflows ?? [], activity, automationHealth, canExport });

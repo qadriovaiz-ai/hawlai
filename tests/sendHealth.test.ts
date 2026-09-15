@@ -164,6 +164,23 @@ describe("the workflows row", () => {
   });
 });
 
+describe("today's automation run row", () => {
+  it("comes first on the card and shows this business's jobs for today", async () => {
+    const { indiaToday } = await import("@/lib/expertise/seasonalCalendar");
+    tables.daily_jobs = [
+      { dealership_id: "d1", run_date: indiaToday(), subsystem: "email_automation", status: "done", error: null, started_at: recent(1), finished_at: recent(1) },
+      { dealership_id: "d1", run_date: indiaToday(), subsystem: "content_autopilot", status: "failed", error: "Facebook token expired", started_at: recent(1), finished_at: recent(1) },
+      { dealership_id: "d2", run_date: indiaToday(), subsystem: "workflows", status: "failed", error: "someone else's", started_at: recent(1), finished_at: recent(1) },
+      { dealership_id: "d1", run_date: "2020-01-01", subsystem: "workflows", status: "failed", error: "long ago", started_at: recent(1), finished_at: recent(1) },
+    ];
+    const body = await (await getSettings()).json();
+    expect(body.automationHealth[0]).toMatchObject({
+      subsystem: "daily_run", kind: "daily", state: "failing", total: 2, done: 1,
+      failed: [{ subsystem: "content_autopilot", error: "Facebook token expired" }],
+    });
+  });
+});
+
 describe("skip reasons", () => {
   it("are read from the logged run summary, even when it was cut off at 500 characters", () => {
     expect(skipReason(JSON.stringify({ stepsSent: 0, skipped: "gmail not connected" }))).toBe("gmail not connected");

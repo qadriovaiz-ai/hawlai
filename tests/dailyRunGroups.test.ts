@@ -105,15 +105,13 @@ describe("partial-run detection", () => {
     expect(Number(match![1])).toBeLessThanOrEqual(60);
   });
 
-  it("counts completed work against a declared expectation", () => {
-    expect(source).toContain("const expected =");
-    expect(source).toContain("completed < expected");
-  });
-
-  it("returns a NON-2XX when a run is incomplete", () => {
-    // The mechanism that makes a partial run visible: Vercel records
-    // a failed cron invocation. A 200 with a failure count in the body
-    // is the silence R7 exists to remove.
-    expect(source).toMatch(/status:\s*500/);
+  it("a partial run is visible as unfinished or failed jobs, not a 500 in the cron log", () => {
+    // Since 2026-09-15 the work runs from today's job list (lib/automation/
+    // dailyJobs.ts) across hand-over invocations; the route answers 202 at
+    // once. Unfinished and failed jobs are tested in tests/dailyJobs.test.ts
+    // and shown on the Automation Health card.
+    expect(source).toContain("after(async () => {");
+    expect(source).toContain("runDailyInvocation(service, {");
+    expect(source).toMatch(/status: 202/);
   });
 });

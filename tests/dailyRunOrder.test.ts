@@ -78,16 +78,11 @@ describe("the run order", () => {
     expect(GROUPS.signals[0]).toBe("lead_export");
   });
 
-  it("every subsystem has a runner, and the route takes its order from the group, not its own list", () => {
+  it("every subsystem has a runner, and the route takes its order from the job list, not its own list", () => {
     const runners = readFileSync(join(__dirname, "../src/lib/automation/dailyRunners.ts"), "utf-8");
     for (const key of ALL) expect(runners).toContain("  " + key + ": (s, ");
     const route = readFileSync(join(__dirname, "../src/app/api/autopilot/daily-run/route.ts"), "utf-8");
-    expect(route).toContain("const results = await runSubsystemsInOrder({");
+    expect(route).toContain("runners: DAILY_RUNNERS,");
     expect(route).not.toMatch(/if \(only\("/);
-  });
-
-  it("the signals run registers the Resend webhook before any per-business work", () => {
-    const route = readFileSync(join(__dirname, "../src/app/api/autopilot/daily-run/route.ts"), "utf-8");
-    expect(route.indexOf("resendWebhook = await ensureResendWebhook();")).toBeLessThan(route.indexOf("const results = await runSubsystemsInOrder({"));
   });
 });

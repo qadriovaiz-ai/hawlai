@@ -250,10 +250,11 @@ describe("the webhook registers itself", () => {
     expect(await ensureResendWebhook()).toEqual({ error: "couldn't read Resend webhooks: This API key is restricted to sending" });
   });
 
-  it("runs with the daily signals cron and a failure marks the run", async () => {
+  it("runs once a day with the signals run, before any business's jobs", async () => {
     const { readFileSync } = await import("node:fs");
     const route = readFileSync(`${__dirname}/../src/app/api/autopilot/daily-run/route.ts`, "utf-8");
-    expect(route).toContain("resendWebhook = await ensureResendWebhook();");
-    expect(route).toContain('failures.push({ dealershipId: "-", subsystem: "resend_webhook", error: resendWebhook.error });');
+    // platformTasks run before today's job list is worked (tests/dailyJobs.test.ts).
+    expect(route).toContain("const resendWebhook = await ensureResendWebhook();");
+    expect(route).toContain('if ("error" in resendWebhook) console.error("[autopilot] resend webhook:", resendWebhook.error);');
   });
 });

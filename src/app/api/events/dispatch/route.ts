@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { EVENT_HANDLERS } from "@/lib/events/eventHandlers";
 import { TASK_EXECUTORS } from "@/lib/tasks/taskExecutors";
 import { emitEvent } from "@/lib/events/emitEvent";
+import { dailyRunStalled } from "@/lib/automation/dailyJobs";
+import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 
 // Triggered by pg_cron every 2 minutes (see migration 129's commented
 // manual setup) via pg_net, which sends the same
@@ -117,7 +119,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Safety net for the daily job list: if a run's hand-over was lost (jobs
+  // waiting and nothing has moved for a few minutes), start it again. Only
+  // matters where this 2-minute schedule is set up in Supabase.
+  const dailyRunNudged: string[] = [];
+  for (const group of ["signals", "heavy"] as const) {
+    try {
+      if (await dailyRunStalled(supabase, group, indiaToday())) {
+        const next = new URL("/api/autopilot/daily-run", new URL(request.url).origin);
+        next.searchParams.set("group", group);
+        next.searchParams.set("continue", "1");
+        await fetch(next, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}, signal: AbortSignal.timeout(10_000) });
+        dailyRunNudged.push(group);
+      }
+    } catch (err: any) {
+      console.error("[event-dispatch] couldn't nudge the daily run:", err.message);
+    }
+  }
+
   return NextResponse.json({
+    dailyRunNudged,
     events: { processed: pendingEvents?.length ?? 0, done: eventsDone, failed: eventsFailed },
     tasks: { processed: pendingTasks?.length ?? 0, done: tasksDone, failed: tasksFailed, skipped: tasksSkipped },
   });
