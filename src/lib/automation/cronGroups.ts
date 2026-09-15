@@ -13,9 +13,15 @@
 // That is how Social Media Auto-Posting could show "100% success" while
 // one post reached Facebook in 28 days: it ran AFTER daily_autopilot,
 // which spends much of the budget on LLM calls for every business.
-// It now runs first — it is the one heavy subsystem whose output is
-// public, and the one where silently not running is most visible to the
-// business's own customers.
+//
+// THE ORDER BELOW IS THE ORDER THINGS RUN — but only since 2026-09-15.
+// Before that the route called subsystems in its own hard-coded order,
+// per business, starting with daily_autopilot, so this list decided WHICH
+// subsystems ran and not WHEN. candle_by_qaaf's welcome emails went five
+// days without running because four businesses' AI work came first.
+// Now each subsystem runs for every business before the next starts
+// (lib/automation/dailyRun.ts): sends that reach customers first, the
+// AI-heavy work last.
 
 export type SubsystemKey =
   | "daily_autopilot" | "content_autopilot" | "report_snapshots"
@@ -27,12 +33,18 @@ export type SubsystemKey =
 export const GROUPS: Record<string, SubsystemKey[]> = {
   // Database-only and fast, and what surfaces work waiting on a human —
   // so it runs FIRST and never queues behind LLM calls.
-  signals: ["budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "stale_approvals", "lead_export"],
-  // Everything slow: LLM-backed work plus third-party APIs.
+  // The export email first: it's the one that reaches a person.
+  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring"],
+  // Everything slow: LLM-backed work plus third-party APIs. Emails and
+  // workflow steps (a lead is waiting) and auto-posting (customers see it)
+  // before monitoring and reports; daily_autopilot's per-campaign AI work
+  // last, because it is what used up the budget.
   heavy: [
+    "email_automation", "workflows",
     "content_autopilot",
-    "daily_autopilot", "report_snapshots",
-    "email_automation", "workflows", "competitor_alerts", "topic_alerts", "google_reviews",
+    "google_reviews", "competitor_alerts", "topic_alerts",
+    "report_snapshots",
+    "daily_autopilot",
   ],
 };
 

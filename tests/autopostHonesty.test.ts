@@ -197,8 +197,13 @@ describe("the health panel judges auto-posting by what was posted", () => {
 });
 
 describe("auto-posting runs before the slow work that can exhaust the time limit", () => {
-  it("is the first thing the heavy invocation does", () => {
-    expect(GROUPS.heavy[0]).toBe("content_autopilot");
+  it("runs before every slow AI and third-party subsystem — only the email sends go first", () => {
+    // Since 2026-09-15 the group order IS the run order (lib/automation/dailyRun.ts).
+    // Emails and workflow steps moved ahead of it: a lead waiting on a
+    // welcome email went five days without one when AI work came first.
+    const at = (k: string) => GROUPS.heavy.indexOf(k as any);
+    expect(GROUPS.heavy.slice(0, 3)).toEqual(["email_automation", "workflows", "content_autopilot"]);
+    for (const slow of ["daily_autopilot", "report_snapshots", "competitor_alerts", "topic_alerts", "google_reviews"]) expect(at("content_autopilot")).toBeLessThan(at(slow));
   });
 
   it("every subsystem still runs, exactly once", () => {

@@ -1,23 +1,10 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { runDailyAutopilot } from "@/lib/agents/autopilotAgent";
-import { runEmailAutomation } from "@/lib/automation/emailAutomation";
-import { runWorkflows } from "@/lib/automation/workflowEngine";
-import { checkCompetitorAlerts } from "@/lib/automation/competitorMonitor";
-import { checkTopicAlerts } from "@/lib/automation/topicMonitor";
-import { runReportSnapshots } from "@/lib/automation/reportSnapshot";
-import { runContentAutopilot } from "@/lib/automation/contentAutopilot";
-import { fetchGoogleReviewsSnapshot } from "@/lib/agents/reputationAgent";
-import { runSeasonalCalendar } from "@/lib/agents/seasonalityAgent";
-import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
-import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
-import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
-import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
-import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runAndLog } from "@/lib/automation/runAndLog";
 import { checkPlatformDailySpend } from "@/lib/agents/platformSpendAlertAgent";
 import { ensureResendWebhook } from "@/lib/email/resendWebhook";
-import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
+import { DAILY_RUNNERS } from "@/lib/automation/dailyRunners";
+import { runSubsystemsInOrder } from "@/lib/automation/dailyRun";
 import { GROUPS, ALL, type SubsystemKey } from "@/lib/automation/cronGroups";
 
 // Triggered by Vercel Cron once a day (see vercel.json). Vercel sends
@@ -116,43 +103,10 @@ export async function GET(request: Request) {
     return result;
   }
 
-  const results: Record<string, any> = {};
-  for (const dealership of dealerships ?? []) {
-    const id = dealership.id;
-    const category = dealership.business_category ?? "business";
-    results[id] = {};
-    const only = (key: SubsystemKey) => subsystems.includes(key);
-
-    if (only("daily_autopilot")) results[id].dailyAutopilot = await run(id, "daily_autopilot", () => runDailyAutopilot(supabase, id));
-    // Budget alerts read the snapshot daily_autopilot writes, so when
-    // both are in the same group this ordering matters. They are in
-    // DIFFERENT groups now (heavy vs signals), which means signals may
-    // read yesterday's snapshot if heavy has not run yet today —
-    // acceptable for an alert, and called out so it is not a surprise.
-    if (only("budget_alerts")) results[id].budgetAlerts = await run(id, "budget_alerts", () => checkCampaignBudgets(supabase, id));
-    if (only("email_automation")) results[id].emailAutomation = await run(id, "email_automation", () => runEmailAutomation(supabase, id));
-    if (only("workflows")) results[id].workflows = await run(id, "workflows", () => runWorkflows(supabase, id));
-    if (only("competitor_alerts")) results[id].competitorAlerts = await run(id, "competitor_alerts", () => checkCompetitorAlerts(supabase, id));
-    if (only("topic_alerts")) results[id].topicAlerts = await run(id, "topic_alerts", () => checkTopicAlerts(supabase, id));
-    if (only("report_snapshots")) results[id].reportSnapshots = await run(id, "report_snapshots", () => runReportSnapshots(supabase, id, category));
-    if (only("content_autopilot")) results[id].contentAutopilot = await run(id, "content_autopilot", () => runContentAutopilot(supabase, id));
-    if (only("google_reviews")) results[id].googleReviews = await run(id, "google_reviews", () => fetchGoogleReviewsSnapshot(supabase, id));
-    // One run, one log row: planning entries (only when the business has
-    // Seasonal Campaigns on) plus the out-of-season warning, which runs
-    // for every business because it changes nothing.
-    if (only("seasonal_calendar")) results[id].seasonalCalendar = await run(id, "seasonal_calendar", () => runSeasonalCalendar(supabase, id));
-    if (only("churn_detection")) results[id].atRiskNotifications = await run(id, "churn_detection", () => notifyAtRiskCustomers(supabase, id));
-    if (only("cold_lead_detection")) results[id].coldLeadNotifications = await run(id, "cold_lead_detection", () => notifyColdLeads(supabase, id));
-    if (only("lead_scoring")) results[id].leadScores = await run(id, "lead_scoring", () => scoreActiveLeads(supabase, id));
-    if (only("stale_approvals")) results[id].staleApprovals = await run(id, "stale_approvals", () => checkStalePendingApprovals(supabase, id));
-    if (only("lead_export")) results[id].leadExport = await run(id, "lead_export", () => runScheduledLeadExport(supabase, id));
-  }
-
-  // Platform-wide, so deliberately OUTSIDE the per-dealership loop —
-  // it sums across every business at once rather than checking each in
-  // isolation (see platformSpendAlertAgent.ts). Runs with the fast
-  // group, and is not counted in `expected` because it is one call for
-  // the whole platform rather than one per dealership.
+  // Platform-wide, so outside the per-business work, and FIRST in the
+  // signals run: registering the Resend webhook has to happen before the
+  // morning's emails go out, and neither may be skipped by a run that ends
+  // early. Not counted in `expected` — one call for the whole platform.
   let platformSpend: any = null;
   let resendWebhook: any = null;
   if (!groupParam || groupParam === "signals") {
@@ -168,6 +122,15 @@ export async function GET(request: Request) {
       failures.push({ dealershipId: "-", subsystem: "platform_spend", error: err.message });
     }
   }
+
+  // Each subsystem across every business, then the next, in the group's
+  // order (lib/automation/dailyRun.ts) — so a run that runs out of time
+  // has already done the sends, for every business, before the AI work.
+  const results = await runSubsystemsInOrder({
+    dealerships: dealerships ?? [],
+    subsystems,
+    execute: (subsystem, d) => run(d.id, subsystem, () => DAILY_RUNNERS[subsystem](supabase, d.id, d.business_category ?? "business")),
+  });
 
   const partial = completed < expected || failures.length > 0;
   const summary = {

@@ -306,9 +306,11 @@ describe("from chat", () => {
 });
 
 describe("wired into the daily run", () => {
-  it("the signals run calls it for every business", async () => {
+  it("the signals run calls it for every business, before the other signals", async () => {
     const { readFileSync } = await import("node:fs");
-    const route = readFileSync(`${__dirname}/../src/app/api/autopilot/daily-run/route.ts`, "utf-8");
-    expect(route).toContain('if (only("lead_export")) results[id].leadExport = await run(id, "lead_export", () => runScheduledLeadExport(supabase, id));');
+    const runners = readFileSync(`${__dirname}/../src/lib/automation/dailyRunners.ts`, "utf-8");
+    expect(runners).toContain("lead_export: (s, id) => runScheduledLeadExport(s, id),");
+    const { GROUPS } = await import("@/lib/automation/cronGroups");
+    expect(GROUPS.signals[0]).toBe("lead_export");
   });
 });

@@ -147,8 +147,8 @@ describe("the daily run", () => {
 
 describe("wired into the cron", () => {
   it("the daily run calls it for the seasonal_calendar subsystem, as one logged run", () => {
-    const route = readFileSync(join(__dirname, "../src/app/api/autopilot/daily-run/route.ts"), "utf-8");
-    expect(route).toMatch(/only\("seasonal_calendar"\)\) results\[id\]\.seasonalCalendar = await run\(id, "seasonal_calendar", \(\) => runSeasonalCalendar\(supabase, id\)\)/);
-    expect(route.match(/"seasonal_calendar"/g)).toHaveLength(2);
+    const runners = readFileSync(join(__dirname, "../src/lib/automation/dailyRunners.ts"), "utf-8");
+    expect(runners).toContain("seasonal_calendar: (s, id) => runSeasonalCalendar(s, id),");
+    expect(runners.match(/runSeasonalCalendar\(/g)).toHaveLength(1);
   });
 });
