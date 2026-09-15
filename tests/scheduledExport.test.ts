@@ -261,6 +261,17 @@ describe("the health row", () => {
     expect(await row()).toMatchObject({ state: "failing", note: "The last export failed: Resend is down" });
   });
 
+  it("THE LIVE CASE: switched to weekly after the daily run had logged skipped exports — the row shows the schedule, not '100% success'", async () => {
+    vi.setSystemTime(new Date("2026-09-16T06:00:00Z"));
+    tables.automation_run_log = [
+      { dealership_id: "d1", subsystem: "lead_export", success: true, detail: JSON.stringify({ skipped: "export off" }), created_at: "2026-09-16T03:00:10Z" },
+    ];
+    tables.dealerships[0].lead_export_last_sent_at = null;
+    const rows = (await (await getSettings()).json()).automationHealth.filter((h: any) => h.subsystem === "lead_export");
+    expect(rows).toEqual([expect.objectContaining({ kind: "export", state: "idle", note: "On (weekly) — first export Mon, 21 Sept" })]);
+    expect(rows[0].successRatePct).toBeUndefined();
+  });
+
   it("switched on but not sent yet: when the first one comes", () => {
     expect(buildExportHealth({ frequency: "weekly", latest: null, lastRun: null, today: "2026-09-16" })).toMatchObject({ state: "idle", note: "On (weekly) — first export Mon, 21 Sept" });
   });

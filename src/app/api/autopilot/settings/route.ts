@@ -107,9 +107,14 @@ export async function GET() {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  automationHealth.push(
-    buildExportHealth({ frequency: (dealership?.lead_export_frequency ?? "off") as any, latest: latestExport ?? null, lastRun: lastRunOf("lead_export") })
-  );
+  // REPLACES the run-log row, never adds beside it: the card shows the
+  // first row per subsystem, and the daily run logs every skipped export
+  // ("off", "not due") as a successful run — which is how this row read
+  // "100% success (7d)" after the schedule was switched on.
+  const exportHealth = buildExportHealth({ frequency: (dealership?.lead_export_frequency ?? "off") as any, latest: latestExport ?? null, lastRun: lastRunOf("lead_export") });
+  const exportIdx = automationHealth.findIndex((h) => h.subsystem === "lead_export");
+  if (exportIdx >= 0) automationHealth[exportIdx] = exportHealth;
+  else automationHealth.push(exportHealth);
   for (const row of [
     buildSendHealth({
       subsystem: "email_automation",
