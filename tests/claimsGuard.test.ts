@@ -371,3 +371,64 @@ describe("email automation — sent to real leads with nobody reading first", ()
     expect((sendDealerEmail.mock.calls[0] as any[])[3]).toBe("Welcome, Asha");
   });
 });
+
+// The two modes, told apart (industry-agnostic overhaul Phase 2, approved
+// 2026-09-17). Only a PRICE is lenient in a draft the owner reads; every
+// other unverifiable claim is removed in both modes. Nothing lenient ever
+// reaches a path that publishes with nobody reading first.
+//
+// Tested here rather than through chat because the AI refuses to write the
+// fabricated line in the first place — the guard never sees it. These feed
+// the line in directly, as an injected/hand-edited draft would.
+describe("draft vs auto-published", () => {
+  const FABRICATED = "500+ people have already tried this workshop.";
+  const CLEAN = "Candle Making Workshop — an evening of slow, warm making.";
+  const UNVERIFIED_PRICE = "Candle Making Workshop, just ₹1,999.";
+
+  it("a draft: the fabricated count is still removed, and the owner is told", async () => {
+    anthropic([{ text: `${CLEAN} ${FABRICATED}` }]);
+    const f = await gatherBusinessFacts(db(), "d1");
+    const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, f, "draft");
+    expect(r.output.text).toBe(CLEAN);
+    expect(r.claimsRemoved?.join(" ")).toMatch(/500\+ people/);
+    expect(r.output._claimsNote).toMatch(/Hawlai removed/);
+    expect(r.priceWarnings).toEqual([]);
+  });
+
+  it("a draft: an unverified PRICE is kept, flagged, and never silently removed", async () => {
+    anthropic([{ text: `${CLEAN} ${UNVERIFIED_PRICE}` }]);
+    const f = await gatherBusinessFacts(db(), "d1");
+    const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, f, "draft");
+    expect(r.output.text).toContain("₹1,999");
+    expect(r.claimsRemoved).toEqual([]);
+    expect(r.priceWarnings).toEqual([expect.stringContaining("₹1,999")]);
+    expect(r.output._claimsNote).toMatch(/Check this price before you use this/);
+  });
+
+  it("auto-published: the same price is removed, so Autopilot posts nothing and records why", async () => {
+    anthropic([{ text: `${CLEAN} ${UNVERIFIED_PRICE}` }]);
+    const r = await runContentAutopilot(db(), "d1");
+    expect(postPhotoToPage).not.toHaveBeenCalled();
+    expect(r.posted).toBe(false);
+    const log = writes.find((w) => w.table === "content_autopilot_log")!.values;
+    expect(log.success).toBe(false);
+    expect(log.error).toMatch(/₹1,999/);
+    expect(log.error).toMatch(/nothing was posted/);
+  });
+
+  it("auto-published: a clean caption still goes out", async () => {
+    anthropic([{ text: CLEAN }]);
+    const r = await runContentAutopilot(db(), "d1");
+    expect(r.posted).toBe(true);
+    expect((postPhotoToPage.mock.calls[0] as any[])[3]).toContain("Candle Making Workshop");
+  });
+
+  it("auto-published email: an unverified price stops the send, and the lead stays unwelcomed", async () => {
+    tables.leads = [{ id: "L1", name: "Asha", email: "asha@example.com" }];
+    anthropic([{ subject: "Our workshop", previewText: "", body: `Hi Asha! ${UNVERIFIED_PRICE}` }]);
+    const r = await runEmailAutomation(db(), "d1");
+    expect(sendDealerEmail).not.toHaveBeenCalled();
+    expect(r.welcomesSent).toBe(0);
+    expect(writes.some((w) => w.table === "leads" && "welcome_email_sent_at" in w.values)).toBe(false);
+  });
+});
