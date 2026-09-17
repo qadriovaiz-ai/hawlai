@@ -114,7 +114,8 @@ async function getContext(supabase: any, dealershipId: string): Promise<Dealersh
 
 // ---- Tool definitions (Claude tool-use schema) ----
 
-const TOOLS = [
+// Exported so tests can check what the chat AI is actually offered.
+export const TOOLS = [
   {
     name: "generate_brand_kit",
     description: "Generate the business's brand identity kit: colors, typography, tagline, mission, vision, brand story, social bios, guidelines. Use when the person wants to build/establish their brand identity from scratch or refresh it. Saved to the 'Brand Voice' page. Note: this does NOT create an actual logo image — it's text/color guidance only. If the person's request implies they want a visual logo too (e.g. \"build my brand kit\", \"design a logo\"), also call generate_logo.",
@@ -616,15 +617,18 @@ const TOOLS = [
   },
   {
     name: "add_product",
-    description: "Add a real product to the business's store (Website Builder's Products tab / live storefront). Use when the person describes an actual product they sell and wants it listed, e.g. \"add a Mogra Nights candle at 599 rupees\". This is not a mockup or suggestion — it's saved and will genuinely appear for sale on their live site once published.",
+    description: "Add a real product OR SERVICE to the business's catalogue (Website Builder's Products tab / live storefront). Any business can list both — a candle shop can run a workshop, a salon can sell products. Use kind \"product\" for something customers buy (\"add a Mogra Nights candle at 599 rupees\") and kind \"service\" for something customers book — a session, class, workshop, consultation or appointment (\"add a candle-making workshop, ₹800, 90 minutes\"). Never refuse a service or add it as a product instead. This is not a mockup or suggestion — it's saved and will genuinely appear on their live site once published.",
     input_schema: {
       type: "object",
       properties: {
+        kind: { type: "string", enum: ["product", "service"], description: "product = bought (and maybe shipped); service = booked. Defaults to product." },
         name: { type: "string" },
         description: { type: "string" },
         price: { type: "number" },
         category: { type: "string" },
-        inventoryCount: { type: "number", description: "Stock count, if the person mentions one. Omit for unlimited/untracked stock." },
+        inventoryCount: { type: "number", description: "Products only: stock count, if the person mentions one. Omit for unlimited/untracked stock. Never set for a service." },
+        durationMinutes: { type: "number", description: "Services only: how long it lasts in whole minutes (90 for \"1.5 hours\"), if the person says." },
+        bookingUrl: { type: "string", description: "Services only: a full https:// booking link, ONLY if the person gives one. Never invent one — without it, customers are sent to the business's booking page." },
       },
       required: ["name", "price"],
     },
@@ -2261,16 +2265,42 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       };
     }
     case "add_product": {
+      // Products and services share the catalogue (migration 188) — the
+      // same validation as the Products tab's own API.
+      const { serviceFieldsFromBody, formatDuration } = await import("../catalog/catalogItem");
+      const kind = input.kind === "service" ? "service" : "product";
+      const fields = serviceFieldsFromBody({ kind, durationMinutes: input.durationMinutes, bookingUrl: input.bookingUrl });
+      if (!fields.ok) return { error: fields.error };
       const { data, error } = await supabase.from("products").insert({
         dealership_id: ctx.id,
         name: input.name,
         description: input.description ?? null,
         price: input.price,
         category: input.category ?? null,
-        inventory_count: input.inventoryCount ?? null,
+        inventory_count: kind === "service" ? null : input.inventoryCount ?? null,
+        ...fields.update,
       }).select("id").single();
       if (error) return { error: error.message };
-      return { success: true, productId: data.id, note: `"${input.name}" added to the Products tab — saved with no image yet, the person can add one there.` };
+      if (kind === "product") {
+        return { success: true, kind, productId: data.id, note: `"${input.name}" added to the Products tab — saved with no image yet, the person can add one there.` };
+      }
+      const { data: dealership } = await supabase.from("dealerships").select("booking_slug, business_models").eq("id", ctx.id).maybeSingle();
+      const duration = formatDuration(fields.update.duration_minutes as number | null);
+      const booking = fields.update.booking_url
+        ? "Customers who tap Book go to the booking link given."
+        : dealership?.booking_slug
+          ? "Customers who tap Book go to the business's booking page."
+          : "There's no booking link or booking page yet, so the store shows \"Contact us to book\" — the person can add a link in Website Builder → Products or turn on a booking page in Appointments.";
+      const models: string[] = Array.isArray(dealership?.business_models) ? dealership.business_models : [];
+      const modelHint = models.length && !models.includes("services")
+        ? " Settings → Brand says this business sells " + models.join(", ") + " — suggest they tick Services there too, so leads and copy fit."
+        : "";
+      return {
+        success: true,
+        kind,
+        productId: data.id,
+        note: `Service "${input.name}"${duration ? ` (${duration})` : ""} added to the Products tab — saved with no image yet. ${booking}${modelHint}`,
+      };
     }
     case "create_discount_code": {
       const code = String(input.code).trim().toUpperCase();
@@ -2771,7 +2801,7 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     case "add_lead":
       return { kind: "record", label: "Lead added", departmentHref };
     case "add_product":
-      return { kind: "record", label: "Product added", summary: result.note, departmentHref };
+      return { kind: "record", label: result.kind === "service" ? "Service added" : "Product added", summary: result.note, departmentHref };
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
     case "schedule_lead_export":

@@ -148,7 +148,7 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
 
   // ─── Website Builder ─────────────────────────────────────────────────────
   { id: "build_website", label: "Website Builder", description: "Builds a multi-page website from a description of your business.", department: "Website Builder", kind: "both", route: "/dashboard/website-builder", gateKey: null, capResource: "website_build" },
-  { id: "add_product", label: "Add Product", description: "Add a product with price, description and inventory count.", department: "Website Builder", kind: "both", route: "/dashboard/website-builder", gateKey: null, capResource: null },
+  { id: "add_product", label: "Add Product or Service", description: "Add a product (price, stock) or a service (price, duration, booking link) to the catalogue.", department: "Website Builder", kind: "both", route: "/dashboard/website-builder", gateKey: null, capResource: null },
   { id: "create_discount_code", label: "Discount Codes", description: "Create a live discount code for your storefront.", department: "Website Builder", kind: "both", route: "/dashboard/website-builder", gateKey: null, capResource: null },
 
   // ─── Marketing Strategy ──────────────────────────────────────────────────

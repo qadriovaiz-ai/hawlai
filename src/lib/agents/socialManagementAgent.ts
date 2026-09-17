@@ -6,6 +6,7 @@
 // and viral trend detection (uses Claude's web_search tool so trends
 // are actually current instead of guessed from training data).
 
+import { formatDuration } from "../catalog/catalogItem";
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { modelForTask } from "../aiTaskRouter";
@@ -40,7 +41,7 @@ export async function generateAutoReply(
   dealershipName: string,
   businessCategory: string,
   brandProfile?: BrandProfile | null,
-  productCatalog?: { name: string; price: number; description?: string | null; inventoryCount?: number | null }[],
+  productCatalog?: { name: string; price: number; description?: string | null; inventoryCount?: number | null; kind?: "service"; durationMinutes?: number | null; bookingLink?: string | null }[],
   // P3 20a — sourced from the shared getBusinessContext() assembler;
   // this surface had zero access to real business_knowledge before,
   // useful for questions ("are you open Sundays") the catalog alone
@@ -61,7 +62,7 @@ export async function generateAutoReply(
   // much is this / is this available" DM, without ever inventing a
   // price for something not genuinely in the catalog.
   const catalogContext = productCatalog && productCatalog.length > 0
-    ? `\nReal current product catalog (use this for any question about a specific product — price, availability):\n${productCatalog.map((p) => `- ${p.name}: ₹${p.price}${p.inventoryCount !== undefined && p.inventoryCount !== null ? (p.inventoryCount > 0 ? ` (in stock)` : ` (out of stock)`) : ""}${p.description ? ` — ${p.description.slice(0, 80)}` : ""}`).join("\n")}`
+    ? `\nReal current catalogue (use this for any question about a specific product or service — price, availability, booking):\n${productCatalog.map((p) => `- ${p.name}: ₹${p.price}${p.kind === "service" ? ` (a SERVICE — booked, not bought or shipped${p.durationMinutes ? `, ${formatDuration(p.durationMinutes)}` : ""}; ${p.bookingLink ? `book at ${p.bookingLink}` : "no booking link — offer to help them book in this conversation"})` : p.inventoryCount !== undefined && p.inventoryCount !== null ? (p.inventoryCount > 0 ? ` (in stock)` : ` (out of stock)`) : ""}${p.description ? ` — ${p.description.slice(0, 80)}` : ""}`).join("\n")}`
     : "";
 
   const knowledgeContext = knowledgeFacts && knowledgeFacts.length > 0

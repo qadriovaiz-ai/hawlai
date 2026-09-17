@@ -4,7 +4,9 @@ import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
-import { fetchCatalog } from "@/lib/claims/businessFacts";
+import { fetchCatalog, type CatalogProduct } from "@/lib/claims/businessFacts";
+import { bookingPageUrl } from "@/lib/catalog/catalogItem";
+import { siteUrl } from "@/lib/email/consent";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -59,6 +61,21 @@ async function sendCommentReply(pageAccessToken: string, commentId: string, text
 // different Meta connections, not two names for the same thing, so a
 // dealership matches on exactly one of the two lookups below, never
 // both.
+/**
+ * The catalogue a DM or comment reply may quote. A service (migration 188)
+ * is booked, not bought: it carries its duration and where to book, and no
+ * stock — so a reply never says a workshop is "in stock".
+ */
+export function autoReplyCatalog(items: CatalogProduct[], bookingPage: string | null) {
+  return items.map((p) => ({
+    name: p.name,
+    price: p.price,
+    description: p.description,
+    inventoryCount: p.kind === "service" ? null : p.inventory,
+    ...(p.kind === "service" ? { kind: "service" as const, durationMinutes: p.durationMinutes ?? null, bookingLink: p.bookingUrl || bookingPage } : {}),
+  }));
+}
+
 export async function handleAutoReplyEntry(entry: any, supabase: any) {
   const entryId: string | undefined = entry?.id;
   if (!entryId) return;
@@ -105,12 +122,11 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
   // The one catalogue every path shares (src/lib/claims) — same columns,
   // same active rule, same shape as the facts the guard checks copy
   // against. This used to be its own query with its own field list.
-  const productCatalog = (await fetchCatalog(supabase, dealership.id)).map((p) => ({
-    name: p.name,
-    price: p.price,
-    description: p.description,
-    inventoryCount: p.inventory,
-  }));
+  const catalogItems = await fetchCatalog(supabase, dealership.id);
+  const bookingPage = catalogItems.some((p) => p.kind === "service")
+    ? bookingPageUrl((await supabase.from("dealerships").select("booking_slug").eq("id", dealership.id).maybeSingle()).data?.booking_slug, siteUrl())
+    : null;
+  const productCatalog = autoReplyCatalog(catalogItems, bookingPage);
 
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {
