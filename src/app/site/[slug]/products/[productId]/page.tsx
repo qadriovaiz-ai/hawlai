@@ -2,7 +2,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import { getTheme } from "@/lib/landingThemes";
 import { renderRichText } from "@/lib/richText";
-import { ProductImageGallery } from "@/components/website/ProductCatalog";
+import { BookServiceButton, ProductImageGallery } from "@/components/website/ProductCatalog";
+import { STOREFRONT_COLUMNS, toStorefrontProduct } from "@/lib/catalog/storefrontCatalog";
+import { formatDuration } from "@/lib/catalog/catalogItem";
 import ProductAddToCart from "@/components/website/ProductAddToCart";
 import ProductReviews from "@/components/website/ProductReviews";
 
@@ -20,14 +22,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   const { data: product } = await supabase
     .from("products")
-    .select("id, name, description, price, compare_at_price, images, inventory_count, is_active, category")
+    .select(`${STOREFRONT_COLUMNS}, is_active, category`)
     .eq("id", productId)
     .eq("dealership_id", website.dealership_id)
     .maybeSingle();
   if (!product || !product.is_active) notFound();
 
   const theme = getTheme(website.theme_key);
-  const outOfStock = product.inventory_count != null && product.inventory_count <= 0;
+  const service = product.kind === "service";
+  const outOfStock = !service && product.inventory_count != null && product.inventory_count <= 0;
+  const bookHref = service
+    ? toStorefrontProduct(product, (await supabase.from("dealerships").select("booking_slug").eq("id", website.dealership_id).maybeSingle()).data?.booking_slug).book_href
+    : null;
+  const duration = service ? formatDuration(product.duration_minutes) : null;
 
   return (
     <section className="px-6 py-10 max-w-4xl mx-auto">
@@ -42,14 +49,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             {product.compare_at_price && product.compare_at_price > product.price && (
               <p className="text-sm text-neutral-400 line-through">₹{Number(product.compare_at_price).toLocaleString("en-IN")}</p>
             )}
+            {duration && <p className="text-sm text-neutral-500">· {duration}</p>}
           </div>
           {product.description && <div className="text-sm text-neutral-600 leading-relaxed mb-6">{renderRichText(product.description)}</div>}
-          <ProductAddToCart
-            slug={slug}
-            product={{ id: product.id, name: product.name, price: Number(product.price), image: product.images?.[0], category: product.category }}
-            outOfStock={outOfStock}
-            theme={theme}
-          />
+          {service ? (
+            <BookServiceButton href={bookHref} theme={theme} />
+          ) : (
+            <ProductAddToCart
+              slug={slug}
+              product={{ id: product.id, name: product.name, price: Number(product.price), image: product.images?.[0], category: product.category }}
+              outOfStock={outOfStock}
+              theme={theme}
+            />
+          )}
         </div>
       </div>
 

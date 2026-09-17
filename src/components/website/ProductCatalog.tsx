@@ -2,19 +2,29 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { ShoppingCart, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShoppingCart, Check, ChevronLeft, ChevronRight, CalendarCheck } from "lucide-react";
 import type { LandingTheme } from "@/lib/landingThemes";
 import { addToCart } from "@/lib/cart";
 import { renderRichText } from "@/lib/richText";
+import { formatDuration } from "@/lib/catalog/catalogItem";
+import type { StorefrontProduct as Product } from "@/lib/catalog/storefrontCatalog";
 
-interface Product {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  compare_at_price: number | null;
-  images: string[];
-  inventory_count: number | null;
+/** A service is booked, not added to a cart: its button opens its booking destination. */
+export function BookServiceButton({ href, theme, className = "" }: { href: string | null | undefined; theme: LandingTheme; className?: string }) {
+  if (!href) {
+    return <p className={`text-sm text-neutral-500 text-center ${className}`}>Contact us to book</p>;
+  }
+  const external = /^https?:\/\//i.test(href);
+  return (
+    <a
+      href={href}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      className={`w-full text-sm font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2 ${className}`}
+      style={{ backgroundColor: theme.accent, color: theme.accentText }}
+    >
+      <CalendarCheck className="w-4 h-4" /> Book now
+    </a>
+  );
 }
 
 export function ProductImageGallery({ images, alt }: { images: string[]; alt: string }) {
@@ -88,7 +98,7 @@ export default function ProductCatalog({ products, slug, theme, heading }: { pro
     return (
       <section className="px-6 py-12 max-w-4xl mx-auto text-center">
         {heading && <h2 className="text-2xl font-bold mb-3" style={{ color: theme.dark }}>{heading}</h2>}
-        <p className="text-sm text-neutral-400">No products listed yet — check back soon.</p>
+        <p className="text-sm text-neutral-400">Nothing listed yet — check back soon.</p>
       </section>
     );
   }
@@ -98,7 +108,9 @@ export default function ProductCatalog({ products, slug, theme, heading }: { pro
       {heading && <h2 className="text-2xl font-bold mb-6 text-center" style={{ color: theme.dark }}>{heading}</h2>}
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
         {products.map((p) => {
-          const outOfStock = p.inventory_count != null && p.inventory_count <= 0;
+          const service = p.kind === "service";
+          const outOfStock = !service && p.inventory_count != null && p.inventory_count <= 0;
+          const duration = service ? formatDuration(p.duration_minutes) : null;
           return (
             <div key={p.id} className="rounded-xl border border-neutral-200 overflow-hidden flex flex-col">
               <Link href={`/site/${slug}/products/${p.id}`}>
@@ -112,7 +124,11 @@ export default function ProductCatalog({ products, slug, theme, heading }: { pro
                   {p.compare_at_price && p.compare_at_price > p.price && (
                     <p className="text-xs text-neutral-400 line-through">₹{Number(p.compare_at_price).toLocaleString("en-IN")}</p>
                   )}
+                  {duration && <p className="text-xs text-neutral-500">· {duration}</p>}
                 </div>
+                {service ? (
+                  <BookServiceButton href={p.book_href} theme={theme} className="mt-1" />
+                ) : (
                 <button
                   onClick={() => handleAdd(p)}
                   disabled={outOfStock}
@@ -121,6 +137,7 @@ export default function ProductCatalog({ products, slug, theme, heading }: { pro
                 >
                   {outOfStock ? "Out of Stock" : addedId === p.id ? (<><Check className="w-4 h-4" /> Added</>) : (<><ShoppingCart className="w-4 h-4" /> Add to Cart</>)}
                 </button>
+                )}
               </div>
             </div>
           );

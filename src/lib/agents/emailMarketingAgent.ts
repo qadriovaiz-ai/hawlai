@@ -10,7 +10,7 @@
 
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
-import { guardGenerated, claimsNote } from "@/lib/claims/claimCheck";
+import { guardGenerated, claimsNote, priceWarningNote, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { EMAIL_RULES, fixSubjects } from "@/lib/expertise/channelRules";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { composeMarketingEmail, type ComposedEmail } from "@/lib/email/composeEmail";
@@ -24,7 +24,7 @@ export interface EmailTaskMeta {
 // The tasks that produce one customer-facing email, sent as the visual
 // template (lib/email/composeEmail.ts). The rest produce several emails
 // or advice for the owner.
-const VISUAL = `Return {subject, previewText, headline (under 60 characters), intro (1–2 short sentences), bullets (0–3 short points, only if they help), ctaLabel (2–4 words for the button), product (the exact name of the product it features from the facts, or ""), body (the same message as plain text, under 120 words)}. Never put a link or web address in any field — Hawlai adds the button link.`;
+const VISUAL = `Return {subject, previewText, headline (under 60 characters), intro (1–2 short sentences), bullets (0–3 short points, only if they help), ctaLabel (2–4 words for the button — for a service, a booking action such as "Book a consultation"; never "Shop" or "Buy" for a service), product (the exact name of the product or service it features from the facts, or ""), body (the same message as plain text, under 120 words)}. Never put a link or web address in any field — Hawlai adds the button link.`;
 export const VISUAL_EMAIL_TASKS = new Set(["welcome_email", "abandoned_cart", "promotional", "newsletter", "follow_up"]);
 
 export const EMAIL_TASKS: EmailTaskMeta[] = [
@@ -52,8 +52,10 @@ export async function generateEmailContent(
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
-  facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; email?: ComposedEmail }> {
+  facts?: BusinessFacts | null,
+  /** "draft" when the owner reviews this before it's sent: unverified prices are flagged, not removed. Automation never passes it. */
+  claimsMode: ClaimsMode = "publish"
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[]; email?: ComposedEmail }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -107,16 +109,16 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     }
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
-    const guarded = guardGenerated(parsed, facts);
+    const guarded = guardGenerated(parsed, facts, claimsMode);
     const removed = [...guarded.removed, ...subjectProblems];
     const output: any = guarded.output;
-    const note = [claimsNote(guarded.removed), subjectNote].filter(Boolean).join(" ");
+    const note = [claimsNote(guarded.removed), priceWarningNote(guarded.priceWarnings), subjectNote].filter(Boolean).join(" ");
     if (note) output._claimsNote = note;
     // The finished visual email, built from the checked words and the
     // real links, photo and brand. Returned beside the output, never
     // inside it — the output is saved and shown as the editable draft.
     const email = VISUAL_EMAIL_TASKS.has(taskKey) ? composeMarketingEmail(output, facts) : undefined;
-    return { output, claimsRemoved: removed, email };
+    return { output, claimsRemoved: removed, priceWarnings: guarded.priceWarnings, email };
   } catch (err: any) {
     console.error("[email-marketing-agent] error:", err.message);
     return fallback;

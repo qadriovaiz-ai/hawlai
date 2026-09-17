@@ -6,6 +6,7 @@ import { buildPageMetadata } from "@/lib/siteMetadata";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import { blockTreeContainsType } from "@/lib/blocks/utils";
 import type { Metadata } from "next";
+import { loadStorefrontItems } from "@/lib/catalog/storefrontCatalog";
 
 // Without this, Next.js's default fetch caching can wrap the Supabase
 // calls below indefinitely — a real bug found live: a database fix
@@ -32,9 +33,7 @@ export default async function SiteHomePage({ params }: { params: Promise<{ slug:
 
   const sections = page.sections ?? [];
   const needsProducts = blockTreeContainsType(legacyToBlocks(sections), "product_grid");
-  const products = needsProducts
-    ? (await supabase.from("products").select("id, name, description, price, compare_at_price, images, inventory_count").eq("dealership_id", website.dealership_id).eq("is_active", true).order("order_index", { ascending: true })).data ?? []
-    : [];
+  const products = needsProducts ? await loadStorefrontItems(supabase, website.dealership_id) : [];
 
   return <SectionRenderer sections={sections} theme={getTheme(website.theme_key)} slug={slug} products={products} />;
 }

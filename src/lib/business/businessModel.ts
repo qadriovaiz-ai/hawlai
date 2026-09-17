@@ -32,11 +32,15 @@ export function cleanBusinessModels(input: unknown): BusinessModel[] | null {
  */
 export function effectiveBusinessModels(
   declared: unknown,
-  signals: { productCount: number }
+  /** productCount: physical items; serviceCount: services (migration 188). */
+  signals: { productCount: number; serviceCount?: number }
 ): { models: BusinessModel[]; inferred: boolean } {
   const clean = cleanBusinessModels(declared);
   if (clean && clean.length) return { models: clean, inferred: false };
-  return { models: signals.productCount > 0 ? ["products"] : [], inferred: true };
+  const guess: BusinessModel[] = [];
+  if (signals.productCount > 0) guess.push("products");
+  if ((signals.serviceCount ?? 0) > 0) guess.push("services");
+  return { models: guess, inferred: true };
 }
 
 export function describeBusinessModels(models: BusinessModel[]): string {

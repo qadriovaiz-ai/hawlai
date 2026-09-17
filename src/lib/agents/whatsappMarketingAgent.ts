@@ -36,7 +36,7 @@ import { logClaudeUsage } from "../usage/logUsage";
 import { CLAUDE_MODELS } from "../models";
 import { modelForTask } from "../aiTaskRouter";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
-import { guardGenerated } from "@/lib/claims/claimCheck";
+import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { WHATSAPP_RULES, addWhatsappOptOut } from "@/lib/expertise/channelRules";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
@@ -49,8 +49,10 @@ export async function generateWhatsappContent(
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
-  facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[] }> {
+  facts?: BusinessFacts | null,
+  /** "draft" when the owner reviews this before it's used: unverified prices are flagged, not removed. */
+  claimsMode: ClaimsMode = "publish"
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[] }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
 
@@ -104,8 +106,8 @@ Return JSON only, no markdown, no preamble. WhatsApp messages should read like a
     if (!facts) return { output: addWhatsappOptOut(taskKey, parsed) };
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
-    const guarded = guardGenerated(parsed, facts);
-    return { output: addWhatsappOptOut(taskKey, guarded.output), claimsRemoved: guarded.removed };
+    const guarded = guardGenerated(parsed, facts, claimsMode);
+    return { output: addWhatsappOptOut(taskKey, guarded.output), claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings };
   } catch (err: any) {
     console.error("[whatsapp-marketing-agent] error:", err.message);
     return fallback;

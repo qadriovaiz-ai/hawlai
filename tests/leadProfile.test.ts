@@ -59,6 +59,7 @@ function fakeSupabase() {
       gte: (k: string, v: any) => (filters.push((r) => r[k] === undefined || r[k] >= v), api),
       in: (k: string, v: any[]) => (filters.push((r) => v.includes(r[k])), api),
       order: () => api,
+      limit: () => api,
       single: async () => run(true),
       maybeSingle: async () => run(true),
       then: (resolve: any, reject: any) => Promise.resolve(run(false)).then(resolve, reject),

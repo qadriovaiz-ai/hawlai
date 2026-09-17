@@ -5,6 +5,7 @@ import { Loader2, Plus, Trash2, Pencil, X, Check, Package, GripVertical, Star } 
 import ImageUploader from "./ImageUploader";
 import RichTextArea from "./RichTextArea";
 import { Button } from "@/components/ui/Button";
+import { cleanBookingUrl, cleanDuration, formatDuration } from "@/lib/catalog/catalogItem";
 
 interface Product {
   id: string;
@@ -17,9 +18,14 @@ interface Product {
   category: string | null;
   inventory_count: number | null;
   is_active: boolean;
+  kind?: "product" | "service" | null;
+  duration_minutes?: number | null;
+  booking_url?: string | null;
 }
 
-const EMPTY_FORM = { name: "", description: "", price: "", compareAtPrice: "", images: "", sku: "", category: "", inventoryCount: "" };
+// A catalogue item is a product (bought, maybe shipped) or a service
+// (booked) — migration 188.
+const EMPTY_FORM = { kind: "product" as "product" | "service", name: "", description: "", price: "", compareAtPrice: "", images: "", sku: "", category: "", inventoryCount: "", durationMinutes: "", bookingUrl: "" };
 
 export default function ProductManager() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -34,6 +40,11 @@ export default function ProductManager() {
   const [reviewsOpenFor, setReviewsOpenFor] = useState<string | null>(null);
   const [reviewsByProduct, setReviewsByProduct] = useState<Record<string, any[]>>({});
   const [reviewsLoading, setReviewsLoading] = useState<Record<string, boolean>>({});
+  // The business's booking page, where a service with no link of its own sends customers.
+  const [bookingSlug, setBookingSlug] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/crm/booking-slug").then((r) => (r.ok ? r.json() : null)).then((d) => setBookingSlug(d?.slug ?? null)).catch(() => {});
+  }, []);
 
   async function reorderProducts(fromIndex: number, toIndex: number) {
     const next = [...products];
@@ -77,6 +88,9 @@ export default function ProductManager() {
 
   function startEdit(p: Product) {
     setForm({
+      kind: p.kind === "service" ? "service" : "product",
+      durationMinutes: p.duration_minutes != null ? String(p.duration_minutes) : "",
+      bookingUrl: p.booking_url ?? "",
       name: p.name,
       description: p.description ?? "",
       price: String(p.price),
@@ -92,8 +106,11 @@ export default function ProductManager() {
   }
 
   async function handleSave() {
-    if (!form.name.trim()) return setError("Product name is required");
+    const service = form.kind === "service";
+    if (!form.name.trim()) return setError(service ? "Service name is required" : "Product name is required");
     if (!form.price || isNaN(Number(form.price))) return setError("A valid price is required");
+    if (service && !cleanDuration(form.durationMinutes).ok) return setError("Duration must be a whole number of minutes, up to 24 hours");
+    if (service && !cleanBookingUrl(form.bookingUrl).ok) return setError("The booking link must be a full web address starting with https://");
     setSaving(true);
     setError(null);
     const payload = {
@@ -102,9 +119,12 @@ export default function ProductManager() {
       price: form.price,
       compareAtPrice: form.compareAtPrice || null,
       images: form.images.split(",").map((s) => s.trim()).filter(Boolean),
-      sku: form.sku || null,
+      sku: service ? null : form.sku || null,
       category: form.category || null,
-      inventoryCount: form.inventoryCount || null,
+      inventoryCount: service ? null : form.inventoryCount || null,
+      kind: form.kind,
+      durationMinutes: service ? form.durationMinutes || null : null,
+      bookingUrl: service ? form.bookingUrl || null : null,
     };
     try {
       const url = editingId ? `/api/products/${editingId}` : "/api/products";
@@ -123,7 +143,7 @@ export default function ProductManager() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this product?")) return;
+    if (!confirm("Delete this item?")) return;
     await fetch(`/api/products/${id}`, { method: "DELETE" });
     load();
   }
@@ -161,19 +181,39 @@ export default function ProductManager() {
     await fetch(`/api/reviews/${review.id}`, { method: "DELETE" });
   }
 
-  if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading products...</div>;
+  if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading products and services...</div>;
+
+  const service = form.kind === "service";
 
   return (
     <div className="space-y-4">
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Package className="w-4 h-4" /> Products ({products.length})</p>
-          {!adding && <Button onClick={startAdd} size="sm"><Plus className="w-3.5 h-3.5" /> Add Product</Button>}
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Package className="w-4 h-4" /> Products &amp; services ({products.length})</p>
+          {!adding && <Button onClick={startAdd} size="sm"><Plus className="w-3.5 h-3.5" /> Add item</Button>}
         </div>
 
         {adding && (
           <div className="bg-slate-200 rounded-lg p-3 space-y-2">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product name" className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+            <div role="radiogroup" aria-label="Item type" className="flex gap-2">
+              {([
+                ["product", "Product", "Customers buy it"],
+                ["service", "Service", "Customers book it"],
+              ] as const).map(([value, label, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={form.kind === value}
+                  onClick={() => setForm({ ...form, kind: value })}
+                  className={`flex-1 text-left rounded-lg border px-3 py-2 ${form.kind === value ? "border-purple-500 bg-white" : "border-slate-300"}`}
+                >
+                  <span className="block text-sm font-semibold text-slate-700">{label}</span>
+                  <span className="block text-xs text-slate-500">{hint}</span>
+                </button>
+              ))}
+            </div>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={service ? "Service name" : "Product name"} className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
             <RichTextArea value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Description" rows={2} className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
             <div className="grid grid-cols-2 gap-2">
               <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Price (₹)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
@@ -191,11 +231,28 @@ export default function ProductManager() {
                 <ImageUploader kind="product" onUploaded={addImage} compact className="w-14" />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="SKU (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
-              <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Category (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
-              <input value={form.inventoryCount} onChange={(e) => setForm({ ...form, inventoryCount: e.target.value })} placeholder="Stock (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
-            </div>
+            {service ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <input value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} inputMode="numeric" placeholder="Duration in minutes (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+                  <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Category (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+                </div>
+                <input value={form.bookingUrl} onChange={(e) => setForm({ ...form, bookingUrl: e.target.value })} placeholder="Booking link, e.g. https://calendly.com/you (optional)" className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+                <p className="text-xs text-slate-500">
+                  {form.bookingUrl.trim()
+                    ? "Customers who tap Book go to this link."
+                    : bookingSlug
+                      ? "Without a link, customers who tap Book go to your booking page."
+                      : "Without a link or a booking page, customers see \u201cContact us to book\u201d. You can turn on a booking page in Appointments."}
+                </p>
+              </>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="SKU (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+                <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Category (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+                <input value={form.inventoryCount} onChange={(e) => setForm({ ...form, inventoryCount: e.target.value })} placeholder="Stock (optional)" className="text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2" />
+              </div>
+            )}
             {error && <p className="text-xs text-red-400">{error}</p>}
             <div className="flex items-center gap-2">
               <Button onClick={handleSave} disabled={saving} loading={saving} size="sm">
@@ -223,7 +280,15 @@ export default function ProductManager() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-700 truncate">{p.name}</p>
-                  <p className="text-xs text-slate-400">₹{Number(p.price).toLocaleString("en-IN")} {p.inventory_count != null && `· ${p.inventory_count} in stock`}</p>
+                  <p className="text-xs text-slate-400">
+                    ₹{Number(p.price).toLocaleString("en-IN")}
+                    {p.kind === "service"
+                      ? ` · Service${formatDuration(p.duration_minutes) ? ` · ${formatDuration(p.duration_minutes)}` : ""}`
+                      : p.inventory_count != null && ` · ${p.inventory_count} in stock`}
+                  </p>
+                  {p.kind === "service" && !p.booking_url && !bookingSlug && (
+                    <p className="text-xs text-amber-600">No way to book yet — add a booking link or turn on your booking page.</p>
+                  )}
                 </div>
                 <button onClick={() => toggleActive(p)} className={`text-[10px] px-2 py-1 rounded-full ${p.is_active ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-500"}`}>
                   {p.is_active ? "Active" : "Hidden"}
@@ -257,7 +322,7 @@ export default function ProductManager() {
               )}
             </div>
           ))}
-          {products.length === 0 && !adding && <p className="text-xs text-slate-400 text-center py-4">No products yet — add your first one above.</p>}
+          {products.length === 0 && !adding && <p className="text-xs text-slate-400 text-center py-4">Nothing listed yet — add your first product or service above.</p>}
         </div>
       </div>
     </div>

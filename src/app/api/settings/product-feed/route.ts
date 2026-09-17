@@ -19,7 +19,7 @@ export async function GET() {
 
   const [{ data: website }, { count }] = await Promise.all([
     supabase.from("websites").select("slug, published").eq("dealership_id", dealershipId).maybeSingle(),
-    supabase.from("products").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).eq("is_active", true),
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).eq("is_active", true).eq("kind", "product"),
   ]);
 
   return NextResponse.json({

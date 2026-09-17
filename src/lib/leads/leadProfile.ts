@@ -115,11 +115,15 @@ export function leadProfileFor(models: BusinessModel[] | null | undefined): Lead
 
 /** A business's models: what it declared, else a guess from its catalogue. */
 export async function loadBusinessModels(supabase: any, dealershipId: string): Promise<BusinessModel[]> {
-  const [{ data: dealership }, { count }] = await Promise.all([
+  const [{ data: dealership }, { data: items }] = await Promise.all([
     supabase.from("dealerships").select("business_models").eq("id", dealershipId).maybeSingle(),
-    supabase.from("products").select("id", { count: "exact", head: true }).eq("dealership_id", dealershipId).eq("is_active", true),
+    supabase.from("products").select("kind").eq("dealership_id", dealershipId).eq("is_active", true).limit(500),
   ]);
-  return effectiveBusinessModels(dealership?.business_models, { productCount: count ?? 0 }).models;
+  const list: { kind?: string | null }[] = items ?? [];
+  return effectiveBusinessModels(dealership?.business_models, {
+    productCount: list.filter((i) => i.kind !== "service").length,
+    serviceCount: list.filter((i) => i.kind === "service").length,
+  }).models;
 }
 
 /** The lead profile for a business. Falls back to the general profile if the lookup fails. */

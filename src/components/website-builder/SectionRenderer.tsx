@@ -1,16 +1,8 @@
 import type { LandingTheme } from "@/lib/landingThemes";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import BlockRenderer from "./blocks/BlockRenderer";
+import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
 
-interface StorefrontProduct {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  compare_at_price: number | null;
-  images: string[];
-  inventory_count: number | null;
-}
 
 // Thin wrapper around the recursive BlockRenderer — this used to be a
 // 150-line switch(section.type) duplicating the same 10 fixed shapes

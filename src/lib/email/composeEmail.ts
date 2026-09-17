@@ -6,12 +6,14 @@
 // must be RIGHT comes from code, never the model:
 //  - the button's link — the real product page, else the storefront, else
 //    no button at all (a promo email once linked to a domain that doesn't
-//    exist);
+//    exist). For a SERVICE: its booking link, else the business's booking
+//    page, else its page on the store — a haircut is booked, not shopped;
 //  - the photo — the product's own uploaded image;
 //  - the brand colour and logo — the owner's brand kit;
 //  - the length — cut to scannable here, whatever came back.
 
-import { matchProducts, type BusinessFacts, type CatalogProduct } from "@/lib/claims/businessFacts";
+import { bookingLinkFor, matchProducts, type BusinessFacts, type CatalogProduct } from "@/lib/claims/businessFacts";
+import { isService } from "@/lib/catalog/catalogItem";
 import { heroProduct } from "@/lib/claims/imageBrief";
 import { senderDisplayName } from "@/lib/email/resendClient";
 import { pickAccent, renderEmailHtml, renderEmailText, safeUrl, type EmailDesign } from "@/lib/email/template";
@@ -74,10 +76,15 @@ export function composeMarketingEmail(
     .map((s) => ({ heading: clip(s.heading, LIMITS.headline), body: clip(s.body, LIMITS.paragraph) }));
 
   const productLink = product ? facts.links?.products.find((l) => l.name === product.name)?.url ?? null : null;
-  const ctaUrl = safeUrl(productLink ?? facts.links?.store ?? null);
-  const ctaLabel = clip(draft.ctaLabel || (productLink ? `Shop ${product!.name}` : "Visit the store"), LIMITS.ctaLabel);
-  // The product's own photo — never a different product's. Only an email
-  // about the business in general shows its best-photographed product.
+  const service = product && isService(product) ? product : null;
+  const bookingLink = service ? bookingLinkFor(service, facts) : null;
+  const ctaUrl = safeUrl(bookingLink ?? productLink ?? facts.links?.store ?? null);
+  const ctaLabel = clip(
+    draft.ctaLabel || (service ? `Book ${service.name}` : productLink ? `Shop ${product!.name}` : "Visit the store"),
+    LIMITS.ctaLabel
+  );
+  // The item's own photo — never a different item's. Only an email about
+  // the business in general shows its best-photographed item.
   const pictured = product ? product : heroProduct(facts);
   const photo = pictured ? safeUrl(pictured.images[0]) : null;
 

@@ -13,8 +13,17 @@
 // Low-friction by design: offending SENTENCES are removed and the owner
 // is told what and why. Nothing is blocked outright, and ordinary
 // persuasive copy passes untouched.
+//
+// Two modes (approved 2026-09-17, industry-agnostic overhaul Phase 2):
+//  - "publish" (the default) — for anything that goes out with nobody
+//    reading it first: every unverifiable claim is removed.
+//  - "draft" — for copy the owner reviews before using it: a PRICE that
+//    can't be matched to the catalogue, site or Business Knowledge is
+//    kept and flagged instead, because service and quote-based businesses
+//    often have real prices Hawlai has no record of. Every other kind of
+//    claim is still removed.
 
-import { describeShipping, knownText, normalise, type BusinessFacts } from "./businessFacts";
+import { describeShipping, knownText, normalise, physicalProducts, serviceItems, type BusinessFacts } from "./businessFacts";
 import { computeShippingAmount } from "@/lib/shipping";
 
 const NOUNS = "homes|customers|families|buyers|people|clients|orders|reviews|ratings|shoppers|users|households|students|patients|members|subscribers";
@@ -28,8 +37,17 @@ const RATINGS = /\b\d(?:\.\d)?\s*[- ]?(?:\/\s*5\b|stars?\b|★)|\brated\s+\d/i;
 const YEARS = /\b(\d+)\s*\+?\s*years?\s+(?:of|in|experience|serving|trusted)/i;
 const PACKAGING = /(keepsake|gift)\s*(box|boxes|packaging|wrap|wrapping|bag|tin)/gi;
 const PERCENT_OFF = /(\d{1,3})\s*%\s*off/gi;
-const FLAT_OFF = /₹\s?(\d[\d,]*)\s*off/gi;
-const PRICE = /\b(?:at|for|only|just|starting\s+(?:at|from)|from|priced\s+at|now)\s+₹\s?(\d[\d,]*)|₹\s?(\d[\d,]*)\s*(?:\/-)?\s*only\b/gi;
+const FLAT_OFF = /(?:₹|\brs\.?|\binr)\s?(\d[\d,]*)\s*off/gi;
+// Any rupee amount, however it's written: ₹1,499 · Rs. 500 · INR 2,000 ·
+// ₹1.5 lakh · 999/- · 500 rupees. Amounts followed by "off" are discounts,
+// checked separately above.
+const MONEY_UNIT = "(k|lakhs?|lacs?|l|crores?|cr)?\\b";
+const PRICE = new RegExp(
+  // (?![\d,]) keeps the number whole, so "₹2,000 off" can't backtrack
+  // into a price of "₹2".
+  `(?:₹|\\brs\\.?|\\binr)\\s?(\\d[\\d,]*(?:\\.\\d{1,2})?)(?![\\d,])\\s*${MONEY_UNIT}(?!\\s*off\\b)|\\b(\\d[\\d,]*(?:\\.\\d{1,2})?)(?![\\d,])\\s*(?:\\/-|rupees\\b)`,
+  "gi"
+);
 
 // Product-attribute claims a business must be able to substantiate.
 const CLAIM_TERMS = [
@@ -61,8 +79,16 @@ function amount(raw: string, unit?: string): number {
   const n = Number(raw.replace(/,/g, ""));
   const u = (unit ?? "").toLowerCase();
   if (u === "k") return n * 1e3;
-  if (u.startsWith("lakh") || u.startsWith("lac")) return n * 1e5;
+  if (u === "l" || u.startsWith("lakh") || u.startsWith("lac")) return n * 1e5;
+  if (u === "cr" || u.startsWith("crore")) return n * 1e7;
   return n;
+}
+
+/** Every rupee amount written in a piece of text. */
+export function moneyAmounts(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(PRICE)) out.push(amount(m[1] ?? m[3], m[2]));
+  return out.filter((n) => Number.isFinite(n));
 }
 
 function escapeRe(s: string): string {
@@ -82,8 +108,20 @@ function realAmounts(f: BusinessFacts): Set<number> {
   for (const o of f.offers) if (o.flat !== null) out.add(o.flat);
   if (f.shipping?.rate != null) out.add(f.shipping.rate);
   if (f.shipping?.freeThreshold != null) out.add(f.shipping.freeThreshold);
+  // Prices the business states itself — on its site, in its descriptions,
+  // in Business Knowledge ("Consultation fee ₹500").
+  for (const n of moneyAmounts(knownText(f))) out.add(n);
   return out;
 }
+
+/** Same amount to the paisa — "₹549" and "₹549.00" are one price. */
+function isRealAmount(amounts: Set<number>, v: number): boolean {
+  for (const a of amounts) if (Math.abs(a - v) < 0.005) return true;
+  return false;
+}
+
+export type ClaimsMode = "publish" | "draft";
+type Problem = { reason: string; kind: "price" | "claim" };
 
 // A link: with a scheme, starting www., or a bare domain on a common TLD.
 // Never the domain half of an email address — "someone@gmail.com" is an
@@ -118,6 +156,8 @@ export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
   const known = knownText(f);
 
   const reasons: string[] = [];
+  // Booking links (a service's own, the booking page) are allowed the same
+  // way as any link the owner has written: knownText carries them.
   for (const m of text.matchAll(LINK)) {
     const link = m[0].replace(/[.,;:!?]+$/, "");
     const host = hostOf(link);
@@ -140,7 +180,16 @@ export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
  * behind their own claims; Hawlai just mustn't invent new ones.
  */
 export function findUnsupportedClaims(text: string, f: BusinessFacts): string[] {
-  const reasons: string[] = [];
+  return Array.from(new Set(findProblems(text, f).map((p) => p.reason)));
+}
+
+function findProblems(text: string, f: BusinessFacts): Problem[] {
+  const problems: Problem[] = [];
+  const reasons = {
+    push: (...rs: string[]) => {
+      for (const reason of rs) problems.push({ reason, kind: "claim" });
+    },
+  };
   const known = knownText(f);
   const t = normalise(text);
   const said = (phrase: string) => known.includes(normalise(phrase));
@@ -171,13 +220,20 @@ export function findUnsupportedClaims(text: string, f: BusinessFacts): string[] 
   const freeShipping = text.match(FREE_SHIPPING);
   if (freeShipping && !said(freeShipping[0])) {
     const s = f.shipping;
-    const cheapest = f.products.length ? Math.min(...f.products.map((p) => p.price)) : 0;
-    const charged = !s || computeShippingAmount({ shipping_mode: s.mode, shipping_rate: s.rate, shipping_free_threshold: s.freeThreshold }, cheapest) > 0;
-    const t = s?.freeThreshold;
-    const namesThreshold =
-      s?.mode === "free_above" && t != null &&
-      new RegExp(`(?:above|over|from|orders?\\s+of)\\s*₹\\s?${t}\\b|₹\\s?${t}\\s*(?:\\+|or\\s+more|and\\s+above|se\\s+upar|ke\\s+upar)`, "i").test(text);
-    if (charged && !namesThreshold) reasons.push(`free shipping ("${freeShipping[0]}") — the store's shipping is ${describeShipping(s)}`);
+    // Shipping is charged on physical products only; a business that
+    // sells only services has nothing to ship at all.
+    const goods = physicalProducts(f);
+    if (!goods.length && serviceItems(f).length) {
+      reasons.push(`free shipping ("${freeShipping[0]}") — this business sells services, nothing is shipped`);
+    } else {
+      const cheapest = goods.length ? Math.min(...goods.map((p) => p.price)) : 0;
+      const charged = !s || computeShippingAmount({ shipping_mode: s.mode, shipping_rate: s.rate, shipping_free_threshold: s.freeThreshold }, cheapest) > 0;
+      const t = s?.freeThreshold;
+      const namesThreshold =
+        s?.mode === "free_above" && t != null &&
+        new RegExp(`(?:above|over|from|orders?\\s+of)\\s*₹\\s?${t}\\b|₹\\s?${t}\\s*(?:\\+|or\\s+more|and\\s+above|se\\s+upar|ke\\s+upar)`, "i").test(text);
+      if (charged && !namesThreshold) reasons.push(`free shipping ("${freeShipping[0]}") — the store's shipping is ${describeShipping(s)}`);
+    }
   }
   each(PACKAGING, (m) => `"${m[0]}" — not mentioned anywhere on the site or in the products`);
   each(PERCENT_OFF, (m) => (f.offers.some((o) => o.percent === Number(m[1])) ? null : `"${m[0]}" — no active discount code gives ${m[1]}% off`));
@@ -186,10 +242,16 @@ export function findUnsupportedClaims(text: string, f: BusinessFacts): string[] 
     return f.offers.some((o) => o.flat === v) ? null : `"${m[0]}" — no active discount code gives ₹${v} off`;
   });
   const amounts = realAmounts(f);
-  each(PRICE, (m) => {
-    const v = amount(m[1] ?? m[2]);
-    return amounts.has(v) ? null : `"${m[0].trim()}" — no product, offer or shipping amount on record is ₹${v}`;
-  });
+  for (const m of text.matchAll(PRICE)) {
+    if (said(m[0])) continue;
+    const v = amount(m[1] ?? m[3], m[2]);
+    // ₹0 is a "free" claim, which the shipping and offer checks own.
+    if (!Number.isFinite(v) || v === 0 || isRealAmount(amounts, v)) continue;
+    problems.push({
+      kind: "price",
+      reason: `"${m[0].trim()}" — no product, service, offer or shipping amount on record is ₹${v.toLocaleString("en-IN")}, and the site and Business Knowledge don't mention it`,
+    });
+  }
   if (/first[\s-]order/i.test(text) && /(off|discount|free)/i.test(text) && f.offers.length === 0) {
     reasons.push("a first-order offer — the store has no active discount codes");
   }
@@ -215,7 +277,7 @@ export function findUnsupportedClaims(text: string, f: BusinessFacts): string[] 
   each(HEALTH, (m) => `"${m[0]}" — a health or efficacy claim that needs real evidence`);
   each(RESULTS, (m) => `"${m[0]}" — a promised result that can't be verified`);
 
-  return Array.from(new Set(reasons));
+  return problems;
 }
 
 // A sentence ends at . ! ? । or an emoji — social copy uses emoji as full
@@ -229,18 +291,31 @@ function pieces(text: string): string[] {
   return text.match(PIECE) ?? [text];
 }
 
-/** Removes each sentence that makes an unsupported claim. The rest of the copy is left exactly as written. */
-export function stripUnsupported(text: string, f: BusinessFacts): { text: string; removed: string[] } {
-  if (findUnsupportedClaims(text, f).length === 0) return { text, removed: [] };
+/**
+ * Removes each sentence that makes an unsupported claim. The rest of the
+ * copy is left exactly as written. In "draft" mode a sentence whose only
+ * problem is an unverified price is kept, and the price is listed in
+ * `priceWarnings` for the owner to check.
+ */
+export function stripUnsupported(
+  text: string,
+  f: BusinessFacts,
+  mode: ClaimsMode = "publish"
+): { text: string; removed: string[]; priceWarnings: string[] } {
+  if (findProblems(text, f).length === 0) return { text, removed: [], priceWarnings: [] };
   const kept: string[] = [];
   const removed: string[] = [];
+  const priceWarnings: string[] = [];
   for (const piece of pieces(text)) {
-    const problems = findUnsupportedClaims(piece, f);
-    if (problems.length) removed.push(...problems);
-    else kept.push(piece);
+    const problems = findProblems(piece, f);
+    if (!problems.length) kept.push(piece);
+    else if (mode === "draft" && problems.every((p) => p.kind === "price")) {
+      kept.push(piece);
+      priceWarnings.push(...problems.map((p) => p.reason));
+    } else removed.push(...problems.map((p) => p.reason));
   }
   const cleaned = kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: cleaned, removed: Array.from(new Set(removed)) };
+  return { text: cleaned, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)) };
 }
 
 /**
@@ -249,14 +324,16 @@ export function stripUnsupported(text: string, f: BusinessFacts): { text: string
  * sequence). An array item whose main text is removed entirely is
  * dropped; keys starting with "_" are metadata and left alone.
  */
-export function guardOutput<T>(output: T, f: BusinessFacts): { output: T; removed: string[] } {
+export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[] } {
   const removed: string[] = [];
+  const priceWarnings: string[] = [];
   const emptied = (before: any, after: any) => typeof before === "string" && before.trim() !== "" && String(after ?? "").trim() === "";
 
   const walk = (v: any): any => {
     if (typeof v === "string") {
-      const r = stripUnsupported(v, f);
+      const r = stripUnsupported(v, f, mode);
       removed.push(...r.removed);
+      priceWarnings.push(...r.priceWarnings);
       return r.text;
     }
     if (Array.isArray(v)) {
@@ -281,7 +358,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts): { output: T; remove
   };
 
   const out = walk(output);
-  return { output: out, removed: Array.from(new Set(removed)) };
+  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)) };
 }
 
 /** What the owner is told — said plainly, never silently hidden. */
@@ -291,9 +368,20 @@ export function claimsNote(removed: string[]): string | null {
   return `Hawlai removed ${n === 1 ? "a line" : "lines"} that made ${n === 1 ? "a claim" : `${n} claims`} it couldn't verify from your store data (${removed.slice(0, 2).join("; ")}${n > 2 ? "; …" : ""}). If a claim is true, add it to Business Knowledge and it will be allowed.`;
 }
 
-/** guardOutput plus the note, attached as `_claimsNote` for the result card. */
-export function guardGenerated<T extends object>(output: T, f: BusinessFacts): { output: T & { _claimsNote?: string }; removed: string[] } {
-  const r = guardOutput(output, f);
-  const note = claimsNote(r.removed);
-  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed };
+/** What the owner is told about prices left in a draft. */
+export function priceWarningNote(warnings: string[]): string | null {
+  if (warnings.length === 0) return null;
+  const n = warnings.length;
+  return `Check ${n === 1 ? "this price" : "these prices"} before you use this: ${warnings.slice(0, 2).join("; ")}${n > 2 ? "; …" : ""}. ${n === 1 ? "It was" : "They were"} left in because you're reviewing this draft — add the price to a product, service or Business Knowledge and Hawlai will recognise it next time.`;
+}
+
+/** guardOutput plus the notes, attached as `_claimsNote` for the result card. */
+export function guardGenerated<T extends object>(
+  output: T,
+  f: BusinessFacts,
+  mode: ClaimsMode = "publish"
+): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[] } {
+  const r = guardOutput(output, f, mode);
+  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings)].filter(Boolean).join(" ");
+  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings };
 }

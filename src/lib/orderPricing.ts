@@ -1,5 +1,6 @@
 import { validateDiscountCode } from "@/lib/discounts";
 import { computeShippingAmount } from "@/lib/shipping";
+import { isService } from "@/lib/catalog/catalogItem";
 
 // Shared by both order-creation paths (COD, and Razorpay's
 // initiate + verify steps) so prices/discounts are always recomputed
@@ -20,6 +21,7 @@ interface ResolvedProduct {
   price: number;
   is_active: boolean;
   inventory_count: number | null;
+  kind?: string | null;
 }
 
 export type OrderPricingResult =
@@ -55,7 +57,7 @@ export async function resolveOrderPricing(
   const productIds = items.map((it: any) => it.productId).filter(Boolean);
   const { data: products, error: productsError } = await supabase
     .from("products")
-    .select("id, name, price, is_active, inventory_count")
+    .select("id, name, price, is_active, inventory_count, kind")
     .in("id", productIds)
     .eq("dealership_id", website.dealership_id);
   if (productsError) return { ok: false, status: 500, error: "Couldn't verify products" };
@@ -68,6 +70,11 @@ export async function resolveOrderPricing(
     const product = productMap.get(raw.productId);
     if (!product || !product.is_active) {
       return { ok: false, status: 400, error: "An item in your cart is no longer available" };
+    }
+    // A service is booked, not bought through the cart — and would
+    // otherwise be charged shipping.
+    if (isService(product)) {
+      return { ok: false, status: 400, error: `"${product.name}" is booked, not ordered — remove it from your cart and book it from its page` };
     }
     const qty = Math.max(1, Math.min(99, Number(raw.quantity) || 1));
     if (product.inventory_count != null && product.inventory_count < qty) {

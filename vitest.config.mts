@@ -21,6 +21,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
+  // tsconfig says jsx: "preserve" (Next compiles JSX itself); tests that
+  // render a component to HTML need it compiled here.
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],

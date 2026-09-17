@@ -23,6 +23,7 @@ import type { BrandVoiceProfile } from "@/lib/agents/brandVoice";
 import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
+import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalogItem";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 
 type Row = Record<string, any>;
@@ -38,10 +39,19 @@ export type SitePage = {
   hasShareImage: boolean;
 };
 
-/** A product as every path should see it — one shape, one set of rules. */
+/**
+ * A catalogue item as every path should see it — one shape, one set of
+ * rules. Products and services both (migration 188); `kind` says which.
+ */
 export type CatalogProduct = {
   id: string | null;
   name: string;
+  /** "service" is booked, not bought or shipped. Missing means product. */
+  kind?: "product" | "service";
+  /** A service's length, when the owner gave one. */
+  durationMinutes?: number | null;
+  /** A service's own booking link, when the owner gave one. */
+  bookingUrl?: string | null;
   price: number;
   description: string | null;
   /** Real uploaded photo URLs. The first one is what an image model is shown. */
@@ -105,7 +115,12 @@ export type BusinessFacts = {
    * — a domain that does not exist — while the real store was
    * hawlai.online/site/candle-by-qaaf.
    */
-  links: { store: string | null; products: { name: string; url: string }[] };
+  links: {
+    store: string | null;
+    products: { name: string; url: string }[];
+    /** The business's own booking page (/book/[slug]), when it has one. */
+    booking?: string | null;
+  };
   /**
    * Where today sits in India's festival calendar, and anything on the
    * live site still selling a festival that's over. See
@@ -123,7 +138,7 @@ export const PAID_ORDER_STATUSES = new Set(["confirmed", "shipped", "delivered"]
 export const UNKNOWN_CATEGORY = "business";
 
 /** One column list, so every path sees the same product fields. */
-export const CATALOG_COLUMNS = "id, name, price, description, images, inventory_count, category, is_active, order_index";
+export const CATALOG_COLUMNS = "id, name, kind, duration_minutes, booking_url, price, description, images, inventory_count, category, is_active, order_index";
 
 function imageList(images: unknown): string[] {
   return Array.isArray(images) ? images.filter((i): i is string => typeof i === "string" && i.trim().length > 0).map((i) => i.trim()) : [];
@@ -133,6 +148,9 @@ export function toCatalogProduct(row: Row): CatalogProduct {
   return {
     id: row.id ?? null,
     name: String(row.name ?? "").trim(),
+    kind: row.kind === "service" ? "service" : "product",
+    durationMinutes: row.duration_minutes == null ? null : Number(row.duration_minutes),
+    bookingUrl: row.booking_url ?? null,
     price: Number(row.price ?? 0),
     description: row.description ?? null,
     images: imageList(row.images),
@@ -341,7 +359,10 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     businessName: dealership?.dealership_name ?? "the business",
     category: category || UNKNOWN_CATEGORY,
     categoryKnown: Boolean(category),
-    businessModels: effectiveBusinessModels(dealership?.business_models, { productCount: products.length }),
+    businessModels: effectiveBusinessModels(dealership?.business_models, {
+      productCount: products.filter((p) => p.kind !== "service").length,
+      serviceCount: products.filter((p) => p.kind === "service").length,
+    }),
     city: dealership?.city ?? null,
     site: website ? { url: `/site/${website.slug}`, published: Boolean(website.published), pages } : null,
     home,
@@ -364,13 +385,16 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     // Always the Hawlai address, never websites.custom_domain: nothing in
     // the app routes a custom domain to the site yet, so a link to one
     // would be a link to nothing.
-    links:
-      website?.slug && website.published
+    links: {
+      ...(website?.slug && website.published
         ? {
             store: storefrontUrl(website.slug),
             products: products.filter((p) => p.id).map((p) => ({ name: String(p.name), url: hawlaiProductUrl(website.slug, String(p.id)) })),
           }
-        : { store: null, products: [] },
+        : { store: null, products: [] }),
+      // Works whether or not the website is published.
+      booking: bookingPageUrl(dealership?.booking_slug, siteBase()),
+    },
     season,
     brand,
     pillars: brand.pillars,
@@ -393,8 +417,26 @@ export async function gatherBusinessFactsSafely(supabase: any, dealershipId: str
 
 /** The storefront's public address — the same base the product links use. */
 export function storefrontUrl(slug: string): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.online";
-  return `${base}/site/${slug}`;
+  return `${siteBase()}/site/${slug}`;
+}
+
+function siteBase(): string {
+  return process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.online";
+}
+
+/** Items customers buy (and may have shipped). */
+export function physicalProducts(f: Pick<BusinessFacts, "products">): CatalogProduct[] {
+  return f.products.filter((p) => !isService(p));
+}
+
+/** Items customers book. */
+export function serviceItems(f: Pick<BusinessFacts, "products">): CatalogProduct[] {
+  return f.products.filter((p) => isService(p));
+}
+
+/** Where a customer books a service: its own link, else the business's booking page. Null when there's nowhere. */
+export function bookingLinkFor(p: CatalogProduct, f: Pick<BusinessFacts, "links">): string | null {
+  return p.bookingUrl || f.links?.booking || null;
 }
 
 function addDaysYmd(ymd: string, days: number): string {
@@ -410,17 +452,32 @@ export function describeShipping(s: BusinessFacts["shipping"]): string {
 
 function describeProduct(p: CatalogProduct): string {
   const bits = [`${p.name} — ₹${p.price}`];
+  if (isService(p)) {
+    const d = formatDuration(p.durationMinutes);
+    if (d) bits.push(`(${d})`);
+  }
   if (p.description) bits.push(`(${p.description.slice(0, 100)})`);
-  if (p.inventory === 0) bits.push("(out of stock)");
+  if (!isService(p) && p.inventory === 0) bits.push("(out of stock)");
   return bits.join(" ");
+}
+
+/** The catalogue lines: products and services listed separately, so copy never offers to ship a haircut. */
+function catalogueLines(f: BusinessFacts, describe: (p: CatalogProduct) => string): string[] {
+  const goods = physicalProducts(f);
+  const services = serviceItems(f);
+  if (!goods.length && !services.length) return ["What it offers: nothing listed in the catalogue yet."];
+  const lines: string[] = [];
+  if (goods.length) lines.push(`Products (${goods.length}): ${goods.map(describe).join("; ")}`);
+  if (services.length) lines.push(`Services (${services.length}, booked — not bought or shipped): ${services.map(describe).join("; ")}`);
+  return lines;
 }
 
 /** How the business describes itself — used wherever "what do they sell" must be stated plainly. */
 export function describeBusiness(f: BusinessFacts): string {
   if (!f.categoryKnown) {
-    return f.products.length
-      ? `"${f.businessName}", which sells ${f.products.slice(0, 3).map((p) => p.name).join(", ")}`
-      : `"${f.businessName}"`;
+    if (!f.products.length) return `"${f.businessName}"`;
+    const verb = physicalProducts(f).length ? "sells" : "offers";
+    return `"${f.businessName}", which ${verb} ${f.products.slice(0, 3).map((p) => p.name).join(", ")}`;
   }
   return `"${f.businessName}", a ${f.category} business${f.city ? ` in ${f.city}` : ""}`;
 }
@@ -439,9 +496,9 @@ export function formatFactsForPrompt(f: BusinessFacts): string {
   } else {
     lines.push("Live website: none built yet.");
   }
-  lines.push(f.products.length ? `Products (${f.products.length}): ${f.products.map((p) => `${p.name} — ₹${p.price}`).join("; ")}` : "Products: none listed.");
+  lines.push(...catalogueLines(f, (p) => `${p.name} — ₹${p.price}`));
   lines.push(f.offers.length ? `Active discount codes: ${f.offers.map((o) => `${o.code} (${o.label})`).join("; ")}` : "Active discount codes: none.");
-  lines.push(`Shipping: ${describeShipping(f.shipping)}.`);
+  if (physicalProducts(f).length) lines.push(`Shipping: ${describeShipping(f.shipping)}.`);
   const l = f.last30;
   lines.push(
     `Last 30 days: ${l.views} page views, ${l.chatOpens} chat opens, ${l.leads} leads captured, ${l.orders} orders, ${l.abandonedCarts} abandoned carts.` +
@@ -468,9 +525,13 @@ export function formatFactsForCopy(f: BusinessFacts): string {
       ? `How the business makes money: ${describeBusinessModels(bm.models)}${bm.inferred ? " (guessed from its catalogue — not confirmed by the owner)" : ""}.`
       : "How the business makes money: not set — don't assume it sells products, services or subscriptions beyond what's listed here."
   );
-  lines.push(f.products.length ? `Products (${f.products.length}): ${f.products.map(describeProduct).join("; ")}` : "Products: none listed in the store.");
+  lines.push(...catalogueLines(f, describeProduct));
   lines.push(f.offers.length ? `Active offers: ${f.offers.map((o) => `code ${o.code} — ${o.label}`).join("; ")}` : "Active offers: none — do not write any discount, sale or offer.");
-  lines.push(`Shipping: ${describeShipping(f.shipping)}.`);
+  // Shipping only means something when something physical is sold.
+  if (physicalProducts(f).length) lines.push(`Shipping: ${describeShipping(f.shipping)}.`);
+  else if (serviceItems(f).length) lines.push("Shipping: not applicable — nothing physical is sold. Never mention shipping or delivery charges.");
+  const booked = serviceItems(f).filter((p) => bookingLinkFor(p, f));
+  if (booked.length) lines.push(`Booking links (the ONLY addresses for booking): ${booked.map((p) => `${p.name} — ${bookingLinkFor(p, f)}`).join("; ")}`);
   if (f.links?.store) {
     lines.push(`Store link (the ONLY website address you may use): ${f.links.store}`);
     if (f.links.products.length) lines.push(`Product links: ${f.links.products.map((p) => `${p.name} — ${p.url}`).join("; ")}`);
@@ -529,6 +590,8 @@ export function knownText(f: BusinessFacts): string {
   parts.push(...(f.brand?.pillars ?? f.pillars ?? []));
   if (f.links?.store) parts.push(f.links.store);
   for (const p of f.links?.products ?? []) parts.push(p.url);
+  if (f.links?.booking) parts.push(f.links.booking);
+  for (const p of f.products) if (p.bookingUrl) parts.push(p.bookingUrl);
   if (f.brand?.description) parts.push(f.brand.description);
   return normalise(parts.join(" \n "));
 }

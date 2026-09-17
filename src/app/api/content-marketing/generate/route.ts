@@ -33,7 +33,9 @@ export async function POST(request: Request) {
     brandProfile,
     { supabase, dealershipId },
     undefined,
-    facts
+    facts,
+    // A draft the owner reads before using: unverified prices are flagged, not removed.
+    "draft"
   );
 
   // Only save real generations to history — a fallback shouldn't

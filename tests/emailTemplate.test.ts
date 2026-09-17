@@ -252,7 +252,7 @@ describe("the generator returns the finished email beside the draft", () => {
     const r = await generateEmailContent("promotional", "candle_by_qaaf", "Home fragrance", "restock", null, undefined, undefined, await gatherBusinessFacts(db(), "d1"));
 
     expect(prompts[0]).toContain("Never put a link or web address in any field — Hawlai adds the button link.");
-    expect(prompts[0]).toContain("ctaLabel (2–4 words for the button)");
+    expect(prompts[0]).toContain("ctaLabel (2–4 words for the button");
     expect(r.email?.html).toContain(PRODUCT_URL);
     expect(r.email?.html).toContain(PHOTO);
     // The claims guard ran first — the invented count never reaches the email.

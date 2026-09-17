@@ -92,6 +92,10 @@ describe("the canonical facts carry everything a generation needs", () => {
     expect(f.products[0]).toEqual({
       id: "p1",
       name: "Lavender candle",
+      // No kind stored = a product (every item from before migration 188).
+      kind: "product",
+      durationMinutes: null,
+      bookingUrl: null,
       price: 550,
       description: "Hand-poured soy wax, 40 hour burn",
       images: ["https://cdn.example/lavender.jpg", "x"],
@@ -245,7 +249,7 @@ describe("images are anchored to the real product (Phase 3 check, before generat
     const brief = buildImageBrief("Diwali post", await gatherBusinessFacts(db(), "d1"));
     expect(brief.anchored).toBe(false);
     expect(brief.prompt).toBe("Diwali post");
-    expect(brief.warning).toMatch(/add your products, or set your business category/);
+    expect(brief.warning).toMatch(/add your products or services, or set your business category/);
   });
 
   it("the product photo is sent to the image model with the rule to match it", async () => {

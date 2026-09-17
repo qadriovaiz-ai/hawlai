@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSocialCaption } from "@/lib/agents/socialMediaAgent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
-import { claimsNote } from "@/lib/claims/claimCheck";
+import { claimsNote, priceWarningNote } from "@/lib/claims/claimCheck";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -24,8 +24,10 @@ export async function POST(request: Request) {
     gatherBusinessFactsSafely(supabase, dealershipId),
   ]);
 
-  // The owner posts this straight to their Page, so it's written from,
-  // and checked against, what the business can back up (src/lib/claims).
-  const { caption, claimsRemoved } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts);
-  return NextResponse.json({ caption, note: claimsNote(claimsRemoved) });
+  // Written from, and checked against, what the business can back up
+  // (src/lib/claims). The owner reads and edits the caption before
+  // posting it, so a price Hawlai can't match is flagged, not removed.
+  const { caption, claimsRemoved, priceWarnings } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts, "draft");
+  const note = [claimsNote(claimsRemoved), priceWarningNote(priceWarnings ?? [])].filter(Boolean).join(" ") || null;
+  return NextResponse.json({ caption, note });
 }

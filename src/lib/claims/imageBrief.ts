@@ -16,7 +16,8 @@
 // The check is on the PROMPT, before generation — no vision pass over
 // the finished image, which would be slow, costly, and after the fact.
 
-import { normalise, type BusinessFacts, type CatalogProduct } from "./businessFacts";
+import { normalise, physicalProducts, serviceItems, type BusinessFacts, type CatalogProduct } from "./businessFacts";
+import { isService } from "@/lib/catalog/catalogItem";
 
 export type ImageBrief = {
   /** What the image model is asked for. */
@@ -59,9 +60,16 @@ export function mentionsProduct(brief: string, f: BusinessFacts): boolean {
   return productTerms(f).some((term) => text.includes(term));
 }
 
-/** The product an image should show: the first one with a photo, else the first listed. */
+/**
+ * The item an image should show: a physical product with a photo first,
+ * then any product, then a service (with a photo if one has it). A
+ * business that sells only services still gets an anchor — images don't
+ * depend on a product photo existing.
+ */
 export function heroProduct(f: BusinessFacts): CatalogProduct | null {
-  return f.products.find((p) => p.images.length > 0) ?? f.products[0] ?? null;
+  const goods = physicalProducts(f);
+  const services = serviceItems(f);
+  return goods.find((p) => p.images.length > 0) ?? goods[0] ?? services.find((p) => p.images.length > 0) ?? services[0] ?? null;
 }
 
 /** The sentence that ties a picture to the real product. Null when the business has told us nothing to anchor to. */
@@ -70,6 +78,9 @@ export function heroSubjectLine(f: BusinessFacts): string | null {
   if (hero) {
     const what = [hero.name, hero.description ? hero.description.slice(0, 120) : null].filter(Boolean).join(" — ");
     const trade = f.categoryKnown ? ` The business is a ${f.category} business` : "";
+    if (isService(hero)) {
+      return `The subject is this business's own service: ${what}.${trade} — show that service being provided, or the result a customer gets from it, as the main subject. Do not show an unrelated product or a generic scene without it.`;
+    }
     return `The hero subject is this business's own product: ${what}.${trade} — show that product as the main subject. Do not substitute a different product or show a generic scene without it.`;
   }
   if (f.categoryKnown) {
@@ -94,11 +105,14 @@ export function buildImageBrief(brief: string, f: BusinessFacts | null | undefin
 
   return {
     prompt,
-    referenceImageUrl: hero?.images[0] ?? null,
+    // Only a physical product's photo is a reference to copy exactly. A
+    // service's photo (a salon chair, a treatment room) isn't the thing to
+    // reproduce, and REFERENCE_PHOTO_RULE is written for products.
+    referenceImageUrl: hero && !isService(hero) ? hero.images[0] ?? null : null,
     anchored: needsAnchor && Boolean(anchor),
     warning:
       !f.products.length && !f.categoryKnown
-        ? "Hawlai doesn't know what this business sells yet — add your products, or set your business category in Settings, so generated images match."
+        ? "Hawlai doesn't know what this business sells yet — add your products or services, or set your business category in Settings, so generated images match."
         : null,
   };
 }

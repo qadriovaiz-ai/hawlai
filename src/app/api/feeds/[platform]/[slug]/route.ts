@@ -53,6 +53,8 @@ export async function GET(
     .select("id, name, description, price, images, inventory_count, brand, condition, gtin, category")
     .eq("dealership_id", website.dealership_id)
     .eq("is_active", true)
+    // Shopping feeds list goods; Google and Meta reject services in them.
+    .eq("kind", "product")
     .order("order_index", { ascending: true });
 
   const ctx = {

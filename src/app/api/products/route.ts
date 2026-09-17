@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { serviceFieldsFromBody } from "@/lib/catalog/catalogItem";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -34,8 +35,10 @@ export async function POST(request: Request) {
   const { name, description, price, compareAtPrice, images, sku, category, inventoryCount } = body;
 
   if (!name || typeof name !== "string" || !name.trim()) {
-    return NextResponse.json({ error: "Product name is required" }, { status: 400 });
+    return NextResponse.json({ error: "A name is required" }, { status: 400 });
   }
+  const service = serviceFieldsFromBody({ kind: body.kind ?? "product", durationMinutes: body.durationMinutes, bookingUrl: body.bookingUrl });
+  if (!service.ok) return NextResponse.json({ error: service.error }, { status: 400 });
   const priceNum = Number(price);
   if (!Number.isFinite(priceNum) || priceNum < 0) {
     return NextResponse.json({ error: "A valid price is required" }, { status: 400 });
@@ -51,6 +54,8 @@ export async function POST(request: Request) {
     sku: sku ?? null,
     category: category ?? null,
     inventory_count: inventoryCount != null && inventoryCount !== "" ? Number(inventoryCount) : null,
+    // Last, so a service's stock is always cleared whatever was sent.
+    ...service.update,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

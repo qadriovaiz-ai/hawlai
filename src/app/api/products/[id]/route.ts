@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { serviceFieldsFromBody } from "@/lib/catalog/catalogItem";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -26,6 +27,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.inventoryCount !== undefined) update.inventory_count = body.inventoryCount === "" || body.inventoryCount == null ? null : Number(body.inventoryCount);
   if (body.isActive !== undefined) update.is_active = !!body.isActive;
   if (body.orderIndex !== undefined) update.order_index = Number(body.orderIndex);
+
+  // Product or service. Whether stock applies depends on the item's
+  // current kind when this update doesn't change it.
+  if (body.kind !== undefined || body.durationMinutes !== undefined || body.bookingUrl !== undefined || body.inventoryCount !== undefined) {
+    const { data: current } = await supabase.from("products").select("kind").eq("id", id).eq("dealership_id", dealershipId).maybeSingle();
+    const service = serviceFieldsFromBody(body, current ?? {});
+    if (!service.ok) return NextResponse.json({ error: service.error }, { status: 400 });
+    Object.assign(update, service.update);
+  }
 
   const { data: product, error } = await supabase
     .from("products")

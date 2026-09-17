@@ -68,13 +68,13 @@ afterEach(() => vi.restoreAllMocks());
 describe("the facts carry the real links", () => {
   it("a published store gets its hawlai.online address and a working link per product", async () => {
     const f = await gatherBusinessFacts(db(), "d1");
-    expect(f.links).toEqual({ store: STORE_URL, products: [{ name: "Lavender candle", url: PRODUCT_URL }] });
+    expect(f.links).toEqual({ store: STORE_URL, products: [{ name: "Lavender candle", url: PRODUCT_URL }], booking: null });
   });
 
   it("an unpublished store gets no links — they would lead nowhere", async () => {
     tables = STORE(false);
     const f = await gatherBusinessFacts(db(), "d1");
-    expect(f.links).toEqual({ store: null, products: [] });
+    expect(f.links).toEqual({ store: null, products: [], booking: null });
     expect(formatFactsForCopy(f)).toContain("do not include any website link at all");
   });
 

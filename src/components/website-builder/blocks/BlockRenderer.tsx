@@ -3,16 +3,8 @@ import type { LandingTheme } from "@/lib/landingThemes";
 import { renderRichText } from "@/lib/richText";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ProductCatalog from "@/components/website/ProductCatalog";
+import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
 
-interface StorefrontProduct {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  compare_at_price: number | null;
-  images: string[];
-  inventory_count: number | null;
-}
 
 export interface BlockRenderContext {
   theme: LandingTheme;

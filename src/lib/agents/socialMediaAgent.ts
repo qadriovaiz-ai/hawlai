@@ -11,7 +11,7 @@
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
-import { stripUnsupported } from "@/lib/claims/claimCheck";
+import { stripUnsupported, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 const GRAPH_VERSION = "v23.0";
@@ -22,8 +22,10 @@ export async function generateSocialCaption(
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   /** Verified business facts (src/lib/claims). When given, the caption is written from them and checked against them. */
-  facts?: BusinessFacts | null
-): Promise<{ caption: string; claimsRemoved: string[] }> {
+  facts?: BusinessFacts | null,
+  /** "draft" when the owner reviews the caption before posting: unverified prices are flagged, not removed. */
+  claimsMode: ClaimsMode = "publish"
+): Promise<{ caption: string; claimsRemoved: string[]; priceWarnings?: string[] }> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
     : "No brand profile set — default to a warm, professional tone in Hinglish.";
@@ -64,8 +66,8 @@ Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 re
     const parsed = JSON.parse(clean);
     const caption: string = parsed.caption ?? prompt;
     if (!facts) return { caption, claimsRemoved: [] };
-    const r = stripUnsupported(caption, facts);
-    return { caption: r.text, claimsRemoved: r.removed };
+    const r = stripUnsupported(caption, facts, claimsMode);
+    return { caption: r.text, claimsRemoved: r.removed, priceWarnings: r.priceWarnings };
   } catch (err: any) {
     console.error("[social-media-agent] generateSocialCaption error:", err.message);
     return unchanged;
