@@ -5,7 +5,7 @@ import { Briefcase, Check } from "lucide-react";
 import { Button } from "@/components/ui";
 
 // No default and no preset first choice: an empty field stays empty until
-// the owner says what they do. It used to start as "Car Dealership", so
+// the owner says what they do. It used to start as car dealership, so
 // clicking Save without typing made any business a car dealership.
 const SUGGESTIONS = ["Retail Store", "Restaurant / Cafe", "Salon / Spa", "Clinic", "Coaching Institute", "Real Estate", "Consulting", "Software / SaaS"];
 
