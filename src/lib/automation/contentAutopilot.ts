@@ -5,6 +5,7 @@ import { captionFrom } from "@/lib/chat/publishActions";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { recentCopy } from "@/lib/content/recentCopy";
 
 /**
  * The words to post, from whatever shape the model returned.
@@ -107,9 +108,12 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
   let instagramError: string | null = null;
 
   try {
+    // Single-shot by design: no revision pass on the path that publishes
+    // with nobody reading first.
+    const recent = await recentCopy(supabase, dealershipId);
     const [imageBuffer, firstAttempt] = await Promise.all([
       generateGraphic("social_graphic", name, category, topic, brandProfile),
-      generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts),
+      generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts, "publish", { recent }),
     ]);
 
     // A caption goes out only if it needed NO claims removed — a
@@ -118,7 +122,7 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     // false claim published under the owner's name.
     let contentResult = firstAttempt;
     if (!contentResult._fallback && contentResult.claimsRemoved?.length) {
-      contentResult = await generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts);
+      contentResult = await generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts, "publish", { recent });
     }
 
     if (contentResult._fallback) throw new Error("Content generation fell back to placeholder — skipping this run rather than posting generic text");

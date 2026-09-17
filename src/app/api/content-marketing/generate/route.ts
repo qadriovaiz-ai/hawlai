@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
+import { recentCopy } from "@/lib/content/recentCopy";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
@@ -35,7 +36,11 @@ export async function POST(request: Request) {
     undefined,
     facts,
     // A draft the owner reads before using: unverified prices are flagged, not removed.
-    "draft"
+    "draft",
+    // The last five pieces so this one doesn't repeat them, and a second
+    // pass that cuts anything another business could have written — worth
+    // its cost here because a person reads the result.
+    { recent: await recentCopy(supabase, dealershipId), revise: true }
   );
 
   // Only save real generations to history — a fallback shouldn't

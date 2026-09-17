@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
+import { recentCopy } from "@/lib/content/recentCopy";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { claimsNote } from "@/lib/claims/claimCheck";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
@@ -63,7 +64,11 @@ export async function POST(request: Request) {
 
   const [imageBuffer, contentResult] = await Promise.all([
     generateGraphic("social_graphic", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }),
-    generateContent("instagram_post", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }, undefined, facts),
+    generateContent("instagram_post", name, category, effectiveTopic, brandProfile, { supabase, dealershipId }, undefined, facts, "publish", {
+      recent: await recentCopy(supabase, dealershipId),
+      // The owner reads the queued post on the calendar before its date.
+      revise: true,
+    }),
   ]);
 
   if (contentResult._fallback) return NextResponse.json({ error: "Content generation didn't work right now — try again shortly." }, { status: 500 });

@@ -58,7 +58,23 @@ export function resolveBrandVoiceProfile(profile: BrandVoiceProfile | null | und
 // prompts — same "pre-formatted, ready to drop in" shape as
 // memorySection/knowledgeSection in masterBrainV2.ts.
 export function formatBrandVoiceSection(profile: BrandVoiceProfile | null | undefined, toneOfVoice: string | null | undefined): string {
-  const p = resolveBrandVoiceProfile(profile, toneOfVoice);
+  // A stored brand_voice can be partial — an older row, or one saved before
+  // a field existed. Missing fields fall back to the safe generic profile
+  // rather than throwing halfway through building a prompt.
+  const fallback = deriveBrandVoiceFallback(toneOfVoice);
+  const stored = resolveBrandVoiceProfile(profile, toneOfVoice);
+  const p: BrandVoiceProfile = {
+    ...fallback,
+    ...stored,
+    personality_traits: Array.isArray(stored.personality_traits) && stored.personality_traits.length ? stored.personality_traits : fallback.personality_traits,
+    vocabulary_preferences: {
+      favor: stored.vocabulary_preferences?.favor ?? [],
+      avoid: stored.vocabulary_preferences?.avoid ?? [],
+    },
+    sentence_rhythm: stored.sentence_rhythm || fallback.sentence_rhythm,
+    formality_level: stored.formality_level ?? fallback.formality_level,
+    punctuation_emoji_style: { ...fallback.punctuation_emoji_style, ...(stored.punctuation_emoji_style ?? {}) },
+  };
   const lines: string[] = [];
   if (p.personality_traits.length > 0) lines.push(`Personality: ${p.personality_traits.join(", ")}.`);
   lines.push(`Formality: ${p.formality_level}.`);

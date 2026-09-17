@@ -12,6 +12,83 @@ import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
+import { STORY_CATEGORY } from "@/lib/business/businessStory";
+
+// WHY THIS EXISTS (approved 2026-09-18): every caption came out in the
+// same shape — hook line, product line, price, CTA, question — whatever
+// was being promoted, and read as if it could belong to any business in
+// the same category. Three causes, all addressed here:
+//   1. the per-type instructions prescribed that shape;
+//   2. nothing told the model to commit to ONE angle, so it covered
+//      every base and landed on the safe average;
+//   3. nothing showed it what it had already written, so it reached for
+//      the same moves every time.
+// The cure is never invention: specificity comes from the owner's own
+// story facts (lib/business/businessStory.ts), which the claims guard
+// already treats as verified.
+
+/** One piece, one angle — committed to, not blended with the others. */
+const ANGLES = [
+  "the making — one real step of how this is made or done, in detail",
+  "the material or ingredient — what it is, where it comes from, why this one",
+  "the slow part — what takes longest or goes wrong, and why it's still done that way",
+  "the person — the owner's own reason for doing this, in their words",
+  "a customer moment — something a customer actually said or did",
+  "the detail people notice — the small thing customers ask about",
+  "what people get wrong — a misunderstanding about this kind of work, corrected plainly",
+  "the use — what it's actually like to live with, on an ordinary day",
+  "what we refuse to do — a shortcut not taken, and the cost of not taking it",
+  "the occasion — why now, if today's date genuinely makes it relevant",
+];
+
+/** Openings and phrasings a reader has seen a thousand times. */
+const TIRED_MOVES = [
+  "Looking for X? Look no further",
+  "Introducing / Meet the ...",
+  "Elevate your ...",
+  "Transform your ...",
+  "Say goodbye to X, say hello to Y",
+  "Perfect for ...",
+  "Indulge in ...",
+  "the perfect blend of X and Y",
+  "crafted with love / made with love",
+  "a touch of luxury / a slice of heaven",
+  "Because you deserve ...",
+  "Tag someone who ...",
+  "Which one is your favourite? / Drop a ❤️ if ...",
+  "Experience the difference",
+  "Not just a X — it's a Y",
+];
+
+function angleFor(topic: string, recent: string[]): string {
+  // Rotated, not random: successive pieces on the same topic get
+  // different angles instead of the model's default favourite.
+  const seed = `${topic}|${recent.length}`.split("").reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 100000, 7);
+  const order = ANGLES.map((a, i) => ANGLES[(i + seed) % ANGLES.length]);
+  return order.slice(0, 3).map((a, i) => `${i + 1}. ${a}`).join("\n");
+}
+
+/** The part of the prompt that asks for one committed angle and real specifics. */
+export function craftSection(topic: string, recent: string[], hasStory: boolean): string {
+  return `
+## How to write this (this matters more than the format)
+- Pick ONE angle and commit to it for the whole piece. Choose from these three, or a better one the facts suggest:
+${angleFor(topic, recent)}
+- Use at least one CONCRETE, specific detail from the verified facts — a step, a material, a place, a length of time, something a customer said. ${
+    hasStory
+      ? "The owner's own story is in the facts above: use it. That detail is the whole point of the piece."
+      : "The owner hasn't written their story down yet, so specifics are thin — write only what the facts support, stay plain, and don't pad with adjectives to fill the gap."
+  }
+- Write it as one person telling another something true. No stacked adjectives, no rented enthusiasm.
+- These openings and phrasings are worn out — never use them or anything close to them:
+${TIRED_MOVES.map((m) => `  - ${m}`).join("\n")}
+- Mention the price only if this particular piece needs it. A price is not a closing move.
+- End the way this piece actually ends. A question is one option, not the default.${
+    recent.length
+      ? `\n- Recent pieces for this business — do NOT repeat their openings, rhythm or closing moves:\n${recent.map((r) => `  - "${r.replace(/\s+/g, " ").slice(0, 160)}"`).join("\n")}`
+      : ""
+  }`;
+}
 
 export interface ContentTypeMeta {
   key: string;
@@ -60,8 +137,14 @@ export async function generateContent(
   /** Verified business facts (src/lib/claims). When given, copy is written from them and checked against them. */
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's used: unverified prices are flagged, not removed. */
-  claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[] }> {
+  claimsMode: ClaimsMode = "publish",
+  opts: {
+    /** The last few pieces written for this business, so this one doesn't repeat them. */
+    recent?: string[];
+    /** Second pass that cuts lines any business in the same category could have written. Pages where a human reviews; never the auto-publish path. */
+    revise?: boolean;
+  } = {}
+): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
 
@@ -96,6 +179,7 @@ Topic/product/context: "${resolveFestiveTopic(topic, facts?.season) || "general 
 
 Content type: ${meta.label}
 Output requirements: ${meta.instructions}
+${craftSection(topic, opts.recent ?? [], Boolean(facts?.ownerFacts?.some((k) => k.category === STORY_CATEGORY)))}
 
 Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this content type (e.g. use "slides" array for carousels, "days" array for a content calendar, "hooks" array for hook generation, "ctas" array for CTA generation, otherwise a "text" field or clearly-named fields matching the requirements above). Be specific to this business and topic — never generic filler.`,
           },
@@ -111,14 +195,89 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
-    if (!facts) return { output: parsed };
+    let parsed = JSON.parse(clean);
+    let revised = false;
+    if (opts.revise) {
+      const second = await reviseForSpecificity(parsed, meta.label, facts, logContext);
+      if (second) {
+        parsed = second;
+        revised = true;
+      }
+    }
+    if (!facts) return { output: parsed, ...(revised ? { revised } : {}) };
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
     const guarded = guardGenerated(parsed, facts, claimsMode);
-    return { output: guarded.output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings };
+    return { output: guarded.output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, ...(revised ? { revised } : {}) };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;
+  }
+}
+
+/**
+ * The second pass: cut every line that any business in the same line of
+ * work could have written, and keep only what the verified facts support.
+ *
+ * Runs only where a person reads the result before it's used (the Content
+ * Marketing page, the content queue) — never on the auto-publish path,
+ * where a second call's cost buys nothing with no human in the loop.
+ *
+ * Returns null on any failure: the first draft beats nothing, so a
+ * revision that doesn't come back is simply skipped.
+ */
+export async function reviseForSpecificity(
+  draft: any,
+  contentLabel: string,
+  facts: BusinessFacts | null | undefined,
+  logContext?: { supabase: any; dealershipId: string }
+): Promise<any | null> {
+  if (!facts) return null;
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: getModel("standard"),
+        max_tokens: 2000,
+        messages: [{
+          role: "user",
+          content: `You are a ruthless copy editor. Below is a draft ${contentLabel} for a real business, and the verified facts about that business.
+
+THE TEST, line by line: could a competitor in the same line of work publish this exact line about themselves? If yes it is filler — cut it, or replace it with something only THIS business can say, taken from the facts.
+
+Rules:
+- Replace only with specifics that are IN the facts: a step, a material, a place, a length of time, something a customer said, the owner's own words. Never invent a detail, number, review, offer or claim — inventing one is worse than leaving the line out.
+- Keep the same JSON shape, the same language, and roughly the same length. No preamble.
+- Cut stacked adjectives, rented enthusiasm and marketing throat-clearing. Plain and specific beats warm and vague.
+- A line already specific to this business stays exactly as it is.
+
+${formatFactsForCopy(facts)}
+
+${COPY_TRUTH_RULES}
+
+Draft JSON:
+${JSON.stringify(draft).slice(0, 6000)}
+
+Return the edited JSON only — same shape, no markdown, no commentary.`,
+        }],
+      }),
+    });
+    if (!response.ok) return null;
+    const bodyText = await response.text();
+    if (!bodyText.trim()) return null;
+    const data = JSON.parse(bodyText);
+    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "content_revision", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    const text = data.content?.[0]?.text ?? "";
+    const match = text.match(/\{[\s\S]*\}/);
+    const clean = (match ? match[0] : text).replace(/```json|```/g, "").trim();
+    if (!clean) return null;
+    const revised = JSON.parse(clean);
+    // A revision that came back a different shape isn't a revision.
+    const sameShape = Object.keys(draft ?? {}).every((k) => k.startsWith("_") || k in revised);
+    return sameShape ? revised : null;
+  } catch (err: any) {
+    console.error("[content-marketing-agent] revision pass failed:", err.message);
+    return null;
   }
 }

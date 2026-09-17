@@ -19,7 +19,8 @@
 // claimCheck.ts checks generated copy against it; imageBrief.ts anchors
 // generated pictures to it.
 
-import type { BrandVoiceProfile } from "@/lib/agents/brandVoice";
+import { formatBrandVoiceSection, type BrandVoiceProfile } from "@/lib/agents/brandVoice";
+import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
@@ -539,9 +540,18 @@ export function formatFactsForCopy(f: BusinessFacts): string {
     lines.push("Store link: none — the website isn't published, so do not include any website link at all.");
   }
   lines.push(`Track record: ${f.allTime.paidOrders} paid order(s) and ${f.allTime.leads} lead(s) on record. No ratings or reviews on record.`);
-  if (f.ownerFacts.length) {
+  // The owner's own story, in full — the specifics that make copy about
+  // THIS business impossible to write about any other one. Never truncated
+  // to 200 characters the way the other notes are: the detail IS the point.
+  const story = f.ownerFacts.filter((k) => k.category === STORY_CATEGORY);
+  if (story.length) {
+    lines.push("The owner's own story — use these specifics; they are what makes this business different:");
+    for (const k of story) lines.push(`- ${k.title}: ${k.content}`);
+  }
+  const otherFacts = f.ownerFacts.filter((k) => k.category !== STORY_CATEGORY);
+  if (otherFacts.length) {
     lines.push("What the owner says about the business:");
-    for (const k of f.ownerFacts.slice(0, 12)) lines.push(`- ${k.title}: ${k.content.slice(0, 200)}`);
+    for (const k of otherFacts.slice(0, 12)) lines.push(`- ${k.title}: ${k.content.slice(0, 200)}`);
   }
   if (f.brand.description) lines.push(`How the owner describes the business: ${f.brand.description.slice(0, 300)}`);
   if (f.brand.pillars.length) lines.push(`Brand messaging pillars (the owner's own words): ${f.brand.pillars.join("; ")}`);
@@ -552,6 +562,9 @@ export function formatFactsForCopy(f: BusinessFacts): string {
     if (said) lines.push(`What the website says: "${said}"`);
   }
   if (f.season) lines.push(formatSeason(f.season));
+  // How this business sounds. It was gathered into the facts but only ever
+  // reached chat, so every other generator wrote in a house voice.
+  if (f.brand?.voice || f.brand?.tone) lines.push(formatBrandVoiceSection(f.brand.voice, f.brand.tone).trim());
   if (f.unreadable.length) lines.push(`Couldn't be read right now (unknown — don't guess): ${f.unreadable.join(", ")}.`);
   return lines.join("\n");
 }

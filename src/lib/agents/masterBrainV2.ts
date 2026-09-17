@@ -634,6 +634,23 @@ export const TOOLS = [
     },
   },
   {
+    name: "business_story",
+    description: "Start or continue the owner's Business Story — the one-time set of questions whose answers make this business's copy impossible to write about anyone else (how it started, how the work is actually done, materials, what a customer said, what they refuse to do). Call this when the person asks to do their business story, asks why their content reads generic, or when copy they're unhappy with has no specifics to draw on. Returns what they've already answered and what's still open; ask the questions ONE at a time, in their own words, and save each answer with save_business_story before asking the next.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "save_business_story",
+    description: "Save one Business Story answer, in the owner's own words. Save what they actually said — tidy the grammar, never add facts, never make it sound like marketing. Saved as Business Knowledge, so copy may state it as true.",
+    input_schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Which question this answers — the key from business_story." },
+        answer: { type: "string", description: "The owner's answer in their own words, a sentence or several. Don't summarise into an adjective." },
+      },
+      required: ["key", "answer"],
+    },
+  },
+  {
     name: "create_discount_code",
     description: "Create a real discount/coupon code customers can actually use at checkout on the business's store, e.g. \"make a WELCOME10 code for 10% off\". This is live the moment it's created — any customer who enters it gets the discount.",
     input_schema: {
@@ -2302,6 +2319,44 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         note: `Service "${input.name}"${duration ? ` (${duration})` : ""} added to the Products tab — saved with no image yet. ${booking}${modelHint}`,
       };
     }
+    case "business_story": {
+      const { STORY_QUESTIONS, storyProgress } = await import("../business/businessStory");
+      const { data: rows } = await supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", ctx.id).eq("is_active", true);
+      const { answered, missing } = storyProgress(rows ?? []);
+      return {
+        total: STORY_QUESTIONS.length,
+        answeredCount: answered.length,
+        answered: answered.map((a) => ({ title: a.title, answer: a.content.slice(0, 200) })),
+        remaining: missing.map((q) => ({ key: q.key, ask: q.ask, nudge: q.nudge })),
+        note:
+          missing.length === 0
+            ? "Every question is answered. Offer to change any of them, and tell them new content will now draw on these."
+            : `Ask the FIRST remaining question below, word for word or close to it, and nothing else in that message. Save the answer with save_business_story, then ask the next. ${missing.length} of ${STORY_QUESTIONS.length} still open.`,
+      };
+    }
+    case "save_business_story": {
+      const { storyQuestion, cleanStoryAnswer, STORY_CATEGORY } = await import("../business/businessStory");
+      const question = storyQuestion(String(input.key ?? ""));
+      if (!question) return { error: `No Business Story question called "${input.key}" — call business_story for the list.` };
+      const answer = cleanStoryAnswer(input.answer);
+      if (!answer.ok) return { error: answer.error };
+      const { data: existing } = await supabase
+        .from("business_knowledge")
+        .select("id")
+        .eq("dealership_id", ctx.id)
+        .eq("category", STORY_CATEGORY)
+        .eq("title", question.title)
+        .maybeSingle();
+      const { error } = existing
+        ? await supabase.from("business_knowledge").update({ content: answer.value, is_active: true }).eq("id", existing.id).eq("dealership_id", ctx.id)
+        : await supabase.from("business_knowledge").insert({ dealership_id: ctx.id, category: STORY_CATEGORY, title: question.title, content: answer.value, is_active: true });
+      if (error) return { error: error.message };
+      return {
+        success: true,
+        saved: question.title,
+        note: `Saved "${question.title}" in their own words. Every piece of copy can now use it, and the claims check treats it as true because they said it. Ask the next open question.`,
+      };
+    }
     case "create_discount_code": {
       const code = String(input.code).trim().toUpperCase();
       if (!/^[A-Z0-9_-]{3,20}$/.test(code)) return { error: "Code must be 3-20 letters/numbers, e.g. WELCOME10" };
@@ -2450,6 +2505,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   export_leads: "/dashboard/leads",
   schedule_lead_export: "/dashboard/autopilot",
   add_product: "/dashboard/website-builder",
+  save_business_story: "/dashboard/settings/knowledge-base",
   create_discount_code: "/dashboard/website-builder",
   get_report_links: "/dashboard/reports",
 };
@@ -2802,6 +2858,8 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: "Lead added", departmentHref };
     case "add_product":
       return { kind: "record", label: result.kind === "service" ? "Service added" : "Product added", summary: result.note, departmentHref };
+    case "save_business_story":
+      return { kind: "record", label: `Business story: ${result.saved}`, summary: result.note, departmentHref };
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
     case "schedule_lead_export":
