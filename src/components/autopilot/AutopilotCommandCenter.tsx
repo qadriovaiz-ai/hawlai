@@ -25,6 +25,8 @@ const SUBSYSTEM_LABELS: Record<string, string> = {
   lead_scoring: "Lead Scoring",
   stale_approvals: "Stale Approval Detection", // P1 19b
   lead_export: "Scheduled Leads Export",
+  // Not a cron job: whether Resend reports what happened to each email.
+  delivery_tracking: "Email Delivery Tracking",
   // P1 18b — not cron subsystems, but the same health shape applies:
   // event_queue/agent_tasks track status directly on each row.
   event_bus: "Event Bus",
@@ -282,7 +284,7 @@ export default function AutopilotCommandCenter() {
                   <span
                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                       !health ? "bg-slate-300"
-                      : health.kind === "sends" || health.kind === "export" || health.kind === "daily" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", running: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
+                      : health.kind === "sends" || health.kind === "export" || health.kind === "daily" || health.kind === "delivery" ? { ok: "bg-green-500", failing: "bg-red-500", paused: "bg-amber-500", running: "bg-amber-500", off: "bg-slate-300", idle: "bg-slate-300" }[health.state as string] ?? "bg-slate-300"
                       : health.lastSuccess ? "bg-green-500" : "bg-red-500"
                     }`}
                   />
@@ -316,6 +318,8 @@ export default function AutopilotCommandCenter() {
                       </span>
                     ))}
                   </span>
+                ) : health && health.kind === "delivery" ? (
+                  <span className={`text-right max-w-[22rem] ${health.state === "failing" ? "text-red-400" : "text-slate-400"}`}>{health.note}</span>
                 ) : health && health.kind === "export" ? (
                   <span className={`text-right ${health.state === "failing" ? "text-red-400" : "text-slate-400"}`}>{health.note}</span>
                 ) : health && health.kind === "sends" ? (

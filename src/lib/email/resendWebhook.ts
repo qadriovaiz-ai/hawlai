@@ -40,11 +40,27 @@ function client(): Resend | null {
   return key ? new Resend(key) : null;
 }
 
-async function findWebhook(resend: Resend): Promise<{ id: string; events: string[] | null } | null> {
+/** Resend's error, with its code kept so a restricted key can be told apart from an outage. */
+class ResendApiError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+  }
+}
+
+async function findWebhook(resend: Resend): Promise<{ id: string; events: string[] | null; status: string | null } | null> {
   const { data, error } = await resend.webhooks.list();
-  if (error) throw new Error(error.message);
+  if (error) throw new ResendApiError(error.message, (error as any).name ?? null);
   const hook = (data?.data ?? []).find((w: any) => w.endpoint === webhookEndpoint());
-  return hook ? { id: hook.id, events: hook.events } : null;
+  return hook ? { id: hook.id, events: hook.events, status: (hook as any).status ?? null } : null;
+}
+
+/** What to tell the owner when Resend refuses. */
+export function describeResendError(code: string | null | undefined, message: string): string {
+  if (code === "restricted_api_key") {
+    return "Resend's API key can only send emails. Replace RESEND_API_KEY in Vercel with a Full access key.";
+  }
+  if (code === "invalid_api_key" || code === "missing_api_key") return "Resend doesn't recognise the API key in RESEND_API_KEY.";
+  return `Resend said: ${message}`;
 }
 
 /** Makes sure Resend sends Hawlai every delivery event. Creates the webhook, or adds missing events to it. */
@@ -55,20 +71,87 @@ export async function ensureResendWebhook(): Promise<{ status: "created" | "upda
     const existing = await findWebhook(resend);
     if (!existing) {
       const { data, error } = await resend.webhooks.create({ endpoint: webhookEndpoint(), events: [...WEBHOOK_EVENTS] });
-      if (error || !data) return { error: `couldn't create the Resend webhook: ${error?.message ?? "no response"}` };
+      if (error || !data) return { error: `couldn't create the Resend webhook: ${error ? describeResendError((error as any).name, error.message) : "no response"}` };
       cachedSecret = null;
+      cachedCheck = null;
       return { status: "created", id: data.id };
     }
     const missing = WEBHOOK_EVENTS.filter((e) => !(existing.events ?? []).includes(e));
-    if (missing.length) {
+    // A webhook switched off (by hand, or by Resend after repeated
+    // failures) reports nothing, even with every event on it.
+    if (missing.length || existing.status === "disabled") {
       const { error } = await resend.webhooks.update(existing.id, { events: [...WEBHOOK_EVENTS], status: "enabled" });
-      if (error) return { error: `couldn't update the Resend webhook: ${error.message}` };
+      if (error) return { error: `couldn't update the Resend webhook: ${describeResendError((error as any).name, error.message)}` };
+      cachedCheck = null;
       return { status: "updated", id: existing.id };
     }
     return { status: "ok", id: existing.id };
   } catch (err: any) {
-    return { error: `couldn't read Resend webhooks: ${err.message}` };
+    return { error: `couldn't read Resend webhooks: ${describeResendError(err?.code, err?.message ?? "unknown error")}` };
   }
+}
+
+export type DeliveryTrackingHealth = {
+  subsystem: "delivery_tracking";
+  kind: "delivery";
+  state: "ok" | "failing" | "idle";
+  note: string;
+  lastSuccess: boolean | null;
+  lastRunAt: null;
+};
+
+const CHECK_TIMEOUT_MS = 4000;
+const CHECK_CACHE_MS = 60_000;
+let cachedCheck: { at: number; health: DeliveryTrackingHealth } | null = null;
+
+/**
+ * Is Resend telling Hawlai what happens to its emails? Read-only — asks
+ * Resend and changes nothing (the morning run is what registers the
+ * webhook). Shared by every business, so cached for a minute.
+ *
+ * WHY (2026-09-18): the webhook went unregistered for two days because the
+ * API key could only send emails, and the reason existed only in Vercel's
+ * logs.
+ */
+export async function checkDeliveryTracking(now = Date.now()): Promise<DeliveryTrackingHealth> {
+  if (cachedCheck && now - cachedCheck.at < CHECK_CACHE_MS) return cachedCheck.health;
+  const base = { subsystem: "delivery_tracking" as const, kind: "delivery" as const, lastRunAt: null };
+  const health = await (async (): Promise<DeliveryTrackingHealth> => {
+    const resend = client();
+    if (!resend) return { ...base, state: "failing", lastSuccess: false, note: "Off — RESEND_API_KEY isn't set, so emails can't be sent or tracked." };
+    let hook: Awaited<ReturnType<typeof findWebhook>>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      hook = await Promise.race([
+        findWebhook(resend),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new ResendApiError("timed out", "timeout")), CHECK_TIMEOUT_MS);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    } catch (err: any) {
+      if (err?.code === "timeout") return { ...base, state: "idle", lastSuccess: null, note: "Couldn't reach Resend just now — reopen this page to check again." };
+      return { ...base, state: "failing", lastSuccess: false, note: `Off — ${describeResendError(err?.code, err?.message ?? "unknown error")}` };
+    }
+    if (!hook) {
+      return { ...base, state: "idle", lastSuccess: null, note: "Not set up yet — Hawlai sets it up on the next morning run (8:30 AM IST)." };
+    }
+    if (hook.status === "disabled") {
+      return { ...base, state: "failing", lastSuccess: false, note: "Off — the webhook is disabled in Resend. Hawlai switches it back on at the next morning run." };
+    }
+    const missing = WEBHOOK_EVENTS.filter((e) => !(hook!.events ?? []).includes(e));
+    if (missing.length) {
+      return { ...base, state: "failing", lastSuccess: false, note: `Partly on — not receiving ${missing.join(", ")}. Hawlai adds them at the next morning run.` };
+    }
+    return { ...base, state: "ok", lastSuccess: true, note: "On — Resend reports deliveries, bounces and spam complaints" };
+  })();
+  // Only a definite answer is cached; a timeout is asked again next time.
+  if (!(health.state === "idle" && health.note.startsWith("Couldn't reach"))) cachedCheck = { at: now, health };
+  return health;
+}
+
+/** Test hook: forget the cached check. */
+export function resetDeliveryTrackingCache() {
+  cachedCheck = null;
 }
 
 let cachedSecret: string | null = null;

@@ -67,7 +67,7 @@ vi.mock("resend", async (orig) => {
 });
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
 
-import { ensureResendWebhook, verifyResendEvent, applyResendEvent, resetWebhookSecretCache, WEBHOOK_EVENTS } from "@/lib/email/resendWebhook";
+import { ensureResendWebhook, verifyResendEvent, applyResendEvent, resetWebhookSecretCache, WEBHOOK_EVENTS, checkDeliveryTracking, resetDeliveryTrackingCache } from "@/lib/email/resendWebhook";
 import { POST } from "@/app/api/webhooks/resend/route";
 
 function signed(event: Row, secret = SECRET) {
@@ -93,6 +93,7 @@ beforeEach(() => {
   process.env.RESEND_API_KEY = "re_test";
   delete process.env.NEXT_PUBLIC_SITE_URL;
   resetWebhookSecretCache();
+  resetDeliveryTrackingCache();
   Object.values(api).forEach((m) => m.mockReset());
   hooks = [{ id: "wh_1", endpoint: ENDPOINT, events: [...WEBHOOK_EVENTS], signing_secret: SECRET }];
   api.list.mockImplementation(async () => ({ data: { object: "list", has_more: false, data: hooks.map(({ signing_secret, ...h }) => h) }, error: null }));
@@ -247,7 +248,18 @@ describe("the webhook registers itself", () => {
     expect(await ensureResendWebhook()).toEqual({ status: "ok", id: "wh_1" });
     expect(api.create).not.toHaveBeenCalled();
     api.list.mockImplementationOnce(async () => ({ data: null, error: { message: "This API key is restricted to sending" } }));
-    expect(await ensureResendWebhook()).toEqual({ error: "couldn't read Resend webhooks: This API key is restricted to sending" });
+    expect(await ensureResendWebhook()).toEqual({ error: "couldn't read Resend webhooks: Resend said: This API key is restricted to sending" });
+  });
+
+  it("a webhook switched off in Resend is switched back on", async () => {
+    (hooks[0] as any).status = "disabled";
+    expect(await ensureResendWebhook()).toEqual({ status: "updated", id: "wh_1" });
+    expect(api.update).toHaveBeenCalledWith("wh_1", { events: [...WEBHOOK_EVENTS], status: "enabled" });
+  });
+
+  it("a sending-only key is named as the reason, with the fix", async () => {
+    api.list.mockImplementationOnce(async () => ({ data: null, error: { name: "restricted_api_key", message: "This API key is restricted to only send emails" } }));
+    expect(await ensureResendWebhook()).toEqual({ error: "couldn't read Resend webhooks: Resend's API key can only send emails. Replace RESEND_API_KEY in Vercel with a Full access key." });
   });
 
   it("runs once a day with the signals run, before any business's jobs", async () => {
@@ -256,5 +268,67 @@ describe("the webhook registers itself", () => {
     // platformTasks run before today's job list is worked (tests/dailyJobs.test.ts).
     expect(route).toContain("const resendWebhook = await ensureResendWebhook();");
     expect(route).toContain('if ("error" in resendWebhook) console.error("[autopilot] resend webhook:", resendWebhook.error);');
+  });
+});
+
+// THE LIVE CASE (2026-09-18): "No webhooks yet" in Resend for two days. The
+// API key could only send emails, and the reason was only in Vercel's logs.
+describe("the Automation Health card says whether delivery tracking is on", () => {
+  it("on: the webhook exists, is enabled and gets every event", async () => {
+    expect(await checkDeliveryTracking()).toMatchObject({ subsystem: "delivery_tracking", kind: "delivery", state: "ok", note: expect.stringMatching(/^On/) });
+  });
+
+  it("a sending-only key: off, with Resend's reason and the fix", async () => {
+    api.list.mockImplementation(async () => ({ data: null, error: { name: "restricted_api_key", message: "This API key is restricted to only send emails" } }));
+    expect(await checkDeliveryTracking()).toMatchObject({
+      state: "failing",
+      note: "Off — Resend's API key can only send emails. Replace RESEND_API_KEY in Vercel with a Full access key.",
+    });
+  });
+
+  it("any other refusal shows Resend's own words", async () => {
+    api.list.mockImplementation(async () => ({ data: null, error: { name: "rate_limit_exceeded", message: "Too many requests" } }));
+    expect((await checkDeliveryTracking()).note).toBe("Off — Resend said: Too many requests");
+  });
+
+  it("not registered yet: says when it will be", async () => {
+    hooks = [];
+    expect(await checkDeliveryTracking()).toMatchObject({ state: "idle", note: expect.stringContaining("next morning run") });
+    expect(api.create).not.toHaveBeenCalled(); // checking never changes anything
+  });
+
+  it("disabled, or missing events: not reported as on", async () => {
+    (hooks[0] as any).status = "disabled";
+    expect(await checkDeliveryTracking()).toMatchObject({ state: "failing", note: expect.stringContaining("disabled") });
+    resetDeliveryTrackingCache();
+    (hooks[0] as any).status = "enabled";
+    hooks[0].events = ["email.opened"];
+    expect(await checkDeliveryTracking()).toMatchObject({ state: "failing", note: expect.stringContaining("email.bounced") });
+  });
+
+  it("no API key: off, and says so", async () => {
+    delete process.env.RESEND_API_KEY;
+    expect(await checkDeliveryTracking()).toMatchObject({ state: "failing", note: expect.stringContaining("RESEND_API_KEY isn't set") });
+  });
+
+  it("asks Resend at most once a minute, and again straight after the webhook is set up", async () => {
+    hooks = [];
+    await checkDeliveryTracking(1_000);
+    await checkDeliveryTracking(30_000);
+    expect(api.list).toHaveBeenCalledTimes(1);
+    await ensureResendWebhook();
+    expect((await checkDeliveryTracking(31_000)).state).toBe("ok");
+  });
+
+  it("Resend not answering in time isn't reported as off", async () => {
+    vi.useFakeTimers();
+    try {
+      api.list.mockImplementation(() => new Promise(() => {}));
+      const pending = checkDeliveryTracking();
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(await pending).toMatchObject({ state: "idle", note: expect.stringContaining("Couldn't reach Resend") });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

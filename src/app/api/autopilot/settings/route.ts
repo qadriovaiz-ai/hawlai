@@ -5,6 +5,7 @@ import { buildExportHealth, EXPORT_FREQUENCIES } from "@/lib/leads/scheduledExpo
 import { exportRole, NOT_ALLOWED } from "@/lib/leads/exportLeads";
 import { buildDailyRunHealth } from "@/lib/automation/dailyJobs";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
+import { checkDeliveryTracking } from "@/lib/email/resendWebhook";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -191,6 +192,9 @@ export async function GET() {
     .eq("dealership_id", dealershipId)
     .eq("run_date", indiaToday());
   automationHealth.unshift(buildDailyRunHealth(todaysJobs ?? []));
+  // Whether bounces, spam complaints and failures reach Hawlai at all —
+  // asked of Resend live, so a refused setup shows here, not only in logs.
+  automationHealth.push(await checkDeliveryTracking());
 
   const canExport = Boolean(await exportRole(dealershipId, user.id).catch(() => null));
   return NextResponse.json({ dealership, workflows: workflows ?? [], activity, automationHealth, canExport });

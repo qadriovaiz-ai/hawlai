@@ -251,3 +251,19 @@ describe("welcome emails record their Resend message id", () => {
     expect(writes.find((w) => w.table === "email_automation_log")?.values).toMatchObject({ success: true, resend_message_id: "re_welcome" });
   });
 });
+
+describe("the card includes email delivery tracking", () => {
+  it("a delivery_tracking row, checked live with Resend", async () => {
+    tables = BASE();
+    const saved = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_KEY;
+    const { resetDeliveryTrackingCache } = await import("@/lib/email/resendWebhook");
+    resetDeliveryTrackingCache();
+    try {
+      const row = (await (await getSettings()).json()).automationHealth.find((h: any) => h.subsystem === "delivery_tracking");
+      expect(row).toMatchObject({ kind: "delivery", state: "failing", note: expect.stringContaining("RESEND_API_KEY isn't set") });
+    } finally {
+      if (saved !== undefined) process.env.RESEND_API_KEY = saved;
+    }
+  });
+});
