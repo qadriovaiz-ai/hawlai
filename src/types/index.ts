@@ -36,7 +36,13 @@ export interface Lead {
   name: string;
   phone: string | null;
   email: string | null;
+  /** What the lead wants — a product, service, plan or requirement. */
+  interest: string | null;
+  /** Everything else the lead told us (company, preferred date, a form's own questions…). */
+  details: Record<string, string | number> | null;
+  /** @deprecated kept for records from before migration 187; read `interest`. */
   vehicle: string | null;
+  /** @deprecated kept for records from before migration 187; now details.purchase_year. */
   purchase_year: number | null;
   budget: number | null;
   source: string;

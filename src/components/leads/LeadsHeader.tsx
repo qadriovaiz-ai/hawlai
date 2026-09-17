@@ -4,7 +4,8 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { Upload, Download, Loader2, X, CheckCircle, AlertCircle } from "lucide-react";
-import { qualifyLead } from "@/lib/ai-engine";
+import { mapLeadAnswers, scoreNewLead } from "@/lib/leads/leadIntake";
+import { LEAD_PROFILES, type LeadProfile } from "@/lib/leads/leadProfile";
 import { buttonClasses } from "@/components/ui";
 import { CSV_CONSENT_SOURCES } from "@/lib/email/consentSources";
 
@@ -13,7 +14,7 @@ interface UploadResult {
   errors: string[];
 }
 
-export default function LeadsHeader({ dealershipId, exportHref }: { dealershipId: string; exportHref?: string | null }) {
+export default function LeadsHeader({ dealershipId, exportHref, profile = LEAD_PROFILES.general }: { dealershipId: string; exportHref?: string | null; profile?: LeadProfile }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -39,30 +40,28 @@ export default function LeadsHeader({ dealershipId, exportHref }: { dealershipId
         const errors: string[] = [];
 
         for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          const name = row["Name"] ?? row["name"] ?? "";
-          const phone = row["Phone"] ?? row["phone"] ?? "";
-          const vehicle = row["Vehicle"] ?? row["vehicle"] ?? "";
-          const purchaseYearStr = row["Purchase Year"] ?? row["purchase_year"] ?? "";
-          const budgetStr = row["Budget"] ?? row["budget"] ?? "";
-          const email = (row["Email"] ?? row["email"] ?? "").trim();
+          // Any column is read: Name/Phone/Email/Budget, an interest column
+          // under whatever name (Interest, Service, Product, Requirement…),
+          // and every other column is kept as a detail.
+          const answers = mapLeadAnswers(rows[i]);
+          const name = answers.name ?? "";
+          const phone = answers.phone ?? "";
+          const email = (answers.email ?? "").trim();
 
           if (!name) { errors.push(`Row ${i + 2}: Missing name`); continue; }
           if (!phone || phone.length < 10) { errors.push(`Row ${i + 2}: Invalid phone`); continue; }
           if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${i + 2}: Invalid email`); continue; }
 
-          const purchaseYear = purchaseYearStr ? parseInt(purchaseYearStr) : null;
-          const budget = budgetStr ? parseFloat(budgetStr.replace(/[^0-9.]/g, "")) : null;
-          const qualification = qualifyLead({ purchaseYear, budget, phone });
+          const qualification = scoreNewLead({ ...answers, source: "csv_upload" }, profile.models);
 
           leads.push({
             dealership_id: dealershipId,
             name,
             phone,
             email: email || null,
-            vehicle: vehicle || null,
-            purchase_year: purchaseYear,
-            budget,
+            interest: answers.interest,
+            details: answers.details,
+            budget: answers.budget,
             ai_score: qualification.score,
             lead_temperature: qualification.temperature,
             qualification_reason: qualification.reason,
@@ -153,7 +152,8 @@ export default function LeadsHeader({ dealershipId, exportHref }: { dealershipId
       <div className="bg-blue-500/10 border border-blue-700/40 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
         <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
         <p className="text-xs text-blue-300">
-          CSV format: <strong>Name, Phone, Email, Vehicle, Purchase Year, Budget</strong> (Email is optional) — All leads are automatically scored by the AI engine.
+          CSV columns: <strong>Name, Phone, Email, {profile.interestLabel}, Budget</strong>
+          {profile.fields.filter((f) => f.column !== "budget").map((f) => `, ${f.label}`).join("")} (only Name and Phone are required). Any other column is kept on the lead. Every lead is scored automatically.
         </p>
       </div>
 

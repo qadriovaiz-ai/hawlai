@@ -10,9 +10,10 @@ import {
 import type { Lead } from "@/types";
 import {
   cn, formatCurrency, getTemperatureColor, getTemperatureIcon,
-  getStatusColor, getStatusLabel
+  getStatusColor
 } from "@/lib/utils";
 import { Button, Select } from "@/components/ui";
+import { LEAD_PROFILES, STAGES, describeLeadDetails, stageLabel, type LeadProfile } from "@/lib/leads/leadProfile";
 
 interface Props {
   leads: Lead[];
@@ -23,9 +24,10 @@ interface Props {
   campaignMap?: Record<string, string>;
   sort?: string;
   dir?: string;
+  profile?: LeadProfile;
 }
 
-export default function LeadsTable({ leads, total, page, pageSize, filters, campaignMap = {}, sort = "created_at", dir = "desc" }: Props) {
+export default function LeadsTable({ leads, total, page, pageSize, filters, campaignMap = {}, sort = "created_at", dir = "desc", profile = LEAD_PROFILES.general }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -111,11 +113,9 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
           className="w-auto"
         >
           <option value="all">All Statuses</option>
-          <option value="new">New</option>
-          <option value="ready_to_call">Ready to Call</option>
-          <option value="called">Called</option>
-          <option value="appointment_set">Appointment Set</option>
-          <option value="converted">Converted</option>
+          {STAGES.map((s) => (
+            <option key={s} value={s}>{profile.stages[s]}</option>
+          ))}
         </Select>
 
         <span className="text-sm text-slate-500">{total} leads</span>
@@ -138,9 +138,9 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                 <tr>
                   <th className="table-header">Name</th>
                   <th className="table-header">Phone</th>
-                  <th className="table-header">Vehicle</th>
+                  <th className="table-header">{profile.interestLabel}</th>
                   <th className="table-header">Source</th>
-                  <th className="table-header">Year</th>
+                  <th className="table-header">Details</th>
                   <th className="table-header">Budget</th>
                   <th className="table-header">
                     <button onClick={() => toggleSort("ai_score")} className="flex items-center gap-1 hover:text-slate-700">
@@ -162,7 +162,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                   <tr key={lead.id} className="hover:bg-slate-200 transition-colors">
                     <td className="table-cell font-medium text-slate-900">{lead.name}</td>
                     <td className="table-cell text-slate-600">{lead.phone ?? "—"}</td>
-                    <td className="table-cell text-slate-600 max-w-32 truncate">{lead.vehicle ?? "—"}</td>
+                    <td className="table-cell text-slate-600 max-w-32 truncate">{lead.interest ?? lead.vehicle ?? "—"}</td>
                     <td className="table-cell max-w-40">
                       {lead.meta_campaign_id && campaignMap[lead.meta_campaign_id] ? (
                         <span className="badge bg-purple-500/10 text-purple-300 border-purple-700/40 truncate max-w-full" title={campaignMap[lead.meta_campaign_id]}>
@@ -172,7 +172,12 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                         <span className="text-xs text-slate-400">{lead.source?.replaceAll("_", " ") ?? "unknown"}</span>
                       )}
                     </td>
-                    <td className="table-cell text-slate-600">{lead.purchase_year ?? "—"}</td>
+                    <td className="table-cell text-slate-600 max-w-48 truncate text-xs">
+                      {describeLeadDetails({ details: lead.details }, { ...profile, fields: profile.fields.filter((f) => f.column !== "budget") })
+                        .slice(0, 2)
+                        .map((d) => `${d.label}: ${d.value}`)
+                        .join(" · ") || "—"}
+                    </td>
                     <td className="table-cell text-slate-600">
                       {lead.budget ? formatCurrency(lead.budget) : "—"}
                     </td>
@@ -215,7 +220,7 @@ export default function LeadsTable({ leads, total, page, pageSize, filters, camp
                     </td>
                     <td className="table-cell">
                       <span className={`badge ${getStatusColor(lead.status)}`}>
-                        {getStatusLabel(lead.status)}
+                        {stageLabel(profile, lead.status)}
                       </span>
                     </td>
                     <td className="table-cell">

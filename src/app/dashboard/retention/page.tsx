@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Heart, Car, Phone } from "lucide-react";
+import { Heart, Tag, Phone } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import RetentionMessageButton from "@/components/leads/RetentionMessageButton";
 import { AT_RISK_DAYS, getCustomerRiskList } from "@/lib/agents/churnAgent";
+import { loadLeadProfile } from "@/lib/leads/leadProfile";
 
 // Master audit Part B — churn/at-risk detection. This page used to be a
 // flat list of every converted customer ordered by created_at, where
@@ -21,7 +22,9 @@ export default async function RetentionPage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const customers = await getCustomerRiskList(supabase, dealershipId);
+  const [customers, leadProfile] = await Promise.all([getCustomerRiskList(supabase, dealershipId), loadLeadProfile(supabase, dealershipId)]);
+  const wonStage = leadProfile.stages.converted;
+  const noun = leadProfile.wonNoun;
   const atRiskCount = customers.filter((c) => c.daysSince >= AT_RISK_DAYS).length;
 
   return (
@@ -32,22 +35,22 @@ export default async function RetentionPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Customer Retention</h1>
-          <p className="text-sm text-slate-500">Re-engage customers who already bought — service reminders, referrals, upsells</p>
+          <p className="text-sm text-slate-500">Stay in touch with people who already chose you — check-ins, referrals, add-ons</p>
         </div>
       </div>
 
       {!customers || customers.length === 0 ? (
         <div className="card p-12 text-center">
           <Heart className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-700 font-medium">No converted customers yet</p>
+          <p className="text-slate-700 font-medium">No {noun}s yet</p>
           <p className="text-slate-400 text-sm mt-1">
-            Move a lead to "Converted" on the Pipeline page once they buy — they'll show up here.
+            Move a lead to &ldquo;{wonStage}&rdquo; on the Pipeline page — they&apos;ll show up here.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-slate-500">
-            {customers.length} customer{customers.length > 1 ? "s" : ""}
+            {customers.length} {noun}{customers.length > 1 ? "s" : ""}
             {atRiskCount > 0 && (
               <> · <span className="text-red-500 font-medium">{atRiskCount} not contacted in {AT_RISK_DAYS}+ days</span></>
             )}
@@ -64,9 +67,9 @@ export default async function RetentionPage() {
                         <Phone className="w-3 h-3" /> {c.phone}
                       </span>
                     )}
-                    {c.vehicle && (
+                    {c.interest && (
                       <span className="inline-flex items-center gap-1">
-                        <Car className="w-3 h-3" /> {c.vehicle}
+                        <Tag className="w-3 h-3" /> {c.interest}
                       </span>
                     )}
                     <span>Last contact {formatRelativeTime(c.touchedAt)}</span>

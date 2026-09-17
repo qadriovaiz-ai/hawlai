@@ -16,7 +16,7 @@ export default async function AppointmentsPage() {
 
   const { data: appointments } = await supabase
     .from("appointments")
-    .select("*, leads(name, phone, vehicle, lead_temperature)")
+    .select("*, leads(name, phone, interest, vehicle, lead_temperature)")
     .eq("dealership_id", dealershipId)
     .order("appointment_date", { ascending: true });
 
@@ -79,8 +79,8 @@ export default async function AppointmentsPage() {
   );
 }
 
-function AppointmentCard({ appt }: { appt: Record<string, unknown> & { id: string; leads?: { name?: string; phone?: string; vehicle?: string } | null } }) {
-  const lead = appt.leads as { name?: string; phone?: string; vehicle?: string } | null;
+function AppointmentCard({ appt }: { appt: Record<string, unknown> & { id: string; leads?: { name?: string; phone?: string; interest?: string; vehicle?: string } | null } }) {
+  const lead = appt.leads as { name?: string; phone?: string; interest?: string; vehicle?: string } | null;
   return (
     <div className="card p-4 flex items-center gap-4">
       <div className="text-center bg-slate-50 rounded-lg p-3 shrink-0 min-w-16">
@@ -98,7 +98,7 @@ function AppointmentCard({ appt }: { appt: Record<string, unknown> & { id: strin
         <Link href={`/dashboard/leads/${appt.lead_id}`} className="font-semibold text-slate-900 hover:text-brand-400 transition-colors">
           {lead?.name ?? "Unknown"}
         </Link>
-        <p className="text-sm text-slate-500">{lead?.vehicle ?? ""} • {String(appt.appointment_type).replace(/_/g, " ")}</p>
+        <p className="text-sm text-slate-500">{[lead?.interest ?? lead?.vehicle, String(appt.appointment_type).replace(/_/g, " ")].filter(Boolean).join(" • ")}</p>
         {typeof appt.notes === "string" ? (
   <p className="text-xs text-slate-400 mt-0.5 truncate">
     {appt.notes}

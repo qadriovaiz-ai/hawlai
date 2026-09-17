@@ -2,8 +2,8 @@
 // AI-Intelligence Pillar 3 — predicted lead conversion score.
 // ------------------------------------------------------------------
 // Separate from leads.ai_score, which is a static, one-time intake
-// estimate (vehicle age/budget/phone, set once at creation via
-// qualifyLead()). This is a behavioral score that changes as the
+// estimate (reachability, stated interest, source, budget — set once
+// at creation via scoreNewLead() in leads/leadIntake.ts). This is a behavioral score that changes as the
 // lead's real activity unfolds — how fast they were contacted, how
 // engaged they've been, how the calls actually went, whether an
 // appointment got booked, and how stale they've gone.
@@ -14,7 +14,7 @@
 // dealership to train a real model without overfitting, and a pooled
 // cross-dealership model is a much bigger, separate initiative (data
 // sharing, model hosting infra this app doesn't have). Same paradigm
-// as qualifyLead() in ai-engine.ts: explainable, zero training data
+// as scoreNewLead() in leads/leadIntake.ts: explainable, zero training data
 // needed, works from day one.
 // ------------------------------------------------------------------
 

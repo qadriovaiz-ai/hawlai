@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeedLeads, generateSeedCalls, generateSeedAppointments } from "@/lib/seed-data";
+import { loadBusinessModels } from "@/lib/leads/leadProfile";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   }
 
   // Insert leads
-  const seedLeads = generateSeedLeads(dealershipId);
+  const seedLeads = generateSeedLeads(dealershipId, await loadBusinessModels(supabase, dealershipId).catch(() => []));
   const { data: insertedLeads, error: leadsError } = await supabase
     .from("leads")
     .insert(seedLeads)

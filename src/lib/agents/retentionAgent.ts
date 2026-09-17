@@ -3,13 +3,15 @@
 // ------------------------------------------------------------------
 // Targets leads already at the "converted" pipeline stage — i.e.
 // actual customers — and generates re-engagement content (service
-// reminders, referral asks, upsell nudges) rather than the "come buy
-// a car" tone Content Agent uses for fresh leads. Reuses the same
+// reminders, referral asks, upsell nudges) rather than the "come buy"
+// tone Content Agent uses for fresh leads. Reuses the same
 // Brand Profile so tone stays consistent.
 // ------------------------------------------------------------------
 
 interface CustomerInfo {
   name: string;
+  /** What they bought or signed up for. `vehicle` is the pre-187 column, read as a fallback. */
+  interest?: string | null;
   vehicle?: string | null;
 }
 
@@ -21,6 +23,7 @@ interface BrandProfile {
 
 import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { leadInterest } from "../leads/leadProfile";
 
 export async function generateRetentionMessage(
   customer: CustomerInfo,
@@ -41,10 +44,11 @@ export async function generateRetentionMessage(
   const angleInstructions: Record<string, string> = {
     service_reminder: "Remind them it may be time for a follow-up service, check-up, or renewal, if relevant to what they bought. Warm, not pushy.",
     referral: "Ask them to refer a friend or family member, mention any referral benefit if relevant to the brand pillars.",
-    upsell: "Let them know about upgrade options, add-ons, or a trade-in/exchange offer, in a low-pressure way.",
+    upsell: "Let them know about upgrade options or add-ons, in a low-pressure way. Only mention an exchange or trade-in offer if the verified facts say the business has one.",
   };
 
-  const fallback = `Hi ${customer.name}, hope you're loving your${customer.vehicle ? ` ${customer.vehicle}` : " purchase"}! Just checking in — let us know if there's anything we can help with.`;
+  const bought = leadInterest(customer);
+  const fallback = `Hi ${customer.name}, hope all is well${bought ? ` with your ${bought}` : ""}! Just checking in — let us know if there's anything we can help with.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -60,8 +64,8 @@ export async function generateRetentionMessage(
         messages: [
           {
             role: "user",
-            content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already made a purchase), not a new lead.
-Customer: ${customer.name}${customer.vehicle ? `, bought/has: ${customer.vehicle}` : ""}.
+            content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already bought from or signed up with this business), not a new lead.
+Customer: ${customer.name}${bought ? `, bought/has: ${bought}` : ""}.
 Goal: ${angleInstructions[angle]}
 ${brandContext}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this customer before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}
 2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}

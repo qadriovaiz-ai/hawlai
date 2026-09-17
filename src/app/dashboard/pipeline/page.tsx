@@ -1,18 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Kanban, Phone, Car } from "lucide-react";
+import { Kanban, Phone, Tag } from "lucide-react";
 import { getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import LeadStageSelect from "@/components/leads/LeadStageSelect";
+import { STAGES as STAGE_VALUES, loadLeadProfile, type Stage } from "@/lib/leads/leadProfile";
 
-const STAGES = [
-  { value: "new", label: "New", color: "border-t-slate-300" },
-  { value: "ready_to_call", label: "Ready to Call", color: "border-t-purple-300" },
-  { value: "called", label: "Called", color: "border-t-blue-300" },
-  { value: "appointment_set", label: "Appointment Set", color: "border-t-green-300" },
-  { value: "converted", label: "Converted", color: "border-t-emerald-400" },
-  { value: "not_interested", label: "Not Interested", color: "border-t-gray-300" },
-];
+// Stage names come from the business's lead profile; the colours stay with
+// what each stage means.
+const STAGE_COLORS: Record<Stage, string> = {
+  new: "border-t-slate-300",
+  ready_to_call: "border-t-purple-300",
+  called: "border-t-blue-300",
+  appointment_set: "border-t-green-300",
+  converted: "border-t-emerald-400",
+  not_interested: "border-t-gray-300",
+};
 
 export default async function PipelinePage() {
   const supabase = await createClient();
@@ -23,11 +26,11 @@ export default async function PipelinePage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const { data: leads } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("dealership_id", dealershipId)
-    .order("created_at", { ascending: false });
+  const [{ data: leads }, leadProfile] = await Promise.all([
+    supabase.from("leads").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
+    loadLeadProfile(supabase, dealershipId),
+  ]);
+  const STAGES = STAGE_VALUES.map((value) => ({ value, label: leadProfile.stages[value], color: STAGE_COLORS[value] }));
 
   const leadsByStage: Record<string, any[]> = {};
   for (const stage of STAGES) leadsByStage[stage.value] = [];
@@ -78,14 +81,14 @@ export default async function PipelinePage() {
                               <Phone className="w-3 h-3" /> {lead.phone}
                             </span>
                           )}
-                          {lead.vehicle && (
-                            <span className="inline-flex items-center gap-1">
-                              <Car className="w-3 h-3" /> {lead.vehicle}
+                          {(lead.interest ?? lead.vehicle) && (
+                            <span className="inline-flex items-center gap-1" title={leadProfile.interestLabel}>
+                              <Tag className="w-3 h-3" /> {lead.interest ?? lead.vehicle}
                             </span>
                           )}
                         </div>
                       </Link>
-                      <LeadStageSelect leadId={lead.id} currentStatus={lead.status} />
+                      <LeadStageSelect leadId={lead.id} currentStatus={lead.status} labels={leadProfile.stages} />
                     </div>
                   ))}
                 </div>

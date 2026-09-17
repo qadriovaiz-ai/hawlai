@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("name, vehicle")
+    .select("name, interest, vehicle")
     .eq("id", leadId)
     .eq("dealership_id", dealershipId)
     .single();

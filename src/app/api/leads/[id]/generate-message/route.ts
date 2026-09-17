@@ -25,7 +25,7 @@ export async function POST(
 
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("name, vehicle, budget, lead_temperature, status, qualification_reason")
+    .select("name, interest, vehicle, details, budget, lead_temperature, status, qualification_reason")
     .eq("id", id)
     .eq("dealership_id", dealershipId)
     .single();

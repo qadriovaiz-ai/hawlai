@@ -36,7 +36,7 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
 
   const { data: stuckLeads } = await supabase
     .from("leads")
-    .select("id, name, vehicle, budget, lead_temperature, status, qualification_reason, draft_followup_generated_at")
+    .select("id, name, interest, vehicle, details, budget, lead_temperature, status, qualification_reason, draft_followup_generated_at")
     .eq("dealership_id", dealershipId)
     .in("status", ["new", "ready_to_call"])
     .lt("created_at", twoDaysAgo);

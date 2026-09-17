@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import LeadsTable from "@/components/leads/LeadsTable";
 import LeadsHeader from "@/components/leads/LeadsHeader";
 import { exportRole, filtersToQuery, cleanFilters } from "@/lib/leads/exportLeads";
+import { loadLeadProfile } from "@/lib/leads/leadProfile";
 
 const SORTABLE_COLUMNS = ["created_at", "ai_score", "predicted_conversion_score"];
 
@@ -47,7 +48,7 @@ export default async function LeadsPage({
   if (params.temp && params.temp !== "all") query = query.eq("lead_temperature", params.temp);
   if (params.status && params.status !== "all") query = query.eq("status", params.status);
 
-  const { data: leads, count } = await query;
+  const [{ data: leads, count }, leadProfile] = await Promise.all([query, loadLeadProfile(supabase, dealershipId)]);
 
   // Map each lead's meta_campaign_id to the actual ad's headline, so
   // the table can show "came from: [Diwali Swift Offer]" instead of
@@ -68,6 +69,7 @@ export default async function LeadsPage({
     <div className="space-y-5 max-w-7xl">
       <LeadsHeader
         dealershipId={dealershipId}
+        profile={leadProfile}
         exportHref={(await exportRole(dealershipId, user.id).catch(() => null)) ? `/api/leads/export${filtersToQuery(cleanFilters({ temperature: params.temp, status: params.status }))}` : null}
       />
       <LeadsTable
@@ -76,6 +78,7 @@ export default async function LeadsPage({
         page={page}
         pageSize={pageSize}
         campaignMap={campaignMap}
+        profile={leadProfile}
         filters={{ q: params.q, temp: params.temp, status: params.status }}
         sort={sortColumn}
         dir={sortAscending ? "asc" : "desc"}

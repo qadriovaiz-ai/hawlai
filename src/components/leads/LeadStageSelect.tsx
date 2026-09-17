@@ -4,17 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Select } from "@/components/ui/Select";
+import { LEAD_PROFILES, STAGES, type Stage } from "@/lib/leads/leadProfile";
 
-const STAGES = [
-  { value: "new", label: "New" },
-  { value: "ready_to_call", label: "Ready to Call" },
-  { value: "called", label: "Called" },
-  { value: "appointment_set", label: "Appointment Set" },
-  { value: "converted", label: "Converted" },
-  { value: "not_interested", label: "Not Interested" },
-];
-
-export default function LeadStageSelect({ leadId, currentStatus }: { leadId: string; currentStatus: string }) {
+export default function LeadStageSelect({ leadId, currentStatus, labels = LEAD_PROFILES.general.stages }: { leadId: string; currentStatus: string; labels?: Record<Stage, string> }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -42,8 +34,8 @@ export default function LeadStageSelect({ leadId, currentStatus }: { leadId: str
         className="text-xs px-2 py-1.5"
       >
         {STAGES.map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
+          <option key={s} value={s}>
+            {labels[s]}
           </option>
         ))}
       </Select>

@@ -14,6 +14,8 @@
 
 import { emitNotification } from "@/lib/notifications/emit";
 
+import { leadInterest } from "@/lib/leads/leadProfile";
+
 export const AT_RISK_DAYS = 90;
 export const WATCH_DAYS = 45;
 
@@ -27,7 +29,8 @@ export interface CustomerRisk {
   id: string;
   name: string;
   phone: string | null;
-  vehicle: string | null;
+  /** What they bought or signed up for (leads.interest, else the pre-187 vehicle column). */
+  interest: string | null;
   touchedAt: string;
   daysSince: number;
   risk: { label: string; tone: string };
@@ -36,7 +39,7 @@ export interface CustomerRisk {
 export async function getCustomerRiskList(supabase: any, dealershipId: string): Promise<CustomerRisk[]> {
   const { data: convertedLeads } = await supabase
     .from("leads")
-    .select("id, name, phone, vehicle, created_at")
+    .select("id, name, phone, interest, vehicle, created_at")
     .eq("dealership_id", dealershipId)
     .eq("status", "converted")
     .order("created_at", { ascending: false });
@@ -64,7 +67,7 @@ export async function getCustomerRiskList(supabase: any, dealershipId: string): 
     .map((c: any) => {
       const touchedAt = lastTouch.get(c.id) ?? c.created_at;
       const daysSince = Math.floor((Date.now() - new Date(touchedAt).getTime()) / 86400000);
-      return { id: c.id, name: c.name, phone: c.phone, vehicle: c.vehicle, touchedAt, daysSince, risk: riskTier(daysSince) };
+      return { id: c.id, name: c.name, phone: c.phone, interest: leadInterest(c), touchedAt, daysSince, risk: riskTier(daysSince) };
     })
     .sort((a: CustomerRisk, b: CustomerRisk) => b.daysSince - a.daysSince);
 }

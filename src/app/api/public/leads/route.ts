@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { qualifyLead } from "@/lib/ai-engine";
+import { mapLeadAnswers, scoreNewLead } from "@/lib/leads/leadIntake";
+import { loadBusinessModels } from "@/lib/leads/leadProfile";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
 import { recordFirstTouchpoint, bridgeVisitorTouchpoints } from "@/lib/agents/touchpointAgent";
 
@@ -8,7 +9,9 @@ import { recordFirstTouchpoint, bridgeVisitorTouchpoints } from "@/lib/agents/to
 // form posts here directly, no login involved.
 export async function POST(request: Request) {
   const body = await request.json();
-  const { slug, name, phone, vehicle, budget, honeypot, visitorId } = body;
+  // `interest` is what the visitor wants; `vehicle` is the form's old field
+  // name, still accepted from pages rendered before this change.
+  const { slug, name, phone, interest, vehicle, budget, honeypot, visitorId } = body;
 
   // Simple bot trap: real visitors never fill a hidden field.
   if (honeypot) return NextResponse.json({ success: true });
@@ -43,7 +46,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This page is not accepting leads right now" }, { status: 404 });
   }
 
-  const qualification = qualifyLead({ purchaseYear: null, budget: budget ? Number(budget) : null, phone });
+  const answers = mapLeadAnswers({ interest: typeof interest === "string" ? interest : typeof vehicle === "string" ? vehicle : "", budget: budget ?? "" });
+  const qualification = scoreNewLead({ ...answers, phone, email: null, source }, await loadBusinessModels(supabase, dealershipId).catch(() => []));
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: existingLead } = await supabase
@@ -64,8 +68,8 @@ export async function POST(request: Request) {
     dealership_id: dealershipId,
     name: name.trim(),
     phone: phone.trim(),
-    vehicle: vehicle ?? null,
-    budget: budget ? Number(budget) : null,
+    interest: answers.interest ? answers.interest.slice(0, 200) : null,
+    budget: answers.budget,
     source,
     ai_score: qualification.score,
     lead_temperature: qualification.temperature,

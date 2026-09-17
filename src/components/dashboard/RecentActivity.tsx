@@ -34,7 +34,7 @@ export default function RecentActivity({ leads }: { leads: Partial<Lead>[] }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-900 truncate">{lead.name}</p>
-              <p className="text-xs text-slate-500 truncate">{lead.vehicle ?? "—"}</p>
+              <p className="text-xs text-slate-500 truncate">{lead.interest ?? lead.vehicle ?? "—"}</p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <span className={`badge ${getTemperatureColor(lead.lead_temperature ?? "cold")}`}>

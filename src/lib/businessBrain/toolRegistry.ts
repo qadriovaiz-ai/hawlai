@@ -208,12 +208,14 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   // the dashboard).
   {
     name: "update_lead",
-    description: "Update this call's lead record with what you learned — status, budget, vehicle interest, purchase timing, deal value, or free-text notes.",
+    description: "Update this call's lead record with what you learned — status, what they want, budget, their company, a preferred date, what they use today, deal value, or free-text notes.",
     parameters: {
       status: { type: "string", description: "One of: new, ready_to_call, appointment_set, not_interested. Never 'converted' — that needs a team member's review." },
       budget: { type: "number", description: "The lead's stated budget" },
-      vehicle: { type: "string", description: "What the lead is interested in" },
-      purchaseYear: { type: "number", description: "Year the lead wants to buy/purchase by" },
+      interest: { type: "string", description: "What the lead wants — a product, service, plan or requirement, in their words" },
+      company: { type: "string", description: "The company the lead works for or is buying for, if they said" },
+      preferredDate: { type: "string", description: "When the lead would like it — a date, week or time they mentioned" },
+      currentSolution: { type: "string", description: "What the lead uses or who they buy from today, if they said" },
       dealValue: { type: "number", description: "Estimated deal value, if known" },
       notes: { type: "string", description: "Free-text notes about what was discussed — saved as a CRM note, not overwritten on the next update. For an actual complaint (something went wrong), use log_complaint instead — not this." },
     },

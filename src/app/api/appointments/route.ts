@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("appointments")
-    .select("*, leads(name, phone, vehicle)")
+    .select("*, leads(name, phone, interest, vehicle)")
     .eq("dealership_id", dealershipId)
     .order("appointment_date", { ascending: true });
 

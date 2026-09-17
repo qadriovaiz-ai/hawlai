@@ -2,12 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Phone, Eye, ArrowRight } from "lucide-react";
-import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
+import { formatDate, getTemperatureColor, getTemperatureIcon } from "@/lib/utils";
 import MarkCalledButton from "@/components/calls/MarkCalledButton";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DraftMessagePreview from "@/components/leads/DraftMessagePreview";
 import { buttonClasses } from "@/components/ui/buttonClasses";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { describeLeadDetails, loadLeadProfile } from "@/lib/leads/leadProfile";
 
 export default async function QueuePage() {
   const supabase = await createClient();
@@ -18,12 +19,10 @@ export default async function QueuePage() {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const { data: leads } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("dealership_id", dealershipId)
-    .eq("status", "ready_to_call")
-    .order("ai_score", { ascending: false });
+  const [{ data: leads }, leadProfile] = await Promise.all([
+    supabase.from("leads").select("*").eq("dealership_id", dealershipId).eq("status", "ready_to_call").order("ai_score", { ascending: false }),
+    loadLeadProfile(supabase, dealershipId),
+  ]);
 
   return (
     <div className="max-w-5xl space-y-5">
@@ -56,7 +55,10 @@ export default async function QueuePage() {
                     </span>
                   </div>
                   <p className="text-sm text-slate-500">
-                    {lead.vehicle ?? "Unknown vehicle"} • {lead.purchase_year ?? "—"} • {lead.budget ? formatCurrency(lead.budget) : "—"}
+                    {[
+                      `${leadProfile.interestLabel}: ${lead.interest ?? lead.vehicle ?? "not given"}`,
+                      ...describeLeadDetails({ budget: lead.budget, details: lead.details }, leadProfile).slice(0, 2).map((d) => `${d.label}: ${d.value}`),
+                    ].join(" • ")}
                   </p>
                 </div>
                 <div className="text-center shrink-0">

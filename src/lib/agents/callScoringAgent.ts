@@ -1,5 +1,5 @@
 // Post-call lead scoring — the authoritative score. The blind,
-// pre-call heuristic in ai-engine.ts (vehicle age/budget) still runs
+// pre-call heuristic in leads/leadIntake.ts (scoreNewLead) still runs
 // the moment a lead comes in, purely so something reasonable shows up
 // immediately (e.g. for a "hot lead" notification before anyone's
 // talked to them) — but once a real conversation has happened, what

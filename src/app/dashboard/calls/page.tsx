@@ -16,7 +16,7 @@ export default async function CallsPage() {
 
   const { data: calls } = await supabase
     .from("calls")
-    .select("*, leads(name, phone, vehicle, lead_temperature)")
+    .select("*, leads(name, phone, interest, vehicle, lead_temperature)")
     .eq("dealership_id", dealershipId)
     .order("created_at", { ascending: false });
 
@@ -81,7 +81,7 @@ export default async function CallsPage() {
                       <Link href={`/dashboard/leads/${call.lead_id}`} className="font-medium text-brand-400 hover:underline">
                         {call.leads?.name ?? "Unknown"}
                       </Link>
-                      <p className="text-xs text-slate-400">{call.leads?.vehicle ?? ""}</p>
+                      <p className="text-xs text-slate-400">{call.leads?.interest ?? call.leads?.vehicle ?? ""}</p>
                     </td>
                     <td className="table-cell text-slate-600">{call.leads?.phone ?? "—"}</td>
                     <td className="table-cell text-slate-600">{formatDate(call.created_at)}</td>

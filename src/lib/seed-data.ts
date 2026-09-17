@@ -1,22 +1,21 @@
-import { qualifyLead } from "./ai-engine";
+import { scoreNewLead } from "./leads/leadIntake";
+import type { BusinessModel } from "./business/businessModel";
 
-const VEHICLES = [
-  "Hero Splendor Plus",
-  "Honda Activa 6G",
-  "Bajaj Pulsar 150",
-  "TVS Apache RTR 160",
-  "Royal Enfield Classic 350",
-  "Maruti Suzuki Swift",
-  "Hyundai i20",
-  "Tata Nexon",
-  "Honda City",
-  "Bajaj Avenger 220",
-  "Hero HF Deluxe",
-  "TVS Jupiter",
-  "Maruti Alto K10",
-  "Hyundai Venue",
-  "Tata Tiago",
-];
+// Sample data for an empty account. Written for the kind of business
+// this is (lib/business/businessModel.ts) — it used to be a two-wheeler
+// and car dealership's leads, calls and test rides for every business.
+
+const INTERESTS: Record<"general" | BusinessModel, string[]> = {
+  general: ["General enquiry", "Pricing details", "Bulk order", "Custom request", "Gift options"],
+  products: ["Bestseller range", "New arrivals", "Gift set", "Bulk order", "Custom order"],
+  services: ["First consultation", "Monthly package", "One-time session", "Follow-up visit", "Premium package"],
+  subscription: ["Monthly plan", "Annual plan", "Family plan", "Free trial", "Plan upgrade"],
+  b2b: ["Bulk supply quote", "Annual contract", "Pilot order", "Custom solution", "Vendor onboarding"],
+};
+
+const COMPANIES = ["Sharma Traders", "Nair Foods Pvt Ltd", "Patel Logistics", "Iyer Consulting", "Verma Textiles"];
+const COMPANY_SIZES = ["1-10", "11-50", "51-200"];
+const CURRENT_SOLUTIONS = ["Another provider", "Nothing yet", "Doing it in-house"];
 
 const NAMES = [
   "Rahul Sharma", "Priya Singh", "Amit Kumar", "Sunita Devi", "Rajesh Patel",
@@ -31,30 +30,47 @@ const NAMES = [
   "Sarita Goel", "Venkat Mehta", "Anand Shankar", "Malathi Agarwal", "Prabhu Sinha",
 ];
 
-const CITIES = ["Mumbai", "Delhi", "Bangalore", "Hyderabad", "Chennai", "Pune", "Ahmedabad"];
 const SOURCES = ["csv_upload", "website", "referral", "walk_in", "social_media"];
 
-export function generateSeedLeads(dealershipId: string) {
-  const currentYear = new Date().getFullYear();
+function primaryModel(models: BusinessModel[]): "general" | BusinessModel {
+  return (["b2b", "subscription", "services", "products"] as const).find((m) => models.includes(m)) ?? "general";
+}
+
+const pick = <T,>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];
+
+export function generateSeedLeads(dealershipId: string, models: BusinessModel[] = []) {
+  const primary = primaryModel(models);
   return NAMES.map((name, i) => {
-    const purchaseYear = currentYear - Math.floor(Math.random() * 14 + 1);
-    const budget = [40000, 60000, 80000, 100000, 120000, 150000, 200000][Math.floor(Math.random() * 7)];
+    const budget = pick([5000, 10000, 25000, 50000, 100000, 200000]);
     const phone = `+91${Math.floor(7000000000 + Math.random() * 2999999999)}`;
-    const vehicle = VEHICLES[i % VEHICLES.length];
-    const qualification = qualifyLead({ purchaseYear, budget, phone });
+    const email = `${name.toLowerCase().replace(" ", ".")}@example.com`;
+    const interest = INTERESTS[primary][i % INTERESTS[primary].length];
+    const details: Record<string, string> = {};
+    if (models.includes("b2b") && i % 2 === 0) {
+      details.company = COMPANIES[i % COMPANIES.length];
+      details.company_size = pick(COMPANY_SIZES);
+    }
+    if (models.includes("services") && i % 3 === 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + 3 + (i % 10));
+      details.preferred_date = d.toISOString().slice(0, 10);
+    }
+    if (models.includes("subscription") && i % 3 === 1) details.current_solution = pick(CURRENT_SOLUTIONS);
+    const source = pick(SOURCES);
+    const qualification = scoreNewLead({ phone, email, interest, budget, details, source }, models);
 
     return {
       dealership_id: dealershipId,
       name,
       phone,
-      email: `${name.toLowerCase().replace(" ", ".")}@example.com`,
-      vehicle,
-      purchase_year: purchaseYear,
+      email,
+      interest,
+      details,
       budget,
-      source: SOURCES[Math.floor(Math.random() * SOURCES.length)],
+      source,
       ai_score: qualification.score,
       lead_temperature: qualification.temperature,
-      status: ["new", "ready_to_call", "called", "appointment_set"][Math.floor(Math.random() * 4)],
+      status: pick(["new", "ready_to_call", "called", "appointment_set"]),
       qualification_reason: qualification.reason,
     };
   });
@@ -63,35 +79,35 @@ export function generateSeedLeads(dealershipId: string) {
 export function generateSeedCalls(leadIds: string[], dealershipId: string) {
   const statuses = ["completed", "no_answer", "busy", "voicemail"] as const;
   const summaries = [
-    "Customer is interested in upgrading. Will visit showroom this weekend.",
+    "Customer is interested and wants to know more. Will visit or call back this weekend.",
     "No answer. Will retry tomorrow.",
     "Customer is busy, requested callback after 6 PM.",
     "Left voicemail. Customer will call back.",
-    "Customer confirmed interest in test ride. Budget confirmed.",
+    "Customer confirmed interest and asked for a quote. Budget confirmed.",
     "Customer needs time to discuss with family. Follow up in 2 weeks.",
-    "Excellent call. Customer is ready to purchase within 30 days.",
-    "Customer already bought from competitor. Mark as not interested.",
+    "Excellent call. Customer is ready to go ahead within 30 days.",
+    "Customer already chose another provider. Mark as not interested.",
   ];
 
   const calls = [];
   const subset = leadIds.slice(0, Math.min(20, leadIds.length));
 
   for (const leadId of subset) {
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const status = pick(statuses);
     calls.push({
       lead_id: leadId,
       dealership_id: dealershipId,
       status,
       duration: status === "completed" ? Math.floor(Math.random() * 300 + 60) : 0,
-      summary: summaries[Math.floor(Math.random() * summaries.length)],
-      transcript: status === "completed" ? "Agent: Hello, may I speak with the customer?\nCustomer: Yes, speaking.\nAgent: I'm calling from your automobile dealership regarding your vehicle upgrade...\nCustomer: Oh yes, I was thinking about it.\nAgent: Great! Can I schedule a test ride for you?" : null,
+      summary: pick(summaries),
+      transcript: status === "completed" ? "Agent: Hello, may I speak with the customer?\nCustomer: Yes, speaking.\nAgent: I'm calling about the enquiry you sent us...\nCustomer: Oh yes, I was thinking about it.\nAgent: Great! Can I set up a time to talk it through?" : null,
     });
   }
   return calls;
 }
 
 export function generateSeedAppointments(leadIds: string[], dealershipId: string) {
-  const types = ["test_ride", "showroom_visit"] as const;
+  const types = ["meeting", "consultation"] as const;
   const statuses = ["scheduled", "completed", "cancelled"] as const;
   const appointments = [];
   const subset = leadIds.slice(0, Math.min(10, leadIds.length));
@@ -106,9 +122,9 @@ export function generateSeedAppointments(leadIds: string[], dealershipId: string
       lead_id: leadId,
       dealership_id: dealershipId,
       appointment_date: appointmentDate.toISOString(),
-      appointment_type: types[Math.floor(Math.random() * types.length)],
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      notes: "Customer confirmed via phone call. Bring RC book and Aadhar.",
+      appointment_type: pick(types),
+      status: pick(statuses),
+      notes: "Customer confirmed via phone call.",
     });
   }
   return appointments;

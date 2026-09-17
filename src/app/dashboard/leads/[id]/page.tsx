@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, Mail, Car, Calendar, DollarSign, Zap } from "lucide-react";
-import { formatCurrency, formatDate, getTemperatureColor, getTemperatureIcon, getStatusColor, getStatusLabel, getCallStatusColor, titleCaseFromSnake } from "@/lib/utils";
+import { ArrowLeft, Phone, Mail, Tag, Info, Zap } from "lucide-react";
+import { formatDate, getTemperatureColor, getTemperatureIcon, getStatusColor, getCallStatusColor, titleCaseFromSnake } from "@/lib/utils";
+import { describeLeadDetails, loadLeadProfile, stageLabel } from "@/lib/leads/leadProfile";
 import AddToQueueButton from "@/components/leads/AddToQueueButton";
 import CreateAppointmentModal from "@/components/appointments/CreateAppointmentModal";
 import GenerateMessageButton from "@/components/leads/GenerateMessageButton";
@@ -34,7 +35,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     sourceCampaign = campaign?.headline ?? null;
   }
 
-  const vehicleAge = lead.purchase_year ? new Date().getFullYear() - lead.purchase_year : null;
+  const leadProfile = await loadLeadProfile(supabase, lead.dealership_id);
+  // Older records keep their purchase year in its own column.
+  const details = { ...(lead.purchase_year ? { purchase_year: lead.purchase_year } : {}), ...(lead.details ?? {}) };
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -58,7 +61,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                   {getTemperatureIcon(lead.lead_temperature)} {lead.lead_temperature} lead
                 </span>
                 <span className={`badge ${getStatusColor(lead.status)}`}>
-                  {getStatusLabel(lead.status)}
+                  {stageLabel(leadProfile, lead.status)}
                 </span>
                 {lead.dnd_opt_out && (
                   <span className="badge bg-red-500/15 text-red-600">Do-not-contact</span>
@@ -89,9 +92,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             {[
               { icon: Phone, label: "Phone", value: lead.phone },
               { icon: Mail, label: "Email", value: lead.email },
-              { icon: Car, label: "Vehicle", value: lead.vehicle },
-              { icon: Calendar, label: "Purchase Year", value: lead.purchase_year ? `${lead.purchase_year} (${vehicleAge} years ago)` : null },
-              { icon: DollarSign, label: "Budget", value: lead.budget ? formatCurrency(lead.budget) : null },
+              { icon: Tag, label: leadProfile.interestLabel, value: lead.interest ?? lead.vehicle },
+              ...describeLeadDetails({ budget: lead.budget, details }, leadProfile).map((d) => ({ icon: Info, ...d })),
               { icon: Zap, label: "Source", value: sourceCampaign ?? lead.source?.replaceAll("_", " ") ?? null },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-3">
@@ -134,7 +136,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               />
             </div>
             <p className="text-xs text-slate-500 mt-1.5">
-              {lead.ai_score >= 70 ? "High replacement probability" : lead.ai_score >= 40 ? "Moderate replacement probability" : "Low replacement probability"}
+              {lead.ai_score >= 70 ? "Strong lead — reachable, and told you what they want" : lead.ai_score >= 40 ? "Promising lead — some details missing" : "Early lead — little to go on yet"}
             </p>
           </div>
 

@@ -13,9 +13,14 @@
 // (the Email & WhatsApp Agent).
 // ------------------------------------------------------------------
 
+import { detailsForPrompt, leadInterest } from "../leads/leadProfile";
+
 interface LeadInfo {
   name: string;
+  /** What they want. `vehicle` is the pre-187 column, read as a fallback. */
+  interest?: string | null;
   vehicle?: string | null;
+  details?: Record<string, unknown> | null;
   budget?: number | null;
   lead_temperature?: string | null;
   status?: string | null;
@@ -63,14 +68,16 @@ export async function generateFollowUpMessage(
       ? `Write a short WhatsApp message (2-4 sentences, casual, can use 1 emoji max, no formal greeting like "Dear"). Return JSON only: {"message":"the whatsapp text"}`
       : `Write a short professional email (greeting, 2-3 short paragraphs, sign-off). Return JSON only: {"subject":"email subject line","message":"the full email body"}`;
 
-  const leadContext = `Lead name: ${lead.name}. ${lead.vehicle ? `Interested in: ${lead.vehicle}.` : ""} ${lead.budget ? `Budget: ₹${lead.budget}.` : ""} Lead temperature: ${lead.lead_temperature ?? "unknown"}. Current stage: ${lead.status ?? "new"}.${lead.qualification_reason ? ` What we know from the last real conversation: ${lead.qualification_reason}` : ""}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this lead before, from past interactions (reference this naturally, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}`;
+  const interest = leadInterest(lead);
+  const details = detailsForPrompt(lead.details);
+  const leadContext = `Lead name: ${lead.name}. ${interest ? `Interested in: ${interest}.` : ""} ${details ? `Other details they gave: ${details}.` : ""} ${lead.budget ? `Budget: ₹${lead.budget}.` : ""} Lead temperature: ${lead.lead_temperature ?? "unknown"}. Current stage: ${lead.status ?? "new"}.${lead.qualification_reason ? ` What we know from the last real conversation: ${lead.qualification_reason}` : ""}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this lead before, from past interactions (reference this naturally, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}`;
 
   const fallback: GeneratedMessage =
     channel === "whatsapp"
-      ? { message: `Hi ${lead.name}, thanks for your interest${lead.vehicle ? ` in the ${lead.vehicle}` : ""}! Would you like to book a free test drive this week?` }
+      ? { message: `Hi ${lead.name}, thanks for your interest${interest ? ` in ${interest}` : ""}! Would you like a quick call this week to talk it through?` }
       : {
-          subject: `Following up on your enquiry${lead.vehicle ? ` — ${lead.vehicle}` : ""}`,
-          message: `Hi ${lead.name},\n\nThank you for your interest${lead.vehicle ? ` in the ${lead.vehicle}` : ""}. We'd love to help you find the right fit — would you be available for a quick call or a test drive this week?\n\nLooking forward to hearing from you.`,
+          subject: `Following up on your enquiry${interest ? ` — ${interest}` : ""}`,
+          message: `Hi ${lead.name},\n\nThank you for your interest${interest ? ` in ${interest}` : ""}. We'd love to help you find the right fit — would you be available for a quick call this week?\n\nLooking forward to hearing from you.`,
         };
 
   try {

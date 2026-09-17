@@ -12,6 +12,8 @@ interface Lead {
   ai_score: number;
   lead_temperature: "hot" | "warm" | "cold";
   status: string;
+  interest?: string | null;
+  vehicle?: string | null;
   qualification_reason: string | null;
   created_at: string;
 }
@@ -22,19 +24,24 @@ const TEMP_STYLE: Record<string, string> = {
   cold: "bg-slate-100 text-slate-500",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "New", ready_to_call: "Ready to Call", called: "Called",
-  appointment_set: "Appointment Set", converted: "Converted", not_interested: "Not Interested",
+// Until the server says what this business calls each stage.
+const DEFAULT_STAGE_LABELS: Record<string, string> = {
+  new: "New", ready_to_call: "Queued for a call", called: "Contacted",
+  appointment_set: "Appointment booked", converted: "Converted", not_interested: "Not interested",
 };
 
 export default function SalesLeadsView() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [STATUS_LABELS, setStageLabels] = useState<Record<string, string>>(DEFAULT_STAGE_LABELS);
 
   function load() {
     setLoading(true);
-    fetch("/api/team/my-leads").then((r) => r.json()).then((d) => setLeads(d.leads ?? [])).finally(() => setLoading(false));
+    fetch("/api/team/my-leads").then((r) => r.json()).then((d) => {
+      setLeads(d.leads ?? []);
+      if (d.stageLabels) setStageLabels(d.stageLabels);
+    }).finally(() => setLoading(false));
   }
   useEffect(() => { load(); }, []);
 
@@ -68,6 +75,7 @@ export default function SalesLeadsView() {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{lead.name}</p>
                   {lead.phone && <p className="text-xs text-slate-400">{lead.phone}</p>}
+                  {(lead.interest ?? lead.vehicle) && <p className="text-xs text-slate-500">{lead.interest ?? lead.vehicle}</p>}
                 </div>
                 <span className="text-xs text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" /> {STATUS_LABELS[lead.status] ?? lead.status}</span>
               </div>

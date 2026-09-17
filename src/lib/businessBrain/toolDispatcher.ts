@@ -87,10 +87,23 @@ async function handleUpdateLead(args: Record<string, any>, ctx: ToolCallContext)
     update.status = args.status;
   }
   if (typeof args?.budget === "number") update.budget = args.budget;
-  if (typeof args?.vehicle === "string" && args.vehicle.trim()) update.vehicle = args.vehicle.trim();
-  if (typeof args?.purchaseYear === "number") update.purchase_year = args.purchaseYear;
+  // `vehicle` / `purchaseYear` are the tool's old parameter names — still
+  // accepted, saved to the generic fields.
+  const interest = typeof args?.interest === "string" ? args.interest.trim() : typeof args?.vehicle === "string" ? args.vehicle.trim() : "";
+  if (interest) update.interest = interest.slice(0, 200);
+  const newDetails: Record<string, string | number> = {};
+  for (const [param, key] of [["company", "company"], ["preferredDate", "preferred_date"], ["currentSolution", "current_solution"]] as const) {
+    if (typeof args?.[param] === "string" && args[param].trim()) newDetails[key] = args[param].trim().slice(0, 200);
+  }
+  if (typeof args?.purchaseYear === "number") newDetails.purchase_year = args.purchaseYear;
   if (typeof args?.dealValue === "number") update.deal_value = args.dealValue;
   const notes = typeof args?.notes === "string" ? args.notes.trim() : "";
+
+  if (Object.keys(newDetails).length > 0) {
+    // Merged into what's already there, never replacing a form's answers.
+    const { data: current } = await ctx.supabase.from("leads").select("details").eq("id", ctx.leadId).maybeSingle();
+    update.details = { ...((current?.details as Record<string, unknown> | null) ?? {}), ...newDetails };
+  }
 
   if (Object.keys(update).length === 0 && !notes) {
     return "Nothing to update — no valid fields were given.";

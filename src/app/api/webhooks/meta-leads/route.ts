@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { qualifyLead } from "@/lib/ai-engine";
+import { mapLeadAnswers, scoreNewLead } from "@/lib/leads/leadIntake";
+import { loadBusinessModels } from "@/lib/leads/leadProfile";
 import { NextResponse } from "next/server";
 import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
@@ -121,22 +122,23 @@ export async function POST(request: Request) {
         const fields = parseFieldData(metaLead.field_data ?? []);
         console.log("[meta-leads] Lead fetched:", { leadgenId, fields });
 
-        const name = fields["full_name"] ?? fields["name"] ?? "Unknown";
-        const phone = fields["phone_number"] ?? fields["phone"] ?? "";
-        const email = fields["email"] ?? null;
-        const vehicle = fields["vehicle_type"] ?? fields["car_model"] ?? null;
-        const budget = fields["budget"] ? Number(fields["budget"]) : null;
+        // Every answer is kept, whatever the form asked: what they want
+        // (interest), budget, and the rest (company, preferred date, the
+        // form's own questions) as details.
+        const answers = mapLeadAnswers(fields);
+        const name = answers.name ?? "Unknown";
+        const phone = answers.phone ?? "";
+        const email = answers.email;
+        const interest = answers.interest ? answers.interest.slice(0, 200) : null;
+        const budget = answers.budget;
+        const details = answers.details;
 
         // Which ad/campaign actually generated this lead — needed to
         // compute cost-per-lead per campaign on the Campaigns page.
         const metaCampaignId = change?.value?.campaign_id ?? metaLead.campaign_id ?? null;
         const metaAdId = change?.value?.ad_id ?? metaLead.ad_id ?? null;
 
-        const qualification = qualifyLead({
-          purchaseYear: null,
-          budget,
-          phone,
-        });
+        const qualification = scoreNewLead({ ...answers, source: "meta_ads_paid" }, await loadBusinessModels(supabase, dealershipId).catch(() => []));
 
         // Dedupe: same phone number for this dealership within the
         // last 30 days is almost certainly the same person re-submitting
@@ -146,7 +148,7 @@ export async function POST(request: Request) {
           const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
           const { data: existingLead } = await supabase
             .from("leads")
-            .select("id")
+            .select("id, details")
             .eq("dealership_id", dealershipId)
             .eq("phone", phone)
             .gte("created_at", thirtyDaysAgo)
@@ -154,14 +156,20 @@ export async function POST(request: Request) {
           if (existingLead) {
             // P2 27a-i — merge instead of silently dropping: a repeat
             // submission often carries fresher info (a different
-            // vehicle interest, a budget not given the first time)
+            // interest, a budget not given the first time)
             // that was previously lost entirely. Doesn't touch status
             // (never regress a lead that's already progressed in the
             // pipeline) and doesn't re-fire the new-lead side effects
             // below (touchpoint, hot-lead alert, auto-call) — those
             // already ran for the original submission.
+            // Only what this submission actually gave overwrites — an
+            // answer left blank this time doesn't erase the earlier one.
             await supabase.from("leads").update({
-              name, email, vehicle, budget,
+              name,
+              ...(email && { email }),
+              ...(interest && { interest }),
+              ...(budget && { budget }),
+              details: { ...((existingLead.details as Record<string, unknown> | null) ?? {}), ...details },
               ai_score: qualification.score, lead_temperature: qualification.temperature, qualification_reason: qualification.reason,
               meta_campaign_id: metaCampaignId, meta_ad_id: metaAdId,
             }).eq("id", existingLead.id);
@@ -177,7 +185,8 @@ export async function POST(request: Request) {
             name,
             phone,
             email,
-            vehicle,
+            interest,
+            details,
             budget,
             source: "meta_ads_paid",
             ai_score: qualification.score,
@@ -211,7 +220,7 @@ export async function POST(request: Request) {
         if (data && qualification.temperature === "hot" && dealershipInfo?.slack_webhook_url) {
           await sendSlackNotification(
             dealershipInfo.slack_webhook_url,
-            `🔥 New *Hot* lead for ${dealershipInfo.dealership_name}: *${name}* (${phone})${vehicle ? ` — interested in ${vehicle}` : ""}. Check it out in Hawlai's Call Queue.`
+            `🔥 New *Hot* lead for ${dealershipInfo.dealership_name}: *${name}* (${phone})${interest ? ` — interested in ${interest}` : ""}. Check it out in Hawlai's Call Queue.`
           );
         }
 
@@ -224,7 +233,7 @@ export async function POST(request: Request) {
             dealershipId,
             kind: "hot_lead",
             title: `New hot lead: ${name}`,
-            body: vehicle ? `Interested in ${vehicle}` : (phone ?? null),
+            body: interest ? `Interested in ${interest}` : (phone ?? null),
             href: `/dashboard/leads/${data.id}`,
             dedupeKey: `hot_lead:${data.id}`,
           });

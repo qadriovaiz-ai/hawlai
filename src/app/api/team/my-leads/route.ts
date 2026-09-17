@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { resolveActiveMembership } from "@/lib/teamMembership";
+import { loadLeadProfile } from "@/lib/leads/leadProfile";
 
 // Same safety pattern as /api/team/my-tasks: service client, but only
 // after confirming — via the caller's own auth.uid() and the
@@ -22,11 +23,15 @@ export async function GET() {
   if (!membership) return NextResponse.json({ error: "Not an active Sales team member" }, { status: 403 });
 
   const service = createServiceClient();
-  const { data: leads } = await service
-    .from("leads")
-    .select("id, name, phone, email, ai_score, lead_temperature, status, qualification_reason, created_at")
-    .eq("assigned_to", membership.id)
-    .order("ai_score", { ascending: false });
+  const [{ data: leads }, profile] = await Promise.all([
+    service
+      .from("leads")
+      .select("id, name, phone, email, interest, vehicle, ai_score, lead_temperature, status, qualification_reason, created_at")
+      .eq("assigned_to", membership.id)
+      .eq("dealership_id", membership.dealership_id)
+      .order("ai_score", { ascending: false }),
+    loadLeadProfile(service, membership.dealership_id),
+  ]);
 
-  return NextResponse.json({ leads: leads ?? [] });
+  return NextResponse.json({ leads: leads ?? [], stageLabels: profile.stages, interestLabel: profile.interestLabel });
 }
