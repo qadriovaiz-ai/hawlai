@@ -22,8 +22,15 @@ export type StoryQuestion = {
   nudge: string;
 };
 
-/** The category every story answer is filed under — printed in full for copy. */
-export const STORY_CATEGORY = "Business story";
+/**
+ * The category every story answer is filed under — printed in full for
+ * copy, and shown as its own section in Settings → Knowledge Base.
+ *
+ * business_knowledge.category is CHECK-constrained (migration 118, widened
+ * by 189). A value outside that list is rejected by the database, which is
+ * exactly how the first intake run saved nothing.
+ */
+export const STORY_CATEGORY = "business_story";
 
 export const STORY_QUESTIONS: StoryQuestion[] = [
   {

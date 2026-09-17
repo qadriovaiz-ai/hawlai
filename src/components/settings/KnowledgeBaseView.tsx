@@ -10,6 +10,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   policy: "Policy",
   faq: "FAQ",
   general: "General",
+  business_story: "Business Story",
 };
 
 export default function KnowledgeBaseView() {

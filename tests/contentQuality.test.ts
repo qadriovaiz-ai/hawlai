@@ -25,6 +25,9 @@ import { seasonFor } from "@/lib/expertise/seasonalCalendar";
 type Row = Record<string, any>;
 let tables: Record<string, Row[]>;
 
+/** Exactly what business_knowledge.category allows in the database. */
+const KNOWLEDGE_CATEGORIES = ["hours", "pricing_note", "policy", "faq", "general", "business_story"];
+
 function db() {
   const from = (table: string) => {
     let op = "select";
@@ -33,6 +36,12 @@ function db() {
     const rows = () => (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
     const run = (single: boolean) => {
       if (op === "insert") {
+        // The real table's CHECK constraint (migration 118, widened by 189).
+        // A double that accepts any category is how a save that the database
+        // rejects every time passed its tests.
+        if (table === "business_knowledge" && !KNOWLEDGE_CATEGORIES.includes(String(payload.category))) {
+          return { data: null, error: { message: `new row for relation "business_knowledge" violates check constraint "business_knowledge_category_check"` } };
+        }
         const row = { id: `${table}-${(tables[table] ?? []).length + 1}`, ...payload };
         (tables[table] ??= []).push(row);
         return { data: row, error: null };
@@ -373,5 +382,95 @@ describe("the routes that write copy", () => {
     const autopilot = readFileSync("src/lib/automation/contentAutopilot.ts", "utf8");
     expect(autopilot).toContain("{ recent }");
     expect(autopilot).not.toContain("revise: true");
+  });
+});
+
+// THE LIVE BUG (2026-09-18): the first real intake run saved nothing. Every
+// answer was written with category "Business story", which the database's
+// CHECK constraint has rejected since migration 118 — and the chat reported
+// a "technical hiccup", promised a batch save that doesn't exist, and asked
+// the next question anyway. Four answers were lost.
+describe("B — a story answer the database will actually accept", () => {
+  const ctx: any = { id: "d1", name: "candle_by_qaaf", category: "Home fragrance" };
+
+  it("the category is one the database allows", () => {
+    expect(KNOWLEDGE_CATEGORIES).toContain(STORY_CATEGORY);
+  });
+
+  it("the migration widens the constraint rather than dropping it", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync("supabase/migrations/189_business_story_category.sql", "utf8");
+    expect(sql).toMatch(/add constraint business_knowledge_category_check/);
+    expect(sql).toMatch(/'business_story'/);
+    for (const c of ["hours", "pricing_note", "policy", "faq", "general"]) expect(sql).toContain(`'${c}'`);
+    expect(sql).not.toMatch(/drop column|delete from/i);
+  });
+
+  it("an answer really lands in the table, under a category the owner can see", async () => {
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = [];
+    const r = await executeTool(db(), ctx, "save_business_story", { key: "origin", answer: "Meri maa Diwali pe diya oil se candle banati thi." }, "");
+    expect(r.success).toBe(true);
+    expect(tables.business_knowledge[0].category).toBe("business_story");
+  });
+
+  it("a refused write stops the intake — never a promise to save later", async () => {
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = [];
+    // The database refuses this write, the way it refused every one of them.
+    const broken = db();
+    const realFrom = broken.from;
+    broken.from = ((t: string) => {
+      const api = realFrom(t);
+      if (t !== "business_knowledge") return api;
+      const insert = api.insert;
+      api.insert = (v: any) => {
+        insert(v);
+        api.single = async () => ({ data: null, error: { message: "permission denied for table business_knowledge" } });
+        api.then = (res: any) => Promise.resolve({ data: null, error: { message: "permission denied for table business_knowledge" } }).then(res);
+        return api;
+      };
+      return api;
+    }) as any;
+    const r = await executeTool(broken, ctx, "save_business_story", { key: "origin", answer: "Meri maa Diwali pe diya oil se candle banati thi." }, "");
+    expect(r.success).toBeUndefined();
+    expect(r.error).toMatch(/NOT saved/);
+    expect(r.stop).toBe(true);
+    expect(r.note).toMatch(/Do NOT ask the next question/);
+    expect(r.note).toMatch(/never say it will be saved later|never promise a later save/);
+  });
+
+  it("a write that reports no error but stores nothing is still not a save", async () => {
+    // The dangerous shape: the driver answers cleanly and the row isn't
+    // there. Only reading it back afterwards catches that.
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = [];
+    const silent = db();
+    const realFrom = silent.from;
+    silent.from = ((t: string) => {
+      const api = realFrom(t);
+      if (t === "business_knowledge") api.insert = () => ({ ...api, single: async () => ({ data: null, error: null }), then: (res: any) => Promise.resolve({ data: null, error: null }).then(res) });
+      return api;
+    }) as any;
+    const r = await executeTool(silent, ctx, "save_business_story", { key: "origin", answer: "Meri maa Diwali pe diya oil se candle banati thi." }, "");
+    expect(r.success).toBeUndefined();
+    expect(r.error).toMatch(/NOT saved/);
+    expect(r.stop).toBe(true);
+    expect(tables.business_knowledge).toHaveLength(0);
+  });
+
+  it("the tool tells the AI to stop rather than carry on after a failure", async () => {
+    const { TOOLS } = await import("@/lib/agents/masterBrainV2");
+    const tool = TOOLS.find((t: any) => t.name === "save_business_story") as any;
+    expect(tool.description).toMatch(/STOP/);
+    expect(tool.description).toMatch(/no batch save/i);
+  });
+
+  it("Settings → Knowledge Base gives the story its own section", async () => {
+    const { readFileSync } = await import("node:fs");
+    const view = readFileSync("src/components/settings/KnowledgeBaseView.tsx", "utf8");
+    expect(view).toMatch(/business_story: "Business Story"/);
+    const api = readFileSync("src/app/api/business-knowledge/route.ts", "utf8");
+    expect(api).toContain('"business_story"');
   });
 });

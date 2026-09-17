@@ -640,7 +640,7 @@ export const TOOLS = [
   },
   {
     name: "save_business_story",
-    description: "Save one Business Story answer, in the owner's own words. Save what they actually said — tidy the grammar, never add facts, never make it sound like marketing. Saved as Business Knowledge, so copy may state it as true.",
+    description: "Save one Business Story answer, in the owner's own words. Save what they actually said — tidy the grammar, never add facts, never make it sound like marketing. Saved as Business Knowledge, so copy may state it as true. If this tool returns an error, STOP: tell the person plainly that this answer was not saved and why, and do not ask the next question until a save succeeds. There is no batch save and nothing is held for later — an unsaved answer is simply lost.",
     input_schema: {
       type: "object",
       properties: {
@@ -2350,7 +2350,31 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       const { error } = existing
         ? await supabase.from("business_knowledge").update({ content: answer.value, is_active: true }).eq("id", existing.id).eq("dealership_id", ctx.id)
         : await supabase.from("business_knowledge").insert({ dealership_id: ctx.id, category: STORY_CATEGORY, title: question.title, content: answer.value, is_active: true });
-      if (error) return { error: error.message };
+      if (error) {
+        // Nothing is queued or retried later. Saying otherwise is how four
+        // answers were lost on the first real intake run.
+        return {
+          error: `That answer was NOT saved: ${error.message}`,
+          stop: true,
+          note: "Tell the person plainly that this answer wasn't saved and repeat it back so they don't lose it. Do NOT ask the next question, and never say it will be saved later — there is no batch save.",
+        };
+      }
+      // Read back what the database actually holds, so a silent write
+      // failure can't be reported as a save.
+      const { data: saved } = await supabase
+        .from("business_knowledge")
+        .select("id, content")
+        .eq("dealership_id", ctx.id)
+        .eq("category", STORY_CATEGORY)
+        .eq("title", question.title)
+        .maybeSingle();
+      if (!saved?.content) {
+        return {
+          error: "That answer was NOT saved — the database has no record of it.",
+          stop: true,
+          note: "Tell the person plainly that this answer wasn't saved and repeat it back. Do NOT ask the next question, and never promise a later save.",
+        };
+      }
       return {
         success: true,
         saved: question.title,

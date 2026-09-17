@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-const CATEGORIES = ["hours", "pricing_note", "policy", "faq", "general"];
+// Kept in step with business_knowledge.category's CHECK constraint
+// (migration 118, widened by 189 for the Business Story intake).
+const CATEGORIES = ["hours", "pricing_note", "policy", "faq", "general", "business_story"];
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
