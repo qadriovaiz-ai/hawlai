@@ -4,10 +4,13 @@ import { useState } from "react";
 import { Briefcase, Check } from "lucide-react";
 import { Button } from "@/components/ui";
 
-const SUGGESTIONS = ["Car Dealership", "Real Estate", "Restaurant", "Coaching Institute", "Salon / Spa", "Clinic", "Retail Store"];
+// No default and no preset first choice: an empty field stays empty until
+// the owner says what they do. It used to start as "Car Dealership", so
+// clicking Save without typing made any business a car dealership.
+const SUGGESTIONS = ["Retail Store", "Restaurant / Cafe", "Salon / Spa", "Clinic", "Coaching Institute", "Real Estate", "Consulting", "Software / SaaS"];
 
 export default function BusinessCategoryField({ initial }: { initial: string | null }) {
-  const [value, setValue] = useState(initial ?? "Car Dealership");
+  const [value, setValue] = useState(initial ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +44,13 @@ export default function BusinessCategoryField({ initial }: { initial: string | n
         <Briefcase className="w-4 h-4 text-slate-400" /> Business Type
       </label>
       <p className="text-xs text-slate-400">
-        Every AI-generated ad, post, email, and page uses this — set it once so everything sounds right for your actual business, not just car dealerships.
+        Every AI-generated ad, post, email, and page uses this — set it once so everything sounds right for your business.
       </p>
       <div className="flex items-center gap-2">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="e.g. Car Dealership, Real Estate, Restaurant"
+          placeholder="e.g. Home fragrance, Dental clinic, Accounting firm"
           className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         <Button onClick={() => handleSave()} loading={saving} className="shrink-0">

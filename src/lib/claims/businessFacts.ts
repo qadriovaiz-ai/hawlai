@@ -22,6 +22,7 @@
 import type { BrandVoiceProfile } from "@/lib/agents/brandVoice";
 import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
+import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 
 type Row = Record<string, any>;
@@ -70,6 +71,8 @@ export type BusinessFacts = {
   /** "business" when the owner hasn't set one — never a guessed industry. */
   category: string;
   categoryKnown: boolean;
+  /** How the business makes money (lib/business/businessModel.ts) — declared by the owner, or guessed from the catalogue. */
+  businessModels: { models: BusinessModel[]; inferred: boolean };
   city: string | null;
   site: { url: string; published: boolean; pages: SitePage[] } | null;
   home: SitePage | null;
@@ -338,6 +341,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     businessName: dealership?.dealership_name ?? "the business",
     category: category || UNKNOWN_CATEGORY,
     categoryKnown: Boolean(category),
+    businessModels: effectiveBusinessModels(dealership?.business_models, { productCount: products.length }),
     city: dealership?.city ?? null,
     site: website ? { url: `/site/${website.slug}`, published: Boolean(website.published), pages } : null,
     home,
@@ -457,6 +461,12 @@ export function formatFactsForCopy(f: BusinessFacts): string {
     f.categoryKnown
       ? `Business category: ${f.category}${f.city ? ` — based in ${f.city}` : ""}`
       : "Business category: NOT SET by the owner — don't assume an industry; write only about the products listed below, and suggest they set their category in Settings."
+  );
+  const bm = f.businessModels;
+  lines.push(
+    bm && bm.models.length
+      ? `How the business makes money: ${describeBusinessModels(bm.models)}${bm.inferred ? " (guessed from its catalogue — not confirmed by the owner)" : ""}.`
+      : "How the business makes money: not set — don't assume it sells products, services or subscriptions beyond what's listed here."
   );
   lines.push(f.products.length ? `Products (${f.products.length}): ${f.products.map(describeProduct).join("; ")}` : "Products: none listed in the store.");
   lines.push(f.offers.length ? `Active offers: ${f.offers.map((o) => `code ${o.code} — ${o.label}`).join("; ")}` : "Active offers: none — do not write any discount, sale or offer.");

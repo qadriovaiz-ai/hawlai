@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
 import IntentStep from "@/components/onboarding/IntentStep";
 import { MODE_LABELS, type ProductMode } from "@/lib/onboarding/intentRouter";
+import { BUSINESS_MODELS, BUSINESS_MODEL_OPTIONS, type BusinessModel } from "@/lib/business/businessModel";
 
 interface BrandVoiceDraft {
   personality_traits: string[];
@@ -36,7 +37,7 @@ interface AnalyzeResult {
 // the customer WANTS before asking who they are. The brand-voice steps
 // that follow are unchanged — they were always good, they just
 // answered the second question first.
-type Step = "intent" | "describe" | "formality" | "language" | "language_notes" | "personality" | "avoid_words" | "done";
+type Step = "intent" | "describe" | "business_model" | "formality" | "language" | "language_notes" | "personality" | "avoid_words" | "done";
 
 const FORMALITY_CHOICES: { label: string; value: BrandVoiceDraft["formality_level"] }[] = [
   { label: "Formal", value: "formal" },
@@ -59,6 +60,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   const [regionalNotes, setRegionalNotes] = useState("");
   const [personalityInput, setPersonalityInput] = useState("");
   const [avoidWordsInput, setAvoidWordsInput] = useState("");
+  const [businessModels, setBusinessModels] = useState<BusinessModel[]>([]);
 
   // Saved as soon as it's known rather than batched into the final
   // submit: if someone abandons onboarding after this step, knowing
@@ -92,7 +94,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
       setDraft(data);
-      setStep("formality");
+      setStep("business_model");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -160,7 +162,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         fetch("/api/dealership", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ onboarding_completed: true }),
+          body: JSON.stringify({ onboarding_completed: true, ...(businessModels.length ? { business_models: businessModels } : {}) }),
         }),
       ]);
 
@@ -256,6 +258,36 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         >
           Continue to Dashboard <ArrowRight className="w-4 h-4" />
         </button>
+      </div>
+    );
+  }
+
+  if (step === "business_model") {
+    const toggleModel = (m: BusinessModel) =>
+      setBusinessModels((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : BUSINESS_MODELS.filter((x) => x === m || prev.includes(x))));
+    return (
+      <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">How does your business make money?</h1>
+        <p className="text-slate-500 mt-2">Tick everything that applies — this sets up your lead stages and how Hawlai writes about what you offer.</p>
+        <div className="mt-6 space-y-2 text-left">
+          {BUSINESS_MODELS.map((m) => (
+            <label key={m} className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${businessModels.includes(m) ? "border-brand-500 bg-brand-500/5" : "border-slate-200 bg-slate-100 hover:border-brand-500"}`}>
+              <input type="checkbox" checked={businessModels.includes(m)} onChange={() => toggleModel(m)} className="mt-1 w-4 h-4 accent-purple-600" />
+              <span>
+                <span className="text-sm font-medium text-slate-800">{BUSINESS_MODEL_OPTIONS[m].label}</span>
+                <span className="block text-xs text-slate-500">{BUSINESS_MODEL_OPTIONS[m].hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <button
+          onClick={() => setStep("formality")}
+          disabled={!businessModels.length}
+          className="w-full mt-5 bg-gradient-to-b from-brand-600 to-brand-700 hover:brightness-110 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+        >
+          Continue <ArrowRight className="w-4 h-4" />
+        </button>
+        <button onClick={() => setStep("formality")} className="mt-3 text-xs text-slate-400 hover:text-slate-600">Not sure — skip this</button>
       </div>
     );
   }

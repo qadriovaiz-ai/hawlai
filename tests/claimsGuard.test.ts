@@ -38,6 +38,7 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     businessName: "candle_by_qaaf",
     category: "Home fragrance",
     categoryKnown: true,
+    businessModels: { models: ["products"], inferred: false },
     city: "Pune",
     site: { url: "/site/candle-by-qaaf", published: true, pages: [HOME] },
     home: HOME,

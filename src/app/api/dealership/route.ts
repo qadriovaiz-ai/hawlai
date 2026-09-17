@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { cleanBusinessModels } from "@/lib/business/businessModel";
 
 // Mirrors migration 149's CHECK constraint. 'full' is included so a
 // customer can explicitly choose "show me everything" — distinct from
@@ -17,7 +18,7 @@ export async function GET() {
 
   const { data } = await supabase
     .from("dealerships")
-    .select("dealership_name, city, business_category, product_mode, business_address")
+    .select("dealership_name, city, business_category, product_mode, business_address, business_models")
     .eq("id", dealershipId)
     .single();
 
@@ -33,7 +34,12 @@ export async function PATCH(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address } = await request.json();
+  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address, business_models } = await request.json();
+
+  const models = business_models === undefined ? undefined : cleanBusinessModels(business_models);
+  if (models === null) {
+    return NextResponse.json({ error: "Choose from products, services, subscriptions or business customers" }, { status: 400 });
+  }
 
   if (business_address !== undefined && business_address !== null && (typeof business_address !== "string" || business_address.trim().length > 300)) {
     return NextResponse.json({ error: "Keep the address under 300 characters" }, { status: 400 });
@@ -54,6 +60,7 @@ export async function PATCH(request: Request) {
     .from("dealerships")
     .update({
       ...(business_category !== undefined && { business_category: business_category.trim() }),
+      ...(models !== undefined && { business_models: models }),
       ...(onboarding_completed !== undefined && { onboarding_completed }),
       ...(product_mode !== undefined && { product_mode }),
       // Printed in every marketing email's footer; blank clears it (and
