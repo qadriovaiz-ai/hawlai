@@ -1,5 +1,6 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
 import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
+import { normaliseEmail, suppressedAmong } from "@/lib/email/consent";
 import { gatherBusinessFactsSafely, type BusinessFacts } from "@/lib/claims/businessFacts";
 
 // Sent with no human in between, so an email goes out only if it needed
@@ -60,7 +61,19 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       .eq("dnd_opt_out", false) // master audit Part C1.3 — never auto-email an opted-out lead
       .limit(50); // safety cap per run
 
-    for (const lead of newLeads ?? []) {
+    // Unsubscribed addresses are dropped BEFORE an email is written. The
+    // send itself already refused them, but only after an AI-written email
+    // had been generated and thrown away — and the lead was picked up
+    // again the next morning to do it all over (16-18 Sept: the same
+    // unsubscribed address, three mornings running). An unsubscribe is
+    // permanent until they opt back in, so it isn't an attempt at all.
+    let blocked: Set<string>;
+    try {
+      blocked = await suppressedAmong(supabase, dealershipId, (newLeads ?? []).map((l: any) => l.email));
+    } catch (err: any) {
+      return { welcomesSent, followUpsSent, skipped: `unsubscribe list unreadable — ${err.message}` };
+    }
+    for (const lead of (newLeads ?? []).filter((l: any) => !blocked.has(normaliseEmail(l.email)))) {
       const output = await verifiedEmail(
         "welcome_email",
         dealership.dealership_name ?? "our business",
@@ -100,7 +113,14 @@ export async function runEmailAutomation(supabase: any, dealershipId: string) {
       .eq("dnd_opt_out", false) // master audit Part C1.3 — never auto-email an opted-out lead
       .limit(50);
 
-    for (const lead of staleLeads ?? []) {
+    // Same as welcome emails: never write an email for an unsubscribed address.
+    let blocked: Set<string>;
+    try {
+      blocked = await suppressedAmong(supabase, dealershipId, (staleLeads ?? []).map((l: any) => l.email));
+    } catch (err: any) {
+      return { welcomesSent, followUpsSent, skipped: `unsubscribe list unreadable — ${err.message}` };
+    }
+    for (const lead of (staleLeads ?? []).filter((l: any) => !blocked.has(normaliseEmail(l.email)))) {
       const output = await verifiedEmail(
         "follow_up",
         dealership.dealership_name ?? "our business",

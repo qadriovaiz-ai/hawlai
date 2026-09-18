@@ -42,6 +42,19 @@ export async function recipientOnRecord(supabase: any, dealershipId: string, ema
   return null;
 }
 
+/**
+ * Which of these addresses are blocked, in one read — for automation that
+ * must check BEFORE writing an email, not after. Throws when the list
+ * can't be read: an unreadable list is never "nobody unsubscribed".
+ */
+export async function suppressedAmong(service: any, dealershipId: string, emails: (string | null | undefined)[]): Promise<Set<string>> {
+  const wanted = Array.from(new Set(emails.map((e) => normaliseEmail(e)).filter(Boolean)));
+  if (wanted.length === 0) return new Set();
+  const { data, error } = await service.from("email_suppressions").select("email").eq("dealership_id", dealershipId).in("email", wanted);
+  if (error) throw new Error(`couldn't read the unsubscribe list: ${error.message}`);
+  return new Set((data ?? []).map((r: { email: string }) => normaliseEmail(r.email)));
+}
+
 /** Whether marketing email to this address is blocked. Throws when the list can't be read — never "not suppressed" by default. */
 export async function isSuppressed(service: any, dealershipId: string, email: string): Promise<boolean> {
   const { data, error } = await service

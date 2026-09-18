@@ -1,5 +1,6 @@
 import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
 import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
+import { normaliseEmail, suppressedAmong } from "@/lib/email/consent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 interface TriggeredLead {
@@ -103,6 +104,17 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
     if (steps.length === 0) continue;
 
     const triggeredLeads = await getTriggeredLeads(supabase, dealershipId, workflow);
+    // An unsubscribed lead gets no workflow EMAIL — checked before a step
+    // writes one. A refused send used to be recorded as a failed step and
+    // retried every run, generating a fresh email each time. Steps that
+    // don't email the lead (queue_content) still run.
+    let unsubscribed: Set<string>;
+    try {
+      unsubscribed = await suppressedAmong(supabase, dealershipId, triggeredLeads.map((l) => l.email));
+    } catch (err: any) {
+      blocked = `unsubscribe list unreadable — ${err.message}`;
+      break;
+    }
 
     for (const lead of triggeredLeads) {
       for (const step of steps) {
@@ -148,6 +160,10 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
           if (taskError) break;
           continue;
         }
+
+        // An email step for an unsubscribed lead: nothing is written, sent,
+        // recorded or retried. Later non-email steps still run.
+        if (unsubscribed.has(normaliseEmail(lead.email))) continue;
 
         if (!dealership.gmail_email) {
           blocked = "gmail not connected"; // email step, but Gmail isn't connected — try again once it is
