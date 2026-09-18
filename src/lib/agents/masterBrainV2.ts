@@ -642,6 +642,11 @@ export const TOOLS = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "competitor_positioning",
+    description: "How this business is positioned against what its competitors say in public — their own words with links, counted theme by theme (price, materials, delivery, expertise… depending on how the business makes money), which ground is crowded, which is open, and angles the business can own with its own facts. Use when the person asks how they're different from competitors, what competitors say, or how to stand out. Returns the latest comparison run on the Strategy page; quote only its counts and quotes.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "business_story",
     description: "Start or continue the owner's Business Story — the one-time set of questions whose answers make this business's copy impossible to write about anyone else (how it started, how the work is actually done, materials, what a customer said, what they refuse to do). Call this when the person asks to do their business story, asks why their content reads generic, or when copy they're unhappy with has no specifics to draw on. Returns what's saved, what's still open, and the exact next question — read from the database. Ask ONE question at a time, the one in `next`, and save each answer with save_business_story before asking another. Never ask a question that isn't in `next`, never re-ask a saved one, and never say the story is complete unless a tool result says complete: true.",
     input_schema: { type: "object", properties: {} },
@@ -2340,6 +2345,25 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         note: "Every number here was counted from their own data. Quote only these numbers, and where a section says there's too little data, say that plainly rather than advising. Point them to the Strategy page for the full diagnosis.",
       };
     }
+    case "competitor_positioning": {
+      const { latestPositioning } = await import("../strategy/positioning/run");
+      const run = await latestPositioning(supabase, ctx.id);
+      const pos = run?.analysis?.positioning;
+      if (!run || !pos) {
+        return {
+          none: true,
+          note: "No competitor comparison has been run yet. Tell them to open the Strategy page (/dashboard/strategy) and press \"Compare with competitors\" — it reads what up to 5 competitors say about themselves and takes about a minute. Don't describe competitors from your own knowledge.",
+        };
+      }
+      return {
+        ranOn: String(run.created_at).slice(0, 10),
+        competitors: (run.competitors ?? []).map((c: any) => ({ name: c.name, source: c.source, quotes: c.claimCount })),
+        themes: pos.rows.map((r: any) => ({ theme: r.label, standing: r.standing, competitorsSayingIt: `${r.claimedBy.length} of ${pos.competitorCount}`, who: r.claimedBy, example: r.examples?.[0] ?? null, yourFacts: r.yourFacts })),
+        positioning: run.analysis.advice?.statement ?? null,
+        angles: run.analysis.advice?.angles ?? [],
+        note: "Every count and quote here was collected from competitors' own pages (or ads the owner pasted) and counted by Hawlai. Quote only these; never add competitor claims from your own knowledge. To refresh, they run it again on the Strategy page.",
+      };
+    }
     case "business_story": {
       const { storyStatus } = await import("../business/businessStory");
       const { data: rows } = await supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", ctx.id).eq("is_active", true);
@@ -2558,6 +2582,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   add_product: "/dashboard/website-builder",
   save_business_story: "/dashboard/settings/knowledge-base",
   diagnose_business: "/dashboard/strategy",
+  competitor_positioning: "/dashboard/strategy",
   create_discount_code: "/dashboard/website-builder",
   get_report_links: "/dashboard/reports",
 };

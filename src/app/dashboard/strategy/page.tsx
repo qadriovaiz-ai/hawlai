@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb, TrendingUp, Layers, Check } from "lucide-react";
 import DeepStrategyPanel from "@/components/strategy/DeepStrategyPanel";
 import DiagnosisPanel from "@/components/strategy/DiagnosisPanel";
+import PositioningPanel from "@/components/strategy/PositioningPanel";
 import { Button } from "@/components/ui/Button";
 
 const GOALS = ["More leads", "More sales", "Brand awareness", "Website traffic"];
@@ -88,6 +89,9 @@ export default function StrategyPage() {
 
       {/* Where the business actually leaks, from its own data — read first. */}
       <DiagnosisPanel />
+
+      {/* What competitors say in public, and the ground this business can own. */}
+      <PositioningPanel />
 
       <DeepStrategyPanel />
 

@@ -141,6 +141,8 @@ describe("a competitor claim is a verbatim quote from a page about that competit
     expect(mentions("Candle by Qaaf", "Best candle brands in India 2026", cat)).toBe(false);
     expect(mentions("Moonlit Candles", "Moonlit Candles | Handmade in Pune", cat)).toBe(true);
     expect(mentions("Moonlit Candles", "Handmade candles in Pune", cat)).toBe(false);
+    // The category word in a name isn't required to match: "Wick Candles" is Wick's page.
+    expect(mentions("Wick Candles", "Wick — hand-poured soy wax", cat)).toBe(true);
   });
 
   it("discovery keeps only competitors a cited page names — never the business itself or one the owner removed", async () => {
@@ -149,6 +151,9 @@ describe("a competitor claim is a verbatim quote from a page about that competit
         [
           { text: "Moonlit Candles sells soy candles in Pune.", url: "https://moonlit.in", title: "Moonlit Candles", quote: "Moonlit Candles — small-batch soy candles" },
           { text: "Aroma Hut is a Lucknow store.", url: "https://aromahut.in", title: "Aroma Hut", quote: "Aroma Hut Lucknow" },
+          // Pages naming the business itself and one the owner removed — both must still be left out.
+          { text: "Candle by Qaaf sells candles.", url: "https://candlebyqaaf.com", title: "Candle by Qaaf", quote: "Candle by Qaaf soy candles" },
+          { text: "Old Rival sells candles.", url: "https://oldrival.in", title: "Old Rival", quote: "Old Rival candles" },
         ],
         '{"competitors":[{"name":"Moonlit Candles","url":"https://moonlit.in"},{"name":"Invented Scents","url":"https://nowhere.in"},{"name":"Aroma Hut"},{"name":"Candle by Qaaf"},{"name":"Old Rival"}]}'
       )
@@ -309,7 +314,10 @@ describe("a run, end to end", () => {
 
   const route = (prompt: string) => {
     if (prompt.startsWith("Find up to")) {
-      return webReply([{ text: "Moonlit Candles sells soy candles.", url: "https://moonlit.in", title: "Moonlit Candles", quote: "Moonlit Candles small-batch soy candles" }], '{"competitors":[{"name":"Moonlit Candles","url":"https://moonlit.in"},{"name":"Old Rival"}]}');
+      return webReply([
+        { text: "Moonlit Candles sells soy candles.", url: "https://moonlit.in", title: "Moonlit Candles", quote: "Moonlit Candles small-batch soy candles" },
+        { text: "Old Rival sells candles.", url: "https://oldrival.in", title: "Old Rival", quote: "Old Rival candles" },
+      ], '{"competitors":[{"name":"Moonlit Candles","url":"https://moonlit.in"},{"name":"Old Rival"}]}');
     }
     if (prompt.includes('"Wick & Co"')) return webReply([{ text: "x", url: "https://wickandco.in", title: "Wick & Co", quote: "Candles from ₹249, free shipping over ₹799" }]);
     if (prompt.includes('"Aroma Hut"')) return webReply([{ text: "x", url: "https://aromahut.in", title: "Aroma Hut Lucknow", quote: "Lucknow's most affordable candles" }]);

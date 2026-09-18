@@ -2,8 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { businessDisplayName } from "@/lib/business/displayName";
 import { NextResponse } from "next/server";
 import { generateDeepStrategy } from "@/lib/agents/deepStrategyAgent";
-import { searchCompetitorAds } from "@/lib/agents/researchAgent";
-import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { latestPositioning, competitorContextFrom } from "@/lib/strategy/positioning/run";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
@@ -31,26 +30,16 @@ export async function GET(request: Request) {
   }
 
   const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, city, business_category, fb_page_access_token, fb_page_access_token_encrypted").eq("id", dealershipId).single(),
+    supabase.from("dealerships").select("dealership_name, city, business_category").eq("id", dealershipId).single(),
     supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
-  // Pull real competitor ad data if Facebook is connected — a real
-  // Meta Ad Library search on the dealer's own business category and
-  // city, not a made-up example.
-  let competitorContext: string | null = null;
-  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
-  if (token && dealership?.business_category) {
-    try {
-      const query = `${dealership.business_category}${dealership.city ? ` ${dealership.city}` : ""}`;
-      const { ads } = await searchCompetitorAds(token, query);
-      if (ads.length > 0) {
-        competitorContext = ads.slice(0, 5).map((ad) => `"${ad.page_name}": ${ad.body ?? ad.title ?? "(no text)"}`).join(" | ");
-      }
-    } catch {
-      // No competitor data — the agent is told to note this honestly.
-    }
-  }
+  // What competitors say in public, from the latest positioning run
+  // (lib/strategy/positioning). This used to search Meta's Ad Library API,
+  // which returns only political/issue ads outside the EU — it answered
+  // "Application does not have permission for this action", so the
+  // competitor section was always written with no data.
+  const competitorContext = competitorContextFrom(await latestPositioning(supabase, dealershipId));
 
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);

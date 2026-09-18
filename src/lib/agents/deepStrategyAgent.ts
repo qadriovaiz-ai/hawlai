@@ -60,7 +60,7 @@ export async function generateDeepStrategy(
     _fallback: true,
     businessAnalysis: `${dealershipName} is a ${businessCategory} business${city ? ` based in ${city}` : ""}. Add a Brand Voice description for a sharper analysis.`,
     productAnalysis: "Add a Brand Voice description first so this can be tailored to your actual offering.",
-    competitorAnalysis: competitorContext ? "Competitor ad data was available but couldn't be analyzed right now — try regenerating." : "No competitor ad data available yet — this fills in once we can find running competitor ads in your area.",
+    competitorAnalysis: competitorContext ? "Competitor data was available but couldn't be analyzed right now — try regenerating." : "No competitor comparison yet — press \"Compare with competitors\" on this page, then regenerate.",
     targetAudience: { ageRange: "25-45", income: "Middle income", description: "Local customers looking for a reliable, trustworthy option." },
     pricingStrategy: "Consider value-based pricing with a clear entry-level offer to reduce first-purchase friction.",
     positioningStatement: `${dealershipName} is a trusted, local ${businessCategory} focused on straightforward, honest service.`,
@@ -100,7 +100,7 @@ export async function generateDeepStrategy(
           role: "user",
           content: `You are a senior marketing strategist doing a full strategic analysis for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
 ${brandContext}${groundingContext ?? ""}
-${competitorContext ? `Known competitor activity: ${competitorContext}` : "No competitor data available — note this honestly rather than inventing specifics."}
+${competitorContext ? `Known competitor activity: ${competitorContext}` : "No competitor data available — say so honestly, suggest running \"Compare with competitors\" on the Strategy page, and never invent competitors or what they say."}
 
 Return JSON only, no markdown:
 {
