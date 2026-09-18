@@ -190,17 +190,22 @@ describe("step 2 — the model call", () => {
     }));
     const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
     const d = buildDiagnosis(base({ events: views(400), leads: [...leads(25, "new"), ...leads(1, "converted")] }));
-    const advice = await generateChannelAdvice(d, null);
+    const result = await generateChannelAdvice(d, null);
     expect(prompts[0]).toContain("MEASURED DIAGNOSIS");
     expect(prompts[0]).toMatch(/Never state, estimate or round a figure that isn't in the diagnosis/);
-    expect(advice!.recommendations.map((r) => r.title)).toEqual(["Fix the enquiry step"]);
-    expect(advice!.removed).toHaveLength(1);
+    if (!result.ok) throw new Error(`expected advice, got ${result.reason}`);
+    expect(result.advice.recommendations.map((r) => r.title)).toEqual(["Fix the enquiry step"]);
+    expect(result.advice.removed).toHaveLength(1);
   });
 
-  it("a failed call is null, never made-up advice", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
+  it("a failed call is a stated failure, never made-up advice", async () => {
+    const spy = vi.fn(async () => new Response("", { status: 500 }));
+    vi.stubGlobal("fetch", spy);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
-    expect(await generateChannelAdvice(buildDiagnosis(base()), null)).toBeNull();
+    expect(await generateChannelAdvice(buildDiagnosis(base()), null)).toMatchObject({ ok: false, reason: "busy" });
+    // A busy service is worth one more try.
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -307,5 +312,122 @@ describe("the chat card", () => {
     expect(card.kind).toBe("document");
     expect(card.groups.map((g: any) => g.heading)).toEqual(expect.arrayContaining(["Lead sources, ranked by conversion", "Customers at risk"]));
     expect(card.departmentHref).toBe("/dashboard/strategy");
+  });
+});
+
+// THE LIVE CASE (2026-09-18): Candle by Qaaf — 28 site visits, 5 leads,
+// nobody contacted, nothing bought, 0 of 0 customers at risk. The numbers
+// showed; "What should I do about it?" said only "Couldn't write the advice
+// right now". Four different failures all returned the same null, three of
+// them without a trace. The fitting cause: thin data means every gap must
+// be explained, the answer ran past its token limit, and a cut-off JSON
+// reply doesn't parse.
+describe("thin data: the Candle by Qaaf shape", () => {
+  const thin = () =>
+    buildDiagnosis(base({
+      models: ["products"],
+      events: views(28),
+      leads: [...leads(3, "new", "website"), ...leads(2, "new", "instagram")],
+      atRisk: [],
+    }));
+
+  const reply = (text: string, stop = "end_turn") =>
+    new Response(JSON.stringify({ content: [{ text }], stop_reason: stop, usage: { input_tokens: 10, output_tokens: 3000 } }), { status: 200 });
+
+  // What a sensible answer for this business looks like, as sent after the
+  // pre-filled "{" — so it starts mid-object.
+  const GOOD_TAIL = `"summary":"5 of 28 visitors became leads, but 0 have been contacted yet.","recommendations":[{"title":"Call every lead this week","action":"Reach all 5 leads by phone or WhatsApp.","evidence":"Leads 5, Contacted 0 (0% of previous)"}],"dataGaps":["Sources: too few leads per source yet — keep tagging where each lead came from."]}`;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("the diagnosis itself handles all the zeros", () => {
+    const d = thin();
+    expect(d.funnels[0].steps.map((s) => s.count)).toEqual([28, 5, 0, 0, 0]);
+    expect(d.funnels[0].weakest).toEqual({ from: "Site visits", to: "Leads", rate: 17.9, entered: 28 });
+    // 0 of 0 at risk, and a store funnel where nobody has checked out.
+    expect(d.atRisk).toEqual({ count: 0, total: 0, names: [] });
+    expect(d.funnels[1].steps.map((s) => s.count)).toEqual([28, 0, 0]);
+    expect(d.sourcesThin).toMatch(/Too few leads per source/);
+  });
+
+  it("an honest answer about this data survives the number check intact", () => {
+    const v = verifyAdvice(JSON.parse(`{${GOOD_TAIL}`), thin());
+    expect(v.removed).toEqual([]);
+    expect(v.recommendations).toHaveLength(1);
+    expect(v.summary).toContain("5 of 28 visitors");
+  });
+
+  it("the live failure: a cut-off answer is retried, shorter, and the second one is used", async () => {
+    const calls: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: any, init?: any) => {
+      calls.push(JSON.parse(init.body));
+      return calls.length === 1 ? reply(`"summary":"5 of 28 visitors became leads, but`, "max_tokens") : reply(GOOD_TAIL);
+    }));
+    const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
+    const result = await generateChannelAdvice(thin(), null);
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].messages[0].content).toMatch(/cut off or wasn't valid JSON/);
+  });
+
+  it("the request leaves room, asks for brevity, and forces the reply to start as JSON", async () => {
+    const calls: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: any, init?: any) => (calls.push(JSON.parse(init.body)), reply(GOOD_TAIL))));
+    const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
+    await generateChannelAdvice(thin(), null);
+    expect(calls[0].max_tokens).toBeGreaterThanOrEqual(3000);
+    expect(calls[0].messages.at(-1)).toEqual({ role: "assistant", content: "{" });
+    expect(calls[0].messages[0].content).toMatch(/summary at most 3 sentences/);
+  });
+
+  it("still cut off after a retry: the reason reaches the page, not a generic message", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => reply(`"summary":"5 of 28`, "max_tokens")));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
+    expect(await generateChannelAdvice(thin(), null)).toMatchObject({ ok: false, reason: "cut_off" });
+  });
+
+  it("an answer wrapped in prose or code fences is still read", async () => {
+    const { parseAdviceJson } = await import("@/lib/strategy/channelAdvice");
+    expect(parseAdviceJson(GOOD_TAIL)).toMatchObject({ summary: expect.stringContaining("5 of 28") });
+    expect(parseAdviceJson("```json\n{" + GOOD_TAIL + "\n```")).toMatchObject({ summary: expect.any(String) });
+    expect(parseAdviceJson(`Here you go: {${GOOD_TAIL} Hope that helps.`)).toMatchObject({ summary: expect.any(String) });
+    expect(parseAdviceJson(`"summary":"cut off here`)).toBeNull();
+  });
+
+  it("an error another try won't fix isn't retried", async () => {
+    const spy = vi.fn(async () => new Response("bad request", { status: 400 }));
+    vi.stubGlobal("fetch", spy);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
+    expect(await generateChannelAdvice(thin(), null)).toMatchObject({ ok: false, reason: "error" });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the page is told why advice failed", () => {
+  beforeEach(() => {
+    tables.page_events = Array.from({ length: 28 }, () => ({ dealership_id: "d1", event_type: "view", created_at: "2026-09-10T10:00:00+05:30" }));
+    tables.leads = Array.from({ length: 5 }, (_, i) => ({ id: `T${i}`, dealership_id: "d1", source: "website", status: "new", created_at: "2026-09-10T10:00:00+05:30" }));
+    tables.campaign_performance_history = [];
+    tables.lead_touchpoints = [];
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("a cut-off answer says so in plain words, with the reason", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: `"summary":"5 of` }], stop_reason: "max_tokens", usage: {} }), { status: 200 })));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { GET } = await import("@/app/api/strategy/diagnosis/route");
+    const body = await (await GET(new Request("https://x.test/api/strategy/diagnosis?advice=1"))).json();
+    expect(body.advice).toBeNull();
+    expect(body.reason).toBe("cut_off");
+    expect(body.error).toMatch(/ran too long and was cut off/);
+    // The numbers are still there.
+    expect(body.diagnosis.funnels[0].steps[1].count).toBe(5);
+  });
+
+  it("the route has room for a retry on Vercel", async () => {
+    const mod = await import("@/app/api/strategy/diagnosis/route");
+    expect(mod.maxDuration).toBe(60);
   });
 });

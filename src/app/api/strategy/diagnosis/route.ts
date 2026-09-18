@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { loadDiagnosis } from "@/lib/strategy/diagnosis";
-import { generateChannelAdvice } from "@/lib/strategy/channelAdvice";
+import { generateChannelAdvice, ADVICE_FAILURE_MESSAGE } from "@/lib/strategy/channelAdvice";
+
+// The advice is a model call that may be retried once — room for both.
+export const maxDuration = 60;
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 // Where the business actually leaks, from its own last 90 days
@@ -26,7 +29,11 @@ export async function GET(request: Request) {
   if (!wantAdvice) return NextResponse.json({ diagnosis });
 
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const advice = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId });
-  if (!advice) return NextResponse.json({ diagnosis, advice: null, error: "Couldn't write the advice right now — the numbers above are still accurate." });
-  return NextResponse.json({ diagnosis, advice });
+  const result = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId });
+  if (!result.ok) {
+    // The reason is said, not hidden: it's what makes the next failure
+    // diagnosable without anyone reading a server log.
+    return NextResponse.json({ diagnosis, advice: null, error: ADVICE_FAILURE_MESSAGE[result.reason], reason: result.reason });
+  }
+  return NextResponse.json({ diagnosis, advice: result.advice });
 }

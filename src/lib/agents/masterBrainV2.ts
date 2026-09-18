@@ -2329,10 +2329,12 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       const { generateChannelAdvice } = await import("../strategy/channelAdvice");
       const diagnosis = await loadDiagnosis(supabase, ctx.id);
       const facts = await factsFor(supabase, ctx);
-      const advice = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId: ctx.id });
+      const adviceResult = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId: ctx.id });
+      const advice = adviceResult.ok ? adviceResult.advice : null;
       return {
         diagnosis,
         advice,
+        ...(adviceResult.ok ? {} : { adviceError: `Advice couldn't be written (${adviceResult.reason}) — share the numbers and suggest trying again.` }),
         note: "Every number here was counted from their own data. Quote only these numbers, and where a section says there's too little data, say that plainly rather than advising. Point them to the Strategy page for the full diagnosis.",
       };
     }

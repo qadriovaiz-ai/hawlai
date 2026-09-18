@@ -93,42 +93,115 @@ const PROMPT_RULES = `RULES — this goes to a small business owner who will act
 - Channels the business doesn't use yet can be suggested only as a test, with how to measure it.
 - 2-4 recommendations. Plain language. No marketing jargon.`;
 
+/** Why advice couldn't be written — said to the owner in plain words, never a silent blank. */
+export type AdviceFailure = "busy" | "cut_off" | "unreadable" | "error";
+
+export const ADVICE_FAILURE_MESSAGE: Record<AdviceFailure, string> = {
+  busy: "The AI service was busy — try again in a minute. The numbers above are still accurate.",
+  cut_off: "The advice ran too long and was cut off — try again. The numbers above are still accurate.",
+  unreadable: "The AI's answer came back in a form Hawlai couldn't read — try again. The numbers above are still accurate.",
+  error: "Couldn't write the advice right now. The numbers above are still accurate.",
+};
+
+export type AdviceResult = { ok: true; advice: ChannelAdvice } | { ok: false; reason: AdviceFailure; detail: string };
+
+/** The JSON object in a reply, if there is one: fences stripped, and the answer may begin mid-object (the call pre-fills "{"). */
+export function parseAdviceJson(text: string): Record<string, unknown> | null {
+  const body = String(text ?? "").replace(/```json|```/g, "").trim();
+  // Two readings: the reply continues the pre-filled "{" (it starts with a
+  // key), or it carries its own object somewhere inside some prose.
+  for (const candidate of [`{${body}`, body]) {
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start < 0 || end <= start) continue;
+    try {
+      const parsed = JSON.parse(candidate.slice(start, end + 1));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // try the other reading
+    }
+  }
+  return null;
+}
+
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504, 529]);
+
+/**
+ * THE BUG (2026-09-18): for Candle by Qaaf — 28 visits, 5 leads, nobody
+ * contacted yet — "What should I do about it?" showed only "Couldn't write
+ * the advice right now". Four ways to fail (an API error, an empty reply, a
+ * reply with no JSON, JSON that didn't parse) all returned the same null,
+ * and only one of them logged anything, so the reason was unknowable.
+ *
+ * The likeliest cause fits the data: with thin data the model is told to
+ * explain every gap and how to close it, and the answer ran past its 1,500
+ * token limit — cut off mid-JSON, which doesn't parse.
+ *
+ * Now: a bigger budget with hard length limits in the prompt; the reply
+ * is forced to start as JSON; a cut-off, unreadable or busy reply gets ONE
+ * retry; and a failure that remains carries its reason to the page and the
+ * log.
+ */
 export async function generateChannelAdvice(
   d: Diagnosis,
   facts: BusinessFacts | null,
   logContext?: { supabase: any; dealershipId: string }
-): Promise<ChannelAdvice | null> {
+): Promise<AdviceResult> {
+  const prompt = `You are a marketing strategist advising where this business should put its effort next.
+
+${formatDiagnosisForPrompt(d)}
+${facts ? `\n${formatFactsForCopy(facts)}\n` : ""}
+${PROMPT_RULES}
+- Keep it short: summary at most 3 sentences; each action at most 2 sentences; at most 4 dataGaps, one sentence each.
+
+Return JSON only:
+{"summary":"2-3 sentences: where this business is losing people, in plain words","recommendations":[{"title":"short","action":"what to do this month","evidence":"the exact number(s) from the diagnosis this rests on"}],"dataGaps":["what can't be judged yet, and how to fix that"]}`;
+
+  let last: AdviceResult = { ok: false, reason: "error", detail: "not attempted" };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    last = await attemptAdvice(prompt, attempt > 0, d, logContext);
+    if (last.ok) return last;
+    // An error that another try won't fix isn't retried.
+    if (last.reason === "error") break;
+  }
+  if (!last.ok) console.error(`[channel-advice] failed (${last.reason}): ${last.detail}`);
+  return last;
+}
+
+async function attemptAdvice(
+  prompt: string,
+  isRetry: boolean,
+  d: Diagnosis,
+  logContext?: { supabase: any; dealershipId: string }
+): Promise<AdviceResult> {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: getModel("standard"),
-        max_tokens: 1500,
-        messages: [{
-          role: "user",
-          content: `You are a marketing strategist advising where this business should put its effort next.
-
-${formatDiagnosisForPrompt(d)}
-${facts ? `\n${formatFactsForCopy(facts)}\n` : ""}
-${PROMPT_RULES}
-
-Return JSON only:
-{"summary":"2-3 sentences: where this business is losing people, in plain words","recommendations":[{"title":"short","action":"what to do this month","evidence":"the exact number(s) from the diagnosis this rests on"}],"dataGaps":["what can't be judged yet, and how to fix that"]}`,
-        }],
+        max_tokens: 3000,
+        messages: [
+          { role: "user", content: isRetry ? `${prompt}\n\nYour last answer was cut off or wasn't valid JSON. Answer again, shorter, as one valid JSON object.` : prompt },
+          // Pre-filled, so the reply is the JSON object from its first character.
+          { role: "assistant", content: "{" },
+        ],
       }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const reason: AdviceFailure = RETRYABLE_STATUS.has(response.status) ? "busy" : "error";
+      return { ok: false, reason, detail: `the AI service answered ${response.status}` };
+    }
     const bodyText = await response.text();
-    if (!bodyText.trim()) return null;
+    if (!bodyText.trim()) return { ok: false, reason: "busy", detail: "empty reply" };
     const data = JSON.parse(bodyText);
     if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "strategy_channel_advice", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    return verifyAdvice(JSON.parse(match[0]), d);
+    const text = String(data.content?.[0]?.text ?? "");
+    if (data.stop_reason === "max_tokens") return { ok: false, reason: "cut_off", detail: `reply cut off after ${data.usage?.output_tokens ?? "?"} tokens` };
+    const parsed = parseAdviceJson(text);
+    if (!parsed) return { ok: false, reason: "unreadable", detail: `no readable JSON in a ${text.length}-character reply` };
+    return { ok: true, advice: verifyAdvice(parsed, d) };
   } catch (err: any) {
-    console.error("[channel-advice] failed:", err?.message);
-    return null;
+    return { ok: false, reason: "busy", detail: err?.message ?? String(err) };
   }
 }

@@ -39,10 +39,18 @@ export default function DiagnosisPanel() {
     setAdvising(true);
     setError(null);
     try {
-      const d = await (await fetch("/api/strategy/diagnosis?advice=1")).json();
+      const res = await fetch("/api/strategy/diagnosis?advice=1");
+      // A timeout comes back as a page, not JSON — say so rather than fail silently.
+      const d = await res.json().catch(() => null);
+      if (!d) {
+        setError(`The advice took too long (${res.status}) — try again. The numbers above are still accurate.`);
+        return;
+      }
       if (d.diagnosis) setDiagnosis(d.diagnosis);
       if (d.advice) setAdvice(d.advice);
       else setError(d.error ?? "Couldn't write the advice right now.");
+    } catch {
+      setError("Couldn't reach Hawlai — check your connection and try again.");
     } finally {
       setAdvising(false);
     }
