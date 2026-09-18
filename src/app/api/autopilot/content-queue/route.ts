@@ -68,6 +68,9 @@ export async function POST(request: Request) {
       recent: await recentCopy(supabase, dealershipId),
       // The owner reads the queued post on the calendar before its date.
       revise: true,
+      // Queued posts go to Facebook and Instagram; Instagram's link rule is
+      // applied when it's posted there.
+      keepLinks: true,
     }),
   ]);
 

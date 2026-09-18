@@ -145,6 +145,12 @@ export async function generateContent(
     recent?: string[];
     /** Second pass that cuts lines any business in the same category could have written. Pages where a human reviews; never the auto-publish path. */
     revise?: boolean;
+    /**
+     * Keep real links even for an Instagram content type. For callers that
+     * post the same caption to Facebook too: Instagram's rule is applied
+     * where the caption is posted to Instagram (postPhotoToInstagram).
+     */
+    keepLinks?: boolean;
   } = {}
 ): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
@@ -206,13 +212,14 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
         revised = true;
       }
     }
-    if (!facts) return { output: applyLinkRule(contentTypeKey, parsed).output, ...(revised ? { revised } : {}) };
+    const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
+    if (!facts) return { output: applyLinkRule(linkRuleFor, parsed).output, ...(revised ? { revised } : {}) };
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
     const guarded = guardGenerated(parsed, facts, claimsMode);
     // Enforced, not requested: a real booking link in the facts is exactly
     // what put a dead URL into an Instagram caption.
-    const linked = applyLinkRule(contentTypeKey, guarded.output);
+    const linked = applyLinkRule(linkRuleFor, guarded.output);
     const output: any = linked.output;
     const linkNote = linkRuleNote(linked.replaced);
     if (linkNote) output._claimsNote = [output._claimsNote, linkNote].filter(Boolean).join(" ");

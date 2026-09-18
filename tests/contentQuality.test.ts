@@ -380,7 +380,7 @@ describe("the routes that write copy", () => {
     const queue = readFileSync("src/app/api/autopilot/content-queue/route.ts", "utf8");
     expect(queue).toMatch(/revise: true/);
     const autopilot = readFileSync("src/lib/automation/contentAutopilot.ts", "utf8");
-    expect(autopilot).toContain("{ recent }");
+    expect(autopilot).toMatch(/\{ recent, keepLinks: true \}/);
     expect(autopilot).not.toContain("revise: true");
   });
 });
@@ -561,5 +561,66 @@ describe("tune 3 — no dead links in an Instagram caption, enforced in code", (
     const r = applyLinkRule("instagram_post", { caption: "Book: https://x.co/a", _source: "https://x.co/a", days: [{ caption: "See qaaf.in" }] });
     expect(r.output).toEqual({ caption: "Book: link in bio", _source: "https://x.co/a", days: [{ caption: "See link in bio" }] });
     expect(r.replaced).toBe(2);
+  });
+});
+
+// ---- follow-ups: service terms reach the copy; Facebook keeps its link -----------
+describe("a service's description reaches the copy facts with its terms intact", () => {
+  // The workshop case: what attendees take home, and when — past 100 characters.
+  const terms =
+    "90-minute hands-on session. You pour your own lavender candle; it sets for 24 hours, so it's ready to collect the next day from our Shahjahanpur studio. All materials included.";
+
+  it("a long service description arrives whole, including the take-home line", () => {
+    const f = facts({ products: [{ id: "s1", name: "Candle Making Workshop", kind: "service", durationMinutes: 90, bookingUrl: null, price: 800, description: terms, images: [], inventory: null, category: null, active: true }] });
+    const block = formatFactsForCopy(f);
+    expect(terms.length).toBeGreaterThan(100);
+    expect(block).toContain("ready to collect the next day");
+    expect(block).toContain("All materials included.");
+  });
+
+  it("a product description is still kept short — it's flavour, not terms", () => {
+    const long = "Hand-poured lavender soy candle " + "with a slow, even burn ".repeat(8) + "ENDMARK";
+    const f = facts({ products: [{ id: "p1", name: "Lavender candle", kind: "product", price: 550, description: long, images: [], inventory: null, category: null, active: true }] });
+    expect(formatFactsForCopy(f)).not.toContain("ENDMARK");
+  });
+});
+
+describe("one caption to Facebook and Instagram: Facebook keeps the link", () => {
+  it("Instagram gets 'link in bio' at the moment it's posted there; the caption itself keeps the link", async () => {
+    const sent: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => {
+      sent.push({ url, body: init?.body ? JSON.parse(init.body) : null });
+      return new Response(JSON.stringify({ id: "ig_media_1" }), { status: 200 });
+    }));
+    try {
+      const { postPhotoToInstagram, postPhotoToPage } = await import("@/lib/agents/socialMediaAgent");
+      const caption = "Seats for Sunday: https://calendly.com/candlebyqaaf/workshop";
+      await postPhotoToPage("page1", "tok", "https://img/x.png", caption);
+      await postPhotoToInstagram("ig1", "tok", "https://img/x.png", caption).catch(() => null);
+      const fb = sent.find((c) => c.url.includes("/page1/photos"));
+      const ig = sent.find((c) => c.url.includes("/ig1/media"));
+      expect(fb.body.caption).toBe("Seats for Sunday: https://calendly.com/candlebyqaaf/workshop");
+      expect(ig.body.caption).toBe("Seats for Sunday: link in bio");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("Autopilot and the queue ask for the caption WITH its links", async () => {
+    const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
+    const caption = { text: "Seats for Sunday: https://calendly.com/candlebyqaaf/workshop" };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
+    try {
+      const withLink = facts({ links: { store: null, products: [], booking: "https://calendly.com/candlebyqaaf/workshop" } });
+      const kept = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, withLink, "publish", { keepLinks: true });
+      expect(kept.output.text).toContain("https://calendly.com/candlebyqaaf/workshop");
+      expect(kept.output._claimsNote ?? "").not.toMatch(/link in bio/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const { readFileSync } = await import("node:fs");
+    const autopilot = readFileSync("src/lib/automation/contentAutopilot.ts", "utf8");
+    expect(autopilot.match(/keepLinks: true/g)?.length).toBe(2);
+    expect(readFileSync("src/app/api/autopilot/content-queue/route.ts", "utf8")).toMatch(/keepLinks: true/);
   });
 });

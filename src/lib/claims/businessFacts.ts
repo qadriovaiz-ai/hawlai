@@ -451,13 +451,21 @@ export function describeShipping(s: BusinessFacts["shipping"]): string {
   return `₹${s.rate ?? "?"} flat on every order (NOT free)`;
 }
 
+export const PRODUCT_DESCRIPTION_CHARS = 100;
+export const SERVICE_DESCRIPTION_CHARS = 500;
+
 function describeProduct(p: CatalogProduct): string {
   const bits = [`${p.name} — ₹${p.price}`];
   if (isService(p)) {
     const d = formatDuration(p.durationMinutes);
     if (d) bits.push(`(${d})`);
   }
-  if (p.description) bits.push(`(${p.description.slice(0, 100)})`);
+  // A product's description is flavour and 100 characters is plenty. A
+  // service's carries the terms copy must get right — what attendees take
+  // home and when, what's included — so it gets room (2026-09-18: a
+  // workshop caption promised a candle to take home from a 90-minute
+  // session whose candles set for 24 hours).
+  if (p.description) bits.push(`(${p.description.slice(0, isService(p) ? SERVICE_DESCRIPTION_CHARS : PRODUCT_DESCRIPTION_CHARS)})`);
   if (!isService(p) && p.inventory === 0) bits.push("(out of stock)");
   return bits.join(" ");
 }

@@ -12,6 +12,7 @@ import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { stripUnsupported, type ClaimsMode } from "@/lib/claims/claimCheck";
+import { replaceLinksWithBio } from "@/lib/content/platformRules";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 const GRAPH_VERSION = "v23.0";
@@ -193,10 +194,15 @@ export async function postPhotoToInstagram(
   imagePublicUrl: string,
   caption: string
 ): Promise<{ id: string }> {
+  // Links in an Instagram caption can't be clicked. Applied HERE, at the
+  // one place every Instagram post passes through (Autopilot, the queue,
+  // the Social page), so the same caption posted to Facebook keeps its
+  // real, clickable link.
+  const igCaption = replaceLinksWithBio(caption).text;
   const createRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${igUserId}/media`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image_url: imagePublicUrl, caption, access_token: pageAccessToken }),
+    body: JSON.stringify({ image_url: imagePublicUrl, caption: igCaption, access_token: pageAccessToken }),
   });
   const createData = await createRes.json();
   if (!createRes.ok || createData.error) {
