@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { generateMarketingStrategy } from "@/lib/agents/strategyAgent";
 import { getCampaignPerformanceState, type CampaignPerformance } from "@/lib/agents/analyticsAgent";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function GET() {
   const supabase = await createClient();
@@ -73,6 +74,9 @@ export async function POST(request: Request) {
     targetLeads,
     historicalCostPerLead
   , factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(plan);
+  if (aiFailed) return aiFailed;
 
   if ((plan as any)._fallback) {
     return NextResponse.json({ error: "Couldn't generate your plan right now — please try again in a moment." }, { status: 503 });

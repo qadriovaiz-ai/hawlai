@@ -195,6 +195,8 @@ describe("Autopilot doesn't save templates as work", () => {
     const spy = anthropic(creditsOut);
     const result = await runDailyAutopilot(db(), "d1");
     expect(result.drafted).toBe(0);
+    // Reported, so Automation Health reads "AI unavailable (credits)", not "0 drafted".
+    expect(result.aiFailure).toEqual({ kind: "credits", message: OUTAGE });
     expect(updates.filter((u) => u.table === "leads")).toEqual([]);
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -209,7 +211,9 @@ describe("Autopilot doesn't save templates as work", () => {
   it("follow-up drafts when the AI works: saved as before", async () => {
     tables.leads = [stuckLead("l1")];
     anthropic(ok(JSON.stringify({ message: "Asha ji, Diwali ke liye lavender candle ready hai" })));
-    expect((await runDailyAutopilot(db(), "d1")).drafted).toBe(1);
+    const worked = await runDailyAutopilot(db(), "d1");
+    expect(worked.drafted).toBe(1);
+    expect(worked.aiFailure).toBeUndefined();
     expect(updates.find((u) => u.table === "leads")?.values.draft_followup_message).toBe("Asha ji, Diwali ke liye lavender candle ready hai");
   });
 
@@ -220,7 +224,8 @@ describe("Autopilot doesn't save templates as work", () => {
       { id: "winner", headline: "Winning hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "B" },
     ];
     anthropic(creditsOut);
-    await runDailyAutopilot(db(), "d1");
+    const result = await runDailyAutopilot(db(), "d1");
+    expect(result.aiFailure).toEqual({ kind: "credits", message: OUTAGE });
     expect(notified.some((n) => n.kind === "campaign_auto_paused")).toBe(true);
     expect(inserts.filter((i) => i.table === "ad_creatives")).toEqual([]);
     expect(notified.some((n) => n.kind === "variant_draft_generated")).toBe(false);

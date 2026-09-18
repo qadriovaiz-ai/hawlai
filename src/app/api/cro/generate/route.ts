@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateCroSuggestions } from "@/lib/agents/croAgentV2";
 import { gatherCroFacts } from "@/lib/cro/siteFacts";
 import { requireFeature } from "@/lib/featureGate";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
   // anyone using the Website Builder (siteFacts.ts). Suggestions are
   // checked against these facts before they're returned.
   const facts = await gatherCroFacts(supabase, dealershipId);
-  const { output, _fallback } = await generateCroSuggestions(taskType, facts, { supabase, dealershipId });
+  const { output, _fallback, _aiFailure } = await generateCroSuggestions(taskType, facts, { supabase, dealershipId });
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
   if (!_fallback) {

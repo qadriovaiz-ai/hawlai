@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Badge, Button, Card } from "@/components/ui";
+import { GENERIC_ERROR } from "@/lib/hooks/useGeneratedOutput";
 
 export default function BrandBuildingView() {
   const [loading, setLoading] = useState(true);
@@ -18,27 +19,37 @@ export default function BrandBuildingView() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  // Why the kit couldn't be built (an AI outage, a plan limit…). A failed
+  // regenerate keeps the kit already on screen and says so; before this,
+  // the error body replaced the kit and the page rendered blank.
+  const [kitError, setKitError] = useState<string | null>(null);
+
+  async function loadKit(url: string) {
+    setLoading(true);
+    setKitError(null);
+    try {
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        setKitError(data.error ?? GENERIC_ERROR);
+        return;
+      }
+      setKit(data);
+      setLogoUrl((current) => data.logoUrl ?? current);
+    } catch {
+      setKitError(GENERIC_ERROR);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    fetch("/api/brand-kit/build")
-      .then((res) => res.json())
-      .then((data) => {
-        setKit(data);
-        setLogoUrl(data.logoUrl ?? null);
-      })
-      .finally(() => setLoading(false));
+    loadKit("/api/brand-kit/build");
   }, []);
 
   function handleRegenerate() {
-    setLoading(true);
     setEditing(false);
-    fetch("/api/brand-kit/build?regenerate=true")
-      .then((res) => res.json())
-      .then((data) => {
-        setKit(data);
-        setLogoUrl(data.logoUrl ?? logoUrl);
-      })
-      .finally(() => setLoading(false));
+    loadKit("/api/brand-kit/build?regenerate=true");
   }
 
   function startEditing() {
@@ -92,10 +103,19 @@ export default function BrandBuildingView() {
     );
   }
 
-  if (!kit) return null;
+  if (!kit) {
+    if (!kitError) return null;
+    return (
+      <Card className="space-y-3">
+        <p role="alert" className="text-sm text-amber-500">{kitError}</p>
+        <Button size="sm" onClick={() => loadKit("/api/brand-kit/build")} loading={loading}>Try again</Button>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-5">
+      {kitError && <p role="alert" className="text-sm text-amber-500 text-right">{kitError}</p>}
       <div className="flex items-center justify-end gap-3">
         {editing ? (
           <>

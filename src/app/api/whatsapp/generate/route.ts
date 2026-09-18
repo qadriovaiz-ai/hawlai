@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateWhatsappContent } from "@/lib/agents/whatsappMarketingAgent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     gatherBusinessFactsSafely(supabase, dealershipId),
   ]);
 
-  const { output, _fallback } = await generateWhatsappContent(
+  const { output, _fallback, _aiFailure } = await generateWhatsappContent(
     taskType,
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "business",
@@ -37,6 +38,8 @@ export async function POST(request: Request) {
     // A draft the owner reads before using: unverified prices are flagged, not removed.
     "draft"
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
   if (!_fallback) {

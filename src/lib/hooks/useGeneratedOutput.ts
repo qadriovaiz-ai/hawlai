@@ -11,6 +11,21 @@ import { useCallback, useEffect, useState } from "react";
 // once instead of needing N fixes — the contrast bug found earlier this
 // session in Content Marketing's own separate copy of this exact pattern
 // is the failure mode this exists to prevent from recurring.
+/** Approved wording for a failure the route didn't explain (bad_request, 2026-09-18). */
+export const GENERIC_ERROR = "Something went wrong writing this — try again. If it keeps happening, let us know.";
+
+/**
+ * What a generate response means for the page: the result, or why there
+ * isn't one. A failed or empty response is never shown as a result.
+ */
+export function generateOutcome(ok: boolean, data: any): { output: any; id: string | null; error: string | null } {
+  if (!ok || !data?.output) {
+    const reason = typeof data?.error === "string" && data.error.trim() ? data.error : GENERIC_ERROR;
+    return { output: null, id: null, error: reason };
+  }
+  return { output: data.output, id: data.id ?? null, error: null };
+}
+
 export interface HistoryItem {
   id: string;
   [key: string]: any;
@@ -34,6 +49,10 @@ export function useGeneratedOutput({ endpoint, query = "" }: UseGeneratedOutputO
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  // Why the last generate didn't produce anything — the route's own words
+  // (an AI outage, a plan limit…). Before this, a failed call rendered as
+  // a blank card, or as a placeholder dressed up as the result.
+  const [error, setError] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     const res = await fetch(`${endpoint}${query}`);
@@ -55,15 +74,21 @@ export function useGeneratedOutput({ endpoint, query = "" }: UseGeneratedOutputO
     setOutput(null);
     setOutputId(null);
     setEditing(false);
+    setError(null);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      setOutput(data.output);
-      setOutputId(data.id ?? null);
+      const data = await res.json().catch(() => ({}));
+      const outcome = generateOutcome(res.ok, data);
+      if (outcome.error) {
+        setError(outcome.error);
+        return data;
+      }
+      setOutput(outcome.output);
+      setOutputId(outcome.id);
       await loadHistory();
       return data;
     } finally {
@@ -106,12 +131,14 @@ export function useGeneratedOutput({ endpoint, query = "" }: UseGeneratedOutputO
   }
 
   function selectFromHistory(item: HistoryItem) {
+    setError(null);
     setOutput(item.output);
     setOutputId(item.id);
     setEditing(false);
   }
 
   function reset() {
+    setError(null);
     setOutput(null);
     setOutputId(null);
     setEditing(false);
@@ -119,6 +146,7 @@ export function useGeneratedOutput({ endpoint, query = "" }: UseGeneratedOutputO
 
   return {
     loading,
+    error,
     output,
     outputId,
     editing,

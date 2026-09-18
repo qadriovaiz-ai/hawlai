@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { recentCopy } from "@/lib/content/recentCopy";
+import { aiFailureLabel } from "@/lib/ai/claude";
 
 /**
  * The words to post, from whatever shape the model returned.
@@ -127,6 +128,7 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
       contentResult = await generateContent("instagram_post", name, category, topic, brandProfile, undefined, undefined, facts, "publish", { recent, keepLinks: true });
     }
 
+    if (contentResult._aiFailure) throw new Error(`${aiFailureLabel(contentResult._aiFailure.kind)} — nothing was posted`);
     if (contentResult._fallback) throw new Error("Content generation fell back to placeholder — skipping this run rather than posting generic text");
     if (contentResult.claimsRemoved?.length) {
       throw new Error(`Skipped: the caption made claims Hawlai couldn't verify (${contentResult.claimsRemoved.slice(0, 2).join("; ")}) — nothing was posted`);

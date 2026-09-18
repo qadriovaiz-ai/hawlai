@@ -8,6 +8,7 @@ import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Badge, Button, Card, type BadgeTone } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel";
+import { GenerationError } from "@/components/shared/GeneratedOutputPanel";
 
 const TASKS = [
   { key: "revenue_forecast", label: "Revenue Forecast" },
@@ -19,7 +20,7 @@ const TASKS = [
 export default function GrowthAdvisorView() {
   const [selectedTask, setSelectedTask] = useState(TASKS[0].key);
   const {
-    loading, output, outputId, editing, draft, saving, history,
+    loading, error, output, outputId, editing, draft, saving, history,
     generate, startEditing, cancelEditing, saveEdits, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/growth-advisor/generate" });
 
@@ -51,6 +52,8 @@ export default function GrowthAdvisorView() {
           {!loading && <Sparkles className="w-4 h-4" />} Generate {currentMeta?.label}
         </Button>
       </Card>
+
+      <GenerationError message={error} />
 
       {output && (
         <Card className="space-y-3">

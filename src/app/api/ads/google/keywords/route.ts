@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeoIdeas } from "@/lib/agents/seoAgent";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 // P3 piece 6 — AI-suggested keywords for a Google Search campaign,
 // reusing seoAgent's existing real keyword generation rather than a
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "business",
     { supabase, dealershipId }
   , factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(ideas);
+  if (aiFailed) return aiFailed;
 
   // Prefer the transactional/commercial ones — someone searching to
   // buy is worth more per click than someone reading up on a topic.

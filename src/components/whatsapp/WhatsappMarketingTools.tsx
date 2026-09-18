@@ -7,6 +7,7 @@ import { toWhatsAppLink } from "@/lib/utils";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
+import { GenerationError } from "@/components/shared/GeneratedOutputPanel";
 
 // Green throughout this file is WhatsApp's own brand color, not the
 // undeclared-purple inconsistency the rollout is retiring elsewhere —
@@ -20,7 +21,7 @@ export default function WhatsappMarketingTools() {
   const [temperatureFilter, setTemperatureFilter] = useState<"all" | "hot" | "warm" | "cold">("all");
   const [messageCopied, setMessageCopied] = useState(false);
   const {
-    loading, output, outputId, editing, draft, saving, history,
+    loading, error, output, outputId, editing, draft, saving, history,
     generate, startEditing, cancelEditing, saveEdits, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/whatsapp/generate" });
 
@@ -85,6 +86,8 @@ export default function WhatsappMarketingTools() {
           Generate {currentMeta?.label}
         </button>
       </Card>
+
+      <GenerationError message={error} />
 
       {output && (
         <Card className="space-y-3">

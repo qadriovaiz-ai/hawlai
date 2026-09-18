@@ -9,6 +9,8 @@ import {
   generateExpansionStrategy,
 } from "@/lib/agents/growthAdvisorV2";
 import { requireFeature } from "@/lib/featureGate";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
+import type { AiFailureNote } from "@/lib/ai/claude";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
   const name = dealership?.dealership_name ?? "the business";
   const category = dealership?.business_category ?? "business";
 
-  let result: { output: any; _fallback?: boolean };
+  let result: { output: any; _fallback?: boolean; _aiFailure?: AiFailureNote };
   if (taskType === "revenue_forecast") {
     const forecast = await computeRevenueForecast(supabase, dealershipId, name, category);
     result = { output: forecast, _fallback: false };
@@ -67,7 +69,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown taskType" }, { status: 400 });
   }
 
-  const { output, _fallback } = result;
+  const { output, _fallback, _aiFailure } = result;
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
   let saved = null;
   if (!_fallback) {
     const { data } = await supabase.from("growth_advisor_items").insert({ dealership_id: dealershipId, task_type: taskType, output }).select().single();

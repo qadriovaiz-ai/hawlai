@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateRetargetingCopy } from "@/lib/agents/retargetingAgent";
 import { requireFeature } from "@/lib/featureGate";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -46,6 +47,9 @@ export async function POST(request: Request) {
   // Written from, and checked against, what the business can back up.
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const output = await generateRetargetingCopy(segmentType, name, category, context, { supabase, dealershipId }, undefined, facts);
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(output);
+  if (aiFailed) return aiFailed;
 
   const { data: saved, error } = await supabase.from("retargeting_campaigns").insert({ dealership_id: dealershipId, segment_type: segmentType, output }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

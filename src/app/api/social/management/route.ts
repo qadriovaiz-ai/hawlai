@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSocialTask } from "@/lib/agents/socialManagementAgent";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     ? (recentPosts ?? []).map((p: any) => `- ${(p.caption ?? "").slice(0, 120)}`).join("\n")
     : null;
 
-  const { output, _fallback } = await generateSocialTask(
+  const { output, _fallback, _aiFailure } = await generateSocialTask(
     taskType,
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "business",
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
     { supabase, dealershipId },
     recentPostsContext
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
   if (!_fallback) {

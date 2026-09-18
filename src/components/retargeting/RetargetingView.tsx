@@ -20,7 +20,7 @@ export default function RetargetingView() {
   const [loadingSegments, setLoadingSegments] = useState(true);
   const [selected, setSelected] = useState<typeof SEGMENTS[number]["key"]>("abandoned_cart");
   const {
-    loading: generating, output, outputId, editing, draft, saving, copied, history,
+    loading: generating, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/retargeting/generate" });
 
@@ -85,6 +85,8 @@ export default function RetargetingView() {
       </Card>
 
       <GeneratedOutputPanel
+
+        error={error}
         title="Ad copy"
         output={output}
         editing={editing}

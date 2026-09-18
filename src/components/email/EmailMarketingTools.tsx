@@ -7,13 +7,14 @@ import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel";
+import { GenerationError } from "@/components/shared/GeneratedOutputPanel";
 
 export default function EmailMarketingTools() {
   const [selectedTask, setSelectedTask] = useState(EMAIL_TASKS[0].key);
   const [topic, setTopic] = useState("");
   const [segments, setSegments] = useState<any>(null);
   const {
-    loading, output, outputId, editing, draft, saving, copied, history,
+    loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/email/generate" });
 
@@ -80,6 +81,8 @@ export default function EmailMarketingTools() {
           Generate {currentMeta?.label}
         </Button>
       </Card>
+
+      <GenerationError message={error} />
 
       {output && (
         <Card className="space-y-2">

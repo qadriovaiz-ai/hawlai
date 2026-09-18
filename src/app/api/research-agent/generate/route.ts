@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateResearch, generateSentimentFromLeads } from "@/lib/agents/researchAgentV2";
 import { getDealershipPlanLimits } from "@/lib/plans";
 import { checkUsage } from "@/lib/usage/usageGuard";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -44,7 +45,9 @@ export async function POST(request: Request) {
     result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId }, undefined, limits.plan);
   }
 
-  const { output, _fallback } = result;
+  const { output, _fallback, _aiFailure } = result;
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
   let saved = null;
   if (!_fallback) {
     const { data } = await supabase.from("research_items").insert({ dealership_id: dealershipId, task_type: taskType, output }).select().single();

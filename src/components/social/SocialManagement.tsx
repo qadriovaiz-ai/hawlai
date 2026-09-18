@@ -13,7 +13,7 @@ export default function SocialManagement() {
   const [selectedTask, setSelectedTask] = useState(SOCIAL_TASKS[0].key);
   const [inputText, setInputText] = useState("");
   const {
-    loading, output, outputId, editing, draft, saving, copied, history,
+    loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/social/management" });
 
@@ -60,6 +60,8 @@ export default function SocialManagement() {
       </Card>
 
       <GeneratedOutputPanel
+
+        error={error}
         output={output}
         editing={editing}
         draft={draft}

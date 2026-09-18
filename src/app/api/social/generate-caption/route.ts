@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateSocialCaption } from "@/lib/agents/socialMediaAgent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { claimsNote, priceWarningNote } from "@/lib/claims/claimCheck";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
   // Written from, and checked against, what the business can back up
   // (src/lib/claims). The owner reads and edits the caption before
   // posting it, so a price Hawlai can't match is flagged, not removed.
-  const { caption, claimsRemoved, priceWarnings } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts, "draft");
+  const { caption, claimsRemoved, priceWarnings, aiFailure } = await generateSocialCaption(prompt, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts, "draft");
+  // The AI failed: the owner's own words would come back looking like a caption — say why instead.
+  if (aiFailure) return aiFailureResponse(aiFailure);
   const note = [claimsNote(claimsRemoved), priceWarningNote(priceWarnings ?? [])].filter(Boolean).join(" ") || null;
   return NextResponse.json({ caption, note });
 }

@@ -14,7 +14,7 @@ export default function ContentMarketingView() {
   const [selectedType, setSelectedType] = useState(CONTENT_TYPES[0].key);
   const [topic, setTopic] = useState("");
   const {
-    loading, output, outputId, editing, draft, saving, copied, history,
+    loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/content-marketing/generate" });
 
@@ -61,6 +61,8 @@ export default function ContentMarketingView() {
       </Card>
 
       <GeneratedOutputPanel
+
+        error={error}
         output={output}
         editing={editing}
         draft={draft}

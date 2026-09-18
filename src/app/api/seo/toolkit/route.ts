@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateSeoTask } from "@/lib/agents/seoToolkitAgent";
 import { generateAeoCheck } from "@/lib/agents/aeoAgent";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
 
-  const { output, _fallback } = taskType === "aeo_check"
+  const { output, _fallback, _aiFailure } = taskType === "aeo_check"
     ? await generateAeoCheck(
         dealership?.dealership_name ?? "the business",
         dealership?.city ?? null,
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
         brandProfile,
         { supabase, dealershipId }
       , factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
   if (!_fallback) {

@@ -13,7 +13,7 @@ export default function PaidAdsView() {
   const [platform, setPlatform] = useState(AD_PLATFORMS[0].key);
   const [taskType, setTaskType] = useState(AD_TASKS[0].key);
   const {
-    loading, output, outputId, editing, draft, saving, copied, history,
+    loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/paid-ads/generate", query: `?platform=${platform}` });
 
@@ -76,6 +76,8 @@ export default function PaidAdsView() {
       </Card>
 
       <GeneratedOutputPanel
+
+        error={error}
         output={output}
         editing={editing}
         draft={draft}

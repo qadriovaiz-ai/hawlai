@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
 import { recentCopy } from "@/lib/content/recentCopy";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     gatherBusinessFactsSafely(supabase, dealershipId),
   ]);
 
-  const { output, _fallback } = await generateContent(
+  const { output, _fallback, _aiFailure } = await generateContent(
     contentType,
     dealership?.dealership_name ?? "the business",
     dealership?.business_category ?? "business",
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
     // its cost here because a person reads the result.
     { recent: await recentCopy(supabase, dealershipId), revise: true }
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   // Only save real generations to history — a fallback shouldn't
   // clutter the calendar/history with placeholder drafts.

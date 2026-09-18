@@ -19,7 +19,11 @@ export default function PitchDeckBuilderCard() {
     setError(null);
     try {
       const res = await fetch("/api/pitch-deck");
-      if (!res.ok) throw new Error("Couldn't generate the deck — try again in a moment.");
+      if (!res.ok) {
+        // The route's own reason (an AI outage, a plan limit…) when it gave one.
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Couldn't generate the deck — try again in a moment.");
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

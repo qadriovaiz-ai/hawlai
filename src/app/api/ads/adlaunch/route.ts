@@ -14,6 +14,7 @@ import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { isAccountUsable, clampBudgetToMinimum, describeMinimum, limitsFromRow } from "@/lib/ads/adAccountLimits";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 import { resolveAdDestination } from "@/lib/ads/destination";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -158,6 +159,9 @@ export async function POST(request: Request) {
     draft = existingDraft;
   } else {
     plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "small business", { supabase, dealershipId }, dealership?.city ?? null, await gatherBusinessFactsSafely(supabase, dealershipId));
+    // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+    const aiFailed = aiFailedResponse(plan);
+    if (aiFailed) return aiFailed;
 
     const { data: newDraft } = await serviceClient
       .from("ad_creatives")

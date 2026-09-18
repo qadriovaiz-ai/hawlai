@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateDeckContent, buildPitchDeckPptx, type DeckBrandKit, type DeckProduct } from "@/lib/agents/pitchDeckAgent";
 import { fetchLogoBuffer } from "@/lib/agents/agencyBrandingAgent";
 import { fetchCatalog } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 const DEFAULT_ACCENT = "7C3AED";
 const DARK = "1E293B";
@@ -40,6 +41,9 @@ export async function GET() {
     brandProfile?.tone_of_voice,
     { supabase, dealershipId }
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(content);
+  if (aiFailed) return aiFailed;
 
   const primaryColor = brandKit?.colors.find((c) => c.role.toLowerCase().includes("primary"))?.hex ?? brandKit?.colors[0]?.hex;
   const accentHex = (primaryColor ?? `#${DEFAULT_ACCENT}`).replace("#", "").toUpperCase();

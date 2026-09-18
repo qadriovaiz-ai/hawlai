@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateInfluencerPlan } from "@/lib/agents/influencerAgent";
 import { requireFeature } from "@/lib/featureGate";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -31,6 +32,9 @@ export async function POST(request: Request) {
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const output = await generateInfluencerPlan(product.trim(), dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(output);
+  if (aiFailed) return aiFailed;
 
   const { data: saved } = await supabase
     .from("influencer_outreach_plans")

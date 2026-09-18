@@ -6,6 +6,7 @@ import { exportRole, NOT_ALLOWED } from "@/lib/leads/exportLeads";
 import { buildDailyRunHealth } from "@/lib/automation/dailyJobs";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { checkDeliveryTracking } from "@/lib/email/resendWebhook";
+import { runError } from "@/lib/automation/runAndLog";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -84,10 +85,10 @@ export async function GET() {
 
   // rows arrive newest-first, so the first row seen per subsystem is
   // its most recent run.
-  const bySubsystem: Record<string, { lastRunAt: string; lastSuccess: boolean; total: number; successCount: number }> = {};
+  const bySubsystem: Record<string, { lastRunAt: string; lastSuccess: boolean; lastError: string | null; total: number; successCount: number }> = {};
   for (const row of runLogRows ?? []) {
     if (!bySubsystem[row.subsystem]) {
-      bySubsystem[row.subsystem] = { lastRunAt: row.created_at, lastSuccess: row.success, total: 0, successCount: 0 };
+      bySubsystem[row.subsystem] = { lastRunAt: row.created_at, lastSuccess: row.success, lastError: row.success ? null : runError(row.detail), total: 0, successCount: 0 };
     }
     bySubsystem[row.subsystem].total += 1;
     if (row.success) bySubsystem[row.subsystem].successCount += 1;
@@ -96,6 +97,8 @@ export async function GET() {
     subsystem,
     lastRunAt: stats.lastRunAt,
     lastSuccess: stats.lastSuccess,
+    // Why the latest run failed — e.g. "AI unavailable (credits)" — shown on the card.
+    lastError: stats.lastError,
     successRatePct: Math.round((stats.successCount / stats.total) * 100),
   }));
 

@@ -11,6 +11,8 @@
 // already returned — this is a drop-in replacement for that pattern,
 // not a behavior change to the route's response shape.
 
+import { aiFailureOf, aiFailureLabel } from "@/lib/ai/claude";
+
 export async function runAndLog<T>(
   supabase: any,
   dealershipId: string,
@@ -19,7 +21,14 @@ export async function runAndLog<T>(
 ): Promise<T | { error: string }> {
   const start = Date.now();
   try {
-    const result = await fn();
+    let result: any = await fn();
+    // A run the AI couldn't do didn't succeed either — it did nothing and
+    // said so. Recorded as a failure with the reason ("AI unavailable
+    // (credits)"), which the daily job list and Automation Health show,
+    // instead of a quiet "0 sent" that reads as nothing to do.
+    const ai = aiFailureOf(result);
+    // `error` first: the stored detail is cut at 500 characters.
+    if (ai && !(result as any).error) result = { error: aiFailureLabel(ai.kind), ...result };
     // A subsystem that CATCHES its own failure and returns { error }
     // did not succeed just because it didn't throw. Recording those as
     // success is how the health panel showed Social Media Auto-Posting
@@ -41,4 +50,22 @@ async function logRun(supabase: any, dealershipId: string, subsystem: string, su
     // this codebase — a logging failure must never mask the actual
     // subsystem's real success/failure, already captured above.
   }
+}
+
+/**
+ * A failed run's reason from its automation_run_log detail: runAndLog
+ * stores the result as JSON (its `error` is the reason) or a thrown
+ * error's message as plain text. Truncated JSON falls back to the text.
+ */
+export function runError(detail: string | null): string | null {
+  if (!detail) return null;
+  try {
+    const parsed = JSON.parse(detail);
+    if (parsed && typeof parsed === "object" && typeof parsed.error === "string") return parsed.error;
+  } catch {
+    const m = detail.match(/"error":"([^"]+)"/);
+    if (m) return m[1];
+    if (!detail.trimStart().startsWith("{")) return detail.slice(0, 200);
+  }
+  return null;
 }

@@ -4,6 +4,7 @@ import { generateCompetitorIntel } from "@/lib/agents/competitorIntelAgent";
 import { requireFeature } from "@/lib/featureGate";
 import { getDealershipPlanLimits } from "@/lib/plans";
 import { checkUsage } from "@/lib/usage/usageGuard";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single();
 
   const limits = await getDealershipPlanLimits(supabase, dealershipId);
-  const { output, _fallback } = await generateCompetitorIntel(
+  const { output, _fallback, _aiFailure } = await generateCompetitorIntel(
     taskType,
     competitorName,
     dealership?.dealership_name ?? "the business",
@@ -40,6 +41,8 @@ export async function POST(request: Request) {
     undefined,
     limits.plan
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
   if (!_fallback) {

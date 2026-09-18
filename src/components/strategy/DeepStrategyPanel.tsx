@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Button, Card } from "@/components/ui";
+import { GENERIC_ERROR } from "@/lib/hooks/useGeneratedOutput";
 
 export default function DeepStrategyPanel() {
   const [open, setOpen] = useState(false);
@@ -17,30 +18,37 @@ export default function DeepStrategyPanel() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  // Why the analysis couldn't be written. A failed regenerate keeps the one
+  // already on screen; before this, the error body replaced it and the
+  // panel rendered blank.
+  const [strategyError, setStrategyError] = useState<string | null>(null);
+
+  async function loadStrategy(url: string) {
+    setLoading(true);
+    setStrategyError(null);
+    try {
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        setStrategyError(data.error ?? GENERIC_ERROR);
+        return;
+      }
+      setStrategy(data);
+      setLoaded(true);
+    } catch {
+      setStrategyError(GENERIC_ERROR);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (open && !loaded) {
-      setLoading(true);
-      fetch("/api/strategy/deep")
-        .then((res) => res.json())
-        .then((data) => {
-          setStrategy(data);
-          setLoaded(true);
-        })
-        .finally(() => setLoading(false));
-    }
+    if (open && !loaded) loadStrategy("/api/strategy/deep");
   }, [open, loaded]);
 
   function handleRegenerate() {
-    setLoading(true);
     setEditing(false);
-    fetch("/api/strategy/deep?regenerate=true")
-      .then((res) => res.json())
-      .then((data) => {
-        setStrategy(data);
-        setLoaded(true);
-      })
-      .finally(() => setLoading(false));
+    loadStrategy("/api/strategy/deep?regenerate=true");
   }
 
   function startEditing() {
@@ -72,6 +80,7 @@ export default function DeepStrategyPanel() {
           <span className="text-sm font-semibold text-slate-700">Full Strategic Analysis</span>
           {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </button>
+        {open && strategyError && <p role="alert" className="text-sm text-amber-500">{strategyError}</p>}
         {open && loaded && strategy && (
           <div className="ml-3 flex items-center gap-3 shrink-0">
             {editing ? (

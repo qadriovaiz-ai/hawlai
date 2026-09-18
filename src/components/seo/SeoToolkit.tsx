@@ -11,7 +11,7 @@ import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel
 export default function SeoToolkit() {
   const [selectedTask, setSelectedTask] = useState(SEO_TASKS[0].key);
   const {
-    loading, output, outputId, editing, draft, saving, copied, history,
+    loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/seo/toolkit" });
 
@@ -45,6 +45,8 @@ export default function SeoToolkit() {
       </Card>
 
       <GeneratedOutputPanel
+
+        error={error}
         output={output}
         editing={editing}
         draft={draft}

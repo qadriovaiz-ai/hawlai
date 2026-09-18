@@ -5,6 +5,7 @@ import { generateDeepStrategy } from "@/lib/agents/deepStrategyAgent";
 import { searchCompetitorAds } from "@/lib/agents/researchAgent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -62,6 +63,9 @@ export async function GET(request: Request) {
     competitorContext,
     { supabase, dealershipId }
   , factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(strategy);
+  if (aiFailed) return aiFailed;
 
   // Never cache a fallback result — a transient API hiccup shouldn't
   // permanently stick the dealer with placeholder text until they

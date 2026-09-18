@@ -15,7 +15,7 @@ export default function ResearchAgentView() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [newWatch, setNewWatch] = useState("");
   const {
-    loading, output, outputId, editing, draft, saving, copied, history,
+    loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/research-agent/generate" });
 
@@ -98,6 +98,8 @@ export default function ResearchAgentView() {
       </Card>
 
       <GeneratedOutputPanel
+
+        error={error}
         output={output}
         editing={editing}
         draft={draft}

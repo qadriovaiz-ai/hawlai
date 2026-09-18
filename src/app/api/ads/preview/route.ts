@@ -6,6 +6,7 @@ import { generateAdPlan, buildFinalCreativeImage } from "@/lib/adEngine";
 import { previewPersonaSummary } from "@/lib/ads/metaTargeting";
 import { getAdAccountLimits, clampBudgetToMinimum, describeMinimum, isAccountUsable } from "@/lib/ads/adAccountLimits";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 // Phase 1 of the two-phase launch flow (Block 2 — Plan Card): generates
 // the ad copy + finished creative image and saves it as a draft, WITHOUT
@@ -44,6 +45,9 @@ export async function POST(request: Request) {
 
   const businessCategory = dealership?.business_category ?? "small business";
   const plan = await generateAdPlan(prompt, brandProfile, businessCategory, { supabase, dealershipId }, dealership?.city ?? null, await gatherBusinessFactsSafely(supabase, dealershipId));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(plan);
+  if (aiFailed) return aiFailed;
 
   const serviceClient = createServiceClient();
 

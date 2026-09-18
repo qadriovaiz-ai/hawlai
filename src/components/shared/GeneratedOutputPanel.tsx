@@ -4,6 +4,16 @@ import { Pencil, Save, X, Copy, Check } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { OutputRenderer, EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 
+/** Why a generate produced nothing, in the route's own words. Renders nothing when there's no error. */
+export function GenerationError({ message }: { message?: string | null }) {
+  if (!message) return null;
+  return (
+    <Card>
+      <p role="alert" className="text-sm text-amber-500">{message}</p>
+    </Card>
+  );
+}
+
 // The "Result" card every generate/edit/save/copy department page
 // renders — paired with useGeneratedOutput. Edit/Copy are deliberately
 // left as accent-colored text links rather than <Button variant="ghost">
@@ -23,6 +33,8 @@ export interface GeneratedOutputPanelProps {
   onCopy: () => void;
   onDraftChange: (next: any) => void;
   title?: string;
+  /** Why the last generate produced nothing (useGeneratedOutput's `error`). */
+  error?: string | null;
 }
 
 export function GeneratedOutputPanel({
@@ -38,8 +50,9 @@ export function GeneratedOutputPanel({
   onCopy,
   onDraftChange,
   title = "Result",
+  error,
 }: GeneratedOutputPanelProps) {
-  if (!output) return null;
+  if (!output) return <GenerationError message={error} />;
   return (
     <Card className="space-y-2">
       <div className="flex items-center justify-between">

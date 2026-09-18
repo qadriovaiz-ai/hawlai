@@ -2,6 +2,7 @@ import { generateEmailContent } from "@/lib/agents/emailMarketingAgent";
 import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
 import { normaliseEmail, suppressedAmong } from "@/lib/email/consent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import type { AiFailureNote } from "@/lib/ai/claude";
 
 interface TriggeredLead {
   leadId: string;
@@ -98,6 +99,8 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
   // Why email steps couldn't go out this run — reported instead of a bare
   // { stepsSent: 0 }, which the health card used to read as success.
   let blocked: string | null = null;
+  // Reported, not swallowed: a step not sent because the AI was down.
+  let aiFailure: AiFailureNote | undefined;
 
   for (const workflow of workflows) {
     const steps = (workflow.workflow_steps ?? []).sort((a: any, b: any) => a.step_order - b.step_order);
@@ -180,7 +183,7 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
             blocked = "business facts unreadable"; // nothing unverified is sent; try again next run
             break;
           }
-          const { output, _fallback, claimsRemoved } = await generateEmailContent(
+          const { output, _fallback, _aiFailure, claimsRemoved } = await generateEmailContent(
             step.email_task_type,
             dealership.dealership_name ?? "our business",
             dealership.business_category ?? "business",
@@ -190,6 +193,7 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
             undefined,
             facts
           );
+          if (_aiFailure) aiFailure = _aiFailure;
           if (_fallback) break; // don't send placeholder content, try again next run
           // Only an email that needed NO claims removed is sent — a
           // stripped one can read oddly and nobody is checking it.
@@ -224,6 +228,7 @@ export async function runWorkflows(supabase: any, dealershipId: string) {
     }
   }
 
-  if (blocked) return stepsSent === 0 ? { stepsSent, skipped: blocked } : { stepsSent, waiting: blocked };
-  return { stepsSent };
+  const ai = aiFailure ? { aiFailure } : {};
+  if (blocked) return stepsSent === 0 ? { stepsSent, skipped: blocked, ...ai } : { stepsSent, waiting: blocked, ...ai };
+  return { stepsSent, ...ai };
 }

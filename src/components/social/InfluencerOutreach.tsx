@@ -15,7 +15,7 @@ export default function InfluencerOutreach() {
   const [messageCopied, setMessageCopied] = useState(false);
 
   const {
-    loading, output: plan, outputId: planId, editing, draft, saving, history,
+    loading, error: generateError, output: plan, outputId: planId, editing, draft, saving, history,
     generate, startEditing, cancelEditing, saveEdits, selectFromHistory, setDraft,
   } = useGeneratedOutput({ endpoint: "/api/influencer" });
 
@@ -65,7 +65,7 @@ export default function InfluencerOutreach() {
               Generate
             </Button>
           </div>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {(error ?? generateError) && <p className="text-xs text-red-400">{error ?? generateError}</p>}
           {plan && (
             <div className="space-y-3 pt-1">
               <div className="flex items-center justify-end gap-3">

@@ -96,6 +96,31 @@ export function withAiFailure<T extends Record<string, any>>(fallback: T, failur
   return { ...fallback, _aiFailure: note };
 }
 
+/**
+ * The failure a result carries, if any — `_aiFailure` beside a
+ * generator's fallback, or `aiFailure` where it's named without the
+ * underscore (lead follow-ups, social captions, the monitors).
+ */
+export function aiFailureOf(result: unknown): AiFailureNote | null {
+  const r = result as { _aiFailure?: AiFailureNote; aiFailure?: AiFailureNote } | null | undefined;
+  if (!r || typeof r !== "object") return null;
+  return r._aiFailure ?? r.aiFailure ?? null;
+}
+
+/** Short reason for Automation Health and the daily job list (approved 2026-09-18: "AI unavailable (credits)"). */
+export const AI_FAILURE_LABEL: Record<AiFailureKind, string> = {
+  credits: "AI unavailable (credits)",
+  auth: "AI unavailable (API key rejected)",
+  rate_limited: "AI unavailable (busy)",
+  overloaded: "AI unavailable (busy)",
+  network: "AI unavailable (no response)",
+  bad_request: "AI request failed",
+};
+
+export function aiFailureLabel(kind: AiFailureKind): string {
+  return AI_FAILURE_LABEL[kind] ?? AI_FAILURE_LABEL.bad_request;
+}
+
 /** Whether the AI is down for everyone until someone acts — the two kinds the operator is alerted about. */
 export function isPlatformOutage(kind: AiFailureKind | null | undefined): boolean {
   return kind === "credits" || kind === "auth";

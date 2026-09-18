@@ -28,7 +28,7 @@ export default function CroView() {
 
   const [taskKey, setTaskKey] = useState("landing_page");
   const {
-    loading: taskLoading, output: taskOutput, outputId: taskOutputId, editing: taskEditing, draft: taskDraft,
+    loading: taskLoading, error: taskGenerateError, output: taskOutput, outputId: taskOutputId, editing: taskEditing, draft: taskDraft,
     saving: taskSaving, copied: taskCopied, history: taskHistory,
     generate: runTask, startEditing: startEditingTask, cancelEditing: cancelEditingTask, saveEdits: saveTaskEdits,
     copyOutput: copyTaskOutput, selectFromHistory: selectTaskFromHistory, reset: resetTask, setDraft: setTaskDraft,
@@ -173,7 +173,7 @@ export default function CroView() {
           {!taskLoading && <Sparkles className="w-4 h-4" />} Generate Suggestions
         </Button>
 
-        {taskError && <p className="text-xs text-red-400">{taskError}</p>}
+        {(taskError ?? taskGenerateError) && <p className="text-xs text-red-400">{taskError ?? taskGenerateError}</p>}
       </Card>
 
       <GeneratedOutputPanel

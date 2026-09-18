@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { analyzeWebsite } from "@/lib/agents/businessIntelligenceAgent";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
 
   try {
     const result = await analyzeWebsite(url, dealershipId ? { supabase, dealershipId } : undefined);
+    // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+    const aiFailed = aiFailedResponse(result);
+    if (aiFailed) return aiFailed;
     return NextResponse.json(result);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });

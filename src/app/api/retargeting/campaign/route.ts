@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/adEngine";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 // One-click retargeting campaign — piece 6/7.
 //
@@ -100,6 +101,9 @@ export async function POST(request: Request) {
     undefined,
     facts
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(plan);
+  if (aiFailed) return aiFailed;
 
   // Saved as a draft in the same table the normal ad flow uses, so it
   // flows through preview -> launch -> approval identically. No

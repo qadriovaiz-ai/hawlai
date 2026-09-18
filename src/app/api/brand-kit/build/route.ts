@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateBrandKit } from "@/lib/agents/brandBuildingAgent";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -47,6 +48,9 @@ export async function GET(request: Request) {
     dealership?.business_category ?? "business",
     { supabase, dealershipId }
   , factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(kit);
+  if (aiFailed) return aiFailed;
 
   // Never cache a fallback result — a transient API hiccup shouldn't
   // permanently stick the dealer with placeholder text until they

@@ -3,6 +3,7 @@ import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/agents/paidAdsAgent";
 import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
+import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       ? "Past campaign performance could not be read — do not assume there is none, and do not draw conclusions about what has or has not worked before."
       : null;
 
-  const { output, _fallback } = await generateAdPlan(
+  const { output, _fallback, _aiFailure } = await generateAdPlan(
     platform,
     taskType,
     dealership?.dealership_name ?? "the business",
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
     // Ad copy is written from, and checked against, the business facts.
     await gatherBusinessFactsSafely(supabase, dealershipId)
   );
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
   if (!_fallback) {

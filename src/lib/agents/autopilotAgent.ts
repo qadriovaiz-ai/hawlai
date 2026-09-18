@@ -27,12 +27,15 @@ import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
 import { generateAdPlan } from "../adEngine";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
-import { isPlatformOutage } from "@/lib/ai/claude";
+import { isPlatformOutage, type AiFailureNote } from "@/lib/ai/claude";
+
+/** The last AI failure seen during one Autopilot run. */
+type AiRun = { failure?: AiFailureNote };
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 const VARIANT_GROUP_LABELS = ["A", "B", "C", "D", "E"]; // same cap as variant-group/route.ts
 
-async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Promise<number> {
+async function draftStuckLeadFollowUps(supabase: any, dealershipId: string, ai: AiRun): Promise<number> {
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
   const staleThreshold = new Date(Date.now() - STALE_DRAFT_HOURS * 60 * 60 * 1000).toISOString();
 
@@ -67,6 +70,7 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
       // empty so the next run writes a real one. If the AI is down for
       // everyone, the rest of the leads would fail the same way.
       if (message.aiFailure) {
+        ai.failure = message.aiFailure;
         if (isPlatformOutage(message.aiFailure.kind)) break;
         continue;
       }
@@ -89,7 +93,7 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
 // clear reason, so it's fully visible and explainable after the
 // fact — never a silent action.
 // ------------------------------------------------------------------
-async function applyAutoPause(supabase: any, dealershipId: string): Promise<number> {
+async function applyAutoPause(supabase: any, dealershipId: string, ai: AiRun): Promise<number> {
   const { data: dealership } = await supabase
     .from("dealerships").select("auto_pause_low_performers, business_category").eq("id", dealershipId).single();
   if (!dealership?.auto_pause_low_performers) return 0;
@@ -175,7 +179,7 @@ async function applyAutoPause(supabase: any, dealershipId: string): Promise<numb
 
       // AI-Intelligence Pillar 2 — auto-iteration. Draft-only: this
       // never launches anything or spends money by itself.
-      await maybeGenerateVariantOnPause(supabase, dealershipId, dealership.business_category ?? "business", campaign);
+      await maybeGenerateVariantOnPause(supabase, dealershipId, dealership.business_category ?? "business", campaign, ai);
     }
   }
   return pausedCount;
@@ -195,7 +199,8 @@ async function maybeGenerateVariantOnPause(
   supabase: any,
   dealershipId: string,
   businessCategory: string,
-  pausedCampaign: { id: string; variant_group_id?: string | null }
+  pausedCampaign: { id: string; variant_group_id?: string | null },
+  ai: AiRun = {}
 ) {
   if (!pausedCampaign.variant_group_id) return;
 
@@ -232,7 +237,10 @@ async function maybeGenerateVariantOnPause(
     const plan = await generateAdPlan(variantPrompt, brandProfile, businessCategory, { supabase, dealershipId }, null, await gatherBusinessFactsSafely(supabase, dealershipId));
     // The AI didn't write it — a category template isn't a new angle to
     // test, and "new variant ready" would be untrue.
-    if (plan._aiFailure) return;
+    if (plan._aiFailure) {
+      ai.failure = plan._aiFailure;
+      return;
+    }
 
     const { data: newDraft, error } = await supabase.from("ad_creatives").insert({
       dealership_id: dealershipId,
@@ -263,10 +271,12 @@ async function maybeGenerateVariantOnPause(
   }
 }
 
-export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number; snapshotted: number }> {
+export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number; snapshotted: number; aiFailure?: AiFailureNote }> {
   await syncOpportunities(supabase, dealershipId);
-  const drafted = await draftStuckLeadFollowUps(supabase, dealershipId);
-  const auto_paused = await applyAutoPause(supabase, dealershipId);
+  // What the AI couldn't do this run, reported rather than read as "nothing to draft".
+  const ai: AiRun = {};
+  const drafted = await draftStuckLeadFollowUps(supabase, dealershipId, ai);
+  const auto_paused = await applyAutoPause(supabase, dealershipId, ai);
   const snapshotted = await snapshotCampaignPerformance(supabase, dealershipId);
-  return { drafted, auto_paused, snapshotted };
+  return { drafted, auto_paused, snapshotted, ...(ai.failure ? { aiFailure: ai.failure } : {}) };
 }

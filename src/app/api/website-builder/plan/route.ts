@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { planWebsite } from "@/lib/agents/websiteBuilderAgent";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 // Planning-only step: takes the owner's free-form prompt and returns a
 // proposed page structure + theme for confirmation. Nothing is written
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
     brandProfile,
     { supabase, dealershipId }
   , factsPrompt(facts));
+  // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
+  const aiFailed = aiFailedResponse(plan);
+  if (aiFailed) return aiFailed;
 
   return NextResponse.json({ plan, prompt: prompt.trim() });
 }
