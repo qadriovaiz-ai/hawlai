@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateRetargetingCopy } from "@/lib/agents/retargetingAgent";
 import { requireFeature } from "@/lib/featureGate";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -42,7 +43,9 @@ export async function POST(request: Request) {
     context = "One-time customers who haven't returned to buy again.";
   }
 
-  const output = await generateRetargetingCopy(segmentType, name, category, context, { supabase, dealershipId });
+  // Written from, and checked against, what the business can back up.
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const output = await generateRetargetingCopy(segmentType, name, category, context, { supabase, dealershipId }, undefined, facts);
 
   const { data: saved, error } = await supabase.from("retargeting_campaigns").insert({ dealership_id: dealershipId, segment_type: segmentType, output }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
