@@ -18,6 +18,7 @@
 // one lead's history via getLeadMemory (P1 4a), which the outbound call
 // path uses.
 
+import { businessDisplayName } from "@/lib/business/displayName";
 import type { BrandVoiceProfile } from "../agents/brandVoice";
 import { getLeadMemory } from "../businessMemory/getLeadMemory";
 import { gatherBusinessFactsSafely, fetchKnowledgeFacts, UNKNOWN_CATEGORY, type BusinessFacts, type KnowledgeFact } from "../claims/businessFacts";
@@ -70,7 +71,7 @@ export async function getBusinessContext(supabase: any, dealershipId: string, le
     ]);
     return {
       id: dealershipId,
-      name: dealership?.dealership_name ?? "the business",
+      name: businessDisplayName(dealership?.dealership_name),
       category: dealership?.business_category || UNKNOWN_CATEGORY,
       city: dealership?.city ?? null,
       toneOfVoice: brandProfile?.tone_of_voice ?? null,

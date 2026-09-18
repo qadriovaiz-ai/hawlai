@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { businessDisplayName } from "@/lib/business/displayName";
 import { NextResponse } from "next/server";
 import { generateMarketingStrategy } from "@/lib/agents/strategyAgent";
 import { getCampaignPerformanceState, type CampaignPerformance } from "@/lib/agents/analyticsAgent";
@@ -61,7 +62,8 @@ export async function POST(request: Request) {
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const plan = await generateMarketingStrategy(
-    dealership?.dealership_name ?? "the business",
+    // The name as people read it, not the signup handle.
+    businessDisplayName(dealership?.dealership_name),
     dealership?.city ?? null,
     monthly_budget,
     goal,

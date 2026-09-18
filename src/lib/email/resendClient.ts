@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { businessDisplayName } from "@/lib/business/displayName";
 
 // Platform-wide email sending via Resend — the fallback/default path
 // for any business that hasn't connected their own Gmail (gmailAgent.ts).
@@ -17,8 +18,6 @@ import { Resend } from "resend";
 // the display name; replies go to the business owner.
 export const SENDER_ADDRESS = "hello@mail.hawlai.online";
 
-const SMALL_WORDS = new Set(["a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"]);
-
 /**
  * The name customers see in their inbox. A business saved as a handle
  * ("candle_by_qaaf") reads as "Candle by Qaaf"; a name the owner typed
@@ -26,15 +25,9 @@ const SMALL_WORDS = new Set(["a", "an", "and", "at", "by", "for", "in", "of", "o
  * break the From header are removed.
  */
 export function senderDisplayName(name: string | null | undefined): string {
-  const clean = String(name ?? "").replace(/["<>\\\r\n]/g, "").replace(/\s+/g, " ").trim();
-  if (!clean) return "Hawlai";
-  const isHandle = !/\s/.test(clean) && /[_-]/.test(clean) && clean === clean.toLowerCase();
-  if (!isHandle) return clean;
-  return clean
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w[0].toUpperCase() + w.slice(1)))
-    .join(" ");
+  // Header-breaking characters out first; then the same handle-to-words
+  // rule every other surface uses (lib/business/displayName.ts).
+  return businessDisplayName(String(name ?? "").replace(/["<>\\\r\n]/g, ""), "Hawlai");
 }
 
 /** The full From header — quoted only when the name holds characters an address header treats specially. */

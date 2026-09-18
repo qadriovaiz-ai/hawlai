@@ -21,6 +21,7 @@
 
 import { formatBrandVoiceSection, type BrandVoiceProfile } from "@/lib/agents/brandVoice";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
+import { businessDisplayName } from "@/lib/business/displayName";
 import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
@@ -357,7 +358,9 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
   }
 
   return {
-    businessName: dealership?.dealership_name ?? "the business",
+    // As a person reads it — "Candle by Qaaf", never the "candle_by_qaaf"
+    // handle the account was created with.
+    businessName: businessDisplayName(dealership?.dealership_name),
     category: category || UNKNOWN_CATEGORY,
     categoryKnown: Boolean(category),
     businessModels: effectiveBusinessModels(dealership?.business_models, {

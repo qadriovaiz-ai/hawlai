@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { businessDisplayName } from "@/lib/business/displayName";
 import { NextResponse } from "next/server";
 import { generateDeepStrategy } from "@/lib/agents/deepStrategyAgent";
 import { searchCompetitorAds } from "@/lib/agents/researchAgent";
@@ -53,7 +54,8 @@ export async function GET(request: Request) {
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const strategy = await generateDeepStrategy(
-    dealership?.dealership_name ?? "the business",
+    // The name as people read it, not the signup handle.
+    businessDisplayName(dealership?.dealership_name),
     dealership?.city ?? null,
     brandProfile,
     dealership?.business_category ?? "business",

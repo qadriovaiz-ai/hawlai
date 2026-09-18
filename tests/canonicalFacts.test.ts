@@ -142,7 +142,8 @@ describe("the canonical facts carry everything a generation needs", () => {
     expect(f.categoryKnown).toBe(false);
     expect(formatFactsForCopy(f)).not.toMatch(/car dealership/i);
     expect(formatFactsForCopy(f)).toMatch(/NOT SET by the owner.*don't assume an industry/);
-    expect(describeBusiness(f)).toBe('"candle_by_qaaf", which sells Lavender candle, Mogra Nights candle');
+    // The name as people read it, not the signup handle (2026-09-18).
+    expect(describeBusiness(f)).toBe('"Candle by Qaaf", which sells Lavender candle, Mogra Nights candle');
   });
 
   it("a failed read is named as unknown, never silently 'none'", async () => {
@@ -194,7 +195,7 @@ describe("one catalogue, shared by the paths that used to query their own", () =
 describe("getBusinessContext is built on the canonical facts", () => {
   it("chat, calls and DMs get the products, offers and shipping they never had", async () => {
     const ctx = await getBusinessContext(db(), "d1");
-    expect(ctx.name).toBe("candle_by_qaaf");
+    expect(ctx.name).toBe("Candle by Qaaf");
     expect(ctx.category).toBe("Home fragrance");
     expect(ctx.toneOfVoice).toBe("warm and unhurried");
     expect(ctx.knowledgeFacts[0].title).toBe("Packaging");
@@ -206,7 +207,7 @@ describe("getBusinessContext is built on the canonical facts", () => {
     const broken = { from: (t: string) => (t === "products" ? { select: () => { throw new Error("db down"); } } : db().from(t)) };
     const ctx = await getBusinessContext(broken, "d1");
     expect(ctx.facts).toBeNull();
-    expect(ctx.name).toBe("candle_by_qaaf");
+    expect(ctx.name).toBe("Candle by Qaaf");
     expect(ctx.knowledgeFacts[0].title).toBe("Packaging");
   });
 });
