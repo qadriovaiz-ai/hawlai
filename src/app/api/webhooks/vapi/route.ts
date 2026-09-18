@@ -90,6 +90,24 @@ export async function POST(request: Request) {
   const dealershipId = callRecord?.dealership_id ?? lead.dealership_id;
   const result = await scoreLeadFromCall(transcript, lead.name, callRecord ? { supabase, dealershipId } : undefined);
 
+  // Couldn't be scored: the lead keeps the score and temperature it had —
+  // a failed AI call is not evidence the lead went cold — and the owner is
+  // asked to read the transcript instead.
+  if (!result.scored) {
+    await supabase.from("leads").update({ status: "called" }).eq("id", lead.id);
+    await emitNotification(supabase, {
+      dealershipId,
+      kind: "call_needs_follow_up",
+      title: `Call with ${lead.name} couldn't be scored — please review it`,
+      body: result.aiFailure
+        ? `${result.aiFailure.message} The lead's score was left as it was; the transcript is saved on the lead.`
+        : "Hawlai couldn't read this call automatically. The lead's score was left as it was; the transcript is saved on the lead.",
+      href: `/dashboard/leads/${lead.id}`,
+      dedupeKey: `call_unscored:${callRecord?.id ?? vapiCallId}`,
+    });
+    return NextResponse.json({ received: true });
+  }
+
   if (callRecord) {
     await supabase.from("calls").update({ intent: result.intent, sentiment: result.sentiment, urgency: result.urgency }).eq("id", callRecord.id);
   }

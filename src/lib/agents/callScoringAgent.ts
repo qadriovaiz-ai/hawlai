@@ -8,7 +8,7 @@
 
 
 import { modelForTask } from "../aiTaskRouter";
-import { callClaude } from "@/lib/ai/claude";
+import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export type CallIntent = "interested" | "not_interested" | "requesting_info" | "ready_to_book" | "complaint" | "no_real_conversation" | "other";
 export type CallSentiment = "positive" | "neutral" | "negative";
@@ -19,6 +19,14 @@ const SENTIMENTS: CallSentiment[] = ["positive", "neutral", "negative"];
 const URGENCIES: CallUrgency[] = ["high", "medium", "low"];
 
 export interface CallScoreResult {
+  /**
+   * False when the call couldn't be scored (the AI failed, or its answer
+   * was unreadable). The other fields are then placeholders and must NOT
+   * be written onto the lead — see the Vapi webhook.
+   */
+  scored: boolean;
+  /** Why, when the AI itself failed. */
+  aiFailure?: AiFailureNote;
   score: number; // 0-100
   temperature: "hot" | "warm" | "cold";
   reason: string;
@@ -27,18 +35,29 @@ export interface CallScoreResult {
   urgency: CallUrgency;
 }
 
-const FALLBACK: CallScoreResult = {
-  score: 30,
-  temperature: "cold",
-  reason: "Couldn't analyze the call transcript automatically — review manually.",
-  intent: "other",
-  sentiment: "neutral",
-  urgency: "low",
-};
+// THE BUG (2026-09-18): when scoring failed this returned score 30,
+// "cold" — and the webhook wrote it onto the lead. A caller who had just
+// asked for 20 Diwali candles became a cold lead because the AI was down,
+// overwriting whatever the lead really was. Now an unscored call says so
+// and changes nothing it can't vouch for.
+function unscored(failure?: AiFailureNote): CallScoreResult {
+  return {
+    scored: false,
+    ...(failure ? { aiFailure: failure } : {}),
+    score: 0,
+    temperature: "cold",
+    reason: "Couldn't analyze the call transcript automatically — review manually.",
+    intent: "other",
+    sentiment: "neutral",
+    urgency: "low",
+  };
+}
 
 export async function scoreLeadFromCall(transcript: string, leadName: string, logContext?: { supabase: any; dealershipId: string }): Promise<CallScoreResult> {
   if (!transcript || transcript.trim().length < 10) {
+    // A real answer, not a failure: nobody talked, so there's nothing warm to lose.
     return {
+      scored: true,
       score: 10,
       temperature: "cold",
       reason: "Call had no meaningful conversation (no answer, hang-up, or voicemail).",
@@ -73,7 +92,7 @@ Transcript:
 ${transcript.slice(0, 8000)}`,
       }],
     }, { operation: "call_scoring", logContext });
-    if (!r.ok) return FALLBACK;
+    if (!r.ok) return unscored(aiFailureNote(r.failure));
     const text = r.text;
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
@@ -83,8 +102,9 @@ ${transcript.slice(0, 8000)}`,
     const intent = INTENTS.includes(parsed.intent) ? parsed.intent : "other";
     const sentiment = SENTIMENTS.includes(parsed.sentiment) ? parsed.sentiment : "neutral";
     const urgency = URGENCIES.includes(parsed.urgency) ? parsed.urgency : "low";
-    return { score, temperature, reason: String(parsed.reason ?? FALLBACK.reason), intent, sentiment, urgency };
+    if (!Number.isFinite(score) || !["hot", "warm", "cold"].includes(parsed.temperature)) return unscored();
+    return { scored: true, score, temperature, reason: String(parsed.reason ?? "").trim() || "Scored from the call transcript.", intent, sentiment, urgency };
   } catch {
-    return FALLBACK;
+    return unscored();
   }
 }
