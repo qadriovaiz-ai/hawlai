@@ -1,0 +1,153 @@
+"use client";
+
+// Where the business actually leaks — its own last 90 days, counted in code
+// (lib/strategy/diagnosis.ts) — and channel advice tied to those numbers.
+
+import { useEffect, useState } from "react";
+import { Loader2, Activity, AlertTriangle, Users2, Megaphone, Lightbulb, Info } from "lucide-react";
+import { Button } from "@/components/ui";
+
+type Step = { key: string; label: string; count: number; fromPrevious: number | null };
+type Funnel = { name: string; steps: Step[]; weakest: { from: string; to: string; rate: number; entered: number } | null; thin: string | null };
+type Diagnosis = {
+  window: { label: string };
+  funnels: Funnel[];
+  sources: { source: string; leads: number; won: number; conversion: number | null; ranked: boolean }[];
+  sourcesThin: string | null;
+  atRisk: { count: number; total: number; names: string[] };
+  paid: { campaign: string; spend: number; leads: number; costPerLead: number | null }[] | null;
+  gaps: string[];
+};
+type Advice = { summary: string; recommendations: { title: string; action: string; evidence: string }[]; dataGaps: string[]; removed: string[] };
+
+export default function DiagnosisPanel() {
+  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [advice, setAdvice] = useState<Advice | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [advising, setAdvising] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/strategy/diagnosis")
+      .then((r) => r.json())
+      .then((d) => (d.error ? setError(d.error) : setDiagnosis(d.diagnosis)))
+      .catch(() => setError("Couldn't load your numbers right now."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function getAdvice() {
+    setAdvising(true);
+    setError(null);
+    try {
+      const d = await (await fetch("/api/strategy/diagnosis?advice=1")).json();
+      if (d.diagnosis) setDiagnosis(d.diagnosis);
+      if (d.advice) setAdvice(d.advice);
+      else setError(d.error ?? "Couldn't write the advice right now.");
+    } finally {
+      setAdvising(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Reading your last 90 days...</div>;
+  }
+  if (!diagnosis) return error ? <div className="card p-5 text-sm text-red-500">{error}</div> : null;
+
+  return (
+    <div className="card p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Activity className="w-4 h-4" /> Diagnosis — where you're losing people</p>
+          <p className="text-xs text-slate-400">From your own data, {diagnosis.window.label}. Counted by Hawlai, not estimated.</p>
+        </div>
+        <Button size="sm" onClick={getAdvice} disabled={advising} loading={advising}>
+          {!advising && <Lightbulb className="w-3.5 h-3.5" />} {advice ? "Refresh advice" : "What should I do about it?"}
+        </Button>
+      </div>
+
+      {diagnosis.funnels.map((f) => (
+        <div key={f.name} className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500">{f.name}</p>
+          <div className="overflow-x-auto">
+            <div className="flex items-stretch gap-1.5 min-w-max">
+              {f.steps.map((s, i) => {
+                const weak = f.weakest && f.weakest.to === s.label && i > 0 && f.steps[i - 1].label === f.weakest.from;
+                return (
+                  <div key={s.key} className={`rounded-lg px-3 py-2 min-w-[7rem] ${weak ? "bg-red-500/10 ring-1 ring-red-400/50" : "bg-slate-200"}`}>
+                    <p className="text-[11px] text-slate-500">{s.label}</p>
+                    <p className="text-lg font-semibold text-slate-800 tabular-nums">{s.count}</p>
+                    {s.fromPrevious !== null && <p className={`text-[11px] tabular-nums ${weak ? "text-red-500 font-semibold" : "text-slate-400"}`}>{s.fromPrevious}% of previous</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {f.weakest ? (
+            <p className="text-xs text-red-500 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Weakest step: {f.weakest.from} → {f.weakest.to} — {f.weakest.rate}% of {f.weakest.entered} get through.</p>
+          ) : (
+            <p className="text-xs text-slate-400 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> {f.thin}</p>
+          )}
+        </div>
+      ))}
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="bg-slate-200 rounded-lg p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Megaphone className="w-3.5 h-3.5" /> Lead sources — ranked by conversion, not volume</p>
+          {diagnosis.sources.length === 0 && <p className="text-xs text-slate-400">No leads in this window.</p>}
+          {diagnosis.sources.map((s) => (
+            <div key={s.source} className="flex items-center justify-between text-xs">
+              <span className="text-slate-700">{s.source}</span>
+              <span className="text-slate-500 tabular-nums">
+                {s.leads} leads · {s.won} won{s.ranked ? ` · ${s.conversion}%` : " · too few to judge"}
+              </span>
+            </div>
+          ))}
+          {diagnosis.sourcesThin && <p className="text-[11px] text-slate-400">{diagnosis.sourcesThin}</p>}
+        </div>
+        <div className="bg-slate-200 rounded-lg p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Users2 className="w-3.5 h-3.5" /> Customers at risk</p>
+          <p className="text-sm text-slate-700 tabular-nums">
+            {diagnosis.atRisk.count} of {diagnosis.atRisk.total} customers haven't heard from you in 90+ days
+          </p>
+          {diagnosis.atRisk.names.length > 0 && <p className="text-[11px] text-slate-500">{diagnosis.atRisk.names.join(", ")}{diagnosis.atRisk.count > diagnosis.atRisk.names.length ? "…" : ""}</p>}
+          {diagnosis.paid && (
+            <div className="pt-1.5 space-y-1">
+              <p className="text-xs font-semibold text-slate-500">Paid ads in this window</p>
+              {diagnosis.paid.map((p) => (
+                <p key={p.campaign} className="text-[11px] text-slate-600 tabular-nums">
+                  {p.campaign}: ₹{p.spend.toLocaleString("en-IN")} · {p.leads} leads{p.costPerLead !== null ? ` · ₹${p.costPerLead.toLocaleString("en-IN")}/lead` : ""}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-red-500">{error}</p>}
+
+      {advice && (
+        <div className="space-y-2 border-t border-slate-200 pt-3">
+          {advice.summary && <p className="text-sm text-slate-700">{advice.summary}</p>}
+          {advice.recommendations.map((r, i) => (
+            <div key={i} className="bg-brand-500/10 rounded-lg p-3">
+              <p className="text-sm font-semibold text-slate-800">{r.title}</p>
+              <p className="text-sm text-slate-700">{r.action}</p>
+              <p className="text-[11px] text-slate-500 mt-1">Based on: {r.evidence}</p>
+            </div>
+          ))}
+          {advice.dataGaps.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-500">Not enough data to judge yet</p>
+              {advice.dataGaps.map((g, i) => <p key={i} className="text-xs text-slate-500">• {g}</p>)}
+            </div>
+          )}
+          {advice.removed.length > 0 && (
+            <p className="text-[11px] text-amber-600">
+              Hawlai left out {advice.removed.length === 1 ? "one suggestion" : `${advice.removed.length} suggestions`} that quoted a number not in your data.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

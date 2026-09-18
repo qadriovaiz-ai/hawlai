@@ -244,7 +244,7 @@ export const TOOLS = [
   },
   {
     name: "generate_marketing_strategy",
-    description: "Generate a deep marketing strategy: SWOT analysis, target personas, quarterly/annual plan, market gap analysis. Use when the person wants an overall strategy, business plan, or asks 'where should I focus'.",
+    description: "Generate a deep marketing strategy: SWOT analysis, target personas, quarterly/annual plan, market gap analysis. Use when the person wants an overall strategy or business plan. For 'where should I focus' or 'what's not working', use diagnose_business first — it's built from their real numbers.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -632,6 +632,11 @@ export const TOOLS = [
       },
       required: ["name", "price"],
     },
+  },
+  {
+    name: "diagnose_business",
+    description: "Where this business is actually losing people, from its own last 90 days: the funnel from site visit to customer with the weakest step named, lead sources ranked by conversion (not volume), customers at risk, and paid-ad cost per lead — every number counted by Hawlai, not estimated. Then channel advice tied to those numbers. Use when the person asks where to focus, what's not working, why sales are low, or which channel to put money into. Quote only the numbers this returns; where it says data is too thin, say so instead of advising.",
+    input_schema: { type: "object", properties: {} },
   },
   {
     name: "business_story",
@@ -2319,6 +2324,18 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         note: `Service "${input.name}"${duration ? ` (${duration})` : ""} added to the Products tab — saved with no image yet. ${booking}${modelHint}`,
       };
     }
+    case "diagnose_business": {
+      const { loadDiagnosis } = await import("../strategy/diagnosis");
+      const { generateChannelAdvice } = await import("../strategy/channelAdvice");
+      const diagnosis = await loadDiagnosis(supabase, ctx.id);
+      const facts = await factsFor(supabase, ctx);
+      const advice = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId: ctx.id });
+      return {
+        diagnosis,
+        advice,
+        note: "Every number here was counted from their own data. Quote only these numbers, and where a section says there's too little data, say that plainly rather than advising. Point them to the Strategy page for the full diagnosis.",
+      };
+    }
     case "business_story": {
       const { STORY_QUESTIONS, storyProgress } = await import("../business/businessStory");
       const { data: rows } = await supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", ctx.id).eq("is_active", true);
@@ -2530,6 +2547,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   schedule_lead_export: "/dashboard/autopilot",
   add_product: "/dashboard/website-builder",
   save_business_story: "/dashboard/settings/knowledge-base",
+  diagnose_business: "/dashboard/strategy",
   create_discount_code: "/dashboard/website-builder",
   get_report_links: "/dashboard/reports",
 };
@@ -2884,6 +2902,30 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: result.kind === "service" ? "Service added" : "Product added", summary: result.note, departmentHref };
     case "save_business_story":
       return { kind: "record", label: `Business story: ${result.saved}`, summary: result.note, departmentHref };
+    case "diagnose_business": {
+      const d = result?.diagnosis;
+      if (!d) return null;
+      const groups: { heading: string; items: { label: string; note?: string }[] }[] = [];
+      for (const f of d.funnels ?? []) {
+        groups.push({
+          heading: f.weakest ? `${f.name} — weakest: ${f.weakest.from} → ${f.weakest.to} (${f.weakest.rate}%)` : `${f.name} — ${f.thin}`,
+          items: f.steps.map((s: any) => ({ label: `${s.label}: ${s.count}`, note: s.fromPrevious !== null ? `${s.fromPrevious}% of previous` : undefined })),
+        });
+      }
+      if ((d.sources ?? []).length) {
+        groups.push({
+          heading: "Lead sources, ranked by conversion",
+          items: d.sources.map((s: any) => ({ label: s.source, note: `${s.leads} leads · ${s.won} won${s.ranked ? ` · ${s.conversion}%` : " · too few to judge"}` })),
+        });
+      }
+      groups.push({ heading: "Customers at risk", items: [{ label: `${d.atRisk.count} of ${d.atRisk.total} not contacted in 90+ days` }] });
+      const advice = result.advice;
+      if (advice?.recommendations?.length) {
+        groups.push({ heading: "What to do", items: advice.recommendations.map((r: any) => ({ label: r.title, note: `${r.action} (based on: ${r.evidence})` })) });
+      }
+      if (advice?.dataGaps?.length) groups.push({ heading: "Not enough data to judge yet", items: advice.dataGaps.map((g: string) => ({ label: g })) });
+      return { kind: "document", label: `Diagnosis — ${d.window.label}`, summary: advice?.summary || undefined, groups, departmentHref };
+    }
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
     case "schedule_lead_export":
