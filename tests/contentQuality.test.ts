@@ -474,3 +474,92 @@ describe("B — a story answer the database will actually accept", () => {
     expect(api).toContain('"business_story"');
   });
 });
+
+// ---- the three tunes from the before/after (2026-09-18) --------------------------
+// The workshop caption used the story, but: the Instagram instruction still
+// prescribed "ends with a question or CTA, plus 8-10 hashtags" (silently
+// overriding the craft rules); the story answer was pasted almost word for
+// word; and a real booking URL went into an Instagram caption, where links
+// can't be clicked.
+describe("tune 1 — per-type instructions set length and platform, not the shape", () => {
+  it("no social type prescribes its ending, and hashtags are few and specific", async () => {
+    const { CONTENT_TYPES } = await import("@/lib/agents/contentMarketingAgent");
+    const social = CONTENT_TYPES.filter((t) => t.group === "Social Posts");
+    for (const t of social) {
+      expect(t.instructions, t.key).not.toMatch(/ends with a (question|discussion question|CTA)|includes a soft CTA/i);
+      expect(t.instructions, t.key).not.toMatch(/8-10/);
+    }
+    const ig = CONTENT_TYPES.find((t) => t.key === "instagram_post")!;
+    expect(ig.instructions).toMatch(/3-5 hashtags specific to this piece/);
+    expect(ig.instructions).toMatch(/not a requirement/);
+    expect(ig.instructions).toMatch(/link in bio/);
+  });
+});
+
+describe("tune 2 — the story is material, not text to paste", () => {
+  it("the prompt allows one short phrase of the owner's words and asks for fresh sentences", () => {
+    const s = craftSection("workshop", [], true);
+    expect(s).toMatch(/owner's story as MATERIAL, not text to paste/);
+    expect(s).toMatch(/At most ONE short phrase/);
+    expect(s).toMatch(/share the fact, never the sentences/);
+  });
+});
+
+describe("tune 3 — no dead links in an Instagram caption, enforced in code", () => {
+  it("replaces every kind of link with 'link in bio', keeping the sentence intact", async () => {
+    const { replaceLinksWithBio } = await import("@/lib/content/platformRules");
+    expect(replaceLinksWithBio("Seat book karo: https://calendly.com/candlebyqaaf/workshop").text).toBe("Seat book karo: link in bio");
+    expect(replaceLinksWithBio("Book at calendly.com/qaaf.").text).toBe("Book at link in bio.");
+    expect(replaceLinksWithBio("See www.qaaf.in today").text).toBe("See link in bio today");
+    // Never an email address.
+    expect(replaceLinksWithBio("Mail hello@qaaf.in").text).toBe("Mail hello@qaaf.in");
+    // Not "link in bio: link in bio".
+    expect(replaceLinksWithBio("Link in bio 👆 https://qaaf.in").text).toBe("Link in bio");
+  });
+
+  it("the live case: an Instagram caption with the booking URL comes back with 'link in bio', and the owner is told", async () => {
+    const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
+    const caption = { text: "90 minute mein pehli candle. Seat book karo: https://calendly.com/candlebyqaaf/workshop" };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
+    try {
+      const withLink = facts({ links: { store: null, products: [], booking: "https://calendly.com/candlebyqaaf/workshop" } });
+      const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, withLink, "draft");
+      expect(r.output.text).toBe("90 minute mein pehli candle. Seat book karo: link in bio");
+      expect(r.output._claimsNote).toMatch(/Instagram doesn't make links in captions clickable/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a platform where links work keeps the link", async () => {
+    const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
+    const post = { text: "Workshop seats: https://calendly.com/candlebyqaaf/workshop" };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(post) }], usage: {} }), { status: 200 })));
+    try {
+      const withLink = facts({ links: { store: null, products: [], booking: "https://calendly.com/candlebyqaaf/workshop" } });
+      const r = await generateContent("linkedin_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, withLink, "draft");
+      expect(r.output.text).toContain("https://calendly.com/candlebyqaaf/workshop");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a generation with no business facts still can't put a dead link in an Instagram caption", async () => {
+    const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
+    const caption = { text: "Book: https://calendly.com/candlebyqaaf/workshop" };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
+    try {
+      const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null);
+      expect(r.output.text).toBe("Book: link in bio");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("holds even with no facts, and leaves metadata keys alone", async () => {
+    const { applyLinkRule } = await import("@/lib/content/platformRules");
+    const r = applyLinkRule("instagram_post", { caption: "Book: https://x.co/a", _source: "https://x.co/a", days: [{ caption: "See qaaf.in" }] });
+    expect(r.output).toEqual({ caption: "Book: link in bio", _source: "https://x.co/a", days: [{ caption: "See link in bio" }] });
+    expect(r.replaced).toBe(2);
+  });
+});

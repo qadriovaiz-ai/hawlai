@@ -13,6 +13,7 @@ import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
+import { applyLinkRule, linkRuleNote } from "@/lib/content/platformRules";
 
 // WHY THIS EXISTS (approved 2026-09-18): every caption came out in the
 // same shape — hook line, product line, price, CTA, question — whatever
@@ -79,6 +80,7 @@ ${angleFor(topic, recent)}
       ? "The owner's own story is in the facts above: use it. That detail is the whole point of the piece."
       : "The owner hasn't written their story down yet, so specifics are thin — write only what the facts support, stay plain, and don't pad with adjectives to fill the gap."
   }
+- Use the owner's story as MATERIAL, not text to paste: take the fact, then write your own sentences about it for this reader. At most ONE short phrase (a few words) in the owner's exact words, where their phrasing is the point. Two pieces about the same fact should share the fact, never the sentences.
 - Write it as one person telling another something true. No stacked adjectives, no rented enthusiasm.
 - These openings and phrasings are worn out — never use them or anything close to them:
 ${TIRED_MOVES.map((m) => `  - ${m}`).join("\n")}
@@ -98,13 +100,13 @@ export interface ContentTypeMeta {
 }
 
 export const CONTENT_TYPES: ContentTypeMeta[] = [
-  { key: "instagram_post", label: "Instagram Post", group: "Social Posts", instructions: "A single Instagram feed post caption, under 150 words, native emoji use, ends with a question or CTA, plus 8-10 relevant hashtags." },
+  { key: "instagram_post", label: "Instagram Post", group: "Social Posts", instructions: "A single Instagram feed post caption, under 150 words. Emoji only where they fit the brand voice. End however this piece actually ends — a question or a call to action is one option, not a requirement. Then 3-5 hashtags specific to this piece (what it's about, what it is), never generic filler or a location tag added by habit. Links aren't clickable in Instagram captions — point to the link in bio instead of writing a URL." },
   { key: "carousel", label: "Carousel", group: "Social Posts", instructions: "A 6-8 slide Instagram/LinkedIn carousel. Return slides as an array, each slide has a short punchy headline (under 10 words) and one supporting line." },
-  { key: "linkedin_post", label: "LinkedIn Post", group: "Social Posts", instructions: "A LinkedIn post, 100-200 words, professional but human tone, short paragraphs/line breaks, ends with a discussion question." },
-  { key: "twitter_post", label: "Twitter / X Post", group: "Social Posts", instructions: "A single tweet under 280 characters, punchy and specific, optionally suggest it as part of a short thread (2-3 tweets) if the topic needs it." },
-  { key: "facebook_post", label: "Facebook Post", group: "Social Posts", instructions: "A Facebook post, slightly longer and more conversational than Instagram, 80-150 words, community-toned." },
+  { key: "linkedin_post", label: "LinkedIn Post", group: "Social Posts", instructions: "A LinkedIn post, 100-200 words, professional but human, short paragraphs with line breaks. End where the thought ends — a discussion question is one option, not a requirement. 0-3 hashtags, only if they're specific to the piece." },
+  { key: "twitter_post", label: "Twitter / X Post", group: "Social Posts", instructions: "A single post under 280 characters, specific rather than punchy-for-its-own-sake; suggest a short thread (2-3 posts) only if the topic genuinely needs it. At most 1-2 hashtags, and only specific ones." },
+  { key: "facebook_post", label: "Facebook Post", group: "Social Posts", instructions: "A Facebook post, a little longer and more conversational than Instagram, 80-150 words, community-toned. End however the piece ends — no compulsory question. 0-3 hashtags, specific to the piece." },
   { key: "threads_post", label: "Threads Post", group: "Social Posts", instructions: "A Threads post, casual and conversational, under 100 words, feels like a real opinion not an ad." },
-  { key: "pinterest_pin", label: "Pinterest Pin", group: "Social Posts", instructions: "A Pinterest pin title (under 100 characters, keyword-rich) and description (under 500 characters, keyword-rich, includes a soft CTA)." },
+  { key: "pinterest_pin", label: "Pinterest Pin", group: "Social Posts", instructions: "A Pinterest pin title (under 100 characters, with the words people would search for) and description (under 500 characters, searchable and specific). A call to action only if it fits." },
   { key: "blog_post", label: "Blog Writing", group: "Long-form", instructions: "A blog post outline with title, meta description, and 5-6 section headings each with a 2-sentence summary of what goes there — not the full article, a strong structured outline." },
   { key: "seo_blog", label: "SEO Blog", group: "Long-form", instructions: "An SEO-focused blog outline: title (with primary keyword), meta description (under 160 chars), target keyword, 3-4 secondary keywords, H2 section headings with 1-sentence notes on search intent for each." },
   { key: "email_newsletter", label: "Email Newsletter", group: "Email & Sales Copy", instructions: "An email newsletter with subject line, preview text (under 90 chars), and body (3-4 short sections with a clear CTA at the end)." },
@@ -204,11 +206,17 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
         revised = true;
       }
     }
-    if (!facts) return { output: parsed, ...(revised ? { revised } : {}) };
+    if (!facts) return { output: applyLinkRule(contentTypeKey, parsed).output, ...(revised ? { revised } : {}) };
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
     const guarded = guardGenerated(parsed, facts, claimsMode);
-    return { output: guarded.output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, ...(revised ? { revised } : {}) };
+    // Enforced, not requested: a real booking link in the facts is exactly
+    // what put a dead URL into an Instagram caption.
+    const linked = applyLinkRule(contentTypeKey, guarded.output);
+    const output: any = linked.output;
+    const linkNote = linkRuleNote(linked.replaced);
+    if (linkNote) output._claimsNote = [output._claimsNote, linkNote].filter(Boolean).join(" ");
+    return { output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, ...(revised ? { revised } : {}) };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;
