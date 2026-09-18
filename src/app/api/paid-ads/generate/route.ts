@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/agents/paidAdsAgent";
 import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
@@ -44,7 +45,10 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "business",
     brandProfile,
     { supabase, dealershipId },
-    performanceContext
+    performanceContext,
+    undefined,
+    // Ad copy is written from, and checked against, the business facts.
+    await gatherBusinessFactsSafely(supabase, dealershipId)
   );
 
   let saved = null;

@@ -11,6 +11,7 @@
 import sharp from "sharp";
 import { buildImageBrief, imageParts } from "@/lib/claims/imageBrief";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { guardGenerated } from "@/lib/claims/claimCheck";
 import { logClaudeUsage } from "./usage/logUsage";
 import { getModel } from "./models";
 
@@ -47,7 +48,35 @@ async function callAdPlanOnce(promptContent: string, logContext?: { supabase: an
 // Step 1: Claude reads the dealer's one-line prompt and extracts
 // everything needed — copy, budget, city, and an image scene idea.
 // ------------------------------------------------------------------
+/**
+ * The ad's headline and body, written from the business facts and then
+ * checked against them — once, here, for every caller (the ad launcher,
+ * preview, chat, the A/B variant autopilot, Retargeting).
+ *
+ * THE BUG (2026-09-18): the output format asked the body to "mention
+ * offer/urgency", no caller passed the facts, and nothing ran the claims
+ * check — so a Paid Ads draft could invent a discount or free shipping
+ * under the owner's name. The fallback headline said "Special Offer".
+ *
+ * Every path saves a DRAFT the owner reviews before launch, so the check
+ * runs in draft mode: invented claims are removed, an unverified price is
+ * kept and flagged (plan._claimsNote). A field the check empties gets an
+ * honest line rather than going out blank.
+ */
 export async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "small business", logContext?: { supabase: any; dealershipId: string }, businessCity?: string | null, facts?: BusinessFacts | null) {
+  const plan: any = await draftAdPlan(prompt, brandProfile, businessCategory, logContext, businessCity, facts);
+  if (!facts) return plan;
+  const checked = guardGenerated({ headline: plan.headline, body: plan.body }, facts, "draft") as any;
+  const name = facts.businessName;
+  return {
+    ...plan,
+    headline: String(checked.output.headline ?? "").trim() || name.slice(0, 40),
+    body: String(checked.output.body ?? "").trim() || `Message ${name} to know more.`,
+    ...(checked.output._claimsNote ? { _claimsNote: checked.output._claimsNote } : {}),
+  };
+}
+
+async function draftAdPlan(prompt: string, brandProfile: any, businessCategory: string, logContext?: { supabase: any; dealershipId: string }, businessCity?: string | null, facts?: BusinessFacts | null) {
   try {
     const brandContext = brandProfile
       ? `\n\nThis dealer's brand profile — match this tone and, where relevant, reference these points:\n- Tone of voice: ${brandProfile.tone_of_voice ?? "not set"}\n- Target customer: ${JSON.stringify(brandProfile.target_persona ?? {})}\n- Key messaging points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none set"}\n- Preferred ad language: ${brandProfile.preferred_language ?? "hinglish"}`
@@ -62,7 +91,7 @@ export async function generateAdPlan(prompt: string, brandProfile?: any, busines
     const basePrompt = `You are an expert Facebook ad strategist for Indian ${businessCategory} businesses.
 Based on this dealer's requirement: "${prompt}"${brandContext}${factsPrompt(facts)}
 Return JSON only (no markdown, no explanation):
-{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars, mention offer/urgency","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"the city to advertise in — extract it from the request if they named one; otherwise use ${businessCity ? JSON.stringify(businessCity) : "null"}; NEVER invent or guess a city, null is correct when there is none","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`;
+{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars — give a real reason to act now; an offer, discount or free shipping ONLY if the verified facts list it as active, otherwise sell the product itself","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"the city to advertise in — extract it from the request if they named one; otherwise use ${businessCity ? JSON.stringify(businessCity) : "null"}; NEVER invent or guess a city, null is correct when there is none","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`;
 
     const first = await callAdPlanOnce(basePrompt, logContext);
 
@@ -108,7 +137,8 @@ Return JSON only (no markdown, no explanation):
     const city = businessCity ?? null;
     const subject = businessCategory && businessCategory !== "small business" ? businessCategory : "our products";
     return {
-      headline: `${businessCategory === "small business" ? "Special Offer" : `${subject.charAt(0).toUpperCase()}${subject.slice(1)} — Special Offer`}`.slice(0, 40),
+      // No "Special Offer": that's an offer claim, and there may be none.
+      headline: `${subject.charAt(0).toUpperCase()}${subject.slice(1)}${city ? ` in ${city}` : ""}`.slice(0, 40),
       body: city ? `Now available in ${city}. Message us to know more!` : `Message us to know more!`,
       daily_budget: 500,
       car_type: null,

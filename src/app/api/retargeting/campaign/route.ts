@@ -3,7 +3,6 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/adEngine";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
-import { guardGenerated } from "@/lib/claims/claimCheck";
 
 // One-click retargeting campaign — piece 6/7.
 //
@@ -92,7 +91,8 @@ export async function POST(request: Request) {
   // them before the draft is saved — the launch screen shows the copy
   // itself, so an invented claim has to be gone before it gets there.
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const rawPlan = await generateAdPlan(
+  // Checked inside generateAdPlan, the same as every other ad.
+  const plan: any = await generateAdPlan(
     angle.brief(offerText),
     brandProfile,
     dealership?.business_category ?? "business",
@@ -100,15 +100,6 @@ export async function POST(request: Request) {
     undefined,
     facts
   );
-  const plan: any = { ...rawPlan };
-  if (facts) {
-    const checked = guardGenerated({ headline: rawPlan.headline, body: rawPlan.body }, facts, "draft") as any;
-    // A headline or body the check emptied keeps the draft launchable
-    // rather than blank; the owner edits it on the launch screen.
-    plan.headline = String(checked.output.headline ?? "").trim() || "Still thinking it over?";
-    plan.body = String(checked.output.body ?? "").trim() || "Come back whenever you're ready.";
-    if (checked.output._claimsNote) plan._claimsNote = checked.output._claimsNote;
-  }
 
   // Saved as a draft in the same table the normal ad flow uses, so it
   // flows through preview -> launch -> approval identically. No

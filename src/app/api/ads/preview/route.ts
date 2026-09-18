@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { generateAdPlan, buildFinalCreativeImage } from "@/lib/adEngine";
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   const businessCategory = dealership?.business_category ?? "small business";
-  const plan = await generateAdPlan(prompt, brandProfile, businessCategory, { supabase, dealershipId }, dealership?.city ?? null);
+  const plan = await generateAdPlan(prompt, brandProfile, businessCategory, { supabase, dealershipId }, dealership?.city ?? null, await gatherBusinessFactsSafely(supabase, dealershipId));
 
   const serviceClient = createServiceClient();
 

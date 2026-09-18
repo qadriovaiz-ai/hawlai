@@ -880,7 +880,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           : perfState.state === "not_connected" || perfState.state === "error"
           ? "Past campaign performance could not be read — do not assume there is none."
           : null;
-      const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext);
+      const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext, await factsFor(supabase, ctx));
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
 
       // LAYER 4 — the real floor, from the merchant's OWN ad account.
@@ -1431,7 +1431,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // onboarding captured; when it is empty the plan returns null and
       // targeting falls back to All India — broad, but never the wrong
       // city.
-      const plan = await makePlan(askedFor, brand, conn.business_category ?? "small business", { supabase, dealershipId: ctx.id }, conn.city ?? ctx.city ?? null);
+      const plan = await makePlan(askedFor, brand, conn.business_category ?? "small business", { supabase, dealershipId: ctx.id }, conn.city ?? ctx.city ?? null, await factsFor(supabase, ctx));
 
       // A budget the person actually said beats the model's guess.
       const statedBudget = Number(String(input.daily_budget ?? "").replace(/[^\d.]/g, ""));

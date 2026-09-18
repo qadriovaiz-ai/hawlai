@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import {
@@ -156,7 +157,7 @@ export async function POST(request: Request) {
     plan = existingDraft.plan_json;
     draft = existingDraft;
   } else {
-    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "small business", { supabase, dealershipId }, dealership?.city ?? null);
+    plan = await generateAdPlan(prompt, brandProfile, dealership?.business_category ?? "small business", { supabase, dealershipId }, dealership?.city ?? null, await gatherBusinessFactsSafely(supabase, dealershipId));
 
     const { data: newDraft } = await serviceClient
       .from("ad_creatives")

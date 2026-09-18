@@ -25,6 +25,7 @@ import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights
 import { emitNotification } from "@/lib/notifications/emit";
 import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
 import { generateAdPlan } from "../adEngine";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
@@ -218,7 +219,9 @@ async function maybeGenerateVariantOnPause(
 
     const variantPrompt = `This ad is winning an A/B test: "${winner.headline}" — ${winner.body_copy ?? ""}. This one lost: "${loser?.headline ?? "an earlier variant"}" — ${loser?.body_copy ?? ""}. Targeting ${winner.targeting_city ?? "the same city"}, budget ₹${winner.daily_budget ?? 500}/day. Create a genuinely different new creative angle (different headline hook and/or background style) to test as variant ${nextLabel} against the winner — it needs to be meaningfully different from both of the above, not a small rewording of either.`;
 
-    const plan = await generateAdPlan(variantPrompt, brandProfile, businessCategory, { supabase, dealershipId });
+    // Written from, and checked against, the business facts — saved as a
+    // draft the owner reviews before it can run.
+    const plan = await generateAdPlan(variantPrompt, brandProfile, businessCategory, { supabase, dealershipId }, null, await gatherBusinessFactsSafely(supabase, dealershipId));
 
     const { data: newDraft, error } = await supabase.from("ad_creatives").insert({
       dealership_id: dealershipId,
