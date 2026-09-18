@@ -12,7 +12,7 @@ import sharp from "sharp";
 import { buildImageBrief, imageParts } from "@/lib/claims/imageBrief";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated } from "@/lib/claims/claimCheck";
-import { logClaudeUsage } from "./usage/logUsage";
+import { callClaude, aiFailureNote } from "@/lib/ai/claude";
 import { getModel } from "./models";
 
 export const GRAPH_VERSION = "v23.0";
@@ -24,23 +24,10 @@ export const GRAPH_VERSION = "v23.0";
 const AD_PLAN_RETRY_THRESHOLD = 60;
 
 async function callAdPlanOnce(promptContent: string, logContext?: { supabase: any; dealershipId: string }): Promise<any> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: getModel("standard"),
-      max_tokens: 500,
-      messages: [{ role: "user", content: promptContent }],
-    }),
-  });
-  const data = await response.json();
-  if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "ad_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-  const text = data.content?.[0]?.text ?? "";
-  const clean = text.replace(/```json|```/g, "").trim();
+  const r = await callClaude({ model: getModel("standard"), max_tokens: 500, messages: [{ role: "user", content: promptContent }] }, { operation: "ad_plan", logContext });
+  // Carries the reason to the fallback below, so the plan says why it's a template.
+  if (!r.ok) throw Object.assign(new Error(`AI unavailable (${r.failure.kind})`), { aiFailure: r.failure });
+  const clean = r.text.replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
 }
 
@@ -149,6 +136,7 @@ Return JSON only (no markdown, no explanation):
       score_reasoning: "Generated via fallback template — not AI-scored.",
       estimated_leads_low: 10,
       estimated_leads_high: 25,
+      ...(err?.aiFailure ? { _aiFailure: aiFailureNote(err.aiFailure) } : {}),
     };
   }
 }
@@ -234,7 +222,7 @@ export function buildTextOverlaySvg(width: number, height: number, headline: str
 // unavailable / too-many-calls rate limits, not a real request
 // problem. HTTP 5xx is treated the same way. Deliberately capped to
 // ONE retry with a fixed short wait, same reasoning as
-// callClaudeWithRetry in masterBrainV2.ts: a rate limit isn't fixed by
+// callClaude in lib/ai/claude.ts: a rate limit isn't fixed by
 // hammering the endpoint again a few hundred ms later, and ad launch
 // already makes 5 sequential calls (image, creative, campaign, adset,
 // ad) — every extra attempt here multiplies across all of them.

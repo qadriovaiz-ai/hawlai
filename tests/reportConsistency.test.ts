@@ -64,7 +64,7 @@ function anthropic() {
     const text: string = JSON.parse(init.body).messages[0].content;
     const kind = text.includes("growth advisor") ? "growth" : "exec";
     prompts.push({ kind, text });
-    return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ text: JSON.stringify(kind === "growth" ? GROWTH_AI : EXEC_AI) }] }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: JSON.stringify(kind === "growth" ? GROWTH_AI : EXEC_AI) }] }) };
   }));
   return prompts;
 }

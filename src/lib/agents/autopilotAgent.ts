@@ -27,6 +27,7 @@ import { explainCampaign, getComparisonCampaigns } from "./reportingAgent";
 import { generateAdPlan } from "../adEngine";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+import { isPlatformOutage } from "@/lib/ai/claude";
 
 const STALE_DRAFT_HOURS = 24; // regenerate if the draft is older than this
 const VARIANT_GROUP_LABELS = ["A", "B", "C", "D", "E"]; // same cap as variant-group/route.ts
@@ -62,6 +63,13 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string): Pro
       // same addition as the manual generate-message route.
       const pastInsights = await getLeadMemory(supabase, dealershipId, lead.id);
       const message = await generateFollowUpMessage(lead, brandProfile, "whatsapp", undefined, undefined, pastInsights);
+      // A generic template isn't a draft for this lead — leave the slot
+      // empty so the next run writes a real one. If the AI is down for
+      // everyone, the rest of the leads would fail the same way.
+      if (message.aiFailure) {
+        if (isPlatformOutage(message.aiFailure.kind)) break;
+        continue;
+      }
       await supabase
         .from("leads")
         .update({ draft_followup_message: message.message, draft_followup_generated_at: new Date().toISOString() })
@@ -222,6 +230,9 @@ async function maybeGenerateVariantOnPause(
     // Written from, and checked against, the business facts — saved as a
     // draft the owner reviews before it can run.
     const plan = await generateAdPlan(variantPrompt, brandProfile, businessCategory, { supabase, dealershipId }, null, await gatherBusinessFactsSafely(supabase, dealershipId));
+    // The AI didn't write it — a category template isn't a new angle to
+    // test, and "new variant ready" would be untrue.
+    if (plan._aiFailure) return;
 
     const { data: newDraft, error } = await supabase.from("ad_creatives").insert({
       dealership_id: dealershipId,

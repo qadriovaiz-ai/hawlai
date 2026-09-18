@@ -186,7 +186,7 @@ describe("step 2 — the model call", () => {
         ],
         dataGaps: [],
       };
-      return new Response(JSON.stringify({ content: [{ text: JSON.stringify(reply) }], usage: {} }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(reply) }], usage: {} }), { status: 200 });
     }));
     const { generateChannelAdvice } = await import("@/lib/strategy/channelAdvice");
     const d = buildDiagnosis(base({ events: views(400), leads: [...leads(25, "new"), ...leads(1, "converted")] }));
@@ -286,7 +286,7 @@ describe("the Strategy page's route", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("returns the diagnosis without a model call; advice only when asked", async () => {
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ content: [{ text: '{"summary":"","recommendations":[],"dataGaps":[]}' }] }), { status: 200 }));
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: '{"summary":"","recommendations":[],"dataGaps":[]}' }] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchSpy);
     const { GET } = await import("@/app/api/strategy/diagnosis/route");
     const plain = await (await GET(new Request("https://x.test/api/strategy/diagnosis"))).json();
@@ -303,7 +303,7 @@ describe("the chat card", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("diagnose_business returns the numbers and shows them as a card with the weakest step and ranked sources", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: '{"summary":"Few visits become leads.","recommendations":[],"dataGaps":[]}' }] }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: '{"summary":"Few visits become leads.","recommendations":[],"dataGaps":[]}' }] }), { status: 200 })));
     const { executeTool, extractArtifact, TOOLS } = await import("@/lib/agents/masterBrainV2");
     expect(TOOLS.some((t: any) => t.name === "diagnose_business")).toBe(true);
     const result = await executeTool(db(), { id: "d1", name: "Candle by Qaaf", category: "Home fragrance" } as any, "diagnose_business", {}, "");
@@ -415,7 +415,7 @@ describe("the page is told why advice failed", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("a cut-off answer says so in plain words, with the reason", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: `"summary":"5 of` }], stop_reason: "max_tokens", usage: {} }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: `"summary":"5 of` }], stop_reason: "max_tokens", usage: {} }), { status: 200 })));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { GET } = await import("@/app/api/strategy/diagnosis/route");
     const body = await (await GET(new Request("https://x.test/api/strategy/diagnosis?advice=1"))).json();

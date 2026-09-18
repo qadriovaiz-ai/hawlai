@@ -7,8 +7,8 @@
 // generous max_tokens, JSON-only response, full fallback, never cache
 // a fallback in the API layer.
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
@@ -152,36 +152,25 @@ export async function generateContent(
      */
     keepLinks?: boolean;
   } = {}
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
 
-  const fallback = {
-    output: {
-      text: `Draft ${meta.label.toLowerCase()} for ${dealershipName} about "${topic || "your business"}". Regenerate once your Anthropic API key/quota is available for a tailored version.`,
-    },
-    _fallback: true,
-  };
+  // Said plainly, never a template dressed up as a draft.
+  const fallback = { output: { text: aiFailureMessage("bad_request") }, _fallback: true };
 
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "not set"}. Messaging pillars: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}.`
     : "No brand voice set yet — keep it natural and honest, avoid generic marketing-speak.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 2000,
-        messages: [
-          {
-            role: "user",
-            content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2000,
+      messages: [
+        {
+          role: "user",
+          content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Topic/product/context: "${resolveFestiveTopic(topic, facts?.season) || "general brand content, use good judgement for this business type"}"
 
@@ -190,16 +179,11 @@ Output requirements: ${meta.instructions}
 ${craftSection(topic, opts.recent ?? [], Boolean(facts?.ownerFacts?.some((k) => k.category === STORY_CATEGORY)))}
 
 Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this content type (e.g. use "slides" array for carousels, "days" array for a content calendar, "hooks" array for hook generation, "ctas" array for CTA generation, otherwise a "text" field or clearly-named fields matching the requirements above). Be specific to this business and topic — never generic filler.`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "content_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "content_generation", logContext });
+    if (!r.ok) return { output: { text: aiFailureMessage(r.failure.kind) }, _fallback: true, _aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
@@ -249,15 +233,12 @@ export async function reviseForSpecificity(
 ): Promise<any | null> {
   if (!facts) return null;
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 2000,
-        messages: [{
-          role: "user",
-          content: `You are a ruthless copy editor. Below is a draft ${contentLabel} for a real business, and the verified facts about that business.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `You are a ruthless copy editor. Below is a draft ${contentLabel} for a real business, and the verified facts about that business.
 
 THE TEST, line by line: could a competitor in the same line of work publish this exact line about themselves? If yes it is filler — cut it, or replace it with something only THIS business can say, taken from the facts.
 
@@ -275,15 +256,10 @@ Draft JSON:
 ${JSON.stringify(draft).slice(0, 6000)}
 
 Return the edited JSON only — same shape, no markdown, no commentary.`,
-        }],
-      }),
-    });
-    if (!response.ok) return null;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return null;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "content_revision", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "content_revision", logContext });
+    if (!r.ok) return null;
+    const text = r.text;
     const match = text.match(/\{[\s\S]*\}/);
     const clean = (match ? match[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return null;

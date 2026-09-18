@@ -303,7 +303,7 @@ describe("D — the editor that cuts what any competitor could have said", () =>
     vi.stubGlobal("fetch", vi.fn(async (_u: any, init: any) => {
       prompts.push(JSON.parse(init.body).messages[0].content);
       return ok
-        ? new Response(JSON.stringify({ content: [{ text: JSON.stringify(reply) }], usage: {} }), { status: 200 })
+        ? new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(reply) }], usage: {} }), { status: 200 })
         : new Response("", { status: 500 });
     }));
     return prompts;
@@ -341,7 +341,7 @@ describe("D — the editor that cuts what any competitor could have said", () =>
     vi.stubGlobal("fetch", vi.fn(async () => {
       call++;
       const body = call === 1 ? draft : { text: "Lavender comes in as dried buds. Rated 4.9/5 by our customers." };
-      return new Response(JSON.stringify({ content: [{ text: JSON.stringify(body) }], usage: {} }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(body) }], usage: {} }), { status: 200 });
     }));
     try {
       const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, facts(), "draft", { revise: true });
@@ -359,7 +359,7 @@ describe("D — the editor that cuts what any competitor could have said", () =>
     let calls = 0;
     vi.stubGlobal("fetch", vi.fn(async () => {
       calls++;
-      return new Response(JSON.stringify({ content: [{ text: JSON.stringify(draft) }], usage: {} }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(draft) }], usage: {} }), { status: 200 });
     }));
     try {
       const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, facts());
@@ -520,7 +520,7 @@ describe("tune 3 — no dead links in an Instagram caption, enforced in code", (
   it("the live case: an Instagram caption with the booking URL comes back with 'link in bio', and the owner is told", async () => {
     const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
     const caption = { text: "90 minute mein pehli candle. Seat book karo: https://calendly.com/candlebyqaaf/workshop" };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
     try {
       const withLink = facts({ links: { store: null, products: [], booking: "https://calendly.com/candlebyqaaf/workshop" } });
       const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, withLink, "draft");
@@ -534,7 +534,7 @@ describe("tune 3 — no dead links in an Instagram caption, enforced in code", (
   it("a platform where links work keeps the link", async () => {
     const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
     const post = { text: "Workshop seats: https://calendly.com/candlebyqaaf/workshop" };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(post) }], usage: {} }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(post) }], usage: {} }), { status: 200 })));
     try {
       const withLink = facts({ links: { store: null, products: [], booking: "https://calendly.com/candlebyqaaf/workshop" } });
       const r = await generateContent("linkedin_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, withLink, "draft");
@@ -547,7 +547,7 @@ describe("tune 3 — no dead links in an Instagram caption, enforced in code", (
   it("a generation with no business facts still can't put a dead link in an Instagram caption", async () => {
     const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
     const caption = { text: "Book: https://calendly.com/candlebyqaaf/workshop" };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
     try {
       const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null);
       expect(r.output.text).toBe("Book: link in bio");
@@ -609,7 +609,7 @@ describe("one caption to Facebook and Instagram: Facebook keeps the link", () =>
   it("Autopilot and the queue ask for the caption WITH its links", async () => {
     const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
     const caption = { text: "Seats for Sunday: https://calendly.com/candlebyqaaf/workshop" };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(caption) }], usage: {} }), { status: 200 })));
     try {
       const withLink = facts({ links: { store: null, products: [], booking: "https://calendly.com/candlebyqaaf/workshop" } });
       const kept = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, withLink, "publish", { keepLinks: true });

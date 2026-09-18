@@ -110,7 +110,7 @@ describe("DM and comment auto-replies know a service is booked", () => {
     let prompt = "";
     vi.stubGlobal("fetch", vi.fn(async (_u: any, init: any) => {
       prompt = JSON.parse(init.body).messages[0].content;
-      return new Response(JSON.stringify({ content: [{ text: '{"reply":"hi"}' }], usage: {} }), { status: 200 });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: '{"reply":"hi"}' }], usage: {} }), { status: 200 });
     }));
     try {
       await generateAutoReply("dm", "is the workshop available?", "candle_by_qaaf", "Home fragrance", null, autoReplyCatalog(items, "https://hawlai.online/book/qaaf"));

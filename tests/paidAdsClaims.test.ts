@@ -94,7 +94,7 @@ function model(reply: Row) {
     if (init?.body) {
       try { prompts.push(JSON.parse(init.body).messages?.[0]?.content ?? ""); } catch { /* not a model call */ }
     }
-    return new Response(JSON.stringify({ content: [{ text: JSON.stringify(reply) }], usage: {} }), { status: 200 });
+    return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(reply) }], usage: {} }), { status: 200 });
   }));
 }
 

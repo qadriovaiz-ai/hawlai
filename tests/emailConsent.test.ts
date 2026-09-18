@@ -267,7 +267,7 @@ describe("automation", () => {
     tables.dealerships[0].business_address = null;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ content: [{ text: JSON.stringify({ subject: "Welcome", headline: "Welcome", intro: "Hi", body: "Hi" }) }] }) }))
+      vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ subject: "Welcome", headline: "Welcome", intro: "Hi", body: "Hi" }) }] }) }))
     );
     const r = await runEmailAutomation(db(), "d1");
     expect(r).toEqual({ welcomesSent: 0, followUpsSent: 0, skipped: "business address missing" });

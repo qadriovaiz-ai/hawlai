@@ -146,7 +146,7 @@ describe("the live-audit output, run through the real CRO agent", () => {
     const prompts: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: any) => {
       prompts.push(JSON.parse(init.body).messages[0].content);
-      return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ text: JSON.stringify(output) }] }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: JSON.stringify(output) }] }) };
     }));
     return prompts;
   }

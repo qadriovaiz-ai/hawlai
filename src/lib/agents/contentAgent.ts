@@ -40,10 +40,12 @@ interface BrandProfile {
 export interface GeneratedMessage {
   subject?: string;
   message: string;
+  /** Set when the AI call failed and `message` is the generic template. */
+  aiFailure?: AiFailureNote;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export async function generateFollowUpMessage(
   lead: LeadInfo,
@@ -81,36 +83,25 @@ export async function generateFollowUpMessage(
         };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 400,
-        messages: [
-          {
-            role: "user",
-            content: `You are writing a follow-up ${channel} message for an Indian ${businessCategory} business's sales team to send to a lead.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 400,
+      messages: [
+        {
+          role: "user",
+          content: `You are writing a follow-up ${channel} message for an Indian ${businessCategory} business's sales team to send to a lead.
 ${leadContext}
 ${brandContext}
 ${channelInstructions}
 The goal: get them to book an appointment/demo/visit or reply. No markdown, no explanation, JSON only.
 ${grounding ?? ""}`,
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "follow_up_message", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "follow_up_message", logContext });
+    // The template still goes back — callers that send it decide — but
+    // marked, so no one mistakes it for a message written for this lead.
+    if (!r.ok) return { ...fallback, aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

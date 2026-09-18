@@ -71,6 +71,16 @@ export function aiFailureMessage(kind: AiFailureKind | null | undefined): string
   return AI_FAILURE_MESSAGE[kind ?? "bad_request"] ?? AI_FAILURE_MESSAGE.bad_request;
 }
 
+/**
+ * What a generator hands back with its fallback when the AI call failed,
+ * so the page (or automation) can say why instead of showing a template.
+ */
+export type AiFailureNote = { kind: AiFailureKind; message: string };
+
+export function aiFailureNote(failure: Pick<AiFailure, "kind">): AiFailureNote {
+  return { kind: failure.kind, message: aiFailureMessage(failure.kind) };
+}
+
 /** Whether the AI is down for everyone until someone acts — the two kinds the operator is alerted about. */
 export function isPlatformOutage(kind: AiFailureKind | null | undefined): boolean {
   return kind === "credits" || kind === "auth";

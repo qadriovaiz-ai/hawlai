@@ -8,7 +8,7 @@
 // during Facebook Connect).
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
+import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { stripUnsupported, type ClaimsMode } from "@/lib/claims/claimCheck";
@@ -26,7 +26,7 @@ export async function generateSocialCaption(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews the caption before posting: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ caption: string; claimsRemoved: string[]; priceWarnings?: string[] }> {
+): Promise<{ caption: string; claimsRemoved: string[]; priceWarnings?: string[]; aiFailure?: AiFailureNote }> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
     : "No brand profile set — default to a warm, professional tone in Hinglish.";
@@ -34,41 +34,29 @@ export async function generateSocialCaption(
   const unchanged = { caption: prompt, claimsRemoved: [] as string[] };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
 What the post is about: "${resolveFestiveTopic(prompt, facts?.season)}"
 ${brandContext}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end. Return JSON only: {"caption":"the caption text"}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return unchanged;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return unchanged;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "social_caption", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "social_caption", logContext });
+    if (!r.ok) return { ...unchanged, aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return unchanged;
     const parsed = JSON.parse(clean);
     const caption: string = parsed.caption ?? prompt;
     if (!facts) return { caption, claimsRemoved: [] };
-    const r = stripUnsupported(caption, facts, claimsMode);
-    return { caption: r.text, claimsRemoved: r.removed, priceWarnings: r.priceWarnings };
+    const checked = stripUnsupported(caption, facts, claimsMode);
+    return { caption: checked.text, claimsRemoved: checked.removed, priceWarnings: checked.priceWarnings };
   } catch (err: any) {
     console.error("[social-media-agent] generateSocialCaption error:", err.message);
     return unchanged;

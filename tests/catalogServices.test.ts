@@ -355,7 +355,7 @@ describe("unverified prices: removed when published, flagged in drafts", () => {
 
 describe("generators: automation stays strict, owner drafts are flagged", () => {
   const anthropic = (json: Row) =>
-    vi.fn(async () => new Response(JSON.stringify({ content: [{ text: JSON.stringify(json) }], usage: {} }), { status: 200 }));
+    vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(json) }], usage: {} }), { status: 200 }));
 
   afterEach(() => vi.unstubAllGlobals());
 

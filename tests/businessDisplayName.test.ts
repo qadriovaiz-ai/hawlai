@@ -72,7 +72,7 @@ beforeEach(() => {
     if (init?.body) {
       try { prompts.push(JSON.parse(init.body).messages?.[0]?.content ?? ""); } catch { /* not a model call */ }
     }
-    return new Response(JSON.stringify({ content: [{ text: "{}" }], usage: {} }), { status: 200 });
+    return new Response(JSON.stringify({ content: [{ type: "text", text: "{}" }], usage: {} }), { status: 200 });
   }));
 });
 afterEach(() => vi.unstubAllGlobals());

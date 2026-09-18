@@ -59,7 +59,7 @@ function anthropic(reply: unknown) {
     "fetch",
     vi.fn(async (_url: string, init?: any) => {
       prompts.push(JSON.parse(init.body).messages[0].content);
-      return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ text: JSON.stringify(reply) }] }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ content: [{ type: "text", text: JSON.stringify(reply) }] }) };
     })
   );
   return prompts;

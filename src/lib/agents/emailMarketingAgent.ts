@@ -41,7 +41,7 @@ interface BrandProfile {
   tone_of_voice?: string | null;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
+import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export async function generateEmailContent(
   taskKey: string,
@@ -55,27 +55,21 @@ export async function generateEmailContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's sent: unverified prices are flagged, not removed. Automation never passes it. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[]; email?: ComposedEmail }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; email?: ComposedEmail }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
-  const fallback = {
-    output: { text: `${meta.label} draft for ${dealershipName}. Regenerate once the API is available for a tailored version.` },
-    _fallback: true,
-  };
+  const fallback = { output: { text: aiFailureMessage("bad_request") }, _fallback: true };
 
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it warm, direct, and specific to the business.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 2000,
-        messages: [{
-          role: "user",
-          content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 ${EMAIL_RULES}
 
@@ -85,15 +79,10 @@ Task: ${meta.label}
 Requirements: ${meta.instructions}
 
 Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above exactly. Write real, specific email copy — never generic filler like "check out our amazing products".`,
-        }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "email_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "email_generation", logContext });
+    if (!r.ok) return { output: { text: aiFailureMessage(r.failure.kind) }, _fallback: true, _aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

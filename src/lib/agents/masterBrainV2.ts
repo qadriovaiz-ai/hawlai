@@ -53,6 +53,9 @@ import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
 import { getModel } from "../models";
+// One retry at most, honouring retry-after: across the chat's 6-step tool
+// loop, more retries multiplied into a rate-limit spiral in production.
+import { callClaude, aiFailureMessage } from "@/lib/ai/claude";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { generateGrowthReport } from "./growthAdvisorAgent";
 import { generateDeepStrategy } from "./deepStrategyAgent";
@@ -829,7 +832,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     }
     case "generate_content": {
       const facts = await factsFor(supabase, ctx);
-      const { output, _fallback } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft");
+      const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft");
+      if (_aiFailure) return { error: _aiFailure.message };
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
@@ -862,7 +866,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     case "generate_email": {
       const facts = await factsFor(supabase, ctx);
       // Chat drafts are shown to the owner before anything is sent or posted.
-      const { output, _fallback } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft");
+      const { output, _fallback, _aiFailure } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft");
+      if (_aiFailure) return { error: _aiFailure.message };
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
@@ -1957,7 +1962,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // manual process.
         const photoElement = { type: "image", src: photoUrl, left: 0, top: 0, scaleX: 0.9, scaleY: 0.9, selectable: true };
 
-        const claudeResult = await callClaudeWithRetry({
+        const claudeResult = await callClaude({
           model: getModel("standard"),
           max_tokens: 3000,
           messages: [{
@@ -1971,11 +1976,9 @@ Instruction: "${input.instruction}"
 
 Respond with ONLY the complete elements array as valid JSON (including the photo element unchanged as the first item) — no markdown, no explanation.`,
           }],
-        }, ctx.id);
-        if (!claudeResult.ok) return { error: "Couldn't reach the design service — try again shortly." };
-        const data = claudeResult.data;
-        if (data.usage) await logClaudeUsage(supabase, ctx.id, "canvas_edit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-        const text = data.content?.[0]?.text ?? "";
+        }, { operation: "canvas_edit", logContext: { supabase, dealershipId: ctx.id } });
+        if (!claudeResult.ok) return { error: aiFailureMessage(claudeResult.failure.kind) };
+        const text = claudeResult.text;
         const jsonMatch = text.match(/\[[\s\S]*\]/);
         const elements = jsonMatch ? JSON.parse(jsonMatch[0]) : [photoElement];
 
@@ -1997,7 +2000,7 @@ Respond with ONLY the complete elements array as valid JSON (including the photo
         const design = designs?.[0];
         if (!design) return { error: input.designName ? `No design found matching "${input.designName}".` : "No designs exist yet — create one first in the Advanced Editor." };
 
-        const claudeResult = await callClaudeWithRetry({
+        const claudeResult = await callClaude({
           model: getModel("standard"),
           max_tokens: 4000,
           messages: [{
@@ -2011,11 +2014,9 @@ Instruction: "${input.instruction}"
 
 Apply ONLY the change(s) implied by the instruction. Preserve every field you're not intentionally changing, and preserve every element not mentioned. Never invent new elements unless the instruction explicitly asks to add something. Respond with ONLY the complete updated elements array as valid JSON — no markdown, no explanation, no preamble.`,
           }],
-        }, ctx.id);
-        if (!claudeResult.ok) return { error: "Couldn't reach the editing service — try again shortly." };
-        const data = claudeResult.data;
-        if (data.usage) await logClaudeUsage(supabase, ctx.id, "canvas_edit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-        const text = data.content?.[0]?.text ?? "";
+        }, { operation: "canvas_edit", logContext: { supabase, dealershipId: ctx.id } });
+        if (!claudeResult.ok) return { error: aiFailureMessage(claudeResult.failure.kind) };
+        const text = claudeResult.text;
         const jsonMatch = text.match(/\[[\s\S]*\]/);
         if (!jsonMatch) return { error: "Couldn't understand how to apply that edit — try rephrasing it." };
         const newElements = JSON.parse(jsonMatch[0]);
@@ -3412,60 +3413,6 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
   }
 }
 
-// Anthropic occasionally returns a transient error (rate limit, brief
-// overload, upstream 5xx) — most likely to surface right after a
-// heavy prior call in the same conversation (e.g. a long strategy
-// generation) pushes close to a rate limit. Previously any non-2xx
-// here was treated as final with zero retry and zero logging of the
-// actual status/body, making this class of failure undiagnosable and
-// needlessly user-visible. Retries only the statuses known to be
-// transient; a real 400/401 (bad request / bad key) fails fast on
-// attempt 1, same as before.
-//
-// Deliberately capped to ONE retry, not several: a 429 tied to a
-// per-minute quota isn't fixed by hammering the same endpoint again a
-// few hundred ms later — that just spends more of an already-tight
-// budget, and across this function's own up-to-6-iteration tool loop,
-// every extra attempt here multiplies into several more calls per
-// single user message. An earlier version allowed 2 retries (3 total
-// attempts) with a fixed short backoff regardless of cause, and that
-// combination is what turned an intermittent failure into a
-// consistent one in production — more requests thrown at a limit that
-// a sub-2-second wait was never going to clear. Anthropic's own
-// Retry-After header (present on real 429s) is the authoritative
-// signal for how long a rate-limit window actually needs, so that's
-// honored here instead of guessing.
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 529]);
-
-async function callClaudeWithRetry(
-  requestBody: Record<string, any>,
-  dealershipId: string,
-  maxAttempts = 2
-): Promise<{ ok: true; data: any } | { ok: false; status: number; errorText: string }> {
-  let status = 0;
-  let errorText = "";
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(requestBody),
-    });
-    if (response.ok) return { ok: true, data: await response.json() };
-
-    status = response.status;
-    errorText = await response.text().catch(() => "<no body>");
-    const willRetry = RETRYABLE_STATUSES.has(status) && attempt < maxAttempts - 1;
-    console.error(
-      `[master-brain] Anthropic API error for dealership ${dealershipId} (attempt ${attempt + 1}/${maxAttempts}${willRetry ? ", retrying" : ", giving up"}) — status ${status}: ${errorText.slice(0, 500)}`
-    );
-    if (!willRetry) break;
-    const retryAfterHeader = Number(response.headers.get("retry-after"));
-    const waitMs = retryAfterHeader > 0 ? Math.min(retryAfterHeader * 1000, 10_000) : 1000;
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-  }
-  return { ok: false, status, errorText };
-}
-
 export async function runMasterBrainChat(
   supabase: any,
   dealershipId: string,
@@ -3570,14 +3517,17 @@ A junior marketer takes a request literally and produces the thing asked for. A 
   let totalOutputTokens = 0;
 
   for (let iteration = 0; iteration < 6; iteration++) {
-    const result = await callClaudeWithRetry(
+    // Usage is summed across the tool loop and logged once, below.
+    const result = await callClaude(
       { model: getModel("standard"), max_tokens: 4096, system: systemPrompt, tools: TOOLS, messages },
-      ctx.id
+      { operation: "master_chat" }
     );
 
     if (!result.ok) {
       if (totalInputTokens || totalOutputTokens) await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
-      return { reply: "Sorry, something went wrong on my end — try again in a moment.", toolsUsed, artifacts };
+      // Why, in the approved words — "on our side" for an outage, "busy"
+      // for a rate limit — instead of one apology for everything.
+      return { reply: aiFailureMessage(result.failure.kind), toolsUsed, artifacts };
     }
     const data = result.data;
     if (data.usage) {
