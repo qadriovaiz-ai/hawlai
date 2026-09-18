@@ -122,6 +122,37 @@ export function storyProgress(rows: { category?: string | null; title?: string |
   return { answered, missing };
 }
 
+/**
+ * Where the intake stands, from what the database holds — the only thing
+ * the chat is allowed to go on.
+ *
+ * THE BUG (2026-09-19): the chat declared candle_by_qaaf's story complete
+ * with 8 of 10 answers saved. A save only ever said "ask the next open
+ * question", so which question was next — and whether any were left — lived
+ * in the model's memory: it asked a near-duplicate of an answered question,
+ * skipped "What people get wrong", and then congratulated the owner. Now
+ * every step returns this, read back from the table, with the exact next
+ * question and `complete` true only when all ten are actually saved.
+ */
+export function storyStatus(rows: { category?: string | null; title?: string | null; content?: string | null }[]) {
+  const { answered, missing } = storyProgress(rows);
+  const next = missing[0] ?? null;
+  return {
+    complete: missing.length === 0,
+    savedCount: answered.length,
+    total: STORY_QUESTIONS.length,
+    saved: answered.map((a) => a.title),
+    stillOpen: missing.map((q) => ({ key: q.key, title: q.title })),
+    next: next ? { key: next.key, title: next.title, ask: next.ask, nudge: next.nudge } : null,
+  };
+}
+
+/** Two answers that are the same words once spacing and case are ignored. */
+export function sameAnswer(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) => String(s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  return norm(a) === norm(b);
+}
+
 /** An answer worth storing: the owner's own words, long enough to be a fact and short enough to prompt with. */
 export function cleanStoryAnswer(input: unknown): { ok: true; value: string } | { ok: false; error: string } {
   const value = String(input ?? "").replace(/\s+/g, " ").trim();

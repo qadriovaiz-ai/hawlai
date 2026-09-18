@@ -643,17 +643,18 @@ export const TOOLS = [
   },
   {
     name: "business_story",
-    description: "Start or continue the owner's Business Story — the one-time set of questions whose answers make this business's copy impossible to write about anyone else (how it started, how the work is actually done, materials, what a customer said, what they refuse to do). Call this when the person asks to do their business story, asks why their content reads generic, or when copy they're unhappy with has no specifics to draw on. Returns what they've already answered and what's still open; ask the questions ONE at a time, in their own words, and save each answer with save_business_story before asking the next.",
+    description: "Start or continue the owner's Business Story — the one-time set of questions whose answers make this business's copy impossible to write about anyone else (how it started, how the work is actually done, materials, what a customer said, what they refuse to do). Call this when the person asks to do their business story, asks why their content reads generic, or when copy they're unhappy with has no specifics to draw on. Returns what's saved, what's still open, and the exact next question — read from the database. Ask ONE question at a time, the one in `next`, and save each answer with save_business_story before asking another. Never ask a question that isn't in `next`, never re-ask a saved one, and never say the story is complete unless a tool result says complete: true.",
     input_schema: { type: "object", properties: {} },
   },
   {
     name: "save_business_story",
-    description: "Save one Business Story answer, in the owner's own words. Save what they actually said — tidy the grammar, never add facts, never make it sound like marketing. Saved as Business Knowledge, so copy may state it as true. If this tool returns an error, STOP: tell the person plainly that this answer was not saved and why, and do not ask the next question until a save succeeds. There is no batch save and nothing is held for later — an unsaved answer is simply lost.",
+    description: "Save one Business Story answer, in the owner's own words. Save what they actually said — tidy the grammar, never add facts, never make it sound like marketing. Saved as Business Knowledge, so copy may state it as true. If this tool returns an error, STOP: tell the person plainly that this answer was not saved and why, and do not ask the next question until a save succeeds. There is no batch save and nothing is held for later — an unsaved answer is simply lost. Call this in the SAME turn the owner answers — never acknowledge an answer without saving it. The result says, from the database, how many are saved and which question is next: ask exactly that one. Only when it says complete: true is the story done.",
     input_schema: {
       type: "object",
       properties: {
-        key: { type: "string", description: "Which question this answers — the key from business_story." },
+        key: { type: "string", description: "Which question this answers — the `next.key` you asked." },
         answer: { type: "string", description: "The owner's answer in their own words, a sentence or several. Don't summarise into an adjective." },
+        replace: { type: "boolean", description: "Only when the owner asked to CHANGE an answer they already gave. Without it, a question that already has a different saved answer is refused." },
       },
       required: ["key", "answer"],
     },
@@ -2340,33 +2341,40 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       };
     }
     case "business_story": {
-      const { STORY_QUESTIONS, storyProgress } = await import("../business/businessStory");
+      const { storyStatus } = await import("../business/businessStory");
       const { data: rows } = await supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", ctx.id).eq("is_active", true);
-      const { answered, missing } = storyProgress(rows ?? []);
+      const status = storyStatus(rows ?? []);
       return {
-        total: STORY_QUESTIONS.length,
-        answeredCount: answered.length,
-        answered: answered.map((a) => ({ title: a.title, answer: a.content.slice(0, 200) })),
-        remaining: missing.map((q) => ({ key: q.key, ask: q.ask, nudge: q.nudge })),
-        note:
-          missing.length === 0
-            ? "Every question is answered. Offer to change any of them, and tell them new content will now draw on these."
-            : `Ask the FIRST remaining question below, word for word or close to it, and nothing else in that message. Save the answer with save_business_story, then ask the next. ${missing.length} of ${STORY_QUESTIONS.length} still open.`,
+        ...status,
+        note: status.complete
+          ? "All 10 answers are saved (checked in the database). Offer to change any of them, and tell them new content will now draw on these."
+          : `${status.savedCount} of ${status.total} saved (checked in the database). Ask the question in \`next\` — word for word or close to it — and nothing else in that message. Don't re-ask anything in \`saved\`, and don't say the story is complete.`,
       };
     }
     case "save_business_story": {
-      const { storyQuestion, cleanStoryAnswer, STORY_CATEGORY } = await import("../business/businessStory");
+      const { storyQuestion, cleanStoryAnswer, storyStatus, sameAnswer, STORY_CATEGORY } = await import("../business/businessStory");
       const question = storyQuestion(String(input.key ?? ""));
       if (!question) return { error: `No Business Story question called "${input.key}" — call business_story for the list.` };
       const answer = cleanStoryAnswer(input.answer);
       if (!answer.ok) return { error: answer.error };
       const { data: existing } = await supabase
         .from("business_knowledge")
-        .select("id")
+        .select("id, content")
         .eq("dealership_id", ctx.id)
         .eq("category", STORY_CATEGORY)
         .eq("title", question.title)
         .maybeSingle();
+      // An answer filed under a question that's already answered would
+      // silently replace that answer. Refused unless the owner asked to
+      // change it.
+      if (existing?.content && !sameAnswer(existing.content, answer.value) && input.replace !== true) {
+        return {
+          error: `"${question.title}" already has a saved answer — this one was NOT saved.`,
+          stop: true,
+          alreadySaved: existing.content.slice(0, 200),
+          note: "If this answer belongs to a different question, save it under that question's key (call business_story for the open ones). Only if the owner asked to change this answer, save again with replace: true. Tell them plainly it wasn't saved yet.",
+        };
+      }
       const { error } = existing
         ? await supabase.from("business_knowledge").update({ content: answer.value, is_active: true }).eq("id", existing.id).eq("dealership_id", ctx.id)
         : await supabase.from("business_knowledge").insert({ dealership_id: ctx.id, category: STORY_CATEGORY, title: question.title, content: answer.value, is_active: true });
@@ -2379,16 +2387,12 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
           note: "Tell the person plainly that this answer wasn't saved and repeat it back so they don't lose it. Do NOT ask the next question, and never say it will be saved later — there is no batch save.",
         };
       }
-      // Read back what the database actually holds, so a silent write
-      // failure can't be reported as a save.
-      const { data: saved } = await supabase
-        .from("business_knowledge")
-        .select("id, content")
-        .eq("dealership_id", ctx.id)
-        .eq("category", STORY_CATEGORY)
-        .eq("title", question.title)
-        .maybeSingle();
-      if (!saved?.content) {
+      // Read back everything the database holds — this answer, and where
+      // the whole intake stands — so neither a silent write failure nor the
+      // model's own count can be reported as progress.
+      const { data: rows } = await supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", ctx.id).eq("is_active", true);
+      const status = storyStatus(rows ?? []);
+      if (!status.saved.includes(question.title)) {
         return {
           error: "That answer was NOT saved — the database has no record of it.",
           stop: true,
@@ -2397,8 +2401,11 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       }
       return {
         success: true,
-        saved: question.title,
-        note: `Saved "${question.title}" in their own words. Every piece of copy can now use it, and the claims check treats it as true because they said it. Ask the next open question.`,
+        justSaved: question.title,
+        ...status,
+        note: status.complete
+          ? `Saved "${question.title}". All ${status.total} answers are now saved (checked in the database) — the Business Story is complete. Every piece of copy can now use it.`
+          : `Saved "${question.title}" — ${status.savedCount} of ${status.total} saved (checked in the database). The story is NOT complete. Ask exactly the question in \`next\`, and nothing else.`,
       };
     }
     case "create_discount_code": {
@@ -2904,7 +2911,7 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     case "add_product":
       return { kind: "record", label: result.kind === "service" ? "Service added" : "Product added", summary: result.note, departmentHref };
     case "save_business_story":
-      return { kind: "record", label: `Business story: ${result.saved}`, summary: result.note, departmentHref };
+      return { kind: "record", label: `Business story: ${result.justSaved}`, summary: result.note, departmentHref };
     case "diagnose_business": {
       const d = result?.diagnosis;
       if (!d) return null;

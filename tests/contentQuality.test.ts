@@ -191,9 +191,9 @@ describe("B — the chat asks the questions and saves the answers", () => {
     const { executeTool } = await import("@/lib/agents/masterBrainV2");
     tables.business_knowledge = [{ dealership_id: "d1", is_active: true, category: STORY_CATEGORY, title: "How it started", content: "My mother's shop shut in 2019 and I kept her pouring pot." }];
     const r = await executeTool(db(), ctx, "business_story", {}, "");
-    expect(r.answeredCount).toBe(1);
-    expect(r.remaining[0].key).toBe(STORY_QUESTIONS[1].key);
-    expect(r.note).toMatch(/ask the FIRST remaining question/i);
+    expect(r).toMatchObject({ complete: false, savedCount: 1, total: 10, saved: ["How it started"] });
+    expect(r.next.key).toBe(STORY_QUESTIONS[1].key);
+    expect(r.note).toMatch(/1 of 10 saved \(checked in the database\)\. Ask the question in `next`/);
   });
 
   it("save_business_story files the answer as Business Knowledge, so copy may state it", async () => {
@@ -211,11 +211,11 @@ describe("B — the chat asks the questions and saves the answers", () => {
     expect(extractArtifact("save_business_story", {}, r)).toMatchObject({ label: "Business story: What you refuse to do" });
   });
 
-  it("answering again replaces that answer instead of filing a second copy", async () => {
+  it("changing an answer on purpose replaces it instead of filing a second copy", async () => {
     const { executeTool } = await import("@/lib/agents/masterBrainV2");
     tables.business_knowledge = [];
     await executeTool(db(), ctx, "save_business_story", { key: "refuse", answer: "No paraffin, ever, whatever it costs me." }, "");
-    await executeTool(db(), ctx, "save_business_story", { key: "refuse", answer: "No paraffin and no synthetic dyes, whatever they cost." }, "");
+    await executeTool(db(), ctx, "save_business_story", { key: "refuse", answer: "No paraffin and no synthetic dyes, whatever they cost.", replace: true }, "");
     expect(tables.business_knowledge).toHaveLength(1);
     expect(tables.business_knowledge[0].content).toBe("No paraffin and no synthetic dyes, whatever they cost.");
   });
@@ -226,6 +226,81 @@ describe("B — the chat asks the questions and saves the answers", () => {
     expect((await executeTool(db(), ctx, "save_business_story", { key: "invented", answer: "Something long enough to pass." }, "")).error).toMatch(/No Business Story question/);
     expect((await executeTool(db(), ctx, "save_business_story", { key: "refuse", answer: "nope" }, "")).error).toMatch(/too short/);
     expect(tables.business_knowledge).toHaveLength(0);
+  });
+});
+
+// THE LIVE CASE (2026-09-19): candle_by_qaaf's intake was declared complete
+// with 8 of 10 saved. A save only said "ask the next open question", so what
+// was next — and whether anything was left — lived in the model's memory: it
+// asked a near-duplicate of the customer-words question, never asked "What
+// people get wrong", and the neighbour answer it had acknowledged was not in
+// the table. Every step now reports what the database holds.
+describe("B — the intake only ever goes on what's saved", () => {
+  const ctx: any = { id: "d1", name: "candle_by_qaaf", category: "Home fragrance" };
+  const EIGHT = ["origin", "first_customers", "how_made", "materials", "customer_words", "slow_part", "detail_noticed", "refuse"];
+  const eightSaved = () =>
+    EIGHT.map((key) => {
+      const q = STORY_QUESTIONS.find((x) => x.key === key)!;
+      return { dealership_id: "d1", is_active: true, category: STORY_CATEGORY, title: q.title, content: `Asha's own answer to ${q.title}.` };
+    });
+  const NEIGHBOUR = "Main bolti hoon ki main ghar se candles banati hoon, haath se, thoda hobby thi jo dheere-dheere kaam ban gayi.";
+
+  it("with 8 saved, it is not complete, and the next question is one of the two still open", async () => {
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = eightSaved();
+    const r = await executeTool(db(), ctx, "business_story", {}, "");
+    expect(r).toMatchObject({ complete: false, savedCount: 8, total: 10 });
+    expect(r.stillOpen.map((q: any) => q.key)).toEqual(["how_you_talk", "mistaken"]);
+    expect(r.next.key).toBe("how_you_talk");
+    expect(r.note).toMatch(/8 of 10 saved \(checked in the database\)/);
+    expect(r.note).not.toMatch(/All 10 answers/);
+  });
+
+  it("each save says, from the table, what's next — never an answered question", async () => {
+    const { executeTool, extractArtifact } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = eightSaved();
+    const r = await executeTool(db(), ctx, "save_business_story", { key: "how_you_talk", answer: NEIGHBOUR }, "");
+    expect(r).toMatchObject({ success: true, justSaved: "How you talk about the work", complete: false, savedCount: 9 });
+    // The chat card names the answer just saved — not the whole list.
+    expect(extractArtifact("save_business_story", {}, r)).toMatchObject({ label: "Business story: How you talk about the work" });
+    expect(r.next).toMatchObject({ key: "mistaken", ask: "What do people usually get wrong or misunderstand about what you sell?" });
+    expect(r.note).toMatch(/9 of 10 saved.*NOT complete.*Ask exactly the question in `next`/);
+  });
+
+  it("complete only when the tenth answer is actually in the table", async () => {
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = eightSaved();
+    await executeTool(db(), ctx, "save_business_story", { key: "how_you_talk", answer: NEIGHBOUR }, "");
+    const last = await executeTool(db(), ctx, "save_business_story", { key: "mistaken", answer: "Log sochte hain yeh sirf shauk hai — actually orders aate hain aur log paise dete hain." }, "");
+    expect(last).toMatchObject({ success: true, complete: true, savedCount: 10, next: null });
+    expect(last.note).toMatch(/All 10 answers are now saved.*complete/);
+  });
+
+  it("an answer filed under an already-answered question is refused, not written over it", async () => {
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = eightSaved();
+    const r = await executeTool(db(), ctx, "save_business_story", { key: "customer_words", answer: NEIGHBOUR }, "");
+    expect(r).toMatchObject({ stop: true, alreadySaved: "Asha's own answer to What a customer actually said." });
+    expect(r.error).toMatch(/already has a saved answer — this one was NOT saved/);
+    expect(tables.business_knowledge.find((k) => k.title === "What a customer actually said")!.content).toBe("Asha's own answer to What a customer actually said.");
+    expect(tables.business_knowledge).toHaveLength(8);
+  });
+
+  it("saving the same answer again isn't treated as a conflict", async () => {
+    const { executeTool } = await import("@/lib/agents/masterBrainV2");
+    tables.business_knowledge = eightSaved();
+    const r = await executeTool(db(), ctx, "save_business_story", { key: "refuse", answer: "asha's own answer to what you refuse to do." }, "");
+    expect(r.success).toBe(true);
+  });
+
+  it("the tools tell the chat to save in the same turn and never to call it complete on its own", async () => {
+    const { TOOLS } = await import("@/lib/agents/masterBrainV2");
+    const save = (TOOLS as any[]).find((t) => t.name === "save_business_story");
+    const story = (TOOLS as any[]).find((t) => t.name === "business_story");
+    expect(save.description).toMatch(/SAME turn the owner answers — never acknowledge an answer without saving it/);
+    expect(save.description).toMatch(/Only when it says complete: true is the story done/);
+    expect(story.description).toMatch(/never say the story is complete unless a tool result says complete: true/);
+    expect(save.input_schema.properties.replace.type).toBe("boolean");
   });
 });
 
