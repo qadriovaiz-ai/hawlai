@@ -8,7 +8,7 @@
 // diagnosis says the data is too thin, the advice must say so rather than
 // advise.
 
-import { logClaudeUsage } from "@/lib/usage/logUsage";
+import { callClaude, aiFailureMessage, isPlatformOutage, type AiFailure } from "@/lib/ai/claude";
 import { getModel } from "@/lib/models";
 import { formatFactsForCopy, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { diagnosisNumbers, formatDiagnosisForPrompt, type Diagnosis } from "./diagnosis";
@@ -94,12 +94,13 @@ const PROMPT_RULES = `RULES — this goes to a small business owner who will act
 - 2-4 recommendations. Plain language. No marketing jargon.`;
 
 /** Why advice couldn't be written — said to the owner in plain words, never a silent blank. */
-export type AdviceFailure = "busy" | "cut_off" | "unreadable" | "error";
+export type AdviceFailure = "busy" | "cut_off" | "unreadable" | "unavailable" | "error";
 
 export const ADVICE_FAILURE_MESSAGE: Record<AdviceFailure, string> = {
   busy: "The AI service was busy — try again in a minute. The numbers above are still accurate.",
   cut_off: "The advice ran too long and was cut off — try again. The numbers above are still accurate.",
   unreadable: "The AI's answer came back in a form Hawlai couldn't read — try again. The numbers above are still accurate.",
+  unavailable: `${aiFailureMessage("credits")} The numbers above are still accurate.`,
   error: "Couldn't write the advice right now. The numbers above are still accurate.",
 };
 
@@ -124,7 +125,11 @@ export function parseAdviceJson(text: string): Record<string, unknown> | null {
   return null;
 }
 
-const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504, 529]);
+/** The AI call itself failed: busy is worth another try; an outage or a bad request isn't. */
+function adviceFailure(failure: AiFailure): AdviceResult {
+  const reason: AdviceFailure = failure.retryable ? "busy" : isPlatformOutage(failure.kind) ? "unavailable" : "error";
+  return { ok: false, reason, detail: `the AI service answered ${failure.status ?? "nothing"} (${failure.kind})` };
+}
 
 /**
  * THE BUG (2026-09-18): for Candle by Qaaf — 28 visits, 5 leads, nobody
@@ -162,7 +167,7 @@ Return JSON only:
     last = await attemptAdvice(prompt, attempt > 0, d, logContext);
     if (last.ok) return last;
     // An error that another try won't fix isn't retried.
-    if (last.reason === "error") break;
+    if (last.reason === "error" || last.reason === "unavailable") break;
   }
   if (!last.ok) console.error(`[channel-advice] failed (${last.reason}): ${last.detail}`);
   return last;
@@ -175,27 +180,19 @@ async function attemptAdvice(
   logContext?: { supabase: any; dealershipId: string }
 ): Promise<AdviceResult> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 3000,
-        messages: [
-          { role: "user", content: isRetry ? `${prompt}\n\nYour last answer was cut off or wasn't valid JSON. Answer again, shorter, as one valid JSON object.` : prompt },
-          // Pre-filled, so the reply is the JSON object from its first character.
-          { role: "assistant", content: "{" },
-        ],
-      }),
-    });
-    if (!response.ok) {
-      const reason: AdviceFailure = RETRYABLE_STATUS.has(response.status) ? "busy" : "error";
-      return { ok: false, reason, detail: `the AI service answered ${response.status}` };
-    }
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return { ok: false, reason: "busy", detail: "empty reply" };
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "strategy_channel_advice", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 3000,
+      messages: [
+        { role: "user", content: isRetry ? `${prompt}\n\nYour last answer was cut off or wasn't valid JSON. Answer again, shorter, as one valid JSON object.` : prompt },
+        // Pre-filled, so the reply is the JSON object from its first character.
+        { role: "assistant", content: "{" },
+      ],
+      // One attempt here: generateChannelAdvice's own loop is the retry,
+      // and it also re-asks when an answer comes back cut off.
+    }, { operation: "strategy_channel_advice", logContext, attempts: 1 });
+    if (!r.ok) return adviceFailure(r.failure);
+    const data = r.data;
     const text = String(data.content?.[0]?.text ?? "");
     if (data.stop_reason === "max_tokens") return { ok: false, reason: "cut_off", detail: `reply cut off after ${data.usage?.output_tokens ?? "?"} tokens` };
     const parsed = parseAdviceJson(text);

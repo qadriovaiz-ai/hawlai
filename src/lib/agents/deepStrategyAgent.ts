@@ -9,9 +9,9 @@
 // being independent lookups.
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
 import type { OpusAccess } from "../plans";
 import { getModel } from "../models";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -85,27 +85,20 @@ export async function generateDeepStrategy(
     : "No brand profile set yet — give reasonable, honest defaults for this business category rather than inventing specifics.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        // Opus (Agency plan only) — SWOT, positioning, pricing strategy,
-        // and multi-persona analysis benefit from deeper reasoning than
-        // most of this app's Sonnet-tier work, and this is generated
-        // infrequently (once per strategy refresh), so the extra cost
-        // is worth it for a business-defining document on the tier
-        // that's priced for it. Basic/Pro get Sonnet — still strong on
-        // this task, at a fraction of the cost.
-        model,
-        max_tokens: 3000,
-        messages: [
-          {
-            role: "user",
-            content: `You are a senior marketing strategist doing a full strategic analysis for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
+    const r = await callClaude({
+      // Opus (Agency plan only) — SWOT, positioning, pricing strategy,
+      // and multi-persona analysis benefit from deeper reasoning than
+      // most of this app's Sonnet-tier work, and this is generated
+      // infrequently (once per strategy refresh), so the extra cost
+      // is worth it for a business-defining document on the tier
+      // that's priced for it. Basic/Pro get Sonnet — still strong on
+      // this task, at a fraction of the cost.
+      model,
+      max_tokens: 3000,
+      messages: [
+        {
+          role: "user",
+          content: `You are a senior marketing strategist doing a full strategic analysis for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
 ${brandContext}${groundingContext ?? ""}
 ${competitorContext ? `Known competitor activity: ${competitorContext}` : "No competitor data available — note this honestly rather than inventing specifics."}
 
@@ -125,20 +118,11 @@ Return JSON only, no markdown:
 "annualGrowthPlan":"3-4 sentences describing the year's overall trajectory and how quarters build on each other"
 }
 Be specific and honest — a small local business's SWOT should not read like a Fortune 500's. If data is thin, say so within the fields rather than inventing corporate-sounding fluff.`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      console.error("[deep-strategy-agent] Claude API not ok:", response.status, errBody.slice(0, 300));
-      return fallback;
-    }
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, model);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "marketing_strategy", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

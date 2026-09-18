@@ -12,10 +12,10 @@
 // came from" beside a Revenue card showing ₹0.
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { gatherBusinessNumbers, type BusinessNumbers } from "@/lib/reports/businessNumbers";
 import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 export interface GrowthReport {
   healthScore: number; // 0-100
@@ -62,20 +62,13 @@ export async function generateGrowthReport(
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 400,
-        messages: [
-          {
-            role: "user",
-            content: `You are an experienced growth advisor reviewing this Indian ${businessCategory} business's marketing health. The real numbers:
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 400,
+      messages: [
+        {
+          role: "user",
+          content: `You are an experienced growth advisor reviewing this Indian ${businessCategory} business's marketing health. The real numbers:
 ${describeNumbersForPrompt(n)}
 Onboarding complete: ${n.onboardingCompleted ? "yes" : "no"}
 
@@ -83,16 +76,11 @@ ${NARRATIVE_RULES}
 
 Return JSON only:
 {"healthScore":integer 0-100 (honest — a business with 0 leads or 0 live campaigns should score low),"headline":"one honest sentence summarizing where they stand","strengths":["1-2 honest positives, or empty array if none yet"],"risks":["1-3 real risks/gaps, most urgent first"],"nextActions":["1-3 concrete next actions, most impactful first, specific enough to act on today"]}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (data.usage) await logClaudeUsage(supabase, dealershipId, "growth_report", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "growth_report", logContext: { supabase, dealershipId } });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

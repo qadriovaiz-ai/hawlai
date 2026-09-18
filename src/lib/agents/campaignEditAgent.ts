@@ -13,9 +13,9 @@
 // arrived via chat instead of a form.
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { callClaude } from "@/lib/ai/claude";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -34,27 +34,18 @@ export async function matchCampaign(campaigns: CampaignSummary[], description: s
   if (campaigns.length === 1) return campaigns[0]; // only one campaign — no ambiguity
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 100,
-        messages: [
-          {
-            role: "user",
-            content: `A dealer said: "${description}"\nWhich campaign are they most likely referring to? Campaigns:\n${campaigns.map((c, i) => `${i}: "${c.headline}" (${c.car_type ?? "no model"}, ${c.targeting_city ?? "no city"}, ₹${c.daily_budget}/day, ${c.meta_status})`).join("\n")}\nReturn JSON only: {"index": number or null if none clearly match}`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "campaign_edit_match", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 100,
+      messages: [
+        {
+          role: "user",
+          content: `A dealer said: "${description}"\nWhich campaign are they most likely referring to? Campaigns:\n${campaigns.map((c, i) => `${i}: "${c.headline}" (${c.car_type ?? "no model"}, ${c.targeting_city ?? "no city"}, ₹${c.daily_budget}/day, ${c.meta_status})`).join("\n")}\nReturn JSON only: {"index": number or null if none clearly match}`,
+        },
+      ],
+    }, { operation: "campaign_edit_match", logContext });
+    if (!r.ok) return null;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
     if (parsed.index === null || parsed.index === undefined) return null;
@@ -73,31 +64,22 @@ export async function proposeTargetingChange(campaign: CampaignSummary, requestT
   estimated_impact: string;
 } | null> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `A dealer wants to change targeting on campaign "${campaign.headline}" (currently targeting ${campaign.targeting_city ?? "all of India"}, ₹${campaign.daily_budget}/day).
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: `A dealer wants to change targeting on campaign "${campaign.headline}" (currently targeting ${campaign.targeting_city ?? "all of India"}, ₹${campaign.daily_budget}/day).
 Their request: "${requestText}"
 
 Interpret this into a Meta Ads targeting change. Return JSON only:
 {"age_min":number (13-65),"age_max":number (13-65),"genders":[] for all genders, [1] for men only, [2] for women only, or [1,2] for both explicitly,"summary":"1 sentence describing exactly what will change","estimated_impact":"1 short honest sentence estimating the likely effect — be realistic, not always positive, e.g. could note a smaller narrower audience"}`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "campaign_edit_targeting", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "campaign_edit_targeting", logContext });
+    if (!r.ok) return null;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     return JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
   } catch (err: any) {
@@ -111,31 +93,22 @@ export async function proposeBudgetChange(campaign: CampaignSummary, requestText
   summary: string;
 } | null> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 150,
-        messages: [
-          {
-            role: "user",
-            content: `A dealer wants to change the daily budget on campaign "${campaign.headline}" (currently ₹${campaign.daily_budget}/day).
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 150,
+      messages: [
+        {
+          role: "user",
+          content: `A dealer wants to change the daily budget on campaign "${campaign.headline}" (currently ₹${campaign.daily_budget}/day).
 Their request: "${requestText}"
 
 Work out the new daily budget in rupees (e.g. "double it" -> current * 2, "add 500 to it" -> current + 500, "make it 3000" -> 3000). Return JSON only:
 {"new_budget":number (whole rupees, must be > 0),"summary":"1 sentence describing exactly what will change, e.g. 'Daily budget goes from ₹1000 to ₹2000'"}`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "campaign_edit_budget", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "campaign_edit_budget", logContext });
+    if (!r.ok) return null;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
     if (!parsed.new_budget || parsed.new_budget <= 0) return null;

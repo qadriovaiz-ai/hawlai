@@ -35,6 +35,8 @@ export interface BusinessIntelligenceResult {
   // states it explicitly.
   target_persona: { age_range?: string; income?: string; concerns?: string[]; gender?: "male" | "female" };
   messaging_pillars: string[];
+  /** Set when the AI call failed and these are the defaults. */
+  _aiFailure?: AiFailureNote;
   // A DRAFT structured profile inferred purely from the source text —
   // the onboarding flow overrides formality_level, hinglish_ok,
   // personality_traits and vocabulary_preferences.avoid with the
@@ -47,8 +49,8 @@ export interface BusinessIntelligenceResult {
 
 const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Car Dealership', 'Real Estate', 'Restaurant', 'Coaching Institute'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"],"gender":"ONLY include this field if the business description EXPLICITLY states a gendered customer base (e.g. 'women's ethnic wear', 'men's grooming') — value 'male' or 'female'. NEVER infer gender from the business category or type alone (e.g. do not guess a gender for a car dealership, restaurant, or clinic just because of what kind of business it is) — omit the field entirely in every other case."},"messaging_pillars":["3-4 key selling points or values"],"brand_voice_draft":{"personality_traits":["3-4 adjectives capturing this brand's personality"],"vocabulary_preferences":{"favor":["2-3 words/phrases this business would naturally use"],"avoid":["1-2 words/phrases that would feel off-brand, or empty array if nothing obvious"]},"sentence_rhythm":"one sentence describing how this brand should sound written — short and punchy vs. flowing and detailed","formality_level":"casual|conversational|professional|formal","hinglish_ok":true,"punctuation_emoji_style":{"emoji_usage":"none|minimal|expressive","exclamation_marks":"avoid|occasional|frequent"}}}`;
 
-import { logClaudeUsage } from "../usage/logUsage";
 import type { BrandVoiceProfile } from "./brandVoice";
+import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 const FALLBACK_BRAND_VOICE: BrandVoiceProfile = {
   personality_traits: [],
@@ -72,35 +74,23 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        // Routed by task identity rather than a hardcoded tier. Resolves
-        // to the same standard-tier model this used before — see
-        // aiTaskRouter.ts for why this one stays on Sonnet.
-        model: modelForTask("business_intelligence"),
-        // Was 600 — too tight once brand_voice_draft's nested fields ride
-        // alongside the original summary/persona/pillars in one payload.
-        max_tokens: 1100,
-        messages: [
-          {
-            role: "user",
-            content: `${sourceLabel}:\n"""\n${sourceText}\n"""\n\nBased only on what's actually there, draft a brand profile. Return JSON only:\n${RESPONSE_SCHEMA}\nIf something isn't clear from the source, make a reasonable, honest default rather than inventing specifics.`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "business_intelligence", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+    const r = await callClaude({
+      // Routed by task identity rather than a hardcoded tier. Resolves
+      // to the same standard-tier model this used before — see
+      // aiTaskRouter.ts for why this one stays on Sonnet.
+      model: modelForTask("business_intelligence"),
+      // Was 600 — too tight once brand_voice_draft's nested fields ride
+      // alongside the original summary/persona/pillars in one payload.
+      max_tokens: 1100,
+      messages: [
+        {
+          role: "user",
+          content: `${sourceLabel}:\n"""\n${sourceText}\n"""\n\nBased only on what's actually there, draft a brand profile. Return JSON only:\n${RESPONSE_SCHEMA}\nIf something isn't clear from the source, make a reasonable, honest default rather than inventing specifics.`,
+        },
+      ],
+    }, { operation: "business_intelligence", logContext });
+    if (!r.ok) return { ...fallback, _aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

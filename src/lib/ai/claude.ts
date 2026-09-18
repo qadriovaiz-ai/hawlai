@@ -81,6 +81,21 @@ export function aiFailureNote(failure: Pick<AiFailure, "kind">): AiFailureNote {
   return { kind: failure.kind, message: aiFailureMessage(failure.kind) };
 }
 
+/**
+ * A generator's fallback, marked with why the AI failed. A placeholder
+ * `output.text` / `output.message` is replaced with the approved words, so
+ * no page shows a template as if it had been written for the business.
+ */
+export function withAiFailure<T extends Record<string, any>>(fallback: T, failure: Pick<AiFailure, "kind">): T & { _aiFailure: AiFailureNote } {
+  const note = aiFailureNote(failure);
+  const out = fallback.output;
+  if (out && typeof out === "object" && !Array.isArray(out)) {
+    const key = typeof out.text === "string" ? "text" : typeof out.message === "string" ? "message" : null;
+    if (key) return { ...fallback, output: { ...out, [key]: note.message }, _aiFailure: note };
+  }
+  return { ...fallback, _aiFailure: note };
+}
+
 /** Whether the AI is down for everyone until someone acts — the two kinds the operator is alerted about. */
 export function isPlatformOutage(kind: AiFailureKind | null | undefined): boolean {
   return kind === "credits" || kind === "auth";

@@ -9,10 +9,10 @@
 // from — and the summary is checked against them (narrativeCheck.ts).
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { gatherBusinessNumbers, type BusinessNumbers } from "@/lib/reports/businessNumbers";
 import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 /** The report's numbers — one definition, shared with the health-score narrative. */
 export type ReportStats = BusinessNumbers;
 
@@ -34,35 +34,24 @@ async function summarizeWithClaude(stats: ReportStats, businessCategory: string,
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 500,
-        messages: [
-          {
-            role: "user",
-            content: `You are writing a short executive summary for a ${businessCategory} business owner. The real numbers from their dashboard:
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 500,
+      messages: [
+        {
+          role: "user",
+          content: `You are writing a short executive summary for a ${businessCategory} business owner. The real numbers from their dashboard:
 ${describeNumbersForPrompt(stats)}
 
 ${NARRATIVE_RULES}
 
 Write it like a sharp marketing manager briefing a busy founder — plain language, no jargon, no fluff. Return JSON only (no markdown):
 {"summary":"2-3 sentence overview of where things stand, in plain English","priorities":["1-3 short, specific, actionable next steps — only ones that matter given the data. Empty array if nothing needs attention."]}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "executive_report", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "executive_report", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
@@ -211,26 +200,14 @@ Performance so far: ${performance ? `₹${performance.spend} spent, ${performanc
 Write 3-4 plain-language sentences: what's working, what isn't, and one concrete next step. No jargon like CTR/CPM — describe things in terms a non-marketer understands (e.g. "getting plenty of clicks but few are becoming leads" instead of "low conversion rate"). Return plain text, no JSON, no markdown.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 300,
-        messages: [{ role: "user", content: promptContent }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "explain_campaign", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
-    return text.trim() || fallback;
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 300,
+      messages: [{ role: "user", content: promptContent }],
+    }, { operation: "explain_campaign", logContext });
+    // The fallback is the plain reading of the real numbers — true either way.
+    if (!r.ok) return fallback;
+    return r.text.trim() || fallback;
   } catch (err: any) {
     console.error("[reporting-agent] explainCampaign error:", err.message);
     return fallback;

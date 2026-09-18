@@ -11,8 +11,8 @@
 // ------------------------------------------------------------------
 
 import { getCampaignPerformanceState, CampaignPerformance } from "./analyticsAgent";
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, aiFailureNote, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface OptimizationRecommendation {
   campaign_id: string;
@@ -25,44 +25,35 @@ export interface OptimizationResult {
   hasEnoughData: boolean;
   recommendations: OptimizationRecommendation[];
   summary: string;
+  /** Set when the AI couldn't review the campaigns; `summary` then says why. */
+  _aiFailure?: AiFailureNote;
 }
 
-async function getRecommendations(campaigns: CampaignPerformance[], businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ recommendations: OptimizationRecommendation[]; summary: string }> {
+async function getRecommendations(campaigns: CampaignPerformance[], businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ recommendations: OptimizationRecommendation[]; summary: string; _aiFailure?: AiFailureNote }> {
   const fallback = {
     recommendations: [],
     summary: "Not enough spend/lead data yet to make confident recommendations.",
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 600,
-        messages: [
-          {
-            role: "user",
-            content: `You are a paid-ads optimization specialist reviewing campaigns for an Indian ${businessCategory} business.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 600,
+      messages: [
+        {
+          role: "user",
+          content: `You are a paid-ads optimization specialist reviewing campaigns for an Indian ${businessCategory} business.
 Campaign data: ${JSON.stringify(campaigns, null, 2)}
 
 For each campaign with meaningful spend or leads, recommend one action. Return JSON only:
 {"summary":"1-2 sentence overview of what's working and what isn't","recommendations":[{"campaign_id":"id from the data","headline":"headline from the data","action":"scale"|"pause"|"watch"|"fix_targeting","reason":"short, specific reason based on the actual numbers"}]}
 Only include campaigns where you have enough signal (spend > 0 or leads > 0) to say something meaningful. If none qualify, return empty recommendations array.`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "optimization_recommendations", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "optimization_recommendations", logContext });
+    // "Not enough data" would be untrue here — the data was there, the AI wasn't.
+    if (!r.ok) return { recommendations: [], summary: aiFailureMessage(r.failure.kind), _aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
@@ -114,6 +105,6 @@ export async function analyzeCampaigns(supabase: any, dealershipId: string): Pro
     };
   }
 
-  const { recommendations, summary } = await getRecommendations(performance.campaigns, businessCategory, { supabase, dealershipId });
-  return { hasEnoughData: true, recommendations, summary };
+  const { recommendations, summary, _aiFailure } = await getRecommendations(performance.campaigns, businessCategory, { supabase, dealershipId });
+  return { hasEnoughData: true, recommendations, summary, ...(_aiFailure ? { _aiFailure } : {}) };
 }

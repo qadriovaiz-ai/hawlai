@@ -38,10 +38,10 @@ export const AD_TASKS: AdTaskMeta[] = [
   { key: "conversion_tracking", label: "Conversion Tracking", instructions: (p) => `A step-by-step guide to setting up conversion tracking (key events) on ${p} for this business type: return {steps: [{step, detail}], suggestedEvents: []} — suggestedEvents relevant to this business (e.g. lead form submit, contact click, purchase).` },
 ];
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "../claims/businessFacts";
 import { guardGenerated } from "../claims/claimCheck";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 // Tasks whose output is copy a customer will read. Only these are
 // claims-checked; the rest are advice to the owner, where a sentence about
@@ -74,15 +74,12 @@ export async function generateAdPlan(
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1800,
-        messages: [{
-          role: "user",
-          content: `You are a paid advertising strategist helping an Indian ${businessCategory} business called "${dealershipName}" plan for ${platform.label}. This platform isn't connected to any ad account yet — this is planning content the dealer will use manually or hand to whoever sets up the account.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1800,
+      messages: [{
+        role: "user",
+        content: `You are a paid advertising strategist helping an Indian ${businessCategory} business called "${dealershipName}" plan for ${platform.label}. This platform isn't connected to any ad account yet — this is planning content the dealer will use manually or hand to whoever sets up the account.
 ${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 ${performanceContext ? `\nReal performance from campaigns already run (use this to ground budget/targeting advice in what's actually working, not generic guesses):\n${performanceContext}` : ""}
 
@@ -90,15 +87,10 @@ Task: ${task.label}
 Requirements: ${task.instructions(platform.label)}
 
 Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above exactly. Be accurate to how ${platform.label} actually works (real format names, real limits) — never invent platform features that don't exist, and never invent fake performance statistics.`,
-        }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "paid_ads_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "paid_ads_plan", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

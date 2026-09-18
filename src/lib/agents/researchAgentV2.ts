@@ -27,38 +27,39 @@ export const RESEARCH_TASKS: ResearchTaskMeta[] = [
   { key: "customer_sentiment", label: "Customer Sentiment", usesWebSearch: false },
 ];
 
-import { logClaudeUsage, logPerplexityUsage } from "../usage/logUsage";
+import { logPerplexityUsage } from "../usage/logUsage";
+import { callClaude, withAiFailure, type AiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
 
-async function callClaude(body: any, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
+/** The parsed JSON, or null — with the reason when the AI itself failed. */
+type Researched = { parsed: any | null; failure?: AiFailure };
+
+async function askClaude(body: any, logContext?: { supabase: any; dealershipId: string }): Promise<Researched> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) return null;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return null;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) {
-      const inputTokens = data.usage.input_tokens ?? 0;
-      const outputTokens = data.usage.output_tokens ?? 0;
-      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "research", inputTokens, outputTokens, body.model);
+    const r = await callClaude(body, { operation: "research", logContext });
+    if (!r.ok) return { parsed: null, failure: r.failure };
+    const usage = r.data.usage;
+    if (logContext && usage) {
       // Research Credits (Section 7) — real cost from what this call
       // actually used, converted through the one tunable credit rate.
-      await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(inputTokens, outputTokens, body.model));
+      await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(usage.input_tokens ?? 0, usage.output_tokens ?? 0, body.model));
     }
-    const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+    // Web-search replies interleave text blocks with search results.
+    const text = (r.data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return null;
-    return JSON.parse(clean);
+    if (!clean) return { parsed: null };
+    return { parsed: JSON.parse(clean) };
   } catch (err: any) {
     console.error("[research-agent] error:", err.message);
-    return null;
+    return { parsed: null };
   }
+}
+
+function researchResult(r: Researched, fallback: { output: any; _fallback: boolean }) {
+  if (r.parsed) return { output: r.parsed };
+  return r.failure ? withAiFailure(fallback, r.failure) : fallback;
 }
 
 // Perplexity path — only ever reached when researchRouter.ts's
@@ -103,7 +104,7 @@ export async function generateResearch(
   // that hasn't been updated to pass the real plan gets today's exact
   // behavior, not an accidental Free-tier downgrade.
   plan: PlanKey = "pro"
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const location = city ? ` in ${city}, India` : " in India";
   const fallback = { output: { text: "Couldn't complete this research right now — try again shortly." }, _fallback: true };
   const grounding = groundingContext ?? "";
@@ -126,8 +127,8 @@ export async function generateResearch(
   // path is logged server-side, and the answer returned is a real
   // researched answer from the substitute provider, not a degraded
   // placeholder.
-  const runResearch = async (prompt: string): Promise<any | null> => {
-    const claudeCall = () => callClaude(
+  const runResearch = async (prompt: string): Promise<Researched> => {
+    const claudeCall = () => askClaude(
       { model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] },
       logContext
     );
@@ -138,25 +139,25 @@ export async function generateResearch(
       prompt,
       logContext
     );
-    if (viaPerplexity) return viaPerplexity;
+    if (viaPerplexity) return { parsed: viaPerplexity };
 
     console.warn(`[research-agent] ${routing.provider} failed for "${taskKey}" — falling back to Claude web search.`);
     return claudeCall();
   };
 
   if (taskKey === "industry_trends") {
-    const parsed = await runResearch(`Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`);
-    return parsed ? { output: parsed } : fallback;
+    const researched = await runResearch(`Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`);
+    return researchResult(researched, fallback);
   }
 
   if (taskKey === "market_research") {
-    const parsed = await runResearch(`Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`);
-    return parsed ? { output: parsed } : fallback;
+    const researched = await runResearch(`Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`);
+    return researchResult(researched, fallback);
   }
 
   if (taskKey === "new_opportunities") {
-    const parsed = await runResearch(`Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`);
-    return parsed ? { output: parsed } : fallback;
+    const researched = await runResearch(`Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`);
+    return researchResult(researched, fallback);
   }
 
   return fallback;
@@ -170,14 +171,14 @@ export async function generateSentimentFromLeads(
   leadSignals: { qualificationReason: string | null; temperature: string; status: string }[],
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const fallback = { output: { text: "Not enough lead data yet to analyze sentiment — this improves as more leads come in with qualification notes." }, _fallback: true };
   const withReasons = leadSignals.filter((l) => l.qualificationReason);
   if (withReasons.length < 3) return fallback;
 
   const summaryInput = withReasons.slice(0, 100).map((l) => `[${l.temperature}/${l.status}] ${l.qualificationReason}`).join("\n");
 
-  const parsed = await callClaude({
+  const researched = await askClaude({
     model: getModel("standard"),
     max_tokens: 1500,
     messages: [{
@@ -189,5 +190,5 @@ ${summaryInput}
 Identify recurring themes — common interests, hesitations, price sensitivity, what makes leads "hot" vs "cold". Return JSON only: {"positiveThemes": [], "concernsOrObjections": [], "summary": "2-3 sentence overall read"}. Base this ONLY on what's actually in the notes above — don't invent sentiment that isn't reflected in the data.${groundingContext ?? ""}`,
     }],
   }, logContext);
-  return parsed ? { output: parsed } : fallback;
+  return researchResult(researched, fallback);
 }

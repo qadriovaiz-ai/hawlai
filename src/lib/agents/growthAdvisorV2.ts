@@ -8,8 +8,8 @@
 // of the AI) so the numbers are real arithmetic on real historical
 // data, with the AI only adding a narrative interpretation on top.
 
-import { logClaudeUsage } from "../usage/logUsage";
-import { getModel, CLAUDE_MODELS } from "../models";
+import { getModel } from "../models";
+import { callClaude, withAiFailure, type AiFailure } from "@/lib/ai/claude";
 
 interface RevenueForecast {
   weeklyLeadCounts: number[]; // last 8 weeks, oldest first
@@ -105,10 +105,7 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
   let narrative = "Not enough historical data yet to forecast confidently — this improves as more leads and conversions come in.";
   if (forecast30Days) {
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({
+      const r = await callClaude({
           // Opus — this narrative interprets real financial forecast
           // math for the business owner; a bad read on their own
           // revenue trend is a bigger cost than the extra tokens.
@@ -118,13 +115,10 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
             role: "user",
             content: `${dealershipName}, a ${businessCategory} business, has this REAL data: weekly lead counts over the last 8 weeks: [${weeklyLeadCounts.join(", ")}]. A linear trend fit on this data shows the business is ${trendDirection}. Conversion rate: ${(conversionRate! * 100).toFixed(1)}%. Average deal value: ₹${avgDealValue}. Trend-projected 30-day revenue forecast range: ₹${forecast30Days.low} to ₹${forecast30Days.high} (mid ₹${forecast30Days.mid}).${groundingContext ?? ""}\n\nWrite a 2-3 sentence plain-English interpretation of this trend and forecast — reference the ${trendDirection} direction explicitly, what it means for the forecast, and any caveat worth noting (e.g. small sample size if lead volume is low). Return JSON only: {"narrative": "..."}`,
           }],
-        }),
-      });
-      if (response.ok) {
-        const bodyText = await response.text();
-        const data = JSON.parse(bodyText);
-        if (data.usage) await logClaudeUsage(supabase, dealershipId, "growth_advisor", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.premium);
-        const text = data.content?.[0]?.text ?? "";
+      }, { operation: "growth_advisor", logContext: { supabase, dealershipId } });
+      // On failure the honest "not enough to forecast" line stays.
+      if (r.ok) {
+        const text = r.text;
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
         if (clean) narrative = JSON.parse(clean).narrative ?? narrative;
@@ -137,45 +131,44 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
   return { weeklyLeadCounts, conversionRate, avgDealValue, trendDirection, forecast30Days, narrative };
 }
 
-async function callClaude(prompt: string, maxTokens = 1500): Promise<any | null> {
+/** The parsed JSON, or null — with the reason when the AI itself failed. */
+async function askClaude(prompt: string, maxTokens = 1500): Promise<{ parsed: any | null; failure?: AiFailure }> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      // Opus — shared by generateGrowthOpportunities, generateBudgetRecommendations,
+    // Opus — shared by generateGrowthOpportunities, generateBudgetRecommendations,
     // generateExpansionStrategy: high-stakes strategic/financial reasoning, called
     // infrequently, same justification as the forecast narrative above.
-    body: JSON.stringify({ model: getModel("premium"), max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
-    });
-    if (!response.ok) return null;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return null;
-    const data = JSON.parse(bodyText);
-    const text = data.content?.[0]?.text ?? "";
+    const r = await callClaude({ model: getModel("premium"), max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }, { operation: "growth_advisor" });
+    if (!r.ok) return { parsed: null, failure: r.failure };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return null;
-    return JSON.parse(clean);
+    if (!clean) return { parsed: null };
+    return { parsed: JSON.parse(clean) };
   } catch (err: any) {
     console.error("[growth-advisor-v2] error:", err.message);
-    return null;
+    return { parsed: null };
   }
+}
+
+function adviceResult(r: { parsed: any | null; failure?: AiFailure }, fallback: { output: any; _fallback: boolean }) {
+  if (r.parsed) return { output: r.parsed };
+  return r.failure ? withAiFailure(fallback, r.failure) : fallback;
 }
 
 export async function generateGrowthOpportunities(dealershipName: string, businessCategory: string, dataContext: string, groundingContext?: string) {
   const fallback = { output: { text: "Not enough data yet to identify specific opportunities." }, _fallback: true };
-  const parsed = await callClaude(`You are a growth advisor for "${dealershipName}", a ${businessCategory} business in India. Here's their real current data:\n${dataContext}${groundingContext ?? ""}\n\nBased ONLY on this real data (not general market advice), identify 3-5 specific growth opportunities — gaps in their own funnel, underused channels, patterns in what's converting vs not. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "grounded in the data above"}]}`);
-  return parsed ? { output: parsed } : fallback;
+  const asked = await askClaude(`You are a growth advisor for "${dealershipName}", a ${businessCategory} business in India. Here's their real current data:\n${dataContext}${groundingContext ?? ""}\n\nBased ONLY on this real data (not general market advice), identify 3-5 specific growth opportunities — gaps in their own funnel, underused channels, patterns in what's converting vs not. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "grounded in the data above"}]}`);
+  return adviceResult(asked, fallback);
 }
 
 export async function generateBudgetRecommendations(dealershipName: string, businessCategory: string, campaignContext: string, groundingContext?: string) {
   const fallback = { output: { text: "No campaign spend data yet to base budget recommendations on." }, _fallback: true };
-  const parsed = await callClaude(`You are a media buyer advising "${dealershipName}", a ${businessCategory} business. Here's their REAL campaign performance data:\n${campaignContext}${groundingContext ?? ""}\n\nRecommend how to reallocate their marketing budget based on what's actually performing — which campaigns to scale, which to cut or fix, and why, using the real spend/leads/revenue numbers above. Return JSON only: {"recommendations": [{"campaign": "...", "action": "scale up | maintain | pause | fix", "reasoning": "..."}], "overallGuidance": "1-2 sentences"}`);
-  return parsed ? { output: parsed } : fallback;
+  const asked = await askClaude(`You are a media buyer advising "${dealershipName}", a ${businessCategory} business. Here's their REAL campaign performance data:\n${campaignContext}${groundingContext ?? ""}\n\nRecommend how to reallocate their marketing budget based on what's actually performing — which campaigns to scale, which to cut or fix, and why, using the real spend/leads/revenue numbers above. Return JSON only: {"recommendations": [{"campaign": "...", "action": "scale up | maintain | pause | fix", "reasoning": "..."}], "overallGuidance": "1-2 sentences"}`);
+  return adviceResult(asked, fallback);
 }
 
 export async function generateExpansionStrategy(dealershipName: string, businessCategory: string, city: string | null, healthScore: number, dataContext: string, groundingContext?: string) {
   const fallback = { output: { text: "Focus on stabilizing current operations before considering expansion." }, _fallback: true };
-  const parsed = await callClaude(`You are a growth strategist advising "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""} with a current health score of ${healthScore}/100. Real current data:\n${dataContext}${groundingContext ?? ""}\n\nGiven this business's actual current state (not hypothetical), give honest advice on expansion readiness — should they expand now (new location/service line/hours) or focus on strengthening the core first, and what would need to be true before expanding. Return JSON only: {"readiness": "not yet | cautiously | ready", "reasoning": "...", "considerations": ["3-4 concrete things to evaluate before expanding"]}`);
-  return parsed ? { output: parsed } : fallback;
+  const asked = await askClaude(`You are a growth strategist advising "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""} with a current health score of ${healthScore}/100. Real current data:\n${dataContext}${groundingContext ?? ""}\n\nGiven this business's actual current state (not hypothetical), give honest advice on expansion readiness — should they expand now (new location/service line/hours) or focus on strengthening the core first, and what would need to be true before expanding. Return JSON only: {"readiness": "not yet | cautiously | ready", "reasoning": "...", "considerations": ["3-4 concrete things to evaluate before expanding"]}`);
+  return adviceResult(asked, fallback);
 }

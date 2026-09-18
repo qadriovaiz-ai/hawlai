@@ -9,11 +9,11 @@
 // and immediately usable by hand.
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
-import { getModel, CLAUDE_MODELS } from "../models";
+import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "../claims/businessFacts";
 import { guardGenerated } from "../claims/claimCheck";
 import { businessDisplayName } from "../business/displayName";
+import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 // THE BUG (2026-09-18): the abandoned-cart prompt told the model to
 // "assume a small discount or free shipping might be offered — mention it
@@ -31,6 +31,8 @@ export interface RetargetingCopy {
   variant2PrimaryText: string;
   /** What the claims check removed or wants checked — shown on the result. */
   _claimsNote?: string;
+  /** Set when the AI call failed and these are the fallback lines. */
+  _aiFailure?: AiFailureNote;
 }
 
 const SEGMENT_PROMPTS: Record<string, (ctx: string) => string> = {
@@ -82,37 +84,25 @@ export async function generateRetargetingCopy(
 
   try {
     const promptBuilder = SEGMENT_PROMPTS[segmentType] ?? SEGMENT_PROMPTS.cold_lead;
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 600,
-        messages: [
-          {
-            role: "user",
-            content: `${promptBuilder(segmentContext)}${groundingContext ?? ""}
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 600,
+      messages: [
+        {
+          role: "user",
+          content: `${promptBuilder(segmentContext)}${groundingContext ?? ""}
 
 Business: ${name} (${category})${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 
 Respond ONLY with JSON, no markdown fences:
 {"headline": "...", "primaryText": "...", "cta": "...", "variant2Headline": "...", "variant2PrimaryText": "..."}`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    const text = data.content?.[0]?.text ?? "";
-    const cleaned = text.replace(/```json|```/g, "").trim();
+        },
+      ],
+    }, { operation: "retargeting_copy", logContext });
+    // The honest per-segment lines, marked — so no one launches them believing the AI wrote them.
+    if (!r.ok) return { ...fallback, _aiFailure: aiFailureNote(r.failure) };
+    const cleaned = r.text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
-
-    if (logContext) {
-      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "retargeting_copy", data.usage?.input_tokens ?? 0, data.usage?.output_tokens ?? 0, CLAUDE_MODELS.standard);
-    }
 
     const copy: RetargetingCopy = {
       headline: parsed.headline ?? fallback.headline,

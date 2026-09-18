@@ -16,8 +16,8 @@
 //   taskExecutors.ts together as more become real.
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude } from "@/lib/ai/claude";
 
 export interface GoalPlanTask {
   type: "human" | "agent";
@@ -47,20 +47,13 @@ export async function decomposeGoal(
   logContext?: { supabase: any; dealershipId: string }
 ): Promise<GoalPlan | null> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1200,
-        messages: [
-          {
-            role: "user",
-            content: `A business owner at "${businessName}" (a ${businessCategory} business in India) stated this goal: "${goalText}"
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1200,
+      messages: [
+        {
+          role: "user",
+          content: `A business owner at "${businessName}" (a ${businessCategory} business in India) stated this goal: "${goalText}"
 
 Break this into a real, concrete plan. Return JSON only:
 {
@@ -80,13 +73,11 @@ Rules:
 - "human" tasks are for work only a person can do (calls, in-person work, judgment calls) — role MUST be exactly one of the available roles listed above. If none are available, propose zero human tasks.
 - "agent" tasks are ONLY for generating a piece of content (contentType MUST be exactly one of the values listed above) — this is the only thing the AI can execute automatically today. Don't propose an agent task for anything else.
 - Prefer agent tasks when the work is genuinely just content generation — don't force a human task just because a role happens to exist.`,
-          },
-        ],
-      }),
-    });
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "goal_decomposition", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "goal_decomposition", logContext });
+    if (!r.ok) return null;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
     // Defensive filter — never trust the model to have followed the

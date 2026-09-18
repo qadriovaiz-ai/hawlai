@@ -25,8 +25,8 @@ export interface MarketingPlan {
   estimated_leads: number | null;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 export async function generateMarketingStrategy(
   dealershipName: string,
@@ -78,20 +78,13 @@ export async function generateMarketingStrategy(
     : `\nThis dealer has no historical campaign performance data yet — base estimated_leads (if you give one) on general best-practice cost-per-lead ranges for Indian ${businessCategory} businesses, and say so plainly rather than presenting it as a confident number. Return null for estimated_leads if you can't honestly estimate it.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1600,
-        messages: [
-          {
-            role: "user",
-            content: `You are a marketing strategist creating a monthly plan for an Indian ${businessCategory} business.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1600,
+      messages: [
+        {
+          role: "user",
+          content: `You are a marketing strategist creating a monthly plan for an Indian ${businessCategory} business.
 Business: ${dealershipName}${city ? `, ${city}` : ""}
 Monthly budget: ₹${monthlyBudget}
 Goal: ${goal}${goalContext}
@@ -104,16 +97,11 @@ Return JSON only:
 {"overview":"2-3 sentence strategic summary","budget_allocation":[{"channel":"channel name","percent":number,"reason":"short reason"}],"funnel_focus":"1 sentence on where the funnel needs the most attention this month","monthly_themes":[{"week":"Week 1","focus":"theme for the week","action":"specific action to take"}],"recommended_offers":["2-3 offer ideas that fit the budget and goal"],"estimated_leads":"integer, your honest estimate of total leads this budget should generate this month, or null if you genuinely can't estimate it responsibly"}
 budget_allocation percents must sum to 100. Give exactly 4 weekly themes.
 ${grounding ?? ""}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "marketing_strategy", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "marketing_strategy", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

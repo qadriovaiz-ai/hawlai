@@ -6,13 +6,14 @@
 // data. New Product Alerts is a separate real monitoring system, see
 // lib/automation/competitorMonitor.ts.
 
-import { logClaudeUsage, logPerplexityUsage } from "../usage/logUsage";
+import { logPerplexityUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import type { PlanKey } from "../plans";
 import { classifyResearch } from "../research/researchRouter";
 import { callComplexResearch } from "../research/perplexityClient";
 import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
+import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface CompetitorTaskMeta {
   key: string;
@@ -54,7 +55,7 @@ export async function generateCompetitorIntel(
   // requireFeature(..., "competitorIntel") at the route level, so
   // Free never reaches here regardless.
   plan: PlanKey = "pro"
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = COMPETITOR_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -103,28 +104,18 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 2500,
-        messages: [{ role: "user", content: prompt }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) {
-      const inputTokens = data.usage.input_tokens ?? 0;
-      const outputTokens = data.usage.output_tokens ?? 0;
-      await logClaudeUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", inputTokens, outputTokens);
-      // Research Credits (Section 7) — real cost from this call.
-      await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(inputTokens, outputTokens));
-    }
-    const text = (data.content ?? [])
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2500,
+      messages: [{ role: "user", content: prompt }],
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+    }, { operation: "competitor_intel", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const usage = r.data.usage;
+    // Research Credits (Section 7) — real cost from this call.
+    if (logContext && usage) await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(usage.input_tokens ?? 0, usage.output_tokens ?? 0));
+    // Web-search replies interleave text blocks with search results.
+    const text = (r.data.content ?? [])
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)
       .join("\n");
