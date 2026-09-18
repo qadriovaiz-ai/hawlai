@@ -7,13 +7,12 @@
 // Every `route` is cross-checked against DEPARTMENT_HREF in masterBrainV2.ts
 // (the map the app already uses for "open in department" links from chat
 // results) so this doesn't become a second, independently-drifting source of
-// truth. Two exceptions, deliberately: `research_market` and
-// `get_customer_sentiment` point at /dashboard/research-agent here, not at
-// DEPARTMENT_HREF's /dashboard/research and /dashboard/insights — those two
-// are confirmed-wrong deep-links (the real UI lives at /dashboard/research-agent,
-// which itself isn't linked from anywhere else in the app). Worth fixing in
-// masterBrainV2.ts too as a follow-up; not done here since that's a separate,
-// already-shipped file this task didn't touch.
+// truth. One exception, deliberately: `get_customer_sentiment` points at
+// /dashboard/research-agent here, not at DEPARTMENT_HREF's
+// /dashboard/insights — a confirmed-wrong deep-link still to fix there.
+// (`research_market` was the other; DEPARTMENT_HREF now points it at
+// /dashboard/research-agent too, since /dashboard/research became the
+// competitor comparison on 2026-09-19.)
 //
 // 41 entries have a real `id` matching a tool name in masterBrainV2.ts's
 // TOOLS array (manage_watch appears as two catalog entries — competitor vs

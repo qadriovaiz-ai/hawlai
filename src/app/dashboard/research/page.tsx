@@ -1,114 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { Search, AlertCircle, Building2, Clock } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+// Competitor research: what competitors say about themselves in public,
+// and the ground this business can own — the same comparison as the
+// Strategy page (components/strategy/PositioningPanel).
+//
+// WHY (2026-09-19): this page searched Meta's Ad Library API, which returns
+// only political/issue ads outside the EU. For an Indian business every
+// search answered "Application does not have permission for this action".
 
-const EXAMPLES = ["competitor name + city", "industry offers near me", "top brands in your category"];
+import Link from "next/link";
+import { Swords, ArrowRight } from "lucide-react";
+import PositioningPanel from "@/components/strategy/PositioningPanel";
 
 export default function ResearchPage() {
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [ads, setAds] = useState<any[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
-
-  async function handleSearch(q?: string) {
-    const term = q ?? query;
-    if (term.trim().length < 2) return setError("Type at least 2 characters");
-    setQuery(term);
-    setError(null);
-    setLoading(true);
-    setSearched(true);
-    try {
-      const res = await fetch(`/api/research/competitor-ads?q=${encodeURIComponent(term)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setAds(data.ads);
-    } catch (err: any) {
-      setError(err.message);
-      setAds(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
-          <Search className="w-5 h-5 text-purple-400" />
+          <Swords className="w-5 h-5 text-purple-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Research</h1>
-          <p className="text-sm text-slate-500">See what other dealerships are currently advertising on Meta</p>
+          <h1 className="text-xl font-bold text-slate-900">Competitor research</h1>
+          <p className="text-sm text-slate-500">What your competitors say about themselves, and where you can say something they don't</p>
         </div>
       </div>
 
-      <div className="card p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="e.g. a competitor's name and city"
-            className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-          <Button onClick={() => handleSearch()} disabled={loading} loading={loading}>
-            {!loading && <Search className="w-4 h-4" />}
-            Search
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {EXAMPLES.map((ex) => (
-            <button
-              key={ex}
-              onClick={() => handleSearch(ex)}
-              className="text-xs text-slate-500 hover:text-purple-400 bg-slate-50 hover:bg-purple-500/10 px-2.5 py-1 rounded-full transition-colors"
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PositioningPanel />
 
-      {error && (
-        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-700/40 rounded-lg p-3">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {searched && !loading && !error && ads && ads.length === 0 && (
-        <div className="card p-8 text-center">
-          <p className="text-slate-500 text-sm">No active ads found for "{query}"</p>
-        </div>
-      )}
-
-      {ads && ads.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-500">{ads.length} ad{ads.length > 1 ? "s" : ""} found</p>
-          {ads.map((ad, i) => (
-            <div key={i} className="card p-4 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-                  <Building2 className="w-3.5 h-3.5 text-slate-400" /> {ad.page_name}
-                </div>
-                <span className={`badge ${ad.is_active ? "bg-green-500/10 text-green-300 border border-green-700/50" : "bg-slate-200 text-slate-500 border border-slate-300"}`}>
-                  {ad.is_active ? "Active" : "Ended"}
-                </span>
-              </div>
-              {ad.title && <p className="text-sm font-medium text-slate-700">{ad.title}</p>}
-              {ad.body && <p className="text-sm text-slate-500">{ad.body}</p>}
-              {ad.started_running && (
-                <p className="text-xs text-slate-400 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Running since {new Date(ad.started_running).toLocaleDateString("en-IN")}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <Link href="/dashboard/competitor-intel" className="card p-4 flex items-center justify-between hover:border-brand-400 transition-colors">
+        <span className="text-sm text-slate-700">Watch a competitor, or dig into one — pricing, social, SEO, content gaps</span>
+        <ArrowRight className="w-4 h-4 text-slate-400" />
+      </Link>
     </div>
   );
 }

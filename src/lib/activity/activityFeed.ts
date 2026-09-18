@@ -76,7 +76,7 @@ const SUBSYSTEM_LABELS: Record<string, { title: string; kind: ActivityItem["kind
   report_snapshots: { title: "Updated performance reports", kind: "campaign", href: "/dashboard/analytics" },
   seasonal_calendar: { title: "Updated the seasonal calendar", kind: "content", href: "/dashboard/calendar" },
   stale_approvals: { title: "Checked for approvals waiting too long", kind: "approval", href: "/dashboard/approvals" },
-  topic_alerts: { title: "Checked topics you're watching", kind: "research", href: "/dashboard/research" },
+  topic_alerts: { title: "Checked topics you're watching", kind: "research", href: "/dashboard/research-agent" },
   workflows: { title: "Ran automation workflows", kind: "work", href: "/dashboard/marketing-automation" },
 };
 

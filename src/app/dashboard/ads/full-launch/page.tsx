@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, Search, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil, FlaskConical, RotateCcw } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, CheckCircle, ImagePlus, CalendarClock, ArrowLeft, Sparkles, Users, IndianRupee, MapPin, PartyPopper, Check, Store, Pencil, FlaskConical, RotateCcw } from "lucide-react";
 import ProductPicker from "@/components/ads/ProductPicker";
 import PhotoEditor from "@/components/ads/PhotoEditor";
 import ScoreBadge from "@/components/shared/ScoreBadge";
 import { Button } from "@/components/ui";
 import { buttonClasses } from "@/components/ui/buttonClasses";
+import CompetitorSnapshot from "@/components/strategy/CompetitorSnapshot";
 
 const EXAMPLES = [
   "Swift wanted, Lucknow, budget up to 8 lakh, daily spend 500",
@@ -82,28 +83,6 @@ function FullLaunchForm() {
   }, [minRadiusKm, radiusKm]);
 
   const [executionStepIndex, setExecutionStepIndex] = useState(0);
-
-  const [competitorLoading, setCompetitorLoading] = useState(false);
-  const [competitorAds, setCompetitorAds] = useState<any[]>([]);
-  const [competitorError, setCompetitorError] = useState<string | null>(null);
-  const [competitorSearched, setCompetitorSearched] = useState(false);
-
-  async function handleCheckCompetitors() {
-    setCompetitorLoading(true);
-    setCompetitorSearched(true);
-    setCompetitorError(null);
-    try {
-      const res = await fetch(`/api/research/competitor-ads?q=${encodeURIComponent(prompt)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't check competitors right now");
-      setCompetitorAds(data.ads ?? []);
-    } catch (err: any) {
-      setCompetitorError(err.message);
-      setCompetitorAds([]);
-    } finally {
-      setCompetitorLoading(false);
-    }
-  }
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -335,34 +314,8 @@ function FullLaunchForm() {
             ))}
           </div>
 
-          <Button
-            onClick={handleCheckCompetitors}
-            disabled={prompt.trim().length < 3}
-            loading={competitorLoading}
-            variant="secondary"
-            size="sm"
-            className="w-full justify-center"
-          >
-            {!competitorLoading && <Search className="w-3.5 h-3.5" />}
-            Check what competitors are running for this
-          </Button>
-
-          {competitorSearched && !competitorLoading && (
-            <div className="space-y-2 pt-1">
-              {competitorError ? (
-                <p className="text-xs text-slate-400">{competitorError}</p>
-              ) : competitorAds.length === 0 ? (
-                <p className="text-xs text-slate-400">No active competitor ads found for this.</p>
-              ) : (
-                competitorAds.slice(0, 3).map((ad, i) => (
-                  <div key={i} className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-                    <p className="text-xs font-semibold text-slate-700">{ad.page_name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{ad.body ?? ad.title ?? "—"}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+          {/* What competitors say, from the latest comparison — runs no searches here. */}
+          <CompetitorSnapshot />
         </div>
 
         <div className="bg-slate-100 rounded-xl border border-slate-200 p-5 space-y-3">

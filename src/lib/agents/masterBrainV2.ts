@@ -2545,7 +2545,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   generate_ad_plan: "/dashboard/paid-ads",
   generate_video_task: "/dashboard/video-marketing",
   research_competitor: "/dashboard/competitor-intel",
-  research_market: "/dashboard/research",
+  research_market: "/dashboard/research-agent",
   generate_cro_suggestions: "/dashboard/cro",
   get_growth_advice: "/dashboard/growth-advisor",
   generate_influencer_outreach: "/dashboard/influencer-marketing",

@@ -50,7 +50,7 @@ export default function CompetitorIntelView() {
   return (
     <div className="space-y-5">
       <Link href="/dashboard/research" className="card p-4 flex items-center justify-between hover:border-brand-400 transition-colors">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Search className="w-4 h-4 text-brand-400" /> Competitor Ads — see what they're running on Meta</span>
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Search className="w-4 h-4 text-brand-400" /> Competitor research — what they say about themselves, and where you can stand out</span>
         <ArrowRight className="w-4 h-4 text-slate-400" />
       </Link>
 
