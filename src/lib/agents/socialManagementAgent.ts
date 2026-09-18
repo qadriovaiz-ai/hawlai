@@ -7,9 +7,9 @@
 // are actually current instead of guessed from training data).
 
 import { formatDuration } from "../catalog/catalogItem";
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { modelForTask } from "../aiTaskRouter";
+import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface SocialTaskMeta {
   key: string;
@@ -87,34 +87,28 @@ export async function generateAutoReply(
     : `This is a private DM auto-reply sent with NO human review before sending. If the question is about a specific product's price/availability AND it's genuinely in the catalog above, answer it directly and confidently — that's a normal, safe question to answer instantly. For anything else (a complaint, a custom request, a product genuinely not in the catalog, or anything you're not confident about), reply with acknowledgement + "our team will get back to you shortly" rather than guessing or promising something specific. Never invent a price or availability for a product not actually listed above.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        // Haiku — a safe, single, auto-sent reply is a tightly
-        // constrained task (explicitly avoids prices/promises/
-        // complaint resolution per the prompt below), and this fires
-        // on every incoming DM/comment when the toggle is on. Routed
-        // through the AI Task Router (Usage/Pricing spec Section 10)
-        // — same Haiku choice, now via the named per-channel mapping.
-        model: modelForTask(channel === "dm" ? "dm_auto_reply" : "comment_auto_reply"),
-        max_tokens: 300,
-        messages: [{
-          role: "user",
-          content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
+    const r = await callClaude({
+      // Haiku — a safe, single, auto-sent reply is a tightly
+      // constrained task (explicitly avoids prices/promises/
+      // complaint resolution per the prompt below), and this fires
+      // on every incoming DM/comment when the toggle is on. Routed
+      // through the AI Task Router (Usage/Pricing spec Section 10)
+      // — same Haiku choice, now via the named per-channel mapping.
+      model: modelForTask(channel === "dm" ? "dm_auto_reply" : "comment_auto_reply"),
+      max_tokens: 300,
+      messages: [{
+        role: "user",
+        content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
 ${brandContext}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}
 ${safety}
 Incoming message: "${incomingText}"
 
 Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`,
-        }],
-      }),
-    });
-    if (!response.ok) return null;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return null;
-    const data = JSON.parse(bodyText);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "auto_reply" });
+    // No reply goes out rather than a guessed one.
+    if (!r.ok) return null;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return null;
@@ -139,12 +133,12 @@ export async function generateSocialTask(
   logContext?: { supabase: any; dealershipId: string },
   recentPostsContext?: string | null,
   groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = SOCIAL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
   const fallback = {
-    output: { text: `${meta.label} draft for ${dealershipName}. Regenerate once the API is available for a tailored version.` },
+    output: { text: aiFailureMessage("bad_request") },
     _fallback: true,
   };
 
@@ -172,17 +166,10 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
       body.tools = [{ type: "web_search_20250305", name: "web_search" }];
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "social_task", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = (data.content ?? [])
+    const r = await callClaude(body, { operation: "social_task", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    // Trend tasks search the web: their replies interleave text blocks with search results.
+    const text = (r.data.content ?? [])
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)
       .join("\n");

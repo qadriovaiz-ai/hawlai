@@ -38,8 +38,8 @@ interface DealershipContext {
   tone_of_voice?: string | null;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 
 export async function generateSeoTask(
   taskKey: string,
@@ -49,40 +49,32 @@ export async function generateSeoTask(
   brandProfile?: DealershipContext | null,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = SEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
   const fallback = {
-    output: { text: `${meta.label} draft for ${dealershipName}${city ? ` in ${city}` : ""}. Regenerate once the API is available for a tailored version.` },
+    output: { text: aiFailureMessage("bad_request") },
     _fallback: true,
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1800,
-        messages: [{
-          role: "user",
-          content: `You are an SEO specialist working on an Indian ${businessCategory} business called "${dealershipName}"${city ? `, based in ${city}` : ""}.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1800,
+      messages: [{
+        role: "user",
+        content: `You are an SEO specialist working on an Indian ${businessCategory} business called "${dealershipName}"${city ? `, based in ${city}` : ""}.
 ${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}
 
 Task: ${meta.label}
 Requirements: ${meta.instructions}
 
 Return JSON only, no markdown, no preamble. Shape the JSON to match the requirements exactly (use the field names implied above). Be specific to this business type and city — never generic filler, and never invent fake statistics or ranking data.`,
-        }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_task", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "seo_task", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

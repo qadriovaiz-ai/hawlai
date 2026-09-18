@@ -26,8 +26,8 @@ export interface SeoIdeas {
   contentIdeas: string[];
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 export interface BlogPost {
   title: string;
@@ -68,25 +68,18 @@ export async function generateBlogPost(
     : "\nNo real website page list is available — return an empty internalLinkSuggestions array rather than guessing plausible-sounding page names.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        // Was 1200 — too tight once metaDescription/headingOutline/
-        // targetIntent/internalLinkSuggestions ride alongside the full
-        // 400-600 word body in one JSON payload; matches the same
-        // truncation failure mode found and fixed in
-        // websiteBuilderAgent.ts's page generation earlier this session.
-        max_tokens: 2800,
-        messages: [
-          {
-            role: "user",
-            content: `Write a helpful, SEO-friendly blog post for an Indian ${businessCategory} business.
+    const r = await callClaude({
+      model: getModel("standard"),
+      // Was 1200 — too tight once metaDescription/headingOutline/
+      // targetIntent/internalLinkSuggestions ride alongside the full
+      // 400-600 word body in one JSON payload; matches the same
+      // truncation failure mode found and fixed in
+      // websiteBuilderAgent.ts's page generation earlier this session.
+      max_tokens: 2800,
+      messages: [
+        {
+          role: "user",
+          content: `Write a helpful, SEO-friendly blog post for an Indian ${businessCategory} business.
 Topic: "${topic}"${city ? `, location: ${city}` : ""}${groundingContext ?? ""}${linkingContext}
 
 Plan before you write:
@@ -96,16 +89,11 @@ Plan before you write:
 
 400-600 words, informative and genuinely useful (not just sales-y), plain language, a few short paragraphs under each heading. Return JSON only:
 {"title":"SEO-friendly title, under 70 chars","metaDescription":"under 160 chars, click-worthy and keyword-aware","targetIntent":"informational|transactional|navigational","headingOutline":[{"level":"H2|H3","heading":"..."}],"content":"the full article body, plain text with \\n\\n between paragraphs and each heading from headingOutline appearing on its own line exactly where it belongs","internalLinkSuggestions":[{"anchorText":"...","linksToSlug":"one of the real slugs listed above","why":"..."}]}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_blog_post", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "seo_blog_post", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
@@ -145,38 +133,26 @@ export async function generateSeoIdeas(
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        // Was 500 — enough for a flat string array, not enough once
-        // every keyword carries an intent label and a reasoning note.
-        max_tokens: 1400,
-        messages: [
-          {
-            role: "user",
-            content: `You are an SEO researcher for an Indian ${businessCategory} business.
+    const r = await callClaude({
+      model: getModel("standard"),
+      // Was 500 — enough for a flat string array, not enough once
+      // every keyword carries an intent label and a reasoning note.
+      max_tokens: 1400,
+      messages: [
+        {
+          role: "user",
+          content: `You are an SEO researcher for an Indian ${businessCategory} business.
 Topic: "${topic}"${city ? `, location: ${city}` : ""}${groundingContext ?? ""}
 
 For each keyword, classify its search intent — informational (researching/comparing, e.g. "X vs Y", "how does X work"), transactional (ready to act, e.g. "X price on-road", "book X near me"), or navigational (searching for this specific business/brand by name) — and give a one-line note on why that keyword matters or what the searcher actually wants. Mix intents realistically: most SEO value for a small business comes from a blend, not all-transactional.
 
 Return JSON only:
 {"keywords":[{"keyword":"realistic search phrase an Indian customer would actually type into Google","intent":"informational|transactional|navigational","note":"one short sentence"}] (8-10 keywords),"contentIdeas":["4-5 short blog post or video content title ideas that would rank for these keywords and also help the business's brand"]}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_keywords", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "seo_keywords", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

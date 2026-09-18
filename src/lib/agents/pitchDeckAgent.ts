@@ -17,8 +17,8 @@
 // ------------------------------------------------------------------
 
 import PptxGenJS from "pptxgenjs";
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 export interface DeckBrandColor {
   name: string;
@@ -50,7 +50,7 @@ export interface DeckContent {
 
 const FALLBACK_CONTENT = (dealershipName: string, businessCategory: string): DeckContent => ({
   title: { headline: dealershipName, subheadline: `A ${businessCategory} business` },
-  missionAbout: { heading: "About Us", body: `${dealershipName} is a ${businessCategory} business focused on serving customers well. Regenerate once your Anthropic API key/quota is available for tailored content.` },
+  missionAbout: { heading: "About Us", body: `${dealershipName} is a ${businessCategory} business focused on serving customers well.` },
   productHighlights: [{ name: "Our offerings", description: "Add products in Website Builder for this slide to list them specifically." }],
   whyUs: ["Local expertise", "Customer-first approach", "Reliable service"],
   contactCta: { heading: "Get in Touch", body: "We'd love to work with you.", ctaText: "Contact us today" },
@@ -78,36 +78,24 @@ export async function generateDeckContent(
   const toneLine = toneOfVoice ? `Brand tone: ${toneOfVoice}.` : "";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1600,
-        messages: [
-          {
-            role: "user",
-            content: `Draft content for a 5-slide pitch deck for "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""}.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1600,
+      messages: [
+        {
+          role: "user",
+          content: `Draft content for a 5-slide pitch deck for "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""}.
 ${brandContext}
 ${productsContext}
 ${toneLine}
 
 Return JSON only:
 {"title":{"headline":"the deck's title — usually the business name or a short positioning line, under 8 words","subheadline":"one line under the title, e.g. what the business does"},"missionAbout":{"heading":"a short heading like 'About Us' or 'Our Mission'","body":"2-3 sentences, genuinely specific to this business, not generic filler"},"productHighlights":[{"name":"...","description":"one line"}] (3-4 items — use the real products listed above if any exist, otherwise describe the business's core offerings honestly without inventing named products),"whyUs":["...","...","..."] (3-4 short, specific differentiators, not generic claims like 'quality service'),"contactCta":{"heading":"a closing heading like 'Let's Talk' or 'Get in Touch'","body":"1-2 sentences inviting the next step","ctaText":"a short call-to-action line, e.g. 'Contact us today'"}}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "pitch_deck_content", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "pitch_deck_content", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

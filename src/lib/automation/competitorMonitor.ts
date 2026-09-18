@@ -6,9 +6,9 @@
 // day. Uses Claude's web_search tool — this is real search-grounded
 // output, not fabricated "there's a new product" claims.
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { emitNotification } from "../notifications/emit";
 import { getModel } from "../models";
+import { callClaude, aiFailureNote, isPlatformOutage, type AiFailureNote } from "@/lib/ai/claude";
 
 export async function checkCompetitorAlerts(supabase: any, dealershipId: string) {
   const { data: watches } = await supabase
@@ -24,28 +24,28 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
     .single();
 
   let newAlerts = 0;
+  // Said, not swallowed: "no new alerts" and "couldn't check" are different answers.
+  let aiFailure: AiFailureNote | undefined;
 
   for (const watch of watches) {
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({
-          model: getModel("standard"),
-          max_tokens: 1500,
-          messages: [{
-            role: "user",
-            content: `Search for recent news about "${watch.competitor_name}" (a ${dealership?.business_category ?? "business"} competitor) — new product launches, major announcements, or notable offers from the last few days. Return JSON only: {"items": [{"title": "short headline", "summary": "1-2 sentences", "sourceUrl": "the URL you found this from"}]} — up to 5 items. If you find nothing recent, return {"items": []}. Never invent items — only include what you actually found via search.`,
-          }],
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-        }),
-      });
-      if (!response.ok) continue;
-      const bodyText = await response.text();
-      if (!bodyText.trim()) continue;
-      const data = JSON.parse(bodyText);
-      if (data.usage) await logClaudeUsage(supabase, dealershipId, "competitor_monitor", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-      const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+      const r = await callClaude({
+        model: getModel("standard"),
+        max_tokens: 1500,
+        messages: [{
+          role: "user",
+          content: `Search for recent news about "${watch.competitor_name}" (a ${dealership?.business_category ?? "business"} competitor) — new product launches, major announcements, or notable offers from the last few days. Return JSON only: {"items": [{"title": "short headline", "summary": "1-2 sentences", "sourceUrl": "the URL you found this from"}]} — up to 5 items. If you find nothing recent, return {"items": []}. Never invent items — only include what you actually found via search.`,
+        }],
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+      }, { operation: "competitor_monitor", logContext: { supabase, dealershipId } });
+      if (!r.ok) {
+        aiFailure = aiFailureNote(r.failure);
+        // Down for everyone: every other watch would fail the same way.
+        if (isPlatformOutage(r.failure.kind)) break;
+        continue;
+      }
+      // Web-search replies interleave text blocks with search results.
+      const text = (r.data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
       if (!clean) continue;
@@ -86,5 +86,5 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
     }
   }
 
-  return { newAlerts };
+  return { newAlerts, ...(aiFailure ? { aiFailure } : {}) };
 }

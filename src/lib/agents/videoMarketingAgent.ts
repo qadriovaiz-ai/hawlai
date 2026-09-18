@@ -25,8 +25,8 @@ export const VIDEO_TASKS: VideoTaskMeta[] = [
   { key: "animation", label: "Animation Concepts", instructions: "3 short animation/motion-graphics concepts suited to a small business budget (e.g. animated text reveals, simple icon animations, kinetic typography), each with a one-line concept and where it'd be used." },
 ];
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -40,27 +40,24 @@ export async function generateVideoTask(
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = VIDEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
   const fallback = {
-    output: { text: `Draft ${meta.label.toLowerCase()} for ${dealershipName} about "${topic || "your business"}". Regenerate once the API is available for a tailored version.` },
+    output: { text: aiFailureMessage("bad_request") },
     _fallback: true,
   };
 
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it natural and specific to the business type.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1800,
-        messages: [{
-          role: "user",
-          content: `You are a short-form video strategist writing for an Indian ${businessCategory} business called "${dealershipName}".
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1800,
+      messages: [{
+        role: "user",
+        content: `You are a short-form video strategist writing for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}
 Topic/context: "${topic || "general brand content, use good judgement for this business type"}"
 
@@ -68,15 +65,10 @@ Task: ${meta.label}
 Requirements: ${meta.instructions}
 
 Return JSON only, no markdown. Shape the JSON sensibly (e.g. "ideas" array, "captions" array, "lines" array for subtitles with {time, text}, "shots" array for editing/b-roll with relevant fields, "concepts" array for animation). Be specific to this business — never generic filler.`,
-        }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "video_marketing", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "video_marketing", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

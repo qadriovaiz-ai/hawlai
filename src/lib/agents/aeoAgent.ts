@@ -8,8 +8,8 @@
 // behind every design choice below (placement, mechanism, honesty
 // framing, artifact shape).
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface AeoCheckResult {
   visibilityScore: number;
@@ -58,7 +58,7 @@ export async function generateAeoCheck(
   brandProfile?: DealershipContext | null,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ output: AeoCheckResult; _fallback?: boolean }> {
+): Promise<{ output: AeoCheckResult; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const fallback = {
     output: {
       visibilityScore: 0,
@@ -99,15 +99,12 @@ export async function generateAeoCheck(
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 3000,
-        messages: [{
-          role: "user",
-          content: `You're running an Answer Engine Optimization (AEO) check for "${dealershipName}", a ${businessCategory} business in India${city ? ` (${city})` : ""} — checking how this business shows up when someone asks an AI assistant a buying question in this category, which is a different mechanism from traditional Google ranking.${brandProfile?.tone_of_voice ? ` Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}${siteContext}
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 3000,
+      messages: [{
+        role: "user",
+        content: `You're running an Answer Engine Optimization (AEO) check for "${dealershipName}", a ${businessCategory} business in India${city ? ` (${city})` : ""} — checking how this business shows up when someone asks an AI assistant a buying question in this category, which is a different mechanism from traditional Google ranking.${brandProfile?.tone_of_voice ? ` Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}${siteContext}
 
 Do this in order:
 
@@ -118,15 +115,11 @@ Do this in order:
 
 Return JSON only, no markdown, no preamble, this exact shape:
 {"visibilityScore": <0-100 integer>, "scoreLabel": "Content citability", "scoreBreakdown": [{"label": "...", "value": "..."}], "competitivePositioning": [{"promptTested": "...", "mentioned": <bool>, "competitorsMentioned": ["..."]}], "recommendations": [{"title": "...", "detail": "..."}]}`,
-        }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "aeo_check", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
+      }],
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+    }, { operation: "aeo_check", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const data = r.data;
     const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();

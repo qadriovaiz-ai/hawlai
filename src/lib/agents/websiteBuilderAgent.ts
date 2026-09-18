@@ -10,8 +10,8 @@
 
 import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
-import { logClaudeUsage } from "../usage/logUsage";
-import { getModel, CLAUDE_MODELS } from "../models";
+import { getModel } from "../models";
+import { callClaude, withAiFailure, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface SiteTypeMeta {
   key: string;
@@ -164,15 +164,12 @@ export async function planWebsite(
     : "No brand voice set yet.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1500,
-        messages: [{
-          role: "user",
-          content: `You are planning the structure of a website for a REAL business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1500,
+      messages: [{
+        role: "user",
+        content: `You are planning the structure of a website for a REAL business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}.
 
 The business owner described what they want in their own words:
 "${prompt.trim()}"
@@ -197,15 +194,10 @@ ${THEME_OPTIONS.map((t) => `   - ${t.key}: ${t.desc}`).join("\n")}
 
 Return JSON only, no markdown, no preamble: {"businessSummary":"...","themeKey":"...","pages":[{"slug":"...","title":"...","pageType":"..."}]}
 ${grounding ?? ""}`,
-        }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_plan", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "website_plan", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
@@ -355,30 +347,27 @@ async function generatePageBlocks(
   fallback: GeneratedPage,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ page: GeneratedPage; fellBack: boolean; reason?: string }> {
+): Promise<{ page: GeneratedPage; fellBack: boolean; reason?: string; aiFailure?: AiFailureNote }> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        // Opus — this writes the actual page copy a visitor reads
-        // first; planWebsite's structural planning stays Sonnet
-        // (deciding a page list/theme is a lighter task), but the
-        // real content quality here is worth the extra cost, and it
-        // only runs once per page per generation, not on every visit.
-        model: getModel("premium"),
-        // Was 2000 — too tight for a forced tool_use call that has to
-        // emit an entire multi-section block tree as one JSON payload,
-        // especially legal pages (real boilerplate text) and any page
-        // with 3-4 sections. Confirmed root cause of live pages stuck
-        // as fallback content: `stop_reason: "max_tokens"` with no
-        // complete tool_use block at all, not a content-quality issue.
-        max_tokens: 4096,
-        tools: [EMIT_PAGE_TOOL],
-        tool_choice: { type: "tool", name: "emit_page" },
-        messages: [{
-          role: "user",
-          content: `You are building the "${page.title}" page (slug: ${page.slug}, type: ${page.pageType}) for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed — the page must be genuinely about this business, never a different industry or an invented example.
+    const r = await callClaude({
+      // Opus — this writes the actual page copy a visitor reads
+      // first; planWebsite's structural planning stays Sonnet
+      // (deciding a page list/theme is a lighter task), but the
+      // real content quality here is worth the extra cost, and it
+      // only runs once per page per generation, not on every visit.
+      model: getModel("premium"),
+      // Was 2000 — too tight for a forced tool_use call that has to
+      // emit an entire multi-section block tree as one JSON payload,
+      // especially legal pages (real boilerplate text) and any page
+      // with 3-4 sections. Confirmed root cause of live pages stuck
+      // as fallback content: `stop_reason: "max_tokens"` with no
+      // complete tool_use block at all, not a content-quality issue.
+      max_tokens: 4096,
+      tools: [EMIT_PAGE_TOOL],
+      tool_choice: { type: "tool", name: "emit_page" },
+      messages: [{
+        role: "user",
+        content: `You are building the "${page.title}" page (slug: ${page.slug}, type: ${page.pageType}) for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed — the page must be genuinely about this business, never a different industry or an invented example.
 ${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}${groundingContext ?? ""}
 ${customInstructions?.trim() ? `\nThe owner's own description of what they want: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions.\n` : ""}
 Block vocabulary (use ONLY these types):
@@ -393,15 +382,13 @@ Keep every text field genuinely concise — this is a website page, not an essay
 ${page.pageType === "legal" ? `This is a legal page ("${page.slug}") — one section with a heading and genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly, not a generic disclaimer. Cover the essential clauses a small business actually needs (not an exhaustive enterprise-grade document) — standard length for this category, not maximal.` : `Include a "button" or "form" block near the end to drive leads, unless this is the contact page itself.`}
 
 Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client names. Call emit_page with the result.`,
-        }],
-      }),
-    });
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      return { page: fallback, fellBack: true, reason: `API returned ${response.status}: ${errBody.slice(0, 300)}` };
+      }],
+    }, { operation: "website_page_generation", logContext });
+    if (!r.ok) {
+      // The reason is for logs and the admin audit; the owner gets aiFailure's approved words.
+      return { page: fallback, fellBack: true, reason: `AI call failed (${r.failure.kind}, ${r.failure.status ?? "no response"})`, aiFailure: aiFailureNote(r.failure) };
     }
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "website_page_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.premium);
+    const data = r.data;
     const toolUse = (data.content ?? []).find((c: any) => c.type === "tool_use" && c.name === "emit_page");
     const input = toolUse?.input;
     if (!input || !Array.isArray(input.blocks) || input.blocks.length === 0) {

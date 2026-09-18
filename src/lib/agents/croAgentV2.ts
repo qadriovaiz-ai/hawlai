@@ -9,9 +9,9 @@
 // (siteFacts.ts) and truth rules, and every suggestion is checked
 // against those facts before anyone sees it.
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { formatFactsForPrompt, scrubCroOutput, CRO_TRUTH_RULES, type CroFacts } from "../cro/siteFacts";
+import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface CroTaskMeta {
   key: string;
@@ -30,7 +30,7 @@ export async function generateCroSuggestions(
   facts: CroFacts,
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean; removed?: string[] }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; removed?: string[] }> {
   const meta = CRO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -44,16 +44,13 @@ export async function generateCroSuggestions(
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 1800,
-        messages: [
-          {
-            role: "user",
-            content: `You are a conversion rate optimization specialist reviewing the real, live website of "${facts.businessName}", a ${facts.category} business in India.${groundingContext ?? ""}
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 1800,
+      messages: [
+        {
+          role: "user",
+          content: `You are a conversion rate optimization specialist reviewing the real, live website of "${facts.businessName}", a ${facts.category} business in India.${groundingContext ?? ""}
 
 ${formatFactsForPrompt(facts)}
 
@@ -63,16 +60,11 @@ Task: ${meta.label}
 ${instructions[taskKey]}
 
 Return JSON only, no markdown, no preamble. Be specific to this business's actual site and real numbers — never generic filler.`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "cro_suggestions", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "cro_suggestions", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

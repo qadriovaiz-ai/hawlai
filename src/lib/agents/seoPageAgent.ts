@@ -13,8 +13,8 @@ export interface SeoPageContent {
   slug: string;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export async function generateSeoPage(
   topic: string,
@@ -24,31 +24,23 @@ export async function generateSeoPage(
   logContext?: { supabase: any; dealershipId: string },
   /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
   grounding?: string
-): Promise<{ output: SeoPageContent | null; _fallback?: boolean }> {
+): Promise<{ output: SeoPageContent | null; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 2000,
-        messages: [{
-          role: "user",
-          content: `Write an SEO-focused content page for "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""}, targeting the topic/keyword: "${topic}".
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `Write an SEO-focused content page for "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""}, targeting the topic/keyword: "${topic}".
 
 Return JSON only: {"title": "SEO title tag, under 60 chars, includes the keyword", "metaDescription": "under 160 chars, click-worthy", "h1": "the on-page H1, can differ slightly from title", "sections": [{"heading": "...", "body": "2-4 sentences"}] (4-5 sections covering this topic thoroughly), "slug": "url-friendly-slug-for-this-topic"}
 
 Write real, specific, useful content for this topic and business — not generic filler. Never invent statistics, prices, or claims that aren't reasonable for this business type.
 ${grounding ?? ""}`,
-        }],
-      }),
-    });
-    if (!response.ok) return { output: null, _fallback: true };
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return { output: null, _fallback: true };
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "seo_page", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "seo_page", logContext });
+    if (!r.ok) return { output: null, _fallback: true, _aiFailure: aiFailureNote(r.failure) };
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return { output: null, _fallback: true };

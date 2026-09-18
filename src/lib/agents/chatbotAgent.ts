@@ -26,6 +26,7 @@
 // ------------------------------------------------------------------
 
 import { getModel } from "../models";
+import { callClaude } from "@/lib/ai/claude";
 
 interface DealershipContext {
   dealershipName: string;
@@ -55,7 +56,6 @@ export interface SalesAgentResult {
   suggestBooking: boolean;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 
 export async function runSalesAgentTurn(
   context: DealershipContext,
@@ -85,17 +85,10 @@ ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.joi
 ${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 500,
-        system: `You are an AI assistant on ${context.dealershipName}'s website (a ${category} business). You chat with visitors like a helpful, knowledgeable person would — not a generic FAQ bot.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 500,
+      system: `You are an AI assistant on ${context.dealershipName}'s website (a ${category} business). You chat with visitors like a helpful, knowledgeable person would — not a generic FAQ bot.
 ${contextBlock}${personaBlock}
 
 Your job in this conversation, as relevant to what the visitor says:
@@ -108,18 +101,13 @@ Your job in this conversation, as relevant to what the visitor says:
 - Only discuss things relevant to this business — politely redirect anything unrelated.
 
 Return JSON only, no markdown: {"reply": "your conversational reply", "leadCapture": {"name": "...", "phone": "...", "email": "... or omit", "interest": "one short phrase on what they're interested in"} or null if they haven't given both a name and phone number yet in this conversation, "suggestBooking": true or false}`,
-        messages: [
-          ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
-          { role: "user", content: message },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "chatbot", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+      messages: [
+        ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+        { role: "user", content: message },
+      ],
+    }, { operation: "chatbot", logContext });
+    if (!r.ok) return fallback;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

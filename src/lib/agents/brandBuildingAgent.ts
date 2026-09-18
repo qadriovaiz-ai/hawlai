@@ -10,8 +10,8 @@
 // deepStrategyAgent.ts: generous max_tokens, never cache a fallback.
 // ------------------------------------------------------------------
 
-import { logClaudeUsage } from "../usage/logUsage";
-import { getModel, CLAUDE_MODELS } from "../models";
+import { getModel } from "../models";
+import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -44,7 +44,7 @@ export async function generateBrandKit(
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
   groundingContext?: string
-): Promise<BrandKit & { _fallback?: boolean }> {
+): Promise<BrandKit & { _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const fallback: BrandKit & { _fallback?: boolean } = {
     _fallback: true,
     colors: [
@@ -80,24 +80,17 @@ export async function generateBrandKit(
     : "No brand profile set yet — give reasonable, honest defaults for this business category rather than inventing specifics.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        // Opus — this is the business's whole identity (colors,
-        // tagline, mission, story), generated once and rarely
-        // regenerated; worth the extra cost for something this
-        // foundational.
-        model: getModel("premium"),
-        max_tokens: 2500,
-        messages: [
-          {
-            role: "user",
-            content: `You are a senior brand strategist and designer building a complete brand identity kit for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
+    const r = await callClaude({
+      // Opus — this is the business's whole identity (colors,
+      // tagline, mission, story), generated once and rarely
+      // regenerated; worth the extra cost for something this
+      // foundational.
+      model: getModel("premium"),
+      max_tokens: 2500,
+      messages: [
+        {
+          role: "user",
+          content: `You are a senior brand strategist and designer building a complete brand identity kit for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
 ${brandContext}${groundingContext ?? ""}
 
 Return JSON only, no markdown:
@@ -113,20 +106,11 @@ Return JSON only, no markdown:
 "guidelines":["4-5 short, concrete do's/don'ts for staying visually and tonally consistent across ads, social and website"]
 }
 Be specific to this business type and city — avoid generic startup-brand-kit filler. Fonts must be real Google Fonts that actually pair well.`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      console.error("[brand-building-agent] Claude API not ok:", response.status, errBody.slice(0, 300));
-      return fallback;
-    }
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "brand_kit", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.premium);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "brand_kit", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

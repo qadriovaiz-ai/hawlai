@@ -43,36 +43,24 @@ function brandContextFor(brandProfile?: BrandProfile | null): string {
     : "No brand profile set — default to a warm, professional tone in Hinglish.";
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
+import { callClaude } from "@/lib/ai/claude";
 
-async function callClaude(prompt: string, maxTokens: number, operation: string, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
+async function askClaudeJson(prompt: string, maxTokens: number, operation: string, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-    if (!response.ok) return null;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return null;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, operation, data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: prompt }],
+    }, { operation, logContext });
+    if (!r.ok) return null;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return null;
     return JSON.parse(clean);
   } catch (err: any) {
-    console.error("[creative-agent] callClaude error:", err.message);
+    console.error("[creative-agent] askClaudeJson error:", err.message);
     return null;
   }
 }
@@ -95,7 +83,7 @@ export async function generateVideoScript(
     ],
   };
 
-  const parsed = await callClaude(
+  const parsed = await askClaudeJson(
     `You are a short-form video scriptwriter for an Indian ${businessCategory} business's Instagram Reels / YouTube Shorts.
 Topic: "${topic}"
 ${brandContextFor(brandProfile)}
@@ -129,7 +117,7 @@ export async function generateCopyVariations(
     { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today.", score: 50 },
   ];
 
-  const parsed = await callClaude(
+  const parsed = await askClaudeJson(
     `You are an ad copywriter for an Indian ${businessCategory} business, A/B testing different angles for the same offer.
 Topic: "${topic}"
 ${brandContextFor(brandProfile)}
@@ -172,7 +160,7 @@ export async function generateProductDescription(
     description: `Discover the ${itemName} — available now. Contact us for full details and pricing.`,
     highlights: [],
   };
-  const parsed = await callClaude(
+  const parsed = await askClaudeJson(
     `Write a product/service listing description for an Indian ${businessCategory} business.
 Item: "${itemName}"
 Details provided: "${details}"

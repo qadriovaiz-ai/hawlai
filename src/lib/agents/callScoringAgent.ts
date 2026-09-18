@@ -6,9 +6,9 @@
 // was actually said is a far better signal than guessed demographics,
 // so this overwrites that guess.
 
-import { logClaudeUsage } from "../usage/logUsage";
-import { CLAUDE_MODELS } from "../models";
+
 import { modelForTask } from "../aiTaskRouter";
+import { callClaude } from "@/lib/ai/claude";
 
 export type CallIntent = "interested" | "not_interested" | "requesting_info" | "ready_to_book" | "complaint" | "no_real_conversation" | "other";
 export type CallSentiment = "positive" | "neutral" | "negative";
@@ -49,22 +49,19 @@ export async function scoreLeadFromCall(transcript: string, leadName: string, lo
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        // Haiku, not Sonnet — this runs after every single call, and
-        // classifying a transcript into hot/warm/cold + a one-line
-        // reason is a simpler task than the department-work this app
-        // mostly uses Sonnet for. Frequency is high, complexity isn't.
-        // Routed through the AI Task Router (Usage/Pricing spec
-        // Section 10) rather than getModel("fast") directly — same
-        // model, now via the named "call_scoring" -> simple mapping.
-        model: modelForTask("call_scoring"),
-        max_tokens: 500,
-        messages: [{
-          role: "user",
-          content: `You just read the transcript of a sales follow-up phone call with a lead named ${leadName}. Score how promising this lead is based ONLY on what was actually said in the call — their interest level, urgency, objections, budget signals, and whether they agreed to a next step.
+    const r = await callClaude({
+      // Haiku, not Sonnet — this runs after every single call, and
+      // classifying a transcript into hot/warm/cold + a one-line
+      // reason is a simpler task than the department-work this app
+      // mostly uses Sonnet for. Frequency is high, complexity isn't.
+      // Routed through the AI Task Router (Usage/Pricing spec
+      // Section 10) rather than getModel("fast") directly — same
+      // model, now via the named "call_scoring" -> simple mapping.
+      model: modelForTask("call_scoring"),
+      max_tokens: 500,
+      messages: [{
+        role: "user",
+        content: `You just read the transcript of a sales follow-up phone call with a lead named ${leadName}. Score how promising this lead is based ONLY on what was actually said in the call — their interest level, urgency, objections, budget signals, and whether they agreed to a next step.
 
 Respond with ONLY a JSON object, no markdown, no preamble:
 {"score": <0-100 integer>, "temperature": "<hot|warm|cold>", "reason": "<one sentence, specific to what was said in this call>", "intent": "<interested|not_interested|requesting_info|ready_to_book|complaint|other>", "sentiment": "<positive|neutral|negative>", "urgency": "<high|medium|low>"}
@@ -74,13 +71,10 @@ urgency = how time-sensitive the lead's own need sounds from what they said, not
 
 Transcript:
 ${transcript.slice(0, 8000)}`,
-        }],
-      }),
-    });
-
-    const data = await response.json();
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "call_scoring", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.fast);
-    const text = data?.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "call_scoring", logContext });
+    if (!r.ok) return FALLBACK;
+    const text = r.text;
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
 

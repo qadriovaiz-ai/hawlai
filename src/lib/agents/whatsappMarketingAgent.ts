@@ -32,13 +32,13 @@ interface BrandProfile {
   tone_of_voice?: string | null;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { CLAUDE_MODELS } from "../models";
 import { modelForTask } from "../aiTaskRouter";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { WHATSAPP_RULES, addWhatsappOptOut } from "@/lib/expertise/channelRules";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
+import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -52,33 +52,30 @@ export async function generateWhatsappContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's used: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[]; priceWarnings?: string[] }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[] }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
 
   const fallback = {
-    output: { message: `Draft ${meta.label.toLowerCase()} for ${dealershipName}. Regenerate once the API is available for a tailored version.` },
+    output: { message: aiFailureMessage("bad_request") },
     _fallback: true,
   };
 
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it warm and conversational, like a real person texting.";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
-        // recovery) is a lower-complexity linguistic task than most
-        // of what this app uses Sonnet for. Routed through the AI
-        // Task Router by taskKey (Usage/Pricing spec Section 10) —
-        // every WHATSAPP_TASKS key maps to "simple", so this is the
-        // same Haiku choice as before, now named rather than hardcoded.
-        model: modelForTask(taskKey),
-        max_tokens: 1600,
-        messages: [{
-          role: "user",
-          content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
+    const r = await callClaude({
+      // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
+      // recovery) is a lower-complexity linguistic task than most
+      // of what this app uses Sonnet for. Routed through the AI
+      // Task Router by taskKey (Usage/Pricing spec Section 10) —
+      // every WHATSAPP_TASKS key maps to "simple", so this is the
+      // same Haiku choice as before, now named rather than hardcoded.
+      model: modelForTask(taskKey),
+      max_tokens: 1600,
+      messages: [{
+        role: "user",
+        content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 ${WHATSAPP_RULES}
 
@@ -88,15 +85,10 @@ Task: ${meta.label}
 Requirements: ${meta.instructions}
 
 Return JSON only, no markdown, no preamble. WhatsApp messages should read like a real person texting, not a formal email — short sentences, no corporate language. Match the field names implied above exactly.`,
-        }],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "whatsapp_generation", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, CLAUDE_MODELS.fast);
-    const text = data.content?.[0]?.text ?? "";
+      }],
+    }, { operation: "whatsapp_generation", logContext });
+    if (!r.ok) return withAiFailure(fallback, r.failure);
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;

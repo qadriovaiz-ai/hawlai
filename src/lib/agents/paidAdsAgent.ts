@@ -41,7 +41,7 @@ export const AD_TASKS: AdTaskMeta[] = [
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "../claims/businessFacts";
 import { guardGenerated } from "../claims/claimCheck";
-import { callClaude, withAiFailure } from "@/lib/ai/claude";
+import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 
 // Tasks whose output is copy a customer will read. Only these are
 // claims-checked; the rest are advice to the owner, where a sentence about
@@ -63,13 +63,13 @@ export async function generateAdPlan(
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). Ad copy is written from them and checked against them. */
   facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; claimsRemoved?: string[] }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[] }> {
   const platform = AD_PLATFORMS.find((p) => p.key === platformKey);
   const task = AD_TASKS.find((t) => t.key === taskKey);
   if (!platform || !task) return { output: { text: "Unknown platform or task." }, _fallback: true };
 
   const fallback = {
-    output: { text: `${task.label} plan for ${dealershipName} on ${platform.label}. Regenerate once the API is available for a tailored version.` },
+    output: { text: aiFailureMessage("bad_request") },
     _fallback: true,
   };
 

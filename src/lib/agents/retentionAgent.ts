@@ -21,9 +21,9 @@ interface BrandProfile {
   preferred_language?: string | null;
 }
 
-import { logClaudeUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import { leadInterest } from "../leads/leadProfile";
+import { callClaude } from "@/lib/ai/claude";
 
 export async function generateRetentionMessage(
   customer: CustomerInfo,
@@ -51,35 +51,23 @@ export async function generateRetentionMessage(
   const fallback = `Hi ${customer.name}, hope all is well${bought ? ` with your ${bought}` : ""}! Just checking in — let us know if there's anything we can help with.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: getModel("standard"),
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already bought from or signed up with this business), not a new lead.
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already bought from or signed up with this business), not a new lead.
 Customer: ${customer.name}${bought ? `, bought/has: ${bought}` : ""}.
 Goal: ${angleInstructions[angle]}
 ${brandContext}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this customer before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}
 2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}
 ${grounding ?? ""}`,
-          },
-        ],
-      }),
-    });
-    if (!response.ok) return fallback;
-    const bodyText = await response.text();
-    if (!bodyText.trim()) return fallback;
-    const data = JSON.parse(bodyText);
-    if (logContext && data.usage) await logClaudeUsage(logContext.supabase, logContext.dealershipId, "retention_message", data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0);
-    const text = data.content?.[0]?.text ?? "";
+        },
+      ],
+    }, { operation: "retention_message", logContext });
+    if (!r.ok) return fallback;
+    const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
