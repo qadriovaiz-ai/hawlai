@@ -31,7 +31,9 @@ export type NotificationKind =
   | "lead_merge_needs_review"
   | "platform_spend_alert"
   | "out_of_season_content"
-  | "email_delivery_problem";
+  | "email_delivery_problem"
+  // Platform admins only: AI is down for every business (migration 190).
+  | "platform_ai_unavailable";
 
 export interface EmitNotificationInput {
   dealershipId: string;

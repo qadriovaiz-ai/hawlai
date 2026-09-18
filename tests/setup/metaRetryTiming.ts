@@ -6,8 +6,13 @@
 
 import { beforeEach } from "vitest";
 import { metaRetryTiming } from "@/lib/ads/metaRead";
+import { claudeRetryTiming } from "@/lib/ai/claude";
 
 beforeEach(() => {
   metaRetryTiming.delaysMs = [0, 0];
   metaRetryTiming.settleMs = [0, 0];
+  // Same for Anthropic calls (lib/ai/claude.ts); tests/claudeClient.test.ts
+  // checks the production defaults.
+  claudeRetryTiming.defaultMs = 0;
+  claudeRetryTiming.maxMs = 0;
 });
