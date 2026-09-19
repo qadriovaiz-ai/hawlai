@@ -289,6 +289,19 @@ export function featuredFestival(s: Season | null | undefined): { event: SeasonE
 // "Festive" without a festival: English, Hinglish and Hindi.
 const GENERIC_FESTIVE = /\b(?:festive|festivals?|festival season|tyoh?aa?r(?:on|o|ein)?|tyohar|tehwar|utsav)\b|त्योहार|त्यौहार|उत्सव/i;
 
+/**
+ * Every festival the text names, one entry per name found — each the set of
+ * festivals that name could mean ("eid" is either Eid). Empty when it names none.
+ */
+export function festivalMentions(text: string): string[][] {
+  const hay = normaliseText(text);
+  const out: string[][] = [];
+  const aliases = new Map<string, string[]>();
+  for (const g of FESTIVAL_GUIDE) for (const a of [g.name, ...g.aliases]) aliases.set(normaliseText(a), [...(aliases.get(normaliseText(a)) ?? []), g.name]);
+  for (const [alias, names] of aliases) if (hay.includes(alias)) out.push([...new Set(names)]);
+  return out;
+}
+
 /** Whether the text names any festival or occasion Hawlai knows, by any of its names. */
 export function namesFestival(text: string): boolean {
   const hay = normaliseText(text);

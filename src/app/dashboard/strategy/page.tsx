@@ -5,6 +5,7 @@ import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb,
 import DeepStrategyPanel from "@/components/strategy/DeepStrategyPanel";
 import DiagnosisPanel from "@/components/strategy/DiagnosisPanel";
 import PositioningPanel from "@/components/strategy/PositioningPanel";
+import CalendarPanel from "@/components/strategy/CalendarPanel";
 import { Button } from "@/components/ui/Button";
 
 const GOALS = ["More leads", "More sales", "Brand awareness", "Website traffic"];
@@ -92,6 +93,9 @@ export default function StrategyPage() {
 
       {/* What competitors say in public, and the ground this business can own. */}
       <PositioningPanel />
+
+      {/* The next 90 days, week by week — built from the two above and the festival calendar. */}
+      <CalendarPanel />
 
       <DeepStrategyPanel />
 

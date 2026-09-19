@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { CONTENT_TYPES } from "@/lib/agents/contentMarketingAgent";
 import { Button, Card, Input } from "@/components/ui";
@@ -19,6 +19,17 @@ export default function ContentMarketingView() {
   } = useGeneratedOutput({ endpoint: "/api/content-marketing/generate" });
 
   const currentMeta = CONTENT_TYPES.find((t) => t.key === selectedType);
+
+  // "Create this" from the 90-day plan (Strategy page) arrives with the
+  // format and the week's idea: ?type=instagram_post&topic=… — filled in,
+  // not generated, so the owner can adjust it first.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const type = q.get("type");
+    if (type && CONTENT_TYPES.some((t) => t.key === type)) setSelectedType(type as typeof selectedType);
+    const given = q.get("topic");
+    if (given) setTopic(given.slice(0, 500));
+  }, []);
 
   return (
     <div className="space-y-5">
