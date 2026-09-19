@@ -20,6 +20,18 @@
 // FESTIVAL_GUIDE holds what doesn't change year to year: the angle, the
 // other names a festival goes by, how long a campaign should run ahead
 // of it, and how long after the day it's still reasonable to mention.
+//
+// ANGLES BY BUSINESS MODEL (2026-09-20, Strategy step 4 + industry-agnostic
+// Phase 3 — one system, not two). `angle` was written for shops: "gifting"
+// is wrong for a salon or a B2B supplier. Each festival now has a kind:
+//   devotional / national — greetings only, for every business;
+//   celebration — the angle depends on how the business makes money
+//   (angleFor): products keep `angle`; services invite bookings ahead of
+//   the day; subscriptions greet members (a festive plan only if it's a
+//   real offer); B2B sends client greetings, and pitches corporate gifting
+//   only if it sells something giftable (approved 2026-09-17).
+
+import type { BusinessModel } from "@/lib/business/businessModel";
 
 export type FestivalGuide = {
   /** Exactly the seasonal_events.name used for this festival. */
@@ -31,44 +43,46 @@ export type FestivalGuide = {
   /** Days after the date it's still in season (the festival runs on, or greetings are still natural). */
   graceDays: number;
   angle: string;
+  /** devotional and national: greetings only, whatever the business sells. */
+  kind: "celebration" | "devotional" | "national";
   /** Set for moments whose date is worked out in code, not loaded from seasonal_events. */
   date?: { month: number; day: number } | { month: number; weekday: number; nth: number };
 };
 
 export const FESTIVAL_GUIDE: FestivalGuide[] = [
   // ---- worked out in code ----
-  { name: "New Year", aliases: ["new year", "new year's", "nye"], leadDays: 14, graceDays: 3, date: { month: 1, day: 1 }, angle: "fresh starts and resolutions; reflecting on the year gone by" },
-  { name: "Republic Day", aliases: ["republic day"], leadDays: 7, graceDays: 1, date: { month: 1, day: 26 }, angle: "patriotic greetings; keep the national flag and emblem out of product promotions" },
-  { name: "Valentine's Day", aliases: ["valentine", "valentine's", "valentines"], leadDays: 14, graceDays: 1, date: { month: 2, day: 14 }, angle: "gifting for someone special" },
-  { name: "Mother's Day", aliases: ["mother's day", "mothers day", "mother’s day"], leadDays: 14, graceDays: 1, date: { month: 5, weekday: 0, nth: 2 }, angle: "gifts and thanks for mothers" },
-  { name: "Father's Day", aliases: ["father's day", "fathers day", "father’s day"], leadDays: 14, graceDays: 1, date: { month: 6, weekday: 0, nth: 3 }, angle: "gifts and thanks for fathers" },
-  { name: "Independence Day", aliases: ["independence day"], leadDays: 7, graceDays: 1, date: { month: 8, day: 15 }, angle: "patriotic greetings; keep the national flag and emblem out of product promotions" },
-  { name: "Christmas", aliases: ["christmas", "xmas"], leadDays: 21, graceDays: 2, date: { month: 12, day: 25 }, angle: "gifting, festive decor and cosy evenings" },
+  { name: "New Year", aliases: ["new year", "new year's", "nye"], leadDays: 14, graceDays: 3, date: { month: 1, day: 1 }, angle: "fresh starts and resolutions; reflecting on the year gone by" , kind: "celebration" },
+  { name: "Republic Day", aliases: ["republic day"], leadDays: 7, graceDays: 1, date: { month: 1, day: 26 }, angle: "patriotic greetings; keep the national flag and emblem out of product promotions" , kind: "national" },
+  { name: "Valentine's Day", aliases: ["valentine", "valentine's", "valentines"], leadDays: 14, graceDays: 1, date: { month: 2, day: 14 }, angle: "gifting for someone special" , kind: "celebration" },
+  { name: "Mother's Day", aliases: ["mother's day", "mothers day", "mother’s day"], leadDays: 14, graceDays: 1, date: { month: 5, weekday: 0, nth: 2 }, angle: "gifts and thanks for mothers" , kind: "celebration" },
+  { name: "Father's Day", aliases: ["father's day", "fathers day", "father’s day"], leadDays: 14, graceDays: 1, date: { month: 6, weekday: 0, nth: 3 }, angle: "gifts and thanks for fathers" , kind: "celebration" },
+  { name: "Independence Day", aliases: ["independence day"], leadDays: 7, graceDays: 1, date: { month: 8, day: 15 }, angle: "patriotic greetings; keep the national flag and emblem out of product promotions" , kind: "national" },
+  { name: "Christmas", aliases: ["christmas", "xmas"], leadDays: 21, graceDays: 2, date: { month: 12, day: 25 }, angle: "gifting, festive decor and cosy evenings" , kind: "celebration" },
 
   // ---- dates from seasonal_events ----
-  { name: "Makar Sankranti / Pongal", aliases: ["makar sankranti", "sankranti", "pongal", "uttarayan"], leadDays: 7, graceDays: 2, angle: "harvest festival — kites in the north and west, Pongal in Tamil Nadu" },
-  { name: "Basant Panchami", aliases: ["basant panchami", "vasant panchami", "saraswati puja"], leadDays: 7, graceDays: 1, angle: "spring, the colour yellow, new beginnings" },
-  { name: "Maha Shivratri", aliases: ["shivratri", "maha shivratri", "mahashivratri"], leadDays: 7, graceDays: 1, angle: "a devotional day — respectful greetings, soft sell only" },
-  { name: "Eid al-Fitr", aliases: ["eid", "eid ul fitr", "eid-ul-fitr", "id-ul-fitr", "eid al-fitr", "ramzan eid", "ramadan eid", "eid mubarak"], leadDays: 14, graceDays: 2, angle: "family feasts, Eid gifting and greetings" },
-  { name: "Holi", aliases: ["holi", "holika"], leadDays: 14, graceDays: 2, angle: "colour, joy and family gatherings; also financial year-end sales season" },
-  { name: "Gudi Padwa / Ugadi", aliases: ["gudi padwa", "ugadi", "cheti chand"], leadDays: 7, graceDays: 1, angle: "new year in Maharashtra, Karnataka and Andhra — fresh starts" },
-  { name: "Baisakhi", aliases: ["baisakhi", "vaisakhi"], leadDays: 7, graceDays: 1, angle: "harvest and new year celebrations, especially in Punjab" },
-  { name: "Ram Navami", aliases: ["ram navami", "rama navami"], leadDays: 7, graceDays: 1, angle: "a devotional day — greetings rather than hard sales" },
-  { name: "Akshaya Tritiya", aliases: ["akshaya tritiya", "akha teej"], leadDays: 14, graceDays: 1, angle: "an auspicious day for new purchases and beginnings" },
-  { name: "Eid al-Adha", aliases: ["eid", "bakrid", "bakri eid", "eid ul adha", "eid-ul-adha", "id-ul-zuha", "eid al-adha", "eid mubarak"], leadDays: 7, graceDays: 2, angle: "family gatherings and greetings" },
-  { name: "Raksha Bandhan", aliases: ["raksha bandhan", "rakhi", "rakshabandhan"], leadDays: 14, graceDays: 1, angle: "gifting between brothers and sisters — mind delivery cut-offs" },
-  { name: "Janmashtami", aliases: ["janmashtami", "krishna janmashtami", "gokulashtami"], leadDays: 7, graceDays: 1, angle: "festive decor and midnight celebrations" },
-  { name: "Ganesh Chaturthi", aliases: ["ganesh chaturthi", "vinayaka chaturthi", "ganeshotsav", "ganpati"], leadDays: 7, graceDays: 10, angle: "welcoming Ganpati home, a ten-day festival especially big in Maharashtra" },
-  { name: "Onam", aliases: ["onam", "thiruvonam"], leadDays: 7, graceDays: 2, angle: "Kerala's harvest festival — family feasts and new clothes" },
-  { name: "Sharad Navratri", aliases: ["navratri", "navaratri", "garba", "dandiya"], leadDays: 21, graceDays: 9, angle: "nine festive nights — the festive build-up begins and ad costs start rising" },
-  { name: "Durga Puja", aliases: ["durga puja", "pujo", "durgotsav"], leadDays: 21, graceDays: 2, angle: "especially big in Bengal and the east — new things, festive homes" },
-  { name: "Dussehra", aliases: ["dussehra", "dasara", "dussera", "vijayadashami", "vijaya dashami"], leadDays: 21, graceDays: 2, angle: "new beginnings; festive momentum builds toward Diwali" },
-  { name: "Karwa Chauth", aliases: ["karwa chauth", "karva chauth"], leadDays: 10, graceDays: 1, angle: "gifts between husbands and wives" },
-  { name: "Dhanteras", aliases: ["dhanteras", "dhantrayodashi", "dhanatrayodashi"], leadDays: 21, graceDays: 1, angle: "the auspicious buying day two days before Diwali — new things for the home" },
-  { name: "Diwali", aliases: ["diwali", "deepavali", "deepawali", "divali"], leadDays: 21, graceDays: 5, angle: "India's biggest gifting season — gifts for family, friends, clients and hosts; lights and home decor. Launch 2–3 weeks ahead, not on the day" },
-  { name: "Bhai Dooj", aliases: ["bhai dooj", "bhai duj", "bhaiya dooj", "bhau beej"], leadDays: 10, graceDays: 1, angle: "gifting between brothers and sisters, closing the Diwali week" },
-  { name: "Chhath Puja", aliases: ["chhath", "chhath puja", "chhat puja"], leadDays: 7, graceDays: 1, angle: "a devotional festival of Bihar, Jharkhand and eastern UP — respectful greetings" },
-  { name: "Guru Nanak Jayanti", aliases: ["guru nanak jayanti", "gurpurab", "guru purab", "guru nanak"], leadDays: 7, graceDays: 1, angle: "a devotional day — greetings rather than hard sales" },
+  { name: "Makar Sankranti / Pongal", aliases: ["makar sankranti", "sankranti", "pongal", "uttarayan"], leadDays: 7, graceDays: 2, angle: "harvest festival — kites in the north and west, Pongal in Tamil Nadu" , kind: "celebration" },
+  { name: "Basant Panchami", aliases: ["basant panchami", "vasant panchami", "saraswati puja"], leadDays: 7, graceDays: 1, angle: "spring, the colour yellow, new beginnings" , kind: "celebration" },
+  { name: "Maha Shivratri", aliases: ["shivratri", "maha shivratri", "mahashivratri"], leadDays: 7, graceDays: 1, angle: "a devotional day — respectful greetings, soft sell only" , kind: "devotional" },
+  { name: "Eid al-Fitr", aliases: ["eid", "eid ul fitr", "eid-ul-fitr", "id-ul-fitr", "eid al-fitr", "ramzan eid", "ramadan eid", "eid mubarak"], leadDays: 14, graceDays: 2, angle: "family feasts, Eid gifting and greetings" , kind: "celebration" },
+  { name: "Holi", aliases: ["holi", "holika"], leadDays: 14, graceDays: 2, angle: "colour, joy and family gatherings; also financial year-end sales season" , kind: "celebration" },
+  { name: "Gudi Padwa / Ugadi", aliases: ["gudi padwa", "ugadi", "cheti chand"], leadDays: 7, graceDays: 1, angle: "new year in Maharashtra, Karnataka and Andhra — fresh starts" , kind: "celebration" },
+  { name: "Baisakhi", aliases: ["baisakhi", "vaisakhi"], leadDays: 7, graceDays: 1, angle: "harvest and new year celebrations, especially in Punjab" , kind: "celebration" },
+  { name: "Ram Navami", aliases: ["ram navami", "rama navami"], leadDays: 7, graceDays: 1, angle: "a devotional day — greetings rather than hard sales" , kind: "devotional" },
+  { name: "Akshaya Tritiya", aliases: ["akshaya tritiya", "akha teej"], leadDays: 14, graceDays: 1, angle: "an auspicious day for new purchases and beginnings" , kind: "celebration" },
+  { name: "Eid al-Adha", aliases: ["eid", "bakrid", "bakri eid", "eid ul adha", "eid-ul-adha", "id-ul-zuha", "eid al-adha", "eid mubarak"], leadDays: 7, graceDays: 2, angle: "family gatherings and greetings" , kind: "celebration" },
+  { name: "Raksha Bandhan", aliases: ["raksha bandhan", "rakhi", "rakshabandhan"], leadDays: 14, graceDays: 1, angle: "gifting between brothers and sisters — mind delivery cut-offs" , kind: "celebration" },
+  { name: "Janmashtami", aliases: ["janmashtami", "krishna janmashtami", "gokulashtami"], leadDays: 7, graceDays: 1, angle: "festive decor and midnight celebrations" , kind: "celebration" },
+  { name: "Ganesh Chaturthi", aliases: ["ganesh chaturthi", "vinayaka chaturthi", "ganeshotsav", "ganpati"], leadDays: 7, graceDays: 10, angle: "welcoming Ganpati home, a ten-day festival especially big in Maharashtra" , kind: "celebration" },
+  { name: "Onam", aliases: ["onam", "thiruvonam"], leadDays: 7, graceDays: 2, angle: "Kerala's harvest festival — family feasts and new clothes" , kind: "celebration" },
+  { name: "Sharad Navratri", aliases: ["navratri", "navaratri", "garba", "dandiya"], leadDays: 21, graceDays: 9, angle: "nine festive nights — the festive build-up begins and ad costs start rising" , kind: "celebration" },
+  { name: "Durga Puja", aliases: ["durga puja", "pujo", "durgotsav"], leadDays: 21, graceDays: 2, angle: "especially big in Bengal and the east — new things, festive homes" , kind: "celebration" },
+  { name: "Dussehra", aliases: ["dussehra", "dasara", "dussera", "vijayadashami", "vijaya dashami"], leadDays: 21, graceDays: 2, angle: "new beginnings; festive momentum builds toward Diwali" , kind: "celebration" },
+  { name: "Karwa Chauth", aliases: ["karwa chauth", "karva chauth"], leadDays: 10, graceDays: 1, angle: "gifts between husbands and wives" , kind: "celebration" },
+  { name: "Dhanteras", aliases: ["dhanteras", "dhantrayodashi", "dhanatrayodashi"], leadDays: 21, graceDays: 1, angle: "the auspicious buying day two days before Diwali — new things for the home" , kind: "celebration" },
+  { name: "Diwali", aliases: ["diwali", "deepavali", "deepawali", "divali"], leadDays: 21, graceDays: 5, angle: "India's biggest gifting season — gifts for family, friends, clients and hosts; lights and home decor. Launch 2–3 weeks ahead, not on the day" , kind: "celebration" },
+  { name: "Bhai Dooj", aliases: ["bhai dooj", "bhai duj", "bhaiya dooj", "bhau beej"], leadDays: 10, graceDays: 1, angle: "gifting between brothers and sisters, closing the Diwali week" , kind: "celebration" },
+  { name: "Chhath Puja", aliases: ["chhath", "chhath puja", "chhat puja"], leadDays: 7, graceDays: 1, angle: "a devotional festival of Bihar, Jharkhand and eastern UP — respectful greetings" , kind: "devotional" },
+  { name: "Guru Nanak Jayanti", aliases: ["guru nanak jayanti", "gurpurab", "guru purab", "guru nanak"], leadDays: 7, graceDays: 1, angle: "a devotional day — greetings rather than hard sales" , kind: "devotional" },
 ];
 
 /** The month-by-month picture, for planning beyond the dated events. */
@@ -89,8 +103,40 @@ export const MONTH_GUIDE: Record<number, string> = {
 
 export type SeasonalEventRow = { name: string; event_date: string; lead_time_days?: number | null };
 
+/** What the angle depends on: how the business makes money, and whether it sells anything that can be given as a gift. */
+export type AngleContext = { models: BusinessModel[]; giftable: boolean };
+
+/**
+ * The festival's angle for THIS business. Unknown models: the guide's own
+ * angle, as before. Several models: one line per model, labelled.
+ */
+export function angleFor(e: { name: string; angle: string; kind?: FestivalGuide["kind"] }, ctx: AngleContext | null | undefined): string {
+  const kind = e.kind ?? guideByName.get(e.name)?.kind ?? "celebration";
+  const models = ctx?.models ?? [];
+  if (kind !== "celebration" || models.length === 0) return e.angle;
+  const per = (m: BusinessModel): string => {
+    switch (m) {
+      case "products":
+        return e.angle;
+      case "services":
+        return `people get ready for ${e.name} — invite them to book ahead of the day; never say slots are running out unless that's a fact`;
+      case "subscription":
+        return `greet members for ${e.name}; a festive plan or gift membership only if one is in the active offers`;
+      case "b2b":
+        return ctx!.giftable
+          ? `${e.name} greetings to clients, and corporate gifting — its products as gifts for clients and teams`
+          : `${e.name} greetings to clients only — nothing it sells is a gift, so no corporate-gifting pitch`;
+    }
+  };
+  if (models.length === 1) return per(models[0]);
+  return models.map((m) => `for ${MODEL_WORDS[m]}: ${per(m)}`).join("; ");
+}
+
+const MODEL_WORDS: Record<BusinessModel, string> = { products: "products", services: "services", subscription: "members", b2b: "business clients" };
+
 export type SeasonEvent = {
   name: string;
+  kind: FestivalGuide["kind"];
   /** YYYY-MM-DD */
   date: string;
   launchFrom: string;
@@ -172,6 +218,7 @@ export function seasonEvents(rows: SeasonalEventRow[], today: string): SeasonEve
       seasonEnds: addDays(date, guide?.graceDays ?? 1),
       daysAway: daysBetween(today, date),
       angle: guide?.angle ?? "",
+      kind: guide?.kind ?? "celebration",
       aliases: guide?.aliases ?? [name.toLowerCase()],
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -284,11 +331,11 @@ function prettyDate(s: string): string {
   return parseYmd(s).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-/** The Season block of the VERIFIED FACTS. */
-export function formatSeason(s: Season): string {
+/** The Season block of the VERIFIED FACTS — angles for this business's way of making money when known. */
+export function formatSeason(s: Season, ctx?: AngleContext | null): string {
   const lines = [`Season (today is ${prettyDate(s.today)} ${s.today.slice(0, 4)}) — this month: ${s.monthGuide}.`];
-  for (const e of s.now) lines.push(`- Happening now: ${e.name} (${prettyDate(e.date)}) — ${e.angle}.`);
-  for (const e of s.launchNow) lines.push(`- Campaign window open: ${e.name} on ${prettyDate(e.date)}, ${e.daysAway} day(s) away — ${e.angle}.`);
+  for (const e of s.now) lines.push(`- Happening now: ${e.name} (${prettyDate(e.date)}) — ${angleFor(e, ctx)}.`);
+  for (const e of s.launchNow) lines.push(`- Campaign window open: ${e.name} on ${prettyDate(e.date)}, ${e.daysAway} day(s) away — ${angleFor(e, ctx)}.`);
   for (const e of s.planAhead.slice(0, 5)) lines.push(`- Plan ahead: ${e.name} on ${prettyDate(e.date)} (${e.daysAway} days away) — campaigns should launch from ${prettyDate(e.launchFrom)}.`);
   for (const e of s.justEnded) lines.push(`- Over — don't write for it: ${e.name} (${prettyDate(e.date)}).`);
   for (const o of s.outOfSeason) lines.push(`- OUT OF SEASON on this business's live website: ${o.where} says "${o.text.slice(0, 80)}" — ${o.festival} was ${o.endedDaysAgo} days ago. Suggest the owner updates it.`);

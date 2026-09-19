@@ -14,17 +14,24 @@
 // matching every other automation toggle in this codebase.
 // ------------------------------------------------------------------
 
-import { FESTIVAL_GUIDE, indiaToday, outOfSeasonFestival, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
+import { FESTIVAL_GUIDE, angleFor, indiaToday, outOfSeasonFestival, type AngleContext, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
+import { effectiveBusinessModels } from "@/lib/business/businessModel";
 import { blocksText } from "@/lib/claims/businessFacts";
 import { emitNotification, type NotificationKind } from "@/lib/notifications/emit";
 
 export async function syncSeasonalCalendarEntries(supabase: any, dealershipId: string): Promise<number> {
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("seasonal_campaigns_enabled")
+    .select("seasonal_campaigns_enabled, business_models")
     .eq("id", dealershipId)
     .single();
   if (!dealership?.seasonal_campaigns_enabled) return 0;
+
+  // The angle for how this business makes money — not a shop's "gifting" for a salon.
+  const { data: catalogue } = await supabase.from("products").select("kind").eq("dealership_id", dealershipId).eq("is_active", true);
+  const productCount = (catalogue ?? []).filter((p: any) => p.kind !== "service").length;
+  const serviceCount = (catalogue ?? []).length - productCount;
+  const angleContext: AngleContext = { models: effectiveBusinessModels(dealership.business_models, { productCount, serviceCount }).models, giftable: productCount > 0 };
 
   const today = indiaToday();
   // Widest realistic lead time first, then filtered precisely per
@@ -58,7 +65,7 @@ export async function syncSeasonalCalendarEntries(supabase: any, dealershipId: s
       channel: "other",
       scheduled_date: today,
       status: "planned",
-      notes: `${event.name} is on ${event.event_date}. Campaigns should be live from today, ${event.lead_time_days} days ahead — not on the day.${guideAngle(event.name)}`,
+      notes: `${event.name} is on ${event.event_date}. Campaigns should be live from today, ${event.lead_time_days} days ahead — not on the day.${guideAngle(event.name, angleContext)}`,
       seasonal_event_id: event.id,
     });
     if (!error) created++;
@@ -66,9 +73,9 @@ export async function syncSeasonalCalendarEntries(supabase: any, dealershipId: s
   return created;
 }
 
-function guideAngle(name: string): string {
-  const angle = FESTIVAL_GUIDE.find((g) => g.name === name)?.angle;
-  return angle ? ` Angle: ${angle}.` : "";
+function guideAngle(name: string, ctx: AngleContext): string {
+  const guide = FESTIVAL_GUIDE.find((g) => g.name === name);
+  return guide ? ` Angle: ${angleFor(guide, ctx)}.` : "";
 }
 
 const OUT_OF_SEASON: NotificationKind = "out_of_season_content";

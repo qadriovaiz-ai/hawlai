@@ -572,7 +572,8 @@ export function formatFactsForCopy(f: BusinessFacts): string {
     const said = [f.home.headings[0], ...f.home.paragraphs.slice(0, 2)].filter(Boolean).join(" ").slice(0, 400);
     if (said) lines.push(`What the website says: "${said}"`);
   }
-  if (f.season) lines.push(formatSeason(f.season));
+  // Festival angles for how THIS business makes money (seasonalCalendar.ts angleFor).
+  if (f.season) lines.push(formatSeason(f.season, { models: f.businessModels?.models ?? [], giftable: physicalProducts(f).length > 0 }));
   // How this business sounds. It was gathered into the facts but only ever
   // reached chat, so every other generator wrote in a house voice.
   if (f.brand?.voice || f.brand?.tone) lines.push(formatBrandVoiceSection(f.brand.voice, f.brand.tone).trim());
