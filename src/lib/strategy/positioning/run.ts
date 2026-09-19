@@ -38,10 +38,22 @@ type CompetitorRow = Competitor & { claimCount: number };
 export const STOPPED_MESSAGE = "The comparison stopped partway — run it again.";
 
 /**
+ * EMERGENCY STOP (2026-09-19): credits fell $3 → $1 in about ten minutes
+ * after the background run went live. Until that's explained, no run
+ * starts and no running run takes another step. Re-enabled only by setting
+ * POSITIONING_ENABLED=true in the environment, on purpose.
+ */
+export const PAUSED_MESSAGE = "Competitor comparison is paused while Hawlai checks its cost. Nothing is running.";
+export function positioningPaused(): boolean {
+  return process.env.POSITIONING_ENABLED !== "true";
+}
+
+/**
  * Starts a run for this business, or returns the one already moving (a
  * second press doesn't start a second set of searches).
  */
 export async function startPositioning(service: any, dealershipId: string, now = Date.now()): Promise<{ ok: true; id: string; reused: boolean } | { ok: false; error: string }> {
+  if (positioningPaused()) return { ok: false, error: PAUSED_MESSAGE };
   const { data: current } = await service
     .from("competitor_positioning")
     .select("id, status, updated_at")
@@ -79,6 +91,11 @@ function failureWords(f: AiFailure): string {
  * another step is waiting (the caller hands over to a fresh invocation).
  */
 export async function advancePositioning(service: any, id: string): Promise<{ more: boolean }> {
+  if (positioningPaused()) {
+    // Stops a run already moving: no further step, no further model call.
+    await service.from("competitor_positioning").update({ status: "failed", error: PAUSED_MESSAGE, step_running: false, updated_at: new Date().toISOString() }).eq("id", id).eq("status", "running");
+    return { more: false };
+  }
   // The claim: only a running run whose step nobody else is doing.
   const { data: run } = await service
     .from("competitor_positioning")

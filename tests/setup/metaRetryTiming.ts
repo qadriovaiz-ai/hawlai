@@ -16,3 +16,6 @@ beforeEach(() => {
   claudeRetryTiming.defaultMs = 0;
   claudeRetryTiming.maxMs = 0;
 });
+
+// Positioning is paused in production by default (lib/strategy/positioning/run.ts); tests exercise it running.
+process.env.POSITIONING_ENABLED = "true";
