@@ -72,7 +72,7 @@ vi.mock("@/lib/usage/usageGuard", () => ({ checkUsage: async () => (creditsLeft 
 
 import { POST as positioningPost, GET as positioningGet } from "@/app/api/strategy/positioning/route";
 import { POST as workPost } from "@/app/api/strategy/positioning/work/route";
-import { STALE_AFTER_MS, STOPPED_MESSAGE } from "@/lib/strategy/positioning/run";
+import { STALE_AFTER_MS, STOPPED_MESSAGE, PAUSED_MESSAGE } from "@/lib/strategy/positioning/run";
 import { POST as adPost, DELETE as adDelete } from "@/app/api/strategy/positioning/ads/route";
 import { POST as dismissPost } from "@/app/api/strategy/positioning/dismiss/route";
 import { GET as deepGet } from "@/app/api/strategy/deep/route";
@@ -177,7 +177,7 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("the button answers at once (202) — the searches happen after, not inside the request", async () => {
     serve(route);
-    const res = await positioningPost(req("/api/strategy/positioning", {}));
+    const res = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     expect(res.status).toBe(202);
     expect(await res.json()).toMatchObject({ state: "running" });
     expect(tables.competitor_positioning[0]).toMatchObject({ dealership_id: "d1", status: "running", step: 0 });
@@ -188,7 +188,7 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("a whole comparison, step by step through the worker route, each hand-over carrying the server's secret", async () => {
     serve(route);
-    await positioningPost(req("/api/strategy/positioning", {}));
+    await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     await drain();
     const run = tables.competitor_positioning[0];
     expect(run.status).toBe("analysed");
@@ -209,7 +209,7 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("a hand-over that isn't accepted stops the run visibly — it never spins", async () => {
     serve(route, 500);
-    await positioningPost(req("/api/strategy/positioning", {}));
+    await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     await drain();
     expect(tables.competitor_positioning[0]).toMatchObject({ status: "failed", error: STOPPED_MESSAGE });
   });
@@ -228,8 +228,8 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("pressing twice while it runs starts no second set of searches", async () => {
     serve(route);
-    await positioningPost(req("/api/strategy/positioning", {}));
-    const second = await positioningPost(req("/api/strategy/positioning", {}));
+    await positioningPost(req("/api/strategy/positioning", { confirm: true }));
+    const second = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     expect(second.status).toBe(202);
     expect(tables.competitor_positioning).toHaveLength(1);
     expect(pending).toHaveLength(1);
@@ -237,7 +237,7 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("credits out: the run fails with the approved reason, and the page is told on its next look", async () => {
     serve(() => CREDITS);
-    await positioningPost(req("/api/strategy/positioning", {}));
+    await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     await drain();
     const body = await (await positioningGet()).json();
     expect(body.current).toMatchObject({ state: "failed", error: OUTAGE });
@@ -245,13 +245,55 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("gated like Competitor Intelligence, and charged to Research Credits — before anything starts", async () => {
     gateAllowed = false;
-    expect((await positioningPost(req("/api/strategy/positioning", {}))).status).toBe(403);
+    expect((await positioningPost(req("/api/strategy/positioning", { confirm: true }))).status).toBe(403);
     gateAllowed = true;
     creditsLeft = false;
-    const res = await positioningPost(req("/api/strategy/positioning", {}));
+    const res = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     expect(res.status).toBe(429);
     expect((await res.json()).limitReached).toBe(true);
     expect(tables.competitor_positioning ?? []).toEqual([]);
+  });
+
+  it("GET shows what pressing the button would cost; POST without a yes above ₹20 starts nothing (409)", async () => {
+    serve(route);
+    let body = await (await positioningGet()).json();
+    // One watched + four free places: discovery ₹6 + 5 × ₹3 + sorting and writing ₹6.
+    expect(body.estimate).toEqual({ estimateInr: 27, needsConfirm: true, blocked: null, searchCalls: 6, reusing: { competitors: 0, withQuotes: 0 } });
+
+    const res = await positioningPost(req("/api/strategy/positioning", {}));
+    expect(res.status).toBe(409);
+    body = await res.json();
+    expect(body).toMatchObject({ needsConfirm: true, error: "This comparison will cost about ₹27 of AI credits. Confirm to start it.", estimate: { estimateInr: 27 } });
+    expect(tables.competitor_positioning ?? []).toEqual([]);
+    expect(pending).toHaveLength(0);
+    // A "confirm" that isn't exactly true isn't a yes.
+    expect((await positioningPost(req("/api/strategy/positioning", { confirm: "yes" }))).status).toBe(409);
+  });
+
+  it("the second run that would search today is refused (429) and GET says why", async () => {
+    serve(route);
+    tables.competitor_positioning = [{ id: "today", dealership_id: "d1", status: "failed", step: 1, competitors: [], claims: [], analysis: { spentInr: 7 }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }];
+    const body = await (await positioningGet()).json();
+    expect(body.estimate.blocked).toMatch(/^You've already run a full comparison today/);
+    const res = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe(body.estimate.blocked);
+    expect(tables.competitor_positioning).toHaveLength(1);
+    expect(pending).toHaveLength(0);
+  });
+
+  it("paused: GET says so instead of a price, and POST starts nothing", async () => {
+    serve(route);
+    process.env.POSITIONING_ENABLED = "false";
+    try {
+      const body = await (await positioningGet()).json();
+      expect(body.estimate).toEqual({ paused: true, blocked: PAUSED_MESSAGE });
+      const res = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
+      expect(res.status).toBe(429);
+      expect(tables.competitor_positioning ?? []).toEqual([]);
+    } finally {
+      process.env.POSITIONING_ENABLED = "true";
+    }
   });
 
   it("GET returns this business's latest finished run and pasted ads", async () => {
@@ -271,6 +313,18 @@ describe("the page", () => {
     expect(panel).toContain("setTimeout(() => void load(), POLL_MS)");
     expect(panel).toContain("It runs in the background — you can leave this page and come back.");
     expect(panel).not.toMatch(/step: "collect"|step: "analyse"/);
+  });
+
+  it("shows the price on the button, asks before anything over the line, and says what a run really cost", async () => {
+    const { readFileSync } = await import("node:fs");
+    const panel = readFileSync("src/components/strategy/PositioningPanel.tsx", "utf8");
+    expect(panel).toContain("` · about ₹${estimate.estimateInr}`");
+    // The yes is asked on the page before any request is sent.
+    expect(panel).toContain("if (!confirm && estimate?.needsConfirm) return setConfirming(true);");
+    expect(panel).toContain("body: JSON.stringify({ confirm })");
+    expect(panel).toContain("disabled={busy || cantRun || confirming}");
+    expect(panel).toContain("It stops searching at ₹40 whatever happens.");
+    expect(panel).toContain("This comparison cost ₹{spentInr.toFixed(2)} of AI credits.");
   });
 });
 

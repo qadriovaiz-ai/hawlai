@@ -19,7 +19,9 @@ type Row = {
 type Positioning = { competitorCount: number; rows: Row[]; whiteSpace: string[]; crowdedYouHave: string[]; openUnbacked: string[] };
 type Advice = { statement: string | null; angles: { theme: string; title: string; why: string }[]; removed: string[] };
 type Competitor = { name: string; source: "watched" | "owner_ad" | "found"; url?: string | null; claimCount: number };
-type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[] } } };
+type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[]; skippedAtCeiling?: string[] }; spentInr?: number } };
+/** What pressing the button would cost now, from GET — or why it can't be pressed. */
+type Estimate = { estimateInr?: number; needsConfirm?: boolean; blocked?: string | null; searchCalls?: number; paused?: boolean; reusing?: { competitors: number; withQuotes: number } };
 /** The run in progress, from GET — what it's doing now, or why it stopped. */
 type Current = { id: string; state: "running" | "failed" | "analysed"; label: string | null; error: string | null };
 
@@ -40,6 +42,9 @@ export default function PositioningPanel() {
   const [loading, setLoading] = useState(true);
   // What the running comparison is doing now; null when nothing is running.
   const [progress, setProgress] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  // Asking the owner's yes before a comparison that costs more than the confirm line.
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [adName, setAdName] = useState("");
@@ -53,6 +58,7 @@ export default function PositioningPanel() {
     if (d.error) setError(d.error);
     setRun(d.run ?? null);
     setOwnerAds(d.ownerAds ?? []);
+    setEstimate(d.estimate ?? null);
     const current: Current | null = d.current ?? null;
     if (current?.state === "running") {
       setProgress(current.label ?? "Working...");
@@ -74,12 +80,19 @@ export default function PositioningPanel() {
     return () => clearTimeout(t);
   }, [progress]);
 
-  async function compare() {
+  async function compare(confirm = false) {
     setError(null);
     setDismissed([]);
+    // Anything over the confirm line asks first, here — before any request.
+    if (!confirm && estimate?.needsConfirm) return setConfirming(true);
+    setConfirming(false);
     try {
-      const res = await fetch("/api/strategy/positioning", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/strategy/positioning", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm }) });
       const d = await res.json().catch(() => null);
+      if (res.status === 409 && d?.needsConfirm) {
+        if (d.estimate) setEstimate(d.estimate);
+        return setConfirming(true);
+      }
       if (!res.ok || !d) return setError(d?.error ?? `Couldn't start the comparison (${res.status}) — try again.`);
       setProgress("Starting...");
     } catch {
@@ -123,6 +136,10 @@ export default function PositioningPanel() {
   const busy = progress !== null;
   // Said about the finished run, from the run itself.
   const couldntCheck = run?.analysis?.notes?.couldntCheck ?? [];
+  const skippedAtCeiling = run?.analysis?.notes?.skippedAtCeiling ?? [];
+  const spentInr = run?.analysis?.spentInr;
+  const cantRun = Boolean(estimate?.blocked);
+  const costLabel = estimate && !estimate.blocked && typeof estimate.estimateInr === "number" ? ` · about ₹${estimate.estimateInr}` : "";
   const nothingFound = (run?.competitors ?? []).filter((c) => c.claimCount === 0).map((c) => c.name);
   const labelOf = (key: string) => p?.rows.find((r) => r.key === key)?.label ?? key;
 
@@ -136,10 +153,27 @@ export default function PositioningPanel() {
             {run ? ` Last run ${new Date(run.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}.` : ""}
           </p>
         </div>
-        <Button size="sm" onClick={compare} disabled={busy} loading={busy}>
-          {!busy && <Sparkles className="w-3.5 h-3.5" />} {run ? "Run again" : "Compare with competitors"}
+        <Button size="sm" onClick={() => compare(false)} disabled={busy || cantRun || confirming} loading={busy}>
+          {!busy && <Sparkles className="w-3.5 h-3.5" />} {run ? "Run again" : "Compare with competitors"}{costLabel}
         </Button>
       </div>
+
+      {/* Why the button can't be pressed now: paused, or today's run already done. */}
+      {!busy && estimate?.blocked && <p className="text-xs text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> {estimate.blocked}</p>}
+      {!busy && estimate && !estimate.blocked && (estimate.reusing?.withQuotes ?? 0) > 0 && (
+        <p className="text-[11px] text-slate-400">Reuses quotes from the last 14 days for {estimate.reusing!.withQuotes} competitor{estimate.reusing!.withQuotes === 1 ? "" : "s"} — only the rest are searched again.</p>
+      )}
+      {confirming && (
+        <div className="bg-amber-500/10 rounded-lg p-3 space-y-2">
+          <p className="text-sm text-slate-700">
+            This comparison will cost about <span className="font-semibold">₹{estimate?.estimateInr}</span> of AI credits ({estimate?.searchCalls} web search{estimate?.searchCalls === 1 ? "" : "es"}). It stops searching at ₹40 whatever happens.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => compare(true)}>Start</Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
 
       {busy && (
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
@@ -150,6 +184,8 @@ export default function PositioningPanel() {
       {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
       {!busy && nothingFound.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Nothing quotable found for: {nothingFound.join(", ")}.</p>}
       {!busy && couldntCheck.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Couldn't check right now: {couldntCheck.join(", ")} — run it again later.</p>}
+      {!busy && skippedAtCeiling.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Stopped searching at the ₹40 limit — not read this time: {skippedAtCeiling.join(", ")}.</p>}
+      {!busy && typeof spentInr === "number" && <p className="text-[11px] text-slate-400">This comparison cost ₹{spentInr.toFixed(2)} of AI credits.</p>}
 
       {!run && !busy && !error && (
         <p className="text-xs text-slate-500">Hawlai reads what up to 5 competitors say about themselves — the ones you watch first — and shows where the ground is crowded, and where you can say something true that they don't.</p>

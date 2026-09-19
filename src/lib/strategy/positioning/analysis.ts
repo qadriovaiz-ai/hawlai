@@ -71,7 +71,7 @@ export async function classifyThemes(
   facts: OwnFact[],
   themes: Theme[],
   logContext?: LogContext
-): Promise<{ ok: true; claimThemes: string[][]; factThemes: string[][] } | { ok: false; failure: AiFailure }> {
+): Promise<{ ok: true; claimThemes: string[][]; factThemes: string[][]; costInr: number } | { ok: false; failure: AiFailure }> {
   const keys = new Set(themes.map((t) => t.key));
   const r = await callClaude(
     {
@@ -99,7 +99,7 @@ Return JSON only: {"claims":{"0":["theme_key"]},"facts":{"0":["theme_key"]}} —
   const parsed = jsonIn(r.text) ?? {};
   const claimThemes = claims.map((_, i) => validThemes(parsed.claims?.[String(i)], keys));
   const factThemes = facts.map((_, i) => validThemes(parsed.facts?.[String(i)], keys));
-  return { ok: true, claimThemes, factThemes };
+  return { ok: true, claimThemes, factThemes, costInr: r.costInr };
 }
 
 export type ThemeStanding = "crowded" | "contested" | "open";
@@ -249,7 +249,7 @@ export async function writePositioning(
   businessFacts: BusinessFacts | null,
   businessName: string,
   logContext?: LogContext
-): Promise<{ ok: true; advice: PositioningAdvice } | { ok: false; failure: AiFailure }> {
+): Promise<{ ok: true; advice: PositioningAdvice; costInr: number } | { ok: false; failure: AiFailure }> {
   const r = await callClaude(
     {
       model: getModel("standard"),
@@ -273,5 +273,5 @@ Return JSON only: {"statement":"one sentence","angles":[{"theme":"theme_key","ti
     { operation: "positioning_write", logContext: logContext ?? null }
   );
   if (!r.ok) return { ok: false, failure: r.failure };
-  return { ok: true, advice: verifyPositioning(jsonIn(r.text) ?? {}, p, businessFacts) };
+  return { ok: true, advice: verifyPositioning(jsonIn(r.text) ?? {}, p, businessFacts), costInr: r.costInr };
 }

@@ -20,6 +20,14 @@ export const PRICING = {
     [CLAUDE_MODELS.fast]: { inputPerMillionUsd: 1.0, outputPerMillionUsd: 5.0 },
   } as Record<string, { inputPerMillionUsd: number; outputPerMillionUsd: number }>,
 
+  // Anthropic's web search tool: $10 per 1,000 searches, billed on top of
+  // the tokens the search results add. Not in token usage — until
+  // 2026-09-19 it wasn't logged at all, so the log undercounted every
+  // web-search feature against the real bill.
+  anthropicWebSearch: {
+    perSearchUsd: 0.01,
+  },
+
   // Vapi — ~$0.09/minute blended cost, as shown on the actual Vapi
   // dashboard for the assistant/voice/model combination in use.
   vapi: {
@@ -85,6 +93,16 @@ export function costOfClaudeCallInr(inputTokens: number, outputTokens: number, m
   const rate = PRICING.anthropic[model] ?? PRICING.anthropic[CLAUDE_MODELS.standard];
   const usd = (inputTokens / 1_000_000) * rate.inputPerMillionUsd + (outputTokens / 1_000_000) * rate.outputPerMillionUsd;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
+}
+
+export function costOfWebSearchesInr(searches: number): number {
+  return Math.round(searches * PRICING.anthropicWebSearch.perSearchUsd * PRICING.usdToInr * 10000) / 10000;
+}
+
+/** What one Messages API reply cost: its tokens, plus any web searches it ran. */
+export function costOfClaudeResponseInr(usage: any, model: string = CLAUDE_MODELS.standard): number {
+  const tokens = costOfClaudeCallInr(usage?.input_tokens ?? 0, usage?.output_tokens ?? 0, model);
+  return Math.round((tokens + costOfWebSearchesInr(Number(usage?.server_tool_use?.web_search_requests ?? 0))) * 10000) / 10000;
 }
 
 export function costOfVapiCallInr(durationSeconds: number): number {

@@ -21,7 +21,13 @@ function db() {
     let op = "select";
     let payload: any = null;
     const filters: ((r: Row) => boolean)[] = [];
-    const rows = () => (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
+    let sort: [string, boolean] | null = null;
+    const rows = () => {
+      const out = (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
+      if (!sort) return out;
+      const [k, asc] = sort;
+      return [...out].sort((a, b) => (String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0) * (asc ? 1 : -1));
+    };
     const run = (single: boolean) => {
       if (op === "insert") {
         const row = { id: `${table}-${(tables[table] ?? []).length + 1}`, ...payload };
@@ -37,7 +43,7 @@ function db() {
       return { data: single ? found[0] ?? null : found, error: null };
     };
     const api: any = {
-      select: () => api, order: () => api, limit: () => api, in: () => api, gte: () => api, not: () => api, is: () => api, lt: () => api, or: () => api, neq: () => api,
+      select: () => api, order: (k: string, o?: { ascending?: boolean }) => ((sort = [k, o?.ascending !== false]), api), limit: () => api, in: () => api, gte: () => api, not: () => api, is: () => api, lt: () => api, or: () => api, neq: () => api,
       insert: (v: any) => ((op = "insert"), (payload = v), api),
       update: (v: any) => ((op = "update"), (payload = v), api),
       eq: (k: string, v: any) => (filters.push((r) => !(k in r) || r[k] === v), api),
@@ -54,7 +60,9 @@ import { citationsOf, mentions, discoverCompetitors, collectClaims, mergeCompeti
 import { buildPositioning, classifyThemes, unallowedNumbers, verifyPositioning, allowedNumbers, ownFactsFrom, formatPositioningForPrompt } from "@/lib/strategy/positioning/analysis";
 import { themesFor, THEMES } from "@/lib/strategy/positioning/themes";
 import { startPositioning, advancePositioning, describeRun, newestRun, competitorContextFrom, latestPositioning, STALE_AFTER_MS, STOPPED_MESSAGE } from "@/lib/strategy/positioning/run";
-import { resetOperatorAlerts } from "@/lib/ai/claude";
+import { resetOperatorAlerts, callClaude } from "@/lib/ai/claude";
+import { planRun, estimateView, RUN_CEILING_INR } from "@/lib/strategy/positioning/budget";
+import { getModel } from "@/lib/models";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
 const OUTAGE = "AI features are temporarily unavailable on our side — the Hawlai team has been alerted. Please try again later.";
@@ -229,7 +237,7 @@ describe("code counts; the model only sorts", () => {
   it("sorting: only real theme keys, only the items asked about, at most two each", async () => {
     anthropic(() => textReply('{"claims":{"0":["price","made_up"],"1":["price"],"9":["price"]},"facts":{"0":["materials","handmade","delivery"]}}'));
     const r = await classifyThemes(claims.slice(0, 2), own.slice(0, 1), themes);
-    expect(r).toEqual({ ok: true, claimThemes: [["price"], ["price"]], factThemes: [["materials", "handmade"]] });
+    expect(r).toEqual({ ok: true, claimThemes: [["price"], ["price"]], factThemes: [["materials", "handmade"]], costInr: expect.any(Number) });
   });
 
   it("crowded, contested and open are counted per competitor — not per quote — and white space needs a fact of your own", () => {
@@ -344,7 +352,7 @@ describe("a run, end to end", () => {
 
   it("one step per invocation: find, one competitor at a time, sort, write — each step at most one model call", async () => {
     const prompts = anthropic(sortAndWrite);
-    const started = await startPositioning(db(), "d1");
+    const started = await startPositioning(db(), "d1", { confirm: true });
     if (!started.ok) throw new Error(started.error);
     expect(tables.competitor_positioning[0]).toMatchObject({ dealership_id: "d1", status: "running", step: 0 });
 
@@ -383,7 +391,7 @@ describe("a run, end to end", () => {
 
   it("a step already claimed isn't run again — a duplicate hand-over does nothing", async () => {
     const prompts = anthropic(sortAndWrite);
-    const started = await startPositioning(db(), "d1");
+    const started = await startPositioning(db(), "d1", { confirm: true });
     if (!started.ok) throw new Error(started.error);
     tables.competitor_positioning[0].step_running = true;
     expect(await advancePositioning(db(), started.id)).toEqual({ more: false });
@@ -396,17 +404,17 @@ describe("a run, end to end", () => {
 
   it("pressing again while a run is moving returns that run — no second set of searches; a stalled one is replaced", async () => {
     const now = Date.now();
-    const first = await startPositioning(db(), "d1", now);
-    const again = await startPositioning(db(), "d1", now + 5_000);
+    const first = await startPositioning(db(), "d1", { confirm: true, now: now });
+    const again = await startPositioning(db(), "d1", { confirm: true, now: now + 5_000 });
     expect(again).toEqual({ ok: true, id: (first as any).id, reused: true });
-    const later = await startPositioning(db(), "d1", now + STALE_AFTER_MS + 1_000);
+    const later = await startPositioning(db(), "d1", { confirm: true, now: now + STALE_AFTER_MS + 1_000 });
     expect(later).toMatchObject({ ok: true, reused: false });
     expect(tables.competitor_positioning).toHaveLength(2);
   });
 
   it("credits out while finding competitors: the run fails with the approved reason and goes no further", async () => {
     const prompts = anthropic(() => CREDITS);
-    const started = await startPositioning(db(), "d1");
+    const started = await startPositioning(db(), "d1", { confirm: true });
     if (!started.ok) throw new Error(started.error);
     expect(await advancePositioning(db(), started.id)).toEqual({ more: false });
     expect(tables.competitor_positioning[0]).toMatchObject({ status: "failed", error: OUTAGE, step_running: false });
@@ -416,7 +424,7 @@ describe("a run, end to end", () => {
 
   it("one competitor too busy to read: noted, and the run carries on without it", async () => {
     anthropic((prompt) => (prompt.startsWith('Search for how "Aroma Hut"') ? { status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "busy" } } } : sortAndWrite(prompt)));
-    const started = await startPositioning(db(), "d1");
+    const started = await startPositioning(db(), "d1", { confirm: true });
     if (!started.ok) throw new Error(started.error);
     await runToEnd(started.id);
     const done = tables.competitor_positioning[0];
@@ -426,7 +434,7 @@ describe("a run, end to end", () => {
 
   it("the counted table is kept even if writing the advice fails", async () => {
     anthropic((prompt) => (prompt.startsWith("You are positioning") ? CREDITS : sortAndWrite(prompt)));
-    const started = await startPositioning(db(), "d1");
+    const started = await startPositioning(db(), "d1", { confirm: true });
     if (!started.ok) throw new Error(started.error);
     await runToEnd(started.id);
     const done = tables.competitor_positioning[0];
@@ -450,5 +458,245 @@ describe("a run, end to end", () => {
   it("the newest run is this business's own", async () => {
     tables.competitor_positioning = [{ id: "theirs", dealership_id: "d2", status: "running", created_at: "2026-09-19T11:00:00Z" }];
     expect(await newestRun(db(), "d1")).toBeNull();
+  });
+});
+
+describe("what a comparison costs, and what stops it costing more", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // 2026-09-19 12:00 IST.
+  const NOW = Date.parse("2026-09-19T06:30:00Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  beforeEach(() => {
+    tables = {
+      dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Shahjahanpur" }],
+      competitor_watches: [{ dealership_id: "d1", competitor_name: "Wick & Co" }],
+      competitor_dismissed: [],
+      competitor_owner_ads: [{ dealership_id: "d1", competitor_name: "Aroma Hut", ad_text: "Diwali sale — 40% off all candles this week only" }],
+      business_knowledge: [{ dealership_id: "d1", is_active: true, category: "business_story", title: "Materials and suppliers", content: "Soy wax from a Kanpur supplier; I rejected paraffin." }],
+      profiles: [],
+      api_usage_logs: [],
+      competitor_positioning: [],
+    };
+  });
+
+  const webClaim = (competitor: string, quote: string, url = "https://x.in") => ({ competitor, quote, url, title: competitor, origin: "web" });
+  /** A finished run from `daysAgo`, with found competitors and web quotes. */
+  function pastRun(daysAgo: number, over: Row = {}) {
+    const at = iso(NOW - daysAgo * DAY);
+    const row = {
+      id: `past-${daysAgo}`,
+      dealership_id: "d1",
+      status: "analysed",
+      step: 6,
+      created_at: at,
+      updated_at: at,
+      competitors: [
+        { name: "Wick & Co", source: "watched", claimCount: 1 },
+        { name: "Aroma Hut", source: "owner_ad", claimCount: 2 },
+        { name: "Moonlit Candles", source: "found", url: "https://moonlit.in", claimCount: 1 },
+      ],
+      claims: [webClaim("Wick & Co", "Candles from ₹249"), webClaim("Aroma Hut", "Lucknow's most affordable candles"), webClaim("Moonlit Candles", "Starting at ₹299")],
+      analysis: { spentInr: 20 },
+      ...over,
+    };
+    tables.competitor_positioning.push(row);
+    return row;
+  }
+
+  const sortAndWrite = (prompt: string) => {
+    if (prompt.startsWith("Sort each item")) return textReply('{"claims":{"0":["price"],"1":["price"]},"facts":{"0":["materials"]}}');
+    if (prompt.startsWith("You are positioning")) return textReply('{"statement":"Candles that say what they are made of.","angles":[]}');
+    if (prompt.startsWith("Find up to")) {
+      return webReply([{ text: "Moonlit Candles sells soy candles.", url: "https://moonlit.in", title: "Moonlit Candles", quote: "Moonlit Candles small-batch soy candles" }], '{"competitors":[{"name":"Moonlit Candles","url":"https://moonlit.in"}]}');
+    }
+    if (prompt.includes('"Wick & Co"')) return webReply([{ text: "x", url: "https://wickandco.in", title: "Wick & Co", quote: "Candles from ₹249, free shipping over ₹799" }]);
+    if (prompt.includes('"Moonlit Candles"')) return webReply([{ text: "x", url: "https://moonlit.in/shop", title: "Moonlit Candles shop", quote: "Starting at ₹299" }]);
+    return webReply([]);
+  };
+
+  async function runToEnd(id: string) {
+    for (let i = 0; i < 20; i++) if (!(await advancePositioning(db(), id)).more) return;
+    throw new Error("the run never finished");
+  }
+
+  it("a first run: finds competitors, searches each one — about ₹27, so it asks first", async () => {
+    const plan = await planRun(db(), "d1", NOW);
+    // Two known + three free places → one discovery and five competitor searches.
+    expect(plan).toMatchObject({ discover: true, searchCalls: 6, estimateInr: 27, needsConfirm: true, blocked: null });
+    expect(estimateView(plan)).toEqual({ estimateInr: 27, needsConfirm: true, blocked: null, searchCalls: 6, reusing: { competitors: 0, withQuotes: 0 } });
+
+    const unconfirmed = await startPositioning(db(), "d1", { now: NOW });
+    expect(unconfirmed).toMatchObject({ ok: false, needsConfirm: true, error: "This comparison will cost about ₹27 of AI credits. Confirm to start it." });
+    expect(tables.competitor_positioning).toHaveLength(0);
+
+    const confirmed = await startPositioning(db(), "d1", { confirm: true, now: NOW });
+    expect(confirmed).toMatchObject({ ok: true, reused: false });
+    expect(tables.competitor_positioning[0].analysis).toMatchObject({ plan: { discover: true, searchCalls: 6, estimateInr: 27 }, spentInr: 0 });
+  });
+
+  it("a rerun within 14 days reuses the competitors and their quotes: no search at all, about ₹6, no confirm", async () => {
+    pastRun(3);
+    const plan = await planRun(db(), "d1", NOW);
+    expect(plan).toMatchObject({ discover: false, searchCalls: 0, estimateInr: 6, needsConfirm: false, blocked: null });
+    expect(plan.reusedFound).toEqual([{ name: "Moonlit Candles", source: "found", url: "https://moonlit.in" }]);
+    expect(Object.keys(plan.cachedClaims).sort()).toEqual(["Aroma Hut", "Moonlit Candles", "Wick & Co"]);
+
+    const prompts = anthropic(sortAndWrite);
+    const started = await startPositioning(db(), "d1", { now: NOW });
+    if (!started.ok) throw new Error(started.error);
+    await runToEnd(started.id);
+    // Only sorting and writing — not one search.
+    expect(prompts.map((x) => x.slice(0, 12))).toEqual(["Sort each it", "You are posi"]);
+    const done = tables.competitor_positioning.find((r) => r.id === started.id)!;
+    expect(done.status).toBe("analysed");
+    expect(done.competitors.map((c: any) => `${c.name}:${c.claimCount}`)).toEqual(["Wick & Co:1", "Aroma Hut:2", "Moonlit Candles:1"]);
+    expect(done.claims.map((c: any) => c.quote)).toContain("Starting at ₹299");
+  });
+
+  it("quotes older than 14 days aren't reused, and a removed competitor isn't brought back", async () => {
+    pastRun(15);
+    expect(await planRun(db(), "d1", NOW)).toMatchObject({ discover: true, searchCalls: 6 });
+
+    tables.competitor_positioning = [];
+    pastRun(2);
+    tables.competitor_dismissed = [{ dealership_id: "d1", competitor_name: "Moonlit Candles" }];
+    const plan = await planRun(db(), "d1", NOW);
+    expect(plan.reusedFound).toEqual([]);
+    expect(Object.keys(plan.cachedClaims).sort()).toEqual(["Aroma Hut", "Wick & Co"]);
+    expect(plan.searchCalls).toBe(0);
+  });
+
+  it("only the competitor without quotes is searched — newest quotes win", async () => {
+    pastRun(5, { claims: [webClaim("Wick & Co", "old Wick quote")] });
+    // A pasted ad in an old run isn't a web quote — the owner's ads are read fresh.
+    pastRun(1, { id: "newer", claims: [webClaim("Wick & Co", "new Wick quote"), webClaim("Moonlit Candles", "Starting at ₹299"), { ...webClaim("Aroma Hut", "Diwali sale"), url: null, origin: "owner" }] });
+    const plan = await planRun(db(), "d1", NOW - 0);
+    expect(plan.cachedClaims["Wick & Co"].map((c) => c.quote)).toEqual(["new Wick quote"]);
+    // Aroma Hut has only the owner's ad: one search, ₹3 + ₹6.
+    expect(plan).toMatchObject({ searchCalls: 1, estimateInr: 9, needsConfirm: false });
+  });
+
+  it("one run that spends, per business per day (India time) — a run that spent nothing doesn't count", async () => {
+    // Earlier today, IST, and it spent.
+    pastRun(0.1, { claims: [], competitors: [], analysis: { spentInr: 8 } });
+    const blocked = await planRun(db(), "d1", NOW);
+    expect(blocked.blocked).toMatch(/^You've already run a full comparison today/);
+    const r = await startPositioning(db(), "d1", { confirm: true, now: NOW });
+    expect(r).toMatchObject({ ok: false, error: blocked.blocked });
+    expect(tables.competitor_positioning).toHaveLength(1);
+
+    // Another business's run doesn't block this one.
+    tables.competitor_positioning[0].dealership_id = "d2";
+    expect((await planRun(db(), "d1", NOW)).blocked).toBeNull();
+
+    // A run today that failed before spending anything doesn't use up the day.
+    tables.competitor_positioning[0] = { ...tables.competitor_positioning[0], dealership_id: "d1", status: "failed", analysis: { spentInr: 0 } };
+    expect((await planRun(db(), "d1", NOW)).blocked).toBeNull();
+
+    // Yesterday 23:00 IST is a different day.
+    tables.competitor_positioning[0] = { ...tables.competitor_positioning[0], created_at: "2026-09-18T17:30:00Z", analysis: { spentInr: 8 } };
+    expect((await planRun(db(), "d1", NOW)).blocked).toBeNull();
+  });
+
+  it("a rerun that needs no search is never blocked by the daily limit", async () => {
+    pastRun(0.1);
+    expect(await planRun(db(), "d1", NOW)).toMatchObject({ searchCalls: 0, blocked: null });
+  });
+
+  it("at the ₹40 ceiling no more competitors are searched; the run finishes with what it has and says who was skipped", async () => {
+    const prompts = anthropic(sortAndWrite);
+    const started = await startPositioning(db(), "d1", { confirm: true, now: NOW });
+    if (!started.ok) throw new Error(started.error);
+    await advancePositioning(db(), started.id); // step 0: discovery
+    const row = tables.competitor_positioning[0];
+    row.analysis = { ...row.analysis, spentInr: RUN_CEILING_INR };
+    const before = prompts.length;
+    await runToEnd(started.id);
+    const searched = prompts.slice(before).filter((x) => x.startsWith("Search for how"));
+    expect(searched).toEqual([]);
+    expect(row.status).toBe("analysed");
+    expect(row.analysis.notes.skippedAtCeiling).toEqual(["Wick & Co", "Aroma Hut", "Moonlit Candles"]);
+    // The pasted ad was enough to compare with.
+    expect(row.claims.map((c: any) => c.quote)).toEqual(["Diwali sale — 40% off all candles this week only"]);
+  });
+
+  it("at the ceiling with nothing to quote, the run fails with the reason — no sorting, no writing", async () => {
+    tables.competitor_owner_ads = [];
+    const prompts = anthropic(sortAndWrite);
+    const started = await startPositioning(db(), "d1", { confirm: true, now: NOW });
+    if (!started.ok) throw new Error(started.error);
+    await advancePositioning(db(), started.id);
+    const row = tables.competitor_positioning[0];
+    row.analysis = { ...row.analysis, spentInr: 41 };
+    const before = prompts.length;
+    await runToEnd(started.id);
+    expect(prompts.length).toBe(before);
+    expect(row).toMatchObject({ status: "failed", error: "The comparison reached its ₹40 limit before finding anything it could quote. Paste an ad you've seen and run it again tomorrow." });
+  });
+
+  it("searches run on the fast model, one search per competitor, kept to its own site when known; discovery gets two", async () => {
+    const bodies: any[] = [];
+    anthropic((prompt, body) => (bodies.push(body), sortAndWrite(prompt)));
+    const started = await startPositioning(db(), "d1", { confirm: true, now: NOW });
+    if (!started.ok) throw new Error(started.error);
+    await runToEnd(started.id);
+    const search = (start: string) => bodies.find((b) => String(b.messages[0].content).startsWith(start))!;
+    const discovery = search("Find up to");
+    expect(discovery.model).toBe(getModel("fast"));
+    expect(discovery.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 2 }]);
+    expect(search('Search for how "Wick & Co"').tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 1 }]);
+    expect(search('Search for how "Moonlit Candles"').tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 1, allowed_domains: ["moonlit.in"] }]);
+    expect(search('Search for how "Moonlit Candles"').model).toBe(getModel("fast"));
+    // Sorting and writing stay on the standard model.
+    expect(search("Sort each item").model).toBe(getModel("standard"));
+    expect(search("You are positioning").model).toBe(getModel("standard"));
+
+    // What it really cost is recorded, and matches what was charged.
+    const done = tables.competitor_positioning[0];
+    expect(done.analysis.spentInr).toBeGreaterThan(0);
+    // Every call's cost, discovery and each competitor included — the same as the usage log.
+    const logged = tables.api_usage_logs.reduce((sum, x) => sum + Number(x.cost_inr), 0);
+    expect(tables.api_usage_logs.filter((x) => x.operation === "positioning_claims")).toHaveLength(3);
+    expect(done.analysis.spentInr).toBeCloseTo(logged, 2);
+    expect(done.analysis.plan).toMatchObject({ estimateInr: 27 });
+  });
+
+  it("if the API refuses the fast model for search, the same search runs once on the standard model", async () => {
+    const models: string[] = [];
+    anthropic((prompt, body) => {
+      models.push(body.model);
+      if (body.model === getModel("fast")) return { status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "web_search is not supported on this model" } } };
+      return sortAndWrite(prompt);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const r = await collectClaims({ name: "Wick & Co", source: "watched" }, { category: "Home fragrance", city: null });
+    expect(models).toEqual([getModel("fast"), getModel("standard")]);
+    expect(r.claims.map((c) => c.quote)).toEqual(["Candles from ₹249, free shipping over ₹799"]);
+  });
+
+  it("an outage isn't retried on the other model", async () => {
+    const models: string[] = [];
+    anthropic((_p, body) => (models.push(body.model), CREDITS));
+    const r = await collectClaims({ name: "Wick & Co", source: "watched" }, { category: "Home fragrance", city: null });
+    expect(models).toEqual([getModel("fast")]);
+    expect(r).toMatchObject({ claims: [], costInr: 0 });
+  });
+
+  it("web-search fees are logged as their own usage row and counted in the call's cost", async () => {
+    anthropic(() => ({ status: 200, body: { content: [{ type: "text", text: "ok" }], usage: { input_tokens: 1000, output_tokens: 100, server_tool_use: { web_search_requests: 2 } } } }));
+    const r = await callClaude({ model: getModel("fast"), max_tokens: 10, messages: [{ role: "user", content: "hi" }] }, { operation: "positioning_claims", logContext: { supabase: db(), dealershipId: "d1" } });
+    if (!r.ok) throw new Error("call failed");
+    const rows = tables.api_usage_logs;
+    const fee = rows.find((x) => x.operation === "positioning_claims:web_search");
+    // $0.01 a search at ₹87.
+    expect(fee).toMatchObject({ dealership_id: "d1", service: "anthropic", model: "web_search", input_tokens: 0, output_tokens: 0, cost_inr: 1.74 });
+    const tokens = rows.find((x) => x.operation === "positioning_claims")!;
+    expect(r.costInr).toBeCloseTo(Number(tokens.cost_inr) + 1.74, 3);
+    // No searches, no fee row.
+    tables.api_usage_logs = [];
+    anthropic(() => textReply("ok"));
+    await callClaude({ model: getModel("fast"), max_tokens: 10, messages: [{ role: "user", content: "hi" }] }, { operation: "x", logContext: { supabase: db(), dealershipId: "d1" } });
+    expect(tables.api_usage_logs.map((x) => x.operation)).toEqual(["x"]);
   });
 });

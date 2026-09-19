@@ -18,7 +18,8 @@
 //
 // Modelled on lib/ads/metaRead.ts (classifyGraphError / GraphResult).
 
-import { logClaudeUsage } from "@/lib/usage/logUsage";
+import { logClaudeUsage, logWebSearchUsage } from "@/lib/usage/logUsage";
+import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { getModel } from "@/lib/models";
 
 export const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
@@ -35,7 +36,7 @@ export type AiFailure = {
   retryable: boolean;
 };
 
-export type ClaudeResult = { ok: true; data: any; text: string } | { ok: false; failure: AiFailure };
+export type ClaudeResult = { ok: true; data: any; text: string; /** Tokens plus web searches, in rupees. */ costInr: number } | { ok: false; failure: AiFailure };
 
 // Anthropic reports an empty credit balance as HTTP 400
 // (invalid_request_error, "Your credit balance is too low…"); newer API
@@ -235,9 +236,10 @@ export async function callClaude(body: Record<string, any>, opts: ClaudeCallOpti
     if (res.ok && data) {
       if (opts.logContext && data.usage) {
         await logClaudeUsage(opts.logContext.supabase, opts.logContext.dealershipId, opts.operation, data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, request.model);
+        await logWebSearchUsage(opts.logContext.supabase, opts.logContext.dealershipId, opts.operation, Number(data.usage.server_tool_use?.web_search_requests ?? 0));
       }
       const text = Array.isArray(data.content) ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("") : "";
-      return { ok: true, data, text };
+      return { ok: true, data, text, costInr: costOfClaudeResponseInr(data.usage, request.model) };
     }
 
     // A 200 with a body we can't read is a hiccup, not an answer.

@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireFeature } from "@/lib/featureGate";
 import { checkUsage } from "@/lib/usage/usageGuard";
-import { startPositioning, latestPositioning, newestRun, describeRun, STOPPED_MESSAGE } from "@/lib/strategy/positioning/run";
+import { startPositioning, latestPositioning, newestRun, describeRun, positioningPaused, STOPPED_MESSAGE, PAUSED_MESSAGE } from "@/lib/strategy/positioning/run";
+import { planRun, estimateView } from "@/lib/strategy/positioning/budget";
 import { driveRun } from "@/lib/strategy/positioning/continue";
 
 // Positioning against what competitors say in public (Advanced Strategy
@@ -49,7 +50,13 @@ export async function GET() {
   }
   // Nothing to show once a newer comparison has finished.
   if (current && run && Date.parse(run.created_at) > Date.parse(current.createdAt)) current = null;
-  return NextResponse.json({ run, current, ownerAds: ads ?? [] });
+  // What pressing the button would cost now — or why it can't be pressed.
+  const estimate = positioningPaused()
+    ? { paused: true, blocked: PAUSED_MESSAGE }
+    : current?.state === "running"
+      ? null
+      : estimateView(await planRun(createServiceClient(), who.dealershipId));
+  return NextResponse.json({ run, current, estimate, ownerAds: ads ?? [] });
 }
 
 /** Starts a comparison (or returns the one already running) and answers at once. */
@@ -67,8 +74,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   const usage = await checkUsage(dealershipId, "research");
   if (!usage.allowed) return NextResponse.json({ error: usage.message, limitReached: true }, { status: 429 });
 
-  const started = await startPositioning(service, dealershipId);
-  if (!started.ok) return NextResponse.json({ error: started.error }, { status: 500 });
+  const body = await request.json().catch(() => ({}));
+  const started = await startPositioning(service, dealershipId, { confirm: body?.confirm === true });
+  if (!started.ok) {
+    // Needs the owner's yes first (409), or can't run now (429: once a day, or paused).
+    if (started.needsConfirm) return NextResponse.json({ error: started.error, needsConfirm: true, estimate: started.plan ? estimateView(started.plan) : null }, { status: 409 });
+    return NextResponse.json({ error: started.error }, { status: started.plan?.blocked || started.error === PAUSED_MESSAGE ? 429 : 500 });
+  }
   if (!started.reused) {
     const origin = new URL(request.url).origin;
     // The first step runs here, after the answer; the rest hand over.

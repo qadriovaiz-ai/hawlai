@@ -1,4 +1,4 @@
-import { costOfClaudeCallInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeoVideoInr, costOfElevenLabsInr, costOfPerplexityCallInr } from "./pricing";
+import { costOfClaudeCallInr, costOfWebSearchesInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeoVideoInr, costOfElevenLabsInr, costOfPerplexityCallInr } from "./pricing";
 import { CLAUDE_MODELS } from "../models";
 
 // Single place every real usage log gets written from — keeps the
@@ -20,6 +20,24 @@ export async function logClaudeUsage(supabase: any, dealershipId: string, operat
     });
   } catch {
     // Best-effort — never let telemetry logging break the real feature.
+  }
+}
+
+/** Web searches a Claude call ran — a separate row, so the log matches the Anthropic bill. */
+export async function logWebSearchUsage(supabase: any, dealershipId: string, operation: string, searches: number) {
+  if (!(searches > 0)) return;
+  try {
+    await supabase.from("api_usage_logs").insert({
+      dealership_id: dealershipId,
+      service: "anthropic",
+      operation: `${operation}:web_search`,
+      model: "web_search",
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_inr: costOfWebSearchesInr(searches),
+    });
+  } catch {
+    // Best-effort, same as every other usage log.
   }
 }
 

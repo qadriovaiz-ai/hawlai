@@ -13,9 +13,8 @@
 // names without a cited page that mentions it is dropped. Nothing here can
 // invent a competitor or put words in one's mouth.
 
-import { callClaude, type AiFailure, type AiFailureNote } from "@/lib/ai/claude";
+import { callClaude, type AiFailure, type AiFailureNote, type ClaudeResult } from "@/lib/ai/claude";
 import { getModel } from "@/lib/models";
-import { costOfClaudeCallInr } from "@/lib/usage/pricing";
 import { recordResearchCredits } from "@/lib/usage/researchCredits";
 
 export type Citation = { url: string; title: string; quote: string };
@@ -33,6 +32,39 @@ export type Claim = {
 };
 
 type LogContext = { supabase: any; dealershipId: string };
+
+// COST (2026-09-19): a run as first built cost about ₹60 — discovery alone
+// read ~39,000 tokens of search results per call on the standard model.
+// Searching and quoting is simple work: it runs on the fast model, with
+// fewer searches. The quote rule doesn't depend on the model — only a real
+// citation's words are kept — so a weaker model finds fewer quotes, never
+// invented ones. Sorting and writing stay on the standard model.
+export const SEARCH_MODEL = getModel("fast");
+export const DISCOVERY_SEARCHES = 2;
+export const CLAIM_SEARCHES = 1;
+
+/**
+ * A web-search call on the fast model. If the API refuses that model for
+ * the tool (a bad request, not an outage), the same call runs once on the
+ * standard model — the run never fails because of the cheaper choice.
+ */
+async function searchCall(body: Record<string, any>, operation: string, logContext?: LogContext): Promise<ClaudeResult> {
+  const first = await callClaude({ ...body, model: SEARCH_MODEL }, { operation, logContext: logContext ?? null });
+  if (first.ok || first.failure.kind !== "bad_request") return first;
+  console.warn(`[positioning] ${operation}: fast model refused (${first.failure.message.slice(0, 120)}) — using the standard model`);
+  return callClaude({ ...body, model: getModel("standard") }, { operation, logContext: logContext ?? null });
+}
+
+/** The site to keep a competitor's search on, when we know it — its own pages, not articles about it. */
+export function searchDomainOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) ? host : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Every web-search citation in a reply, once each. */
 export function citationsOf(data: any): Citation[] {
@@ -83,9 +115,9 @@ function categoryWordsOf(category: string): string[] {
   return [...words, ...words.map((w) => (w.endsWith("s") ? w.slice(0, -1) : `${w}s`))];
 }
 
-async function chargeResearch(logContext: LogContext | undefined, data: any) {
-  const usage = data?.usage;
-  if (logContext && usage) await recordResearchCredits(logContext.dealershipId, costOfClaudeCallInr(usage.input_tokens ?? 0, usage.output_tokens ?? 0));
+/** Research Credits at what the call really cost — the model that ran, and its searches. */
+async function chargeResearch(logContext: LogContext | undefined, costInr: number) {
+  if (logContext && costInr > 0) await recordResearchCredits(logContext.dealershipId, costInr);
 }
 
 /** The JSON object holding `key`, after any cited prose that precedes it. */
@@ -109,14 +141,13 @@ function jsonIn(data: any, key: string): any | null {
 export async function discoverCompetitors(
   input: { businessName: string; category: string; city: string | null; exclude: string[]; want: number },
   logContext?: LogContext
-): Promise<{ found: Competitor[]; failure?: AiFailure }> {
-  if (input.want <= 0) return { found: [] };
+): Promise<{ found: Competitor[]; failure?: AiFailure; costInr: number }> {
+  if (input.want <= 0) return { found: [], costInr: 0 };
   const where = input.city ? `in or near ${input.city}, India, or selling online across India` : "in India, including online sellers";
-  const r = await callClaude(
+  const r = await searchCall(
     {
-      model: getModel("standard"),
       max_tokens: 1500,
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: DISCOVERY_SEARCHES }],
       messages: [{
         role: "user",
         content: `Find up to ${input.want + 2} real businesses that compete with "${input.businessName}", a ${input.category} business, for the same customers — ${where}. Prefer small and mid-sized sellers a customer would realistically compare it with, not giant marketplaces themselves.
@@ -124,10 +155,11 @@ Do not include: ${[input.businessName, ...input.exclude].map((n) => `"${n}"`).jo
 Only name a business you found on a page you can cite. For each one, first write one sentence naming it, citing the page you found it on. Then end with this JSON and nothing after it: {"competitors":[{"name":"their business name as they write it","url":"their own site or profile, if you found one"}]}`,
       }],
     },
-    { operation: "positioning_discovery", logContext: logContext ?? null }
+    "positioning_discovery",
+    logContext
   );
-  if (!r.ok) return { found: [], failure: r.failure };
-  await chargeResearch(logContext, r.data);
+  if (!r.ok) return { found: [], failure: r.failure, costInr: 0 };
+  await chargeResearch(logContext, r.costInr);
 
   const cites = citationsOf(r.data);
   const parsed = jsonIn(r.data, "competitors");
@@ -144,7 +176,7 @@ Only name a business you found on a page you can cite. For each one, first write
     found.push({ name, source: "found", url });
     if (found.length >= input.want) break;
   }
-  return { found };
+  return { found, costInr: r.costInr };
 }
 
 /**
@@ -155,22 +187,23 @@ export async function collectClaims(
   competitor: Competitor,
   context: { category: string; city: string | null },
   logContext?: LogContext
-): Promise<{ claims: Claim[]; failure?: AiFailure }> {
-  const r = await callClaude(
+): Promise<{ claims: Claim[]; failure?: AiFailure; costInr: number }> {
+  const domain = searchDomainOf(competitor.url);
+  const r = await searchCall(
     {
-      model: getModel("standard"),
-      max_tokens: 1500,
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }],
+      max_tokens: 1200,
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: CLAIM_SEARCHES, ...(domain ? { allowed_domains: [domain] } : {}) }],
       messages: [{
         role: "user",
         content: `Search for how "${competitor.name}" (a ${context.category} business${context.city ? ` near ${context.city}` : ""}, India)${competitor.url ? ` — ${competitor.url} —` : ""} describes itself to customers: its website, Instagram or Facebook bio, Google listing, and marketplace listings.
 Quote what it says in its OWN words about its products or services, prices, quality or materials, delivery, offers, gifting, guarantees or experience — citing each quote. Skip reviews written by customers and articles written about it by others. If you can't find it, say so.`,
       }],
     },
-    { operation: "positioning_claims", logContext: logContext ?? null }
+    "positioning_claims",
+    logContext
   );
-  if (!r.ok) return { claims: [], failure: r.failure };
-  await chargeResearch(logContext, r.data);
+  if (!r.ok) return { claims: [], failure: r.failure, costInr: 0 };
+  await chargeResearch(logContext, r.costInr);
 
   const cat = categoryWordsOf(context.category);
   const claims: Claim[] = citationsOf(r.data)
@@ -178,7 +211,7 @@ Quote what it says in its OWN words about its products or services, prices, qual
     .filter((c) => mentions(competitor.name, `${c.title} ${c.url} ${c.quote}`, cat) || (competitor.url ? sameSite(c.url, competitor.url) : false))
     .slice(0, 8)
     .map((c) => ({ competitor: competitor.name, quote: c.quote, url: c.url, title: c.title || null, origin: "web" as const }));
-  return { claims };
+  return { claims, costInr: r.costInr };
 }
 
 function sameSite(a: string, b: string): boolean {
