@@ -10,7 +10,7 @@ import {
   type AudienceResult,
 } from "@/lib/ads/metaCustomAudiences";
 import { buildSuppressionList, hashPhone, hashEmail, isSuppressed } from "@/lib/ads/audienceHashing";
-import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { loadMetaAudienceToken } from "@/lib/ads/metaToken";
 
 // Meta Custom Audience sync — retargeting piece 5/7.
 //
@@ -18,6 +18,11 @@ import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 // ad account. Each audience has a stable audience_key so re-syncing
 // updates the same Meta audience rather than creating duplicates
 // (enforced by unique(dealership_id, audience_key), migration 155).
+//
+// TOKEN (Retargeting R1, 2026-09-20): audiences are ad-account objects, so
+// create, upload and count use the USER token (lib/ads/metaToken.ts
+// loadMetaAudienceToken) — never the Page token, which can't manage them.
+// An expired one says "reconnect" instead of failing at Meta.
 
 type AudienceKey = "abandoned_cart" | "viewed_no_purchase" | "buyers" | "buyers_lookalike";
 
@@ -64,9 +69,10 @@ export async function GET() {
   const resolved = await resolveOwner(supabase);
   if (resolved.error) return resolved.error;
 
-  const [{ data: rows }, { data: dealership }] = await Promise.all([
+  const [{ data: rows }, { data: dealership }, token] = await Promise.all([
     supabase.from("meta_custom_audiences").select("*").eq("dealership_id", resolved.dealershipId),
-    supabase.from("dealerships").select("fb_ad_account_id, meta_pixel_id, fb_page_access_token, fb_page_access_token_encrypted").eq("id", resolved.dealershipId).single(),
+    supabase.from("dealerships").select("fb_ad_account_id, meta_pixel_id").eq("id", resolved.dealershipId).single(),
+    loadMetaAudienceToken(supabase, resolved.dealershipId),
   ]);
 
   const byKey = new Map((rows ?? []).map((r: any) => [r.audience_key, r]));
@@ -74,12 +80,14 @@ export async function GET() {
   return NextResponse.json({
     // Reports readiness rather than silently offering a sync that
     // can't work — both a pixel and an ad account are required.
-    ready: !!(dealership?.fb_ad_account_id && dealership?.meta_pixel_id && hasMetaPageToken(dealership)),
+    ready: !!(dealership?.fb_ad_account_id && dealership?.meta_pixel_id && token.ok),
     missing: {
       adAccount: !dealership?.fb_ad_account_id,
       pixel: !dealership?.meta_pixel_id,
-      connection: !hasMetaPageToken(dealership),
+      connection: !token.ok,
     },
+    // What to do about the connection, in words: connect, or reconnect.
+    connection: token.ok ? null : { reason: token.reason, message: token.message },
     audiences: (Object.keys(DEFINITIONS) as AudienceKey[]).map((key) => {
       const row = byKey.get(key);
       return {
@@ -109,14 +117,19 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_ad_account_id, meta_pixel_id, fb_page_access_token, fb_page_access_token_encrypted")
+    .select("fb_ad_account_id, meta_pixel_id")
     .eq("id", dealershipId)
     .single();
 
-  const token = readMetaPageToken(dealership);
+  // Nothing goes to Meta without a user token — no Page-token fallback.
+  const access = await loadMetaAudienceToken(supabase, dealershipId);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.message, needsReconnect: access.reason !== "missing" }, { status: 400 });
+  }
+  const token = access.token;
   const rawAccount = dealership?.fb_ad_account_id;
-  if (!token || !rawAccount) {
-    return NextResponse.json({ error: "Connect your Facebook Page and ad account first, in Integrations." }, { status: 400 });
+  if (!rawAccount) {
+    return NextResponse.json({ error: "No Meta ad account is linked yet — choose one in Integrations." }, { status: 400 });
   }
   const adAccountId = String(rawAccount).startsWith("act_") ? String(rawAccount) : `act_${rawAccount}`;
 
@@ -230,7 +243,7 @@ export async function POST(request: Request) {
     );
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error, needsTermsAcceptance: result.needsTermsAcceptance ?? false }, { status: 400 });
+      return NextResponse.json({ error: result.error, needsTermsAcceptance: result.needsTermsAcceptance ?? false, needsReconnect: result.needsReconnect ?? false }, { status: 400 });
     }
     return NextResponse.json({ success: true, audienceId, approximateCount });
   } catch (err: any) {

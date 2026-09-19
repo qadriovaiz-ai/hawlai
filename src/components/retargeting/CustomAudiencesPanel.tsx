@@ -31,6 +31,9 @@ export default function CustomAudiencesPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [termsError, setTermsError] = useState(false);
+  // Connect or reconnect Facebook — audiences need the user token, not the Page's.
+  const [connection, setConnection] = useState<{ reason: string; message: string } | null>(null);
+  const [reconnect, setReconnect] = useState(false);
 
   function load() {
     fetch("/api/retargeting/audiences")
@@ -40,6 +43,7 @@ export default function CustomAudiencesPanel() {
         setAudiences(d.audiences ?? []);
         setReady(!!d.ready);
         setMissing(d.missing ?? null);
+        setConnection(d.connection ?? null);
       })
       .catch((err) => setError(err.message));
   }
@@ -49,6 +53,7 @@ export default function CustomAudiencesPanel() {
     setBusy(key);
     setError(null);
     setTermsError(false);
+    setReconnect(false);
     try {
       const res = await fetch("/api/retargeting/audiences", {
         method: "POST",
@@ -58,6 +63,7 @@ export default function CustomAudiencesPanel() {
       const d = await res.json();
       if (!res.ok) {
         setTermsError(!!d.needsTermsAcceptance);
+        setReconnect(!!d.needsReconnect);
         throw new Error(d.error ?? "Sync failed");
       }
       load();
@@ -90,10 +96,14 @@ export default function CustomAudiencesPanel() {
         <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
           <span>
-            {missing.connection && <>Connect your Facebook Page first. </>}
+            {missing.connection && <>{connection?.message ?? "Connect Facebook in Integrations first."} </>}
             {missing.adAccount && <>No Meta ad account is linked yet. </>}
             {missing.pixel && <>Add your Meta Pixel ID for the website-based audiences. </>}
-            <Link href="/dashboard/settings/integrations" className="underline">Open Integrations</Link>
+            {missing.connection ? (
+              <Link href="/dashboard/settings/connect-facebook" className="underline">{connection?.reason === "missing" ? "Connect Facebook" : "Reconnect Facebook"}</Link>
+            ) : (
+              <Link href="/dashboard/settings/integrations" className="underline">Open Integrations</Link>
+            )}
           </span>
         </div>
       )}
@@ -110,7 +120,12 @@ export default function CustomAudiencesPanel() {
         </div>
       )}
 
-      {error && !termsError && <p className="text-xs text-red-500">{error}</p>}
+      {error && !termsError && (
+        <p className="text-xs text-red-500">
+          {error}
+          {reconnect && <> <Link href="/dashboard/settings/connect-facebook" className="underline">Reconnect Facebook</Link></>}
+        </p>
+      )}
 
       <div className="space-y-2">
         {(audiences ?? []).map((a) => (

@@ -22,6 +22,7 @@
 // ------------------------------------------------------------------
 
 import { GRAPH_VERSION } from "@/lib/adEngine";
+import { AUDIENCE_TOKEN_EXPIRED } from "@/lib/ads/metaToken";
 
 const RETENTION_DAYS = 30;
 const RETENTION_SECONDS = RETENTION_DAYS * 24 * 60 * 60;
@@ -33,11 +34,17 @@ export interface AudienceResult {
   error?: string;
   /** True when the failure is specifically un-accepted Custom Audience terms — the dealer must fix this in Ads Manager, we can't. */
   needsTermsAcceptance?: boolean;
+  /** True when Meta says the token is expired or revoked (code 190) — only reconnecting Facebook fixes it. */
+  needsReconnect?: boolean;
 }
 
 function interpretError(data: any, httpStatus: number): AudienceResult {
   const err = data?.error ?? {};
   const message: string = err.error_user_msg ?? err.message ?? `Meta API error (${httpStatus})`;
+
+  // The stored expiry can be wrong (a password change or removed app
+  // revokes the token early). Meta's 190 is the real answer.
+  if (err.code === 190) return { success: false, needsReconnect: true, error: AUDIENCE_TOKEN_EXPIRED };
 
   // Meta reports this as a normal API error, so without matching on it
   // a dealer sees "something went wrong" for a problem that has one
