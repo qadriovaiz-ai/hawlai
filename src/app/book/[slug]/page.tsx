@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Calendar, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import TrackingScripts from "@/components/website/TrackingScripts";
+import ConsentBanner from "@/components/website/ConsentBanner";
 import { trackSchedule } from "@/lib/pixelEvents";
 
 export default function BookingPage() {
@@ -88,6 +89,10 @@ export default function BookingPage() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10">
       {tracking}
+      {/* The same choice as on the store (ConsentBanner): the pixel above
+          loads only after "Allow". Not on the "You're booked!" screen —
+          allowing reloads the page, which would lose that confirmation. */}
+      <ConsentBanner slug={slug} businessName={dealershipName} source="booking" />
       <div className="max-w-lg mx-auto bg-white rounded-2xl shadow-sm p-6 sm:p-8 space-y-6">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">

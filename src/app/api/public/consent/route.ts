@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 // was given. A flag on the visitor's own device demonstrates nothing.
 
 export async function POST(request: Request) {
-  const { slug, status, visitorId } = await request.json();
+  const { slug, status, visitorId, source } = await request.json();
 
   if (status !== "granted" && status !== "denied") {
     return NextResponse.json({ error: "Invalid consent status" }, { status: 400 });
@@ -25,9 +25,17 @@ export async function POST(request: Request) {
   // Same slug-resolution fallback as /api/public/track: quick-launch
   // landing pages and Website Builder sites are different namespaces
   // sharing one tracking contract.
-  const { data: page } = await supabase.from("landing_pages").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
-  let dealershipId = page?.dealership_id;
-  if (!dealershipId) {
+  // A booking page names its business by booking slug — its own namespace,
+  // never mixed with site slugs (Retargeting R2 follow-up, 2026-09-20).
+  let dealershipId: string | undefined;
+  if (source === "booking") {
+    const { data: business } = await supabase.from("dealerships").select("id").eq("booking_slug", slug).maybeSingle();
+    dealershipId = business?.id;
+  } else {
+    const { data: page } = await supabase.from("landing_pages").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
+    dealershipId = page?.dealership_id;
+  }
+  if (!dealershipId && source !== "booking") {
     const { data: website } = await supabase.from("websites").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
     dealershipId = website?.dealership_id;
   }

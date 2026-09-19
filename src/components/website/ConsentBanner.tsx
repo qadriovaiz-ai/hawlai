@@ -17,7 +17,16 @@ import {
 // preferences". A consent record obtained through a manipulated
 // interface isn't valid consent, so making refusal awkward would
 // undermine the very thing this exists to establish.
-export default function ConsentBanner({ slug, businessName }: { slug: string; businessName?: string | null }) {
+export default function ConsentBanner({
+  slug,
+  businessName,
+  source = "site",
+}: {
+  slug: string;
+  businessName?: string | null;
+  /** "booking" on a business's booking page, where slug is its booking slug. */
+  source?: "site" | "booking";
+}) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -34,12 +43,12 @@ export default function ConsentBanner({ slug, businessName }: { slug: string; bu
       // choice, since an identifier stored "just in case" is exactly
       // what consent is meant to gate.
       const visitorId = getVisitorIdIfConsented();
-      recordConsentServerSide(slug, status, visitorId);
+      recordConsentServerSide(slug, status, visitorId, source);
     } else {
       // A visitor who previously accepted and now declines must not
       // keep the identifier that consent was controlling.
       const existingId = getVisitorIdIfConsented();
-      recordConsentServerSide(slug, status, existingId);
+      recordConsentServerSide(slug, status, existingId, source);
       clearVisitorId();
     }
 

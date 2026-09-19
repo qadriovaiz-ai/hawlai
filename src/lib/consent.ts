@@ -90,12 +90,16 @@ export function clearVisitorId() {
 }
 
 /** Records the choice server-side so the business can demonstrate it later. Best-effort — never blocks the visitor. */
-export function recordConsentServerSide(slug: string, status: "granted" | "denied", visitorId: string | null) {
+/**
+ * @param source which slug this is: a store or landing page (the default),
+ *   or a business's booking page — the two are different namespaces.
+ */
+export function recordConsentServerSide(slug: string, status: "granted" | "denied", visitorId: string | null, source: "site" | "booking" = "site") {
   try {
     fetch("/api/public/consent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, status, visitorId }),
+      body: JSON.stringify({ slug, status, visitorId, source }),
       keepalive: true,
     }).catch(() => {});
   } catch {
