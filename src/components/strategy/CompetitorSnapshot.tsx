@@ -61,7 +61,7 @@ export default function CompetitorSnapshot() {
     return (
       <p className="text-xs text-slate-500">
         No competitor comparison yet.{" "}
-        <Link href="/dashboard/strategy" className="text-brand-400 hover:text-brand-300">Run one on the Strategy page</Link> — it reads what your competitors say about themselves (about a minute).
+        <Link href="/dashboard/strategy" className="text-brand-400 hover:text-brand-300">Run one on the Strategy page</Link> — it reads what your competitors say about themselves, in the background (a few minutes).
       </p>
     );
   }

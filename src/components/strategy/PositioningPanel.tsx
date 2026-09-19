@@ -19,7 +19,12 @@ type Row = {
 type Positioning = { competitorCount: number; rows: Row[]; whiteSpace: string[]; crowdedYouHave: string[]; openUnbacked: string[] };
 type Advice = { statement: string | null; angles: { theme: string; title: string; why: string }[]; removed: string[] };
 type Competitor = { name: string; source: "watched" | "owner_ad" | "found"; url?: string | null; claimCount: number };
-type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null } };
+type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[] } } };
+/** The run in progress, from GET — what it's doing now, or why it stopped. */
+type Current = { id: string; state: "running" | "failed" | "analysed"; label: string | null; error: string | null };
+
+/** How often the page asks how a running comparison is getting on. */
+export const POLL_MS = 3000;
 type OwnerAd = { id: string; competitor_name: string; ad_text: string };
 
 const SOURCE_LABEL: Record<Competitor["source"], string> = { watched: "you watch", owner_ad: "your pasted ad", found: "found by Hawlai" };
@@ -33,9 +38,9 @@ export default function PositioningPanel() {
   const [run, setRun] = useState<Run | null>(null);
   const [ownerAds, setOwnerAds] = useState<OwnerAd[]>([]);
   const [loading, setLoading] = useState(true);
-  const [phase, setPhase] = useState<null | "collect" | "analyse">(null);
+  // What the running comparison is doing now; null when nothing is running.
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notes, setNotes] = useState<string[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [adName, setAdName] = useState("");
   const [adText, setAdText] = useState("");
@@ -44,50 +49,41 @@ export default function PositioningPanel() {
 
   async function load() {
     const d = await fetch("/api/strategy/positioning").then((r) => r.json()).catch(() => null);
-    if (d?.error) setError(d.error);
-    setRun(d?.run ?? null);
-    setOwnerAds(d?.ownerAds ?? []);
+    if (!d) return;
+    if (d.error) setError(d.error);
+    setRun(d.run ?? null);
+    setOwnerAds(d.ownerAds ?? []);
+    const current: Current | null = d.current ?? null;
+    if (current?.state === "running") {
+      setProgress(current.label ?? "Working...");
+    } else {
+      setProgress(null);
+      if (current?.state === "failed") setError(current.error);
+    }
   }
 
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
 
-  /** A step's JSON, or its reason — a timeout comes back as a page, not JSON. */
-  async function step(body: any): Promise<any | null> {
-    const res = await fetch("/api/strategy/positioning", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const d = await res.json().catch(() => null);
-    if (!d) {
-      setError(`That took too long (${res.status}) — try again.`);
-      return null;
-    }
-    if (!res.ok) {
-      setError(d.error ?? "Something went wrong writing this — try again. If it keeps happening, let us know.");
-      return null;
-    }
-    return d;
-  }
+  // While a comparison runs (in the background, one step at a time), ask
+  // how it's getting on. Coming back to the page picks up where it is.
+  useEffect(() => {
+    if (progress === null) return;
+    const t = setTimeout(() => void load(), POLL_MS);
+    return () => clearTimeout(t);
+  }, [progress]);
 
   async function compare() {
     setError(null);
-    setNotes([]);
     setDismissed([]);
     try {
-      setPhase("collect");
-      const collected = await step({ step: "collect" });
-      if (!collected) return;
-      const found: string[] = [];
-      if (collected.nothingFound?.length) found.push(`Nothing quotable found for: ${collected.nothingFound.join(", ")}.`);
-      if (collected.couldntCheck?.length) found.push(`Couldn't check right now: ${collected.couldntCheck.join(", ")} — run it again later.`);
-      setNotes(found);
-      setPhase("analyse");
-      const analysed = await step({ step: "analyse", id: collected.id });
-      if (!analysed) return;
-      await load();
+      const res = await fetch("/api/strategy/positioning", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d) return setError(d?.error ?? `Couldn't start the comparison (${res.status}) — try again.`);
+      setProgress("Starting...");
     } catch {
       setError("Couldn't reach Hawlai — check your connection and try again.");
-    } finally {
-      setPhase(null);
     }
   }
 
@@ -124,7 +120,10 @@ export default function PositioningPanel() {
 
   const p = run?.analysis?.positioning ?? null;
   const advice = run?.analysis?.advice ?? null;
-  const busy = phase !== null;
+  const busy = progress !== null;
+  // Said about the finished run, from the run itself.
+  const couldntCheck = run?.analysis?.notes?.couldntCheck ?? [];
+  const nothingFound = (run?.competitors ?? []).filter((c) => c.claimCount === 0).map((c) => c.name);
   const labelOf = (key: string) => p?.rows.find((r) => r.key === key)?.label ?? key;
 
   return (
@@ -145,11 +144,12 @@ export default function PositioningPanel() {
       {busy && (
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          {phase === "collect" ? "Reading competitors' pages — this takes up to a minute..." : "Comparing what they say with what you can say..."}
+          {progress} <span className="text-slate-400">It runs in the background — you can leave this page and come back.</span>
         </p>
       )}
       {error && <p role="alert" className="text-xs text-red-500">{error}</p>}
-      {notes.map((n, i) => <p key={i} className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> {n}</p>)}
+      {!busy && nothingFound.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Nothing quotable found for: {nothingFound.join(", ")}.</p>}
+      {!busy && couldntCheck.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Couldn't check right now: {couldntCheck.join(", ")} — run it again later.</p>}
 
       {!run && !busy && !error && (
         <p className="text-xs text-slate-500">Hawlai reads what up to 5 competitors say about themselves — the ones you watch first — and shows where the ground is crowded, and where you can say something true that they don't.</p>

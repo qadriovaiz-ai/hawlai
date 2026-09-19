@@ -29,8 +29,9 @@ function db() {
         return { data: row, error: null };
       }
       if (op === "update") {
-        for (const r of rows()) Object.assign(r, payload);
-        return { data: null, error: null };
+        const touched = rows();
+        for (const r of touched) Object.assign(r, payload);
+        return { data: single ? touched[0] ?? null : touched, error: null };
       }
       const found = rows();
       return { data: single ? found[0] ?? null : found, error: null };
@@ -52,7 +53,7 @@ function db() {
 import { citationsOf, mentions, discoverCompetitors, collectClaims, mergeCompetitors, ownerAdClaim } from "@/lib/strategy/positioning/collect";
 import { buildPositioning, classifyThemes, unallowedNumbers, verifyPositioning, allowedNumbers, ownFactsFrom, formatPositioningForPrompt } from "@/lib/strategy/positioning/analysis";
 import { themesFor, THEMES } from "@/lib/strategy/positioning/themes";
-import { collectPositioning, analysePositioning, competitorContextFrom, latestPositioning } from "@/lib/strategy/positioning/run";
+import { startPositioning, advancePositioning, describeRun, newestRun, competitorContextFrom, latestPositioning, STALE_AFTER_MS, STOPPED_MESSAGE } from "@/lib/strategy/positioning/run";
 import { resetOperatorAlerts } from "@/lib/ai/claude";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
@@ -325,65 +326,129 @@ describe("a run, end to end", () => {
     return textReply("{}");
   };
 
-  it("collect: watched, pasted-ad and found competitors, their quotes and the pasted ad — saved for this business", async () => {
-    anthropic(route);
-    const r = await collectPositioning(db(), "d1");
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.competitors.map((c) => `${c.source}:${c.name}:${c.claimCount}`)).toEqual(["watched:Wick & Co:1", "owner_ad:Aroma Hut:2", "found:Moonlit Candles:1"]);
-    const saved = tables.competitor_positioning[0];
-    expect(saved).toMatchObject({ dealership_id: "d1", status: "collected" });
-    expect(saved.claims.map((c: any) => c.quote)).toContain("Diwali sale — 40% off all candles this week only");
-    // A dismissed competitor is never searched for, and never comes back.
-    expect(saved.competitors.map((c: any) => c.name)).not.toContain("Old Rival");
-  });
+  /** Runs every step, one "invocation" each, as the hand-overs would; returns how many ran. */
+  async function runToEnd(id: string, limit = 20) {
+    let steps = 0;
+    for (; steps < limit; steps++) {
+      const { more } = await advancePositioning(db(), id);
+      if (!more) return steps + 1;
+    }
+    throw new Error("the run never finished");
+  }
 
-  it("analyse: sorted, counted and written onto the same row; the latest run feeds deep strategy", async () => {
-    anthropic((prompt) => {
-      if (prompt.startsWith("Sort each item")) return textReply('{"claims":{"0":["price","delivery"],"1":["price"],"2":["price"],"3":["offers"]},"facts":{"0":["materials","handmade"],"1":["materials"],"2":["delivery"]}}');
-      if (prompt.startsWith("You are positioning")) return textReply('{"statement":"Candles that say exactly what they are made of.","angles":[{"theme":"materials","title":"Name your wax","why":"None of the 3 competitors talk about materials; you can name your Kanpur soy wax."}]}');
-      return route(prompt);
-    });
-    const collected = await collectPositioning(db(), "d1");
-    if (!collected.ok) throw new Error(collected.error);
-    const r = await analysePositioning(db(), "d1", collected.id);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.positioning.rows.find((x) => x.key === "price")).toMatchObject({ claimedBy: ["Wick & Co", "Aroma Hut", "Moonlit Candles"], standing: "crowded" });
-    expect(r.positioning.whiteSpace).toContain("materials");
-    expect(r.advice?.angles.map((a) => a.title)).toEqual(["Name your wax"]);
+  const sortAndWrite = (prompt: string) => {
+    if (prompt.startsWith("Sort each item")) return textReply('{"claims":{"0":["offers"],"1":["price","delivery"],"2":["price"],"3":["price"]},"facts":{"0":["materials","handmade"],"1":["materials"],"2":["delivery"]}}');
+    if (prompt.startsWith("You are positioning")) return textReply('{"statement":"Candles that say exactly what they are made of.","angles":[{"theme":"materials","title":"Name your wax","why":"None of the 3 competitors talk about materials; you can name your Kanpur soy wax."}]}');
+    return route(prompt);
+  };
+
+  it("one step per invocation: find, one competitor at a time, sort, write — each step at most one model call", async () => {
+    const prompts = anthropic(sortAndWrite);
+    const started = await startPositioning(db(), "d1");
+    if (!started.ok) throw new Error(started.error);
+    expect(tables.competitor_positioning[0]).toMatchObject({ dealership_id: "d1", status: "running", step: 0 });
+
+    // Step 0: who to compare with — one discovery search.
+    expect(await advancePositioning(db(), started.id)).toEqual({ more: true });
+    expect(prompts).toHaveLength(1);
+    const afterFind = tables.competitor_positioning[0];
+    expect(afterFind.competitors.map((c: any) => `${c.source}:${c.name}`)).toEqual(["watched:Wick & Co", "owner_ad:Aroma Hut", "found:Moonlit Candles"]);
+    // A dismissed competitor is never searched for, and never comes back.
+    expect(afterFind.competitors.map((c: any) => c.name)).not.toContain("Old Rival");
+    // The pasted ad is in from the start.
+    expect(afterFind.claims.map((c: any) => c.quote)).toEqual(["Diwali sale — 40% off all candles this week only"]);
+
+    // Steps 1-3: one competitor each.
+    for (const name of ["Wick & Co", "Aroma Hut", "Moonlit Candles"]) {
+      const before = prompts.length;
+      expect(describeRun(tables.competitor_positioning[0]).label).toMatch(new RegExp(`Reading what ${name.replace("&", "\\&")} says about itself`));
+      await advancePositioning(db(), started.id);
+      expect(prompts.length - before).toBe(1);
+      expect(prompts.at(-1)).toContain(`"${name}"`);
+    }
+
+    // Sort, then write.
+    expect(await runToEnd(started.id)).toBe(2);
+    const done = tables.competitor_positioning[0];
+    expect(done).toMatchObject({ status: "analysed", step_running: false, error: null });
+    expect(done.competitors.map((c: any) => `${c.name}:${c.claimCount}`)).toEqual(["Wick & Co:1", "Aroma Hut:2", "Moonlit Candles:1"]);
+    const p = done.analysis.positioning;
+    expect(p.rows.find((x: any) => x.key === "price")).toMatchObject({ claimedBy: ["Wick & Co", "Aroma Hut", "Moonlit Candles"], standing: "crowded" });
+    expect(p.whiteSpace).toContain("materials");
+    expect(done.analysis.advice.angles.map((a: any) => a.title)).toEqual(["Name your wax"]);
+
     const latest = await latestPositioning(db(), "d1");
-    expect(latest.status).toBe("analysed");
     expect(competitorContextFrom(latest)).toMatch(/^From competitors' own public pages, counted by Hawlai — Price and value: 3 of 3 \(Wick & Co, Aroma Hut, Moonlit Candles\)/);
   });
 
-  it("credits out while collecting: nothing saved, and the approved reason", async () => {
-    anthropic(() => CREDITS);
-    const r = await collectPositioning(db(), "d1");
-    expect(r).toEqual({ ok: false, error: OUTAGE, aiFailure: { kind: "credits", message: OUTAGE } });
-    expect(tables.competitor_positioning ?? []).toEqual([]);
+  it("a step already claimed isn't run again — a duplicate hand-over does nothing", async () => {
+    const prompts = anthropic(sortAndWrite);
+    const started = await startPositioning(db(), "d1");
+    if (!started.ok) throw new Error(started.error);
+    tables.competitor_positioning[0].step_running = true;
+    expect(await advancePositioning(db(), started.id)).toEqual({ more: false });
+    expect(prompts).toHaveLength(0);
+    // Nor is a finished or failed run.
+    tables.competitor_positioning[0] = { ...tables.competitor_positioning[0], step_running: false, status: "analysed" };
+    expect(await advancePositioning(db(), started.id)).toEqual({ more: false });
+    expect(prompts).toHaveLength(0);
+  });
+
+  it("pressing again while a run is moving returns that run — no second set of searches; a stalled one is replaced", async () => {
+    const now = Date.now();
+    const first = await startPositioning(db(), "d1", now);
+    const again = await startPositioning(db(), "d1", now + 5_000);
+    expect(again).toEqual({ ok: true, id: (first as any).id, reused: true });
+    const later = await startPositioning(db(), "d1", now + STALE_AFTER_MS + 1_000);
+    expect(later).toMatchObject({ ok: true, reused: false });
+    expect(tables.competitor_positioning).toHaveLength(2);
+  });
+
+  it("credits out while finding competitors: the run fails with the approved reason and goes no further", async () => {
+    const prompts = anthropic(() => CREDITS);
+    const started = await startPositioning(db(), "d1");
+    if (!started.ok) throw new Error(started.error);
+    expect(await advancePositioning(db(), started.id)).toEqual({ more: false });
+    expect(tables.competitor_positioning[0]).toMatchObject({ status: "failed", error: OUTAGE, step_running: false });
+    expect(describeRun(tables.competitor_positioning[0])).toMatchObject({ state: "failed", error: OUTAGE });
+    expect(prompts).toHaveLength(1);
+  });
+
+  it("one competitor too busy to read: noted, and the run carries on without it", async () => {
+    anthropic((prompt) => (prompt.startsWith('Search for how "Aroma Hut"') ? { status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "busy" } } } : sortAndWrite(prompt)));
+    const started = await startPositioning(db(), "d1");
+    if (!started.ok) throw new Error(started.error);
+    await runToEnd(started.id);
+    const done = tables.competitor_positioning[0];
+    expect(done.status).toBe("analysed");
+    expect(done.analysis.notes.couldntCheck).toEqual(["Aroma Hut"]);
   });
 
   it("the counted table is kept even if writing the advice fails", async () => {
-    let writing = false;
-    anthropic((prompt) => {
-      if (prompt.startsWith("Sort each item")) return textReply('{"claims":{"0":["price"]},"facts":{}}');
-      if (prompt.startsWith("You are positioning")) {
-        writing = true;
-        return CREDITS;
-      }
-      return route(prompt);
-    });
-    const collected = await collectPositioning(db(), "d1");
-    if (!collected.ok) throw new Error(collected.error);
-    const r = await analysePositioning(db(), "d1", collected.id);
-    expect(writing).toBe(true);
-    expect(r).toMatchObject({ ok: true, advice: null, adviceError: OUTAGE });
-    expect(tables.competitor_positioning[0].status).toBe("analysed");
+    anthropic((prompt) => (prompt.startsWith("You are positioning") ? CREDITS : sortAndWrite(prompt)));
+    const started = await startPositioning(db(), "d1");
+    if (!started.ok) throw new Error(started.error);
+    await runToEnd(started.id);
+    const done = tables.competitor_positioning[0];
+    expect(done).toMatchObject({ status: "analysed" });
+    expect(done.analysis.advice).toBeNull();
+    expect(done.analysis.adviceError).toBe(OUTAGE);
+    expect(done.analysis.positioning.rows.length).toBeGreaterThan(0);
   });
 
-  it("another business's run can't be analysed from here", async () => {
-    tables.competitor_positioning = [{ id: "other-run", dealership_id: "d2", competitors: [], claims: [] }];
-    expect(await analysePositioning(db(), "d1", "other-run")).toEqual({ ok: false, error: "That run wasn't found — start a new one." });
+  it("where a run stands, in words — and a run that stopped moving is stopped, not spinning", () => {
+    const base = { id: "r", created_at: "2026-09-19T10:00:00Z", updated_at: "2026-09-19T10:00:00Z", status: "running", competitors: [{ name: "Wick & Co" }, { name: "Glow" }] };
+    const at = Date.parse("2026-09-19T10:00:30Z");
+    expect(describeRun({ ...base, step: 0 }, at).label).toBe("Finding your competitors...");
+    expect(describeRun({ ...base, step: 2 }, at).label).toBe("Reading what Glow says about itself (2 of 2)...");
+    expect(describeRun({ ...base, step: 3 }, at).label).toBe("Sorting what they say, theme by theme...");
+    expect(describeRun({ ...base, step: 4 }, at).label).toBe("Writing your positioning...");
+    expect(describeRun({ ...base, step: 1 }, Date.parse(base.updated_at) + STALE_AFTER_MS + 1)).toMatchObject({ state: "failed", error: STOPPED_MESSAGE });
+    expect(describeRun({ ...base, status: "failed", error: OUTAGE })).toMatchObject({ state: "failed", error: OUTAGE });
+  });
+
+  it("the newest run is this business's own", async () => {
+    tables.competitor_positioning = [{ id: "theirs", dealership_id: "d2", status: "running", created_at: "2026-09-19T11:00:00Z" }];
+    expect(await newestRun(db(), "d1")).toBeNull();
   });
 });

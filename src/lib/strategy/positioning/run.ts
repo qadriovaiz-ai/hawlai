@@ -1,122 +1,244 @@
-// One positioning run, in two requests that each fit Vercel's 60 seconds
-// (Advanced Strategy step 3, approved 2026-09-19):
-//   collectPositioning — who the competitors are and what they say (web
-//     search + ads the owner pasted in), saved as a row;
-//   analysePositioning — sorting, counting and writing, saved onto it.
-// Every read and write is filtered by the business (dealership_id).
+// A positioning run, in the background, one step per invocation.
+//
+// THE BUG (2026-09-19): "Compare with competitors" answered 504 every time.
+// Collecting ran discovery and then a second wave of competitor web
+// searches inside one request; each web-search call takes 15–40 seconds,
+// so it ran past Vercel's 60-second limit.
+//
+// Now, like the daily automation run (lib/automation/dailyJobs.ts): the
+// button starts a run and gets an answer at once; each invocation claims
+// the run's next step, does it, saves it, and hands over to a fresh
+// invocation. Every step is one or two model calls — well inside 60s.
+//
+//   step 0        find competitors (watched → pasted-ad → found, five at most)
+//   steps 1..N    read one competitor's public pages each
+//   step N+1      sort every quote and fact into themes
+//   step N+2      count, and write the positioning → analysed
+//
+// A step is claimed with a conditional update, so a duplicate hand-over
+// can't run it twice. A run that stops moving (a killed invocation, a
+// failed hand-over) is shown as stopped — never left spinning.
+// Every read and write is filtered by id and, where it matters, business.
 
 import { businessDisplayName } from "@/lib/business/displayName";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
-import { aiFailureNote, isPlatformOutage, type AiFailure, type AiFailureNote } from "@/lib/ai/claude";
+import { aiFailureMessage, aiFailureNote, isPlatformOutage, type AiFailure } from "@/lib/ai/claude";
 import { collectClaims, discoverCompetitors, mergeCompetitors, ownerAdClaim, type Claim, type Competitor } from "./collect";
-import { buildPositioning, classifyThemes, ownFactsFrom, writePositioning, type Positioning, type PositioningAdvice } from "./analysis";
+import { buildPositioning, classifyThemes, ownFactsFrom, writePositioning, type OwnFact } from "./analysis";
 import { themesFor } from "./themes";
+import type { BusinessModel } from "@/lib/business/businessModel";
 
 export const MAX_COMPETITORS = 5;
+/** Each step finishes well inside 60s and hands over in seconds; longer than this without moving means it stopped. */
+export const STALE_AFTER_MS = 150_000;
 
 type Ctx = { supabase: any; dealershipId: string };
+type CompetitorRow = Competitor & { claimCount: number };
 
-export type CollectOutcome =
-  | { ok: true; id: string; competitors: (Competitor & { claimCount: number })[]; nothingFound: string[]; couldntCheck: string[] }
-  | { ok: false; error: string; aiFailure?: AiFailureNote };
+export const STOPPED_MESSAGE = "The comparison stopped partway — run it again.";
 
-/** The worst failure among several: an outage outranks being busy. */
-function worst(failures: AiFailure[]): AiFailure | null {
-  return failures.find((f) => isPlatformOutage(f.kind)) ?? failures[0] ?? null;
-}
-
-export async function collectPositioning(service: any, dealershipId: string): Promise<CollectOutcome> {
-  const log: Ctx = { supabase: service, dealershipId };
-  const [{ data: dealership }, { data: watches }, { data: dismissed }, { data: ownerAds }] = await Promise.all([
-    service.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single(),
-    service.from("competitor_watches").select("competitor_name").eq("dealership_id", dealershipId),
-    service.from("competitor_dismissed").select("competitor_name").eq("dealership_id", dealershipId),
-    service.from("competitor_owner_ads").select("competitor_name, ad_text").eq("dealership_id", dealershipId),
-  ]);
-  const businessName = businessDisplayName(dealership?.dealership_name);
-  const category = dealership?.business_category || "business";
-  const city = dealership?.city ?? null;
-
-  const watchedNames: string[] = (watches ?? []).map((w: any) => String(w.competitor_name)).filter(Boolean);
-  const adNames: string[] = [...new Set<string>((ownerAds ?? []).map((a: any) => String(a.competitor_name)).filter(Boolean))];
-  const known = mergeCompetitors(watchedNames, adNames, [], MAX_COMPETITORS);
-  const dismissedNames: string[] = (dismissed ?? []).map((d: any) => String(d.competitor_name));
-
-  // Finding more and reading the known ones run side by side.
-  const [discovery, ...knownClaims] = await Promise.all([
-    discoverCompetitors({ businessName, category, city, exclude: [...known.map((k) => k.name), ...dismissedNames], want: MAX_COMPETITORS - known.length }, log),
-    ...known.map((c) => collectClaims(c, { category, city }, log)),
-  ]);
-  const competitors = mergeCompetitors(watchedNames, adNames, discovery.found, MAX_COMPETITORS);
-  const newOnes = competitors.filter((c) => !known.some((k) => k.name === c.name));
-  const foundClaims = await Promise.all(newOnes.map((c) => collectClaims(c, { category, city }, log)));
-
-  const results = [...known.map((c, i) => ({ c, r: knownClaims[i] })), ...newOnes.map((c, i) => ({ c, r: foundClaims[i] }))];
-  const failures = [discovery.failure, ...results.map((x) => x.r.failure)].filter(Boolean) as AiFailure[];
-  const outage = failures.find((f) => isPlatformOutage(f.kind));
-  const claims: Claim[] = [...results.flatMap((x) => x.r.claims), ...(ownerAds ?? []).map(ownerAdClaim)];
-
-  // Nothing to compare against, because the AI couldn't search: say why.
-  if (outage || (claims.length === 0 && failures.length > 0)) {
-    const f = outage ?? worst(failures)!;
-    const note = aiFailureNote(f);
-    return { ok: false, error: note.message, aiFailure: note };
-  }
-  if (competitors.length === 0) {
-    return { ok: false, error: `Hawlai couldn't find competitors for a ${category} business${city ? ` in ${city}` : ""} with pages it could quote. Add one you know on the Competitor Intelligence page (New Product Alerts → Watch), or paste an ad you've seen, and run this again.` };
-  }
-
-  const rows = competitors.map((c) => ({ ...c, claimCount: claims.filter((cl) => cl.competitor === c.name).length }));
-  const { data: saved, error } = await service
+/**
+ * Starts a run for this business, or returns the one already moving (a
+ * second press doesn't start a second set of searches).
+ */
+export async function startPositioning(service: any, dealershipId: string, now = Date.now()): Promise<{ ok: true; id: string; reused: boolean } | { ok: false; error: string }> {
+  const { data: current } = await service
     .from("competitor_positioning")
-    .insert({ dealership_id: dealershipId, status: "collected", competitors: rows, claims })
+    .select("id, status, updated_at")
+    .eq("dealership_id", dealershipId)
+    .eq("status", "running")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (current && now - Date.parse(current.updated_at) < STALE_AFTER_MS) return { ok: true, id: current.id, reused: true };
+
+  const { data: row, error } = await service
+    .from("competitor_positioning")
+    .insert({ dealership_id: dealershipId, status: "running", step: 0, step_running: false, competitors: [], claims: [], analysis: {}, updated_at: new Date(now).toISOString() })
     .select("id")
     .single();
-  if (error || !saved) return { ok: false, error: `Couldn't save what was found: ${error?.message ?? "no row"}` };
-
-  return {
-    ok: true,
-    id: saved.id,
-    competitors: rows,
-    nothingFound: rows.filter((r) => r.claimCount === 0).map((r) => r.name),
-    couldntCheck: results.filter((x) => x.r.failure).map((x) => x.c.name),
-  };
+  if (error || !row) return { ok: false, error: `Couldn't start the comparison: ${error?.message ?? "no row"}` };
+  return { ok: true, id: row.id, reused: false };
 }
 
-export type AnalyseOutcome =
-  | { ok: true; positioning: Positioning; advice: PositioningAdvice | null; adviceError?: string }
-  | { ok: false; error: string; aiFailure?: AiFailureNote };
+async function fail(service: any, id: string, error: string) {
+  await service.from("competitor_positioning").update({ status: "failed", step_running: false, error, updated_at: new Date().toISOString() }).eq("id", id);
+}
 
-export async function analysePositioning(service: any, dealershipId: string, id: string): Promise<AnalyseOutcome> {
-  const log: Ctx = { supabase: service, dealershipId };
-  const { data: row } = await service.from("competitor_positioning").select("id, competitors, claims").eq("id", id).eq("dealership_id", dealershipId).maybeSingle();
-  if (!row) return { ok: false, error: "That run wasn't found — start a new one." };
+async function save(service: any, id: string, fields: Record<string, unknown>) {
+  await service.from("competitor_positioning").update({ ...fields, step_running: false, updated_at: new Date().toISOString() }).eq("id", id);
+}
 
-  const facts = await gatherBusinessFactsSafely(service, dealershipId);
-  const { data: dealership } = await service.from("dealerships").select("dealership_name").eq("id", dealershipId).single();
-  const themes = themesFor(facts?.businessModels.models ?? null);
-  const ownFacts = facts ? ownFactsFrom(facts) : [];
-  const claims: Claim[] = Array.isArray(row.claims) ? row.claims : [];
-  const competitorNames: string[] = (Array.isArray(row.competitors) ? row.competitors : []).map((c: any) => String(c.name));
+/** The approved words for an AI failure — an outage stops the run; being busy is said too. */
+function failureWords(f: AiFailure): string {
+  return aiFailureNote(f).message;
+}
 
-  const sorted = await classifyThemes(claims, ownFacts, themes, log);
-  if (!sorted.ok) {
-    const note = aiFailureNote(sorted.failure);
-    return { ok: false, error: note.message, aiFailure: note };
-  }
-  const positioning = buildPositioning(competitorNames, claims, sorted.claimThemes, ownFacts, sorted.factThemes, themes);
-
-  // The counted table stands on its own; the written advice is extra.
-  const written = await writePositioning(positioning, ownFacts, facts, businessDisplayName(dealership?.dealership_name), log);
-  const advice = written.ok ? written.advice : null;
-  const adviceError = written.ok ? undefined : aiFailureNote(written.failure).message;
-
-  await service
+/**
+ * Claims the run's next step, does it and saves it. `more` says whether
+ * another step is waiting (the caller hands over to a fresh invocation).
+ */
+export async function advancePositioning(service: any, id: string): Promise<{ more: boolean }> {
+  // The claim: only a running run whose step nobody else is doing.
+  const { data: run } = await service
     .from("competitor_positioning")
-    .update({ status: "analysed", analysis: { positioning, advice, adviceError: adviceError ?? null, models: facts?.businessModels ?? null } })
+    .update({ step_running: true, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("dealership_id", dealershipId);
-  return { ok: true, positioning, advice, ...(adviceError ? { adviceError } : {}) };
+    .eq("status", "running")
+    .eq("step_running", false)
+    .select("id, dealership_id, step, competitors, claims, analysis")
+    .maybeSingle();
+  if (!run) return { more: false };
+
+  const dealershipId: string = run.dealership_id;
+  const log: Ctx = { supabase: service, dealershipId };
+  const competitors: CompetitorRow[] = Array.isArray(run.competitors) ? run.competitors : [];
+  const claims: Claim[] = Array.isArray(run.claims) ? run.claims : [];
+  const analysis: any = run.analysis ?? {};
+  const notes = { couldntCheck: [] as string[], ...(analysis.notes ?? {}) };
+  const step: number = run.step ?? 0;
+  const n = competitors.length;
+
+  try {
+    const { data: dealership } = await service.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single();
+    const category = dealership?.business_category || "business";
+    const city = dealership?.city ?? null;
+
+    // ---- step 0: who to compare with -----------------------------------
+    if (step === 0) {
+      const [{ data: watches }, { data: dismissed }, { data: ownerAds }] = await Promise.all([
+        service.from("competitor_watches").select("competitor_name").eq("dealership_id", dealershipId),
+        service.from("competitor_dismissed").select("competitor_name").eq("dealership_id", dealershipId),
+        service.from("competitor_owner_ads").select("competitor_name, ad_text").eq("dealership_id", dealershipId),
+      ]);
+      const watched: string[] = (watches ?? []).map((w: any) => String(w.competitor_name)).filter(Boolean);
+      const adNames: string[] = [...new Set<string>((ownerAds ?? []).map((a: any) => String(a.competitor_name)).filter(Boolean))];
+      const known = mergeCompetitors(watched, adNames, [], MAX_COMPETITORS);
+      const discovery = await discoverCompetitors(
+        { businessName: businessDisplayName(dealership?.dealership_name), category, city, exclude: [...known.map((k) => k.name), ...(dismissed ?? []).map((d: any) => String(d.competitor_name))], want: MAX_COMPETITORS - known.length },
+        log
+      );
+      if (discovery.failure && isPlatformOutage(discovery.failure.kind)) {
+        await fail(service, id, failureWords(discovery.failure));
+        return { more: false };
+      }
+      const list = mergeCompetitors(watched, adNames, discovery.found, MAX_COMPETITORS);
+      if (list.length === 0) {
+        await fail(
+          service,
+          id,
+          discovery.failure
+            ? failureWords(discovery.failure)
+            : `Hawlai couldn't find competitors for a ${category} business${city ? ` in ${city}` : ""} with pages it could quote. Add one you know on the Competitor Intelligence page (New Product Alerts → Watch), or paste an ad you've seen, and run this again.`
+        );
+        return { more: false };
+      }
+      // Ads the owner pasted are their own record — in from the start.
+      const adClaims = (ownerAds ?? []).map(ownerAdClaim);
+      const rows: CompetitorRow[] = list.map((c) => ({ ...c, claimCount: adClaims.filter((a: Claim) => a.competitor === c.name).length }));
+      await save(service, id, { step: 1, competitors: rows, claims: adClaims, analysis: { notes: { couldntCheck: discovery.failure ? ["finding more competitors"] : [] } } });
+      return { more: true };
+    }
+
+    // ---- steps 1..N: one competitor's own pages -------------------------
+    if (step >= 1 && step <= n) {
+      const c = competitors[step - 1];
+      const r = await collectClaims(c, { category, city }, log);
+      if (r.failure && isPlatformOutage(r.failure.kind)) {
+        await fail(service, id, failureWords(r.failure));
+        return { more: false };
+      }
+      if (r.failure) notes.couldntCheck = [...notes.couldntCheck, c.name];
+      const all = [...claims, ...r.claims];
+      const rows = competitors.map((x, i) => (i === step - 1 ? { ...x, claimCount: x.claimCount + r.claims.length } : x));
+      const isLast = step === n;
+      if (isLast && all.length === 0) {
+        await fail(service, id, r.failure ? failureWords(r.failure) : "Hawlai couldn't find anything these competitors say about themselves that it could quote. Paste an ad you've seen, or watch a competitor with a website, and run this again.");
+        return { more: false };
+      }
+      await save(service, id, { step: step + 1, competitors: rows, claims: all, analysis: { ...analysis, notes } });
+      return { more: true };
+    }
+
+    // ---- step N+1: sort into themes ---------------------------------------
+    if (step === n + 1) {
+      const facts = await gatherBusinessFactsSafely(service, dealershipId);
+      const models: BusinessModel[] | null = facts?.businessModels.models ?? null;
+      const ownFacts: OwnFact[] = facts ? ownFactsFrom(facts) : [];
+      const sorted = await classifyThemes(claims, ownFacts, themesFor(models), log);
+      if (!sorted.ok) {
+        await fail(service, id, failureWords(sorted.failure));
+        return { more: false };
+      }
+      await save(service, id, { step: step + 1, analysis: { ...analysis, notes, models, ownFacts, claimThemes: sorted.claimThemes, factThemes: sorted.factThemes } });
+      return { more: true };
+    }
+
+    // ---- step N+2: count, and write -----------------------------------------
+    const ownFacts: OwnFact[] = analysis.ownFacts ?? [];
+    const positioning = buildPositioning(competitors.map((c) => c.name), claims, analysis.claimThemes ?? [], ownFacts, analysis.factThemes ?? [], themesFor(analysis.models ?? null));
+    const facts = await gatherBusinessFactsSafely(service, dealershipId);
+    // The counted table stands on its own; the written advice is extra.
+    const written = await writePositioning(positioning, ownFacts, facts, businessDisplayName(dealership?.dealership_name), log);
+    await save(service, id, {
+      status: "analysed",
+      step: step + 1,
+      error: null,
+      analysis: {
+        notes,
+        models: analysis.models ?? null,
+        positioning,
+        advice: written.ok ? written.advice : null,
+        adviceError: written.ok ? null : aiFailureNote(written.failure).message,
+      },
+    });
+    return { more: false };
+  } catch (err: any) {
+    console.error(`[positioning] run ${id} step ${step} failed:`, err?.message);
+    await fail(service, id, aiFailureMessage("bad_request"));
+    return { more: false };
+  }
+}
+
+export type RunView = {
+  id: string;
+  state: "running" | "failed" | "analysed";
+  /** What's happening now, in words — for the page while it waits. */
+  label: string | null;
+  error: string | null;
+  createdAt: string;
+};
+
+/** Where a run stands, in words. A running row that stopped moving is a stopped run. */
+export function describeRun(row: any, now = Date.now()): RunView {
+  const competitors: CompetitorRow[] = Array.isArray(row?.competitors) ? row.competitors : [];
+  const n = competitors.length;
+  const step: number = row?.step ?? 0;
+  const base = { id: row.id, createdAt: row.created_at };
+  if (row.status === "analysed") return { ...base, state: "analysed", label: null, error: null };
+  if (row.status === "failed") return { ...base, state: "failed", label: null, error: row.error ?? STOPPED_MESSAGE };
+  if (row.status === "running" && now - Date.parse(row.updated_at) > STALE_AFTER_MS) return { ...base, state: "failed", label: null, error: STOPPED_MESSAGE };
+  const label =
+    step === 0
+      ? "Finding your competitors..."
+      : step <= n
+        ? `Reading what ${competitors[step - 1].name} says about itself (${step} of ${n})...`
+        : step === n + 1
+          ? "Sorting what they say, theme by theme..."
+          : "Writing your positioning...";
+  return { ...base, state: "running", label, error: null };
+}
+
+/** This business's newest run of any state — what the page is waiting on. */
+export async function newestRun(supabase: any, dealershipId: string) {
+  const { data } = await supabase
+    .from("competitor_positioning")
+    .select("id, status, step, competitors, error, created_at, updated_at")
+    .eq("dealership_id", dealershipId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
 }
 
 /** The latest finished run, for the page, the chat and deep strategy. */
