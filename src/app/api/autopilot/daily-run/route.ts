@@ -9,15 +9,16 @@ import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 
 // The daily automation run. Vercel Cron calls it twice a day (vercel.json:
 // signals at 8:30 AM IST, heavy at 9:00) with `Authorization: Bearer
-// $CRON_SECRET`; it also calls ITSELF, with the same secret from the
-// server's own environment, to carry a run on.
+// $CRON_SECRET`; the 2-minute event dispatcher calls it with the same
+// secret to carry on a run whose invocation's time ran out. It never calls
+// itself: a chain of self-calls is stopped by Vercel with 508 "Loop
+// Detected" (lib/automation/dailyJobs.ts).
 //
 // HOW IT WORKS (lib/automation/dailyJobs.ts): the cron's invocation writes
 // today's job list — one job per business per automation — and every
-// invocation works through it one job at a time, hands over to a fresh
-// invocation, and stops taking jobs well inside Vercel Hobby's 60 seconds.
-// It answers 202 at once and does the work in after(), so a hand-over
-// request returns immediately.
+// invocation works through it one job at a time and stops taking jobs
+// after 180 of its 300 seconds. It answers 202 at once and does the work in
+// after(), so the cron and the dispatcher get their answer immediately.
 //
 // WHY: everything used to run inside one 60-second invocation. With five
 // businesses, candle_by_qaaf's welcome emails ran on 10 Sep and not once on
@@ -25,7 +26,7 @@ import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 // invocation writes nothing. A partial run now shows as unfinished or
 // failed jobs on the Automation Health card, not as a 500 only Vercel's
 // cron log showed.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -52,17 +53,6 @@ export async function GET(request: Request) {
   const isContinuation = url.searchParams.get("continue") === "1";
   const runDate = indiaToday();
 
-  const handOver = async (group: DailyGroup) => {
-    const next = new URL("/api/autopilot/daily-run", url.origin);
-    next.searchParams.set("group", group);
-    next.searchParams.set("continue", "1");
-    const res = await fetch(next, {
-      headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {},
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (res.status !== 202) throw new Error(`the next invocation answered ${res.status}`);
-  };
-
   after(async () => {
     const service = createServiceClient();
     const summary = await runDailyInvocation(service, {
@@ -70,7 +60,6 @@ export async function GET(request: Request) {
       isContinuation,
       runDate,
       runners: DAILY_RUNNERS,
-      handOver,
       // Platform-wide, once a day, first: the Resend webhook has to be
       // registered before the morning's emails go out.
       platformTasks: async () => {

@@ -12,24 +12,32 @@
 //  2. It takes jobs ONE AT A TIME with a conditional claim (pending →
 //     running only if still pending with the same attempt count), so two
 //     invocations can never run the same job.
-//  3. Before each job it has started beyond the first, it makes sure one
-//     fresh invocation has been started to carry on — BEFORE the job runs,
-//     so an invocation killed mid-job has already handed over. At most one
-//     hand-over per invocation keeps it to about two running at once.
-//  4. It stops taking new jobs after BUDGET_MS, well inside 60 seconds.
+//  3. It stops taking new jobs after BUDGET_MS of its 300 seconds, so the
+//     job under way still finishes.
+//  4. What's left is carried on by the 2-minute event dispatcher (pg_cron →
+//     /api/events/dispatch → this route, dailyRunStalled): as soon as jobs
+//     are waiting and none is running, it starts an invocation.
 //  5. A job left "running" by a killed invocation is put back after
 //     STUCK_MINUTES; after MAX_ATTEMPTS it's failed with the reason.
 //  6. Yesterday's unfinished jobs are marked failed when today's list is
 //     written, instead of lingering.
 //
-// Limit, stated plainly: a single automation that needs more than 60
-// seconds for one business can't finish here either — it now fails on its
+// NO INVOCATION CALLS THIS ROUTE ITSELF (2026-09-20). It used to hand over
+// to a fresh invocation of itself before its second job, so a day's run
+// was a chain of self-calls — and Vercel cuts a deployment calling itself
+// off with 508 "Loop Detected" after a few hops (it stopped competitor
+// positioning in production the same way). The dispatcher is called from
+// outside by pg_cron, so its one call here is never part of a chain.
+//
+// Limit, stated plainly: a single automation that needs more than about
+// two minutes for one business can't finish here either — it fails on its
 // own, visibly, instead of silently taking every later business with it.
 
 import { runAndLog } from "@/lib/automation/runAndLog";
 import { GROUPS, type SubsystemKey } from "@/lib/automation/cronGroups";
 
-export const BUDGET_MS = 35_000;
+/** Stop taking new jobs after this long — the job under way then has the rest of the invocation's 300s. */
+export const BUDGET_MS = 180_000;
 export const STUCK_MINUTES = 10;
 export const MAX_ATTEMPTS = 3;
 
@@ -76,7 +84,7 @@ export async function requeueStuckJobs(service: any, group: DailyGroup, runDate:
       .from("daily_jobs")
       .update(
         giveUp
-          ? { status: "failed", error: `didn't finish within 60 seconds (tried ${job.attempts} times)`, finished_at: new Date(now).toISOString() }
+          ? { status: "failed", error: `didn't finish in the time a run has (tried ${job.attempts} times)`, finished_at: new Date(now).toISOString() }
           : { status: "pending" }
       )
       .eq("id", job.id)
@@ -119,30 +127,21 @@ export async function workDailyJobs(
     group: DailyGroup;
     runDate: string;
     runners: Record<SubsystemKey, Runner>;
-    /** Starts another invocation to carry on. */
-    handOver: () => Promise<void>;
     clock?: () => number;
   }
-): Promise<{ ran: number; handedOver: boolean; outOfTime: boolean }> {
+): Promise<{ ran: number; outOfTime: boolean }> {
   const clock = opts.clock ?? Date.now;
   const start = clock();
   let ran = 0;
-  let handedOver = false;
 
   await requeueStuckJobs(service, opts.group, opts.runDate, clock());
 
   const categories = new Map<string, string>();
   while (true) {
-    if (clock() - start > BUDGET_MS) return { ran, handedOver, outOfTime: true };
+    // Out of time: stop. The dispatcher carries on what's left (dailyRunStalled).
+    if (clock() - start > BUDGET_MS) return { ran, outOfTime: true };
     const job = await claimNextJob(service, opts.group, opts.runDate);
-    if (!job) return { ran, handedOver, outOfTime: false };
-
-    if (ran >= 1 && !handedOver) {
-      // Before the job, not after: if this job runs past the limit and the
-      // invocation is killed, the next one is already on its way.
-      handedOver = true;
-      await opts.handOver().catch((err) => console.error("[daily-jobs] hand-over failed:", err?.message));
-    }
+    if (!job) return { ran, outOfTime: false };
 
     if (!categories.has(job.dealership_id)) {
       const { data } = await service.from("dealerships").select("business_category").eq("id", job.dealership_id).maybeSingle();
@@ -159,12 +158,6 @@ export async function workDailyJobs(
       .eq("id", job.id);
     ran++;
   }
-}
-
-/** Whether a group still has work left today. */
-export async function hasPendingJobs(service: any, group: DailyGroup, runDate: string): Promise<boolean> {
-  const { data } = await service.from("daily_jobs").select("id").eq("run_date", runDate).eq("run_group", group).eq("status", "pending").limit(1);
-  return Boolean(data?.length);
 }
 
 export type DailyRunHealth = {
@@ -186,7 +179,7 @@ export function buildDailyRunHealth(jobs: { subsystem: string; status: string; e
   const killed = jobs.filter((j) => j.status === "running" && j.started_at && now - Date.parse(j.started_at) > STUCK_MINUTES * 60_000);
   const failed = [
     ...jobs.filter((j) => j.status === "failed").map((j) => ({ subsystem: j.subsystem, error: j.error })),
-    ...killed.map((j) => ({ subsystem: j.subsystem, error: "didn't finish within 60 seconds" })),
+    ...killed.map((j) => ({ subsystem: j.subsystem, error: "didn't finish in the time a run has" })),
   ];
   const open = jobs.filter((j) => j.status === "pending" || (j.status === "running" && !killed.includes(j))).length;
   const times = jobs.map((j) => j.finished_at ?? j.started_at).filter(Boolean) as string[];
@@ -198,7 +191,7 @@ export function buildDailyRunHealth(jobs: { subsystem: string; status: string; e
 /**
  * One invocation of the daily run. The cron's first invocation (not a
  * continuation) runs the platform-wide tasks and writes today's list;
- * every invocation then works through the list and hands over.
+ * every invocation then works through the list until its time is up.
  */
 export async function runDailyInvocation(
   service: any,
@@ -207,7 +200,6 @@ export async function runDailyInvocation(
     isContinuation: boolean;
     runDate: string;
     runners: Record<SubsystemKey, Runner>;
-    handOver: (group: DailyGroup) => Promise<void>;
     /** Platform-wide work for the signals run (Resend webhook, platform spend). */
     platformTasks?: () => Promise<unknown>;
     clock?: () => number;
@@ -219,30 +211,24 @@ export async function runDailyInvocation(
   }
   for (const group of opts.groups) {
     if (!opts.isContinuation) summary[`${group}Plan`] = await planDailyJobs(service, group, opts.runDate);
-    const worked = await workDailyJobs(service, { group, runDate: opts.runDate, runners: opts.runners, handOver: () => opts.handOver(group), clock: opts.clock });
-    summary[group] = worked;
-    // Out of time without having handed over (one long job): hand over now
-    // so the rest still gets done.
-    if (worked.outOfTime && !worked.handedOver && (await hasPendingJobs(service, group, opts.runDate))) {
-      await opts.handOver(group).catch((err) => console.error("[daily-jobs] hand-over failed:", err?.message));
-    }
+    summary[group] = await workDailyJobs(service, { group, runDate: opts.runDate, runners: opts.runners, clock: opts.clock });
   }
   return summary;
 }
 
 /**
- * For the 2-minute event dispatcher: whether a group's list has stalled —
- * jobs waiting (or stuck) and nothing started or finished for a few
- * minutes — so it can restart a run whose hand-over was lost.
+ * For the 2-minute event dispatcher: whether a group's list needs an
+ * invocation — jobs waiting (or stuck) and none being worked on. This is
+ * how a run continues once an invocation's time is up, so it doesn't wait
+ * for minutes of silence first.
  */
 export async function dailyRunStalled(service: any, group: DailyGroup, runDate: string, now = Date.now()): Promise<boolean> {
   const { data: jobs } = await service.from("daily_jobs").select("status, started_at, finished_at").eq("run_date", runDate).eq("run_group", group);
   const list = jobs ?? [];
-  const recent = now - 3 * 60_000;
   const stuckBefore = now - STUCK_MINUTES * 60_000;
-  const waiting = list.some((j: any) => j.status === "pending" || (j.status === "running" && j.started_at && Date.parse(j.started_at) < stuckBefore));
-  const active = list.some(
-    (j: any) => (j.status === "running" && j.started_at && Date.parse(j.started_at) > recent) || (j.finished_at && Date.parse(j.finished_at) > recent)
-  );
+  const stuck = (j: any) => j.status === "running" && j.started_at && Date.parse(j.started_at) < stuckBefore;
+  const waiting = list.some((j: any) => j.status === "pending" || stuck(j));
+  // An invocation is on it: a job running that isn't stuck.
+  const active = list.some((j: any) => j.status === "running" && !stuck(j));
   return waiting && !active;
 }

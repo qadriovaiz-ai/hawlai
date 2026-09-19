@@ -7,6 +7,12 @@
 //
 // These run the real job list, worker, invocation and route against a fake
 // database and fake automations with a fake clock.
+//
+// 2026-09-20: an invocation no longer calls this route itself to carry on
+// — a chain of self-calls is what Vercel stops with 508 "Loop Detected".
+// It works for BUDGET_MS of its 300s; the 2-minute dispatcher (called from
+// outside by pg_cron) starts the next invocation when jobs are waiting and
+// none is running.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -59,6 +65,7 @@ function db() {
       eq: (k: string, v: any) => (filters.push((r) => r[k] === v), api),
       lt: (k: string, v: any) => (filters.push((r) => r[k] != null && r[k] < v), api),
       gte: (k: string, v: any) => (filters.push((r) => r[k] >= v), api),
+      lte: (k: string, v: any) => (filters.push((r) => r[k] <= v), api),
       in: (k: string, v: any[]) => (filters.push((r) => v.includes(r[k])), api),
       order: (k: string) => ((orderBy = k), api),
       limit: (n: number) => ((limit = n), api),
@@ -89,6 +96,8 @@ import {
 import { GROUPS, type SubsystemKey } from "@/lib/automation/cronGroups";
 
 const TODAY = "2026-09-16";
+/** The route and the dispatcher use India's real date. */
+const TODAY_IN_INDIA = () => new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 const BUSINESSES = ["lala", "hind-realestate", "riverside-pottery", "bloom-and-wax", "candle_by_qaaf"];
 
 /** Fake automations that take (fake) time: the AI ones are slow. */
@@ -117,77 +126,84 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("the live case: five businesses, 60-second invocations", () => {
-  it("every business's jobs all run, across hand-overs — candle_by_qaaf's emails included", async () => {
+/** The cron's invocation, then the dispatcher's ticks: each tick starts an invocation only if the list needs one. */
+async function runTheDay(group: "heavy" | "signals", runners: any, clock: { now: number }) {
+  const invocations: string[] = [];
+  const invoke = async (isContinuation: boolean) => {
+    invocations.push(isContinuation ? "dispatcher" : "cron");
+    await runDailyInvocation(db(), { groups: [group], isContinuation, runDate: TODAY, runners, clock: () => clock.now });
+  };
+  await invoke(false);
+  for (let tick = 0; tick < 50 && (await dailyRunStalled(db(), group, TODAY)); tick++) await invoke(true);
+  return invocations;
+}
+
+describe("the live case: five businesses", () => {
+  it("every business's jobs all run — candle_by_qaaf's emails included — in the cron's one invocation", async () => {
     const clock = { now: 0 };
     const calls: string[] = [];
-    const runners = fakeRunners(clock, calls);
-    const invocations: number[] = [];
-    let pendingHandOvers = 0;
-
-    // The cron's invocation, then every hand-over it and its successors ask for.
-    const invoke = async (isContinuation: boolean) => {
-      invocations.push(clock.now);
-      await runDailyInvocation(db(), { groups: ["heavy"], isContinuation, runDate: TODAY, runners, handOver: async () => void pendingHandOvers++, clock: () => clock.now });
-    };
-    await invoke(false);
-    while (pendingHandOvers > 0) {
-      pendingHandOvers--;
-      await invoke(true);
-    }
-
+    const invocations = await runTheDay("heavy", fakeRunners(clock, calls), clock);
     const jobs = tables.daily_jobs;
     expect(jobs).toHaveLength(BUSINESSES.length * GROUPS.heavy.length);
     expect(jobs.every((j) => j.status === "done")).toBe(true);
     for (const b of BUSINESSES) for (const s of GROUPS.heavy) expect(calls).toContain(`${b}:${s}`);
-    expect(invocations.length).toBeGreaterThan(1);
+    // ~2 minutes of work fits in one 300s invocation.
+    expect(invocations).toEqual(["cron"]);
     // Emails for every business before any daily_autopilot.
     expect(Math.max(...BUSINESSES.map((b) => calls.indexOf(`${b}:email_automation`)))).toBeLessThan(calls.indexOf("lala:daily_autopilot"));
   });
 
-  it("no invocation starts a job after its time budget", async () => {
+  it("more than one invocation's work: the dispatcher carries it on — every job runs, with no invocation calling the route", async () => {
+    tables.dealerships = Array.from({ length: 20 }, (_, i) => ({ id: `biz-${i}`, business_category: null, created_at: `2026-01-${String(i + 1).padStart(2, "0")}` }));
+    const clock = { now: 0 };
+    const calls: string[] = [];
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const invocations = await runTheDay("heavy", fakeRunners(clock, calls), clock);
+    expect(tables.daily_jobs.every((j) => j.status === "done")).toBe(true);
+    expect(calls).toHaveLength(20 * GROUPS.heavy.length);
+    expect(invocations[0]).toBe("cron");
+    expect(invocations.length).toBeGreaterThan(1);
+    expect(invocations.slice(1).every((i) => i === "dispatcher")).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("no invocation starts a job after its time budget, and the budget leaves the last job room inside 300s", async () => {
     const clock = { now: 0 };
     const starts: number[] = [];
+    tables.dealerships = Array.from({ length: 20 }, (_, i) => ({ id: `biz-${i}`, business_category: null, created_at: `2026-01-${String(i + 1).padStart(2, "0")}` }));
     const runners = fakeRunners(clock, []);
     const wrapped = Object.fromEntries(Object.entries(runners).map(([k, fn]: any) => [k, async (...a: any[]) => (starts.push(clock.now), fn(...a))])) as any;
     await planDailyJobs(db(), "heavy", TODAY);
     const invStart = clock.now;
-    const r = await workDailyJobs(db(), { group: "heavy", runDate: TODAY, runners: wrapped, handOver: async () => {}, clock: () => clock.now });
+    const r = await workDailyJobs(db(), { group: "heavy", runDate: TODAY, runners: wrapped, clock: () => clock.now });
     expect(r.outOfTime).toBe(true);
     expect(Math.max(...starts) - invStart).toBeLessThanOrEqual(BUDGET_MS);
+    const { maxDuration } = await import("@/app/api/autopilot/daily-run/route");
+    expect(maxDuration).toBe(300);
+    expect(maxDuration * 1000 - BUDGET_MS).toBeGreaterThanOrEqual(120_000);
   });
 });
 
-describe("hand-over", () => {
-  it("happens before the second job starts — so a kill during that job can't end the run — and only once per invocation", async () => {
+describe("carrying on", () => {
+  it("an invocation that runs out of time just stops — the rest waits for the dispatcher", async () => {
     const clock = { now: 0 };
-    const events: string[] = [];
-    await planDailyJobs(db(), "signals", TODAY);
-    const runners = Object.fromEntries(GROUPS.signals.map((s) => [s, async (_: any, id: string) => void events.push(`run ${id}:${s}`)])) as any;
-    await workDailyJobs(db(), { group: "signals", runDate: TODAY, runners, handOver: async () => void events.push("hand-over"), clock: () => clock.now });
-    expect(events.filter((e) => e === "hand-over")).toHaveLength(1);
-    expect(events.indexOf("hand-over")).toBe(1);
-  });
-
-  it("an invocation that ran out of time without handing over (one long job) hands over before exiting", async () => {
-    const clock = { now: 0 };
-    let handOvers = 0;
     const runners = fakeRunners(clock, []);
     runners.email_automation = async () => void (clock.now += BUDGET_MS + 1);
-    await runDailyInvocation(db(), { groups: ["heavy"], isContinuation: false, runDate: TODAY, runners, handOver: async () => void handOvers++, clock: () => clock.now });
-    expect(handOvers).toBe(1);
+    const summary: any = await runDailyInvocation(db(), { groups: ["heavy"], isContinuation: false, runDate: TODAY, runners, clock: () => clock.now });
+    expect(summary.heavy).toEqual({ ran: 1, outOfTime: true });
+    expect(tables.daily_jobs.filter((j) => j.status === "pending").length).toBeGreaterThan(0);
+    expect(await dailyRunStalled(db(), "heavy", TODAY)).toBe(true);
   });
 
-  it("a finished list doesn't hand over", async () => {
+  it("a finished list needs nothing more", async () => {
     tables.dealerships = tables.dealerships.slice(0, 1);
-    let handOvers = 0;
     const runners = Object.fromEntries(GROUPS.signals.map((s) => [s, async () => ({})])) as any;
-    await planDailyJobs(db(), "signals", TODAY);
-    // one invocation does everything instantly — its single hand-over came before job 2
-    await workDailyJobs(db(), { group: "signals", runDate: TODAY, runners, handOver: async () => void handOvers++, clock: () => 0 });
-    const next = await runDailyInvocation(db(), { groups: ["signals"], isContinuation: true, runDate: TODAY, runners, handOver: async () => void handOvers++, clock: () => 0 });
-    expect((next as any).signals).toEqual({ ran: 0, handedOver: false, outOfTime: false });
-    expect(handOvers).toBe(1);
+    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: false, runDate: TODAY, runners, clock: () => 0 });
+    expect(await dailyRunStalled(db(), "signals", TODAY)).toBe(false);
+    const next = await runDailyInvocation(db(), { groups: ["signals"], isContinuation: true, runDate: TODAY, runners, clock: () => 0 });
+    expect((next as any).signals).toEqual({ ran: 0, outOfTime: false });
   });
 });
 
@@ -212,7 +228,7 @@ describe("a job whose invocation was killed", () => {
     tables.daily_jobs.find((j) => j.id === killed!.id)!.started_at = new Date(Date.now() - (STUCK_MINUTES + 1) * 60_000).toISOString();
     const ran: string[] = [];
     const runners = Object.fromEntries(GROUPS.signals.map((s) => [s, async () => void ran.push(s)])) as any;
-    await workDailyJobs(db(), { group: "signals", runDate: TODAY, runners, handOver: async () => {}, clock: () => Date.now() });
+    await workDailyJobs(db(), { group: "signals", runDate: TODAY, runners, clock: () => Date.now() });
     expect(ran).toContain(killed!.subsystem);
     expect(tables.daily_jobs.find((j) => j.id === killed!.id)).toMatchObject({ status: "done", attempts: 2 });
   });
@@ -229,7 +245,7 @@ describe("a job whose invocation was killed", () => {
     const job = tables.daily_jobs[0];
     Object.assign(job, { status: "running", attempts: MAX_ATTEMPTS, started_at: new Date(Date.now() - (STUCK_MINUTES + 1) * 60_000).toISOString() });
     await requeueStuckJobs(db(), "heavy", TODAY);
-    expect(job).toMatchObject({ status: "failed", error: `didn't finish within 60 seconds (tried ${MAX_ATTEMPTS} times)` });
+    expect(job).toMatchObject({ status: "failed", error: `didn't finish in the time a run has (tried ${MAX_ATTEMPTS} times)` });
   });
 });
 
@@ -280,7 +296,7 @@ describe("the list", () => {
     tables.dealerships = tables.dealerships.slice(0, 2);
     const runners = Object.fromEntries(GROUPS.signals.map((s) => [s, async () => ({})])) as any;
     runners.lead_export = async (_: any, id: string) => (id === "lala" ? { error: "Resend is down" } : {});
-    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: false, runDate: TODAY, runners, handOver: async () => {}, clock: () => 0 });
+    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: false, runDate: TODAY, runners, clock: () => 0 });
     expect(tables.daily_jobs.find((j) => j.dealership_id === "lala" && j.subsystem === "lead_export")).toMatchObject({ status: "failed", error: "Resend is down" });
     expect(tables.daily_jobs.filter((j) => j.status === "done")).toHaveLength(2 * GROUPS.signals.length - 1);
     expect(tables.automation_run_log.length).toBe(2 * GROUPS.signals.length);
@@ -292,11 +308,11 @@ describe("the invocation", () => {
     const order: string[] = [];
     const runners = Object.fromEntries(GROUPS.signals.map((s) => [s, async () => void order.push("job")])) as any;
     const platformTasks = async () => void order.push("platform");
-    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: false, runDate: TODAY, runners, handOver: async () => {}, platformTasks, clock: () => 0 });
+    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: false, runDate: TODAY, runners, platformTasks, clock: () => 0 });
     expect(order[0]).toBe("platform");
     tables.daily_jobs = [];
     order.length = 0;
-    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: true, runDate: TODAY, runners, handOver: async () => {}, platformTasks, clock: () => 0 });
+    await runDailyInvocation(db(), { groups: ["signals"], isContinuation: true, runDate: TODAY, runners, platformTasks, clock: () => 0 });
     expect(order).toEqual([]);
     expect(tables.daily_jobs).toEqual([]);
   });
@@ -326,38 +342,81 @@ describe("the health row", () => {
       state: "failing",
       failed: [
         { subsystem: "content_autopilot", error: "Facebook token expired" },
-        { subsystem: "daily_autopilot", error: "didn't finish within 60 seconds" },
+        { subsystem: "daily_autopilot", error: "didn't finish in the time a run has" },
       ],
       lastSuccess: false,
     });
   });
 });
 
-describe("the 2-minute safety net", () => {
-  it("nudges only a list that has waiting jobs and no recent movement", async () => {
+describe("the 2-minute dispatcher", () => {
+  it("starts an invocation as soon as jobs are waiting and none is running — not after minutes of silence", async () => {
     const now = Date.now();
     await planDailyJobs(db(), "heavy", TODAY);
     expect(await dailyRunStalled(db(), "heavy", TODAY, now)).toBe(true);
+    // One finished a minute ago, the rest waiting, nobody on them: carry on now.
     tables.daily_jobs[0].status = "done";
     tables.daily_jobs[0].finished_at = new Date(now - 60_000).toISOString();
+    expect(await dailyRunStalled(db(), "heavy", TODAY, now)).toBe(true);
+    // An invocation is on it: leave it be.
+    Object.assign(tables.daily_jobs[1], { status: "running", started_at: new Date(now - 30_000).toISOString() });
     expect(await dailyRunStalled(db(), "heavy", TODAY, now)).toBe(false);
+    // …unless that job is stuck (its invocation died): then it's waiting too.
+    tables.daily_jobs[1].started_at = new Date(now - (STUCK_MINUTES + 1) * 60_000).toISOString();
+    expect(await dailyRunStalled(db(), "heavy", TODAY, now)).toBe(true);
+    // All done: nothing to start.
     for (const j of tables.daily_jobs) Object.assign(j, { status: "done", finished_at: new Date(now - 10 * 60_000).toISOString() });
     expect(await dailyRunStalled(db(), "heavy", TODAY, now)).toBe(false);
+    // All done but one whose invocation died: that one alone still needs an invocation.
+    Object.assign(tables.daily_jobs[3], { status: "running", finished_at: null, started_at: new Date(now - (STUCK_MINUTES + 1) * 60_000).toISOString() });
+    expect(await dailyRunStalled(db(), "heavy", TODAY, now)).toBe(true);
+  });
+
+  it("the dispatcher's call to the daily run is one hop from outside, and the daily run makes no call of its own", async () => {
+    vi.resetModules();
+    const afterCallbacks: (() => Promise<void>)[] = [];
+    vi.doMock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: (fn: any) => void afterCallbacks.push(fn) }));
+    vi.doMock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
+    const quick = Object.fromEntries([...GROUPS.heavy, ...GROUPS.signals].map((s) => [s, async () => ({})]));
+    vi.doMock("@/lib/automation/dailyRunners", () => ({ DAILY_RUNNERS: quick }));
+    vi.doMock("@/lib/email/resendWebhook", () => ({ ensureResendWebhook: async () => ({ status: "ok", id: "wh" }) }));
+    vi.doMock("@/lib/agents/platformSpendAlertAgent", () => ({ checkPlatformDailySpend: async () => ({}) }));
+    process.env.CRON_SECRET = "cron-test-secret";
+    const { GET: dailyRun } = await import("@/app/api/autopilot/daily-run/route");
+    const { POST: dispatch } = await import("@/app/api/events/dispatch/route");
+
+    await planDailyJobs(db(), "heavy", TODAY_IN_INDIA());
+    // Every request anyone makes: the dispatcher's nudge goes to the real daily-run route.
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (u: any, init: any) => {
+      requests.push(String(u));
+      return dailyRun(new Request(String(u), { headers: init?.headers }));
+    }));
+    const res = await dispatch(new Request("https://hawlai.online/api/events/dispatch", { method: "POST", headers: { authorization: "Bearer cron-test-secret" } }));
+    expect((await res.json()).dailyRunNudged).toEqual(["heavy"]);
+    expect(requests).toEqual(["https://hawlai.online/api/autopilot/daily-run?group=heavy&continue=1"]);
+    // The daily run's own work: all of it, and not one request.
+    for (const cb of afterCallbacks.splice(0)) await cb();
+    expect(requests).toHaveLength(1);
+    expect(tables.daily_jobs.filter((j) => j.run_date === TODAY_IN_INDIA()).every((j) => j.status === "done")).toBe(true);
+    vi.unstubAllGlobals();
+    delete process.env.CRON_SECRET;
   });
 });
 
 describe("the route", () => {
-  it("answers 202 at once, works in after(), and hands over to itself with the server's own secret", async () => {
+  it("answers 202 at once, works in after() — and never calls itself", async () => {
     vi.resetModules();
     const afterCallbacks: (() => Promise<void>)[] = [];
     vi.doMock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: (fn: any) => void afterCallbacks.push(fn) }));
     vi.doMock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
     vi.doMock("@/lib/email/resendWebhook", () => ({ ensureResendWebhook: async () => ({ status: "ok", id: "wh" }) }));
     vi.doMock("@/lib/agents/platformSpendAlertAgent", () => ({ checkPlatformDailySpend: async () => ({}) }));
+    // Each automation takes a minute of the clock: more than one invocation's budget.
     const slow = Object.fromEntries([...GROUPS.heavy, ...GROUPS.signals].map((s) => [s, async () => ({})]));
     vi.doMock("@/lib/automation/dailyRunners", () => ({ DAILY_RUNNERS: slow }));
-    const fetched: { url: string; auth: string | null }[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (u: any, init: any) => (fetched.push({ url: String(u), auth: init?.headers?.Authorization ?? null }), { status: 202 })));
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (u: any) => (fetched.push(String(u)), { status: 202 })));
     process.env.CRON_SECRET = "cron-test-secret";
 
     const { GET } = await import("@/app/api/autopilot/daily-run/route");
@@ -367,7 +426,7 @@ describe("the route", () => {
 
     await afterCallbacks[0]();
     expect(tables.daily_jobs.length).toBe(BUSINESSES.length * GROUPS.heavy.length);
-    expect(fetched[0]).toEqual({ url: "https://hawlai.online/api/autopilot/daily-run?group=heavy&continue=1", auth: "Bearer cron-test-secret" });
+    expect(fetched.filter((u) => u.includes("/api/autopilot/daily-run"))).toEqual([]);
 
     const denied = await GET(new Request("https://hawlai.online/api/autopilot/daily-run?group=heavy&continue=1"));
     expect(denied.status).toBe(401);

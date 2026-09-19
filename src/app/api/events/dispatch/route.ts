@@ -119,9 +119,12 @@ export async function POST(request: Request) {
     }
   }
 
-  // Safety net for the daily job list: if a run's hand-over was lost (jobs
-  // waiting and nothing has moved for a few minutes), start it again. Only
-  // matters where this 2-minute schedule is set up in Supabase.
+  // How the daily job list continues: an invocation stops after its time
+  // budget, and when jobs are waiting with none running, this starts the
+  // next one. Called from outside by pg_cron, so this is one hop — never a
+  // chain of the daily run calling itself (Vercel's 508, dailyJobs.ts).
+  // Without this 2-minute schedule set up in Supabase, a day's run gets
+  // only the cron's own invocation.
   const dailyRunNudged: string[] = [];
   for (const group of ["signals", "heavy"] as const) {
     try {

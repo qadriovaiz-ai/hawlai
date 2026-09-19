@@ -97,12 +97,14 @@ describe("partial-run detection", () => {
   // SOURCE-LEVEL assertions, labelled as such — see the file header.
   it("sets an explicit maxDuration within the Hobby plan cap", () => {
     // Its absence is the likely reason the timeout in the audit
-    // finding was the steady state rather than an edge case. The value
-    // must also be <= 60: Hobby caps there, so a larger number is
-    // aspirational at best and a rejected deploy at worst.
+    // finding was the steady state rather than an edge case. The cap:
+    // Hobby with Fluid compute (on by default) allows 300s — Vercel's
+    // docs, functions/configuring-functions/duration, checked 2026-09-20;
+    // 60s was the cap without Fluid compute. Routes asking for 300 have
+    // deployed here since July. A larger number is a rejected deploy.
     const match = source.match(/export const maxDuration = (\d+)/);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeLessThanOrEqual(60);
+    expect(Number(match![1])).toBeLessThanOrEqual(300);
   });
 
   it("a partial run is visible as unfinished or failed jobs, not a 500 in the cron log", () => {
