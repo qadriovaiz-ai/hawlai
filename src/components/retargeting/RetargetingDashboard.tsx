@@ -16,7 +16,8 @@ import { Button } from "@/components/ui/Button";
 interface Segment {
   key: string;
   label: string;
-  count: number;
+  /** Null when only Meta can count them (pixel-only audiences). */
+  count: number | null;
   valueInr: number | null;
   detail: string | null;
 }
@@ -31,6 +32,7 @@ const ICONS: Record<string, typeof ShoppingCart> = {
   abandoned_cart: ShoppingCart,
   viewed_no_purchase: Eye,
   buyers: Repeat,
+  lapsed_buyers: Repeat,
 };
 
 export default function RetargetingDashboard() {
@@ -102,7 +104,7 @@ export default function RetargetingDashboard() {
                 <Icon className="w-4 h-4 text-slate-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums">{s.count.toLocaleString("en-IN")}</p>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums">{s.count == null ? "—" : s.count.toLocaleString("en-IN")}</p>
                 <p className="text-xs text-slate-500">{s.label}</p>
               </div>
               {s.detail && <p className="text-[10.5px] text-slate-400">{s.detail}</p>}
@@ -112,7 +114,8 @@ export default function RetargetingDashboard() {
                 </p>
               )}
 
-              {s.count > 0 && (
+              {/* Pixel-only audiences have no count of ours: advertise once Meta has one. */}
+              {((s.count ?? 0) > 0 || (s.count == null && metaCount != null)) && (
                 <>
                   {openFor === s.key ? (
                     <div className="space-y-2 pt-1">

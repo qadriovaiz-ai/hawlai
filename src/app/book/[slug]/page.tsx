@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { Calendar, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import TrackingScripts from "@/components/website/TrackingScripts";
+import { trackSchedule } from "@/lib/pixelEvents";
 
 export default function BookingPage() {
   const params = useParams();
@@ -19,6 +21,9 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The business's Meta pixel, loaded only after consent (TrackingScripts) —
+  // "opened the booking page, didn't book" is built from it (Retargeting R2).
+  const [pixelId, setPixelId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/public/book?slug=${slug}`)
@@ -27,6 +32,7 @@ export default function BookingPage() {
         if (d.error) { setError(d.error); return; }
         setDealershipName(d.dealershipName);
         setSlots(d.slots ?? []);
+        setPixelId(d.metaPixelId ?? null);
       })
       .finally(() => setLoading(false));
   }, [slug]);
@@ -43,6 +49,7 @@ export default function BookingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Booking failed");
+      trackSchedule();
       setDone(true);
     } catch (err: any) {
       setError(err.message);
@@ -61,9 +68,12 @@ export default function BookingPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-6 h-6 animate-spin text-purple-600" /></div>;
   if (error && !dealershipName) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">{error}</div>;
 
+  const tracking = pixelId ? <TrackingScripts metaPixelId={pixelId} /> : null;
+
   if (done) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        {tracking}
         <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md w-full text-center space-y-3">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
           <h1 className="text-lg font-bold text-slate-900">You're booked!</h1>
@@ -77,6 +87,7 @@ export default function BookingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10">
+      {tracking}
       <div className="max-w-lg mx-auto bg-white rounded-2xl shadow-sm p-6 sm:p-8 space-y-6">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">

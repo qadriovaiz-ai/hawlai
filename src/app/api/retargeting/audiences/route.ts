@@ -5,12 +5,15 @@ import {
   createWebsiteAudience,
   createCustomerListAudience,
   createLookalikeAudience,
-  addUsersToAudience,
+  replaceAudienceUsers,
   fetchAudienceCount,
   type AudienceResult,
 } from "@/lib/ads/metaCustomAudiences";
 import { buildSuppressionList, hashPhone, hashEmail, isSuppressed } from "@/lib/ads/audienceHashing";
 import { loadMetaAudienceToken } from "@/lib/ads/metaToken";
+import { effectiveBusinessModels } from "@/lib/business/businessModel";
+import { bookingPageUrl } from "@/lib/catalog/catalogItem";
+import { audiencesFor, listMembers, AUDIENCE_BY_KEY, type AudienceDefinition, type AudienceKey } from "@/lib/retargeting/audiences";
 
 // Meta Custom Audience sync — retargeting piece 5/7.
 //
@@ -23,35 +26,11 @@ import { loadMetaAudienceToken } from "@/lib/ads/metaToken";
 // create, upload and count use the USER token (lib/ads/metaToken.ts
 // loadMetaAudienceToken) — never the Page token, which can't manage them.
 // An expired one says "reconnect" instead of failing at Meta.
-
-type AudienceKey = "abandoned_cart" | "viewed_no_purchase" | "buyers" | "buyers_lookalike";
-
-const DEFINITIONS: Record<AudienceKey, { name: string; type: "website" | "customer_list" | "lookalike"; label: string; description: string }> = {
-  abandoned_cart: {
-    name: "Hawlai — Added to cart, didn't buy",
-    type: "website",
-    label: "Added to cart but didn't buy",
-    description: "People who put something in their cart in the last 30 days and haven't ordered.",
-  },
-  viewed_no_purchase: {
-    name: "Hawlai — Viewed a product, didn't buy",
-    type: "website",
-    label: "Viewed a product but didn't buy",
-    description: "People who looked at a product in the last 30 days and haven't ordered.",
-  },
-  buyers: {
-    name: "Hawlai — Customers who bought",
-    type: "customer_list",
-    label: "Existing customers",
-    description: "People who have actually ordered from you.",
-  },
-  buyers_lookalike: {
-    name: "Hawlai — People like your customers",
-    type: "lookalike",
-    label: "People similar to your customers",
-    description: "New people whose behaviour resembles your existing customers.",
-  },
-};
+//
+// BY BUSINESS MODEL (R2, 2026-09-20): which audiences a business gets
+// depends on how it makes money (lib/retargeting/audiences.ts). Customer
+// lists are REPLACED on every sync, so people who have since booked,
+// converted or opted out drop off.
 
 async function resolveOwner(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -64,37 +43,59 @@ async function resolveOwner(supabase: any) {
   return { dealershipId };
 }
 
+/** The business's setup: ad account, pixel, booking page, and the audiences for how it makes money. */
+async function setupOf(supabase: any, dealershipId: string) {
+  const [{ data: dealership }, { data: catalogue }] = await Promise.all([
+    supabase.from("dealerships").select("fb_ad_account_id, meta_pixel_id, business_models, booking_slug").eq("id", dealershipId).single(),
+    supabase.from("products").select("kind").eq("dealership_id", dealershipId).eq("is_active", true),
+  ]);
+  const productCount = (catalogue ?? []).filter((p: any) => p.kind !== "service").length;
+  const serviceCount = (catalogue ?? []).length - productCount;
+  const models = effectiveBusinessModels(dealership?.business_models, { productCount, serviceCount });
+  return { dealership, models, audiences: audiencesFor(models.models) };
+}
+
+/** Why this audience can't be created right now, or null when it can. */
+function blockedBy(def: AudienceDefinition, dealership: any): string | null {
+  if (def.type === "website" && !dealership?.meta_pixel_id) return "Add your Meta Pixel ID in Integrations first — this audience is built from pixel activity.";
+  if (def.rule && "includeUrl" in def.rule && !dealership?.booking_slug) return "Set up your booking page first — this audience is the people who open it.";
+  return null;
+}
+
 export async function GET() {
   const supabase = await createClient();
   const resolved = await resolveOwner(supabase);
   if (resolved.error) return resolved.error;
 
-  const [{ data: rows }, { data: dealership }, token] = await Promise.all([
+  const [{ data: rows }, setup, token] = await Promise.all([
     supabase.from("meta_custom_audiences").select("*").eq("dealership_id", resolved.dealershipId),
-    supabase.from("dealerships").select("fb_ad_account_id, meta_pixel_id").eq("id", resolved.dealershipId).single(),
+    setupOf(supabase, resolved.dealershipId),
     loadMetaAudienceToken(supabase, resolved.dealershipId),
   ]);
-
+  const { dealership, models, audiences } = setup;
   const byKey = new Map((rows ?? []).map((r: any) => [r.audience_key, r]));
 
   return NextResponse.json({
-    // Reports readiness rather than silently offering a sync that
-    // can't work — both a pixel and an ad account are required.
-    ready: !!(dealership?.fb_ad_account_id && dealership?.meta_pixel_id && token.ok),
+    // A pixel is only needed for the pixel-based audiences — each one says
+    // what's missing for it rather than the whole panel going dark.
+    ready: !!(dealership?.fb_ad_account_id && token.ok),
     missing: {
       adAccount: !dealership?.fb_ad_account_id,
-      pixel: !dealership?.meta_pixel_id,
+      pixel: !dealership?.meta_pixel_id && audiences.some((a) => a.type === "website"),
       connection: !token.ok,
     },
     // What to do about the connection, in words: connect, or reconnect.
     connection: token.ok ? null : { reason: token.reason, message: token.message },
-    audiences: (Object.keys(DEFINITIONS) as AudienceKey[]).map((key) => {
-      const row = byKey.get(key);
+    models: models.models,
+    modelsGuessed: models.inferred,
+    audiences: audiences.map((def) => {
+      const row = byKey.get(def.key);
       return {
-        key,
-        label: DEFINITIONS[key].label,
-        description: DEFINITIONS[key].description,
-        type: DEFINITIONS[key].type,
+        key: def.key,
+        label: def.label,
+        description: def.description,
+        type: def.type,
+        blocked: blockedBy(def, dealership),
         syncStatus: row?.sync_status ?? null,
         syncError: row?.sync_error ?? null,
         approximateCount: row?.approximate_count ?? null,
@@ -112,14 +113,10 @@ export async function POST(request: Request) {
   const { dealershipId } = resolved;
 
   const { audienceKey } = await request.json();
-  const definition = DEFINITIONS[audienceKey as AudienceKey];
-  if (!definition) return NextResponse.json({ error: "Unknown audience" }, { status: 400 });
-
-  const { data: dealership } = await supabase
-    .from("dealerships")
-    .select("fb_ad_account_id, meta_pixel_id")
-    .eq("id", dealershipId)
-    .single();
+  const { dealership, audiences } = await setupOf(supabase, dealershipId);
+  // Only an audience for how this business makes money.
+  const definition = audiences.find((a) => a.key === audienceKey);
+  if (!definition) return NextResponse.json({ error: AUDIENCE_BY_KEY.has(audienceKey) ? "That audience isn't one for how your business makes money." : "Unknown audience" }, { status: 400 });
 
   // Nothing goes to Meta without a user token — no Page-token fallback.
   const access = await loadMetaAudienceToken(supabase, dealershipId);
@@ -132,10 +129,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No Meta ad account is linked yet — choose one in Integrations." }, { status: 400 });
   }
   const adAccountId = String(rawAccount).startsWith("act_") ? String(rawAccount) : `act_${rawAccount}`;
-
-  if (definition.type === "website" && !dealership?.meta_pixel_id) {
-    return NextResponse.json({ error: "Add your Meta Pixel ID in Integrations first — website audiences are built from pixel activity." }, { status: 400 });
-  }
+  const blocked = blockedBy(definition, dealership);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 400 });
 
   const service = createServiceClient();
 
@@ -150,6 +145,8 @@ export async function POST(request: Request) {
 
   let result: AudienceResult;
   let audienceId = existing?.meta_audience_id as string | undefined;
+  /** Said on the row when a list had nobody to send. */
+  let note: string | null = null;
 
   try {
     if (definition.type === "website") {
@@ -158,13 +155,15 @@ export async function POST(request: Request) {
         // on its own side, so there is nothing to re-push.
         result = { success: true, audienceId };
       } else {
+        const rule = definition.rule!;
         result = await createWebsiteAudience({
           adAccountId,
           accessToken: token,
           pixelId: dealership!.meta_pixel_id!,
           name: definition.name,
-          includeEvent: audienceKey === "abandoned_cart" ? "AddToCart" : "ViewContent",
-          excludeEvent: "Purchase",
+          includeEvent: "includeEvent" in rule ? rule.includeEvent : "PageView",
+          includeUrlContains: "includeUrl" in rule ? bookingPageUrl(dealership!.booking_slug)! : undefined,
+          excludeEvent: rule.excludeEvent,
           description: definition.description,
         });
         audienceId = result.audienceId;
@@ -177,23 +176,23 @@ export async function POST(request: Request) {
         result = { success: true, audienceId };
       }
 
-      // Unlike website audiences, a customer list must be pushed —
-      // Meta has no way to see our orders table.
+      // Unlike website audiences, a customer list must be pushed — Meta
+      // has no way to see our records. Replaced, not appended.
       if (result.success && audienceId) {
-        const { data: orders } = await service
-          .from("orders")
-          .select("customer_phone, customer_email")
-          .eq("dealership_id", dealershipId)
-          .neq("status", "cancelled");
-
+        const members = await listMembers(service, dealershipId, definition.key as AudienceKey);
         // Same suppression as the CSV export (piece 1) — an opted-out
         // person must not reach Meta through this path either.
         const suppression = await buildSuppressionList(service, dealershipId);
-        const rows = (orders ?? [])
-          .filter((o: any) => !isSuppressed(suppression, o.customer_phone, o.customer_email))
-          .map((o: any) => ({ phoneHash: hashPhone(o.customer_phone), emailHash: hashEmail(o.customer_email) }));
-
-        result = await addUsersToAudience({ audienceId, accessToken: token, rows });
+        const rows = members
+          .filter((m) => !isSuppressed(suppression, m.phone, m.email))
+          .map((m) => ({ phoneHash: hashPhone(m.phone), emailHash: hashEmail(m.email) }));
+        const replaced = await replaceAudienceUsers({ audienceId, accessToken: token, rows });
+        result = replaced;
+        if (replaced.success && replaced.sent === 0) {
+          note = existing?.meta_audience_id
+            ? "Nobody is in this group right now. Meta still has the people from the last sync — pause any campaign aimed at it."
+            : "Nobody is in this group yet — sync again once there is.";
+        }
       }
     } else {
       // Lookalike needs its source list to exist first — Meta models
@@ -202,12 +201,12 @@ export async function POST(request: Request) {
         .from("meta_custom_audiences")
         .select("meta_audience_id")
         .eq("dealership_id", dealershipId)
-        .eq("audience_key", "buyers")
+        .eq("audience_key", definition.seed!)
         .maybeSingle();
 
       if (!source?.meta_audience_id) {
         return NextResponse.json(
-          { error: "Sync \"Existing customers\" first — a lookalike is built from that list." },
+          { error: `Sync "${AUDIENCE_BY_KEY.get(definition.seed!)!.label}" first — a lookalike is built from that list.` },
           { status: 400 }
         );
       }
@@ -236,7 +235,7 @@ export async function POST(request: Request) {
         meta_audience_id: audienceId ?? null,
         approximate_count: approximateCount,
         sync_status: result.success ? "synced" : "failed",
-        sync_error: result.success ? null : result.error ?? "Unknown error",
+        sync_error: result.success ? note : result.error ?? "Unknown error",
         last_synced_at: new Date().toISOString(),
       },
       { onConflict: "dealership_id,audience_key" }
@@ -245,7 +244,7 @@ export async function POST(request: Request) {
     if (!result.success) {
       return NextResponse.json({ error: result.error, needsTermsAcceptance: result.needsTermsAcceptance ?? false, needsReconnect: result.needsReconnect ?? false }, { status: 400 });
     }
-    return NextResponse.json({ success: true, audienceId, approximateCount });
+    return NextResponse.json({ success: true, audienceId, approximateCount, note });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Sync failed" }, { status: 500 });
   }

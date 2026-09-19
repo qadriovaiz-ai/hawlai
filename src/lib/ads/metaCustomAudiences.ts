@@ -86,8 +86,13 @@ async function metaAudiencePost(path: string, body: Record<string, any>, token: 
  * at any point in the past, which isn't the intent — the intent is
  * "hasn't bought during this same window".
  */
-function buildEventRule(pixelId: string, includeEvent: string, excludeEvent?: string) {
+function buildEventRule(pixelId: string, includeEvent: string, excludeEvent?: string, includeUrlContains?: string) {
   const source = [{ id: pixelId, type: "pixel" }];
+  // "Visited this page": a PageView whose URL contains the path (R2 — a
+  // services business's booking page).
+  const includeFilters = includeUrlContains
+    ? [{ field: "event", operator: "eq", value: "PageView" }, { field: "url", operator: "i_contains", value: includeUrlContains }]
+    : [{ field: "event", operator: "eq", value: includeEvent }];
   const rule: Record<string, any> = {
     inclusions: {
       operator: "or",
@@ -97,7 +102,7 @@ function buildEventRule(pixelId: string, includeEvent: string, excludeEvent?: st
           retention_seconds: RETENTION_SECONDS,
           filter: {
             operator: "and",
-            filters: [{ field: "event", operator: "eq", value: includeEvent }],
+            filters: includeFilters,
           },
         },
       ],
@@ -130,6 +135,8 @@ export async function createWebsiteAudience(opts: {
   name: string;
   includeEvent: string;
   excludeEvent?: string;
+  /** Instead of includeEvent: people who opened a page whose URL contains this. */
+  includeUrlContains?: string;
   description?: string;
 }): Promise<AudienceResult> {
   return metaAudiencePost(
@@ -137,7 +144,7 @@ export async function createWebsiteAudience(opts: {
     {
       name: opts.name,
       description: opts.description ?? `Created by Hawlai — ${RETENTION_DAYS} day window`,
-      rule: buildEventRule(opts.pixelId, opts.includeEvent, opts.excludeEvent),
+      rule: buildEventRule(opts.pixelId, opts.includeEvent, opts.excludeEvent, opts.includeUrlContains),
       prefill: 1, // backfill from existing pixel history rather than starting empty
     },
     opts.accessToken
@@ -166,42 +173,54 @@ export async function createCustomerListAudience(opts: {
   );
 }
 
+/** Meta's batch limit for a customer-list upload. */
+export const REPLACE_BATCH = 10_000;
+
 /**
- * Uploads already-hashed contact data to a customer-list audience.
+ * REPLACES everyone on a customer list with these people (Meta's
+ * usersreplace, one session, in batches). A list of people who enquired but
+ * haven't booked must lose the ones who have since booked or opted out;
+ * appending (Meta's /users) never removes anyone.
  *
- * Takes hashes, never raw values: hashing happens in
- * audienceHashing.ts (piece 1), which also applies opt-out
- * suppression. Accepting raw PII here would create a second path that
- * could bypass that suppression.
+ * Takes hashes, never raw values: hashing happens in audienceHashing.ts,
+ * which also applies opt-out suppression — accepting raw PII here would
+ * create a path that could bypass it. Nobody to send: nothing is
+ * sent — Meta refuses an empty replacement, so the caller says the list in
+ * Meta still holds the last sync's people.
+ *
+ * UNVERIFIED AGAINST A LIVE AD ACCOUNT: built from Meta's documented
+ * Replace Users API; check the first real sync in Ads Manager.
  */
-export async function addUsersToAudience(opts: {
+export async function replaceAudienceUsers(opts: {
   audienceId: string;
   accessToken: string;
   rows: { phoneHash: string | null; emailHash: string | null }[];
-}): Promise<AudienceResult> {
+  /** Tests pass a fixed one; otherwise random, per Meta's session rules. */
+  sessionId?: number;
+}): Promise<AudienceResult & { sent: number }> {
   const usable = opts.rows.filter((r) => r.phoneHash || r.emailHash);
-  if (usable.length === 0) return { success: true }; // nothing to send is not a failure
-
-  try {
-    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${opts.audienceId}/users`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        access_token: opts.accessToken,
-        payload: {
-          schema: ["PHONE", "EMAIL"],
-          // Meta expects "" for a missing field, not null — a null
-          // here is rejected for the whole batch.
-          data: usable.map((r) => [r.phoneHash ?? "", r.emailHash ?? ""]),
-        },
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok || data?.error) return interpretError(data, res.status);
-    return { success: true, audienceId: opts.audienceId };
-  } catch (err: any) {
-    return { success: false, error: err?.message?.slice(0, 300) ?? "Upload failed" };
+  const sessionId = opts.sessionId ?? Math.floor(Math.random() * 1e15);
+  // Nobody: no batches, nothing sent (Meta refuses an empty replacement).
+  const batches = Math.ceil(usable.length / REPLACE_BATCH);
+  for (let b = 0; b < batches; b++) {
+    const slice = usable.slice(b * REPLACE_BATCH, (b + 1) * REPLACE_BATCH);
+    try {
+      const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${opts.audienceId}/usersreplace`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: opts.accessToken,
+          session: { session_id: sessionId, batch_seq: b + 1, last_batch_flag: b === batches - 1, estimated_num_total: usable.length },
+          payload: { schema: ["PHONE", "EMAIL"], data: slice.map((r) => [r.phoneHash ?? "", r.emailHash ?? ""]) },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.error) return { ...interpretError(data, res.status), sent: b * REPLACE_BATCH };
+    } catch (err: any) {
+      return { success: false, error: err?.message?.slice(0, 300) ?? "Upload failed", sent: b * REPLACE_BATCH };
+    }
   }
+  return { success: true, audienceId: opts.audienceId, sent: usable.length };
 }
 
 // ---- Lookalike -----------------------------------------------------

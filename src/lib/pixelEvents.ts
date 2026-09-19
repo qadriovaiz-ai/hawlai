@@ -114,3 +114,12 @@ export function trackSearch(query: string) {
 export function trackLead(value?: number) {
   track("Lead", value != null ? { value, currency: "INR" } : {});
 }
+
+/**
+ * A booking made on the business's booking page — Meta's standard event
+ * for it. The "opened the booking page but didn't book" audience excludes
+ * whoever fired it (Retargeting R2).
+ */
+export function trackSchedule() {
+  track("Schedule", {});
+}

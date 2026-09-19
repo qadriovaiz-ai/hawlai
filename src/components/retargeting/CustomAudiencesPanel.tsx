@@ -9,14 +9,18 @@ import { Button } from "@/components/ui/Button";
 //
 // Replaces the disabled "available once Meta Ads is connected"
 // placeholder that stood here before. Website audiences are rule-based
-// (Meta keeps them current itself); the customer list is pushed from
-// real orders; the lookalike is derived from that list.
+// (Meta keeps them current itself); customer lists are pushed from the
+// business's own records and replaced on every sync; the lookalike is
+// derived from the customers list. Which audiences depends on how the
+// business makes money (R2, lib/retargeting/audiences.ts).
 
 interface Audience {
   key: string;
   label: string;
   description: string;
   type: "website" | "customer_list" | "lookalike";
+  /** What's missing for this one (a pixel, a booking page); null when it can be created. */
+  blocked: string | null;
   syncStatus: "pending" | "synced" | "failed" | null;
   syncError: string | null;
   approximateCount: number | null;
@@ -34,6 +38,7 @@ export default function CustomAudiencesPanel() {
   // Connect or reconnect Facebook — audiences need the user token, not the Page's.
   const [connection, setConnection] = useState<{ reason: string; message: string } | null>(null);
   const [reconnect, setReconnect] = useState(false);
+  const [models, setModels] = useState<{ list: string[]; guessed: boolean } | null>(null);
 
   function load() {
     fetch("/api/retargeting/audiences")
@@ -44,6 +49,7 @@ export default function CustomAudiencesPanel() {
         setReady(!!d.ready);
         setMissing(d.missing ?? null);
         setConnection(d.connection ?? null);
+        setModels({ list: d.models ?? [], guessed: !!d.modelsGuessed });
       })
       .catch((err) => setError(err.message));
   }
@@ -88,6 +94,14 @@ export default function CustomAudiencesPanel() {
         <p className="text-xs text-slate-400 mt-0.5">
           Builds these lists directly in your Meta ad account so you can target them in any campaign.
         </p>
+        {/* Why these audiences: they follow how the business makes money. */}
+        {models && (
+          <p className="text-[11px] text-slate-400 mt-1">
+            {models.list.length
+              ? <>Audiences for a business selling {models.list.map((m) => ({ products: "products", services: "services", subscription: "subscriptions", b2b: "business clients" } as Record<string, string>)[m] ?? m).join(" and ")}{models.guessed ? " — guessed from your catalogue; set it in Settings if that's wrong" : ""}.</>
+              : <>How your business makes money isn't set, so these are a shop's audiences — set it in Settings to get the right ones.</>}
+          </p>
+        )}
       </div>
 
       {/* States the exact missing prerequisite rather than a generic
@@ -98,7 +112,6 @@ export default function CustomAudiencesPanel() {
           <span>
             {missing.connection && <>{connection?.message ?? "Connect Facebook in Integrations first."} </>}
             {missing.adAccount && <>No Meta ad account is linked yet. </>}
-            {missing.pixel && <>Add your Meta Pixel ID for the website-based audiences. </>}
             {missing.connection ? (
               <Link href="/dashboard/settings/connect-facebook" className="underline">{connection?.reason === "missing" ? "Connect Facebook" : "Reconnect Facebook"}</Link>
             ) : (
@@ -145,11 +158,14 @@ export default function CustomAudiencesPanel() {
               {a.syncStatus === "failed" && a.syncError && (
                 <p className="text-[10.5px] text-red-500 mt-1">{a.syncError}</p>
               )}
+              {/* A list that synced with nobody in it says so. */}
+              {a.syncStatus === "synced" && a.syncError && <p className="text-[10.5px] text-amber-700 mt-1">{a.syncError}</p>}
+              {a.blocked && <p className="text-[10.5px] text-amber-700 mt-1">{a.blocked}</p>}
             </div>
             <Button
               onClick={() => sync(a.key)}
               loading={busy === a.key}
-              disabled={!ready || busy !== null}
+              disabled={!ready || busy !== null || Boolean(a.blocked)}
               variant="secondary"
               size="sm"
             >
@@ -161,7 +177,7 @@ export default function CustomAudiencesPanel() {
       </div>
 
       <p className="text-[10.5px] text-slate-400">
-        The two website audiences update themselves once created — Meta keeps them current from your site activity. The customer list is sent from your real orders, and anyone who opted out of contact is excluded.
+        Website audiences update themselves once created — Meta keeps them current from your site activity. Lists are sent from your own records, replaced each time you refresh them (so people who have since bought, booked or opted out drop off), and anyone who opted out of contact is never included.
       </p>
     </div>
   );

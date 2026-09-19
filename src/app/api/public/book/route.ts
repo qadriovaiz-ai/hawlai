@@ -8,11 +8,13 @@ export async function GET(request: Request) {
   if (!slug) return NextResponse.json({ error: "slug required" }, { status: 400 });
 
   const supabase = createServiceClient();
-  const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name").eq("booking_slug", slug).maybeSingle();
+  const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name, meta_pixel_id").eq("booking_slug", slug).maybeSingle();
   if (!dealership) return NextResponse.json({ error: "Booking page not found" }, { status: 404 });
 
   const slots = await getAvailableSlots(supabase, dealership.id);
-  return NextResponse.json({ dealershipName: dealership.dealership_name, slots });
+  // The business's pixel (public by nature — it's in every page's source),
+  // so the booking page is tracked like its store: only after consent.
+  return NextResponse.json({ dealershipName: dealership.dealership_name, slots, metaPixelId: dealership.meta_pixel_id ?? null });
 }
 
 export async function POST(request: Request) {

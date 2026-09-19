@@ -38,6 +38,32 @@ const OFFER_ANGLES: Record<string, { label: string; brief: (offer: string) => st
     brief: (offer) =>
       `An ad for new people who behave like existing customers but have never bought. They don't know the business yet, so lead with what makes it worth trying. ${offer}`,
   },
+  // By business model (Retargeting R2, lib/retargeting/audiences.ts).
+  lapsed_buyers: {
+    label: "Bought before, not lately",
+    brief: (offer) =>
+      `An ad for people who bought once but not for a couple of months. They know the business — remind them what they liked and give a reason to come back now, not a first-time pitch. ${offer}`,
+  },
+  booking_visitors: {
+    label: "Opened your booking page but didn't book",
+    brief: (offer) =>
+      `An ad for people who opened the booking page but didn't book. They were close — take away the likely hesitation and invite them to pick a time. ${offer}`,
+  },
+  enquired_not_booked: {
+    label: "Enquired but didn't book",
+    brief: (offer) =>
+      `An ad for people who enquired recently but haven't booked. Answer the question they most likely still have, and make booking the easy next step. ${offer}`,
+  },
+  lapsed_members: {
+    label: "Members gone quiet",
+    brief: (offer) =>
+      `An ad for members who haven't paid, ordered or visited in a while. Welcome them back warmly and remind them what they're missing — no guilt. ${offer}`,
+  },
+  engaged_not_converted: {
+    label: "Engaged but not yet a client",
+    brief: (offer) =>
+      `An ad for businesses that have been in touch but haven't signed. Professional and specific: the outcome they'd get, and one clear next step. ${offer}`,
+  },
 };
 
 export async function POST(request: Request) {
