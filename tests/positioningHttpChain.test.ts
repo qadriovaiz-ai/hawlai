@@ -1,13 +1,15 @@
-// The positioning hand-over over REAL HTTP (2026-09-20).
+// A competitor comparison over REAL HTTP (2026-09-20).
 //
-// Two production stalls were in the hand-over chain: first every
-// hand-over was redirected to /auth/login (the middleware), then a run
-// stopped at step 1 after its hand-over was accepted. Tests that call the
-// worker route as a function can't see either. Here the server really
-// calls itself: a local HTTP server stands in for the deployment — the
-// middleware's own public-path decision, then the real worker route — and
-// each hand-over is a real fetch over TCP carrying the real secret header.
-// Only Anthropic and the database are fakes.
+// Three production failures were in how a run moved from step to step:
+// hand-overs redirected to /auth/login; a step outliving its invocation;
+// then Vercel's 508 "Loop Detected" — each step called our own worker
+// route for the next, and Vercel cuts off a deployment that keeps calling
+// itself. The server no longer calls itself at all. Here a local HTTP
+// server stands in for the deployment (the middleware's session rule,
+// then the real routes), the test plays the page over real TCP — press
+// the button, then poll — and every request the server receives is
+// checked to have come from the page. Only Anthropic and the database
+// are fakes.
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import http from "node:http";
@@ -63,20 +65,16 @@ vi.mock("@/lib/usage/researchCredits", () => ({ recordResearchCredits: async () 
 vi.mock("@/lib/featureGate", () => ({ requireFeature: async () => ({ allowed: true }) }));
 vi.mock("@/lib/usage/usageGuard", () => ({ checkUsage: async () => ({ allowed: true }) }));
 
-import { POST as startPost } from "@/app/api/strategy/positioning/route";
-import { POST as workPost } from "@/app/api/strategy/positioning/work/route";
+import { POST as startPost, GET as lookGet } from "@/app/api/strategy/positioning/route";
 import { isPublicPath } from "@/lib/supabase/middleware";
-import { WORK_PATH } from "@/lib/strategy/positioning/continue";
-import { STOPPED_MESSAGE } from "@/lib/strategy/positioning/run";
+import { runTiming, RUN_FOR_MS } from "@/lib/strategy/positioning/continue";
 
-const SECRET = "http-chain-secret";
+const PAGE = "the-page";
 const realFetch = globalThis.fetch;
 let server: http.Server;
 let origin: string;
-/** What reached the server over the wire. */
-let received: { path: string; auth: string | undefined; status: number }[];
-/** Set to make the "deployment" redirect everything, as the middleware once did. */
-let redirectEverything = false;
+/** Every request that reached the server: who sent it, and what it got. */
+let received: { from: string; method: string; path: string; status: number }[];
 
 beforeAll(async () => {
   server = http.createServer(async (req, res) => {
@@ -85,19 +83,20 @@ beforeAll(async () => {
     for await (const c of req) chunks.push(c as Buffer);
     const body = Buffer.concat(chunks).toString();
     let status: number;
-    let text: string;
+    let text = "";
     let location: string | undefined;
-    // The middleware's decision for a request with no session cookie.
-    if (redirectEverything || !isPublicPath(url.pathname)) {
-      if (url.pathname === "/auth/login") [status, text] = [200, "<html>login</html>"];
-      else [status, text, location] = [307, "", "/auth/login"];
-    } else if (url.pathname === WORK_PATH && req.method === "POST") {
-      const r = await workPost(new Request(`${origin}${url.pathname}`, { method: "POST", headers: req.headers as any, body }));
+    const hasSession = String(req.headers.cookie ?? "").includes("session=1");
+    // The middleware: no session and not a public path → login.
+    if (!hasSession && !isPublicPath(url.pathname)) {
+      [status, location] = [307, "/auth/login"];
+    } else if (url.pathname === "/api/strategy/positioning") {
+      const request = new Request(`${origin}${url.pathname}`, { method: req.method, headers: req.headers as any, ...(req.method === "POST" ? { body } : {}) });
+      const r = req.method === "POST" ? await startPost(request) : await lookGet(request);
       [status, text] = [r.status, await r.text()];
     } else {
-      [status, text] = [404, ""];
+      status = 404;
     }
-    received.push({ path: url.pathname, auth: req.headers.authorization, status });
+    received.push({ from: String(req.headers["x-sent-by"] ?? "the server itself"), method: req.method ?? "", path: url.pathname, status });
     res.writeHead(status, location ? { location } : { "content-type": "application/json" });
     res.end(text);
   });
@@ -108,64 +107,88 @@ afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
 const reply = (content: any[]) => new Response(JSON.stringify({ content, usage: { input_tokens: 10, output_tokens: 10 } }), { status: 200 });
 beforeEach(() => {
-  process.env.CRON_SECRET = SECRET;
   received = [];
-  redirectEverything = false;
   pending.length = 0;
+  runTiming.runForMs = RUN_FOR_MS;
   tables = {
     profiles: [{ id: "u1", dealership_id: "d1" }],
     dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Shahjahanpur" }],
-    competitor_watches: [{ dealership_id: "d1", competitor_name: "Wick & Co" }],
+    competitor_watches: [{ dealership_id: "d1", competitor_name: "Wick & Co" }, { dealership_id: "d1", competitor_name: "Glow" }],
     competitor_dismissed: [],
     competitor_owner_ads: [],
     business_knowledge: [{ dealership_id: "d1", is_active: true, category: "business_story", title: "Materials", content: "Soy wax." }],
     competitor_positioning: [],
   };
-  // Anthropic is faked; everything else — the hand-overs — is real HTTP.
+  // Anthropic is faked; every other request is real HTTP.
   vi.stubGlobal("fetch", vi.fn(async (url: any, init: any) => {
     const href = String(url);
     if (!href.startsWith("https://api.anthropic.com")) return realFetch(url, init);
     const prompt = String(JSON.parse(init.body).messages?.[0]?.content ?? "");
     if (prompt.startsWith("Find up to")) return reply([{ type: "text", text: '{"competitors":[]}' }]);
     if (prompt.includes('"Wick & Co"')) return reply([{ type: "text", text: "x", citations: [{ type: "web_search_result_location", url: "https://wickandco.in", title: "Wick & Co", cited_text: "Candles from ₹249" }] }]);
-    if (prompt.startsWith("Sort each item")) return reply([{ type: "text", text: '{"claims":{"0":["price"]},"facts":{"0":["materials"]}}' }]);
+    if (prompt.includes('"Glow"')) return reply([{ type: "text", text: "x", citations: [{ type: "web_search_result_location", url: "https://glow.in", title: "Glow", cited_text: "Glow candles, handmade" }] }]);
+    if (prompt.startsWith("Sort each item")) return reply([{ type: "text", text: '{"claims":{"0":["price"],"1":["handmade"]},"facts":{"0":["materials"]}}' }]);
     return reply([{ type: "text", text: '{"statement":"","angles":[]}' }]);
   }));
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.CRON_SECRET;
+  runTiming.runForMs = RUN_FOR_MS;
 });
 
-/** Waits for all the deferred work, including work that more hand-overs start. */
+/** The page, over real HTTP, with the owner's session. */
+function page(method: "GET" | "POST", body?: any) {
+  return realFetch(`${origin}/api/strategy/positioning`, {
+    method,
+    headers: { cookie: "session=1", "x-sent-by": PAGE, ...(body ? { "content-type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+/** Waits for the deferred work the requests started. */
 async function settle(limit = 50) {
   for (let i = 0; i < limit; i++) {
     if (!pending.length) return;
     await pending.shift();
   }
-  throw new Error("the chain never settled");
+  throw new Error("the work never settled");
 }
 
-describe("the hand-over, over real HTTP", () => {
-  it("a whole comparison: every step after the first reaches the worker over the wire, with the secret, and is accepted", async () => {
-    const res = await startPost(new Request(`${origin}/api/strategy/positioning`, { method: "POST", body: JSON.stringify({ confirm: true }) }));
+describe("a comparison over real HTTP", () => {
+  it("press the button, and the whole run finishes — the server never sends a request to itself", async () => {
+    const res = await page("POST", { confirm: true });
     expect(res.status).toBe(202);
     await settle();
-    const run = tables.competitor_positioning[0];
-    expect(run).toMatchObject({ status: "analysed", step_running: false });
-    // find → Wick & Co → sort → write: three hand-overs, each over HTTP.
-    expect(received).toEqual([
-      { path: WORK_PATH, auth: `Bearer ${SECRET}`, status: 202 },
-      { path: WORK_PATH, auth: `Bearer ${SECRET}`, status: 202 },
-      { path: WORK_PATH, auth: `Bearer ${SECRET}`, status: 202 },
-    ]);
+    expect(tables.competitor_positioning[0]).toMatchObject({ status: "analysed", step_running: false });
+    // One request reached the server, and the page sent it.
+    expect(received).toEqual([{ from: PAGE, method: "POST", path: "/api/strategy/positioning", status: 202 }]);
+    const look = await (await page("GET")).json();
+    expect(look.run.competitors.map((c: any) => c.name)).toEqual(["Wick & Co", "Glow"]);
   });
 
-  it("a deployment that redirects the worker to login stops the run at once and visibly — never a silent stall", async () => {
-    redirectEverything = true;
-    await startPost(new Request(`${origin}/api/strategy/positioning`, { method: "POST", body: JSON.stringify({ confirm: true }) }));
+  it("an invocation that pauses after every step: the page's polling carries the run to the end — still no request from the server to itself", async () => {
+    runTiming.runForMs = 0;
+    await page("POST", { confirm: true });
     await settle();
-    expect(received.map((r) => `${r.path}:${r.status}`)).toEqual([`${WORK_PATH}:307`, "/auth/login:200"]);
-    expect(tables.competitor_positioning[0]).toMatchObject({ status: "failed", error: STOPPED_MESSAGE, step: 1 });
+    const run = tables.competitor_positioning[0];
+    let polls = 0;
+    while (run.status === "running" && polls < 10) {
+      run.updated_at = new Date(Date.now() - 6_000).toISOString(); // the page's next look, a few seconds on
+      const look = await page("GET");
+      expect(look.status).toBe(200);
+      await settle();
+      polls++;
+    }
+    // find, Wick & Co, Glow, sort, write: the button's invocation did one, four polls the rest.
+    expect(polls).toBe(4);
+    expect(run.status).toBe("analysed");
+    expect(received.every((r) => r.from === PAGE)).toBe(true);
+    expect(received.map((r) => `${r.method} ${r.status}`)).toEqual(["POST 202", "GET 200", "GET 200", "GET 200", "GET 200"]);
+  });
+
+  it("without a session the page's request is sent to login — the middleware still guards the routes", async () => {
+    const res = await realFetch(`${origin}/api/strategy/positioning`, { method: "POST", redirect: "manual", body: "{}" });
+    expect(res.status).toBe(307);
+    expect(tables.competitor_positioning).toEqual([]);
   });
 });

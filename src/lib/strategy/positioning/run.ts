@@ -1,23 +1,23 @@
-// A positioning run, in the background, one step per invocation.
+// A positioning run, in the background, one step at a time.
 //
 // THE BUG (2026-09-19): "Compare with competitors" answered 504 every time.
 // Collecting ran discovery and then a second wave of competitor web
 // searches inside one request; each web-search call takes 15–40 seconds,
 // so it ran past Vercel's 60-second limit.
 //
-// Now, like the daily automation run (lib/automation/dailyJobs.ts): the
-// button starts a run and gets an answer at once; each invocation claims
-// the run's next step, does it, saves it, and hands over to a fresh
-// invocation. Every step is one or two model calls — well inside 60s.
+// Now the button starts a run and gets an answer at once; the work is
+// done in steps, each claimed, done and saved on its own, so a run that's
+// interrupted carries on from its step (continue.ts: how the steps are
+// driven — never by the server calling itself, which Vercel stops with 508).
 //
 //   step 0        find competitors (watched → pasted-ad → found, five at most)
 //   steps 1..N    read one competitor's public pages each
 //   step N+1      sort every quote and fact into themes
 //   step N+2      count, and write the positioning → analysed
 //
-// A step is claimed with a conditional update, so a duplicate hand-over
-// can't run it twice. A run that stops moving (a killed invocation, a
-// failed hand-over) is shown as stopped — never left spinning.
+// A step is claimed with a conditional update, so two invocations can't
+// run it twice. A step that dies with its invocation is run again at most
+// twice, then the run is shown as stopped — never left spinning.
 // Every read and write is filtered by id and, where it matters, business.
 
 import { businessDisplayName } from "@/lib/business/displayName";

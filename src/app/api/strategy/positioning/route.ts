@@ -5,16 +5,16 @@ import { requireFeature } from "@/lib/featureGate";
 import { checkUsage } from "@/lib/usage/usageGuard";
 import { startPositioning, latestPositioning, newestRun, describeRun, positioningPaused, STOPPED_MESSAGE, PAUSED_MESSAGE } from "@/lib/strategy/positioning/run";
 import { planRun, estimateView } from "@/lib/strategy/positioning/budget";
-import { driveRun, resumeStalled } from "@/lib/strategy/positioning/continue";
+import { driveRun, pickUp } from "@/lib/strategy/positioning/continue";
 
 // Positioning against what competitors say in public (Advanced Strategy
 // step 3, lib/strategy/positioning).
 //
-// A run works in the background, one step per invocation (run.ts): POST
-// starts it and answers at once; the page polls GET for progress. It used
-// to be two long requests, and collecting ran past Vercel's 60 seconds
-// every time (504). 300s since 2026-09-20: step 0 runs here, and a run
-// stalled when its step and the hand-over after it outlived 60s.
+// A run works in the background (run.ts, continue.ts): POST starts it,
+// answers at once, and steps it in after() — normally to the end, inside
+// 300s. The page polls GET for progress, and GET carries on a run that
+// paused or whose invocation died. The server never calls itself: that
+// chain (one self-call per step) hit Vercel's 508 "Loop Detected".
 export const maxDuration = 300;
 
 async function dealershipOf(supabase: any): Promise<{ ok: true; dealershipId: string } | { ok: false; response: NextResponse }> {
@@ -29,7 +29,7 @@ async function dealershipOf(supabase: any): Promise<{ ok: true; dealershipId: st
  * The latest finished comparison, the run in progress (if any) with what
  * it's doing, and the ads the owner has pasted in.
  */
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   const supabase = await createClient();
   const who = await dealershipOf(supabase);
   if (!who.ok) return who.response;
@@ -45,12 +45,11 @@ export async function GET(request: Request) {
   if (newest?.status === "running" && !positioningPaused()) {
     const service = createServiceClient();
     const now = Date.now();
-    const resumed = await resumeStalled(service, newest, now);
-    if (resumed === "resumed") {
+    const picked = await pickUp(service, newest, now);
+    if (picked === "picked") {
       newest = { ...newest, step_running: false, updated_at: new Date(now).toISOString() };
-      const origin = new URL(request.url).origin;
-      after(() => driveRun(service, origin, found.id));
-    } else if (resumed === "stopped") {
+      after(() => driveRun(service, found.id));
+    } else if (picked === "stopped") {
       newest = { ...newest, status: "failed", error: STOPPED_MESSAGE };
     }
   }
@@ -89,9 +88,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: started.error }, { status: started.plan?.blocked || started.error === PAUSED_MESSAGE ? 429 : 500 });
   }
   if (!started.reused) {
-    const origin = new URL(request.url).origin;
-    // The first step runs here, after the answer; the rest hand over.
-    after(() => driveRun(service, origin, started.id));
+    // The steps run here, after the answer — normally all of them (continue.ts).
+    after(() => driveRun(service, started.id));
   }
   return NextResponse.json({ id: started.id, state: "running" }, { status: 202 });
 }

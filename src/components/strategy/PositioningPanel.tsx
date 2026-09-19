@@ -178,7 +178,7 @@ export default function PositioningPanel() {
       {busy && (
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          {progress} <span className="text-slate-400">It runs in the background — you can leave this page and come back.</span>
+          {progress} <span className="text-slate-400">It usually takes a minute or two. If you leave this page it may pause, and it carries on when you come back.</span>
         </p>
       )}
       {error && <p role="alert" className="text-xs text-red-500">{error}</p>}

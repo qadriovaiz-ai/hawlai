@@ -65,7 +65,7 @@ import { planRun, estimateView, RUN_CEILING_INR, ALREADY_RAN_TODAY, TOO_MANY_TRI
 import { SEARCH_TIMEOUT_MS } from "@/lib/strategy/positioning/collect";
 import { ANALYSIS_TIMEOUT_MS } from "@/lib/strategy/positioning/analysis";
 import { DEFAULT_CLAUDE_RETRY_TIMING } from "@/lib/ai/claude";
-import { HANDOVER_LOST_AFTER_MS } from "@/lib/strategy/positioning/continue";
+import { CONTINUE_AFTER_MS, RUN_FOR_MS } from "@/lib/strategy/positioning/continue";
 import { getModel } from "@/lib/models";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
@@ -625,14 +625,15 @@ describe("what a comparison costs, and what stops it costing more", () => {
 
   it("every step's calls end well inside the step limit and the invocation", async () => {
     const { STALE_AFTER_MS } = await import("@/lib/strategy/positioning/run");
-    const { maxDuration: workLimit } = await import("@/app/api/strategy/positioning/work/route");
+    const { maxDuration: workLimit } = await import("@/app/api/strategy/positioning/route");
     // A search: one attempt, plus the one standard-model fallback.
     expect(2 * SEARCH_TIMEOUT_MS).toBeLessThan(STALE_AFTER_MS);
     // Sorting or writing: two attempts and the longest wait between them.
     expect(2 * ANALYSIS_TIMEOUT_MS + DEFAULT_CLAUDE_RETRY_TIMING.maxMs).toBeLessThan(STALE_AFTER_MS);
-    // A step, then a hand-over (10s), inside the invocation.
-    expect(STALE_AFTER_MS + 10_000).toBeLessThan(workLimit * 1000);
-    expect(HANDOVER_LOST_AFTER_MS).toBeLessThan(STALE_AFTER_MS);
+    // The last step an invocation starts (at RUN_FOR_MS) still ends inside it.
+    expect(RUN_FOR_MS + 2 * ANALYSIS_TIMEOUT_MS + DEFAULT_CLAUDE_RETRY_TIMING.maxMs).toBeLessThan(workLimit * 1000);
+    expect(STALE_AFTER_MS).toBeLessThan(workLimit * 1000);
+    expect(CONTINUE_AFTER_MS).toBeLessThan(STALE_AFTER_MS);
   });
 
   it("a search that never answers is given up after its limit — once, no retry, no fallback — and the step moves on", async () => {

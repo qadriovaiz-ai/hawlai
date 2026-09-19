@@ -53,11 +53,9 @@ const PUBLIC_PATH_PREFIXES = [
   // dashboard endpoints and must stay protected.
   "/api/events/dispatch",
   "/api/autopilot/daily-run",
-  // The server carrying a competitor comparison on to its next step, with
-  // CRON_SECRET (lib/strategy/positioning/continue.ts). Without this every
-  // hand-over was 307'd to /auth/login and each run stopped after step 0.
-  // Exact path: the rest of /api/strategy/positioning is session-backed.
-  "/api/strategy/positioning/work",
+  // (/api/strategy/positioning/work was here until 2026-09-20: the route is
+  // gone — a run no longer calls the server back, see
+  // lib/strategy/positioning/continue.ts.)
 ];
 
 /**

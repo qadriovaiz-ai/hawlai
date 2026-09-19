@@ -74,7 +74,7 @@ vi.mock("@/lib/featureGate", () => ({
 vi.mock("@/lib/usage/usageGuard", () => ({ checkUsage: async () => (creditsLeft ? { allowed: true } : { allowed: false, message: "You've used this month's research credits." }) }));
 
 import { POST as positioningPost, GET as positioningGet } from "@/app/api/strategy/positioning/route";
-import { POST as workPost } from "@/app/api/strategy/positioning/work/route";
+import { pickUp, runTiming, RUN_FOR_MS } from "@/lib/strategy/positioning/continue";
 import { STALE_AFTER_MS, STOPPED_MESSAGE, PAUSED_MESSAGE } from "@/lib/strategy/positioning/run";
 import { POST as adPost, DELETE as adDelete } from "@/app/api/strategy/positioning/ads/route";
 import { POST as dismissPost } from "@/app/api/strategy/positioning/dismiss/route";
@@ -140,18 +140,17 @@ afterEach(() => {
 });
 
 describe("the Strategy page's routes — a run in the background", () => {
-  const SECRET = "test-cron-secret";
-  let handOvers: { url: string; auth: string | null }[];
+  /** Every request the server made to its own deployment — there must be none (Vercel's 508 "Loop Detected"). */
+  let selfCalls: string[];
 
-  /** Anthropic by prompt, plus the server calling its own worker route to carry a run on. */
-  function serve(route: (prompt: string) => { status: number; body: any }, workerStatus?: number) {
-    handOvers = [];
+  /** Anthropic by prompt; anything aimed at our own deployment is recorded and refused. */
+  function serve(route: (prompt: string) => { status: number; body: any }) {
+    selfCalls = [];
     vi.stubGlobal("fetch", vi.fn(async (url: any, init: any) => {
       const href = String(url);
-      if (href.includes("/api/strategy/positioning/work")) {
-        handOvers.push({ url: href, auth: init?.headers?.Authorization ?? null });
-        if (workerStatus) return new Response("{}", { status: workerStatus });
-        return workPost(new Request(href, init));
+      if (href.startsWith("https://hawlai.test")) {
+        selfCalls.push(href);
+        return new Response("{}", { status: 508 });
       }
       const body = init?.body ? JSON.parse(init.body) : {};
       const r = route(String(body.messages?.[0]?.content ?? ""));
@@ -170,12 +169,12 @@ describe("the Strategy page's routes — a run in the background", () => {
   };
 
   beforeEach(() => {
-    process.env.CRON_SECRET = SECRET;
     pending.length = 0;
+    runTiming.runForMs = RUN_FOR_MS;
     tables.competitor_watches = [{ dealership_id: "d1", competitor_name: "Wick & Co" }];
   });
   afterEach(() => {
-    delete process.env.CRON_SECRET;
+    runTiming.runForMs = RUN_FOR_MS;
   });
 
   it("the button answers at once (202) — the searches happen after, not inside the request", async () => {
@@ -189,81 +188,67 @@ describe("the Strategy page's routes — a run in the background", () => {
     expect(pending).toHaveLength(1);
   });
 
-  it("a whole comparison, step by step through the worker route, each hand-over carrying the server's secret", async () => {
+  // THE 508 (2026-09-20): each step called our own worker route for the
+  // next; Vercel cut the chain off with "Loop Detected". Now one
+  // invocation steps the whole run, and never calls the deployment.
+  it("a whole comparison in the one invocation the button started — not a single request back to our own server", async () => {
     serve(route);
     await positioningPost(req("/api/strategy/positioning", { confirm: true }));
-    await drain();
+    expect(pending).toHaveLength(1);
+    await pending.shift()!();
+    expect(pending).toHaveLength(0);
     const run = tables.competitor_positioning[0];
     expect(run.status).toBe("analysed");
-    // find → Wick & Co → sort → write: four steps, three hand-overs.
-    expect(handOvers).toHaveLength(3);
-    expect(handOvers.every((h) => h.auth === `Bearer ${SECRET}`)).toBe(true);
+    expect(selfCalls).toEqual([]);
     const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.run.id).toBe(run.id);
     expect(body.current).toBeNull();
   });
 
-  it("the worker only takes steps for the server itself", async () => {
-    serve(route);
-    const res = await workPost(new Request("https://hawlai.test/api/strategy/positioning/work", { method: "POST", body: JSON.stringify({ id: "x" }) }));
-    expect(res.status).toBe(401);
-    expect(pending).toHaveLength(0);
+  it("there is no worker route any more", async () => {
+    const { existsSync } = await import("node:fs");
+    expect(existsSync("src/app/api/strategy/positioning/work/route.ts")).toBe(false);
+    const { isPublicPath } = await import("@/lib/supabase/middleware");
+    expect(isPublicPath("/api/strategy/positioning/work")).toBe(false);
   });
 
-  it("a hand-over that isn't accepted stops the run visibly — it never spins", async () => {
-    serve(route, 500);
+  it("an invocation that stops at its time budget leaves the run for the page — whose next look carries it on, to the end", async () => {
+    serve(route);
+    runTiming.runForMs = 0; // stop after every step
     await positioningPost(req("/api/strategy/positioning", { confirm: true }));
-    await drain();
-    expect(tables.competitor_positioning[0]).toMatchObject({ status: "failed", error: STOPPED_MESSAGE });
+    await pending.shift()!();
+    const run = tables.competitor_positioning[0];
+    expect(run).toMatchObject({ status: "running", step: 1, step_running: false });
+
+    // Just paused: left alone for a few seconds.
+    run.updated_at = new Date(Date.now() - 3_000).toISOString();
+    await positioningGet(req("/api/strategy/positioning"));
+    expect(pending).toHaveLength(0);
+
+    // Then each look carries it on — a fresh request from the page every time.
+    let looks = 0;
+    while (run.status === "running" && looks < 10) {
+      run.updated_at = new Date(Date.now() - 6_000).toISOString();
+      const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
+      expect(body.current.state).toBe("running");
+      expect(pending).toHaveLength(1);
+      await pending.shift()!();
+      looks++;
+    }
+    // find, Wick & Co, sort, write: the first invocation did one, three looks the rest.
+    expect(looks).toBe(3);
+    expect(run.status).toBe("analysed");
+    // Pausing isn't a failure: nothing counted against the run.
+    expect(run.analysis.resumes ?? 0).toBe(0);
+    expect(selfCalls).toEqual([]);
   });
 
   it("while it runs, GET says what it's doing — and a run that's moving is left alone", async () => {
     const now = Date.now();
-    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: false, competitors: [{ name: "Wick & Co", claimCount: 0 }], claims: [], analysis: {}, created_at: new Date(now).toISOString(), updated_at: new Date(now - 5_000).toISOString() }];
+    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: false, competitors: [{ name: "Wick & Co", claimCount: 0 }], claims: [], analysis: {}, created_at: new Date(now).toISOString(), updated_at: new Date(now - 2_000).toISOString() }];
     const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.current).toMatchObject({ id: "r1", state: "running", label: "Reading what Wick & Co says about itself (1 of 1)..." });
     expect(pending).toHaveLength(0);
-    expect(tables.competitor_positioning[0].analysis.resumes).toBeUndefined();
-  });
-
-  // THE PRODUCTION STALL (2026-09-20): step 0 finished and handed over, then
-  // the invocation carrying the run ended without doing step 1 — "Reading
-  // what Winsome Decorative says about itself (1 of 5)" for minutes, then
-  // "stopped partway". Here the hand-over is accepted (202) and then the
-  // work it should do is lost, the way a killed invocation loses it.
-  it("a hand-over accepted and then lost: the page's next look picks the run up, and it finishes", async () => {
-    let lose = 1;
-    handOvers = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: any, init: any) => {
-      const href = String(url);
-      if (href.includes("/api/strategy/positioning/work")) {
-        handOvers.push({ url: href, auth: init?.headers?.Authorization ?? null });
-        if (lose-- > 0) return new Response("{}", { status: 202 }); // accepted, then the invocation died
-        return workPost(new Request(href, init));
-      }
-      const body = init?.body ? JSON.parse(init.body) : {};
-      const r = route(String(body.messages?.[0]?.content ?? ""));
-      return new Response(JSON.stringify(r.body), { status: r.status });
-    }));
-    await positioningPost(req("/api/strategy/positioning", { confirm: true }));
-    await drain();
-    const run = tables.competitor_positioning[0];
-    // Stuck exactly as in production: step 1, nobody on it.
-    expect(run).toMatchObject({ status: "running", step: 1, step_running: false });
-
-    // Within 30s it's still just "on its way".
-    run.updated_at = new Date(Date.now() - 20_000).toISOString();
-    await positioningGet(req("/api/strategy/positioning"));
-    expect(pending).toHaveLength(0);
-
-    // After 30s with nothing, the page's look carries it on — and it finishes.
-    run.updated_at = new Date(Date.now() - 31_000).toISOString();
-    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
-    expect(body.current).toMatchObject({ state: "running", label: "Reading what Wick & Co says about itself (1 of 1)..." });
-    expect(pending).toHaveLength(1);
-    await drain();
-    expect(run).toMatchObject({ status: "analysed", step_running: false });
-    expect(run.analysis.resumes).toBe(1);
   });
 
   it("a step whose invocation died (claimed, silent past the step limit) is run again — twice at most, then stopped", async () => {
@@ -296,25 +281,31 @@ describe("the Strategy page's routes — a run in the background", () => {
     expect(row).toMatchObject({ status: "failed", error: STOPPED_MESSAGE, step_running: false });
   });
 
-  it("two looks at the same stalled run pick it up once; a look that names another business picks up nothing", async () => {
-    const { resumeStalled } = await import("@/lib/strategy/positioning/continue");
+  it("two looks at the same idle run pick it up once; a look that names another business picks up nothing", async () => {
     const old = new Date(Date.now() - 60_000).toISOString();
     tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: false, analysis: {}, created_at: old, updated_at: old }];
     const seen = { ...tables.competitor_positioning[0] };
-    expect(await resumeStalled(db(), { ...seen, dealership_id: "d2" })).toBeNull();
-    expect(await resumeStalled(db(), seen)).toBe("resumed");
-    expect(await resumeStalled(db(), seen)).toBeNull();
-    expect(tables.competitor_positioning[0].analysis.resumes).toBe(1);
+    expect(await pickUp(db(), { ...seen, dealership_id: "d2" })).toBeNull();
+    expect(await pickUp(db(), seen)).toBe("picked");
+    expect(await pickUp(db(), seen)).toBeNull();
+    expect(tables.competitor_positioning[0].updated_at).not.toBe(old);
   });
 
-  it("the count of pick-ups survives the first step, so the limit can't reset", async () => {
+  it("the count of re-runs survives the steps, so the limit can't reset", async () => {
     serve(route);
-    const old = new Date(Date.now() - 60_000).toISOString();
-    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 0, step_running: false, competitors: [], claims: [], analysis: { plan: { discover: true, reusedFound: [], searchCalls: 2, estimateInr: 12 } }, created_at: old, updated_at: old }];
+    const old = new Date(Date.now() - STALE_AFTER_MS - 60_000).toISOString();
+    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 0, step_running: true, competitors: [], claims: [], analysis: { plan: { discover: true, reusedFound: [], searchCalls: 2, estimateInr: 12 } }, created_at: old, updated_at: old }];
+    runTiming.runForMs = 0;
     await positioningGet(req("/api/strategy/positioning"));
     await pending.shift()!(); // step 0 only
     const row = tables.competitor_positioning[0];
     expect(row.step).toBe(1);
+    expect(row.analysis.resumes).toBe(1);
+    runTiming.runForMs = RUN_FOR_MS;
+    row.updated_at = new Date(Date.now() - 6_000).toISOString();
+    await positioningGet(req("/api/strategy/positioning"));
+    await pending.shift()!();
+    expect(row.status).toBe("analysed");
     expect(row.analysis.resumes).toBe(1);
   });
 
@@ -323,7 +314,7 @@ describe("the Strategy page's routes — a run in the background", () => {
     tables.competitor_positioning = [{ id: "theirs", dealership_id: "d2", status: "running", step: 1, step_running: false, competitors: [{ name: "X" }], analysis: {}, created_at: old, updated_at: old }];
     await positioningGet(req("/api/strategy/positioning"));
     expect(pending).toHaveLength(0);
-    expect(tables.competitor_positioning[0].analysis.resumes).toBeUndefined();
+    expect(tables.competitor_positioning[0].updated_at).toBe(old);
 
     tables.competitor_positioning[0].dealership_id = "d1";
     process.env.POSITIONING_ENABLED = "false";
@@ -420,7 +411,7 @@ describe("the page", () => {
     const { readFileSync } = await import("node:fs");
     const panel = readFileSync("src/components/strategy/PositioningPanel.tsx", "utf8");
     expect(panel).toContain("setTimeout(() => void load(), POLL_MS)");
-    expect(panel).toContain("It runs in the background — you can leave this page and come back.");
+    expect(panel).toContain("If you leave this page it may pause, and it carries on when you come back.");
     expect(panel).not.toMatch(/step: "collect"|step: "analyse"/);
   });
 
