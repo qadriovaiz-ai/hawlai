@@ -61,7 +61,11 @@ import { buildPositioning, classifyThemes, unallowedNumbers, verifyPositioning, 
 import { themesFor, THEMES } from "@/lib/strategy/positioning/themes";
 import { startPositioning, advancePositioning, describeRun, newestRun, competitorContextFrom, latestPositioning, STALE_AFTER_MS, STOPPED_MESSAGE } from "@/lib/strategy/positioning/run";
 import { resetOperatorAlerts, callClaude } from "@/lib/ai/claude";
-import { planRun, estimateView, RUN_CEILING_INR } from "@/lib/strategy/positioning/budget";
+import { planRun, estimateView, RUN_CEILING_INR, ALREADY_RAN_TODAY, TOO_MANY_TRIES_TODAY } from "@/lib/strategy/positioning/budget";
+import { SEARCH_TIMEOUT_MS } from "@/lib/strategy/positioning/collect";
+import { ANALYSIS_TIMEOUT_MS } from "@/lib/strategy/positioning/analysis";
+import { DEFAULT_CLAUDE_RETRY_TIMING } from "@/lib/ai/claude";
+import { HANDOVER_LOST_AFTER_MS } from "@/lib/strategy/positioning/continue";
 import { getModel } from "@/lib/models";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
@@ -597,6 +601,73 @@ describe("what a comparison costs, and what stops it costing more", () => {
     // Yesterday 23:00 IST is a different day.
     tables.competitor_positioning[0] = { ...tables.competitor_positioning[0], created_at: "2026-09-18T17:30:00Z", analysis: { spentInr: 8 } };
     expect((await planRun(db(), "d1", NOW)).blocked).toBeNull();
+  });
+
+  it("a run that failed doesn't use up the day — the retry reuses what it found; three failures that spent do", async () => {
+    // Today's run found competitors, spent on discovery, then stalled.
+    pastRun(0.1, { status: "failed", claims: [], analysis: { spentInr: 7 } });
+    const retry = await planRun(db(), "d1", NOW);
+    expect(retry.blocked).toBeNull();
+    // Its competitors are reused: no discovery paid twice.
+    expect(retry).toMatchObject({ discover: false, reusedFound: [{ name: "Moonlit Candles" }] });
+
+    pastRun(0.05, { id: "second", status: "failed", claims: [], analysis: { spentInr: 3 } });
+    expect((await planRun(db(), "d1", NOW)).blocked).toBeNull();
+    pastRun(0.02, { id: "third", status: "failed", claims: [], analysis: { spentInr: 3 } });
+    expect((await planRun(db(), "d1", NOW)).blocked).toBe(TOO_MANY_TRIES_TODAY);
+
+    // One that finished today uses up the day, whatever else failed.
+    tables.competitor_positioning = [];
+    pastRun(0.1, { status: "failed", claims: [], analysis: { spentInr: 7 } });
+    pastRun(0.05, { id: "done", claims: [], competitors: [], analysis: { spentInr: 20 } });
+    expect((await planRun(db(), "d1", NOW)).blocked).toBe(ALREADY_RAN_TODAY);
+  });
+
+  it("every step's calls end well inside the step limit and the invocation", async () => {
+    const { STALE_AFTER_MS } = await import("@/lib/strategy/positioning/run");
+    const { maxDuration: workLimit } = await import("@/app/api/strategy/positioning/work/route");
+    // A search: one attempt, plus the one standard-model fallback.
+    expect(2 * SEARCH_TIMEOUT_MS).toBeLessThan(STALE_AFTER_MS);
+    // Sorting or writing: two attempts and the longest wait between them.
+    expect(2 * ANALYSIS_TIMEOUT_MS + DEFAULT_CLAUDE_RETRY_TIMING.maxMs).toBeLessThan(STALE_AFTER_MS);
+    // A step, then a hand-over (10s), inside the invocation.
+    expect(STALE_AFTER_MS + 10_000).toBeLessThan(workLimit * 1000);
+    expect(HANDOVER_LOST_AFTER_MS).toBeLessThan(STALE_AFTER_MS);
+  });
+
+  it("a search that never answers is given up after its limit — once, no retry, no fallback — and the step moves on", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let calls = 0;
+      vi.stubGlobal("fetch", vi.fn((_u: string, init: any) => {
+        calls++;
+        return new Promise((_res, rej) => init.signal?.addEventListener("abort", () => rej(init.signal.reason)));
+      }));
+      const pending = collectClaims({ name: "Wick & Co", source: "watched" }, { category: "Home fragrance", city: null });
+      await vi.advanceTimersByTimeAsync(SEARCH_TIMEOUT_MS - 1);
+      let settled = false;
+      void pending.then(() => (settled = true));
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      const r = await pending;
+      expect(r.failure).toMatchObject({ kind: "network", message: `no answer within ${SEARCH_TIMEOUT_MS}ms` });
+      expect(calls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sorting that never answers is given up after its limit too", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      vi.stubGlobal("fetch", vi.fn((_u: string, init: any) => new Promise((_res, rej) => init.signal?.addEventListener("abort", () => rej(init.signal.reason)))));
+      const pending = classifyThemes([{ competitor: "A", quote: "x", url: null, title: null, origin: "owner" }], [], themesFor(["products"]));
+      await vi.advanceTimersByTimeAsync(2 * ANALYSIS_TIMEOUT_MS + 5_000);
+      expect(await pending).toMatchObject({ ok: false, failure: { kind: "network" } });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a rerun that needs no search is never blocked by the daily limit", async () => {

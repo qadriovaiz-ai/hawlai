@@ -197,6 +197,13 @@ export type ClaudeCallOptions = {
   logContext?: { supabase: any; dealershipId: string } | null;
   /** How many attempts in total, for failures another try can fix. Default 2. */
   attempts?: number;
+  /**
+   * Give up on an attempt after this long (a "network" failure). Unset: no
+   * limit. For work inside a time-limited invocation, where a call that
+   * never answers would otherwise outlive the invocation and leave the
+   * work half-done with nothing recorded.
+   */
+  timeoutMs?: number;
 };
 
 async function readJson(res: Response): Promise<any> {
@@ -220,19 +227,27 @@ export async function callClaude(body: Record<string, any>, opts: ClaudeCallOpti
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     let res: Response;
+    let data: any;
+    const abort = opts.timeoutMs ? new AbortController() : null;
+    const timer = abort ? setTimeout(() => abort.abort(new Error(`no answer within ${opts.timeoutMs}ms`)), opts.timeoutMs) : null;
     try {
       res = await fetch(ANTHROPIC_MESSAGES_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01" },
         body: JSON.stringify(request),
+        ...(abort ? { signal: abort.signal } : {}),
       });
+      // The body is part of the answer: the limit covers reading it too.
+      data = await readJson(res);
     } catch (err: any) {
-      failure = classifyClaudeError(null, { error: { message: err?.message ?? "no response" } });
+      const timedOut = abort?.signal.aborted;
+      failure = classifyClaudeError(null, { error: { message: timedOut ? `no answer within ${opts.timeoutMs}ms` : err?.message ?? "no response" } });
       if (attempt < attempts - 1) await wait(claudeRetryTiming.defaultMs);
       continue;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
 
-    const data = await readJson(res);
     if (res.ok && data) {
       if (opts.logContext && data.usage) {
         await logClaudeUsage(opts.logContext.supabase, opts.logContext.dealershipId, opts.operation, data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, request.model);

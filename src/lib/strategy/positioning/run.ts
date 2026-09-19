@@ -196,7 +196,7 @@ export async function advancePositioning(service: any, id: string): Promise<{ mo
         step: 1,
         competitors: rows,
         claims: startClaims,
-        analysis: { plan, reused, spentInr: spent() + discovery.costInr, notes: { ...notes, couldntCheck: discovery.failure ? ["finding more competitors"] : [] } },
+        analysis: { plan, reused, resumes: analysis.resumes ?? 0, spentInr: spent() + discovery.costInr, notes: { ...notes, couldntCheck: discovery.failure ? ["finding more competitors"] : [] } },
       });
       return { more: true };
     }
@@ -260,6 +260,8 @@ export async function advancePositioning(service: any, id: string): Promise<{ mo
       analysis: {
         notes,
         plan,
+        // How often it had to be picked up again (continue.ts) — kept, so the limit holds and it can be looked at.
+        resumes: analysis.resumes ?? 0,
         // What this comparison really cost — shown to the owner, and the check on the estimate.
         spentInr: Math.round((spent() + (written.ok ? written.costInr : 0)) * 100) / 100,
         models: analysis.models ?? null,
@@ -309,7 +311,7 @@ export function describeRun(row: any, now = Date.now()): RunView {
 export async function newestRun(supabase: any, dealershipId: string) {
   const { data } = await supabase
     .from("competitor_positioning")
-    .select("id, status, step, competitors, error, created_at, updated_at")
+    .select("id, dealership_id, status, step, step_running, competitors, analysis, error, created_at, updated_at")
     .eq("dealership_id", dealershipId)
     .order("created_at", { ascending: false })
     .limit(1)

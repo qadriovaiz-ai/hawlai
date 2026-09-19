@@ -43,16 +43,25 @@ export const SEARCH_MODEL = getModel("fast");
 export const DISCOVERY_SEARCHES = 2;
 export const CLAIM_SEARCHES = 1;
 
+// TIME (2026-09-20): every step runs inside one serverless invocation. A
+// search call with no limit could outlive it — the invocation is killed,
+// the step is left claimed with nothing recorded, and the run stalls
+// ("stopped partway"). So a search gets one attempt of at most 45s (a
+// retry would double the time for a ₹3 search), and the standard-model
+// fallback another 45s: a step is always over well inside its time.
+export const SEARCH_TIMEOUT_MS = 45_000;
+
 /**
  * A web-search call on the fast model. If the API refuses that model for
  * the tool (a bad request, not an outage), the same call runs once on the
  * standard model — the run never fails because of the cheaper choice.
  */
 async function searchCall(body: Record<string, any>, operation: string, logContext?: LogContext): Promise<ClaudeResult> {
-  const first = await callClaude({ ...body, model: SEARCH_MODEL }, { operation, logContext: logContext ?? null });
+  const opts = { operation, logContext: logContext ?? null, attempts: 1, timeoutMs: SEARCH_TIMEOUT_MS };
+  const first = await callClaude({ ...body, model: SEARCH_MODEL }, opts);
   if (first.ok || first.failure.kind !== "bad_request") return first;
   console.warn(`[positioning] ${operation}: fast model refused (${first.failure.message.slice(0, 120)}) — using the standard model`);
-  return callClaude({ ...body, model: getModel("standard") }, { operation, logContext: logContext ?? null });
+  return callClaude({ ...body, model: getModel("standard") }, opts);
 }
 
 /** The site to keep a competitor's search on, when we know it — its own pages, not articles about it. */

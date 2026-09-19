@@ -5,7 +5,7 @@ import { requireFeature } from "@/lib/featureGate";
 import { checkUsage } from "@/lib/usage/usageGuard";
 import { startPositioning, latestPositioning, newestRun, describeRun, positioningPaused, STOPPED_MESSAGE, PAUSED_MESSAGE } from "@/lib/strategy/positioning/run";
 import { planRun, estimateView } from "@/lib/strategy/positioning/budget";
-import { driveRun } from "@/lib/strategy/positioning/continue";
+import { driveRun, resumeStalled } from "@/lib/strategy/positioning/continue";
 
 // Positioning against what competitors say in public (Advanced Strategy
 // step 3, lib/strategy/positioning).
@@ -13,8 +13,9 @@ import { driveRun } from "@/lib/strategy/positioning/continue";
 // A run works in the background, one step per invocation (run.ts): POST
 // starts it and answers at once; the page polls GET for progress. It used
 // to be two long requests, and collecting ran past Vercel's 60 seconds
-// every time (504).
-export const maxDuration = 60;
+// every time (504). 300s since 2026-09-20: step 0 runs here, and a run
+// stalled when its step and the hand-over after it outlived 60s.
+export const maxDuration = 300;
 
 async function dealershipOf(supabase: any): Promise<{ ok: true; dealershipId: string } | { ok: false; response: NextResponse }> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -28,26 +29,32 @@ async function dealershipOf(supabase: any): Promise<{ ok: true; dealershipId: st
  * The latest finished comparison, the run in progress (if any) with what
  * it's doing, and the ads the owner has pasted in.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const who = await dealershipOf(supabase);
   if (!who.ok) return who.response;
-  const [run, newest, { data: ads }] = await Promise.all([
+  const [run, found, { data: ads }] = await Promise.all([
     latestPositioning(supabase, who.dealershipId),
     newestRun(supabase, who.dealershipId),
     supabase.from("competitor_owner_ads").select("id, competitor_name, ad_text, created_at").eq("dealership_id", who.dealershipId).order("created_at", { ascending: false }),
   ]);
 
-  let current = newest && newest.status !== "analysed" ? describeRun(newest) : null;
-  // A run that stopped moving is recorded as stopped, so it never spins again.
-  if (current && newest.status === "running" && current.state === "failed") {
-    await createServiceClient()
-      .from("competitor_positioning")
-      .update({ status: "failed", error: STOPPED_MESSAGE, step_running: false })
-      .eq("id", newest.id)
-      .eq("dealership_id", who.dealershipId)
-      .eq("status", "running");
+  // A run that stopped moving is carried on from its step (continue.ts) —
+  // or, once it has been picked up too often, recorded as stopped.
+  let newest = found;
+  if (newest?.status === "running" && !positioningPaused()) {
+    const service = createServiceClient();
+    const now = Date.now();
+    const resumed = await resumeStalled(service, newest, now);
+    if (resumed === "resumed") {
+      newest = { ...newest, step_running: false, updated_at: new Date(now).toISOString() };
+      const origin = new URL(request.url).origin;
+      after(() => driveRun(service, origin, found.id));
+    } else if (resumed === "stopped") {
+      newest = { ...newest, status: "failed", error: STOPPED_MESSAGE };
+    }
   }
+  let current = newest && newest.status !== "analysed" ? describeRun(newest) : null;
   // Nothing to show once a newer comparison has finished.
   if (current && run && Date.parse(run.created_at) > Date.parse(current.createdAt)) current = null;
   // What pressing the button would cost now — or why it can't be pressed.

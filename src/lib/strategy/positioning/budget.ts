@@ -5,7 +5,10 @@
 // POSITIONING_ENABLED goes back on:
 //   - competitors found in the last 14 days are reused — no discovery;
 //   - a competitor's quotes from the last 14 days are reused — no search;
-//   - one run that searches the web, per business per day;
+//   - one comparison that spends, per business per day — a run that
+//     failed doesn't use the day up (2026-09-20: a run that stalled did,
+//     and the retry had to wait a day), but three that spent and failed
+//     do: after that, no more spending today;
 //   - every run stops searching at a ₹40 ceiling and finishes with what
 //     it has;
 //   - the owner sees the estimate first, and confirms anything over ₹20.
@@ -17,6 +20,13 @@ export const MAX_COMPETITORS = 5;
 export const REUSE_DAYS = 14;
 export const RUN_CEILING_INR = 40;
 export const CONFIRM_ABOVE_INR = 20;
+/** Runs that spent, finished or not, one business may start in a day. */
+export const MAX_ATTEMPTS_A_DAY = 3;
+
+export const ALREADY_RAN_TODAY =
+  "You've already run a full comparison today — one a day keeps the cost down. Run it again tomorrow; it will reuse what today's run found.";
+export const TOO_MANY_TRIES_TODAY =
+  "Three comparisons were started today and none finished, so Hawlai won't spend more on it today. Run it again tomorrow — it will reuse what they found.";
 
 /**
  * Rupees per piece, rounded UP from the expected cost on the models now in
@@ -97,11 +107,11 @@ export async function planRun(service: any, dealershipId: string, now = Date.now
   const estimateInr = (discover ? EST_INR.discovery : 0) + freshCompetitors * EST_INR.competitor + EST_INR.sortAndWrite;
 
   const today = indiaDate(now);
-  const searchedToday = runs.some((r) => indiaDate(r.created_at) === today && searchedTheWeb(r));
+  const spentToday = runs.filter((r) => indiaDate(r.created_at) === today && searchedTheWeb(r));
+  // Finished (or still going): the day's comparison is done. Failed: another try is allowed.
+  const ranToday = spentToday.some((r) => r.status !== "failed");
   const blocked =
-    searchCalls > 0 && searchedToday
-      ? "You've already run a full comparison today — one a day keeps the cost down. Run it again tomorrow; it will reuse what today's run found."
-      : null;
+    searchCalls === 0 ? null : ranToday ? ALREADY_RAN_TODAY : spentToday.length >= MAX_ATTEMPTS_A_DAY ? TOO_MANY_TRIES_TODAY : null;
 
   return { discover, reusedFound, cachedClaims, searchCalls, estimateInr, needsConfirm: estimateInr > CONFIRM_ABOVE_INR, blocked };
 }

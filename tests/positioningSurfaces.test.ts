@@ -17,6 +17,9 @@ function db() {
     let payload: any = null;
     const filters: ((r: Row) => boolean)[] = [];
     const described: string[] = [];
+    // Like Supabase, a read returns only the columns asked for.
+    let cols = "*";
+    const pick = (r: Row) => (cols === "*" || /[(:]/.test(cols) ? r : Object.fromEntries(cols.split(",").map((c) => c.trim()).filter((c) => c in r).map((c) => [c, r[c]])));
     const rows = () => (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
     const run = (single: boolean) => {
       if (op === "insert" || op === "upsert") {
@@ -34,11 +37,11 @@ function db() {
         tables[table] = (tables[table] ?? []).filter((r) => !filters.every((f) => f(r)));
         return { data: null, error: null };
       }
-      const found = rows();
+      const found = rows().map(pick);
       return { data: single ? found[0] ?? null : found, error: null };
     };
     const api: any = {
-      select: () => api, order: () => api, limit: () => api, in: () => api, gte: () => api, not: () => api, is: () => api, lt: () => api, or: () => api, neq: () => api,
+      select: (c?: string) => ((cols = op === "select" && c ? c : cols), api), order: () => api, limit: () => api, in: () => api, gte: () => api, not: () => api, is: () => api, lt: () => api, or: () => api, neq: () => api,
       insert: (v: any) => ((op = "insert"), (payload = v), api),
       upsert: (v: any) => ((op = "upsert"), (payload = v), api),
       update: (v: any) => ((op = "update"), (payload = v), api),
@@ -195,7 +198,7 @@ describe("the Strategy page's routes — a run in the background", () => {
     // find → Wick & Co → sort → write: four steps, three hand-overs.
     expect(handOvers).toHaveLength(3);
     expect(handOvers.every((h) => h.auth === `Bearer ${SECRET}`)).toBe(true);
-    const body = await (await positioningGet()).json();
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.run.id).toBe(run.id);
     expect(body.current).toBeNull();
   });
@@ -214,16 +217,122 @@ describe("the Strategy page's routes — a run in the background", () => {
     expect(tables.competitor_positioning[0]).toMatchObject({ status: "failed", error: STOPPED_MESSAGE });
   });
 
-  it("while it runs, GET says what it's doing; a run that stopped moving is shown — and recorded — as stopped", async () => {
+  it("while it runs, GET says what it's doing — and a run that's moving is left alone", async () => {
     const now = Date.now();
-    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: false, competitors: [{ name: "Wick & Co", claimCount: 0 }], claims: [], analysis: {}, created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString() }];
-    let body = await (await positioningGet()).json();
+    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: false, competitors: [{ name: "Wick & Co", claimCount: 0 }], claims: [], analysis: {}, created_at: new Date(now).toISOString(), updated_at: new Date(now - 5_000).toISOString() }];
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.current).toMatchObject({ id: "r1", state: "running", label: "Reading what Wick & Co says about itself (1 of 1)..." });
+    expect(pending).toHaveLength(0);
+    expect(tables.competitor_positioning[0].analysis.resumes).toBeUndefined();
+  });
 
-    tables.competitor_positioning[0].updated_at = new Date(now - STALE_AFTER_MS - 5_000).toISOString();
-    body = await (await positioningGet()).json();
+  // THE PRODUCTION STALL (2026-09-20): step 0 finished and handed over, then
+  // the invocation carrying the run ended without doing step 1 — "Reading
+  // what Winsome Decorative says about itself (1 of 5)" for minutes, then
+  // "stopped partway". Here the hand-over is accepted (202) and then the
+  // work it should do is lost, the way a killed invocation loses it.
+  it("a hand-over accepted and then lost: the page's next look picks the run up, and it finishes", async () => {
+    let lose = 1;
+    handOvers = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: any, init: any) => {
+      const href = String(url);
+      if (href.includes("/api/strategy/positioning/work")) {
+        handOvers.push({ url: href, auth: init?.headers?.Authorization ?? null });
+        if (lose-- > 0) return new Response("{}", { status: 202 }); // accepted, then the invocation died
+        return workPost(new Request(href, init));
+      }
+      const body = init?.body ? JSON.parse(init.body) : {};
+      const r = route(String(body.messages?.[0]?.content ?? ""));
+      return new Response(JSON.stringify(r.body), { status: r.status });
+    }));
+    await positioningPost(req("/api/strategy/positioning", { confirm: true }));
+    await drain();
+    const run = tables.competitor_positioning[0];
+    // Stuck exactly as in production: step 1, nobody on it.
+    expect(run).toMatchObject({ status: "running", step: 1, step_running: false });
+
+    // Within 30s it's still just "on its way".
+    run.updated_at = new Date(Date.now() - 20_000).toISOString();
+    await positioningGet(req("/api/strategy/positioning"));
+    expect(pending).toHaveLength(0);
+
+    // After 30s with nothing, the page's look carries it on — and it finishes.
+    run.updated_at = new Date(Date.now() - 31_000).toISOString();
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
+    expect(body.current).toMatchObject({ state: "running", label: "Reading what Wick & Co says about itself (1 of 1)..." });
+    expect(pending).toHaveLength(1);
+    await drain();
+    expect(run).toMatchObject({ status: "analysed", step_running: false });
+    expect(run.analysis.resumes).toBe(1);
+  });
+
+  it("a step whose invocation died (claimed, silent past the step limit) is run again — twice at most, then stopped", async () => {
+    serve(route);
+    const now = Date.now();
+    const died = () => new Date(now - STALE_AFTER_MS - 1_000).toISOString();
+    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: true, competitors: [{ name: "Wick & Co", source: "watched", claimCount: 0 }], claims: [], analysis: { plan: { discover: false, reusedFound: [], searchCalls: 1, estimateInr: 9 } }, created_at: new Date(now).toISOString(), updated_at: died() }];
+    const row = tables.competitor_positioning[0];
+
+    // Claimed but not yet past the step limit: still working, left alone.
+    row.updated_at = new Date(now - STALE_AFTER_MS + 10_000).toISOString();
+    await positioningGet(req("/api/strategy/positioning"));
+    expect(pending).toHaveLength(0);
+
+    row.updated_at = died();
+    await positioningGet(req("/api/strategy/positioning"));
+    expect(pending).toHaveLength(1);
+    expect(row).toMatchObject({ step_running: false, analysis: { resumes: 1 } });
+    pending.length = 0; // …and that one dies too
+    row.step_running = true;
+    row.updated_at = died();
+    await positioningGet(req("/api/strategy/positioning"));
+    expect(row.analysis.resumes).toBe(2);
+    pending.length = 0;
+    row.step_running = true;
+    row.updated_at = died();
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
+    expect(pending).toHaveLength(0);
     expect(body.current).toMatchObject({ state: "failed", error: STOPPED_MESSAGE });
-    expect(tables.competitor_positioning[0].status).toBe("failed");
+    expect(row).toMatchObject({ status: "failed", error: STOPPED_MESSAGE, step_running: false });
+  });
+
+  it("two looks at the same stalled run pick it up once; a look that names another business picks up nothing", async () => {
+    const { resumeStalled } = await import("@/lib/strategy/positioning/continue");
+    const old = new Date(Date.now() - 60_000).toISOString();
+    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 1, step_running: false, analysis: {}, created_at: old, updated_at: old }];
+    const seen = { ...tables.competitor_positioning[0] };
+    expect(await resumeStalled(db(), { ...seen, dealership_id: "d2" })).toBeNull();
+    expect(await resumeStalled(db(), seen)).toBe("resumed");
+    expect(await resumeStalled(db(), seen)).toBeNull();
+    expect(tables.competitor_positioning[0].analysis.resumes).toBe(1);
+  });
+
+  it("the count of pick-ups survives the first step, so the limit can't reset", async () => {
+    serve(route);
+    const old = new Date(Date.now() - 60_000).toISOString();
+    tables.competitor_positioning = [{ id: "r1", dealership_id: "d1", status: "running", step: 0, step_running: false, competitors: [], claims: [], analysis: { plan: { discover: true, reusedFound: [], searchCalls: 2, estimateInr: 12 } }, created_at: old, updated_at: old }];
+    await positioningGet(req("/api/strategy/positioning"));
+    await pending.shift()!(); // step 0 only
+    const row = tables.competitor_positioning[0];
+    expect(row.step).toBe(1);
+    expect(row.analysis.resumes).toBe(1);
+  });
+
+  it("only this business's run is picked up, and not while paused", async () => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    tables.competitor_positioning = [{ id: "theirs", dealership_id: "d2", status: "running", step: 1, step_running: false, competitors: [{ name: "X" }], analysis: {}, created_at: old, updated_at: old }];
+    await positioningGet(req("/api/strategy/positioning"));
+    expect(pending).toHaveLength(0);
+    expect(tables.competitor_positioning[0].analysis.resumes).toBeUndefined();
+
+    tables.competitor_positioning[0].dealership_id = "d1";
+    process.env.POSITIONING_ENABLED = "false";
+    try {
+      await positioningGet(req("/api/strategy/positioning"));
+      expect(pending).toHaveLength(0);
+    } finally {
+      process.env.POSITIONING_ENABLED = "true";
+    }
   });
 
   it("pressing twice while it runs starts no second set of searches", async () => {
@@ -239,7 +348,7 @@ describe("the Strategy page's routes — a run in the background", () => {
     serve(() => CREDITS);
     await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     await drain();
-    const body = await (await positioningGet()).json();
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.current).toMatchObject({ state: "failed", error: OUTAGE });
   });
 
@@ -256,7 +365,7 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("GET shows what pressing the button would cost; POST without a yes above ₹20 starts nothing (409)", async () => {
     serve(route);
-    let body = await (await positioningGet()).json();
+    let body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     // One watched + four free places: discovery ₹6 + 5 × ₹3 + sorting and writing ₹6.
     expect(body.estimate).toEqual({ estimateInr: 27, needsConfirm: true, blocked: null, searchCalls: 6, reusing: { competitors: 0, withQuotes: 0 } });
 
@@ -272,8 +381,8 @@ describe("the Strategy page's routes — a run in the background", () => {
 
   it("the second run that would search today is refused (429) and GET says why", async () => {
     serve(route);
-    tables.competitor_positioning = [{ id: "today", dealership_id: "d1", status: "failed", step: 1, competitors: [], claims: [], analysis: { spentInr: 7 }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }];
-    const body = await (await positioningGet()).json();
+    tables.competitor_positioning = [{ id: "today", dealership_id: "d1", status: "analysed", step: 1, competitors: [], claims: [], analysis: { spentInr: 7 }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }];
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.estimate.blocked).toMatch(/^You've already run a full comparison today/);
     const res = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
     expect(res.status).toBe(429);
@@ -286,7 +395,7 @@ describe("the Strategy page's routes — a run in the background", () => {
     serve(route);
     process.env.POSITIONING_ENABLED = "false";
     try {
-      const body = await (await positioningGet()).json();
+      const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
       expect(body.estimate).toEqual({ paused: true, blocked: PAUSED_MESSAGE });
       const res = await positioningPost(req("/api/strategy/positioning", { confirm: true }));
       expect(res.status).toBe(429);
@@ -299,7 +408,7 @@ describe("the Strategy page's routes — a run in the background", () => {
   it("GET returns this business's latest finished run and pasted ads", async () => {
     tables.competitor_positioning = [ANALYSED, { ...ANALYSED, id: "run-other", dealership_id: "d2" }];
     tables.competitor_owner_ads = [{ id: "ad1", dealership_id: "d1", competitor_name: "Aroma Hut", ad_text: "Diwali sale — 40% off" }];
-    const body = await (await positioningGet()).json();
+    const body = await (await positioningGet(req("/api/strategy/positioning"))).json();
     expect(body.run.id).toBe("run-1");
     expect(body.current).toBeNull();
     expect(body.ownerAds.map((a: any) => a.id)).toEqual(["ad1"]);

@@ -17,6 +17,9 @@ import { findUnsupportedClaims } from "@/lib/claims/claimCheck";
 import type { Claim } from "./collect";
 import type { Theme } from "./themes";
 
+/** Sorting and writing: two attempts of at most 50s each, so the step ends well inside its invocation (see collect.ts SEARCH_TIMEOUT_MS). */
+export const ANALYSIS_TIMEOUT_MS = 50_000;
+
 type LogContext = { supabase: any; dealershipId: string };
 
 /** One thing the business can stand behind, numbered for the model. */
@@ -93,7 +96,7 @@ ${facts.map((f, i) => `F${i}: ${f.label} — ${f.text}`).join("\n") || "(none)"}
 Return JSON only: {"claims":{"0":["theme_key"]},"facts":{"0":["theme_key"]}} — keys are the item numbers without the letter.`,
       }],
     },
-    { operation: "positioning_themes", logContext: logContext ?? null }
+    { operation: "positioning_themes", logContext: logContext ?? null, timeoutMs: ANALYSIS_TIMEOUT_MS }
   );
   if (!r.ok) return { ok: false, failure: r.failure };
   const parsed = jsonIn(r.text) ?? {};
@@ -270,7 +273,7 @@ RULES:
 Return JSON only: {"statement":"one sentence","angles":[{"theme":"theme_key","title":"short","why":"what to say and why, citing the count"}]}`,
       }],
     },
-    { operation: "positioning_write", logContext: logContext ?? null }
+    { operation: "positioning_write", logContext: logContext ?? null, timeoutMs: ANALYSIS_TIMEOUT_MS }
   );
   if (!r.ok) return { ok: false, failure: r.failure };
   return { ok: true, advice: verifyPositioning(jsonIn(r.text) ?? {}, p, businessFacts), costInr: r.costInr };
