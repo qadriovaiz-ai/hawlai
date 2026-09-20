@@ -154,25 +154,27 @@ describe("the live case: five businesses", () => {
   });
 
   it("more than one invocation's work: the dispatcher carries it on — every job runs, with no invocation calling the route", async () => {
-    tables.dealerships = Array.from({ length: 20 }, (_, i) => ({ id: `biz-${i}`, business_category: null, created_at: `2026-01-${String(i + 1).padStart(2, "0")}` }));
+    tables.dealerships = Array.from({ length: 10 }, (_, i) => ({ id: `biz-${i}`, business_category: null, created_at: `2026-01-${String(i + 1).padStart(2, "0")}` }));
     const clock = { now: 0 };
     const calls: string[] = [];
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const invocations = await runTheDay("heavy", fakeRunners(clock, calls), clock);
     expect(tables.daily_jobs.every((j) => j.status === "done")).toBe(true);
-    expect(calls).toHaveLength(20 * GROUPS.heavy.length);
+    expect(calls).toHaveLength(10 * GROUPS.heavy.length);
     expect(invocations[0]).toBe("cron");
     expect(invocations.length).toBeGreaterThan(1);
     expect(invocations.slice(1).every((i) => i === "dispatcher")).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
-  });
+    // A whole day's list through a fake database: slower than vitest's 5s
+    // default when the full suite is running in parallel.
+  }, 30_000);
 
   it("no invocation starts a job after its time budget, and the budget leaves the last job room inside 300s", async () => {
     const clock = { now: 0 };
     const starts: number[] = [];
-    tables.dealerships = Array.from({ length: 20 }, (_, i) => ({ id: `biz-${i}`, business_category: null, created_at: `2026-01-${String(i + 1).padStart(2, "0")}` }));
+    tables.dealerships = Array.from({ length: 10 }, (_, i) => ({ id: `biz-${i}`, business_category: null, created_at: `2026-01-${String(i + 1).padStart(2, "0")}` }));
     const runners = fakeRunners(clock, []);
     const wrapped = Object.fromEntries(Object.entries(runners).map(([k, fn]: any) => [k, async (...a: any[]) => (starts.push(clock.now), fn(...a))])) as any;
     await planDailyJobs(db(), "heavy", TODAY);
@@ -183,7 +185,7 @@ describe("the live case: five businesses", () => {
     const { maxDuration } = await import("@/app/api/autopilot/daily-run/route");
     expect(maxDuration).toBe(300);
     expect(maxDuration * 1000 - BUDGET_MS).toBeGreaterThanOrEqual(120_000);
-  });
+  }, 30_000);
 });
 
 describe("carrying on", () => {

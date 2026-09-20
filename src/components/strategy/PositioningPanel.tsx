@@ -18,6 +18,8 @@ type Row = {
 };
 type Positioning = { competitorCount: number; rows: Row[]; whiteSpace: string[]; crowdedYouHave: string[]; openUnbacked: string[] };
 type Advice = { statement: string | null; angles: { theme: string; title: string; why: string }[]; removed: string[] };
+/** What the owner can accept into Brand Voice, and what's there now (step 5). */
+type Pillars = { offered: { statement: string | null; pillars: string[] }; current: string[]; statement: string | null; acceptedAt: string | null };
 type Competitor = { name: string; source: "watched" | "owner_ad" | "found"; url?: string | null; claimCount: number };
 type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[]; skippedAtCeiling?: string[] }; spentInr?: number } };
 /** What pressing the button would cost now, from GET — or why it can't be pressed. */
@@ -45,6 +47,9 @@ export default function PositioningPanel() {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   // Asking the owner's yes before a comparison that costs more than the confirm line.
   const [confirming, setConfirming] = useState(false);
+  const [pillars, setPillars] = useState<Pillars | null>(null);
+  const [accepting, setAccepting] = useState<"replace" | "add" | null>(null);
+  const [accepted, setAccepted] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [adName, setAdName] = useState("");
@@ -59,6 +64,11 @@ export default function PositioningPanel() {
     setRun(d.run ?? null);
     setOwnerAds(d.ownerAds ?? []);
     setEstimate(d.estimate ?? null);
+    // What this comparison offers the Brand Voice, next to what's there now.
+    fetch("/api/strategy/positioning/pillars")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => setPillars(p))
+      .catch(() => {});
     const current: Current | null = d.current ?? null;
     if (current?.state === "running") {
       setProgress(current.label ?? "Working...");
@@ -135,6 +145,27 @@ export default function PositioningPanel() {
   const advice = run?.analysis?.advice ?? null;
   const busy = progress !== null;
   // Said about the finished run, from the run itself.
+  /** Writes the accepted pillars into Brand Voice — only from this click. */
+  async function accept(mode: "replace" | "add") {
+    setAccepting(mode);
+    setError(null);
+    try {
+      const res = await fetch("/api/strategy/positioning/pillars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d) return setError(d?.error ?? "Couldn't save to your Brand Voice — try again.");
+      setPillars((p) => (p ? { ...p, current: d.pillars, statement: d.statement, acceptedAt: new Date().toISOString() } : p));
+      setAccepted(mode === "replace" ? "Your Brand Voice pillars now say this." : "Added to your Brand Voice pillars.");
+    } catch {
+      setError("Couldn't reach Hawlai — check your connection and try again.");
+    } finally {
+      setAccepting(null);
+    }
+  }
+
   const couldntCheck = run?.analysis?.notes?.couldntCheck ?? [];
   const skippedAtCeiling = run?.analysis?.notes?.skippedAtCeiling ?? [];
   const spentInr = run?.analysis?.spentInr;
@@ -208,6 +239,46 @@ export default function PositioningPanel() {
           )}
         </div>
       )}
+      {/* Step 5: this becomes the Brand Voice every generator reads — but
+          only when the owner says so. Nothing is written without a click. */}
+      {pillars && pillars.offered.pillars.length > 0 && (
+        <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+          <p className="text-xs font-semibold text-slate-600">Make this your brand's message?</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1">From this comparison</p>
+              <ul className="space-y-0.5">
+                {pillars.offered.pillars.map((line, i) => (
+                  <li key={i} className="text-xs text-slate-700">• {line}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1">Your Brand Voice says now</p>
+              {pillars.current.length > 0 ? (
+                <ul className="space-y-0.5">
+                  {pillars.current.map((line, i) => (
+                    <li key={i} className="text-xs text-slate-500">• {line}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-400">Nothing yet.</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" variant="secondary" onClick={() => accept("replace")} loading={accepting === "replace"} disabled={accepting !== null}>
+              Replace
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => accept("add")} loading={accepting === "add"} disabled={accepting !== null}>
+              Add to them
+            </Button>
+            <span className="text-[10.5px] text-slate-400">Every email, post and ad is written from these.</span>
+          </div>
+          {accepted && <p className="text-[11px] text-green-600">{accepted}</p>}
+        </div>
+      )}
+
       {run?.analysis?.adviceError && <p className="text-xs text-red-500">{run.analysis.adviceError} The comparison below is still accurate.</p>}
 
       {p && (
