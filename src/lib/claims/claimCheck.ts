@@ -148,6 +148,17 @@ function hostOf(link: string): string {
  * Allowed: the storefront's own host, and any link the owner has written
  * into their own content (site, Business Knowledge) — their links are
  * theirs to use.
+ *
+ * THE SECOND LIVE CASE (2026-09-21): a workshop caption said "Book here"
+ * and linked https://calendly.com — Calendly's own homepage, not
+ * https://calendly.com/candlebyqaaf/workshop, which is where the booking
+ * actually is. This check passed it, because it let a link through when
+ * its HOST appeared anywhere in the owner's own text, and the host of the
+ * real booking link is calendly.com. On a host the business does not own,
+ * that is the difference between a booking and a dead end — so a
+ * third-party link must now match the owner's link itself, or go deeper
+ * into it. Only the storefront's own host keeps host-wide freedom, because
+ * every path under it really is theirs.
  */
 export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
   const allowedHosts = new Set<string>();
@@ -155,16 +166,38 @@ export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
   for (const p of f.links?.products ?? []) allowedHosts.add(hostOf(p.url));
   const known = knownText(f);
 
+  // Every address the owner has actually given, as whole links. Read as
+  // links, not as text: "calendly.com" IS a substring of
+  // "calendly.com/candlebyqaaf/workshop", and matching text was exactly
+  // how the homepage passed as verified.
+  const tidy = (s: string) => normalise(s).replace(/[.,;:!?]+$/, "").replace(/\/+$/, "");
+  const ownLinks = new Set<string>();
+  if (f.links?.booking) ownLinks.add(tidy(f.links.booking));
+  for (const p of f.links?.products ?? []) ownLinks.add(tidy(p.url));
+  for (const p of f.products) if (p.bookingUrl) ownLinks.add(tidy(p.bookingUrl));
+
   const reasons: string[] = [];
-  // Booking links (a service's own, the booking page) are allowed the same
-  // way as any link the owner has written: knownText carries them.
   for (const m of text.matchAll(LINK)) {
     const link = m[0].replace(/[.,;:!?]+$/, "");
     const host = hostOf(link);
     if (allowedHosts.has(host)) continue;
-    if (known.includes(normalise(link)) || known.includes(normalise(host))) continue;
+    const n = tidy(link);
+    // One of the owner's own links, or a page inside one.
+    const own = Array.from(ownLinks).filter((k) => k !== "");
+    if (own.some((k) => n === k || n.startsWith(`${k}/`) || n.startsWith(`${k}?`))) continue;
+    // A link the owner has written somewhere in their own content. Unless
+    // it is an ANCESTOR of one of their real links — "calendly.com" when
+    // the booking is at "calendly.com/candlebyqaaf/workshop". That is not
+    // their page; it only looked like one because their page's address
+    // contains it.
+    const ancestorOfOwn = own.some((k) => k.startsWith(`${n}/`) || k.startsWith(`${n}?`));
+    if (known.includes(n) && !ancestorOfOwn) continue;
+    const booking = f.links?.booking ?? f.products.find((p) => p.bookingUrl)?.bookingUrl ?? null;
+    const sameHostAsBooking = booking ? hostOf(booking) === host : false;
     reasons.push(
-      f.links?.store
+      sameHostAsBooking && booking
+        ? `a link to "${link}" — that is not the booking page, it's the front door of ${host}; bookings go to ${booking}`
+        : f.links?.store
         ? `a link to "${link}" — that isn't this business's website; the store is ${f.links.store}`
         : `a link to "${link}" — this business has no published website to link to`
     );
@@ -292,17 +325,49 @@ function pieces(text: string): string[] {
 }
 
 /**
+ * A booking link pointed at the wrong page on the right host, put right.
+ *
+ * "Book here: calendly.com" is not a claim to delete — the sentence is
+ * true and the call to action is wanted. Only the address is wrong, and
+ * the right one is known. Deleting the line would cost the booking just
+ * as surely as the broken link did, so this rewrites it instead.
+ */
+export function repairBookingLinks(text: string, f: BusinessFacts): { text: string; fixed: string[] } {
+  const booking = f.links?.booking ?? f.products.find((p) => p.bookingUrl)?.bookingUrl ?? null;
+  if (!booking) return { text, fixed: [] };
+  const bookingHost = hostOf(booking);
+  const target = normalise(booking).replace(/\/+$/, "");
+  const fixed: string[] = [];
+  const out = text.replace(LINK, (link: string) => {
+    const trail = link.match(/[.,;:!?]+$/)?.[0] ?? "";
+    const bare = trail ? link.slice(0, -trail.length) : link;
+    if (hostOf(bare) !== bookingHost) return link;
+    const n = normalise(bare).replace(/\/+$/, "");
+    // The booking page itself, or a page inside it — leave it alone.
+    if (n === target || n.startsWith(`${target}/`) || n.startsWith(`${target}?`)) return link;
+    fixed.push(bare);
+    return `${booking}${trail}`;
+  });
+  return { text: out, fixed: Array.from(new Set(fixed)) };
+}
+
+/**
  * Removes each sentence that makes an unsupported claim. The rest of the
  * copy is left exactly as written. In "draft" mode a sentence whose only
  * problem is an unverified price is kept, and the price is listed in
  * `priceWarnings` for the owner to check.
+ *
+ * A wrong booking link is repaired first, not removed: see
+ * repairBookingLinks.
  */
 export function stripUnsupported(
   text: string,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { text: string; removed: string[]; priceWarnings: string[] } {
-  if (findProblems(text, f).length === 0) return { text, removed: [], priceWarnings: [] };
+): { text: string; removed: string[]; priceWarnings: string[]; linksFixed: string[] } {
+  const repair = repairBookingLinks(text, f);
+  text = repair.text;
+  if (findProblems(text, f).length === 0) return { text, removed: [], priceWarnings: [], linksFixed: repair.fixed };
   const kept: string[] = [];
   const removed: string[] = [];
   const priceWarnings: string[] = [];
@@ -315,7 +380,7 @@ export function stripUnsupported(
     } else removed.push(...problems.map((p) => p.reason));
   }
   const cleaned = kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: cleaned, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)) };
+  return { text: cleaned, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), linksFixed: repair.fixed };
 }
 
 /**
@@ -324,9 +389,10 @@ export function stripUnsupported(
  * sequence). An array item whose main text is removed entirely is
  * dropped; keys starting with "_" are metadata and left alone.
  */
-export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[] } {
+export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[]; linksFixed: string[] } {
   const removed: string[] = [];
   const priceWarnings: string[] = [];
+  const linksFixed: string[] = [];
   const emptied = (before: any, after: any) => typeof before === "string" && before.trim() !== "" && String(after ?? "").trim() === "";
 
   const walk = (v: any): any => {
@@ -334,6 +400,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "
       const r = stripUnsupported(v, f, mode);
       removed.push(...r.removed);
       priceWarnings.push(...r.priceWarnings);
+      linksFixed.push(...r.linksFixed);
       return r.text;
     }
     if (Array.isArray(v)) {
@@ -358,7 +425,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "
   };
 
   const out = walk(output);
-  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)) };
+  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), linksFixed: Array.from(new Set(linksFixed)) };
 }
 
 /** What the owner is told — said plainly, never silently hidden. */
@@ -366,6 +433,12 @@ export function claimsNote(removed: string[]): string | null {
   if (removed.length === 0) return null;
   const n = removed.length;
   return `Hawlai removed ${n === 1 ? "a line" : "lines"} that made ${n === 1 ? "a claim" : `${n} claims`} it couldn't verify from your store data (${removed.slice(0, 2).join("; ")}${n > 2 ? "; …" : ""}). If a claim is true, add it to Business Knowledge and it will be allowed.`;
+}
+
+/** What the owner is told when a link was put right — never changed silently. */
+export function linkFixedNote(fixed: string[], booking: string | null): string | null {
+  if (fixed.length === 0 || !booking) return null;
+  return `One link pointed at ${fixed[0]}, which isn't where your bookings are — Hawlai sent it to ${booking} instead.`;
 }
 
 /** What the owner is told about prices left in a draft. */
@@ -380,8 +453,9 @@ export function guardGenerated<T extends object>(
   output: T,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[] } {
+): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[]; linksFixed: string[] } {
   const r = guardOutput(output, f, mode);
-  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings)].filter(Boolean).join(" ");
-  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings };
+  const booking = f.links?.booking ?? f.products.find((p) => p.bookingUrl)?.bookingUrl ?? null;
+  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
+  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings, linksFixed: r.linksFixed };
 }

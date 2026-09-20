@@ -3515,6 +3515,18 @@ ${formatFactsForCopy(storeFacts)}
 ${COPY_TRUTH_RULES}
 - These rules cover your own replies and every tool brief, image prompts included.`
     : "";
+  // Every guard in this file sits on what a TOOL returns. The chat AI
+  // writes copy in its own replies too — a caption, a CTA, a link — and
+  // that text went back to the owner unchecked. It sent one workshop
+  // customer to calendly.com's homepage instead of the workshop's own
+  // booking page. Links in the reply are now checked against the
+  // business's real ones (src/lib/chat/replyLinks.ts).
+  const { fixReplyLinks, linkFixNote } = await import("../chat/replyLinks");
+  const checkedReply = (text: string): string => {
+    const fix = fixReplyLinks(text, storeFacts);
+    return `${fix.reply}${linkFixNote(fix) ?? ""}`;
+  };
+
   const { CHANNEL_POLICY_FOR_CHAT } = await import("../expertise/channelRules");
   const channelPolicySection = `
 
@@ -3579,7 +3591,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       const text = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
       // A caption generated beside an image belongs with it — that
       // pairing also decides whether Instagram is offered.
-      return { reply: text || "Done!", toolsUsed, artifacts: attachTurnImages(artifacts) };
+      return { reply: text ? checkedReply(text) : "Done!", toolsUsed, artifacts: attachTurnImages(artifacts) };
     }
 
     messages.push({ role: "assistant", content: blocks });

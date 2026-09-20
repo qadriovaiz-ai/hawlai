@@ -156,7 +156,7 @@ describe("low friction: only the offending sentence goes, the rest reads exactly
 
   it("clean copy comes back identical, with nothing removed", () => {
     const caption = "Light it, breathe out, stay a while. 🕯️ Shop the Lavender candle — ₹550.";
-    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [] });
+    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [], linksFixed: [] });
   });
 
   it("works on every output shape: a hook that was only a claim is dropped, and so is a calendar day left with no caption", () => {
