@@ -868,7 +868,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const recentPostsContext = (recentPosts ?? []).length > 0
         ? (recentPosts as any[]).map((r) => r.output?.caption || r.output?.hook || r.output?.headline || JSON.stringify(r.output).slice(0, 150)).filter(Boolean).join("\n")
         : null;
-      const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, recentPostsContext, groundingContext);
+      const socialFacts = await factsFor(supabase, ctx);
+      const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice, preferred_language: socialFacts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, recentPostsContext, groundingContext);
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "social_management_items", { task_type: input.taskType, input_text: input.inputText ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
@@ -3464,7 +3465,7 @@ export async function runMasterBrainChat(
   // string's role in every generation prompt. Falls back to a profile
   // derived from tone_of_voice for businesses that haven't gone through
   // conversational extraction yet, so this is never empty.
-  const brandVoiceSection = formatBrandVoiceSection(ctx.brandVoice, ctx.toneOfVoice);
+  const brandVoiceSection = formatBrandVoiceSection(ctx.brandVoice, ctx.toneOfVoice, ctx.facts?.brand?.language ?? null);
 
   const memorySection = ctx.memories.length > 0
     ? `\n\n## What you've learned about this business over time\nThese are real, durable observations from past conversations and results — apply them naturally, the way a CMO who's worked here for months would, without announcing "per my memory" or listing them back:\n${ctx.memories.map((m) => `- ${m}`).join("\n")}`
@@ -3527,13 +3528,28 @@ ${COPY_TRUTH_RULES}
     return `${fix.reply}${linkFixNote(fix) ?? ""}`;
   };
 
+  // The owner set Preferred Ad Language to English and chat kept writing
+  // Hinglish. 7f1972c made the setting a rule inside every GENERATOR —
+  // but chat writes copy in its own replies too, and its prompt had no
+  // language or tone rule anywhere. All it had was the facts line
+  // "Preferred language: english", sitting under ten Business Story
+  // answers printed in full, in Hinglish. The same weak signal, one layer
+  // up. Placed directly after the facts, so it is the last thing said
+  // before the conversation starts.
+  const { soundRule, normaliseLanguage } = await import("../content/language");
+  const soundSection = `
+
+${soundRule(normaliseLanguage(storeFacts?.brand?.language), ctx.toneOfVoice ?? storeFacts?.brand?.tone)}
+- This covers the words YOU write, not just what a tool returns: a caption, a headline, a tagline or a line of copy in your own reply follows it exactly as a generated piece would.
+- It does not govern how you talk ABOUT the work. Explaining, asking a question or thinking out loud with the owner stays in whatever language they are writing to you in — it is the copy itself, the part a customer will read, that follows the setting.`;
+
   const { CHANNEL_POLICY_FOR_CHAT } = await import("../expertise/channelRules");
   const channelPolicySection = `
 
 ## Email and WhatsApp — rules for anything you write or send, and how to answer questions about them
 ${CHANNEL_POLICY_FOR_CHAT}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${channelPolicySection}
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${soundSection}${channelPolicySection}
 
 ## How you think, not just what you generate
 
@@ -3548,6 +3564,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 
 ## Guidelines
 - When the person asks for something concrete, USE THE RELEVANT TOOL rather than just talking about it. For a broad request ("help me launch my skincare brand"), call multiple tools in sequence (e.g. brand kit, then a launch content piece, then SEO) and weave the results into one helpful reply — with the shared strategic thread from above, not disconnected outputs.
+- **Copy a customer will read goes through the tool, always — even one line.** A caption, a headline, an ad line, a subject line, a tagline: call generate_content (or generate_email / generate_whatsapp / generate_ad_plan) and show what it returns. Never type the copy out yourself in the reply because it's short or because you can see the facts right here. The tools are where the checks live — the owner's language setting, their real Business Story detail, the claims check, and the links. Copy written straight into a reply has none of that, and it has already gone out wrong: a workshop caption with a booking link that led to the wrong page. Writing it yourself is faster and worse. If a tool fails, say so plainly rather than quietly writing the copy by hand instead.
 - **Do the work, don't hand out homework.** If a request could be read as either "explain what I should do" or "go do it," default to doing it. A day-by-day or step-by-step "plan" that just tells the person what to go do themselves (write these posts yourself, set up your profile like this, message these contacts) is the wrong shape for almost every request here — call the tools to actually produce the brand kit, the content, the website draft, the first WhatsApp message, right now, in this reply. Reserve pure instructional/advisory text for the specific things only the person can physically do (a phone call to a local shop owner, walking into a store) — everything else, build it, don't describe it.
 - Especially for a new or newly-onboarding business: don't front-load a wall of questions before doing anything. Ask at most 1-2 short clarifying questions if something is genuinely unclear (category, target city), then immediately start producing real output with reasonable assumptions for anything else — a brand kit, a first batch of content, a website — rather than making the person answer a long requirements list before any actual work happens.
 - Everything you GENERATE (content, a brand kit, a graphic, a draft) is automatically saved and also shows up on its normal dashboard page. End such a reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard." EXCEPTION — this does NOT apply when the reply carries an inline approval card (propose_price_change) or is asking the person a question. Nothing has been saved yet in those cases: the change is waiting on their decision, which is on the card in this same message. NEVER add a "saved to" or "you can review it at" line to those replies — there is no page to name, and naming one sends them away from the buttons they need to press.

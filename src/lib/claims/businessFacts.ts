@@ -576,7 +576,7 @@ export function formatFactsForCopy(f: BusinessFacts): string {
   if (f.season) lines.push(formatSeason(f.season, { models: f.businessModels?.models ?? [], giftable: physicalProducts(f).length > 0 }));
   // How this business sounds. It was gathered into the facts but only ever
   // reached chat, so every other generator wrote in a house voice.
-  if (f.brand?.voice || f.brand?.tone) lines.push(formatBrandVoiceSection(f.brand.voice, f.brand.tone).trim());
+  if (f.brand?.voice || f.brand?.tone) lines.push(formatBrandVoiceSection(f.brand.voice, f.brand.tone, f.brand.language).trim());
   if (f.unreadable.length) lines.push(`Couldn't be read right now (unknown — don't guess): ${f.unreadable.join(", ")}.`);
   return lines.join("\n");
 }

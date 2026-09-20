@@ -10,6 +10,8 @@
 // isn't, so no business (old or new) is ever left with an empty voice.
 // ------------------------------------------------------------------
 
+import { normaliseLanguage } from "@/lib/content/language";
+
 export interface BrandVoiceProfile {
   personality_traits: string[]; // 3-4 adjectives, e.g. ["confident", "warm", "direct"]
   vocabulary_preferences: {
@@ -57,7 +59,24 @@ export function resolveBrandVoiceProfile(profile: BrandVoiceProfile | null | und
 // The full, explicit-instructions block for real text-generation
 // prompts — same "pre-formatted, ready to drop in" shape as
 // memorySection/knowledgeSection in masterBrainV2.ts.
-export function formatBrandVoiceSection(profile: BrandVoiceProfile | null | undefined, toneOfVoice: string | null | undefined): string {
+export function formatBrandVoiceSection(
+  profile: BrandVoiceProfile | null | undefined,
+  toneOfVoice: string | null | undefined,
+  /**
+   * The owner's Preferred Ad Language, when it is set.
+   *
+   * THE BUG (2026-09-21, second report): hinglish_ok defaults to true for
+   * every business without an extracted brand voice, so this block said
+   * "write naturally in Hinglish where it fits, don't force pure English"
+   * — under a heading that says to follow it exactly — while the language
+   * rule three sections later said to write every word in English. Both
+   * in the same prompt, in the chat AND in every generator, since
+   * formatFactsForCopy prints this block too. The model picked the one
+   * that matched the ten Hinglish story answers in front of it. A setting
+   * the owner chose outranks a default inferred from their tone.
+   */
+  language?: string | null
+): string {
   // A stored brand_voice can be partial — an older row, or one saved before
   // a field existed. Missing fields fall back to the safe generic profile
   // rather than throwing halfway through building a prompt.
@@ -79,13 +98,18 @@ export function formatBrandVoiceSection(profile: BrandVoiceProfile | null | unde
   if (p.personality_traits.length > 0) lines.push(`Personality: ${p.personality_traits.join(", ")}.`);
   lines.push(`Formality: ${p.formality_level}.`);
   lines.push(`Sentence rhythm: ${p.sentence_rhythm}`);
-  lines.push(
-    `Language mixing: ${
-      p.hinglish_ok
-        ? "Hindi/English mixing is on-brand — write naturally in Hinglish where it fits, don't force pure English."
-        : "Keep language consistent — avoid mixing Hindi and English mid-sentence."
-    }${p.regional_language_notes ? ` ${p.regional_language_notes}` : ""}`
-  );
+  // A chosen language settles this line; only where none is chosen does
+  // the profile's own hinglish_ok decide.
+  const chosen = normaliseLanguage(language);
+  const mixing =
+    language && chosen === "english"
+      ? "The owner has set their copy language to English — that settles it. Write in English throughout, and don't mix Hindi in."
+      : language && chosen === "hindi"
+      ? "The owner has set their copy language to Hindi — that settles it. Write in Devanagari throughout, and don't mix English in."
+      : p.hinglish_ok
+      ? "Hindi/English mixing is on-brand — write naturally in Hinglish where it fits, don't force pure English."
+      : "Keep language consistent — avoid mixing Hindi and English mid-sentence.";
+  lines.push(`Language mixing: ${mixing}${p.regional_language_notes ? ` ${p.regional_language_notes}` : ""}`);
   if (p.vocabulary_preferences.favor.length > 0) lines.push(`Words/phrases to favor: ${p.vocabulary_preferences.favor.join(", ")}.`);
   if (p.vocabulary_preferences.avoid.length > 0) lines.push(`Words/phrases to NEVER use: ${p.vocabulary_preferences.avoid.join(", ")}.`);
   lines.push(

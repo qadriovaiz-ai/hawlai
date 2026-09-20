@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   const [{ data: dealership }, { data: brandProfile }, { data: recentPosts }] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
-    supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("brand_profiles").select("tone_of_voice, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("content_autopilot_log").select("caption").eq("dealership_id", dealershipId).eq("success", true).order("created_at", { ascending: false }).limit(10),
   ]);
   const recentPostsContext = (recentPosts ?? []).length > 0

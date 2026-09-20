@@ -10,6 +10,7 @@ import { formatDuration } from "../catalog/catalogItem";
 import { getModel } from "../models";
 import { modelForTask } from "../aiTaskRouter";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
+import { soundRule, normaliseLanguage } from "@/lib/content/language";
 
 export interface SocialTaskMeta {
   key: string;
@@ -55,7 +56,12 @@ export async function generateAutoReply(
   // reply is trying to achieve (support vs. sales vs. front-desk).
   personaGoals?: string | null
 ): Promise<string | null> {
-  const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.";
+  // An auto-reply is sent to a customer with nobody reading it first —
+  // if any copy follows the owner's chosen language, this does.
+  const brandContext = [
+    brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "Keep it warm and natural.",
+    soundRule(normaliseLanguage(brandProfile?.preferred_language), brandProfile?.tone_of_voice),
+  ].join("\n");
 
   // Real catalog, when available — this is what turns "I'll get back
   // to you" into an actual instant answer for the very common "how
@@ -122,6 +128,8 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
 
 interface BrandProfile {
   tone_of_voice?: string | null;
+  /** The owner's Preferred Ad Language — a setting, obeyed as a rule (lib/content/language.ts). */
+  preferred_language?: string | null;
 }
 
 export async function generateSocialTask(
@@ -142,7 +150,13 @@ export async function generateSocialTask(
     _fallback: true,
   };
 
-  const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it natural, warm, and specific to the business.";
+  // Reply suggestions and DM templates are read by customers, so they
+  // follow the owner's language setting like any other copy — this
+  // generator had no language rule at all.
+  const brandContext = [
+    brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it natural, warm, and specific to the business.",
+    soundRule(normaliseLanguage(brandProfile?.preferred_language), brandProfile?.tone_of_voice),
+  ].join("\n");
   const isTrends = taskKey === "viral_trends";
 
   try {

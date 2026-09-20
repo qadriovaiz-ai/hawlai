@@ -113,7 +113,9 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
     getBusinessContext(supabase, dealership.id),
     resolvePersona(supabase, dealership.id, "dm"), // P3 piece 5 — defaults to support
   ]);
-  const brandProfile = { tone_of_voice: businessCtx.toneOfVoice };
+  // An auto-reply goes to a customer unread by anyone here, so the
+  // owner's chosen language applies to it like any other copy.
+  const brandProfile = { tone_of_voice: businessCtx.toneOfVoice, preferred_language: businessCtx.facts?.brand?.language ?? null };
 
   // Real catalog — capped at 40 products to keep the prompt a
   // reasonable size; a seller with more than that is a genuine edge

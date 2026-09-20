@@ -127,6 +127,19 @@ describe("the workshop caption, with English selected", () => {
     expect(prompts[0]).not.toContain("Write EVERY word of this piece in English");
   });
 
+  it("the Brand Voice block stops contradicting the setting (2026-09-21)", async () => {
+    // Why English didn't hold even here: formatFactsForCopy prints the
+    // Brand Voice block, whose hinglish_ok defaults to true — so the same
+    // prompt carried "write naturally in Hinglish… don't force pure
+    // English", under a heading telling the model to follow it exactly.
+    anthropic(ENGLISH_CAPTION);
+    const withVoice = facts("english", { brand: { tone: "warm", voice: null, persona: null, language: "english", pillars: [], description: null, colors: [], logoUrl: null } as any });
+    await ask({ tone_of_voice: "warm", preferred_language: "english" }, withVoice);
+    expect(prompts[0]).toContain("Write EVERY word of this piece in English");
+    expect(prompts[0]).not.toContain("don't force pure English");
+    expect(prompts[0]).toContain("set their copy language to English — that settles it");
+  });
+
   it("the Content Marketing page's revision pass is in it too", async () => {
     // The page asks for a second, tightening pass; it used to be told to
     // "keep the same language", which would have locked in the wrong one.
