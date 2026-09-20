@@ -2530,6 +2530,8 @@ export interface Artifact {
   // — see MasterChatPage.tsx — since the whole point is pre-publish
   // visibility of real legal-exposure risk, not a silent data-layer flag.
   complianceFlags?: { rule: string; detail: string }[];
+  /** Said on the card when the piece used nothing of the owner's own story. */
+  storyNote?: string;
 }
 
 // Where each tool's result actually lives, so a person can jump straight
@@ -3621,6 +3623,13 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       // produced, so it covers every text-generation tool uniformly
       // (not just the ones that happen to call withBrandVoiceCheck
       // internally), with zero changes needed to executeTool() itself.
+      // Written from nothing of this business's own story (storyEcho.ts).
+      // Attached here, with the other cross-cutting checks, so it shows on
+      // the card whichever tool produced the piece — the Content Marketing
+      // page had this note from the start; chat silently dropped it.
+      if (artifact && typeof result?._storyNote === "string") {
+        artifact.storyNote = result._storyNote;
+      }
       if (artifact) {
         const complianceCheck = validateAdvertisingClaimCompliance(flattenResultText(result));
         if (complianceCheck.violations.length > 0) {

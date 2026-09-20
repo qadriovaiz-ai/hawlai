@@ -72,6 +72,8 @@ interface Artifact {
   // which is data-layer only) since pre-publish visibility of real
   // legal-exposure risk is the entire point of this check.
   complianceFlags?: { rule: string; detail: string }[];
+  /** The piece used nothing of the owner's own story (lib/content/storyEcho.ts). */
+  storyNote?: string;
   departmentHref?: string;
 }
 
@@ -742,6 +744,16 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
   // recommendation, anything). Deliberately visible, unlike
   // brandVoiceFlags (data-layer only) — pre-publish visibility of real
   // legal-exposure risk is the whole point of this check.
+  // Nothing of this business's own story made it into the piece
+  // (lib/content/storyEcho.ts). Not a legal risk, so it sits under the
+  // card in amber rather than red — but it is never left unsaid: a
+  // generic caption handed over quietly is the bug this exists for.
+  const storyWarning = artifact.storyNote ? (
+    <div className="px-3 py-2 bg-amber-500/10 border-t border-amber-400/20">
+      <p className="text-[10.5px] text-amber-700 leading-snug">{artifact.storyNote}</p>
+    </div>
+  ) : null;
+
   const complianceWarning = artifact.complianceFlags && artifact.complianceFlags.length > 0 ? (
     <div className="px-3 py-2 bg-red-500/10 border-t border-red-400/20 space-y-1">
       <p className="text-[10px] font-semibold text-red-500 flex items-center gap-1">
@@ -791,7 +803,9 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
         ) : (
           <pre className="px-3 py-2 text-[11.5px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed max-h-[360px] overflow-y-auto">{preview.text}</pre>
         )}
-        {complianceWarning}
+        {storyWarning}
+        {storyWarning}
+      {complianceWarning}
         {publishStrip}
       </div>
     );
@@ -806,7 +820,9 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           </div>
           <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
         </div>
-        {complianceWarning}
+        {storyWarning}
+        {storyWarning}
+      {complianceWarning}
           {approvalStrip}
           {publishStrip}
         {artifact.departmentHref && (
@@ -876,7 +892,9 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
             <p className="pt-2 border-t border-slate-200 text-[10px] text-slate-400 italic leading-snug">{r.disclosure}</p>
           )}
         </div>
-        {complianceWarning}
+        {storyWarning}
+        {storyWarning}
+      {complianceWarning}
         {artifact.departmentHref && (
           <a
             href={artifact.departmentHref}
@@ -1106,6 +1124,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           )}
         </div>
       </div>
+      {storyWarning}
       {complianceWarning}
       {/*
         The Approve / Edit / Reject row.

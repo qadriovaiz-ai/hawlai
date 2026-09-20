@@ -18,6 +18,19 @@
 // them would have passed the very caption that started this. So words the
 // catalogue, the business name or the category already contain are struck
 // out of the story's vocabulary before anything is compared.
+//
+// ONE WORD IS NOT AN ECHO (2026-09-20, second report). The first version
+// passed anything that shared a single word with the story, and "Khud
+// banao. Khud le jaao. Soy wax, apni pasand ki fragrance, 90 minutes… ek
+// candle jo tumne apne haathon se dhaali hai" passed on "sirf", "khud",
+// "haathon" — and on "work", which came from the TITLE of a story answer
+// ("How we work"), a label Hawlai wrote, not the owner. So:
+//   - titles are ignored; only what the owner actually typed counts;
+//   - a match is STRONG (a number like the 24-hour cure, or a name like
+//     Kanpur) or ORDINARY (any other distinctive word);
+//   - the piece has used the story when it carries one strong match, or
+//     two ordinary ones. A single ordinary word is the kind of overlap a
+//     generic sentence has by accident.
 
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
@@ -26,6 +39,9 @@ import type { BusinessFacts } from "@/lib/claims/businessFacts";
 const COMMON = new Set([
   "with", "that", "this", "from", "your", "you", "our", "the", "and", "for", "but", "not", "are", "was", "were", "have", "has", "had", "can", "will", "just", "only", "also", "when", "what", "which", "each", "every", "some", "made", "make", "makes", "making", "like", "into", "than", "then", "they", "them", "their", "there", "here", "about", "after", "before", "because", "would", "could", "should", "more", "most", "very", "much", "many", "been", "being", "does", "done", "over", "under", "same", "other", "such", "these", "those",
   "hai", "hain", "tha", "thi", "the", "kar", "karo", "karta", "karti", "karte", "karna", "kiya", "kiye", "liye", "mein", "main", "aur", "par", "phir", "bhi", "koi", "kuch", "jab", "tab", "abhi", "apna", "apni", "apne", "hum", "humne", "hamara", "mera", "meri", "mere", "tumhara", "tumhari", "yeh", "woh", "kya", "kyun", "nahi", "haan", "sab", "bahut", "thoda", "zyada", "achha", "accha", "banao", "banaya", "banate",
+  // What the second slip-through was built from: the words any handmade
+  // business says about itself.
+  "sirf", "khud", "haath", "haathon", "haatho", "har", "sath", "saath", "pasand", "chahiye", "milta", "milti", "hota", "hoti", "hote", "rakhte", "rakhta", "dete", "deta", "lete", "leta", "jaao", "jao", "chalo", "dekho", "suno", "work", "works", "working",
 ]);
 
 function words(text: string): string[] {
@@ -41,13 +57,34 @@ function isTellingNumber(word: string): boolean {
   return /^\d{1,3}$/.test(word);
 }
 
+/** How much a matching word is worth: a number or a name, or any other distinctive word. */
+export type StoryWords = { strong: Set<string>; ordinary: Set<string> };
+
+/** Names the owner typed mid-sentence (Kanpur, Diwali) — never the word that starts a sentence. */
+function namesIn(text: string): string[] {
+  const out: string[] = [];
+  for (const sentence of String(text ?? "").split(/[.!?\n—]+/)) {
+    const tokens = sentence.trim().split(/\s+/).slice(1);
+    for (const t of tokens) {
+      const word = t.replace(/[^A-Za-z]/g, "");
+      if (word.length >= 3 && word[0] === word[0].toUpperCase() && word.slice(1) !== word.slice(1).toUpperCase()) out.push(word.toLowerCase());
+    }
+  }
+  return out;
+}
+
 /**
  * The words that belong to THIS owner's story and nowhere else in the
  * facts — what a piece has to echo for the story to have been used.
+ *
+ * Only the CONTENT of each answer: the title is the question Hawlai
+ * asked ("How we work"), and matching on it passed a caption that shared
+ * nothing but the word "work".
  */
-export function storyVocabulary(facts: BusinessFacts | null | undefined): Set<string> {
+export function storyVocabulary(facts: BusinessFacts | null | undefined): StoryWords {
+  const empty: StoryWords = { strong: new Set(), ordinary: new Set() };
   const story = (facts?.ownerFacts ?? []).filter((k) => k.category === STORY_CATEGORY);
-  if (!story.length) return new Set();
+  if (!story.length) return empty;
 
   // Everything a competitor in the same line of work would also have.
   const shared = new Set<string>();
@@ -65,20 +102,25 @@ export function storyVocabulary(facts: BusinessFacts | null | undefined): Set<st
   for (const o of facts?.offers ?? []) addShared(o.label);
   for (const k of facts?.ownerFacts ?? []) if (k.category !== STORY_CATEGORY) addShared(k.content);
 
-  const out = new Set<string>();
+  const out: StoryWords = { strong: new Set(), ordinary: new Set() };
   for (const k of story) {
-    for (const w of words(`${k.title} ${k.content}`)) {
+    const names = new Set(namesIn(k.content));
+    for (const w of words(k.content)) {
       if (COMMON.has(w) || shared.has(w)) continue;
       if (isTellingNumber(w)) {
-        out.add(w);
+        out.strong.add(w);
         continue;
       }
       if (w.length < 4 || /^\d+$/.test(w)) continue;
-      out.add(w);
+      if (names.has(w)) out.strong.add(w);
+      else out.ordinary.add(w);
     }
   }
   return out;
 }
+
+/** A strong match is enough on its own; ordinary words need each other. */
+export const ORDINARY_MATCHES_NEEDED = 2;
 
 /** Every word the piece actually says, whatever shape it came back in. */
 export function textOfOutput(output: unknown): string {
@@ -99,10 +141,12 @@ export function textOfOutput(output: unknown): string {
  */
 export function usesOwnStory(output: unknown, facts: BusinessFacts | null | undefined): boolean {
   const vocabulary = storyVocabulary(facts);
-  if (vocabulary.size === 0) return true;
+  if (vocabulary.strong.size === 0 && vocabulary.ordinary.size === 0) return true;
   const said = new Set(words(textOfOutput(output)));
-  for (const w of vocabulary) if (said.has(w)) return true;
-  return false;
+  for (const w of vocabulary.strong) if (said.has(w)) return true;
+  let ordinary = 0;
+  for (const w of vocabulary.ordinary) if (said.has(w)) ordinary += 1;
+  return ordinary >= ORDINARY_MATCHES_NEEDED;
 }
 
 /** The owner's story facts, shortest first — what a retry is told to compress. */
