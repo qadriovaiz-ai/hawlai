@@ -7,6 +7,7 @@ import { loadDiagnosis } from "@/lib/strategy/diagnosis";
 import { latestPositioning } from "@/lib/strategy/positioning/run";
 import { buildWeeks, baselineFrom, WEEKS, PLANS_A_DAY } from "@/lib/strategy/calendar/weeks";
 import { writeWeekIdeas } from "@/lib/strategy/calendar/write";
+import { reviewQuarter } from "@/lib/strategy/calendar/review";
 
 // The next 90 days, week by week (Advanced Strategy step 4;
 // lib/strategy/calendar). GET: the latest plan. POST: plan again — code
@@ -25,18 +26,25 @@ async function dealershipOf(supabase: any): Promise<{ ok: true; dealershipId: st
   return { ok: true, dealershipId: profile.dealership_id as string };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const who = await dealershipOf(supabase);
   if (!who.ok) return who.response;
   const { data } = await supabase
     .from("strategy_quarters")
-    .select("id, starts_on, ends_on, weeks, notes, cost_inr, created_at")
+    .select("id, starts_on, ends_on, weeks, baseline, notes, cost_inr, created_at")
     .eq("dealership_id", who.dealershipId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return NextResponse.json({ quarter: data ?? null });
+
+  // How it's going — asked for, not on every look: it reads the last 90
+  // days again (Strategy step 5).
+  if (!data || new URL(request.url).searchParams.get("review") !== "1") return NextResponse.json({ quarter: data ?? null });
+  const service = createServiceClient();
+  const diagnosis = await loadDiagnosis(supabase, who.dealershipId).catch(() => null);
+  const review = await reviewQuarter(service, who.dealershipId, data, diagnosis);
+  return NextResponse.json({ quarter: data, review });
 }
 
 const addDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);

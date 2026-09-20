@@ -13,6 +13,8 @@ const GROUPS = ["Social Posts", "Long-form", "Email & Sales Copy", "Video", "Qui
 export default function ContentMarketingView() {
   const [selectedType, setSelectedType] = useState(CONTENT_TYPES[0].key);
   const [topic, setTopic] = useState("");
+  /** The week of the 90-day plan this came from, when it did (step 5). */
+  const [fromWeek, setFromWeek] = useState<{ quarter: string; week: number } | null>(null);
   const {
     loading, error, output, outputId, editing, draft, saving, copied, history,
     generate, startEditing, cancelEditing, saveEdits, copyOutput, selectFromHistory, reset, setDraft,
@@ -29,6 +31,9 @@ export default function ContentMarketingView() {
     if (type && CONTENT_TYPES.some((t) => t.key === type)) setSelectedType(type as typeof selectedType);
     const given = q.get("topic");
     if (given) setTopic(given.slice(0, 500));
+    const quarter = q.get("quarter");
+    const week = Number(q.get("week"));
+    if (quarter && Number.isInteger(week) && week > 0) setFromWeek({ quarter, week });
   }, []);
 
   return (
@@ -65,7 +70,8 @@ export default function ContentMarketingView() {
           onChange={(e) => setTopic(e.target.value)}
           placeholder="Topic, product, or offer (optional — leave blank for a general idea)"
         />
-        <Button onClick={() => generate({ contentType: selectedType, topic })} loading={loading}>
+        {fromWeek && <p className="text-[11px] text-slate-400">From week {fromWeek.week} of your 90-day plan — what you make here counts as that week's.</p>}
+        <Button onClick={() => generate({ contentType: selectedType, topic, ...(fromWeek ? { quarterId: fromWeek.quarter, week: fromWeek.week } : {}) })} loading={loading}>
           {!loading && <Sparkles className="w-4 h-4" />}
           Generate
         </Button>

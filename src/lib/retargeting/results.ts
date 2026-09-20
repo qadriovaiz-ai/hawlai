@@ -32,14 +32,21 @@ export type AudienceResults = {
 
 export const EMPTY_RESULTS: AudienceResults = { campaigns: 0, orders: 0, revenueInr: 0, leads: 0, bookings: 0, since: null };
 
-/** Results for every audience this business has advertised to, by audience id. */
-export async function resultsByAudience(service: any, dealershipId: string): Promise<Record<string, AudienceResults>> {
-  const { data: ads } = await service
+/**
+ * Results for every audience this business has advertised to, by audience id.
+ *
+ * @param since only ads launched on or after this — what a quarter brought
+ *   back is what its own ads brought back (Strategy step 5).
+ */
+export async function resultsByAudience(service: any, dealershipId: string, since?: string | null): Promise<Record<string, AudienceResults>> {
+  let query = service
     .from("ad_creatives")
     .select("retarget_audience_key, meta_campaign_id, created_at")
     .eq("dealership_id", dealershipId)
     .not("retarget_audience_key", "is", null)
     .not("meta_campaign_id", "is", null);
+  if (since) query = query.gte("created_at", since);
+  const { data: ads } = await query;
 
   const byCampaign = new Map<string, string>();
   const out: Record<string, AudienceResults> = {};

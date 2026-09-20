@@ -327,7 +327,7 @@ describe("the route", () => {
       { id: "new", dealership_id: "d1", created_at: "2026-09-19T00:00:00Z", weeks: [] },
       { id: "theirs", dealership_id: "d2", created_at: "2026-09-20T00:00:00Z", weeks: [] },
     ];
-    expect((await (await GET()).json()).quarter.id).toBe("new");
+    expect((await (await GET(new Request("https://hawlai.test/api/strategy/calendar"))).json()).quarter.id).toBe("new");
   });
 });
 

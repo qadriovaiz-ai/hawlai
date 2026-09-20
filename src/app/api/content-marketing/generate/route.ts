@@ -5,6 +5,22 @@ import { recentCopy } from "@/lib/content/recentCopy";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
+/** The week this piece belongs to, checked against the business's own plan. */
+async function linkedWeek(supabase: any, dealershipId: string, quarterId: unknown, week: unknown) {
+  const id = typeof quarterId === "string" ? quarterId : null;
+  const n = Number(week);
+  if (!id || !Number.isInteger(n) || n < 1) return {};
+  const { data: quarter } = await supabase
+    .from("strategy_quarters")
+    .select("id, weeks")
+    .eq("id", id)
+    .eq("dealership_id", dealershipId)
+    .maybeSingle();
+  const weeks = Array.isArray(quarter?.weeks) ? quarter!.weeks : [];
+  if (!quarter || !weeks.some((w: any) => Number(w?.week) === n)) return {};
+  return { strategy_quarter_id: quarter.id, strategy_week: n };
+}
+
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
   return profile?.dealership_id as string | undefined;
@@ -17,8 +33,13 @@ export async function POST(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { contentType, topic } = await request.json();
+  const { contentType, topic, quarterId, week } = await request.json();
   if (!contentType) return NextResponse.json({ error: "contentType required" }, { status: 400 });
+
+  // Made from a week of the 90-day plan? Only if that plan is this
+  // business's own and really has that week — the link is what step 5
+  // counts as "done", so a request body can't claim it.
+  const fromWeek = await linkedWeek(supabase, dealershipId, quarterId, week);
 
   const [{ data: dealership }, { data: brandProfile }, facts] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
@@ -52,7 +73,7 @@ export async function POST(request: Request) {
   if (!_fallback) {
     const { data } = await supabase
       .from("content_pieces")
-      .insert({ dealership_id: dealershipId, content_type: contentType, topic: topic ?? "", output })
+      .insert({ dealership_id: dealershipId, content_type: contentType, topic: topic ?? "", output, ...fromWeek })
       .select()
       .single();
     saved = data;
