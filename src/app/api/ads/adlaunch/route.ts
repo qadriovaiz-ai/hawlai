@@ -266,6 +266,16 @@ export async function POST(request: Request) {
       if (converters?.meta_audience_id) excludeAudienceIds = [converters.meta_audience_id];
     }
 
+    // Record which audience this ad is for, before Meta is touched: R5
+    // counts what each audience brought back by joining on this.
+    if (retarget_audience_key) {
+      await serviceClient
+        .from("ad_creatives")
+        .update({ retarget_audience_key })
+        .eq("id", draft.id)
+        .eq("dealership_id", dealershipId);
+    }
+
     // The page already resolved a URL above (product link, the
     // dealership's own site, or a published landing page). Run it
     // through the shared resolver so the OBJECTIVE is chosen the same

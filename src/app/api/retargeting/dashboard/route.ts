@@ -5,6 +5,7 @@ import { effectiveBusinessModels } from "@/lib/business/businessModel";
 import { buildSuppressionList, isSuppressed } from "@/lib/ads/audienceHashing";
 import { variantsFor, listMembers } from "@/lib/retargeting/audiences";
 import { stepFor, NO_FREQUENCY_CAP_NOTE } from "@/lib/retargeting/messages";
+import { resultsByAudience, resultsLine, type AudienceResults } from "@/lib/retargeting/results";
 
 // Retargeting dashboard — piece 6/7.
 //
@@ -34,11 +35,13 @@ export async function GET() {
 
   const service = createServiceClient();
 
-  const [{ data: dealership }, { data: catalogue }, audiencesRes, suppression] = await Promise.all([
+  const [{ data: dealership }, { data: catalogue }, audiencesRes, suppression, results] = await Promise.all([
     service.from("dealerships").select("business_models").eq("id", dealershipId).maybeSingle(),
     service.from("products").select("kind").eq("dealership_id", dealershipId).eq("is_active", true),
     service.from("meta_custom_audiences").select("audience_key, approximate_count, sync_status, last_synced_at").eq("dealership_id", dealershipId),
     buildSuppressionList(service, dealershipId),
+    // What each audience has brought back so far (R5).
+    resultsByAudience(service, dealershipId).catch(() => ({}) as Record<string, AudienceResults>),
   ]);
   const productCount = (catalogue ?? []).filter((p: any) => p.kind !== "service").length;
   const models = effectiveBusinessModels(dealership?.business_models, { productCount, serviceCount: (catalogue ?? []).length - productCount });
@@ -50,7 +53,15 @@ export async function GET() {
     audiences.map(async (v) => {
       // Which of the three messages this group's ad is (R4).
       const step = stepFor(v.tier);
-      const a = { key: v.id, label: v.label, description: v.description, type: v.def.type, step: step ? { number: step.step, kind: step.kind, label: step.label, allowsOffer: step.allowsOffer } : null };
+      const a = {
+        key: v.id,
+        label: v.label,
+        description: v.description,
+        type: v.def.type,
+        step: step ? { number: step.step, kind: step.kind, label: step.label, allowsOffer: step.allowsOffer } : null,
+        results: results[v.id] ?? null,
+        resultsLine: resultsLine(results[v.id]),
+      };
       if (v.def.key === "abandoned_cart") {
         // This tier's window, not the whole 30 days.
         const { data: carts } = await service

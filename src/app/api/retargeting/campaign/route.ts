@@ -165,6 +165,9 @@ export async function POST(request: Request) {
       creative_score: plan.confidence_score ?? null,
       score_reasoning: plan.score_reasoning ?? null,
       plan_json: plan,
+      // Which audience and tier this ad is for, so what it brings back can
+      // be counted back to it (R5, migration 194).
+      retarget_audience_key: audienceKey,
       status: "draft",
     })
     .select()

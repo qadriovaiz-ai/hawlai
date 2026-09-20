@@ -20,6 +20,9 @@ interface Segment {
   count: number | null;
   /** Which of the three messages this group's ad is (R4); null when the audience isn't split by recency. */
   step: { number: number; kind: string; label: string; allowsOffer: boolean } | null;
+  /** What ads to this group brought back (R5); null until one has run. */
+  results: { campaigns: number; orders: number; revenueInr: number; leads: number; bookings: number; since: string | null } | null;
+  resultsLine: string | null;
   valueInr: number | null;
   detail: string | null;
 }
@@ -117,6 +120,13 @@ export default function RetargetingDashboard() {
                 </p>
               )}
               {s.detail && <p className="text-[10.5px] text-slate-400">{s.detail}</p>}
+              {/* What this group's ads actually brought back — from your own
+                  orders and enquiries, not Meta's estimate (R5). */}
+              {s.resultsLine && (
+                <p className={`text-[10.5px] ${s.results && (s.results.orders > 0 || s.results.bookings > 0) ? "text-green-600" : "text-slate-400"}`}>
+                  {s.resultsLine}
+                </p>
+              )}
               {metaCount != null && (
                 <p className="text-[10.5px] text-slate-400">
                   Meta can reach ~{metaCount.toLocaleString("en-IN")}
