@@ -841,7 +841,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const facts = await factsFor(supabase, ctx);
       // The last few pieces, so a caption asked for in chat doesn't repeat
       // the opening and rhythm of the last one (the page already did this).
-      const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [] }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft", { recent: await recentCopy(supabase, ctx.id) });
+      const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [], preferred_language: facts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft", { recent: await recentCopy(supabase, ctx.id) });
       if (_aiFailure) return { error: _aiFailure.message };
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);

@@ -9,6 +9,7 @@
 // honest guidance instead of fabricating numbers.
 
 import { getModel } from "../models";
+import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, claimsNote, priceWarningNote, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { EMAIL_RULES, fixSubjects } from "@/lib/expertise/channelRules";
@@ -61,7 +62,11 @@ export async function generateEmailContent(
 
   const fallback = { output: { text: aiFailureMessage("bad_request") }, _fallback: true };
 
-  const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it warm, direct, and specific to the business.";
+  // Email never carried the owner's language setting at all.
+  const brandContext = [
+    brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it warm, direct, and specific to the business.",
+    soundRule(normaliseLanguage((brandProfile as any)?.preferred_language ?? facts?.brand?.language), brandProfile?.tone_of_voice),
+  ].join("\n");
 
   try {
     const r = await callClaude({

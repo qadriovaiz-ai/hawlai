@@ -33,6 +33,7 @@ interface BrandProfile {
 }
 
 import { CLAUDE_MODELS } from "../models";
+import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { modelForTask } from "../aiTaskRouter";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
@@ -61,7 +62,11 @@ export async function generateWhatsappContent(
     _fallback: true,
   };
 
-  const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it warm and conversational, like a real person texting.";
+  // WhatsApp never carried the owner's language setting at all.
+  const brandContext = [
+    brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it warm and conversational, like a real person texting.",
+    soundRule(normaliseLanguage((brandProfile as any)?.preferred_language ?? facts?.brand?.language), brandProfile?.tone_of_voice),
+  ].join("\n");
 
   try {
     const r = await callClaude({

@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   const [{ data: dealership }, { data: brandProfile }, facts] = await Promise.all([
     supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
-    supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("brand_profiles").select("tone_of_voice, target_persona, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
     // Written from, and checked against, what the business can back up (src/lib/claims).
     gatherBusinessFactsSafely(supabase, dealershipId),
   ]);

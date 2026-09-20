@@ -14,6 +14,7 @@ import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import { usesOwnStory, storyForRetry, GENERIC_NOTE } from "@/lib/content/storyEcho";
+import { soundRule, languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
 import { applyLinkRule, linkRuleNote } from "@/lib/content/platformRules";
 
 // WHY THIS EXISTS (approved 2026-09-18): every caption came out in the
@@ -128,6 +129,8 @@ interface BrandProfile {
   tone_of_voice?: string | null;
   target_persona?: any;
   messaging_pillars?: string[] | null;
+  /** Settings → Brand → Preferred Ad Language. */
+  preferred_language?: string | null;
 }
 
 export async function generateContent(
@@ -164,6 +167,11 @@ export async function generateContent(
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "not set"}. Messaging pillars: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}.`
     : "No brand voice set yet — keep it natural and honest, avoid generic marketing-speak.";
+  // The owner's own settings: what they chose beats what the facts sound
+  // like (lib/content/language.ts). The page and chat both pass the brand
+  // profile; the facts carry it too, for paths that don't.
+  const language: CopyLanguage = normaliseLanguage(brandProfile?.preferred_language ?? facts?.brand?.language);
+  const sound = soundRule(language, brandProfile?.tone_of_voice ?? facts?.brand?.tone);
 
   try {
     const r = await callClaude({
@@ -175,6 +183,8 @@ export async function generateContent(
           content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
 ${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
 Topic/product/context: "${resolveFestiveTopic(topic, facts?.season) || "general brand content, use good judgement for this business type"}"
+
+${sound}
 
 Content type: ${meta.label}
 Output requirements: ${meta.instructions}
@@ -192,7 +202,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     let parsed = JSON.parse(clean);
     let revised = false;
     if (opts.revise) {
-      const second = await reviseForSpecificity(parsed, meta.label, facts, logContext);
+      const second = await reviseForSpecificity(parsed, meta.label, facts, logContext, language);
       if (second) {
         parsed = second;
         revised = true;
@@ -205,9 +215,9 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     // only when the first draft missed it — a retry on every piece would
     // double the cost of the many to fix the few.
     let generic = false;
-    if (!usesOwnStory(parsed, facts)) {
-      const retried = await retryWithStory(parsed, meta.label, meta.instructions, topic, facts, logContext);
-      if (retried && usesOwnStory(retried, facts)) parsed = retried;
+    if (!usesOwnStory(parsed, facts, language)) {
+      const retried = await retryWithStory(parsed, meta.label, meta.instructions, topic, facts, logContext, language);
+      if (retried && usesOwnStory(retried, facts, language)) parsed = retried;
       else {
         if (retried) parsed = retried;
         generic = true;
@@ -246,7 +256,8 @@ export async function retryWithStory(
   formatInstructions: string,
   topic: string,
   facts: BusinessFacts | null | undefined,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  language: CopyLanguage = "hinglish"
 ): Promise<any | null> {
   const story = storyForRetry(facts);
   if (!story.length) return null;
@@ -262,7 +273,8 @@ The owner's own story — use ONE of these, whichever fits the topic "${topic}":
 ${story.map((s) => `- ${s}`).join("\n")}
 
 Rewrite the draft so one of those details is IN it:
-- Keep the same JSON shape, the same language, and the same length. This is a rewrite, not an expansion — if the detail needs room, cut a generic line to make it.
+- Keep the same JSON shape and the same length. This is a rewrite, not an expansion — if the detail needs room, cut a generic line to make it.
+- ${languageRule(language)}
 - Compress the detail into a phrase where the piece is short. A whole sentence about it is only for a piece that has room.
 - Use the detail as material, not a quote: at most a few words in the owner's own phrasing.
 - Never invent anything that isn't in that story, and don't add a claim, number or offer.
@@ -302,7 +314,8 @@ export async function reviseForSpecificity(
   draft: any,
   contentLabel: string,
   facts: BusinessFacts | null | undefined,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  language: CopyLanguage = "hinglish"
 ): Promise<any | null> {
   if (!facts) return null;
   try {
@@ -317,7 +330,8 @@ THE TEST, line by line: could a competitor in the same line of work publish this
 
 Rules:
 - Replace only with specifics that are IN the facts: a step, a material, a place, a length of time, something a customer said, the owner's own words. Never invent a detail, number, review, offer or claim — inventing one is worse than leaving the line out.
-- Keep the same JSON shape, the same language, and roughly the same length. No preamble.
+- Keep the same JSON shape and roughly the same length. No preamble.
+- ${languageRule(language)}
 - Cut stacked adjectives, rented enthusiasm and marketing throat-clearing. Plain and specific beats warm and vague.
 - A line already specific to this business stays exactly as it is.
 

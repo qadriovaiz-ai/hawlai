@@ -13,6 +13,7 @@ import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { stripUnsupported, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { replaceLinksWithBio } from "@/lib/content/platformRules";
+import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 const GRAPH_VERSION = "v23.0";
@@ -27,9 +28,15 @@ export async function generateSocialCaption(
   /** "draft" when the owner reviews the caption before posting: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
 ): Promise<{ caption: string; claimsRemoved: string[]; priceWarnings?: string[]; aiFailure?: AiFailureNote }> {
-  const brandContext = brandProfile
-    ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
-    : "No brand profile set — default to a warm, professional tone in Hinglish.";
+  // The owner's settings, as rules rather than fields (lib/content/language.ts):
+  // "Preferred language: english" sitting in a sentence lost to the Hinglish
+  // examples around it.
+  const brandContext = [
+    brandProfile
+      ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}.`
+      : "No brand profile set — default to a warm, professional tone.",
+    soundRule(normaliseLanguage(brandProfile?.preferred_language), brandProfile?.tone_of_voice),
+  ].join("\n");
   // The owner's own words come back unchanged when generation fails.
   const unchanged = { caption: prompt, claimsRemoved: [] as string[] };
 

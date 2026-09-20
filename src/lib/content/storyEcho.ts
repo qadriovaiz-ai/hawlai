@@ -34,6 +34,7 @@
 
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
+import { looksHinglish, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
 
 /** Words too common to make anything distinctive — English and the Hinglish a caption is written in. */
 const COMMON = new Set([
@@ -122,6 +123,23 @@ export function storyVocabulary(facts: BusinessFacts | null | undefined): StoryW
 /** A strong match is enough on its own; ordinary words need each other. */
 export const ORDINARY_MATCHES_NEEDED = 2;
 
+/**
+ * How many ordinary words a piece must share with the story.
+ *
+ * Two, normally. But a piece written in English from notes kept in
+ * Hinglish can only carry the detail across by translating it — the words
+ * themselves don't survive, so demanding two of them would call every
+ * honest English caption generic. There, one is the evidence there is.
+ */
+export function ordinaryMatchesNeeded(facts: BusinessFacts | null | undefined, language?: CopyLanguage | string | null): number {
+  if (!language) return ORDINARY_MATCHES_NEEDED;
+  const asked = normaliseLanguage(language);
+  const story = (facts?.ownerFacts ?? []).filter((k) => k.category === STORY_CATEGORY).map((k) => k.content).join(" ");
+  const storyIsHinglish = looksHinglish(story);
+  const sameRegister = asked === "hinglish" ? storyIsHinglish : !storyIsHinglish;
+  return sameRegister ? ORDINARY_MATCHES_NEEDED : 1;
+}
+
 /** Every word the piece actually says, whatever shape it came back in. */
 export function textOfOutput(output: unknown): string {
   const parts: string[] = [];
@@ -139,14 +157,14 @@ export function textOfOutput(output: unknown): string {
  * Whether the piece used the owner's story. True when there's no story to
  * use: a business that hasn't written one can't be failed for missing it.
  */
-export function usesOwnStory(output: unknown, facts: BusinessFacts | null | undefined): boolean {
+export function usesOwnStory(output: unknown, facts: BusinessFacts | null | undefined, language?: CopyLanguage | string | null): boolean {
   const vocabulary = storyVocabulary(facts);
   if (vocabulary.strong.size === 0 && vocabulary.ordinary.size === 0) return true;
   const said = new Set(words(textOfOutput(output)));
   for (const w of vocabulary.strong) if (said.has(w)) return true;
   let ordinary = 0;
   for (const w of vocabulary.ordinary) if (said.has(w)) ordinary += 1;
-  return ordinary >= ORDINARY_MATCHES_NEEDED;
+  return ordinary >= ordinaryMatchesNeeded(facts, language);
 }
 
 /** The owner's story facts, shortest first — what a retry is told to compress. */
