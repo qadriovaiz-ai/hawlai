@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { generateAdPlan } from "@/lib/adEngine";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
+import { parseVariant } from "@/lib/retargeting/audiences";
 
 // One-click retargeting campaign — piece 6/7.
 //
@@ -76,8 +77,11 @@ export async function POST(request: Request) {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const { audienceKey, discountPercent, customOffer } = await request.json();
-  const angle = OFFER_ANGLES[audienceKey];
-  if (!angle) return NextResponse.json({ error: "Unknown audience" }, { status: 400 });
+  // "abandoned_cart:4_14" — the tier decides the budget and, from R4, the
+  // message; the angle is the audience's (lib/retargeting/audiences.ts).
+  const variant = parseVariant(audienceKey);
+  const angle = variant ? OFFER_ANGLES[variant.def.key] : undefined;
+  if (!variant || !angle) return NextResponse.json({ error: "Unknown audience" }, { status: 400 });
 
   const service = createServiceClient();
 

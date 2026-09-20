@@ -231,6 +231,8 @@ export interface BuildTargetingInput {
    * deliberately NOT layered on top — see buildMetaTargeting().
    */
   customAudienceIds?: string[] | null;
+  /** Never show this ad to these — the people who already bought or booked (R3). */
+  excludedCustomAudienceIds?: string[] | null;
 }
 
 export interface BuiltTargeting {
@@ -299,11 +301,16 @@ export async function buildMetaTargeting(input: BuildTargetingInput): Promise<Bu
   // also forced OFF: expanding beyond your actual cart-abandoners is
   // the opposite of retargeting them.
   const retargetIds = (input.customAudienceIds ?? []).filter(Boolean);
+  // Customers are excluded at the ad set too, not only inside the audience:
+  // a rule or a list can be stale, and paying to advertise to someone who
+  // already bought is the failure this prevents.
+  const excludedIds = [...new Set((input.excludedCustomAudienceIds ?? []).filter(Boolean))].filter((id) => !retargetIds.includes(id));
   if (retargetIds.length > 0) {
     return {
       targeting: {
         geo_locations: location.geo_locations, // Meta still requires a geo
         custom_audiences: retargetIds.map((id) => ({ id })),
+        ...(excludedIds.length ? { excluded_custom_audiences: excludedIds.map((id) => ({ id })) } : {}),
         targeting_automation: { advantage_audience: 0 },
       },
       specialAdCategory: "NONE",

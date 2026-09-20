@@ -101,7 +101,7 @@ beforeEach(() => {
     websites: [{ id: "w1", dealership_id: "d1", slug: "candle-by-qaaf", published: true, shipping_mode: "flat", shipping_rate: 60 }],
     products: [{ id: "p1", dealership_id: "d1", name: "Lavender candle", price: 550, is_active: true, images: [] }],
     abandoned_carts: [{ dealership_id: "d1", contacted: false, items: [{ name: "Lavender candle" }] }],
-    meta_custom_audiences: [{ dealership_id: "d1", audience_key: "abandoned_cart", meta_audience_id: "aud_1", sync_status: "synced" }],
+    meta_custom_audiences: [{ dealership_id: "d1", audience_key: "abandoned_cart:1_3", meta_audience_id: "aud_1", sync_status: "synced" }],
   };
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -174,7 +174,7 @@ describe("both routes pass the facts", () => {
   it("the campaign draft: the ad writer gets the facts, and the saved headline/body are checked", async () => {
     model({ headline: "Free delivery today", body: "Your Lavender candle is waiting. Flat 20% off till Sunday.", confidence_score: 90, score_reasoning: "clear", background_style: "studio_white" });
     const { POST } = await import("@/app/api/retargeting/campaign/route");
-    const res = await POST(new Request("https://x.test", { method: "POST", body: JSON.stringify({ audienceKey: "abandoned_cart" }) }));
+    const res = await POST(new Request("https://x.test", { method: "POST", body: JSON.stringify({ audienceKey: "abandoned_cart:1_3" }) }));
     expect(res.status).toBe(200);
     expect(prompts.some((p) => p.includes("VERIFIED FACTS"))).toBe(true);
     const draft = inserted.find((i) => i.table === "ad_creatives")!.row;

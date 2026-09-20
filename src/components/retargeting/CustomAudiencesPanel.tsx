@@ -16,6 +16,10 @@ import { Button } from "@/components/ui/Button";
 
 interface Audience {
   key: string;
+  /** The audience this is a tier of — several tiers share one group (R3). */
+  group: string;
+  /** "1-3 days"; null when the audience isn't split by recency. */
+  tier: string | null;
   label: string;
   description: string;
   type: "website" | "customer_list" | "lookalike";
@@ -141,11 +145,18 @@ export default function CustomAudiencesPanel() {
       )}
 
       <div className="space-y-2">
-        {(audiences ?? []).map((a) => (
-          <div key={a.key} className="border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-3 flex-wrap">
+        {(audiences ?? []).map((a, i) => (
+          <div
+            key={a.key}
+            className={`border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-3 flex-wrap ${
+              // A tier sits under the audience above it, not as its own card.
+              a.tier && i > 0 && (audiences ?? [])[i - 1].group === a.group ? "ml-4 border-l-2 border-l-slate-300" : ""
+            }`}
+          >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium text-slate-800">{a.label}</p>
+                {a.tier && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 tabular-nums">{a.tier}</span>}
                 {a.syncStatus === "synced" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
                 {a.syncStatus === "failed" && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
               </div>
@@ -176,6 +187,9 @@ export default function CustomAudiencesPanel() {
         ))}
       </div>
 
+      <p className="text-[10.5px] text-slate-400">
+        Each group of people is split by how recently they showed interest — 1–3, 4–14 and 15–30 days — because what's worth saying changes with it. Anyone who already bought or booked is left out of all of them, and out of the ads themselves.
+      </p>
       <p className="text-[10.5px] text-slate-400">
         Website audiences update themselves once created — Meta keeps them current from your site activity. Lists are sent from your own records, replaced each time you refresh them (so people who have since bought, booked or opted out drop off), and anyone who opted out of contact is never included.
       </p>

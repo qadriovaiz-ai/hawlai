@@ -251,6 +251,21 @@ export async function POST(request: Request) {
       retargetAudienceIds = [audience.meta_audience_id];
     }
 
+    // Never advertise to people who already bought or booked (R3). Looked
+    // up the same way, and left out when they ARE the audience (a
+    // "come back" ad to customers is a different thing).
+    let excludeAudienceIds: string[] = [];
+    if (retargetAudienceIds.length > 0 && retarget_audience_key !== "converters") {
+      const { data: converters } = await serviceClient
+        .from("meta_custom_audiences")
+        .select("meta_audience_id")
+        .eq("dealership_id", dealershipId)
+        .eq("audience_key", "converters")
+        .eq("sync_status", "synced")
+        .maybeSingle();
+      if (converters?.meta_audience_id) excludeAudienceIds = [converters.meta_audience_id];
+    }
+
     // The page already resolved a URL above (product link, the
     // dealership's own site, or a published landing page). Run it
     // through the shared resolver so the OBJECTIVE is chosen the same
@@ -285,6 +300,7 @@ export async function POST(request: Request) {
       destination: routeDestination,
       targetingLocation: targeting_location ?? null,
       retargetAudienceIds,
+      excludeAudienceIds,
       scheduledStart: scheduled_start ?? null,
       variantGroupId: variant_group_id ?? null,
       variantLabel: variant_label ?? null,

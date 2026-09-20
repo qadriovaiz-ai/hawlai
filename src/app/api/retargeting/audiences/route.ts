@@ -13,7 +13,7 @@ import { buildSuppressionList, hashPhone, hashEmail, isSuppressed } from "@/lib/
 import { loadMetaAudienceToken } from "@/lib/ads/metaToken";
 import { effectiveBusinessModels } from "@/lib/business/businessModel";
 import { bookingPageUrl } from "@/lib/catalog/catalogItem";
-import { audiencesFor, listMembers, AUDIENCE_BY_KEY, type AudienceDefinition, type AudienceKey } from "@/lib/retargeting/audiences";
+import { variantsFor, parseVariant, listMembers, type Variant } from "@/lib/retargeting/audiences";
 
 // Meta Custom Audience sync — retargeting piece 5/7.
 //
@@ -31,6 +31,11 @@ import { audiencesFor, listMembers, AUDIENCE_BY_KEY, type AudienceDefinition, ty
 // depends on how it makes money (lib/retargeting/audiences.ts). Customer
 // lists are REPLACED on every sync, so people who have since booked,
 // converted or opted out drop off.
+//
+// RECENCY AND EXCLUSIONS (R3, 2026-09-20): an audience of recent interest
+// is three — 1-3, 4-14 and 15-30 days — each its own Meta audience, keyed
+// "abandoned_cart:4_14". People who already bought or booked are left out
+// of all of them.
 
 async function resolveOwner(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -52,13 +57,13 @@ async function setupOf(supabase: any, dealershipId: string) {
   const productCount = (catalogue ?? []).filter((p: any) => p.kind !== "service").length;
   const serviceCount = (catalogue ?? []).length - productCount;
   const models = effectiveBusinessModels(dealership?.business_models, { productCount, serviceCount });
-  return { dealership, models, audiences: audiencesFor(models.models) };
+  return { dealership, models, variants: variantsFor(models.models) };
 }
 
 /** Why this audience can't be created right now, or null when it can. */
-function blockedBy(def: AudienceDefinition, dealership: any): string | null {
-  if (def.type === "website" && !dealership?.meta_pixel_id) return "Add your Meta Pixel ID in Integrations first — this audience is built from pixel activity.";
-  if (def.rule && "includeUrl" in def.rule && !dealership?.booking_slug) return "Set up your booking page first — this audience is the people who open it.";
+function blockedBy(v: Variant, dealership: any): string | null {
+  if (v.def.type === "website" && !dealership?.meta_pixel_id) return "Add your Meta Pixel ID in Integrations first — this audience is built from pixel activity.";
+  if (v.def.rule && "includeUrl" in v.def.rule && !dealership?.booking_slug) return "Set up your booking page first — this audience is the people who open it.";
   return null;
 }
 
@@ -72,7 +77,7 @@ export async function GET() {
     setupOf(supabase, resolved.dealershipId),
     loadMetaAudienceToken(supabase, resolved.dealershipId),
   ]);
-  const { dealership, models, audiences } = setup;
+  const { dealership, models, variants } = setup;
   const byKey = new Map((rows ?? []).map((r: any) => [r.audience_key, r]));
 
   return NextResponse.json({
@@ -81,21 +86,23 @@ export async function GET() {
     ready: !!(dealership?.fb_ad_account_id && token.ok),
     missing: {
       adAccount: !dealership?.fb_ad_account_id,
-      pixel: !dealership?.meta_pixel_id && audiences.some((a) => a.type === "website"),
+      pixel: !dealership?.meta_pixel_id && variants.some((v) => v.def.type === "website"),
       connection: !token.ok,
     },
     // What to do about the connection, in words: connect, or reconnect.
     connection: token.ok ? null : { reason: token.reason, message: token.message },
     models: models.models,
     modelsGuessed: models.inferred,
-    audiences: audiences.map((def) => {
-      const row = byKey.get(def.key);
+    audiences: variants.map((v) => {
+      const row = byKey.get(v.id);
       return {
-        key: def.key,
-        label: def.label,
-        description: def.description,
-        type: def.type,
-        blocked: blockedBy(def, dealership),
+        key: v.id,
+        group: v.def.key,
+        tier: v.tier?.label ?? null,
+        label: v.label,
+        description: v.description,
+        type: v.def.type,
+        blocked: blockedBy(v, dealership),
         syncStatus: row?.sync_status ?? null,
         syncError: row?.sync_error ?? null,
         approximateCount: row?.approximate_count ?? null,
@@ -113,10 +120,11 @@ export async function POST(request: Request) {
   const { dealershipId } = resolved;
 
   const { audienceKey } = await request.json();
-  const { dealership, audiences } = await setupOf(supabase, dealershipId);
-  // Only an audience for how this business makes money.
-  const definition = audiences.find((a) => a.key === audienceKey);
-  if (!definition) return NextResponse.json({ error: AUDIENCE_BY_KEY.has(audienceKey) ? "That audience isn't one for how your business makes money." : "Unknown audience" }, { status: 400 });
+  const { dealership, models, variants } = await setupOf(supabase, dealershipId);
+  // Only an audience for how this business makes money, and a tier it has.
+  const variant = variants.find((v) => v.id === audienceKey);
+  const definition = variant?.def;
+  if (!variant || !definition) return NextResponse.json({ error: parseVariant(audienceKey) ? "That audience isn't one for how your business makes money." : "Unknown audience" }, { status: 400 });
 
   // Nothing goes to Meta without a user token — no Page-token fallback.
   const access = await loadMetaAudienceToken(supabase, dealershipId);
@@ -129,7 +137,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No Meta ad account is linked yet — choose one in Integrations." }, { status: 400 });
   }
   const adAccountId = String(rawAccount).startsWith("act_") ? String(rawAccount) : `act_${rawAccount}`;
-  const blocked = blockedBy(definition, dealership);
+  const blocked = blockedBy(variant, dealership);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 400 });
 
   const service = createServiceClient();
@@ -160,17 +168,18 @@ export async function POST(request: Request) {
           adAccountId,
           accessToken: token,
           pixelId: dealership!.meta_pixel_id!,
-          name: definition.name,
+          name: variant.name,
           includeEvent: "includeEvent" in rule ? rule.includeEvent : "PageView",
           includeUrlContains: "includeUrl" in rule ? bookingPageUrl(dealership!.booking_slug)! : undefined,
           excludeEvent: rule.excludeEvent,
-          description: definition.description,
+          window: variant.tier ? { fromDays: variant.tier.fromDays, toDays: variant.tier.toDays } : undefined,
+          description: variant.description,
         });
         audienceId = result.audienceId;
       }
     } else if (definition.type === "customer_list") {
       if (!audienceId) {
-        result = await createCustomerListAudience({ adAccountId, accessToken: token, name: definition.name, description: definition.description });
+        result = await createCustomerListAudience({ adAccountId, accessToken: token, name: variant.name, description: variant.description });
         audienceId = result.audienceId;
       } else {
         result = { success: true, audienceId };
@@ -179,7 +188,7 @@ export async function POST(request: Request) {
       // Unlike website audiences, a customer list must be pushed — Meta
       // has no way to see our records. Replaced, not appended.
       if (result.success && audienceId) {
-        const members = await listMembers(service, dealershipId, definition.key as AudienceKey);
+        const members = await listMembers(service, dealershipId, variant.id, Date.now(), models.models);
         // Same suppression as the CSV export (piece 1) — an opted-out
         // person must not reach Meta through this path either.
         const suppression = await buildSuppressionList(service, dealershipId);
@@ -201,12 +210,13 @@ export async function POST(request: Request) {
         .from("meta_custom_audiences")
         .select("meta_audience_id")
         .eq("dealership_id", dealershipId)
+        // A seed is a plain list (the converters), never a tier — its key is its id.
         .eq("audience_key", definition.seed!)
         .maybeSingle();
 
       if (!source?.meta_audience_id) {
         return NextResponse.json(
-          { error: `Sync "${AUDIENCE_BY_KEY.get(definition.seed!)!.label}" first — a lookalike is built from that list.` },
+          { error: `Sync "${parseVariant(definition.seed!)!.label}" first — a lookalike is built from that list.` },
           { status: 400 }
         );
       }
@@ -217,7 +227,7 @@ export async function POST(request: Request) {
         result = await createLookalikeAudience({
           adAccountId,
           accessToken: token,
-          name: definition.name,
+          name: variant.name,
           originAudienceId: source.meta_audience_id,
         });
         audienceId = result.audienceId;
@@ -231,7 +241,7 @@ export async function POST(request: Request) {
         dealership_id: dealershipId,
         audience_key: audienceKey,
         audience_type: definition.type,
-        name: definition.name,
+        name: variant.name,
         meta_audience_id: audienceId ?? null,
         approximate_count: approximateCount,
         sync_status: result.success ? "synced" : "failed",

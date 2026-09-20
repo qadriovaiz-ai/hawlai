@@ -99,6 +99,34 @@ describe("geo_locations is NESTED, which is the only shape Meta accepts", () => 
     expect(built.targeting.geo_locations).toEqual({ countries: ["IN"] });
   });
 
+  // R3 (2026-09-20): people who already bought or booked are excluded at the
+  // ad set too — a stale audience rule or list shouldn't cost the business
+  // money advertising to its own customers.
+  it("retargeting excludes the converters audience at the ad set", async () => {
+    stubCityLookup(null);
+    const built = await buildMetaTargeting({ ...base, aiSuggestedCity: null, customAudienceIds: ["aud_1"], excludedCustomAudienceIds: ["aud_conv", "aud_conv"] } as any);
+    expect(built.targeting.custom_audiences).toEqual([{ id: "aud_1" }]);
+    expect(built.targeting.excluded_custom_audiences).toEqual([{ id: "aud_conv" }]);
+  });
+
+  it("nothing to exclude, or excluding the very audience being targeted, leaves no exclusion", async () => {
+    stubCityLookup(null);
+    const none = await buildMetaTargeting({ ...base, aiSuggestedCity: null, customAudienceIds: ["aud_1"] } as any);
+    expect(none.targeting).not.toHaveProperty("excluded_custom_audiences");
+    const same = await buildMetaTargeting({ ...base, aiSuggestedCity: null, customAudienceIds: ["aud_1"], excludedCustomAudienceIds: ["aud_1"] } as any);
+    expect(same.targeting).not.toHaveProperty("excluded_custom_audiences");
+  });
+
+  it("the launcher passes them through, and the ad launcher looks up this business's converters", () => {
+    const { readFileSync } = require("node:fs");
+    const launch = readFileSync("src/lib/ads/launchCampaign.ts", "utf8");
+    expect(launch).toContain("excludedCustomAudienceIds: ctx.excludeAudienceIds ?? [],");
+    const route = readFileSync("src/app/api/ads/adlaunch/route.ts", "utf8");
+    expect(route).toContain('.eq("audience_key", "converters")');
+    expect(route).toContain('retarget_audience_key !== "converters"');
+    expect(route).toContain("excludeAudienceIds,");
+  });
+
   it("a special ad category is location-only but still located", async () => {
     stubCityLookup(null);
     const built = await buildMetaTargeting({ ...base, businessCategory: "real estate", aiSuggestedCity: null });

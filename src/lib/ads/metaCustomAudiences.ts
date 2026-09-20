@@ -86,8 +86,16 @@ async function metaAudiencePost(path: string, body: Record<string, any>, token: 
  * at any point in the past, which isn't the intent — the intent is
  * "hasn't bought during this same window".
  */
-function buildEventRule(pixelId: string, includeEvent: string, excludeEvent?: string, includeUrlContains?: string) {
+function buildEventRule(
+  pixelId: string,
+  includeEvent: string,
+  excludeEvent?: string,
+  includeUrlContains?: string,
+  /** The tier: keep the last `toDays`, and drop the last `fromDays` (R3 recency bands). */
+  window?: { fromDays: number; toDays: number }
+) {
   const source = [{ id: pixelId, type: "pixel" }];
+  const keepSeconds = (window ? window.toDays : RETENTION_DAYS) * 24 * 60 * 60;
   // "Visited this page": a PageView whose URL contains the path (R2 — a
   // services business's booking page).
   const includeFilters = includeUrlContains
@@ -99,7 +107,7 @@ function buildEventRule(pixelId: string, includeEvent: string, excludeEvent?: st
       rules: [
         {
           event_sources: source,
-          retention_seconds: RETENTION_SECONDS,
+          retention_seconds: keepSeconds,
           filter: {
             operator: "and",
             filters: includeFilters,
@@ -109,21 +117,25 @@ function buildEventRule(pixelId: string, includeEvent: string, excludeEvent?: st
     },
   };
 
+  const exclusions: Record<string, any>[] = [];
+  // Whoever already went ahead (bought, booked) — never retargeted.
   if (excludeEvent) {
-    rule.exclusions = {
-      operator: "or",
-      rules: [
-        {
-          event_sources: source,
-          retention_seconds: RETENTION_SECONDS,
-          filter: {
-            operator: "and",
-            filters: [{ field: "event", operator: "eq", value: excludeEvent }],
-          },
-        },
-      ],
-    };
+    exclusions.push({
+      event_sources: source,
+      retention_seconds: keepSeconds,
+      filter: { operator: "and", filters: [{ field: "event", operator: "eq", value: excludeEvent }] },
+    });
   }
+  // The fresher tier's people belong to that tier, not this one: "4–14
+  // days" is the last 14 days minus the last 3.
+  if (window && window.fromDays > 0) {
+    exclusions.push({
+      event_sources: source,
+      retention_seconds: window.fromDays * 24 * 60 * 60,
+      filter: { operator: "and", filters: includeFilters },
+    });
+  }
+  if (exclusions.length) rule.exclusions = { operator: "or", rules: exclusions };
 
   return rule;
 }
@@ -137,14 +149,16 @@ export async function createWebsiteAudience(opts: {
   excludeEvent?: string;
   /** Instead of includeEvent: people who opened a page whose URL contains this. */
   includeUrlContains?: string;
+  /** The recency tier this audience is (R3); without it, the plain 30-day window. */
+  window?: { fromDays: number; toDays: number };
   description?: string;
 }): Promise<AudienceResult> {
   return metaAudiencePost(
     `${opts.adAccountId}/customaudiences`,
     {
       name: opts.name,
-      description: opts.description ?? `Created by Hawlai — ${RETENTION_DAYS} day window`,
-      rule: buildEventRule(opts.pixelId, opts.includeEvent, opts.excludeEvent, opts.includeUrlContains),
+      description: opts.description ?? `Created by Hawlai — ${opts.window ? `${opts.window.fromDays}-${opts.window.toDays}` : RETENTION_DAYS} day window`,
+      rule: buildEventRule(opts.pixelId, opts.includeEvent, opts.excludeEvent, opts.includeUrlContains, opts.window),
       prefill: 1, // backfill from existing pixel history rather than starting empty
     },
     opts.accessToken

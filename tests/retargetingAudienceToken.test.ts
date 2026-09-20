@@ -91,12 +91,12 @@ afterEach(() => {
 describe("which token audiences use", () => {
   it("a valid user token: create and count both carry it — never the Page token", async () => {
     seed("valid");
-    const res = await post("abandoned_cart");
+    const res = await post("abandoned_cart:1_3");
     expect(res.status).toBe(200);
     expect(calls.map((c) => c.token)).toEqual([USER, USER]);
     expect(calls[0].url).toContain("/act_123/customaudiences");
     expect(calls[1].url).toContain("/aud-1?fields=approximate_count_lower_bound");
-    expect(tables.meta_custom_audiences[0]).toMatchObject({ dealership_id: "d1", audience_key: "abandoned_cart", sync_status: "synced", approximate_count: 1200 });
+    expect(tables.meta_custom_audiences[0]).toMatchObject({ dealership_id: "d1", audience_key: "abandoned_cart:1_3", sync_status: "synced", approximate_count: 1200 });
   });
 
   it("the customer list is created and uploaded with the user token too", async () => {
@@ -118,7 +118,7 @@ describe("no usable user token: say what to do, send nothing", () => {
     seed("expired");
     const body = await (await GET()).json();
     expect(body).toMatchObject({ ready: false, missing: { connection: true }, connection: { reason: "expired", message: AUDIENCE_TOKEN_EXPIRED } });
-    const res = await post("abandoned_cart");
+    const res = await post("abandoned_cart:1_3");
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: AUDIENCE_TOKEN_EXPIRED, needsReconnect: true });
     expect(calls).toEqual([]);
@@ -139,7 +139,7 @@ describe("no usable user token: say what to do, send nothing", () => {
     seed("none", false);
     const body = await (await GET()).json();
     expect(body.connection).toEqual({ reason: "missing", message: AUDIENCE_TOKEN_MISSING });
-    expect(await (await post("abandoned_cart")).json()).toEqual({ error: AUDIENCE_TOKEN_MISSING, needsReconnect: false });
+    expect(await (await post("abandoned_cart:1_3")).json()).toEqual({ error: AUDIENCE_TOKEN_MISSING, needsReconnect: false });
     expect(calls).toEqual([]);
   });
 
@@ -156,7 +156,7 @@ describe("Meta says the token is dead (190) before the stored expiry", () => {
   it("the owner is told to reconnect, and the row records it", async () => {
     seed("valid");
     meta(() => ({ status: 400, body: { error: { code: 190, error_subcode: 460, type: "OAuthException", message: "Error validating access token: The session has been invalidated because the user changed their password." } } }));
-    const res = await post("viewed_no_purchase");
+    const res = await post("viewed_no_purchase:1_3");
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: AUDIENCE_TOKEN_EXPIRED, needsReconnect: true, needsTermsAcceptance: false });
     expect(calls).toHaveLength(1);
@@ -166,7 +166,7 @@ describe("Meta says the token is dead (190) before the stored expiry", () => {
   it("other Meta errors are not called a dead token", async () => {
     seed("valid");
     meta(() => ({ status: 400, body: { error: { code: 100, message: "Invalid parameter" } } }));
-    expect(await (await post("abandoned_cart")).json()).toMatchObject({ error: "Invalid parameter", needsReconnect: false });
+    expect(await (await post("abandoned_cart:1_3")).json()).toMatchObject({ error: "Invalid parameter", needsReconnect: false });
   });
 });
 

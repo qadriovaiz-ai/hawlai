@@ -49,6 +49,8 @@ export type LaunchContext = {
   destination: ResolvedDestination;
   targetingLocation?: any;
   retargetAudienceIds?: string[];
+  /** Audiences the ad must never reach — the business's converters (R3). */
+  excludeAudienceIds?: string[];
   scheduledStart?: string | null;
   variantGroupId?: string | null;
   variantLabel?: string | null;
@@ -116,6 +118,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     aiSuggestedCity: plan.targeting_city,
     accessToken: pageAccessToken,
     customAudienceIds: ctx.retargetAudienceIds ?? [],
+    excludedCustomAudienceIds: ctx.excludeAudienceIds ?? [],
   });
 
   // Step 5: campaign
