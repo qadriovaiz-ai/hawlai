@@ -65,6 +65,30 @@ const SUPERLATIVE_WORDS = "best|finest|top[- ]rated|most\\s+trusted|most\\s+love
 const POSSESSIVE_SUPERLATIVE = new RegExp(`\\b(?:india|the\\s+world|the\\s+city|the\\s+country)['’]s\\s+(?:${SUPERLATIVE_WORDS}|top)\\b`, "gi");
 const BEST_SELLING = /\b(?:best[- ]?sell(?:ing|ers?)|top[- ]?sell(?:ing|ers?)|fastest[- ]selling|most[- ]ordered)\b/gi;
 const SCARCITY = /\b(?:selling\s+(?:out\s+)?fast|almost\s+(?:sold\s+out|gone)|only\s+\d+\s+(?:left|pieces?\s+left|in\s+stock)|limited\s+stock|(?:just\s+)?a\s+few\s+left|while\s+stocks?\s+lasts?)\b/gi;
+
+// The same urgency, about a service: "Slots limited", "only 3 seats left",
+// "slots bhar rahe hain".
+//
+// THE LIVE CASE (2026-09-21): a workshop caption ended "₹800 · Slots
+// limited · Book karo". Nothing on record says how many slots a workshop
+// has — a service carries no stock count, deliberately (migration 188:
+// services are booked, never counted). The stock patterns above all talk
+// about pieces and shelves, so every one of these went straight through.
+// Told to a customer, it is an invented reason to hurry.
+const SEATS = "slots?|seats?|spots?|places?|batch(?:es)?";
+const SLOT_SCARCITY = new RegExp(
+  "\\b(?:" +
+    // only 3 slots left / sirf 2 seats bache hain
+    `(?:only|just|sirf|bas)\\s+\\d+\\s+(?:${SEATS})(?:\\s+(?:left|remaining|available|bache(?:\\s+hain)?|baaki(?:\\s+hain)?|reh\\s+gaye))?` +
+    // slots limited / seats filling fast / slots bhar rahe hain
+    `|(?:${SEATS}|booking)s?\\s+(?:are\\s+|is\\s+)?(?:limited|limited\\s+hain|filling\\s+(?:up\\s+)?fast|almost\\s+full|nearly\\s+full|bhar\\s+rahe\\s+hain|bhar\\s+rahi\\s+hain|khatam\\s+ho\\s+rahe\\s+hain)` +
+    // limited slots / limited seats
+    `|limited\\s+(?:${SEATS})` +
+    // a few slots left / last few seats
+    `|(?:a\\s+)?few\\s+(?:${SEATS})\\s+(?:left|remaining)|last\\s+(?:few\\s+)?(?:${SEATS})` +
+    ")\\b",
+  "gi"
+);
 const COMPARATIVE =
   /\b(?:better|cheaper|stronger|safer|longer[- ]lasting|more\s+affordable)\s+than\s+(?!ever\b|before\b|yesterday\b|last\b|you\s+think\b)[\w'-]+|\bunlike\s+(?:other|most|any)\s+(?:brands?|stores?|shops?|sellers?|competitors?|companies)\b|\b(?:cheapest|lowest\s+prices?)\b/gi;
 const GUARANTEE = /\b(?:guarantee[ds]?|money[- ]back|risk[- ]free|100\s*%\s*(?:satisfaction|safe|effective|pure|genuine|results?))\b/gi;
@@ -302,6 +326,7 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
   each(COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports`);
   each(GUARANTEE, (m) => `"${m[0]}" — a guarantee the business hasn't offered`);
   each(SCARCITY, (m) => `"${m[0]}" — urgency about stock that nothing on record supports`);
+  each(SLOT_SCARCITY, (m) => `"${m[0]}" — how many slots are left isn't on record; a service has no stock count, so nothing here backs the hurry`);
 
   // Links to a website that isn't the business's own
   reasons.push(...findUnsupportedLinks(text, f));
