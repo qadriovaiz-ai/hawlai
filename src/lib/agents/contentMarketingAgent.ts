@@ -13,6 +13,7 @@ import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
+import { usesOwnStory, storyForRetry, GENERIC_NOTE } from "@/lib/content/storyEcho";
 import { applyLinkRule, linkRuleNote } from "@/lib/content/platformRules";
 
 // WHY THIS EXISTS (approved 2026-09-18): every caption came out in the
@@ -81,6 +82,7 @@ ${angleFor(topic, recent)}
       : "The owner hasn't written their story down yet, so specifics are thin — write only what the facts support, stay plain, and don't pad with adjectives to fill the gap."
   }
 - Use the owner's story as MATERIAL, not text to paste: take the fact, then write your own sentences about it for this reader. At most ONE short phrase (a few words) in the owner's exact words, where their phrasing is the point. Two pieces about the same fact should share the fact, never the sentences.
+- SHORT DOES NOT MEAN GENERIC. However short the piece — "punchy", "one line", a Reel hook — the specific detail stays; everything else gets cut first. Compress it into a phrase instead of spending a sentence on it. A workshop whose owner once ruined a whole batch by rushing the temperature: "90 minute mein apni pehli candle — bina poora batch jalaaye" says the real thing in four extra words. "Ek candle jo tumhari apni hai" says nothing a competitor couldn't.
 - Write it as one person telling another something true. No stacked adjectives, no rented enthusiasm.
 - These openings and phrasings are worn out — never use them or anything close to them:
 ${TIRED_MOVES.map((m) => `  - ${m}`).join("\n")}
@@ -196,6 +198,22 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
         revised = true;
       }
     }
+
+    // The draft used nothing of the owner's own story: ONE retry at the
+    // same length, told to compress a detail in rather than add words
+    // (lib/content/storyEcho.ts). Only when there IS a story to use, and
+    // only when the first draft missed it — a retry on every piece would
+    // double the cost of the many to fix the few.
+    let generic = false;
+    if (!usesOwnStory(parsed, facts)) {
+      const retried = await retryWithStory(parsed, meta.label, meta.instructions, topic, facts, logContext);
+      if (retried && usesOwnStory(retried, facts)) parsed = retried;
+      else {
+        if (retried) parsed = retried;
+        generic = true;
+      }
+    }
+    if (generic) parsed = { ...parsed, _storyNote: GENERIC_NOTE };
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
     if (!facts) return { output: applyLinkRule(linkRuleFor, parsed).output, ...(revised ? { revised } : {}) };
     // Sentences making claims the facts don't support are removed, and
@@ -211,6 +229,61 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;
+  }
+}
+
+/**
+ * The retry for a draft that used none of the owner's story: the same
+ * piece, the same length, with one detail compressed in.
+ *
+ * Deliberately not "write it again": a fresh generation would drift off
+ * the topic the owner asked for. This edits what's there, which is also
+ * why it keeps the JSON shape.
+ */
+export async function retryWithStory(
+  draft: any,
+  contentLabel: string,
+  formatInstructions: string,
+  topic: string,
+  facts: BusinessFacts | null | undefined,
+  logContext?: { supabase: any; dealershipId: string }
+): Promise<any | null> {
+  const story = storyForRetry(facts);
+  if (!story.length) return null;
+  try {
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `This draft ${contentLabel} uses nothing that belongs to this business. Any competitor could publish it as-is.
+
+The owner's own story — use ONE of these, whichever fits the topic "${topic}":
+${story.map((s) => `- ${s}`).join("\n")}
+
+Rewrite the draft so one of those details is IN it:
+- Keep the same JSON shape, the same language, and the same length. This is a rewrite, not an expansion — if the detail needs room, cut a generic line to make it.
+- Compress the detail into a phrase where the piece is short. A whole sentence about it is only for a piece that has room.
+- Use the detail as material, not a quote: at most a few words in the owner's own phrasing.
+- Never invent anything that isn't in that story, and don't add a claim, number or offer.
+- Keep the format's requirements: ${formatInstructions}
+
+Draft JSON:
+${JSON.stringify(draft).slice(0, 6000)}
+
+Return the edited JSON only — same shape, no markdown, no commentary.`,
+      }],
+    }, { operation: "content_story_retry", logContext });
+    if (!r.ok) return null;
+    const match = r.text.match(/\{[\s\S]*\}/);
+    const clean = (match ? match[0] : r.text).replace(/```json|```/g, "").trim();
+    if (!clean) return null;
+    const retried = JSON.parse(clean);
+    const sameShape = Object.keys(draft ?? {}).every((k) => k.startsWith("_") || k in retried);
+    return sameShape ? retried : null;
+  } catch (err: any) {
+    console.error("[content-marketing-agent] story retry failed:", err.message);
+    return null;
   }
 }
 
