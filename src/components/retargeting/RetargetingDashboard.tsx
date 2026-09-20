@@ -18,6 +18,8 @@ interface Segment {
   label: string;
   /** Null when only Meta can count them (pixel-only audiences). */
   count: number | null;
+  /** Which of the three messages this group's ad is (R4); null when the audience isn't split by recency. */
+  step: { number: number; kind: string; label: string; allowsOffer: boolean } | null;
   valueInr: number | null;
   detail: string | null;
 }
@@ -38,6 +40,7 @@ const ICONS: Record<string, typeof ShoppingCart> = {
 export default function RetargetingDashboard() {
   const router = useRouter();
   const [segments, setSegments] = useState<Segment[] | null>(null);
+  const [frequencyNote, setFrequencyNote] = useState<string | null>(null);
   const [metaAudiences, setMetaAudiences] = useState<MetaAudience[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +53,7 @@ export default function RetargetingDashboard() {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? "Couldn't load");
         setSegments(d.segments ?? []);
+        setFrequencyNote(d.frequencyCapNote ?? null);
         setMetaAudiences(d.metaAudiences ?? []);
       })
       .catch((err) => setError(err.message));
@@ -60,14 +64,14 @@ export default function RetargetingDashboard() {
     return found?.approximate_count ?? null;
   }
 
-  async function createCampaign(audienceKey: string) {
+  async function createCampaign(audienceKey: string, withOffer = true) {
     setBusy(audienceKey);
     setError(null);
     try {
       const res = await fetch("/api/retargeting/campaign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audienceKey, discountPercent: discount ? Number(discount) : null }),
+        body: JSON.stringify({ audienceKey, discountPercent: withOffer && discount ? Number(discount) : null }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Couldn't create the campaign");
@@ -107,6 +111,11 @@ export default function RetargetingDashboard() {
                 <p className="text-2xl font-bold text-slate-900 tabular-nums">{s.count == null ? "—" : s.count.toLocaleString("en-IN")}</p>
                 <p className="text-xs text-slate-500">{s.label}</p>
               </div>
+              {s.step && (
+                <p className="text-[10.5px] text-slate-500">
+                  <span className="font-medium">Message {s.step.number} of 3:</span> {s.step.label}
+                </p>
+              )}
               {s.detail && <p className="text-[10.5px] text-slate-400">{s.detail}</p>}
               {metaCount != null && (
                 <p className="text-[10.5px] text-slate-400">
@@ -119,20 +128,28 @@ export default function RetargetingDashboard() {
                 <>
                   {openFor === s.key ? (
                     <div className="space-y-2 pt-1">
-                      <div>
-                        <label className="block text-[10.5px] text-slate-500 mb-1">Discount to offer (%)</label>
-                        <input
-                          value={discount}
-                          onChange={(e) => setDiscount(e.target.value.replace(/\D/g, "").slice(0, 2))}
-                          placeholder="Leave blank for none"
-                          className="input text-xs"
-                        />
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Only what you enter here gets promised in the ad.
+                      {/* An offer belongs in the last message: someone who was
+                          here yesterday gets a reminder, not a discount. */}
+                      {s.step && !s.step.allowsOffer ? (
+                        <p className="text-[10.5px] text-slate-500">
+                          No offer in this one — it's the {s.step.label.toLowerCase()}. The 15–30 day group is where an offer goes.
                         </p>
-                      </div>
+                      ) : (
+                        <div>
+                          <label className="block text-[10.5px] text-slate-500 mb-1">Discount to offer (%)</label>
+                          <input
+                            value={discount}
+                            onChange={(e) => setDiscount(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                            placeholder="Leave blank for none"
+                            className="input text-xs"
+                          />
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Only what you enter here gets promised in the ad.
+                          </p>
+                        </div>
+                      )}
                       <div className="flex gap-1.5">
-                        <Button onClick={() => createCampaign(s.key)} loading={busy === s.key} size="sm" className="flex-1 justify-center">
+                        <Button onClick={() => createCampaign(s.key, s.step?.allowsOffer !== false)} loading={busy === s.key} size="sm" className="flex-1 justify-center">
                           Create draft
                         </Button>
                         <Button onClick={() => setOpenFor(null)} variant="secondary" size="sm" disabled={busy !== null}>
@@ -155,6 +172,8 @@ export default function RetargetingDashboard() {
       <p className="text-[10.5px] text-slate-400">
         The big number is what happened on your own site. &ldquo;Meta can reach&rdquo; is Meta&apos;s own estimate of how many of those people it can actually match — always lower, and it needs a minimum audience size before an ad will run at all.
       </p>
+      {/* Said plainly rather than implying a cap Meta won't take (R4). */}
+      {frequencyNote && <p className="text-[10.5px] text-slate-400">{frequencyNote}</p>}
     </div>
   );
 }

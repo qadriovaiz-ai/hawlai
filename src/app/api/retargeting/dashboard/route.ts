@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { effectiveBusinessModels } from "@/lib/business/businessModel";
 import { buildSuppressionList, isSuppressed } from "@/lib/ads/audienceHashing";
 import { variantsFor, listMembers } from "@/lib/retargeting/audiences";
+import { stepFor, NO_FREQUENCY_CAP_NOTE } from "@/lib/retargeting/messages";
 
 // Retargeting dashboard — piece 6/7.
 //
@@ -47,7 +48,9 @@ export async function GET() {
 
   const segments = await Promise.all(
     audiences.map(async (v) => {
-      const a = { key: v.id, label: v.label, description: v.description, type: v.def.type };
+      // Which of the three messages this group's ad is (R4).
+      const step = stepFor(v.tier);
+      const a = { key: v.id, label: v.label, description: v.description, type: v.def.type, step: step ? { number: step.step, kind: step.kind, label: step.label, allowsOffer: step.allowsOffer } : null };
       if (v.def.key === "abandoned_cart") {
         // This tier's window, not the whole 30 days.
         const { data: carts } = await service
@@ -65,7 +68,7 @@ export async function GET() {
           return sum + items.reduce((s: number, i: any) => s + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
         }, 0);
         const count = (carts ?? []).length;
-        return { key: a.key, label: a.label, count, valueInr: Math.round(valueInr), detail: count > 0 ? `₹${Math.round(valueInr).toLocaleString("en-IN")} of unconverted carts` : null };
+        return { ...a, count, valueInr: Math.round(valueInr), detail: count > 0 ? `₹${Math.round(valueInr).toLocaleString("en-IN")} of unconverted carts` : null };
       }
       if (v.def.key === "viewed_no_purchase") {
         // Only consented events carry a visitor_id, so this counts distinct
@@ -80,17 +83,17 @@ export async function GET() {
           .lt("created_at", new Date(Date.now() - v.tier!.fromDays * 86_400_000).toISOString())
           .limit(5000);
         const count = new Set((views ?? []).map((e: any) => e.visitor_id)).size;
-        return { key: a.key, label: a.label, count, valueInr: null, detail: count > 0 ? "People who browsed in the last 30 days" : null };
+        return { ...a, count, valueInr: null, detail: count > 0 ? "People who browsed in the last 30 days" : null };
       }
       if (v.def.type === "customer_list") {
         const members = await listMembers(service, dealershipId, v.id, Date.now(), models.models);
         const count = members.filter((m) => (m.phone || m.email) && !isSuppressed(suppression, m.phone, m.email)).length;
-        return { key: a.key, label: a.label, count, valueInr: null, detail: count > 0 ? a.description : null };
+        return { ...a, count, valueInr: null, detail: count > 0 ? a.description : null };
       }
       // Pixel-only: Meta's count is the only one there is.
-      return { key: a.key, label: a.label, count: null, valueInr: null, detail: "Counted by Meta from your pixel — see Meta's estimate once synced" };
+      return { ...a, count: null, valueInr: null, detail: "Counted by Meta from your pixel — see Meta's estimate once synced" };
     })
   );
 
-  return NextResponse.json({ segments, metaAudiences: audiencesRes.data ?? [] });
+  return NextResponse.json({ segments, metaAudiences: audiencesRes.data ?? [], frequencyCapNote: NO_FREQUENCY_CAP_NOTE });
 }

@@ -17,6 +17,7 @@
 
 import { metaPost } from "@/lib/adEngine";
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
+import { frequencyCapFor } from "@/lib/retargeting/messages";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
@@ -159,6 +160,10 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     optimization_goal: destination.optimizationGoal,
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
     targeting: built.targeting,
+    // A frequency cap, where Meta takes one at all — it accepts them on
+    // reach campaigns only, so a Traffic or Leads ad set gets none and the
+    // Retargeting page says so (lib/retargeting/messages.ts).
+    ...(frequencyCapFor(destination.objective) ? { frequency_control_specs: frequencyCapFor(destination.objective)!.specs } : {}),
     status: "PAUSED",
     // Required by LEAD_GENERATION, and rejected on some objectives
     // where it does not apply — so it is sent only when the resolved

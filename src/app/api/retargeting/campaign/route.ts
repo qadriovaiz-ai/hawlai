@@ -5,6 +5,7 @@ import { generateAdPlan } from "@/lib/adEngine";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 import { parseVariant } from "@/lib/retargeting/audiences";
+import { stepFor, messageBrief } from "@/lib/retargeting/messages";
 
 // One-click retargeting campaign — piece 6/7.
 //
@@ -111,17 +112,30 @@ export async function POST(request: Request) {
   // model to invent — an ad promising a discount the business never
   // agreed to is a genuine commercial problem, not just bad copy.
   const pct = Number(discountPercent);
-  const offerText =
+  const authorised =
     typeof customOffer === "string" && customOffer.trim()
       ? `The offer to feature is exactly: "${customOffer.trim()}". Do not invent any other discount or promise.`
       : Number.isFinite(pct) && pct > 0 && pct <= 90
       ? `Feature exactly a ${Math.round(pct)}% discount. Do not invent any other discount, free shipping, or promise beyond that.`
-      : `Do NOT promise any discount, free shipping, or offer — none has been authorised. Persuade on value alone.`;
+      : null;
+
+  // Which of the three messages this is, from the tier (R4). The offer
+  // belongs to the last one: an offer sent to someone who was here
+  // yesterday trains people to wait for a discount, so an offer passed
+  // for an earlier message is refused here rather than quietly dropped.
+  const step = stepFor(variant.tier);
+  if (authorised && step && !step.allowsOffer) {
+    return NextResponse.json(
+      { error: `An offer belongs in the last message. This group saw you ${variant.tier!.label} ago, so its ad is a ${step.label.toLowerCase()} — make the offer ad for the 15–30 day group.`, step: step.step },
+      { status: 400 }
+    );
+  }
 
   // The ad is written from the business's real facts and checked against
   // them before the draft is saved — the launch screen shows the copy
   // itself, so an invented claim has to be gone before it gets there.
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  const offerText = messageBrief(step, facts, { text: authorised });
   // Checked inside generateAdPlan, the same as every other ad.
   const plan: any = await generateAdPlan(
     angle.brief(offerText),
@@ -163,6 +177,7 @@ export async function POST(request: Request) {
     draft,
     plan,
     audienceKey,
+    step: step ? { number: step.step, kind: step.kind, label: step.label } : null,
     // The caller passes this to /api/ads/adlaunch so the campaign
     // targets the audience rather than a cold demographic.
     retargetAudienceKey: audienceKey,
