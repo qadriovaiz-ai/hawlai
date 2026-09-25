@@ -135,9 +135,12 @@ describe("the words are swapped in the blocks the site actually renders", () => 
       ctaText: "Shop Christmas",
     });
 
+    // Stored exactly as written. It used to be wrapped in <p>…</p>,
+    // because the prop is called `html` — and the live page then showed
+    // the tags to every visitor (tests/homepageRendersPlainText.test.ts).
     expect(sections[0].children.map((c: any) => c.props.text ?? c.props.html ?? c.props.label)).toEqual([
       "Light up your Christmas.",
-      "<p>Hand-poured candles for the season.</p>",
+      "Hand-poured candles for the season.",
       "Shop Christmas",
     ]);
     // The gifting section below is untouched.
@@ -155,7 +158,7 @@ describe("the words are swapped in the blocks the site actually renders", () => 
     );
 
     expect(sections[1].children[0].props.text).toBe("Light up your Christmas gifting");
-    expect(sections[1].children[1].props.html).toBe("<p>Gift sets for the season.</p>");
+    expect(sections[1].children[1].props.html).toBe("Gift sets for the season.");
     expect(sections[1].children[2].props.label).toBe("See Christmas gifts");
     // The hero — which the old tool wrongly edited — is untouched.
     expect(sections[0].children[0].props.text).toBe("A mood, not just a candle.");

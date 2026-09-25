@@ -1,6 +1,6 @@
 import type { Block } from "@/lib/blocks/types";
 import type { LandingTheme } from "@/lib/landingThemes";
-import { renderRichText } from "@/lib/richText";
+import { renderRichText, stripTags } from "@/lib/richText";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ProductCatalog from "@/components/website/ProductCatalog";
 import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
@@ -108,7 +108,10 @@ export default function BlockRenderer({ block, ctx }: { block: Block; ctx: Block
     case "heading": {
       const level = Math.min(Math.max(Number(block.props.level) || 2, 1), 3);
       const Tag = `h${level}` as keyof JSX.IntrinsicElements;
-      return <Tag className={`${HEADING_SIZE[level]} ${ALIGN_CLASS[block.props.align] ?? ""} ${hiddenOnMobile(block)}`}>{block.props.text}</Tag>;
+      // Same reason as the text block below: no field here holds HTML, so
+      // a tag that found its way into one is shown to a visitor as
+      // literal characters. See lib/richText.
+      return <Tag className={`${HEADING_SIZE[level]} ${ALIGN_CLASS[block.props.align] ?? ""} ${hiddenOnMobile(block)}`}>{stripTags(String(block.props.text ?? ""))}</Tag>;
     }
 
     case "text":
@@ -130,7 +133,7 @@ export default function BlockRenderer({ block, ctx }: { block: Block; ctx: Block
           className={`inline-block px-6 py-3 rounded-full font-semibold ${hiddenOnMobile(block, "inline-block")}`}
           style={white ? { backgroundColor: "#fff", color: theme.dark } : { backgroundColor: theme.accent, color: theme.accentText }}
         >
-          {block.props.label}
+          {stripTags(String(block.props.label))}
         </a>
       );
     }

@@ -176,7 +176,17 @@ export function applyHomepageCopy(
   if (subheadline) {
     if (targets.subheadline) {
       changed.push({ field: "subheadline", from: stripHtml(targets.subheadline.props.html), to: subheadline });
-      targets.subheadline.props.html = `<p>${subheadline}</p>`;
+      // Stored as written, NOT wrapped in <p>.
+      //
+      // THE LIVE BUG (2026-09-21): it was wrapped, and the homepage then
+      // showed "<p>No paraffin. No synthetic shortcuts…</p>" to every
+      // visitor, tags included. The prop is called `html`, which is what
+      // suggested the wrapping — but it has never held HTML. The text
+      // block renders it through lib/richText, a markdown subset
+      // (**bold**, *italic*, [link](url)) where everything else is
+      // escaped, and the builder's own editor writes markdown into it
+      // too. The name is the only thing that was ever HTML about it.
+      targets.subheadline.props.html = subheadline;
     } else if (targets.legacy) {
       changed.push({ field: "subheadline", from: targets.legacy.subheadline ?? "", to: subheadline });
       targets.legacy.subheadline = subheadline;
