@@ -2,6 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { LeadTemperature, LeadStatus, CallStatus, AppointmentStatus } from "@/types";
 import { readConsent, getVisitorIdIfConsented } from "./consent";
+import { pieceIdFrom } from "./attribution/contentLink";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -200,6 +201,13 @@ export function trackEvent(slug: string, eventType: string, coords?: { xPct: num
         xPct: coords?.xPct,
         yPct: coords?.yPct,
         variant,
+        // Which piece of content sent them here (?hw=, Phase 0). Sent
+        // whether or not they consented, like `variant` and unlike the
+        // UTM tag: it identifies the POST, not the person, and counting
+        // visits per post is the same aggregate site operation as
+        // counting visits per page. Tying it to a person still needs
+        // visitorId, which stays consent-gated below.
+        contentPieceId: pieceIdFrom(typeof window === "undefined" ? "" : window.location.search),
         visitorId: consented ? getVisitorIdIfConsented() : null,
         consentGranted: consented,
         ...(consented ? getUtmParams() : {}),

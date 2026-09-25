@@ -53,7 +53,7 @@ export async function bridgeVisitorTouchpoints(
     const lookback = new Date(Date.now() - BRIDGE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
     const { data: events } = await supabase
       .from("page_events")
-      .select("event_type, created_at, utm_source, utm_medium")
+      .select("event_type, created_at, utm_source, utm_medium, content_piece_id")
       .eq("dealership_id", params.dealershipId)
       .eq("visitor_id", params.visitorId)
       .gte("created_at", lookback)
@@ -82,6 +82,23 @@ export async function bridgeVisitorTouchpoints(
         channel: firstTagged.utm_medium ? `${firstTagged.utm_source}/${firstTagged.utm_medium}` : firstTagged.utm_source,
         occurred_at: firstTagged.created_at,
       });
+    }
+
+    // The piece of content this visitor arrived from (Hawlai Brain,
+    // Phase 0). The FIRST one only: a visitor who read three posts
+    // before enquiring was brought in by the first, and crediting all
+    // three would make every piece look like it produces leads. Written
+    // as its own touchpoint so the channel rows above keep meaning
+    // exactly what they meant before.
+    const firstPiece = events.find((e: { content_piece_id: string | null }) => e.content_piece_id);
+    if (firstPiece) {
+      rows.push({
+        lead_id: params.leadId,
+        dealership_id: params.dealershipId,
+        channel: "content",
+        occurred_at: firstPiece.created_at,
+        content_piece_id: firstPiece.content_piece_id,
+      } as any);
     }
 
     if (rows.length === 0) return;
