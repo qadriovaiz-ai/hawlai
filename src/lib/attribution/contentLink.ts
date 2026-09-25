@@ -47,6 +47,50 @@ export function attributionUrl(url: string, pieceId: string | null | undefined):
   }
 }
 
+/** Where Hawlai's own tracker runs — the only pages a mark can ever report back from. */
+export function trackedHost(): string {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.online").hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "hawlai.online";
+  }
+}
+
+const LINK_IN_TEXT = /(?<![@\w.-])(?:https?:\/\/[^\s<>"'()\[\]]+|www\.[^\s<>"'()\[\]]+)/gi;
+
+function hostOf(url: string): string {
+  try {
+    return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The same copy, with this piece's mark on the links that can actually
+ * report back.
+ *
+ * ONLY links to pages Hawlai serves are marked. A booking link on
+ * Calendly, or any other third party, is left exactly as written: our
+ * tracker never runs there, so a parameter on it would be noise on a
+ * customer's link bought at the price of nothing at all. Trailing
+ * punctuation stays outside the link.
+ */
+export function markTrackedLinks(text: string, pieceId: string | null | undefined): { text: string; marked: number } {
+  if (!isPieceId(pieceId) || !text) return { text: String(text ?? ""), marked: 0 };
+  const host = trackedHost();
+  let marked = 0;
+  const out = String(text).replace(LINK_IN_TEXT, (raw) => {
+    const trail = raw.match(/[.,;:!?]+$/)?.[0] ?? "";
+    const link = trail ? raw.slice(0, -trail.length) : raw;
+    if (hostOf(link) !== host) return raw;
+    const next = attributionUrl(link, pieceId);
+    if (next !== link) marked += 1;
+    return `${next}${trail}`;
+  });
+  return { text: out, marked };
+}
+
 /** The piece id on an incoming URL's query string, if it carries a real one. */
 export function pieceIdFrom(search: string | null | undefined): string | null {
   const s = String(search ?? "");

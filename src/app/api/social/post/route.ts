@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { postPhotoToPage, postTextToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { isPieceId, markTrackedLinks } from "@/lib/attribution/contentLink";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -16,8 +17,22 @@ export async function POST(request: Request) {
   // Three ways in, one posting path: an uploaded photo (the Social
   // page), an image already in storage (chat, which generated it a
   // moment ago and has its URL), or words alone.
-  const { photo_base64, image_url, caption, scheduled_time, post_to_instagram } = await request.json();
+  const { photo_base64, image_url, caption, scheduled_time, post_to_instagram, content_piece_id } = await request.json();
   if (!caption || caption.trim().length < 1) return NextResponse.json({ error: "Caption is required" }, { status: 400 });
+
+  // Which piece of content this post is, so a visit arriving from it can
+  // be counted against it (Hawlai Brain, Phase 0). Confirmed to belong to
+  // this business before it is used — the id arrives in a request body.
+  let pieceId: string | null = null;
+  if (isPieceId(content_piece_id)) {
+    const { data: owned } = await supabase
+      .from("content_pieces")
+      .select("id")
+      .eq("id", content_piece_id)
+      .eq("dealership_id", dealershipId)
+      .maybeSingle();
+    pieceId = owned?.id ?? null;
+  }
 
   const { data: dealership } = await supabase
     .from("dealerships")
@@ -60,9 +75,14 @@ export async function POST(request: Request) {
     // Words alone go to /feed; a picture goes to /photos. Instagram has
     // no text-only post at all, so it is refused below rather than
     // silently skipped.
+    // Facebook keeps real, clickable links, so its copy carries the mark.
+    // Instagram's caption is deliberately left alone: postPhotoToInstagram
+    // replaces every link with "link in bio", so there is nothing there to
+    // mark and Instagram organic stays unattributed by decision.
+    const fbCaption = markTrackedLinks(caption, pieceId).text;
     const result = imageUrl
-      ? await postPhotoToPage(pageId, pageAccessToken, imageUrl, caption, scheduledPublishTime)
-      : await postTextToPage(pageId, pageAccessToken, caption, scheduledPublishTime);
+      ? await postPhotoToPage(pageId, pageAccessToken, imageUrl, fbCaption, scheduledPublishTime)
+      : await postTextToPage(pageId, pageAccessToken, fbCaption, scheduledPublishTime);
 
     let instagramResult: { posted: boolean; id?: string; error?: string } = { posted: false };
     if (post_to_instagram && !imageUrl) {

@@ -71,7 +71,9 @@ describe("what the owner is asked before anything goes live", () => {
 
   it("a caption with no image is Facebook-only, and the confirm says Instagram is skipped", () => {
     const a = socialPublishAction({ caption: "Slow evenings start here." })!;
-    expect(a.payload).toEqual({ caption: "Slow evenings start here.", image_url: null, post_to_instagram: false });
+    // content_piece_id rides along for attribution (Phase 0) — null here
+    // because this caption was never saved as a draft.
+    expect(a.payload).toEqual({ caption: "Slow evenings start here.", image_url: null, post_to_instagram: false, content_piece_id: null });
     expect(a.confirm).toMatch(/Facebook Page right now/);
     expect(a.confirm).toMatch(/Instagram is skipped/);
     expect(a.done).toBe("✅ Posted to Facebook");

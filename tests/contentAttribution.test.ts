@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from "vitest";
 
-import { attributionUrl, pieceIdFrom, isPieceId, PIECE_PARAM } from "@/lib/attribution/contentLink";
+import { attributionUrl, pieceIdFrom, isPieceId, markTrackedLinks, PIECE_PARAM } from "@/lib/attribution/contentLink";
 import { contentResults, MIN_VISITS_TO_RANK } from "@/lib/attribution/contentResults";
 
 const P1 = "11111111-1111-4111-8111-111111111111";
@@ -54,6 +54,36 @@ describe("the mark on a link", () => {
     expect(pieceIdFrom("?hw=1 OR 1=1")).toBeNull();
     expect(pieceIdFrom("")).toBeNull();
     expect(isPieceId("' or true--")).toBe(false);
+  });
+});
+
+describe("marking the links in a caption", () => {
+  it("only links to pages Hawlai serves are marked — the tracker never runs anywhere else", () => {
+    const caption = "Khud dhaalo apni pehli candle. Slots: https://hawlai.online/book/candle-by-qaaf";
+    const r = markTrackedLinks(caption, P1);
+    expect(r.marked).toBe(1);
+    expect(r.text).toContain(`https://hawlai.online/book/candle-by-qaaf?${PIECE_PARAM}=${P1}`);
+  });
+
+  it("A THIRD-PARTY BOOKING LINK IS LEFT ALONE — a parameter there reports nothing", () => {
+    // Calendly won't tell us anything, so marking it is noise added to a
+    // real customer's link for no return.
+    const caption = "Book here: https://calendly.com/candlebyqaaf/workshop";
+    expect(markTrackedLinks(caption, P1)).toEqual({ text: caption, marked: 0 });
+  });
+
+  it("the sentence around the link is untouched, punctuation included", () => {
+    const r = markTrackedLinks("Shop: https://hawlai.online/site/candle-by-qaaf. Aaj hi.", P1);
+    expect(r.text).toBe(`Shop: https://hawlai.online/site/candle-by-qaaf?${PIECE_PARAM}=${P1}. Aaj hi.`);
+    expect(r.text.endsWith(". Aaj hi.")).toBe(true);
+  });
+
+  it("no piece, no change — copy is never rewritten for tracking's sake", () => {
+    const caption = "Shop: https://hawlai.online/site/candle-by-qaaf";
+    expect(markTrackedLinks(caption, null)).toEqual({ text: caption, marked: 0 });
+    expect(markTrackedLinks(caption, "nope")).toEqual({ text: caption, marked: 0 });
+    // And a caption with no link at all is returned as-is.
+    expect(markTrackedLinks("Link in bio.", P1)).toEqual({ text: "Link in bio.", marked: 0 });
   });
 });
 

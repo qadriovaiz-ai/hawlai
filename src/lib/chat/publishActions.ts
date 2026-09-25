@@ -124,7 +124,10 @@ export function socialPublishAction(opts: { caption: string; imageUrl?: string |
       : "This posts live to your Facebook Page right now, where your followers will see it. There's no image on this one, so Instagram is skipped — ask me to generate an image first if you want it there too.",
     endpoint: "/api/social/post",
     method: "POST",
-    payload: { caption, image_url: imageUrl, post_to_instagram: Boolean(imageUrl) },
+    // The draft's id travels with the post so a visit arriving from it
+    // can be counted against it (Hawlai Brain, Phase 0). It is the same
+    // id Reject uses to discard the draft — one piece, one identity.
+    payload: { caption, image_url: imageUrl, post_to_instagram: Boolean(imageUrl), content_piece_id: opts.draftId ?? null },
     done: `✅ Posted to ${channels}`,
     ...(opts.draftId
       ? {
