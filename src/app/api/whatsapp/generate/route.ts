@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { generateWhatsappContent } from "@/lib/agents/whatsappMarketingAgent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
+import { markOutputLinks } from "@/lib/attribution/contentLink";
+import { registerPiece } from "@/lib/attribution/pieces";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -42,6 +44,7 @@ export async function POST(request: Request) {
   if (_aiFailure) return aiFailureResponse(_aiFailure);
 
   let saved = null;
+  let marked = output;
   if (!_fallback) {
     const { data } = await supabase
       .from("whatsapp_marketing_pieces")
@@ -49,9 +52,28 @@ export async function POST(request: Request) {
       .select()
       .single();
     saved = data;
+
+    // WhatsApp has no send capability at all — the owner copies this text
+    // and sends it themselves. So the mark has to be in the words that get
+    // copied, which means marking at save rather than at send, and saving
+    // the marked version so the page and the copy button agree.
+    if (saved?.id) {
+      const pieceId = await registerPiece(supabase, { dealershipId, kind: "whatsapp", sourceId: saved.id, label: topic ?? null });
+      if (pieceId) {
+        marked = markOutputLinks(output, pieceId);
+        const { data: updated } = await supabase
+          .from("whatsapp_marketing_pieces")
+          .update({ output: marked })
+          .eq("id", saved.id)
+          .eq("dealership_id", dealershipId)
+          .select()
+          .single();
+        if (updated) saved = updated;
+      }
+    }
   }
 
-  return NextResponse.json({ output, _fallback, id: saved?.id ?? null });
+  return NextResponse.json({ output: marked, _fallback, id: saved?.id ?? null });
 }
 
 export async function PATCH(request: Request) {

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { postPhotoToPage, postTextToPage, getConnectedInstagramAccountId, postPhotoToInstagram } from "@/lib/agents/socialMediaAgent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { isPieceId, markTrackedLinks } from "@/lib/attribution/contentLink";
+import { registerPiece } from "@/lib/attribution/pieces";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -25,13 +26,15 @@ export async function POST(request: Request) {
   // this business before it is used — the id arrives in a request body.
   let pieceId: string | null = null;
   if (isPieceId(content_piece_id)) {
-    const { data: owned } = await supabase
+    const { data: draft } = await supabase
       .from("content_pieces")
-      .select("id")
+      .select("id, topic")
       .eq("id", content_piece_id)
       .eq("dealership_id", dealershipId)
       .maybeSingle();
-    pieceId = owned?.id ?? null;
+    // Registered on publish, not on generation: a draft that is never
+    // posted is not a published piece and gets no identity.
+    if (draft?.id) pieceId = await registerPiece(supabase, { dealershipId, kind: "content", sourceId: draft.id, label: draft.topic });
   }
 
   const { data: dealership } = await supabase

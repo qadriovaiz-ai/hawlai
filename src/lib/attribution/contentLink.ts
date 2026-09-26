@@ -91,6 +91,27 @@ export function markTrackedLinks(text: string, pieceId: string | null | undefine
   return { text: out, marked };
 }
 
+/**
+ * markTrackedLinks over every string in a generated result, whatever
+ * shape it came back in — a message, a sequence, a set of variants.
+ * Keys starting with "_" are metadata and left alone, the same
+ * convention guardOutput follows.
+ */
+export function markOutputLinks<T>(output: T, pieceId: string | null | undefined): T {
+  if (!isPieceId(pieceId)) return output;
+  const walk = (v: any): any => {
+    if (typeof v === "string") return markTrackedLinks(v, pieceId).text;
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, x] of Object.entries(v)) out[k] = k.startsWith("_") ? x : walk(x);
+      return out;
+    }
+    return v;
+  };
+  return walk(output) as T;
+}
+
 /** The piece id on an incoming URL's query string, if it carries a real one. */
 export function pieceIdFrom(search: string | null | undefined): string | null {
   const s = String(search ?? "");

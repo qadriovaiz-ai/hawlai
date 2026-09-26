@@ -107,25 +107,25 @@ function db(tables: Record<string, any[]>) {
   return { from };
 }
 
-const piece = (id: string, content_type: string) => ({ id, dealership_id: "d1", content_type, topic: "Workshop", created_at: "2026-09-01T00:00:00Z" });
-const view = (id: string | null, n: number) => Array.from({ length: n }, () => ({ dealership_id: "d1", event_type: "view", content_piece_id: id }));
+const piece = (id: string, kind: string) => ({ id, dealership_id: "d1", kind, label: "Workshop", created_at: "2026-09-01T00:00:00Z" });
+const view = (id: string | null, n: number) => Array.from({ length: n }, () => ({ dealership_id: "d1", event_type: "view", marketing_piece_id: id }));
 
 describe("what a piece produced", () => {
   it("visits and leads are counted against the piece that carried the link", async () => {
     const r = await contentResults(
       db({
-        content_pieces: [piece(P1, "instagram_post"), piece(P2, "blog")],
-        page_events: [...view(P1, 25), ...view(P2, 3), { dealership_id: "d1", event_type: "click", content_piece_id: P1 }],
+        marketing_pieces: [piece(P1, "content"), piece(P2, "email")],
+        page_events: [...view(P1, 25), ...view(P2, 3), { dealership_id: "d1", event_type: "click", marketing_piece_id: P1 }],
         lead_touchpoints: [
-          { dealership_id: "d1", lead_id: "l1", content_piece_id: P1 },
-          { dealership_id: "d1", lead_id: "l2", content_piece_id: P1 },
+          { dealership_id: "d1", lead_id: "l1", marketing_piece_id: P1 },
+          { dealership_id: "d1", lead_id: "l2", marketing_piece_id: P1 },
         ],
       }),
       "d1"
     );
 
     const first = r.pieces.find((p) => p.pieceId === P1)!;
-    expect(first).toMatchObject({ visits: 25, clicks: 1, leads: 2, contentType: "instagram_post" });
+    expect(first).toMatchObject({ visits: 25, clicks: 1, leads: 2, kind: "content" });
     expect(first.ranked).toBe(true);
     expect(first.leadRate).toBe(8); // 2/25
     expect(r.totals).toMatchObject({ visits: 28, leads: 2, piecesWithAnyVisit: 2 });
@@ -134,11 +134,11 @@ describe("what a piece produced", () => {
   it("one lead counts once for a piece, however many times it came back", async () => {
     const r = await contentResults(
       db({
-        content_pieces: [piece(P1, "instagram_post")],
+        marketing_pieces: [piece(P1, "content")],
         page_events: view(P1, 30),
         lead_touchpoints: [
-          { dealership_id: "d1", lead_id: "l1", content_piece_id: P1 },
-          { dealership_id: "d1", lead_id: "l1", content_piece_id: P1 },
+          { dealership_id: "d1", lead_id: "l1", marketing_piece_id: P1 },
+          { dealership_id: "d1", lead_id: "l1", marketing_piece_id: P1 },
         ],
       }),
       "d1"
@@ -151,9 +151,9 @@ describe("what a piece produced", () => {
     // decided by the catalogue of pieces, never by the event row.
     const r = await contentResults(
       db({
-        content_pieces: [piece(P1, "instagram_post")],
+        marketing_pieces: [piece(P1, "content")],
         page_events: [...view(P1, 20), ...view(OTHER, 500)],
-        lead_touchpoints: [{ dealership_id: "d1", lead_id: "l1", content_piece_id: OTHER }],
+        lead_touchpoints: [{ dealership_id: "d1", lead_id: "l1", marketing_piece_id: OTHER }],
       }),
       "d1"
     );
@@ -185,23 +185,23 @@ describe("the lead is credited to the piece that brought them in", () => {
   it("ONLY THE FIRST piece gets the credit — a visitor who read three posts was brought in by one", async () => {
     const { bridgeVisitorTouchpoints } = await import("@/lib/agents/touchpointAgent");
     const { supabase, upserted } = bridgeDb([
-      { event_type: "view", created_at: "2026-09-10T10:00:00Z", utm_source: null, utm_medium: null, content_piece_id: P1 },
-      { event_type: "view", created_at: "2026-09-11T10:00:00Z", utm_source: null, utm_medium: null, content_piece_id: P2 },
-      { event_type: "view", created_at: "2026-09-12T10:00:00Z", utm_source: null, utm_medium: null, content_piece_id: P2 },
+      { event_type: "view", created_at: "2026-09-10T10:00:00Z", utm_source: null, utm_medium: null, marketing_piece_id: P1 },
+      { event_type: "view", created_at: "2026-09-11T10:00:00Z", utm_source: null, utm_medium: null, marketing_piece_id: P2 },
+      { event_type: "view", created_at: "2026-09-12T10:00:00Z", utm_source: null, utm_medium: null, marketing_piece_id: P2 },
     ]);
 
     await bridgeVisitorTouchpoints(supabase, { leadId: "l1", dealershipId: "d1", visitorId: "v1" });
 
-    const content = upserted.filter((r) => r.content_piece_id);
+    const content = upserted.filter((r) => r.marketing_piece_id);
     expect(content).toHaveLength(1);
     // Crediting all three would make every piece look like it produces leads.
-    expect(content[0]).toMatchObject({ lead_id: "l1", channel: "content", content_piece_id: P1, occurred_at: "2026-09-10T10:00:00Z" });
+    expect(content[0]).toMatchObject({ lead_id: "l1", channel: "content", marketing_piece_id: P1, occurred_at: "2026-09-10T10:00:00Z" });
   });
 
   it("the channel touchpoints still mean exactly what they meant before", async () => {
     const { bridgeVisitorTouchpoints } = await import("@/lib/agents/touchpointAgent");
     const { supabase, upserted } = bridgeDb([
-      { event_type: "chat_open", created_at: "2026-09-10T10:00:00Z", utm_source: "instagram", utm_medium: "bio", content_piece_id: P1 },
+      { event_type: "chat_open", created_at: "2026-09-10T10:00:00Z", utm_source: "instagram", utm_medium: "bio", marketing_piece_id: P1 },
     ]);
 
     await bridgeVisitorTouchpoints(supabase, { leadId: "l1", dealershipId: "d1", visitorId: "v1" });
@@ -214,7 +214,7 @@ describe("the lead is credited to the piece that brought them in", () => {
   it("no visitor id, nothing bridged — consent still gates the person-level link", async () => {
     const { bridgeVisitorTouchpoints } = await import("@/lib/agents/touchpointAgent");
     const { supabase, upserted } = bridgeDb([
-      { event_type: "view", created_at: "2026-09-10T10:00:00Z", utm_source: null, utm_medium: null, content_piece_id: P1 },
+      { event_type: "view", created_at: "2026-09-10T10:00:00Z", utm_source: null, utm_medium: null, marketing_piece_id: P1 },
     ]);
     await bridgeVisitorTouchpoints(supabase, { leadId: "l1", dealershipId: "d1", visitorId: null });
     expect(upserted).toHaveLength(0);
@@ -226,9 +226,9 @@ describe("it refuses to draw a conclusion it can't support", () => {
     // candle_by_qaaf's actual scale — ~28 visits, 5 leads, spread thin.
     const r = await contentResults(
       db({
-        content_pieces: [piece(P1, "instagram_post"), piece(P2, "blog")],
+        marketing_pieces: [piece(P1, "content"), piece(P2, "email")],
         page_events: [...view(P1, 4), ...view(P2, 2)],
-        lead_touchpoints: [{ dealership_id: "d1", lead_id: "l1", content_piece_id: P1 }],
+        lead_touchpoints: [{ dealership_id: "d1", lead_id: "l1", marketing_piece_id: P1 }],
       }),
       "d1"
     );
@@ -243,7 +243,7 @@ describe("it refuses to draw a conclusion it can't support", () => {
   });
 
   it("nothing tracked yet is said plainly, not shown as zero performance", async () => {
-    const r = await contentResults(db({ content_pieces: [piece(P1, "blog")], page_events: [], lead_touchpoints: [] }), "d1");
+    const r = await contentResults(db({ marketing_pieces: [piece(P1, "content")], page_events: [], lead_touchpoints: [] }), "d1");
     expect(r.pieces).toEqual([]);
     expect(r.thin).toContain("nothing to compare");
   });
@@ -251,9 +251,9 @@ describe("it refuses to draw a conclusion it can't support", () => {
   it("one good piece still isn't a pattern", async () => {
     const r = await contentResults(
       db({
-        content_pieces: [piece(P1, "instagram_post"), piece(P2, "blog")],
+        marketing_pieces: [piece(P1, "content"), piece(P2, "email")],
         page_events: [...view(P1, 40), ...view(P2, 5)],
-        lead_touchpoints: [{ dealership_id: "d1", lead_id: "l1", content_piece_id: P1 }],
+        lead_touchpoints: [{ dealership_id: "d1", lead_id: "l1", marketing_piece_id: P1 }],
       }),
       "d1"
     );

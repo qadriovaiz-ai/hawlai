@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { isPieceId } from "@/lib/attribution/contentLink";
+import { ownedPieceId } from "@/lib/attribution/pieces";
 
 const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "whatsapp_click", "popup_shown"];
 
@@ -29,19 +29,10 @@ export async function POST(request: Request) {
   // RLS off, so the id is only kept once it is confirmed to be a piece
   // belonging to THIS business — otherwise one business's page could
   // write rows against another's content.
-  let piece: string | null = null;
-  if (isPieceId(contentPieceId)) {
-    const { data: owned } = await supabase
-      .from("content_pieces")
-      .select("id")
-      .eq("id", contentPieceId)
-      .eq("dealership_id", dealershipId)
-      .maybeSingle();
-    piece = owned?.id ?? null;
-  }
+  const piece = await ownedPieceId(supabase, dealershipId, contentPieceId);
 
   await supabase.from("page_events").insert({
-    content_piece_id: piece,
+    marketing_piece_id: piece,
     dealership_id: dealershipId,
     event_type: eventType,
     x_pct: typeof xPct === "number" ? xPct : null,

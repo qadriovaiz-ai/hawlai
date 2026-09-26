@@ -7,6 +7,8 @@ import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { recentCopy } from "@/lib/content/recentCopy";
 import { aiFailureLabel } from "@/lib/ai/claude";
+import { markTrackedLinks } from "@/lib/attribution/contentLink";
+import { registerPiece } from "@/lib/attribution/pieces";
 
 /**
  * The words to post, from whatever shape the model returned.
@@ -139,13 +141,35 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
       throw new Error("The generated post had no usable caption text — nothing was posted rather than publishing an image with no words.");
     }
 
+    // An autopilot post is a real published piece, so it gets a real
+    // piece row — which is also what makes it show on the Content
+    // Marketing page beside everything else, instead of existing only in
+    // content_autopilot_log where the owner never sees it.
+    //
+    // Saved BEFORE posting, because the Facebook caption can only carry
+    // the mark once the piece has an identity. If the post then fails,
+    // the row stays as a generated caption the owner can reuse, and the
+    // failure itself is on the Automation Health card as always.
+    const { data: savedPiece } = await supabase
+      .from("content_pieces")
+      .insert({ dealership_id: dealershipId, content_type: "instagram_post", topic: topic || "Autopilot post", output: contentResult.output })
+      .select("id")
+      .single();
+    const pieceId = savedPiece?.id
+      ? await registerPiece(supabase, { dealershipId, kind: "autopilot", sourceId: savedPiece.id, label: topic || "Autopilot post" })
+      : null;
+
     const serviceClient = createServiceClient();
     const filePath = `content-autopilot/${dealershipId}/${Date.now()}.png`;
     await serviceClient.storage.from("ad-creatives").upload(filePath, imageBuffer, { contentType: "image/png", upsert: true });
     const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
     imageUrl = publicUrlData.publicUrl;
 
-    const result = await postPhotoToPage(dealership.fb_page_id, pageToken, imageUrl, caption);
+    // Facebook keeps real links, so its copy carries the mark; the
+    // Instagram call below is given the unmarked caption, since its links
+    // become "link in bio" anyway and Instagram organic stays
+    // unattributed by decision.
+    const result = await postPhotoToPage(dealership.fb_page_id, pageToken, imageUrl, markTrackedLinks(caption, pieceId).text);
     postId = result.id;
     // It IS live from here, so the cadence clock moves regardless of
     // what the read-back finds — otherwise tomorrow's run would publish

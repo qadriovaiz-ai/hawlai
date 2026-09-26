@@ -46,8 +46,8 @@ beforeEach(() => {
   tables = {
     landing_pages: [],
     websites: [{ slug: "candle-by-qaaf", dealership_id: "d1", published: true }],
-    // P1 is candle_by_qaaf's. P2 belongs to another business entirely.
-    content_pieces: [
+    // MINE is candle_by_qaaf's registry row. THEIRS belongs to another business.
+    marketing_pieces: [
       { id: MINE, dealership_id: "d1" },
       { id: THEIRS, dealership_id: "d2" },
     ],
@@ -58,14 +58,14 @@ describe("the piece id on a public event", () => {
   it("this business's own piece is recorded", async () => {
     await call({ slug: "candle-by-qaaf", eventType: "view", contentPieceId: MINE });
     expect(inserted).toHaveLength(1);
-    expect(inserted[0].content_piece_id).toBe(MINE);
+    expect(inserted[0].marketing_piece_id).toBe(MINE);
     expect(inserted[0].dealership_id).toBe("d1");
   });
 
   it("ANOTHER BUSINESS'S PIECE IS DROPPED — the visit is still counted, the credit isn't", async () => {
     await call({ slug: "candle-by-qaaf", eventType: "view", contentPieceId: THEIRS });
     expect(inserted).toHaveLength(1);
-    expect(inserted[0].content_piece_id).toBeNull();
+    expect(inserted[0].marketing_piece_id).toBeNull();
     expect(inserted[0].dealership_id).toBe("d1");
   });
 
@@ -73,7 +73,7 @@ describe("the piece id on a public event", () => {
     for (const bad of ["99999999-9999-4999-8999-999999999999", "' or 1=1 --", "../../admin", "", null, 42, { id: MINE }]) {
       inserted = [];
       await call({ slug: "candle-by-qaaf", eventType: "view", contentPieceId: bad });
-      expect(inserted[0].content_piece_id, String(bad)).toBeNull();
+      expect(inserted[0].marketing_piece_id, String(bad)).toBeNull();
     }
   });
 

@@ -20,12 +20,20 @@ let posted: { fb: string | null; ig: string | null };
 function db() {
   const from = (table: string) => {
     const filters: [string, any][] = [];
+    let insertRow: any = null;
     const rows = () => (tables[table] ?? []).filter((r) => filters.every(([k, v]) => r[k] === v));
     const api: any = {
       select: () => api,
       eq: (k: string, v: any) => (filters.push([k, v]), api),
-      single: async () => ({ data: rows()[0] ?? null, error: null }),
-      maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
+      insert: (row: any) => {
+        // A real uuid, as Postgres would: the mark is only applied to an
+        // id that looks like one, so a fake id would silently skip it.
+        insertRow = { id: crypto.randomUUID(), ...row };
+        (tables[table] ??= []).push(insertRow);
+        return api;
+      },
+      single: async () => ({ data: insertRow ?? rows()[0] ?? null, error: null }),
+      maybeSingle: async () => ({ data: insertRow ?? rows()[0] ?? null, error: null }),
     };
     return api;
   };
@@ -54,10 +62,12 @@ beforeEach(() => {
   tables = {
     profiles: [{ id: "u1", dealership_id: "d1" }],
     dealerships: [{ id: "d1", fb_page_id: "PAGE1", fb_page_access_token: "TOKEN" }],
+    // The draft the card points at, and one belonging to someone else.
     content_pieces: [
-      { id: PIECE, dealership_id: "d1" },
-      { id: THEIRS, dealership_id: "d2" },
+      { id: PIECE, dealership_id: "d1", topic: "Workshop Saturday" },
+      { id: THEIRS, dealership_id: "d2", topic: "Someone else's" },
     ],
+    marketing_pieces: [],
   };
 });
 
@@ -76,7 +86,19 @@ describe("what Facebook actually receives", () => {
   it("THE WIRING: the site link in the posted copy carries the mark", async () => {
     const res = await post({ caption: `Workshop Saturday. Book: ${SITE}`, content_piece_id: PIECE });
     expect(res.status).toBe(200);
-    expect(posted.fb).toBe(`Workshop Saturday. Book: ${SITE}?${PIECE_PARAM}=${PIECE}`);
+
+    // The draft was registered on publish, and the link carries the
+    // REGISTRY id — not the content_pieces id. That is the whole point of
+    // the registry: one identity space, whichever table the draft lives in.
+    const registered = tables.marketing_pieces[0];
+    expect(registered).toMatchObject({ dealership_id: "d1", kind: "content", source_table: "content_pieces", source_id: PIECE, label: "Workshop Saturday" });
+    expect(posted.fb).toBe(`Workshop Saturday. Book: ${SITE}?${PIECE_PARAM}=${registered.id}`);
+  });
+
+  it("publishing the same draft twice registers it once", async () => {
+    await post({ caption: `Book: ${SITE}`, content_piece_id: PIECE });
+    await post({ caption: `Book: ${SITE}`, content_piece_id: PIECE });
+    expect(tables.marketing_pieces).toHaveLength(1);
   });
 
   it("ANOTHER BUSINESS'S PIECE ID MARKS NOTHING", async () => {
@@ -91,7 +113,7 @@ describe("what Facebook actually receives", () => {
 
   it("Instagram's caption is left unmarked — organic Instagram stays unattributed", async () => {
     await post({ caption: `Book: ${SITE}`, image_url: "https://cdn.example/x.png", post_to_instagram: true, content_piece_id: PIECE });
-    expect(posted.fb).toContain(`${PIECE_PARAM}=${PIECE}`);
+    expect(posted.fb).toContain(`${PIECE_PARAM}=${tables.marketing_pieces[0].id}`);
     expect(posted.ig).toBe(`Book: ${SITE}`);
     expect(posted.ig).not.toContain(PIECE_PARAM);
   });

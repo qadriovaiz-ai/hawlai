@@ -21,8 +21,10 @@ export const MIN_PIECES_TO_COMPARE = 3;
 
 export type PieceResult = {
   pieceId: string;
-  contentType: string | null;
-  topic: string | null;
+  /** What was published: content, an unreviewed autopilot post, an email, a WhatsApp draft. */
+  kind: string | null;
+  /** The topic or subject, so results read as words rather than ids. */
+  label: string | null;
   createdAt: string | null;
   visits: number;
   clicks: number;
@@ -64,24 +66,27 @@ export async function contentResults(
   const [{ data: events }, { data: touchpoints }, { data: pieces }] = await Promise.all([
     service
       .from("page_events")
-      .select("event_type, content_piece_id")
+      .select("event_type, marketing_piece_id")
       .eq("dealership_id", dealershipId)
-      .not("content_piece_id", "is", null)
+      .not("marketing_piece_id", "is", null)
       .gte("created_at", from),
     service
       .from("lead_touchpoints")
-      .select("lead_id, content_piece_id")
+      .select("lead_id, marketing_piece_id")
       .eq("dealership_id", dealershipId)
-      .not("content_piece_id", "is", null)
+      .not("marketing_piece_id", "is", null)
       .gte("occurred_at", from),
     service
-      .from("content_pieces")
-      .select("id, content_type, topic, created_at")
+      .from("marketing_pieces")
+      .select("id, kind, label, created_at")
       .eq("dealership_id", dealershipId),
   ]);
 
-  const known = new Map<string, { content_type: string | null; topic: string | null; created_at: string | null }>();
-  for (const p of pieces ?? []) known.set(p.id, { content_type: p.content_type ?? null, topic: p.topic ?? null, created_at: p.created_at ?? null });
+  // The registry is what decides a piece belongs to this business
+  // (migration 197): every row read here was selected by dealership_id,
+  // so an id seen on an event that isn't in this map is not counted.
+  const known = new Map<string, { kind: string | null; label: string | null; created_at: string | null }>();
+  for (const p of pieces ?? []) known.set(p.id, { kind: p.kind ?? null, label: p.label ?? null, created_at: p.created_at ?? null });
 
   const rows = new Map<string, PieceResult>();
   const row = (id: string): PieceResult => {
@@ -90,8 +95,8 @@ export async function contentResults(
       const meta = known.get(id);
       r = {
         pieceId: id,
-        contentType: meta?.content_type ?? null,
-        topic: meta?.topic ?? null,
+        kind: meta?.kind ?? null,
+        label: meta?.label ?? null,
         createdAt: meta?.created_at ?? null,
         visits: 0, clicks: 0, formSubmits: 0, leads: 0, leadRate: null, ranked: false,
       };
@@ -103,8 +108,8 @@ export async function contentResults(
   for (const e of events ?? []) {
     // A piece that no longer belongs to this business (or was deleted)
     // is not counted — the id alone is never taken as proof of ownership.
-    if (!known.has(e.content_piece_id)) continue;
-    const r = row(e.content_piece_id);
+    if (!known.has(e.marketing_piece_id)) continue;
+    const r = row(e.marketing_piece_id);
     if (e.event_type === EVENT.view) r.visits += 1;
     else if (e.event_type === EVENT.click) r.clicks += 1;
     else if (e.event_type === EVENT.form) r.formSubmits += 1;
@@ -113,11 +118,11 @@ export async function contentResults(
   // One lead counts once for a piece however many times it was touched.
   const seen = new Set<string>();
   for (const t of touchpoints ?? []) {
-    if (!known.has(t.content_piece_id)) continue;
-    const key = `${t.content_piece_id}:${t.lead_id}`;
+    if (!known.has(t.marketing_piece_id)) continue;
+    const key = `${t.marketing_piece_id}:${t.lead_id}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    row(t.content_piece_id).leads += 1;
+    row(t.marketing_piece_id).leads += 1;
   }
 
   for (const r of rows.values()) {
