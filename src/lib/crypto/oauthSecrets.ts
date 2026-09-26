@@ -38,7 +38,7 @@
 
 import { resolveSecret, encryptSecret } from "./secretCrypto";
 
-export type OAuthProvider = "gmail" | "youtube" | "google_ads" | "linkedin" | "pinterest" | "snapchat";
+export type OAuthProvider = "gmail" | "youtube" | "google_ads" | "linkedin" | "pinterest" | "snapchat" | "search_console";
 export type TokenKind = "access_token" | "refresh_token";
 
 type Row = Record<string, any> | null | undefined;

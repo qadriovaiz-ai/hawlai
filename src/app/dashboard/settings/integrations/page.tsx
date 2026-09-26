@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, ArrowRight, Globe, FileText, Radio, Star } from "lucide-react";
+import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, ArrowRight, Globe, FileText, Radio, Star, Search } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import InstagramBusinessLoginConnect from "@/components/settings/InstagramBusinessLoginConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
@@ -33,13 +33,18 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, pinterest_access_token_encrypted, snapchat_access_token, snapchat_access_token_encrypted, linkedin_access_token, linkedin_access_token_encrypted")
+    .select("fb_page_id, gmail_email, search_console_email, search_console_site_url, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, pinterest_access_token_encrypted, snapchat_access_token, snapchat_access_token_encrypted, linkedin_access_token, linkedin_access_token_encrypted")
     .eq("id", dealershipId)
     .single();
 
   const isMetaConnected = !!dealership?.fb_page_id;
   const isGmailConnected = !!dealership?.gmail_email;
   const isGoogleAdsConnected = !!dealership?.google_ads_email;
+  // Connected and READING are different states: an account can be linked
+  // with no matching verified property, and saying "Connected" then would
+  // be a quiet lie about whether any data is coming in.
+  const isSearchConsoleConnected = !!dealership?.search_console_email;
+  const searchConsoleProperty = dealership?.search_console_site_url as string | null | undefined;
   const isYoutubeConnected = !!dealership?.youtube_channel_title;
   // hasToken(), not readToken(): whether a connection exists is
   // answerable without decrypting one, and a settings page has no
@@ -63,6 +68,21 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         </div>
       </div>
 
+      {params.search_console_error && (
+        <div className="card p-3 text-xs text-red-300 border-red-500/30">
+          Search Console connection failed: {decodeURIComponent(params.search_console_error)}
+        </div>
+      )}
+      {params.search_console_note && (
+        <div className="card p-3 text-xs text-amber-300 border-amber-500/30">
+          {decodeURIComponent(params.search_console_note)}
+        </div>
+      )}
+      {params.search_console === "connected" && !params.search_console_note && (
+        <div className="card p-3 text-xs text-green-300 border-green-500/30">
+          Search Console connected — Hawlai can now read the searches people actually used to find you.
+        </div>
+      )}
       {params.google_ads_error && (
         <div className="bg-red-500/10 border border-red-700/40 rounded-lg p-3 text-sm text-red-400">
           Google Ads connection failed: {decodeURIComponent(params.google_ads_error)}
@@ -117,6 +137,33 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             <Link href="/dashboard/settings/connect-facebook" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
             </Link>
+          )}
+        </div>
+
+        {/* Google Search Console */}
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-sky-500/20 rounded-lg flex items-center justify-center shrink-0">
+              <Search className="w-4 h-4 text-sky-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Google Search Console</p>
+              <p className="text-xs text-slate-400">The searches people really used to find you</p>
+            </div>
+          </div>
+          {isSearchConsoleConnected ? (
+            <div className="space-y-1">
+              <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.search_console_email})</span>
+              {searchConsoleProperty ? (
+                <p className="text-xs text-slate-400 break-all">Reading: {searchConsoleProperty}</p>
+              ) : (
+                <p className="text-xs text-amber-400">No verified property matched this business yet — add your site in Search Console, then connect again.</p>
+              )}
+            </div>
+          ) : (
+            <a href="/api/auth/search-console/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
+              Connect <ArrowRight className="w-3 h-3" />
+            </a>
           )}
         </div>
 
