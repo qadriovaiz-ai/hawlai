@@ -10,6 +10,7 @@
 
 import { getModel } from "../models";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
+import { recordPresence, aeoTrend, recordAeoSignals, type AeoTrend } from "@/lib/seo/aeoPresence";
 
 export interface AeoCheckResult {
   visibilityScore: number;
@@ -18,6 +19,8 @@ export interface AeoCheckResult {
   competitivePositioning: { promptTested: string; mentioned: boolean; competitorsMentioned: string[] }[];
   recommendations: { title: string; detail: string }[];
   disclosure: string;
+  /** How this run compares with the last one — only when the fixed question set was used. */
+  trend?: AeoTrend;
 }
 
 interface DealershipContext {
@@ -57,7 +60,14 @@ export async function generateAeoCheck(
   businessCategory: string,
   brandProfile?: DealershipContext | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  /**
+   * The fixed question set (lib/seo/aeoQuestions.ts). Same every run, so
+   * presence can be compared run to run — see migration 199. Empty falls
+   * back to the old behaviour of letting the model choose, which still
+   * gives a usable snapshot, just not a trend.
+   */
+  questions: string[] = []
 ): Promise<{ output: AeoCheckResult; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const fallback = {
     output: {
@@ -108,7 +118,9 @@ export async function generateAeoCheck(
 
 Do this in order:
 
-1. Generate 3-4 realistic buyer-intent questions someone in India would actually ask an AI assistant when deciding on a ${businessCategory}${city ? ` in ${city}` : ""} — mix a plain category-recommendation phrasing with at least one value/trust-framed phrasing ("best affordable...", "is [category] worth it"), not just the single most literal wording.
+1. ${questions.length
+          ? `Test EXACTLY these questions, word for word, and return them unchanged as "promptTested" — they are the same every run so this business's presence can be tracked over time, and rewording one breaks that comparison:\n${questions.map((q) => `   - "${q}"`).join("\n")}`
+          : `Generate 3-4 realistic buyer-intent questions someone in India would actually ask an AI assistant when deciding on a ${businessCategory}${city ? ` in ${city}` : ""} — mix a plain category-recommendation phrasing with at least one value/trust-framed phrasing ("best affordable...", "is [category] worth it"), not just the single most literal wording.`}
 2. For EACH question, use web search to find out what's genuinely being said about businesses in this category/city right now, then judge: would "${dealershipName}" plausibly be named in a synthesized answer to that question, and which other real businesses/brands would likely be named instead or alongside it. Base this on what you actually find — never invent that a business was mentioned somewhere it wasn't, and say so plainly if you can't find enough to judge either way.
 3. ${hasSite ? "Score this business's actual homepage content (given above) for AI-answer-engine citability" : "Give a lower-confidence, category-general citability assessment — no actual site content was available to analyze"} against these signals: does it open with a direct-answer statement rather than a slow build-up; is there FAQ-style content; how fresh is the content; is there any structured/schema-markup signal. Produce an overall 0-100 score.
 4. Write 3-5 concrete, structural recommendations (not generic marketing advice) to improve citability — ground these in whatever AEO/GEO knowledge appears in the context above if present, rather than generic knowledge.
@@ -125,16 +137,35 @@ Return JSON only, no markdown, no preamble, this exact shape:
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
-    return {
-      output: {
-        visibilityScore: Math.max(0, Math.min(100, Number(parsed.visibilityScore) || 0)),
-        scoreLabel: String(parsed.scoreLabel || "Content citability"),
-        scoreBreakdown: Array.isArray(parsed.scoreBreakdown) ? parsed.scoreBreakdown : [],
-        competitivePositioning: Array.isArray(parsed.competitivePositioning) ? parsed.competitivePositioning : [],
-        recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
-        disclosure: DISCLOSURE,
-      },
+    const output: AeoCheckResult = {
+      visibilityScore: Math.max(0, Math.min(100, Number(parsed.visibilityScore) || 0)),
+      scoreLabel: String(parsed.scoreLabel || "Content citability"),
+      scoreBreakdown: Array.isArray(parsed.scoreBreakdown) ? parsed.scoreBreakdown : [],
+      competitivePositioning: Array.isArray(parsed.competitivePositioning) ? parsed.competitivePositioning : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+      disclosure: DISCLOSURE,
     };
+
+    // Stored here rather than at each caller, so the page and chat both
+    // build the same history without either having to remember to
+    // (migration 199). Only when the questions were the fixed set —
+    // storing a run of invented questions would put uncomparable rows in
+    // a table whose whole purpose is comparison.
+    if (logContext && questions.length && output.competitivePositioning.length) {
+      const rows = output.competitivePositioning
+        .filter((p) => p?.promptTested)
+        .map((p) => ({ question: String(p.promptTested).trim(), mentioned: Boolean(p.mentioned), competitors: p.competitorsMentioned ?? [] }));
+      const runId = await recordPresence(logContext.supabase, logContext.dealershipId, rows, output.visibilityScore);
+      if (runId) {
+        const trend = await aeoTrend(logContext.supabase, logContext.dealershipId);
+        if (trend) {
+          output.trend = trend;
+          await recordAeoSignals(logContext.supabase, logContext.dealershipId, trend);
+        }
+      }
+    }
+
+    return { output };
   } catch (err: any) {
     console.error("[aeo-agent] error:", err.message);
     return fallback;

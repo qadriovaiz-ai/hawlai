@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSeoTask } from "@/lib/agents/seoToolkitAgent";
 import { generateAeoCheck } from "@/lib/agents/aeoAgent";
+import { aeoQuestionsFor } from "@/lib/seo/aeoQuestions";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
         dealership?.business_category ?? "business",
         brandProfile,
         { supabase, dealershipId }
-      , factsPrompt(facts))
+      , factsPrompt(facts), aeoQuestionsFor(dealership, facts))
     : await generateSeoTask(
         taskType,
         dealership?.dealership_name ?? "the business",

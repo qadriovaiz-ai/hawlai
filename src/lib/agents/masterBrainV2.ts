@@ -852,8 +852,13 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // site read that generateSeoTask's single-templated-prompt runner
       // can't do — dispatched to its own function instead. See
       // seoToolkitAgent.ts's SEO_TASKS entry for the full explanation.
+      // The same fixed question set the SEO page uses (migration 199) —
+      // two callers each inventing their own would quietly break the
+      // run-to-run comparison the whole thing exists for.
+      const { aeoQuestionsFor } = await import("../seo/aeoQuestions");
+      const seoFacts = input.taskType === "aeo_check" ? await factsFor(supabase, ctx) : null;
       const { output, _fallback } = input.taskType === "aeo_check"
-        ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext)
+        ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, aeoQuestionsFor({ business_category: ctx.category, city: ctx.city }, seoFacts))
         : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck(output, resolvedBrandVoice);
