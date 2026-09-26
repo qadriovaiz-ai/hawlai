@@ -16,6 +16,7 @@ import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
 import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
+import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -40,4 +41,8 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   lead_scoring: (s, id) => scoreActiveLeads(s, id),
   stale_approvals: (s, id) => checkStalePendingApprovals(s, id),
   lead_export: (s, id) => runScheduledLeadExport(s, id),
+  // Reads stored pages and runs pure code — no AI call, no web request —
+  // so it belongs in the database-only group and costs nothing to run
+  // daily for every business (lib/seo/technicalAudit.ts).
+  site_audit: (s, id) => runTechnicalAudit(s, id),
 };

@@ -17,6 +17,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 
 import { GROUPS } from "@/lib/automation/cronGroups";
+import { DAILY_RUNNERS } from "@/lib/automation/dailyRunners";
 
 const ROUTE = "src/app/api/autopilot/daily-run/route.ts";
 const source = fs.readFileSync(ROUTE, "utf8");
@@ -31,9 +32,12 @@ describe("subsystem grouping", () => {
     expect(Object.keys(groups).sort()).toEqual(["heavy", "signals"]);
   });
 
-  it("covers all fifteen per-dealership subsystems", () => {
+  it("covers every per-dealership subsystem, and every one has a runner", () => {
     const all = Object.values(groups).flat();
-    expect(all).toHaveLength(15);
+    // Counting them was the old check; comparing against the runner table
+    // is the one that actually matters — a subsystem in a group with no
+    // runner, or a runner in no group, both fail silently in production.
+    expect(all.sort()).toEqual(Object.keys(DAILY_RUNNERS).sort());
   });
 
   it("assigns every subsystem to exactly ONE group", () => {
