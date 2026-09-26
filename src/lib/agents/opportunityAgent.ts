@@ -176,6 +176,25 @@ async function detectCandidates(supabase: any, dealershipId: string): Promise<Ca
     }
   }
 
+  // 9. What the market itself is saying (Brain, Phase 2). Derived in code
+  // from counted demand, the real catalogue and what other departments
+  // have filed — see lib/opportunities/marketOpportunities.ts for why
+  // this produces bands rather than a score out of a hundred. Reads only;
+  // a failure here leaves the rest of the feed intact.
+  try {
+    const { marketOpportunities } = await import("@/lib/opportunities/marketOpportunities");
+    const { topQueries } = await import("@/lib/seo/searchQueries");
+    const { readSignals } = await import("@/lib/signals/signals");
+    const [queries, signals, { data: products }] = await Promise.all([
+      topQueries(supabase, dealershipId, 50),
+      readSignals(supabase, dealershipId, { limit: 40 }),
+      supabase.from("products").select("name").eq("dealership_id", dealershipId).eq("is_active", true),
+    ]);
+    candidates.push(...marketOpportunities({ queries, signals, catalogue: products ?? [] }));
+  } catch (err: any) {
+    console.error("[opportunity-agent] market opportunities skipped:", err?.message);
+  }
+
   return candidates;
 }
 
