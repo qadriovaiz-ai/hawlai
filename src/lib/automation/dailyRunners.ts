@@ -18,6 +18,7 @@ import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetect
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
+import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -50,4 +51,8 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // the database-only one. Costs nothing in AI, and businesses with no
   // Search Console connection return a reason and stop.
   search_console_sync: (s, id) => syncSearchQueries(s, id),
+  // Arithmetic over stored attribution rows — no AI, no third party — so
+  // it sits with the database-only work. Says what it can't tell yet as
+  // readily as what it can (lib/attribution/performanceBrain.ts).
+  content_performance: (s, id) => runContentPerformance(s, id),
 };

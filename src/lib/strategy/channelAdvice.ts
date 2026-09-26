@@ -13,6 +13,7 @@ import { getModel } from "@/lib/models";
 import { formatFactsForCopy, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { diagnosisNumbers, formatDiagnosisForPrompt, type Diagnosis } from "./diagnosis";
 import { formatSignalsForPrompt, type StoredSignal } from "@/lib/signals/signals";
+import { convergences, formatConvergencesForPrompt } from "@/lib/signals/crossIntelligence";
 
 export type Recommendation = { title: string; action: string; evidence: string };
 
@@ -205,10 +206,14 @@ export async function generateChannelAdvice(
   signals: StoredSignal[] = []
 ): Promise<AdviceResult> {
   const signalSection = formatSignalsForPrompt(signals);
+  // Where separate departments independently noticed the same thing
+  // (lib/signals/crossIntelligence.ts). Counted from the signals already
+  // in hand, so this costs nothing and adds no call.
+  const agreementSection = formatConvergencesForPrompt(convergences(signals));
   const prompt = `You are a marketing strategist advising where this business should put its effort next.
 
 ${formatDiagnosisForPrompt(d)}
-${facts ? `\n${formatFactsForCopy(facts)}\n` : ""}${signalSection ? `\n${signalSection}\n` : ""}
+${facts ? `\n${formatFactsForCopy(facts)}\n` : ""}${signalSection ? `\n${signalSection}\n` : ""}${agreementSection ? `\n${agreementSection}\n` : ""}
 ${PROMPT_RULES}${signalSection ? `\n${SIGNAL_RULES}` : ""}
 - Keep it short: summary at most 3 sentences; each action at most 2 sentences; at most 4 dataGaps, one sentence each.
 
