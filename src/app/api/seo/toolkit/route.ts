@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateSeoTask } from "@/lib/agents/seoToolkitAgent";
 import { generateAeoCheck } from "@/lib/agents/aeoAgent";
 import { aeoQuestionsFor } from "@/lib/seo/aeoQuestions";
+import { topQueries } from "@/lib/seo/searchQueries";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
@@ -28,6 +29,9 @@ export async function POST(request: Request) {
 
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  // This business's real search terms, when it has connected Search
+  // Console (migration 201) — what replaces the guessed keyword list.
+  const searchTerms = await topQueries(supabase, dealershipId);
 
   const { output, _fallback, _aiFailure } = taskType === "aeo_check"
     ? await generateAeoCheck(
@@ -44,7 +48,7 @@ export async function POST(request: Request) {
         dealership?.business_category ?? "business",
         brandProfile,
         { supabase, dealershipId }
-      , factsPrompt(facts));
+      , factsPrompt(facts), searchTerms);
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   if (_aiFailure) return aiFailureResponse(_aiFailure);
 

@@ -17,6 +17,7 @@ import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
+import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -45,4 +46,8 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // so it belongs in the database-only group and costs nothing to run
   // daily for every business (lib/seo/technicalAudit.ts).
   site_audit: (s, id) => runTechnicalAudit(s, id),
+  // A third-party API call, so it belongs in the heavy group rather than
+  // the database-only one. Costs nothing in AI, and businesses with no
+  // Search Console connection return a reason and stop.
+  search_console_sync: (s, id) => syncSearchQueries(s, id),
 };

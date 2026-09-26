@@ -40,6 +40,22 @@ interface DealershipContext {
 
 import { getModel } from "../models";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
+import { formatQueriesForPrompt } from "@/lib/seo/searchQueries";
+import type { QueryRow } from "@/lib/seo/searchConsole";
+
+/**
+ * What to ask for INSTEAD of the static instruction, once this business's
+ * real search terms are available (migration 201).
+ *
+ * The static instruction for competitor_keywords asks for keywords
+ * competitors are "probably" ranking for — a guess, politely worded.
+ * With Search Console connected there is no need to guess: the terms
+ * people actually typed are in the prompt, with Google's own counts.
+ */
+const REAL_DATA_INSTRUCTIONS: Record<string, string> = {
+  competitor_keywords:
+    `Work ONLY from the real search terms given above. Return the 10 most worth acting on as {"keywords": [{"keyword": "...", "intent": "informational" | "transactional", "note": "one short sentence on what that term's own numbers show and what to do about it — quote the impressions, clicks or position exactly as given"}]}. Prefer terms the business is already seen for but never clicked on, and terms sitting just below the top of the results, because those are the ones already earning attention. Never add a term that is not in the list above, and never state a search volume or a ranking figure that is not printed there.`,
+};
 
 export async function generateSeoTask(
   taskKey: string,
@@ -48,10 +64,18 @@ export async function generateSeoTask(
   businessCategory: string,
   brandProfile?: DealershipContext | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  /** This business's real Search Console terms, when it has connected one. */
+  searchTerms: QueryRow[] = []
 ): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = SEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
+
+  // Real data replaces the guess where there is real data, and the task
+  // falls back to its old wording where there isn't — an owner with no
+  // Search Console connection still gets the same help as before.
+  const searchSection = formatQueriesForPrompt(searchTerms);
+  const requirements = searchSection && REAL_DATA_INSTRUCTIONS[taskKey] ? REAL_DATA_INSTRUCTIONS[taskKey] : meta.instructions;
 
   const fallback = {
     output: { text: aiFailureMessage("bad_request") },
@@ -65,10 +89,12 @@ export async function generateSeoTask(
       messages: [{
         role: "user",
         content: `You are an SEO specialist working on an Indian ${businessCategory} business called "${dealershipName}"${city ? `, based in ${city}` : ""}.
-${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}
+${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}${searchSection ? `
+
+${searchSection}` : ""}
 
 Task: ${meta.label}
-Requirements: ${meta.instructions}
+Requirements: ${requirements}
 
 Return JSON only, no markdown, no preamble. Shape the JSON to match the requirements exactly (use the field names implied above). Be specific to this business type and city — never generic filler, and never invent fake statistics or ranking data.`,
       }],

@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 // so encryption is exercised for real rather than stubbed out.
 process.env.MARKETING_ENCRYPTION_KEY = process.env.MARKETING_ENCRYPTION_KEY ?? "a".repeat(64);
 
-import { matchProperty, readConnection, validAccessToken, fetchQueries, SEARCH_CONSOLE_SELECT } from "@/lib/seo/searchConsole";
+import { matchProperty, readConnection, validAccessToken, fetchQueries, searchConsoleSelect } from "@/lib/seo/searchConsole";
 import { tokenWrite, tokenClear, hasToken } from "@/lib/crypto/oauthSecrets";
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
@@ -109,13 +109,13 @@ describe("the stored connection", () => {
 
   it("the select asks for everything the connection needs", () => {
     for (const col of ["search_console_access_token_encrypted", "search_console_refresh_token_encrypted", "search_console_token_expiry", "search_console_site_url"]) {
-      expect(SEARCH_CONSOLE_SELECT).toContain(col);
+      expect(searchConsoleSelect()).toContain(col);
     }
   });
 
   it("migration 200 creates every column the code reads", () => {
     const sql = readFileSync("supabase/migrations/200_search_console.sql", "utf8");
-    for (const col of SEARCH_CONSOLE_SELECT.split(",").map((c) => c.trim())) {
+    for (const col of searchConsoleSelect().split(",").map((c) => c.trim())) {
       expect(sql, col).toContain(col);
     }
   });

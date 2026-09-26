@@ -14,7 +14,17 @@ import { readToken, tokenSelect, tokenWrite } from "@/lib/crypto/oauthSecrets";
 
 const API = "https://www.googleapis.com/webmasters/v3";
 
-export const SEARCH_CONSOLE_SELECT = `${tokenSelect("search_console")}, search_console_token_expiry, search_console_email, search_console_site_url`;
+/**
+ * The columns a connection needs, as a function rather than a constant.
+ *
+ * Computed on call, not at module load: a constant here ran tokenSelect()
+ * the moment anything imported this file, which broke an unrelated test
+ * that partially mocks the crypto helpers — and load-time work that can
+ * fail is worth avoiding regardless of who notices it first.
+ */
+export function searchConsoleSelect(): string {
+  return `${tokenSelect("search_console")}, search_console_token_expiry, search_console_email, search_console_site_url`;
+}
 
 export type SearchConsoleConnection = {
   accessToken: string;

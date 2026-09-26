@@ -859,7 +859,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const seoFacts = input.taskType === "aeo_check" ? await factsFor(supabase, ctx) : null;
       const { output, _fallback } = input.taskType === "aeo_check"
         ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, aeoQuestionsFor({ business_category: ctx.category, city: ctx.city }, seoFacts))
-        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
+        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id));
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck(output, resolvedBrandVoice);
     }

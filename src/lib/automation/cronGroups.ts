@@ -27,7 +27,7 @@ export type SubsystemKey =
   | "daily_autopilot" | "content_autopilot" | "report_snapshots"
   | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
   | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
-  | "lead_scoring" | "stale_approvals" | "lead_export" | "site_audit";
+  | "lead_scoring" | "stale_approvals" | "lead_export" | "site_audit" | "search_console_sync";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
@@ -44,6 +44,7 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     "content_autopilot",
     "google_reviews", "competitor_alerts", "topic_alerts",
     "report_snapshots",
+    "search_console_sync",
     "daily_autopilot",
   ],
 };
