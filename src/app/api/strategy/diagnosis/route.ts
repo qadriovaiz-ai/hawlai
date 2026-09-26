@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { loadDiagnosis } from "@/lib/strategy/diagnosis";
 import { generateChannelAdvice, ADVICE_FAILURE_MESSAGE } from "@/lib/strategy/channelAdvice";
+import { readSignals } from "@/lib/signals/signals";
 
 // The advice is a model call that may be retried once — room for both.
 export const maxDuration = 60;
@@ -29,7 +30,11 @@ export async function GET(request: Request) {
   if (!wantAdvice) return NextResponse.json({ diagnosis });
 
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const result = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId });
+  // What the other departments have noticed (migration 198) — a plain
+  // read of a store the daily monitors already fill, so this costs no
+  // extra AI call. Capped so the prompt stays a sensible size.
+  const signals = await readSignals(supabase, dealershipId, { limit: 12 });
+  const result = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId }, signals);
   if (!result.ok) {
     // The reason is said, not hidden: it's what makes the next failure
     // diagnosable without anyone reading a server log.

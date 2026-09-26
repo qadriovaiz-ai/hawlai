@@ -2338,9 +2338,13 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
     case "diagnose_business": {
       const { loadDiagnosis } = await import("../strategy/diagnosis");
       const { generateChannelAdvice } = await import("../strategy/channelAdvice");
+      const { readSignals } = await import("../signals/signals");
       const diagnosis = await loadDiagnosis(supabase, ctx.id);
       const facts = await factsFor(supabase, ctx);
-      const adviceResult = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId: ctx.id });
+      // Same signals the Strategy page reads (migration 198): a store
+      // read, not another AI call.
+      const adviceSignals = await readSignals(supabase, ctx.id, { limit: 12 });
+      const adviceResult = await generateChannelAdvice(diagnosis, facts, { supabase, dealershipId: ctx.id }, adviceSignals);
       const advice = adviceResult.ok ? adviceResult.advice : null;
       return {
         diagnosis,

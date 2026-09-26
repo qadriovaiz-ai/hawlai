@@ -12,6 +12,7 @@ import { callClaude, aiFailureMessage, isPlatformOutage, type AiFailure } from "
 import { getModel } from "@/lib/models";
 import { formatFactsForCopy, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { diagnosisNumbers, formatDiagnosisForPrompt, type Diagnosis } from "./diagnosis";
+import { formatSignalsForPrompt, type StoredSignal } from "@/lib/signals/signals";
 
 export type Recommendation = { title: string; action: string; evidence: string };
 
@@ -47,9 +48,48 @@ export function unverifiedNumbers(text: string, allowed: Set<string>): string[] 
   return out;
 }
 
+/**
+ * The figures a signal puts in front of the model (Brain, Phase 0b).
+ *
+ * THE INTERACTION THIS EXISTS FOR: every number the model quotes is
+ * checked against the diagnosis, and anything else is thrown away. Hand
+ * it signals without widening that set and the advice silently loses
+ * every line that cites one — the feature would look wired up and
+ * quietly do nothing.
+ *
+ * Only what is actually printed in the prompt counts: a signal's summary
+ * and the values of its evidence. Not the source URL, which carries
+ * version numbers and ids that are not claims about anything.
+ */
+export function signalNumbers(signals: StoredSignal[]): Set<string> {
+  const out = new Set<string>();
+  const addFrom = (text: string) => {
+    for (const m of String(text ?? "").matchAll(/\d[\d,]*(?:\.\d+)?/g)) out.add(normaliseNumber(m[0]));
+  };
+  const walk = (v: unknown): void => {
+    if (typeof v === "number" && Number.isFinite(v)) {
+      out.add(String(v));
+      out.add(String(Math.round(v)));
+      return;
+    }
+    if (typeof v === "string") return addFrom(v);
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (v && typeof v === "object") return Object.values(v).forEach(walk);
+  };
+  for (const s of signals) {
+    addFrom(s.summary);
+    walk(s.evidence);
+  }
+  return out;
+}
+
 /** Keeps only what the diagnosis backs. Pure, so the rule is tested directly. */
-export function verifyAdvice(raw: { summary?: unknown; recommendations?: unknown; dataGaps?: unknown }, d: Diagnosis): ChannelAdvice {
-  const allowed = diagnosisNumbers(d);
+export function verifyAdvice(
+  raw: { summary?: unknown; recommendations?: unknown; dataGaps?: unknown },
+  d: Diagnosis,
+  signals: StoredSignal[] = []
+): ChannelAdvice {
+  const allowed = new Set([...diagnosisNumbers(d), ...signalNumbers(signals)]);
   const removed: string[] = [];
 
   const summary = String(raw.summary ?? "")
@@ -85,8 +125,13 @@ export function verifyAdvice(raw: { summary?: unknown; recommendations?: unknown
   return { summary, recommendations, dataGaps, removed };
 }
 
+const SIGNAL_RULES = `- The signals below are what OTHER departments have noticed. Use them to decide what is worth doing — especially where the diagnosis is too thin to say much — but they are context, not measurement:
+  - A recommendation resting on a signal must name it in "evidence" ("competitors added same-day delivery — Aroma Co, 12 Sept") rather than dressing it up as something this business measured.
+  - A line marked as a reading rather than a measured fact stays that way. Never restate one as a number or a certainty.
+  - Any figure you quote from a signal must appear in that signal exactly as printed.`;
+
 const PROMPT_RULES = `RULES — this goes to a small business owner who will act on it:
-- Every recommendation must rest on a number in the MEASURED DIAGNOSIS, and its "evidence" must quote that number exactly as written there.
+- Every recommendation must rest on a number in the MEASURED DIAGNOSIS, or on a signal named below, and its "evidence" must quote that number or signal exactly as written there.
 - Never state, estimate or round a figure that isn't in the diagnosis — no industry benchmarks, no projected results, no "could double". A recommendation with an invented number is thrown away.
 - Rank what to fix by where the diagnosis says people are lost, not by what is generally popular.
 - Where the diagnosis says there isn't enough data, say so in dataGaps and say how to get it (e.g. "tag every lead's source", "run the site for more visits") — don't advise as if you knew.
@@ -150,13 +195,21 @@ function adviceFailure(failure: AiFailure): AdviceResult {
 export async function generateChannelAdvice(
   d: Diagnosis,
   facts: BusinessFacts | null,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  /**
+   * What the other departments have noticed (migration 198). Costs no
+   * extra AI call — they are read from the store the daily monitors
+   * already fill — and matter most exactly where this business's own
+   * numbers are too thin to advise on.
+   */
+  signals: StoredSignal[] = []
 ): Promise<AdviceResult> {
+  const signalSection = formatSignalsForPrompt(signals);
   const prompt = `You are a marketing strategist advising where this business should put its effort next.
 
 ${formatDiagnosisForPrompt(d)}
-${facts ? `\n${formatFactsForCopy(facts)}\n` : ""}
-${PROMPT_RULES}
+${facts ? `\n${formatFactsForCopy(facts)}\n` : ""}${signalSection ? `\n${signalSection}\n` : ""}
+${PROMPT_RULES}${signalSection ? `\n${SIGNAL_RULES}` : ""}
 - Keep it short: summary at most 3 sentences; each action at most 2 sentences; at most 4 dataGaps, one sentence each.
 
 Return JSON only:
@@ -164,7 +217,7 @@ Return JSON only:
 
   let last: AdviceResult = { ok: false, reason: "error", detail: "not attempted" };
   for (let attempt = 0; attempt < 2; attempt++) {
-    last = await attemptAdvice(prompt, attempt > 0, d, logContext);
+    last = await attemptAdvice(prompt, attempt > 0, d, logContext, signals);
     if (last.ok) return last;
     // An error that another try won't fix isn't retried.
     if (last.reason === "error" || last.reason === "unavailable") break;
@@ -177,7 +230,8 @@ async function attemptAdvice(
   prompt: string,
   isRetry: boolean,
   d: Diagnosis,
-  logContext?: { supabase: any; dealershipId: string }
+  logContext?: { supabase: any; dealershipId: string },
+  signals: StoredSignal[] = []
 ): Promise<AdviceResult> {
   try {
     const r = await callClaude({
@@ -197,7 +251,7 @@ async function attemptAdvice(
     if (data.stop_reason === "max_tokens") return { ok: false, reason: "cut_off", detail: `reply cut off after ${data.usage?.output_tokens ?? "?"} tokens` };
     const parsed = parseAdviceJson(text);
     if (!parsed) return { ok: false, reason: "unreadable", detail: `no readable JSON in a ${text.length}-character reply` };
-    return { ok: true, advice: verifyAdvice(parsed, d) };
+    return { ok: true, advice: verifyAdvice(parsed, d, signals) };
   } catch (err: any) {
     return { ok: false, reason: "busy", detail: err?.message ?? String(err) };
   }
