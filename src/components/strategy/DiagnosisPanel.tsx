@@ -4,7 +4,7 @@
 // (lib/strategy/diagnosis.ts) — and channel advice tied to those numbers.
 
 import { useEffect, useState } from "react";
-import { Loader2, Activity, AlertTriangle, Users2, Megaphone, Lightbulb, Info } from "lucide-react";
+import { Loader2, Activity, AlertTriangle, Users2, Megaphone, Lightbulb, Info, Compass } from "lucide-react";
 import { Button } from "@/components/ui";
 
 type Step = { key: string; label: string; count: number; fromPrevious: number | null };
@@ -18,11 +18,20 @@ type Diagnosis = {
   paid: { campaign: string; spend: number; leads: number; costPerLead: number | null }[] | null;
   gaps: string[];
 };
+type Channel = {
+  channel: string;
+  label: string;
+  standing: "proven" | "fits" | "test";
+  reasons: string[];
+  needs: string[];
+  measure: string | null;
+};
 type Advice = { summary: string; recommendations: { title: string; action: string; evidence: string }[]; dataGaps: string[]; removed: string[] };
 
 export default function DiagnosisPanel() {
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [advice, setAdvice] = useState<Advice | null>(null);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [advising, setAdvising] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +39,11 @@ export default function DiagnosisPanel() {
   useEffect(() => {
     fetch("/api/strategy/diagnosis")
       .then((r) => r.json())
-      .then((d) => (d.error ? setError(d.error) : setDiagnosis(d.diagnosis)))
+      .then((d) => {
+        if (d.error) return setError(d.error);
+        setDiagnosis(d.diagnosis);
+        setChannels(d.channels ?? []);
+      })
       .catch(() => setError("Couldn't load your numbers right now."))
       .finally(() => setLoading(false));
   }, []);
@@ -47,6 +60,7 @@ export default function DiagnosisPanel() {
         return;
       }
       if (d.diagnosis) setDiagnosis(d.diagnosis);
+      if (d.channels) setChannels(d.channels);
       if (d.advice) setAdvice(d.advice);
       else setError(d.error ?? "Couldn't write the advice right now.");
     } catch {
@@ -97,6 +111,44 @@ export default function DiagnosisPanel() {
           )}
         </div>
       ))}
+
+      {channels.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5" /> Which channels suit you — decided from your own facts, not your category
+          </p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {channels.map((c) => (
+              <div key={c.channel} className="bg-slate-200 rounded-lg p-3 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-700">{c.label}</span>
+                  {/* Three plainly different things, said as three plainly
+                      different words — "recommended" for an untested channel
+                      would claim evidence that isn't there. */}
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${
+                      c.standing === "proven"
+                        ? "bg-green-500/15 text-green-600"
+                        : c.standing === "fits"
+                        ? "bg-sky-500/15 text-sky-600"
+                        : "bg-slate-300 text-slate-500"
+                    }`}
+                  >
+                    {c.standing === "proven" ? "Already works here" : c.standing === "fits" ? "Fits your facts" : "Untested"}
+                  </span>
+                </div>
+                {c.reasons.slice(0, 2).map((r) => (
+                  <p key={r} className="text-[11px] text-slate-500">{r}</p>
+                ))}
+                {c.needs.map((n) => (
+                  <p key={n} className="text-[11px] text-amber-600">Needs: {n}</p>
+                ))}
+                {c.measure && <p className="text-[11px] text-slate-400">To find out: {c.measure}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-3">
         <div className="bg-slate-200 rounded-lg p-3 space-y-1.5">

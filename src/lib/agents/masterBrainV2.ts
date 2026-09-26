@@ -643,6 +643,16 @@ export const TOOLS = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "plan_budget",
+    description:
+      "Ways to divide a marketing budget the person has named, with the reason each channel is in the split. Use when they say how much they have to spend or ask where to put money (\"₹50,000 hai, kya karun\"). IMPORTANT, and say it in your own words when you report this: these are splits, NOT forecasts. A number of leads appears only where Hawlai worked it out from this business's own measured cost per lead, and that figure is named — everywhere else the result says which number nobody knows yet, and you must pass that on rather than filling it in. Never add a projection, a revenue figure or an ROI of your own, and never quote a cost per lead the result doesn't give you. When it returns no scenarios, say why it couldn't and what to fix first.",
+    input_schema: {
+      type: "object",
+      properties: { budgetInr: { type: "number", description: "The amount in rupees the person said they have to spend." } },
+      required: ["budgetInr"],
+    },
+  },
+  {
     name: "competitor_positioning",
     description: "How this business is positioned against what its competitors say in public — their own words with links, counted theme by theme (price, materials, delivery, expertise… depending on how the business makes money), which ground is crowded, which is open, and angles the business can own with its own facts. Use when the person asks how they're different from competitors, what competitors say, or how to stand out. Returns the latest comparison run on the Strategy page; quote only its counts and quotes.",
     input_schema: { type: "object", properties: {} },
@@ -2358,6 +2368,24 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         note: "Every number here was counted from their own data. Quote only these numbers, and where a section says there's too little data, say that plainly rather than advising. Point them to the Strategy page for the full diagnosis.",
       };
     }
+    case "plan_budget": {
+      // Pure arithmetic on the owner's own figures: no AI call here, and
+      // the refusals live in the library (lib/strategy/simulator.ts), not
+      // in a prompt where a model could talk its way past them.
+      const { loadFitInput } = await import("../strategy/fitInput");
+      const { channelFit } = await import("../strategy/channelFit");
+      const { simulate } = await import("../strategy/simulator");
+      const fitInput = await loadFitInput(supabase, ctx.id, ctx.city);
+      const fits = channelFit(fitInput);
+      const simulation = simulate({ budgetInr: Number(input.budgetInr) || 0, fits, diagnosis: fitInput.diagnosis });
+      return {
+        ...simulation,
+        channels: fits.map((f) => ({ channel: f.channel, label: f.label, standing: f.standing, reasons: f.reasons, needs: f.needs, measure: f.measure })),
+        note: simulation.thin
+          ? "No split could be justified — tell them why, in the words of `thin`, and what to fix first. Don't offer a plan anyway."
+          : "These are splits, not forecasts. Where `projectedLeads` is null there is NO lead number to give: say which figure is missing, from `unknowns`, instead of estimating one. Where it isn't null, quote it with the basis it names.",
+      };
+    }
     case "competitor_positioning": {
       const { latestPositioning } = await import("../strategy/positioning/run");
       const run = await latestPositioning(supabase, ctx.id);
@@ -2597,6 +2625,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   add_product: "/dashboard/website-builder",
   save_business_story: "/dashboard/settings/knowledge-base",
   diagnose_business: "/dashboard/strategy",
+  plan_budget: "/dashboard/strategy",
   competitor_positioning: "/dashboard/strategy",
   create_discount_code: "/dashboard/website-builder",
   get_report_links: "/dashboard/reports",
@@ -2975,6 +3004,31 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       }
       if (advice?.dataGaps?.length) groups.push({ heading: "Not enough data to judge yet", items: advice.dataGaps.map((g: string) => ({ label: g })) });
       return { kind: "document", label: `Diagnosis — ${d.window.label}`, summary: advice?.summary || undefined, groups, departmentHref };
+    }
+    case "plan_budget": {
+      const sim = result as any;
+      if (sim?.thin) return { kind: "document", label: "Budget", summary: sim.thin, departmentHref };
+      const groups = (sim?.scenarios ?? []).map((s: any) => ({
+        heading: s.name,
+        items: [
+          ...s.allocations.map((a: any) => ({
+            label: `${a.label} — ₹${a.amountInr.toLocaleString("en-IN")} (${a.sharePct}%)`,
+            // A lead figure is shown only where the result carried one,
+            // and it always arrives with the campaign it was measured on.
+            note: a.projectedLeads !== null ? `about ${a.projectedLeads} leads ${a.basis} · ${a.why}` : a.why,
+          })),
+          ...(s.projectedLeadsTotal === null
+            ? s.unknowns.slice(0, 2).map((u: string) => ({ label: "Not known yet", note: u }))
+            : [{ label: `About ${s.projectedLeadsTotal} leads in total`, note: "On this business's own measured cost per lead — not a forecast." }]),
+        ],
+      }));
+      return {
+        kind: "document",
+        label: `₹${Number(sim?.budgetInr ?? 0).toLocaleString("en-IN")} — ways to split it`,
+        summary: sim?.disclaimer,
+        groups,
+        departmentHref,
+      };
     }
     case "trigger_call":
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };

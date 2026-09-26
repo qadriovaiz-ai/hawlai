@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { loadDiagnosis } from "@/lib/strategy/diagnosis";
 import { generateChannelAdvice, ADVICE_FAILURE_MESSAGE } from "@/lib/strategy/channelAdvice";
 import { readSignals } from "@/lib/signals/signals";
+import { channelFit } from "@/lib/strategy/channelFit";
+import { loadFitInput } from "@/lib/strategy/fitInput";
 
 // The advice is a model call that may be retried once — room for both.
 export const maxDuration = 60;
@@ -26,8 +28,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Couldn't read your numbers right now — ${err?.message ?? "try again shortly"}.` }, { status: 500 });
   }
 
+  // Which channels suit this business (lib/strategy/channelFit.ts) —
+  // decided in code from its own catalogue, searches and history, so it
+  // costs nothing and ships with the numbers rather than behind a button.
+  let channels: Awaited<ReturnType<typeof channelFit>> = [];
+  try {
+    const { data: where } = await supabase.from("dealerships").select("city").eq("id", dealershipId).maybeSingle();
+    const fitInput = await loadFitInput(supabase, dealershipId, where?.city ?? null);
+    channels = channelFit(fitInput);
+  } catch (err: any) {
+    // The diagnosis is the point of this route; channel fit failing must
+    // not take it down with it.
+    console.error("[strategy-diagnosis] channel fit skipped:", err?.message);
+  }
+
   const wantAdvice = new URL(request.url).searchParams.get("advice") === "1";
-  if (!wantAdvice) return NextResponse.json({ diagnosis });
+  if (!wantAdvice) return NextResponse.json({ diagnosis, channels });
 
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   // What the other departments have noticed (migration 198) — a plain
@@ -38,7 +54,7 @@ export async function GET(request: Request) {
   if (!result.ok) {
     // The reason is said, not hidden: it's what makes the next failure
     // diagnosable without anyone reading a server log.
-    return NextResponse.json({ diagnosis, advice: null, error: ADVICE_FAILURE_MESSAGE[result.reason], reason: result.reason });
+    return NextResponse.json({ diagnosis, channels, advice: null, error: ADVICE_FAILURE_MESSAGE[result.reason], reason: result.reason });
   }
-  return NextResponse.json({ diagnosis, advice: result.advice });
+  return NextResponse.json({ diagnosis, channels, advice: result.advice });
 }
