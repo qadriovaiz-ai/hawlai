@@ -6,6 +6,7 @@
 // for that topic) so the feed doesn't repeat the same story daily.
 
 import { emitNotification } from "../notifications/emit";
+import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
 import { getModel } from "../models";
 import { callClaude, aiFailureNote, isPlatformOutage, type AiFailureNote } from "@/lib/ai/claude";
 
@@ -62,6 +63,20 @@ export async function checkTopicAlerts(supabase: any, dealershipId: string) {
           summary: item.summary ?? null,
           source_url: item.sourceUrl ?? null,
         });
+        // Filed where the other departments can read it (migration 198):
+        // the alert is news for the owner, the signal is input for
+        // strategy and content. `observed` — a real article, quoted, with
+        // its link, not a conclusion drawn from it.
+        await recordSignal(supabase, dealershipId, {
+          source: "topic_monitor",
+          topic: watch.topic,
+          summary: `${watch.topic}: ${item.title}`,
+          evidence: { topic: watch.topic, headline: item.title, detail: item.summary ?? null },
+          confidence: "observed",
+          sourceUrl: item.sourceUrl ?? null,
+          fingerprint: fingerprintOf(["topic_monitor", watch.topic, item.title]),
+        });
+
         // Only reached for genuinely new alerts — the title dedupe
         // above already skipped anything seen before.
         await emitNotification(supabase, {

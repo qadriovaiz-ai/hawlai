@@ -7,6 +7,7 @@
 // output, not fabricated "there's a new product" claims.
 
 import { emitNotification } from "../notifications/emit";
+import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
 import { getModel } from "../models";
 import { callClaude, aiFailureNote, isPlatformOutage, type AiFailureNote } from "@/lib/ai/claude";
 
@@ -69,6 +70,21 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
           summary: item.summary ?? null,
           source_url: item.sourceUrl ?? null,
         });
+        // The same finding, filed where the other departments can read
+        // it (migration 198). The alert above is news for the owner; this
+        // is input for strategy, positioning and content. Recorded as
+        // `observed`, not `inferred`: it is a competitor's own
+        // announcement, quoted, with the page it came from.
+        await recordSignal(supabase, dealershipId, {
+          source: "competitor_monitor",
+          topic: watch.competitor_name,
+          summary: `${watch.competitor_name}: ${item.title}`,
+          evidence: { competitor: watch.competitor_name, headline: item.title, detail: item.summary ?? null },
+          confidence: "observed",
+          sourceUrl: item.sourceUrl ?? null,
+          fingerprint: fingerprintOf(["competitor_monitor", watch.competitor_name, item.title]),
+        });
+
         // Only reached for genuinely new alerts — the title dedupe
         // above already skipped anything seen before.
         await emitNotification(supabase, {
