@@ -27,14 +27,14 @@ export type SubsystemKey =
   | "daily_autopilot" | "content_autopilot" | "report_snapshots"
   | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
   | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
-  | "lead_scoring" | "stale_approvals" | "lead_export" | "site_audit" | "search_console_sync" | "content_performance";
+  | "lead_scoring" | "stale_approvals" | "lead_export" | "site_audit" | "search_console_sync" | "content_performance" | "strategy_signals";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
   // Database-only and fast, and what surfaces work waiting on a human —
   // so it runs FIRST and never queues behind LLM calls.
   // The export email first: it's the one that reaches a person.
-  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance"],
+  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance", "strategy_signals"],
   // Everything slow: LLM-backed work plus third-party APIs. Emails and
   // workflow steps (a lead is waiting) and auto-posting (customers see it)
   // before monitoring and reports; daily_autopilot's per-campaign AI work

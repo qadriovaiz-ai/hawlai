@@ -19,6 +19,7 @@ import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
+import { runStrategySignals } from "@/lib/strategy/strategySignals";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -55,4 +56,7 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // it sits with the database-only work. Says what it can't tell yet as
   // readily as what it can (lib/attribution/performanceBrain.ts).
   content_performance: (s, id) => runContentPerformance(s, id),
+  // The last two departments filing what they already counted — the
+  // funnel and the competitor comparison. Reads only, no AI call.
+  strategy_signals: (s, id) => runStrategySignals(s, id),
 };
