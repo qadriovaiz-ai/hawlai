@@ -424,7 +424,7 @@ export function storefrontUrl(slug: string): string {
   return `${siteBase()}/site/${slug}`;
 }
 
-function siteBase(): string {
+export function siteBase(): string {
   return process.env.NEXT_PUBLIC_SITE_URL ?? "https://hawlai.online";
 }
 
