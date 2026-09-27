@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       bySource[l.source ?? "unknown"] = (bySource[l.source ?? "unknown"] ?? 0) + 1;
     }
     const context = `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}. By source: ${JSON.stringify(bySource)}.`;
-    result = await generateGrowthOpportunities(name, category, context);
+    result = await generateGrowthOpportunities(name, category, context, undefined, { supabase, dealershipId });
   } else if (taskType === "budget_recommendations") {
     const perfState = await getCampaignPerformanceState(supabase, dealershipId);
     const performance = perfState.state === 'ok' ? perfState.value : { campaigns: [], totals: { spend: 0, leads: 0, cost_per_lead: null } };
@@ -58,13 +58,13 @@ export async function POST(request: Request) {
       : performance.campaigns.length > 0
       ? performance.campaigns.map((c) => `${c.headline}: spend ₹${c.spend}, leads ${c.leads}, revenue ₹${c.revenue}, cost/lead ${c.cost_per_lead ?? "—"}`).join("\n")
       : "No campaign performance data yet.";
-    result = await generateBudgetRecommendations(name, category, context);
+    result = await generateBudgetRecommendations(name, category, context, undefined, { supabase, dealershipId });
   } else if (taskType === "expansion_strategy") {
     const growth = await generateGrowthReport(supabase, dealershipId, category);
     const { data: leads } = await supabase.from("leads").select("status").eq("dealership_id", dealershipId);
     const converted = (leads ?? []).filter((l: any) => l.status === "converted").length;
     const context = `Health score: ${growth.healthScore}/100. Total leads: ${(leads ?? []).length}. Converted: ${converted}. Known risks: ${growth.risks.join("; ") || "none flagged"}.`;
-    result = await generateExpansionStrategy(name, category, dealership?.city ?? null, growth.healthScore, context);
+    result = await generateExpansionStrategy(name, category, dealership?.city ?? null, growth.healthScore, context, undefined, { supabase, dealershipId });
   } else {
     return NextResponse.json({ error: "Unknown taskType" }, { status: 400 });
   }

@@ -29,7 +29,6 @@ import { getValidYoutubeAccessToken, uploadVideoToYouTube } from "./youtubeAgent
 import { generate3DScene } from "./threeDAgent";
 import { recordFirstTouchpoint } from "./touchpointAgent";
 import { sendDealerEmail } from "../email/sendDealerEmail";
-import { logClaudeUsage } from "../usage/logUsage";
 import { generateContent, CONTENT_TYPES } from "./contentMarketingAgent";
 import { generateSeoTask, SEO_TASKS } from "./seoToolkitAgent";
 import { generateAeoCheck } from "./aeoAgent";
@@ -982,7 +981,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         const all = leads ?? [];
         const byStatus: Record<string, number> = {};
         for (const l of all) byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
-        const { output, _fallback } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`, groundingContext) as { output: any; _fallback?: boolean };
+        const { output, _fallback } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "growth_opportunities", output });
         return output;
       }
@@ -997,12 +996,12 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             : budgetState.state === "not_connected" || budgetState.state === "error"
             ? "Campaign performance could not be read. Do not recommend budget changes based on past results — say the ad account needs reconnecting first."
             : "No campaign data yet.";
-        const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context, groundingContext) as { output: any; _fallback?: boolean };
+        const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "budget_recommendations", output });
         return output;
       }
       const growth = await generateGrowthReport(supabase, ctx.id, ctx.category);
-      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`, groundingContext) as { output: any; _fallback?: boolean };
+      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
       if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "expansion_strategy", output });
       return output;
     }
@@ -3642,32 +3641,28 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - If a request is ambiguous, ask ONE clarifying question rather than guessing wildly, unless a reasonable default is obvious.`;
 
   const messages: any[] = [...history.slice(-10), { role: "user", content: message }];
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
 
   for (let iteration = 0; iteration < 6; iteration++) {
     // Usage is summed across the tool loop and logged once, below.
     const result = await callClaude(
       { model: getModel("standard"), max_tokens: 4096, system: systemPrompt, tools: TOOLS, messages },
-      { operation: "master_chat" }
+      // Logged per call, like every other site (lib/usage/logUsage.ts).
+      // It used to log once per turn from here with summed tokens, which
+      // meant the loop's own cost was invisible — and it wrote with the
+      // request's session client, which RLS silently rejected.
+      { operation: "master_chat", logContext: { supabase, dealershipId: ctx.id } }
     );
 
     if (!result.ok) {
-      if (totalInputTokens || totalOutputTokens) await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       // Why, in the approved words — "on our side" for an outage, "busy"
       // for a rate limit — instead of one apology for everything.
       return { reply: aiFailureMessage(result.failure.kind), toolsUsed, artifacts };
     }
     const data = result.data;
-    if (data.usage) {
-      totalInputTokens += data.usage.input_tokens ?? 0;
-      totalOutputTokens += data.usage.output_tokens ?? 0;
-    }
     const blocks = data.content ?? [];
     const toolUseBlocks = blocks.filter((b: any) => b.type === "tool_use");
 
     if (toolUseBlocks.length === 0) {
-      await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
       const text = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
       // A caption generated beside an image belongs with it — that
       // pairing also decides whether Instagram is offered.
@@ -3736,6 +3731,5 @@ A junior marketer takes a request literally and produces the thing asked for. A 
     messages.push({ role: "user", content: toolResults });
   }
 
-  await logClaudeUsage(supabase, ctx.id, "master_chat", totalInputTokens, totalOutputTokens);
   return { reply: "That took a lot of steps — here's what I've got so far, ask me to continue if you need more.", toolsUsed, artifacts: attachTurnImages(artifacts) };
 }

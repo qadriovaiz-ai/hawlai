@@ -132,12 +132,12 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
 }
 
 /** The parsed JSON, or null — with the reason when the AI itself failed. */
-async function askClaude(prompt: string, maxTokens = 1500): Promise<{ parsed: any | null; failure?: AiFailure }> {
+async function askClaude(prompt: string, maxTokens = 1500, logContext?: { supabase: any; dealershipId: string }): Promise<{ parsed: any | null; failure?: AiFailure }> {
   try {
     // Opus — shared by generateGrowthOpportunities, generateBudgetRecommendations,
     // generateExpansionStrategy: high-stakes strategic/financial reasoning, called
     // infrequently, same justification as the forecast narrative above.
-    const r = await callClaude({ model: getModel("premium"), max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }, { operation: "growth_advisor" });
+    const r = await callClaude({ model: getModel("premium"), max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }, { operation: "growth_advisor", logContext });
     if (!r.ok) return { parsed: null, failure: r.failure };
     const text = r.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -155,20 +155,20 @@ function adviceResult(r: { parsed: any | null; failure?: AiFailure }, fallback: 
   return r.failure ? withAiFailure(fallback, r.failure) : fallback;
 }
 
-export async function generateGrowthOpportunities(dealershipName: string, businessCategory: string, dataContext: string, groundingContext?: string) {
+export async function generateGrowthOpportunities(dealershipName: string, businessCategory: string, dataContext: string, groundingContext?: string, logContext?: { supabase: any; dealershipId: string }) {
   const fallback = { output: { text: "Not enough data yet to identify specific opportunities." }, _fallback: true };
-  const asked = await askClaude(`You are a growth advisor for "${dealershipName}", a ${businessCategory} business in India. Here's their real current data:\n${dataContext}${groundingContext ?? ""}\n\nBased ONLY on this real data (not general market advice), identify 3-5 specific growth opportunities — gaps in their own funnel, underused channels, patterns in what's converting vs not. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "grounded in the data above"}]}`);
+  const asked = await askClaude(`You are a growth advisor for "${dealershipName}", a ${businessCategory} business in India. Here's their real current data:\n${dataContext}${groundingContext ?? ""}\n\nBased ONLY on this real data (not general market advice), identify 3-5 specific growth opportunities — gaps in their own funnel, underused channels, patterns in what's converting vs not. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "grounded in the data above"}]}`, 1500, logContext);
   return adviceResult(asked, fallback);
 }
 
-export async function generateBudgetRecommendations(dealershipName: string, businessCategory: string, campaignContext: string, groundingContext?: string) {
+export async function generateBudgetRecommendations(dealershipName: string, businessCategory: string, campaignContext: string, groundingContext?: string, logContext?: { supabase: any; dealershipId: string }) {
   const fallback = { output: { text: "No campaign spend data yet to base budget recommendations on." }, _fallback: true };
-  const asked = await askClaude(`You are a media buyer advising "${dealershipName}", a ${businessCategory} business. Here's their REAL campaign performance data:\n${campaignContext}${groundingContext ?? ""}\n\nRecommend how to reallocate their marketing budget based on what's actually performing — which campaigns to scale, which to cut or fix, and why, using the real spend/leads/revenue numbers above. Return JSON only: {"recommendations": [{"campaign": "...", "action": "scale up | maintain | pause | fix", "reasoning": "..."}], "overallGuidance": "1-2 sentences"}`);
+  const asked = await askClaude(`You are a media buyer advising "${dealershipName}", a ${businessCategory} business. Here's their REAL campaign performance data:\n${campaignContext}${groundingContext ?? ""}\n\nRecommend how to reallocate their marketing budget based on what's actually performing — which campaigns to scale, which to cut or fix, and why, using the real spend/leads/revenue numbers above. Return JSON only: {"recommendations": [{"campaign": "...", "action": "scale up | maintain | pause | fix", "reasoning": "..."}], "overallGuidance": "1-2 sentences"}`, 1500, logContext);
   return adviceResult(asked, fallback);
 }
 
-export async function generateExpansionStrategy(dealershipName: string, businessCategory: string, city: string | null, healthScore: number, dataContext: string, groundingContext?: string) {
+export async function generateExpansionStrategy(dealershipName: string, businessCategory: string, city: string | null, healthScore: number, dataContext: string, groundingContext?: string, logContext?: { supabase: any; dealershipId: string }) {
   const fallback = { output: { text: "Focus on stabilizing current operations before considering expansion." }, _fallback: true };
-  const asked = await askClaude(`You are a growth strategist advising "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""} with a current health score of ${healthScore}/100. Real current data:\n${dataContext}${groundingContext ?? ""}\n\nGiven this business's actual current state (not hypothetical), give honest advice on expansion readiness — should they expand now (new location/service line/hours) or focus on strengthening the core first, and what would need to be true before expanding. Return JSON only: {"readiness": "not yet | cautiously | ready", "reasoning": "...", "considerations": ["3-4 concrete things to evaluate before expanding"]}`);
+  const asked = await askClaude(`You are a growth strategist advising "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}` : ""} with a current health score of ${healthScore}/100. Real current data:\n${dataContext}${groundingContext ?? ""}\n\nGiven this business's actual current state (not hypothetical), give honest advice on expansion readiness — should they expand now (new location/service line/hours) or focus on strengthening the core first, and what would need to be true before expanding. Return JSON only: {"readiness": "not yet | cautiously | ready", "reasoning": "...", "considerations": ["3-4 concrete things to evaluate before expanding"]}`, 1500, logContext);
   return adviceResult(asked, fallback);
 }

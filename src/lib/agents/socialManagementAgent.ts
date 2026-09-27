@@ -54,7 +54,13 @@ export async function generateAutoReply(
   pastInsights?: string[] | null,
   // P3 piece 5 — the assigned persona's goals, shaping what this
   // reply is trying to achieve (support vs. sales vs. front-desk).
-  personaGoals?: string | null
+  personaGoals?: string | null,
+  /**
+   * So the call is logged. This fires on every inbound DM and comment
+   * with nobody reviewing it, and until 2026-09-27 it was the highest-
+   * frequency Claude call in the product that recorded nothing at all.
+   */
+  logContext?: { supabase: any; dealershipId: string }
 ): Promise<string | null> {
   // An auto-reply is sent to a customer with nobody reading it first —
   // if any copy follows the owner's chosen language, this does.
@@ -111,7 +117,7 @@ Incoming message: "${incomingText}"
 
 Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`,
       }],
-    }, { operation: "auto_reply" });
+    }, { operation: "auto_reply", logContext });
     // No reply goes out rather than a guessed one.
     if (!r.ok) return null;
     const text = r.text;

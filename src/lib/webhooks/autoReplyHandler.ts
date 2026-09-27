@@ -153,7 +153,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals);
+        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals, { supabase, dealershipId: dealership.id });
         if (replyText) {
           if (channel === "instagram") {
             await sendInstagramDmReply(replyToken, entryId, senderId, replyText);
@@ -197,7 +197,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
         // No pastInsights on the comment path — a public comment has
         // no resolved lead identity (resolveDmLead is DM-only, P2
         // 27a-iii), so there's no specific person's history to draw on.
-        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, null, persona.goals);
+        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, null, persona.goals, { supabase, dealershipId: dealership.id });
         if (replyText) {
           await sendCommentReply(replyToken, commentId, replyText);
         } else {

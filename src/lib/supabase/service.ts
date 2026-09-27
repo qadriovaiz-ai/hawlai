@@ -1,5 +1,15 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
+// SERVER ONLY. This client holds the service-role key and bypasses RLS
+// entirely, so an accidental import from a client component would ship it
+// to a browser. Next's `import "server-only"` would catch that at build
+// time, but that package isn't a dependency here — so this throws on
+// evaluation in a browser instead, and a test asserts no client file
+// imports it.
+if (typeof window !== "undefined") {
+  throw new Error("lib/supabase/service is server-only — it holds the service-role key and must never be imported into a client bundle.");
+}
+
 /**
  * Service-role Supabase client — for server-to-server contexts ONLY
  * (e.g. webhooks from Meta/Google Ads where there is no logged-in user/cookie session).
