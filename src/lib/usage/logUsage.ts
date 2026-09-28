@@ -81,7 +81,16 @@ function logFailed(what: string, err: unknown): void {
   console.error(`[usage] ${what} log failed:`, (err as any)?.message ?? err);
 }
 
-export async function logClaudeUsage(supabase: any, dealershipId: string, operation: string, inputTokens: number, outputTokens: number, model: string = CLAUDE_MODELS.standard) {
+export async function logClaudeUsage(
+  supabase: any,
+  dealershipId: string,
+  operation: string,
+  inputTokens: number,
+  outputTokens: number,
+  model: string = CLAUDE_MODELS.standard,
+  /** What prompt caching did on this call — written at 1.25x input, read at 0.1x. */
+  cache: { creationTokens?: number; readTokens?: number } = {}
+) {
   try {
     await usageClient(supabase).from("api_usage_logs").insert({
       dealership_id: dealershipId,
@@ -90,7 +99,9 @@ export async function logClaudeUsage(supabase: any, dealershipId: string, operat
       model,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      cost_inr: costOfClaudeCallInr(inputTokens, outputTokens, model),
+      cache_creation_input_tokens: cache.creationTokens ?? null,
+      cache_read_input_tokens: cache.readTokens ?? null,
+      cost_inr: costOfClaudeCallInr(inputTokens, outputTokens, model, cache),
     });
   } catch (err) {
     logFailed("claude", err);

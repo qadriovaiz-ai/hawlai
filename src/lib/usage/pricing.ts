@@ -89,9 +89,30 @@ export const PRICING = {
   },
 };
 
-export function costOfClaudeCallInr(inputTokens: number, outputTokens: number, model: string = CLAUDE_MODELS.standard): number {
+/**
+ * Prompt caching multipliers, applied to a model's own input rate.
+ *
+ * Writing a cache entry costs a quarter more than sending the tokens
+ * plainly; reading one costs a tenth. That is why a cached prefix has to
+ * be read at least twice to be worth creating — and why pricing a read
+ * at the full input rate, as this function did before the chat's tool
+ * block was cached, would have hidden the entire saving.
+ */
+export const CACHE_MULTIPLIER = { write: 1.25, read: 0.1 } as const;
+
+export function costOfClaudeCallInr(
+  inputTokens: number,
+  outputTokens: number,
+  model: string = CLAUDE_MODELS.standard,
+  cache: { creationTokens?: number; readTokens?: number } = {}
+): number {
   const rate = PRICING.anthropic[model] ?? PRICING.anthropic[CLAUDE_MODELS.standard];
-  const usd = (inputTokens / 1_000_000) * rate.inputPerMillionUsd + (outputTokens / 1_000_000) * rate.outputPerMillionUsd;
+  const perInputToken = rate.inputPerMillionUsd / 1_000_000;
+  const usd =
+    inputTokens * perInputToken +
+    (outputTokens / 1_000_000) * rate.outputPerMillionUsd +
+    (cache.creationTokens ?? 0) * perInputToken * CACHE_MULTIPLIER.write +
+    (cache.readTokens ?? 0) * perInputToken * CACHE_MULTIPLIER.read;
   return Math.round(usd * PRICING.usdToInr * 10000) / 10000;
 }
 

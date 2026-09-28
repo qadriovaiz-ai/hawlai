@@ -250,7 +250,17 @@ export async function callClaude(body: Record<string, any>, opts: ClaudeCallOpti
 
     if (res.ok && data) {
       if (opts.logContext && data.usage) {
-        await logClaudeUsage(opts.logContext.supabase, opts.logContext.dealershipId, opts.operation, data.usage.input_tokens ?? 0, data.usage.output_tokens ?? 0, request.model);
+        await logClaudeUsage(
+          opts.logContext.supabase,
+          opts.logContext.dealershipId,
+          opts.operation,
+          data.usage.input_tokens ?? 0,
+          data.usage.output_tokens ?? 0,
+          request.model,
+          // Present only on a cached prefix; null everywhere else, which
+          // is how a cached call is told apart from an uncached one.
+          { creationTokens: data.usage.cache_creation_input_tokens ?? 0, readTokens: data.usage.cache_read_input_tokens ?? 0 }
+        );
         await logWebSearchUsage(opts.logContext.supabase, opts.logContext.dealershipId, opts.operation, Number(data.usage.server_tool_use?.web_search_requests ?? 0));
       }
       const text = Array.isArray(data.content) ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("") : "";

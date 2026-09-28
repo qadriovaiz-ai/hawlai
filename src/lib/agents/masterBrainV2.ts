@@ -696,6 +696,36 @@ export const TOOLS = [
 ];
 
 /**
+ * The tool definitions with a cache breakpoint on the last one.
+ *
+ * WHY: the tool schema measures ~10,900 tokens and was re-sent in full on
+ * every iteration of the chat loop and every turn of the conversation —
+ * the single largest line in the cost audit. Anthropic renders a request
+ * as tools → system → messages, so marking the final tool caches the
+ * whole block as a prefix. Cache reads cost a tenth of input; the write
+ * costs a quarter more, and breaks even on the second request, which a
+ * chat loop reaches within seconds.
+ *
+ * NOTHING THE MODEL SEES CHANGES. The tools are identical, in the same
+ * order, with the same text — cache_control is metadata, not content.
+ * The static half of the system prompt could be cached too, but only by
+ * moving it ahead of the business's own facts, and reordering a prompt
+ * is a behaviour change however small; that is a separate decision.
+ *
+ * The array is built once and reused, because a cache prefix must be
+ * byte-identical every request: rebuilding it per call would be correct
+ * too, but this way there is one object and no chance of drift.
+ */
+const TOOLS_CACHED = [
+  ...TOOLS.slice(0, -1),
+  { ...TOOLS[TOOLS.length - 1], cache_control: { type: "ephemeral" as const } },
+];
+
+export function cachedTools() {
+  return TOOLS_CACHED;
+}
+
+/**
  * The canonical facts for this turn (src/lib/claims).
  *
  * Gathered once with the business context, so tools share one read —
@@ -3645,7 +3675,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
   for (let iteration = 0; iteration < 6; iteration++) {
     // Usage is summed across the tool loop and logged once, below.
     const result = await callClaude(
-      { model: getModel("standard"), max_tokens: 4096, system: systemPrompt, tools: TOOLS, messages },
+      { model: getModel("standard"), max_tokens: 4096, system: systemPrompt, tools: cachedTools(), messages },
       // Logged per call, like every other site (lib/usage/logUsage.ts).
       // It used to log once per turn from here with summed tokens, which
       // meant the loop's own cost was invisible — and it wrote with the
