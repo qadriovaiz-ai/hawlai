@@ -174,7 +174,13 @@ function fakeDb(seed: { websites: Row[]; website_pages: Row[] }) {
 
 // ---- the world this runs in -----------------------------------------
 
-const SITE = { id: "w1", slug: "candle_by_qaaf", published: true, dealership_id: "d1" };
+// The slug and the business's name are DIFFERENT here on purpose, and
+// they are in production too: websites.slug is "candle-by-qaaf" while
+// dealership_name is "candle_by_qaaf". A read-back that built its URL
+// from the name, or from a normalised version of it, would fetch
+// /site/candle_by_qaaf — which really does 404 — and report "not live
+// yet" about a page that is live.
+const SITE = { id: "w1", slug: "candle-by-qaaf", published: true, dealership_id: "d1" };
 const HOME = { id: "p1", website_id: "w1", slug: "home", title: "Home", seo_title: null, meta_description: null };
 
 const OWNER_DESCRIPTION =
@@ -270,7 +276,10 @@ describe("propose → approve → write → read the live page", () => {
     expect(page.title).toBe("Home");
 
     // The live page was actually fetched, and the verdict comes from it.
-    expect(fetchImpl).toHaveBeenCalledWith("https://hawlai.online/site/candle_by_qaaf", expect.anything());
+    // The slug as the websites row holds it — not the business's name,
+    // and not a normalisation of it.
+    expect(fetchImpl).toHaveBeenCalledWith("https://hawlai.online/site/candle-by-qaaf", expect.anything());
+    expect(fetchImpl.mock.calls[0][0]).not.toContain("candle_by_qaaf");
     const verification = (released.outcome as any).platformResponse.verification;
     expect(verification.verified).toBe(true);
     expect(verification.message).toMatch(/^Live —/);
@@ -315,5 +324,27 @@ describe("propose → approve → write → read the live page", () => {
     // was never recorded.
     expect(store.tables.pending_approvals).toHaveLength(0);
     expect(store.tables.website_pages[0].seo_title).toBeNull();
+
+    // AND IT SAYS SO. After the real failure the chat told the owner
+    // "your exact wording is safe with me — come back and I'll apply it
+    // immediately, no need to retype anything." Nothing held it: the
+    // insert that failed is the first write of the flow. The tool now
+    // tells the model that in the result, because the model had no way
+    // to know it from an error string.
+    expect(proposal.saved).toBe(false);
+    expect(proposal.note).toMatch(/Nothing was saved anywhere/);
+    expect(proposal.note).toMatch(/no draft, no queue and no retry waiting/);
+    expect(proposal.note).toMatch(/Do NOT tell them their wording is being held/);
+  });
+});
+
+describe("what chat may claim when nothing was written", () => {
+  const brain = readFileSync("src/lib/agents/masterBrainV2.ts", "utf8");
+
+  it("the system prompt forbids promising to hold or do something later", () => {
+    expect(brain).toMatch(/You cannot hold anything for later/);
+    expect(brain).toMatch(/never promise to do a thing later by yourself/);
+    // Named, because this is the second time it has been invented.
+    expect(brain).toMatch(/batch save/i);
   });
 });

@@ -1010,7 +1010,27 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         resolutionPath: "exact",
         resolutionDetail: { query: asked, candidateCount: allPages.length, matchType: "exact" },
       });
-      if (!created.ok) return { error: created.reason };
+      if (!created.ok) {
+        // NOTHING WAS STORED, and the reply must not imply otherwise.
+        //
+        // When this failed on 2026-09-29 the chat told the owner "your
+        // exact wording is safe with me — come back and I'll apply it
+        // immediately, no need to retype anything." There is nowhere
+        // that wording could have been kept: the first statement of
+        // createPublishAction is the insert, and it is what failed. The
+        // text existed only in that conversation, and a new one starts
+        // without it. Same invention as the "batch-save later" that
+        // never existed.
+        return {
+          error: created.reason,
+          saved: false,
+          note:
+            "Nothing was saved anywhere — this failed before any record was written, so there is no draft, no queue and no retry waiting. " +
+            "Do NOT tell them their wording is being held, kept safe, remembered, or that you will apply it later by yourself: none of that is true. " +
+            "Say plainly that it did not go through and nothing was stored, and either try again now or ask them to send the wording again when they retry. " +
+            "If the error mentions a constraint or another database detail, say it is a fault on Hawlai's side, not something they did.",
+        };
+      }
 
       return {
         success: true,
@@ -3812,6 +3832,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - Especially for a new or newly-onboarding business: don't front-load a wall of questions before doing anything. Ask at most 1-2 short clarifying questions if something is genuinely unclear (category, target city), then immediately start producing real output with reasonable assumptions for anything else — a brand kit, a first batch of content, a website — rather than making the person answer a long requirements list before any actual work happens.
 - Everything you GENERATE (content, a brand kit, a graphic, a draft) is automatically saved and also shows up on its normal dashboard page. End such a reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard." EXCEPTION — this does NOT apply when the reply carries an inline approval card (propose_price_change) or is asking the person a question. Nothing has been saved yet in those cases: the change is waiting on their decision, which is on the card in this same message. NEVER add a "saved to" or "you can review it at" line to those replies — there is no page to name, and naming one sends them away from the buttons they need to press.
 - You CAN set the search title and meta description on their website from this chat — propose_page_meta. It shows an approval card with buttons right here, and after they approve, Hawlai FETCHES the live page and reads the rendered title and description back; the reply says "live" only when that read-back matches, and otherwise says exactly what the page is still serving. NEVER send someone to Website Builder to paste meta tags in by hand, and never call it live because a tool saved a row.
+- **You cannot hold anything for later.** There is no drafts box you can put a message in, no queue you can add to, and nothing of yours survives this conversation. So never say you have kept, saved, remembered or noted something down unless a tool result says it was written, and never promise to do a thing later by yourself — you only ever act inside a turn the person started. When something fails, say it failed and nothing was stored; if you need their words again, ask for them. "Your wording is safe with me, I'll apply it once this is fixed" was said to an owner after a write that never happened, and it has been invented before as a "batch save" that did not exist. An offer you cannot keep costs more than the retype you were trying to save them.
 - **Saved is not live, and only the tool can tell you which one happened.** Generating something and changing what a customer sees are different events. When a result carries a \`note\`, that note is the truth about what changed — say what it says. If it says a draft was saved, never write "done", "that's set", "your site is updated" or anything an owner would read as the change being live; say where the draft is and what they still have to do. This has already gone wrong: an owner was told their meta description was set when a suggestion had been written to a list, and they stopped checking. A confirmation you can't back up is worse than no confirmation.
 - **When the person gives you their own words, those words are the answer.** If they paste a line and ask you to use it, pass it to the tool in the field meant for it (generate_seo takes \`exactText\`) and show what comes back unchanged. Never rewrite, shorten, translate or improve their town, their product name or their call to action — "Shahjahanpur" does not become "Uttar Pradesh", and "Shop now" does not become a slogan. Never invent a length limit to justify an edit: if their text really is too long for a field, give the real count and the real limit and let them choose. Their sentence, kept whole, is almost always better than yours.
 - generate_graphic and generate_logo produce real images that render directly in this chat — use markdown image syntax ![description](url) with the returned URL so the person sees it immediately, in addition to confirming it's saved on its dashboard page.
