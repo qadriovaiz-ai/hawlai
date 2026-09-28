@@ -36,6 +36,22 @@ export default defineConfig({
     // Zeroes the Meta retry waits (attempts unchanged) so retry tests
     // don't sleep. Not a *.test.ts file, so `include` never runs it as one.
     setupFiles: ["tests/setup/metaRetryTiming.ts"],
+    // Vitest's default is 5 seconds, and that is too close to what this
+    // suite genuinely needs. Several tests dynamically import
+    // masterBrainV2 — the largest module in the app, with a long
+    // dependency tree — or walk src/ from disk; solo they take 1.5-3.4s,
+    // and when workers contend during a full run they cross 5s and fail.
+    // That happened on 2026-09-28: three tests timed out, passed on a
+    // re-run, and passed in isolation.
+    //
+    // Raised rather than sprinkled per-test, because a per-test number
+    // only fixes the tests that have already failed — the next slow one
+    // fails next week. 15s still catches a genuine hang quickly (the
+    // slowest test in the suite is 2.6s, so this is ~6x headroom), and a
+    // flaky gate is worse than a slow one: people learn to re-run it
+    // instead of reading it.
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
     // A run must never pass because no assertion executed.
     passWithNoTests: false,
     reporters: process.env.CI ? ["dot"] : ["default"],
