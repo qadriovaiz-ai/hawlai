@@ -544,6 +544,8 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   // list of pending approvals it otherwise has no reason to know about.
   const [decision, setDecision] = useState<"idle" | "working" | "approved" | "rejected" | "error">("idle");
   const [decisionNote, setDecisionNote] = useState<string | null>(null);
+  /** Approved and written, but the live page did not read back as expected. */
+  const [unverified, setUnverified] = useState(false);
 
   async function decide(status: "approved" | "rejected") {
     if (!artifact.approval) return;
@@ -571,7 +573,21 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
         return;
       }
       setDecision(status);
-      setDecisionNote(status === "approved" ? "Applied to your store." : "Rejected — nothing was changed.");
+      // Some actions verify themselves after writing — a meta change
+      // fetches the live page and reads the title back. When the route
+      // returns that verdict it IS the answer, and "Applied" would be a
+      // weaker claim than the one Hawlai can actually stand behind (or,
+      // if the read-back disagreed, a claim it cannot).
+      //
+      // An unverified write is still a write, so this is not an error —
+      // but it must not read as a plain green success either, or the
+      // owner walks away believing something nobody confirmed.
+      setUnverified(status === "approved" && data?.publish?.verified === false);
+      setDecisionNote(
+        status === "approved"
+          ? (data?.publish?.message ?? "Applied to your store.")
+          : "Rejected — nothing was changed."
+      );
     } catch {
       setDecision("error");
       setDecisionNote("Couldn't reach the server.");
@@ -630,7 +646,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
   const approvalStrip = artifact.approval ? (
     <div className="border-t border-slate-100 px-3 py-2">
       {decision === "approved" || decision === "rejected" ? (
-        <p className={`text-[11px] font-medium ${decision === "approved" ? "text-emerald-600" : "text-slate-500"}`}>
+        <p className={`text-[11px] font-medium ${decision === "approved" ? (unverified ? "text-amber-600" : "text-emerald-600") : "text-slate-500"}`}>
           {decisionNote}
         </p>
       ) : (

@@ -10,7 +10,7 @@
 
 import type { RiskLevel } from "@/lib/executionPolicy";
 
-export type PlatformId = "shopify" | "wordpress" | "woocommerce" | "meta" | "hawlai_shop";
+export type PlatformId = "shopify" | "wordpress" | "woocommerce" | "meta" | "hawlai_shop" | "hawlai_site";
 
 /**
  * What a platform can be asked to do.
@@ -51,7 +51,18 @@ export type ActionKey =
    * Meta will actually deliver it. THE money step: nothing spends until
    * this runs, so it is always approval-gated and critical.
    */
-  | "activate_ad_campaign";
+  | "activate_ad_campaign"
+  /**
+   * Set the <title> and meta description of one page on the business's
+   * own site — the two lines a stranger reads in a search result.
+   *
+   * Approval-gated because it is public-facing copy about the business,
+   * written from a chat message. Title and description travel on ONE
+   * card rather than two, unlike the product fields: they are read
+   * together in a search result and an owner approving one without
+   * seeing the other is approving half a sentence.
+   */
+  | "update_page_meta";
 
 /**
  * One field changing, in terms a person can check.
@@ -223,6 +234,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "update_product_name",
   "launch_ad_campaign",
   "activate_ad_campaign",
+  "update_page_meta",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -238,4 +250,7 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   launch_ad_campaign: "high",
   // The one action that starts real spend.
   activate_ad_campaign: "critical",
+  // Nothing spends, but it changes what every stranger who finds this
+  // business in a search result reads first.
+  update_page_meta: "medium",
 };

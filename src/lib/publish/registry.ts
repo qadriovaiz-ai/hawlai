@@ -21,6 +21,7 @@ import { createShopifyPlatform } from "./platforms/shopify";
 import { shopifyCredentialsAdapter } from "./platforms/shopifyCredentials";
 import { createMetaPlatform } from "./platforms/meta";
 import { createHawlaiShopPlatform } from "./platforms/hawlaiShop";
+import { createHawlaiSitePlatform } from "./platforms/hawlaiSite";
 
 export function createPlatformRegistry(supabase: any): Partial<Record<PlatformId, PublishPlatform>> {
   return {
@@ -29,6 +30,9 @@ export function createPlatformRegistry(supabase: any): Partial<Record<PlatformId
     // The business's own storefront (products table) — the store most
     // Hawlai businesses actually sell from.
     hawlai_shop: createHawlaiShopPlatform({ supabase }),
+    // The business's own website (website_pages) — the title and
+    // description a stranger reads in a search result.
+    hawlai_site: createHawlaiSitePlatform({ supabase }),
     // wordpress and woocommerce are declared in PlatformId but have no
     // producer — nothing calls createPublishAction with either, so no
     // card can reach approval for them. Deliberately ABSENT rather than

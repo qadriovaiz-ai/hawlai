@@ -80,6 +80,11 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // step (ad_campaign_activate). Gated anyway because these are real
   // public objects in the merchant's own account, under their brand.
   launch_ad_campaign: { actionType: "create", riskLevel: "high", description: "Create a paused ad campaign in the merchant's Meta account -- real objects, no spend until activated", requiresApproval: true },
+  // The two lines a stranger reads about this business in a search
+  // result. Nothing spends, and it is entirely reversible — but it is
+  // public copy about the business, written from a chat message, so it
+  // is gated like the rest of this group rather than on cost.
+  update_page_meta: { actionType: "edit", riskLevel: "medium", description: "Change the search title or meta description on a page of the merchant's own site — what Google and link previews show", requiresApproval: true },
 };
 
 export function getActionPolicy(actionKey: string): ActionPolicy | null {

@@ -100,17 +100,11 @@ describe("what chat is allowed to claim about an SEO draft", () => {
     expect(brain).toContain("note: seoDraftNote(input.taskType, output)");
     const note = brain.slice(brain.indexOf("function seoDraftNote"), brain.indexOf("export async function executeTool"));
     expect(note).toMatch(/live website is unchanged/i);
-    expect(note).toMatch(/Website Builder/);
     expect(note).toMatch(/Never say it is set, live, updated or done/i);
-    // The homepage title tag is the business name (lib/siteMetadata.ts),
-    // so no meta title suggestion can ever become it. Pointing an owner
-    // at a field that does not exist is the same false promise again.
-    expect(note).toMatch(/homepage title tag is the business name/i);
-  });
-
-  it("the homepage title really is the business name, which is why the note says so", () => {
-    const metadata = readFileSync("src/lib/siteMetadata.ts", "utf8");
-    expect(metadata).toContain('pageSlug === "home" ? dealershipName');
+    // And it points at the tool that CAN apply it, rather than sending
+    // the owner off to paste it into Website Builder themselves.
+    expect(note).toMatch(/propose_page_meta/);
+    expect(note).toMatch(/reads it back/i);
   });
 
   it("tells the model both rules in the system prompt", () => {

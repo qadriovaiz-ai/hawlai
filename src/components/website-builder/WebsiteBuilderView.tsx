@@ -370,7 +370,7 @@ export default function WebsiteBuilderView() {
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, sections: next } : p)));
   }
 
-  function updatePageMeta(pageId: string, field: "title" | "meta_description" | "og_image_url", value: string) {
+  function updatePageMeta(pageId: string, field: "title" | "seo_title" | "meta_description" | "og_image_url", value: string) {
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, [field]: value } : p)));
   }
 
@@ -386,6 +386,7 @@ export default function WebsiteBuilderView() {
         body: JSON.stringify({
           sections: page.sections,
           title: page.title,
+          seoTitle: page.seo_title ?? "",
           metaDescription: page.meta_description,
           ogImageUrl: page.og_image_url,
           expectedUpdatedAt: page.updated_at,
@@ -625,10 +626,23 @@ export default function WebsiteBuilderView() {
               <div className="border-t border-slate-200 pt-3 space-y-2.5">
                 <p className="text-xs font-semibold text-slate-600">SEO — {currentPage.title}</p>
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-1">Page title (browser tab &amp; search results)</p>
+                  {/* Renamed from "Page title (browser tab & search
+                      results)", which it never was: this string is the
+                      menu link, and the title tag now has its own field
+                      below (migration 203). */}
+                  <p className="text-[11px] text-slate-400 mb-1">Page name (menu link)</p>
                   <input
                     value={currentPage.title ?? ""}
                     onChange={(e) => updatePageMeta(currentPage.id, "title", e.target.value)}
+                    className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1">Search title ({(currentPage.seo_title ?? "").length}/60) — browser tab &amp; the blue line in Google</p>
+                  <input
+                    value={currentPage.seo_title ?? ""}
+                    onChange={(e) => updatePageMeta(currentPage.id, "seo_title", e.target.value)}
+                    placeholder={currentPage.slug === "home" ? "Leave empty to use your business name" : `Leave empty to use "${currentPage.title} | your business name"`}
                     className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2"
                   />
                 </div>

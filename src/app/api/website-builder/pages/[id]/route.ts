@@ -54,6 +54,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const update: any = {};
   if (body.title !== undefined) update.title = body.title;
+  // The <title> tag, separate from `title` — which is the navigation
+  // label and reads "Home" on every generated homepage (migration 203).
+  if (body.seoTitle !== undefined) update.seo_title = body.seoTitle || null;
   if (body.metaDescription !== undefined) update.meta_description = body.metaDescription;
   if (body.ogImageUrl !== undefined) update.og_image_url = body.ogImageUrl || null;
   if (body.sections !== undefined) update.sections = body.sections;

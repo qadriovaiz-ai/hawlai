@@ -250,7 +250,19 @@ export async function PATCH(
         });
       }
 
-      return NextResponse.json({ ...data, publish: { status: "executed" } });
+      // A write can succeed and still not be live — an unpublished site,
+      // a page serving something else. hawlai_site fetches the real page
+      // after writing and reports what it read; that verdict is the only
+      // thing entitled to use the word "live", so it is carried through
+      // to the card rather than being flattened into "Applied."
+      const verification = (outcome.platformResponse as any)?.verification;
+      return NextResponse.json({
+        ...data,
+        publish: {
+          status: "executed",
+          ...(verification ? { verified: Boolean(verification.verified), message: String(verification.message), url: verification.url ?? null } : {}),
+        },
+      });
     }
   }
 

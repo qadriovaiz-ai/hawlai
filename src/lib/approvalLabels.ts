@@ -13,6 +13,9 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   auto_paused_campaign: "Auto-paused a low performer",
   launch_campaign: "Launch new campaign",
   pause_campaign: "Pause campaign",
+  // "Update Page Meta" title-cased tells an owner nothing about what
+  // they are approving; this is the line strangers read in Google.
+  update_page_meta: "Change a page's search title & description",
 };
 
 const AGENT_LABELS: Record<string, string> = {

@@ -169,6 +169,20 @@ export const TOOLS = [
     },
   },
   {
+    name: "propose_page_meta",
+    description:
+      "Set the search title and/or meta description of one page on the business's OWN Hawlai website — the two lines a stranger reads in a Google result, and what WhatsApp shows in a link preview. USE THIS when they want their meta tags actually applied, not drafted: generate_seo only writes a suggestion to the SEO Toolkit and changes nothing public. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT and nothing on the site changes until they approve. NEVER tell them to go to Website Builder to paste it in — the decision is already in front of them. After approval Hawlai fetches the live page and reads the rendered title and description back, and only says it is live when they match. If they gave you their own wording, pass it exactly as they typed it; if it is longer than Google shows, the card warns and saves it whole — never shorten it yourself.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage. If unsure which they mean, the tool returns the list to choose from." },
+        title: { type: "string", description: "The <title> for that page — what shows in the browser tab and as the blue line in a search result. Omit to leave it as it is." },
+        metaDescription: { type: "string", description: "The description under the title in a search result. Omit to leave it as it is." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "generate_social_management",
     description: `Generate social media management content (not a post — replies, growth strategy, trends). Valid taskType values: ${SOCIAL_TASKS.map((t) => t.key).join(", ")}.`,
     input_schema: {
@@ -810,9 +824,9 @@ function seoDraftNote(taskType: string, output: any): string {
   }
   return (
     "Saved as a SUGGESTION on the SEO Toolkit page. The live website is unchanged: this did not set the page title or the meta description Google reads. " +
-    "To make it real the owner edits the page in Website Builder — the Meta description field on that page, which caps at 160 characters. " +
-    "The homepage title tag is the business name and cannot be changed from a meta title suggestion, so say so rather than sending them to look for a field that isn't there. " +
-    "Tell them plainly that this is a draft. Never say it is set, live, updated or done." +
+    "To actually apply it, call propose_page_meta with the exact text — that puts an approval card in this chat and, once approved, writes the live page and reads it back. " +
+    "Offer that in the same reply rather than sending them to Website Builder to paste it in themselves. " +
+    "Tell them plainly that this is still a draft. Never say it is set, live, updated or done." +
     restored
   );
 }
@@ -943,6 +957,75 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id), input.exactText);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck({ ...output, note: seoDraftNote(input.taskType, output) }, resolvedBrandVoice);
+    }
+    case "propose_page_meta": {
+      const { createPublishAction: createMetaAction } = await import("../publish/create");
+      const { createHawlaiSitePlatform } = await import("../publish/platforms/hawlaiSite");
+      const { createServiceClient: makeSiteService } = await import("../supabase/service");
+
+      const title = typeof input.title === "string" && input.title.trim() ? input.title : undefined;
+      const metaDescription = typeof input.metaDescription === "string" && input.metaDescription.trim() ? input.metaDescription : undefined;
+      if (title === undefined && metaDescription === undefined) {
+        return { error: "Tell me what to set — a search title, a description, or both." };
+      }
+
+      const { data: site } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
+      if (!site) return { error: "This business doesn't have a Hawlai website yet, so there's no page to set these on. I can build one — just say the word." };
+
+      const { data: pages } = await supabase
+        .from("website_pages")
+        .select("id, slug, title")
+        .eq("website_id", site.id)
+        .order("order_index", { ascending: true });
+      const allPages = (pages ?? []) as { id: string; slug: string; title: string | null }[];
+      if (allPages.length === 0) return { error: "Your website has no pages yet." };
+
+      const asked = String(input.page ?? "home").trim().toLowerCase();
+      const page =
+        allPages.find((p) => p.slug.toLowerCase() === asked) ??
+        allPages.find((p) => (p.title ?? "").toLowerCase() === asked) ??
+        (asked === "home" ? allPages.find((p) => p.slug === "home") ?? allPages[0] : null);
+
+      // Asked for a page that isn't there: show what is, rather than
+      // guessing which one they meant and writing to the wrong page.
+      if (!page) {
+        return {
+          needs_clarification: true,
+          question: "Which page did you mean?",
+          candidates: allPages.map((p) => ({ page: p.slug, title: p.title ?? p.slug })),
+        };
+      }
+
+      const siteService = makeSiteService();
+      const created = await createMetaAction(siteService, createHawlaiSitePlatform({ supabase: siteService }), {
+        dealershipId: ctx.id,
+        platform: "hawlai_site",
+        actionKey: "update_page_meta",
+        targetRef: page.id,
+        targetLabel: `${page.title ?? page.slug} (/site/${site.slug}${page.slug === "home" ? "" : `/${page.slug}`})`,
+        // The owner's wording travels whole. No trim to a limit, no
+        // tidy-up: the card warns about length and they decide.
+        requestedChanges: { seoTitle: title, metaDescription },
+        requestedBy: null,
+        resolutionPath: "exact",
+        resolutionDetail: { query: asked, candidateCount: allPages.length, matchType: "exact" },
+      });
+      if (!created.ok) return { error: created.reason };
+
+      return {
+        success: true,
+        already_pending: created.alreadyPending ?? false,
+        approval_id: created.approvalId,
+        action_id: created.actionId,
+        page: page.slug,
+        page_label: page.title ?? page.slug,
+        summary: created.preview.summary,
+        warnings: created.preview.warnings,
+        published: site.published !== false,
+        note: created.alreadyPending
+          ? "You already asked for this exact change — here it is again, still waiting on your approval."
+          : "Ready for your approval below — nothing on the live site changes until you approve it. Once approved, Hawlai reads the live page back and will say whether the new text is actually being served.",
+      };
     }
     case "generate_social_management": {
       const { data: recentPosts } = await supabase
@@ -2653,6 +2736,7 @@ const DEPARTMENT_HREF: Record<string, string> = {
   build_website: "/dashboard/website-builder",
   generate_content: "/dashboard/content-marketing",
   generate_seo: "/dashboard/seo",
+  propose_page_meta: "/dashboard/website-builder",
   generate_social_management: "/dashboard/social",
   generate_email: "/dashboard/email",
   generate_whatsapp: "/dashboard/whatsapp",
@@ -3423,6 +3507,31 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       };
     }
 
+    case "propose_page_meta": {
+      if (result?.needs_clarification) {
+        return {
+          kind: "document",
+          label: "Which page?",
+          groups: [{ heading: "Pages on your site", items: (result.candidates ?? []).map((c: any) => ({ label: c.title, note: `/${c.page}` })) }],
+          departmentHref,
+        };
+      }
+      return {
+        kind: "record",
+        label: result?.already_pending ? "Already waiting for approval" : "Search title & description",
+        summary: `${result?.summary ?? ""} ${result?.note ?? ""}`.trim(),
+        // The buttons live on the card. Without the approval id the
+        // owner gets a description of a change with no way to take it.
+        approval: result?.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
+        fields: [
+          { label: "Page", value: String(result?.page_label ?? result?.page ?? "") },
+          ...(result?.published === false ? [{ label: "Site status", value: "Not published — this won't be public until you publish it" }] : []),
+          ...(Array.isArray(result?.warnings) ? result.warnings.map((w: string, i: number) => ({ label: i === 0 ? "Worth knowing" : " ", value: w })) : []),
+        ],
+        departmentHref,
+      };
+    }
+
     case "generate_seo": {
       if (input?.taskType === "competitor_keywords" && Array.isArray(result?.keywords)) {
         return { kind: "document", label: "Competitor Keyword Research", groups: groupKeywordsByIntent(result.keywords), departmentHref };
@@ -3702,6 +3811,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - **Do the work, don't hand out homework.** If a request could be read as either "explain what I should do" or "go do it," default to doing it. A day-by-day or step-by-step "plan" that just tells the person what to go do themselves (write these posts yourself, set up your profile like this, message these contacts) is the wrong shape for almost every request here — call the tools to actually produce the brand kit, the content, the website draft, the first WhatsApp message, right now, in this reply. Reserve pure instructional/advisory text for the specific things only the person can physically do (a phone call to a local shop owner, walking into a store) — everything else, build it, don't describe it.
 - Especially for a new or newly-onboarding business: don't front-load a wall of questions before doing anything. Ask at most 1-2 short clarifying questions if something is genuinely unclear (category, target city), then immediately start producing real output with reasonable assumptions for anything else — a brand kit, a first batch of content, a website — rather than making the person answer a long requirements list before any actual work happens.
 - Everything you GENERATE (content, a brand kit, a graphic, a draft) is automatically saved and also shows up on its normal dashboard page. End such a reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard." EXCEPTION — this does NOT apply when the reply carries an inline approval card (propose_price_change) or is asking the person a question. Nothing has been saved yet in those cases: the change is waiting on their decision, which is on the card in this same message. NEVER add a "saved to" or "you can review it at" line to those replies — there is no page to name, and naming one sends them away from the buttons they need to press.
+- You CAN set the search title and meta description on their website from this chat — propose_page_meta. It shows an approval card with buttons right here, and after they approve, Hawlai FETCHES the live page and reads the rendered title and description back; the reply says "live" only when that read-back matches, and otherwise says exactly what the page is still serving. NEVER send someone to Website Builder to paste meta tags in by hand, and never call it live because a tool saved a row.
 - **Saved is not live, and only the tool can tell you which one happened.** Generating something and changing what a customer sees are different events. When a result carries a \`note\`, that note is the truth about what changed — say what it says. If it says a draft was saved, never write "done", "that's set", "your site is updated" or anything an owner would read as the change being live; say where the draft is and what they still have to do. This has already gone wrong: an owner was told their meta description was set when a suggestion had been written to a list, and they stopped checking. A confirmation you can't back up is worse than no confirmation.
 - **When the person gives you their own words, those words are the answer.** If they paste a line and ask you to use it, pass it to the tool in the field meant for it (generate_seo takes \`exactText\`) and show what comes back unchanged. Never rewrite, shorten, translate or improve their town, their product name or their call to action — "Shahjahanpur" does not become "Uttar Pradesh", and "Shop now" does not become a slogan. Never invent a length limit to justify an edit: if their text really is too long for a field, give the real count and the real limit and let them choose. Their sentence, kept whole, is almost always better than yours.
 - generate_graphic and generate_logo produce real images that render directly in this chat — use markdown image syntax ![description](url) with the returned URL so the person sees it immediately, in addition to confirming it's saved on its dashboard page.
