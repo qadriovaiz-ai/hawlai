@@ -16,7 +16,7 @@ import ErrorBoundary from "../src/components/ui/ErrorBoundary";
 describe("the error boundary around a page section", () => {
   it("passes children straight through while nothing is wrong", () => {
     const html = renderToStaticMarkup(
-      createElement(ErrorBoundary, { section: "SEO Toolkit" }, createElement("p", null, "the toolkit"))
+      createElement(ErrorBoundary, { section: "SEO Toolkit", children: createElement("p", null, "the toolkit") })
     );
     expect(html).toContain("the toolkit");
     expect(html).not.toContain("didn't load");

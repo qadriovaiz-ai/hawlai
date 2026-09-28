@@ -154,8 +154,19 @@ export const TOOLS = [
   },
   {
     name: "generate_seo",
-    description: `Generate SEO content/guidance. Valid taskType values: ${SEO_TASKS.map((t) => t.key).join(", ")}.`,
-    input_schema: { type: "object", properties: { taskType: { type: "string", enum: SEO_TASKS.map((t) => t.key) } }, required: ["taskType"] },
+    description: `Generate SEO content/guidance — DRAFTS, saved to the SEO Toolkit page. None of this changes the live website: meta_tags in particular writes a suggested title and description for the owner to copy into Website Builder, it does not set what Google reads. Report what the result's note says and never tell the person their site is updated. Valid taskType values: ${SEO_TASKS.map((t) => t.key).join(", ")}.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        taskType: { type: "string", enum: SEO_TASKS.map((t) => t.key) },
+        exactText: {
+          type: "string",
+          description:
+            "The person's OWN wording, when they have given you a line and asked for it to be used — paste it here exactly as they typed it, including the town, the product name and the call to action. It is used unchanged. Never retype it from memory, never tidy it, and never leave it out because you think it needs shortening.",
+        },
+      },
+      required: ["taskType"],
+    },
   },
   {
     name: "generate_social_management",
@@ -775,6 +786,37 @@ async function saveGenerated(supabase: any, dealershipId: string, table: string,
   }
 }
 
+/**
+ * What actually happened when an SEO task ran — which is less than the
+ * chat used to claim.
+ *
+ * On 2026-09-28 an owner asked for a meta description, and chat replied
+ * "Done — that's set." Nothing was set. generate_seo writes a row in
+ * seo_toolkit_items, a list of suggestions; the title and description
+ * Google reads come from website_pages, which only Website Builder
+ * writes. The owner believed their site had changed.
+ *
+ * The homepage is worth naming separately: its <title> is the business
+ * name, built in lib/siteMetadata.ts, and no meta title suggestion can
+ * change that today. Sending someone off to paste one would be the same
+ * false promise in a different place.
+ */
+function seoDraftNote(taskType: string, output: any): string {
+  const restored = output?._ownerWordsRestored
+    ? " The person's own wording was used exactly as they wrote it — do not present it as edited or improved, and do not mention a character limit."
+    : "";
+  if (taskType !== "meta_tags") {
+    return `Saved as a draft on the SEO Toolkit page. Nothing on the live website changed.${restored}`;
+  }
+  return (
+    "Saved as a SUGGESTION on the SEO Toolkit page. The live website is unchanged: this did not set the page title or the meta description Google reads. " +
+    "To make it real the owner edits the page in Website Builder — the Meta description field on that page, which caps at 160 characters. " +
+    "The homepage title tag is the business name and cannot be changed from a meta title suggestion, so say so rather than sending them to look for a field that isn't there. " +
+    "Tell them plainly that this is a draft. Never say it is set, live, updated or done." +
+    restored
+  );
+}
+
 // Exported for tests: every chat tool's real behaviour runs through here.
 export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
   const gatedFeature: GatedFeatureKey | undefined =
@@ -898,9 +940,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const seoFacts = input.taskType === "aeo_check" ? await factsFor(supabase, ctx) : null;
       const { output, _fallback } = input.taskType === "aeo_check"
         ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, aeoQuestionsFor({ business_category: ctx.category, city: ctx.city }, seoFacts))
-        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id));
+        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id), input.exactText);
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
-      return withBrandVoiceCheck(output, resolvedBrandVoice);
+      return withBrandVoiceCheck({ ...output, note: seoDraftNote(input.taskType, output) }, resolvedBrandVoice);
     }
     case "generate_social_management": {
       const { data: recentPosts } = await supabase
@@ -3660,6 +3702,8 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - **Do the work, don't hand out homework.** If a request could be read as either "explain what I should do" or "go do it," default to doing it. A day-by-day or step-by-step "plan" that just tells the person what to go do themselves (write these posts yourself, set up your profile like this, message these contacts) is the wrong shape for almost every request here — call the tools to actually produce the brand kit, the content, the website draft, the first WhatsApp message, right now, in this reply. Reserve pure instructional/advisory text for the specific things only the person can physically do (a phone call to a local shop owner, walking into a store) — everything else, build it, don't describe it.
 - Especially for a new or newly-onboarding business: don't front-load a wall of questions before doing anything. Ask at most 1-2 short clarifying questions if something is genuinely unclear (category, target city), then immediately start producing real output with reasonable assumptions for anything else — a brand kit, a first batch of content, a website — rather than making the person answer a long requirements list before any actual work happens.
 - Everything you GENERATE (content, a brand kit, a graphic, a draft) is automatically saved and also shows up on its normal dashboard page. End such a reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard." EXCEPTION — this does NOT apply when the reply carries an inline approval card (propose_price_change) or is asking the person a question. Nothing has been saved yet in those cases: the change is waiting on their decision, which is on the card in this same message. NEVER add a "saved to" or "you can review it at" line to those replies — there is no page to name, and naming one sends them away from the buttons they need to press.
+- **Saved is not live, and only the tool can tell you which one happened.** Generating something and changing what a customer sees are different events. When a result carries a \`note\`, that note is the truth about what changed — say what it says. If it says a draft was saved, never write "done", "that's set", "your site is updated" or anything an owner would read as the change being live; say where the draft is and what they still have to do. This has already gone wrong: an owner was told their meta description was set when a suggestion had been written to a list, and they stopped checking. A confirmation you can't back up is worse than no confirmation.
+- **When the person gives you their own words, those words are the answer.** If they paste a line and ask you to use it, pass it to the tool in the field meant for it (generate_seo takes \`exactText\`) and show what comes back unchanged. Never rewrite, shorten, translate or improve their town, their product name or their call to action — "Shahjahanpur" does not become "Uttar Pradesh", and "Shop now" does not become a slogan. Never invent a length limit to justify an edit: if their text really is too long for a field, give the real count and the real limit and let them choose. Their sentence, kept whole, is almost always better than yours.
 - generate_graphic and generate_logo produce real images that render directly in this chat — use markdown image syntax ![description](url) with the returned URL so the person sees it immediately, in addition to confirming it's saved on its dashboard page.
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).
