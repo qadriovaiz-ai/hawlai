@@ -1,5 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { businessDisplayName } from "@/lib/business/displayName";
+// The title rule itself lives in lib/seo/pageTitle so the SEO health
+// check can grade the same string this renders, without importing a
+// module that holds the service-role key.
+import { resolvePageTitle } from "@/lib/seo/pageTitle";
+export { resolvePageTitle };
 import type { Metadata } from "next";
 
 // Shared by both public storefront routes (site/[slug] for "home" and
@@ -9,44 +13,6 @@ import type { Metadata } from "next";
 // layout's generic "Hawlai — AI Marketing Operating System" title —
 // same bug this already-fixed pattern in app/p/[slug]/page.tsx solved
 // for the older single-page landing system.
-
-/**
- * The nav label every generated site starts with, which is not a title.
- *
- * websiteBuilderAgent creates every homepage as `{ slug: "home", title:
- * "Home" }`, and app/site/[slug]/layout.tsx renders that string as the
- * menu item. Reading it as the title tag would put "Home" in the browser
- * tab and the search result of every site in the product — so the
- * default label is treated as no title at all, and the real one lives in
- * seo_title (migration 203).
- */
-const DEFAULT_HOME_LABEL = "home";
-
-/**
- * The <title> for one page, in the order an owner would expect.
- *
- * 1. seo_title — what they (or chat, with approval) set deliberately.
- * 2. the page's own title, unless it is the untouched "Home" label.
- * 3. the business's name, formatted — `businessDisplayName` so a signup
- *    handle reads "Candle by Qaaf" and never `candle_by_qaaf`. That name
- *    reaches Google and the WhatsApp link preview; a raw handle there is
- *    the business's brand, spelled wrong, in public.
- */
-export function resolvePageTitle(
-  pageSlug: string,
-  page: { title?: string | null; seo_title?: string | null },
-  dealershipName: string | null | undefined
-): string {
-  const business = businessDisplayName(dealershipName, "Business");
-  const seoTitle = String(page.seo_title ?? "").trim();
-  if (seoTitle) return seoTitle;
-
-  const pageTitle = String(page.title ?? "").trim();
-  if (pageSlug === "home") {
-    return pageTitle && pageTitle.toLowerCase() !== DEFAULT_HOME_LABEL ? pageTitle : business;
-  }
-  return pageTitle ? `${pageTitle} | ${business}` : business;
-}
 
 export async function buildPageMetadata(slug: string, pageSlug: string): Promise<Metadata> {
   const supabase = createServiceClient();

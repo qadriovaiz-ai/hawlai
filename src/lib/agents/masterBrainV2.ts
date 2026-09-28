@@ -176,8 +176,14 @@ export const TOOLS = [
       type: "object",
       properties: {
         page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage. If unsure which they mean, the tool returns the list to choose from." },
-        title: { type: "string", description: "The <title> for that page — what shows in the browser tab and as the blue line in a search result. Omit to leave it as it is." },
-        metaDescription: { type: "string", description: "The description under the title in a search result. Omit to leave it as it is." },
+        title: { type: "string", description: "The <title> for that page — what shows in the browser tab and as the blue line in a search result. When you write it yourself, keep it under 60 characters, because Google cuts it off there. Omit to leave it as it is." },
+        metaDescription: { type: "string", description: "The description under the title in a search result. When you write it yourself, keep it WITHIN 160 characters — Google truncates around 155-160, and a sentence that ends mid-word in a search result is worse than a shorter one. Omit to leave it as it is." },
+        writtenByOwner: {
+          type: "array",
+          items: { type: "string", enum: ["title", "metaDescription"] },
+          description:
+            "Which of these the person typed themselves, word for word. Their own wording is saved exactly as written — never shortened, never claim-checked away — and the card warns them if it says something their Business Story doesn't back up. Anything you wrote yourself must NOT be listed here: that goes through the claims check like every other piece of copy Hawlai writes.",
+        },
       },
       required: [],
     },
@@ -954,7 +960,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const seoFacts = input.taskType === "aeo_check" ? await factsFor(supabase, ctx) : null;
       const { output, _fallback } = input.taskType === "aeo_check"
         ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, aeoQuestionsFor({ business_category: ctx.category, city: ctx.city }, seoFacts))
-        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id), input.exactText);
+        : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id), input.exactText, seoFacts ?? await factsFor(supabase, ctx));
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck({ ...output, note: seoDraftNote(input.taskType, output) }, resolvedBrandVoice);
     }
@@ -967,6 +973,45 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const metaDescription = typeof input.metaDescription === "string" && input.metaDescription.trim() ? input.metaDescription : undefined;
       if (title === undefined && metaDescription === undefined) {
         return { error: "Tell me what to set — a search title, a description, or both." };
+      }
+
+      // THE CLAIMS CHECK, and which half of it applies to whom.
+      //
+      // A meta description is read by more strangers than most captions,
+      // and SEO was the one copy surface that never ran this: "No
+      // paraffin, no fake fragrance" was proposed for a business whose
+      // Business Story says nothing of the kind (2026-09-29).
+      //
+      // Decision C: the guard governs what HAWLAI writes. Wording the
+      // owner typed themselves is theirs to stand behind — it is kept
+      // exactly, and the card warns instead of editing it.
+      const { guardGenerated } = await import("../claims/claimCheck");
+      const metaFacts = await factsFor(supabase, ctx);
+      const ownWords = new Set((Array.isArray(input.writtenByOwner) ? input.writtenByOwner : []).map((f: any) => String(f)));
+      const claimWarnings: string[] = [];
+
+      function checkedCopy(field: "title" | "metaDescription", value: string | undefined): string | undefined {
+        if (value === undefined || !metaFacts) return value;
+        const verdict = guardGenerated({ value }, metaFacts, "publish");
+        if (verdict.removed.length === 0) return value;
+        const what = field === "title" ? "search title" : "description";
+        if (ownWords.has(field)) {
+          claimWarnings.push(`Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`);
+          return value;
+        }
+        const kept = String((verdict.output as any).value ?? "").trim();
+        claimWarnings.push(`Taken out of the ${what}, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`);
+        return kept || undefined;
+      }
+
+      const safeTitle = checkedCopy("title", title);
+      const safeDescription = checkedCopy("metaDescription", metaDescription);
+      if (safeTitle === undefined && safeDescription === undefined) {
+        return {
+          error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to put on the page.",
+          saved: false,
+          note: "Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording.",
+        };
       }
 
       const { data: site } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
@@ -1005,7 +1050,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         targetLabel: `${page.title ?? page.slug} (/site/${site.slug}${page.slug === "home" ? "" : `/${page.slug}`})`,
         // The owner's wording travels whole. No trim to a limit, no
         // tidy-up: the card warns about length and they decide.
-        requestedChanges: { seoTitle: title, metaDescription },
+        // claimWarnings ride along so the preview can show them — the
+        // platform reads the facts of the page, not of the business.
+        requestedChanges: { seoTitle: safeTitle, metaDescription: safeDescription, claimWarnings },
         requestedBy: null,
         resolutionPath: "exact",
         resolutionDetail: { query: asked, candidateCount: allPages.length, matchType: "exact" },
@@ -1042,6 +1089,13 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         summary: created.preview.summary,
         warnings: created.preview.warnings,
         published: site.published !== false,
+        // Shown on the card, because "148/160" is the thing an owner can
+        // act on and "your description is a bit long" is not. The live
+        // homepage sat at 164 and the health check failed it for months.
+        lengths: [
+          safeTitle !== undefined ? `Title ${safeTitle.length}/60` : null,
+          safeDescription !== undefined ? `Description ${safeDescription.length}/160` : null,
+        ].filter(Boolean).join(" · "),
         note: created.alreadyPending
           ? "You already asked for this exact change — here it is again, still waiting on your approval."
           : "Ready for your approval below — nothing on the live site changes until you approve it. Once approved, Hawlai reads the live page back and will say whether the new text is actually being served.",
@@ -3545,6 +3599,7 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
         approval: result?.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
         fields: [
           { label: "Page", value: String(result?.page_label ?? result?.page ?? "") },
+          ...(result?.lengths ? [{ label: "Length", value: String(result.lengths) }] : []),
           ...(result?.published === false ? [{ label: "Site status", value: "Not published — this won't be public until you publish it" }] : []),
           ...(Array.isArray(result?.warnings) ? result.warnings.map((w: string, i: number) => ({ label: i === 0 ? "Worth knowing" : " ", value: w })) : []),
         ],

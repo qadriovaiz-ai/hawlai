@@ -12,10 +12,17 @@ export async function GET() {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const { data: website } = await supabase.from("websites").select("id, published, slug").eq("dealership_id", dealershipId).maybeSingle();
-  const { data: pages } = website
-    ? await supabase.from("website_pages").select("slug, title, meta_description, sections").eq("website_id", website.id)
-    : { data: [] };
+  const [{ data: pages }, { data: dealership }] = await Promise.all([
+    website
+      // seo_title, because that is what the page serves as its <title>;
+      // `title` is the navigation label (migration 203).
+      ? supabase.from("website_pages").select("slug, title, seo_title, meta_description, sections").eq("website_id", website.id)
+      : Promise.resolve({ data: [] as any[] }),
+    // The name the title falls back to, so the audit grades the string
+    // a visitor really sees rather than an empty one.
+    supabase.from("dealerships").select("dealership_name").eq("id", dealershipId).maybeSingle(),
+  ]);
 
-  const audit = auditWebsite(website, pages ?? []);
+  const audit = auditWebsite(website, pages ?? [], dealership?.dealership_name ?? null);
   return NextResponse.json(audit);
 }

@@ -11,6 +11,7 @@
 import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import { getModel } from "../models";
+import { fitMetaDescription } from "@/lib/seo/metaLength";
 import { callClaude, withAiFailure, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface SiteTypeMeta {
@@ -410,7 +411,12 @@ Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client
         slug: page.slug,
         title: page.title,
         pageType: page.pageType,
-        metaDescription: typeof input.metaDescription === "string" && input.metaDescription.trim() ? input.metaDescription.trim() : fallback.metaDescription,
+        // Fitted, not just requested. The schema has said "under 160
+        // characters" all along and a live homepage still got 164, which
+        // the SEO health check then failed. Nobody reviews these — a
+        // whole site is generated in one pass — so the limit is applied
+        // here rather than hoped for.
+        metaDescription: typeof input.metaDescription === "string" && input.metaDescription.trim() ? fitMetaDescription(input.metaDescription) : fallback.metaDescription,
         sections: sanitizeInternalLinks(normalizedBlocks, validSlugs, fallbackHref),
       },
       fellBack: false,

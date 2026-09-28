@@ -48,7 +48,9 @@ export async function POST(request: Request) {
         dealership?.business_category ?? "business",
         brandProfile,
         { supabase, dealershipId }
-      , factsPrompt(facts), searchTerms);
+      // facts last: written into the prompt AND used to strip claims the
+      // business cannot back up, the way every other copy surface does.
+      , factsPrompt(facts), searchTerms, undefined, facts);
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   if (_aiFailure) return aiFailureResponse(_aiFailure);
 

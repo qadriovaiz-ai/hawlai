@@ -27,6 +27,7 @@ export interface SeoIdeas {
 }
 
 import { getModel } from "../models";
+import { resolvePageTitle } from "@/lib/seo/pageTitle";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 export interface BlogPost {
@@ -220,7 +221,9 @@ export interface WebsiteAudit {
 // consumer (croAgent.ts).
 export function auditWebsite(
   website: { published?: boolean; slug?: string | null } | null,
-  pages: { slug: string; title?: string | null; meta_description?: string | null; sections?: any[] | null }[]
+  pages: { slug: string; title?: string | null; seo_title?: string | null; meta_description?: string | null; sections?: any[] | null }[],
+  /** So the title check can fall back exactly as the page itself does. */
+  dealershipName?: string | null
 ): WebsiteAudit {
   if (!website) {
     return { score: 0, published: false, siteUrl: null, pages: [] };
@@ -229,7 +232,7 @@ export function auditWebsite(
     return {
       score: 0,
       published: !!website.published,
-      siteUrl: website.slug ? `/p/${website.slug}` : null,
+      siteUrl: website.slug ? `/site/${website.slug}` : null,
       pages: [{ pageSlug: "—", pageTitle: "No pages yet", score: 0, checks: [{ label: "Website has pages", passed: false, detail: "Add pages in the Website Builder before there's anything to audit." }] }],
     };
   }
@@ -237,11 +240,20 @@ export function auditWebsite(
   const pageResults: PageAuditResult[] = pages.map((page) => {
     const checks: SeoCheck[] = [];
 
-    const titleLen = page.title?.length ?? 0;
+    // THE TITLE THE PAGE ACTUALLY SERVES, not the nav label.
+    //
+    // This graded page.title until 2026-09-29, and since migration 203
+    // split the menu link from the title tag that is a different string:
+    // every generated homepage stores "Home" there, so an owner who set
+    // a good 55-character search title was still told "Only 4
+    // characters". resolvePageTitle is the same function the renderer
+    // calls, fallbacks included.
+    const servedTitle = resolvePageTitle(page.slug, page, dealershipName);
+    const titleLen = servedTitle.length;
     checks.push({
       label: "Title length",
       passed: titleLen >= 15 && titleLen <= 60,
-      detail: titleLen === 0 ? "No title set." : titleLen < 15 ? `Only ${titleLen} characters — likely too thin for search results.` : titleLen > 60 ? `${titleLen} characters — Google may truncate this.` : `${titleLen} characters — good length.`,
+      detail: titleLen === 0 ? "No title set." : titleLen < 15 ? `"${servedTitle}" is only ${titleLen} characters — likely too thin for search results.` : titleLen > 60 ? `${titleLen} characters — Google may truncate this.` : `${titleLen} characters — good length.`,
     });
 
     const descLen = page.meta_description?.length ?? 0;
@@ -291,7 +303,11 @@ export function auditWebsite(
   return {
     score: overallScore,
     published: !!website.published,
-    siteUrl: website.slug ? `/p/${website.slug}` : null,
+    // /site/, not /p/. This is a `websites` row: /p/ is the legacy
+    // single-page landing route (auditLandingPage below still uses it,
+    // correctly, for landing_pages), and /p/candle-by-qaaf returns 404.
+    // The SEO page has been offering owners a dead link to their site.
+    siteUrl: website.slug ? `/site/${website.slug}` : null,
     pages: pageResults,
   };
 }

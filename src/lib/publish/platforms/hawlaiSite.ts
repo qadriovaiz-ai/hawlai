@@ -140,6 +140,13 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       }
       if (wantTitle !== undefined && sameText(page.seo_title, wantTitle)) warnings.push("The title is already this — approving will change nothing.");
       if (wantDescription !== undefined && sameText(page.meta_description, wantDescription)) warnings.push("The description is already this — approving will change nothing.");
+      // Raised by the claims check before this action was created: a
+      // claim removed from Hawlai's own wording, or one the owner wrote
+      // themselves that their Business Story doesn't back up. Shown, not
+      // enforced — the person approving decides.
+      for (const warning of Array.isArray(action.requestedChanges.claimWarnings) ? action.requestedChanges.claimWarnings : []) {
+        if (typeof warning === "string" && warning.trim()) warnings.push(warning);
+      }
       if (site.published === false) {
         warnings.push("This website isn't published, so the change won't be visible to anyone until you publish it in Website Builder.");
       }

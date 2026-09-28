@@ -23,6 +23,8 @@ import { getModel } from "../models";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { formatQueriesForPrompt } from "@/lib/seo/searchQueries";
 import { flattenResultText } from "./brandVoiceValidation";
+import { guardGenerated } from "@/lib/claims/claimCheck";
+import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import type { QueryRow } from "@/lib/seo/searchConsole";
 
 /**
@@ -79,7 +81,16 @@ export async function generateSeoTask(
   /** This business's real Search Console terms, when it has connected one. */
   searchTerms: QueryRow[] = [],
   /** Copy the owner wrote and asked to be used as-is. Never edited. */
-  exactText?: string
+  exactText?: string,
+  /**
+   * This business's real facts, so claims it cannot support are removed.
+   *
+   * SEO copy went out unguarded until 2026-09-29, while Content, Email,
+   * Ads, Retargeting and WhatsApp all ran through the same check — and a
+   * meta description is read by more strangers than most captions.
+   * Optional: without facts the task behaves exactly as it did.
+   */
+  facts?: BusinessFacts | null
 ): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = SEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -123,7 +134,16 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the requirem
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    return { output: keepOwnerWords(taskKey, JSON.parse(clean), exactText) };
+
+    // ORDER MATTERS, and it is the whole of decision C (2026-09-29):
+    // the guard runs on what HAWLAI wrote, and the owner's own wording
+    // is restored afterwards. Stripping a claim the owner typed himself
+    // would contradict the verbatim rule this task already keeps — his
+    // sentence is his to make, and the card warns instead.
+    const generated = JSON.parse(clean);
+    const guarded = facts ? guardGenerated(generated, facts, "draft") : { output: generated, removed: [] as string[] };
+    const output = keepOwnerWords(taskKey, guarded.output, exactText);
+    return { output, ...(guarded.removed.length ? { claimsRemoved: guarded.removed } : {}) };
   } catch (err: any) {
     console.error("[seo-toolkit-agent] error:", err.message);
     return fallback;
