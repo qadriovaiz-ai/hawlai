@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import SearchConsoleActions from "@/components/settings/SearchConsoleActions";
 import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, ArrowRight, Globe, FileText, Radio, Star, Search } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import InstagramBusinessLoginConnect from "@/components/settings/InstagramBusinessLoginConnect";
@@ -151,20 +152,14 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
               <p className="text-xs text-slate-400">The searches people really used to find you</p>
             </div>
           </div>
-          {isSearchConsoleConnected ? (
-            <div className="space-y-1">
-              <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.search_console_email})</span>
-              {searchConsoleProperty ? (
-                <p className="text-xs text-slate-400 break-all">Reading: {searchConsoleProperty}</p>
-              ) : (
-                <p className="text-xs text-amber-400">No verified property matched this business yet — add your site in Search Console, then connect again.</p>
-              )}
-            </div>
-          ) : (
-            <a href="/api/auth/search-console/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
-              Connect <ArrowRight className="w-3 h-3" />
-            </a>
-          )}
+          {/* Connect, Reconnect and Disconnect live in a client component:
+              disconnecting is a POST, and reconnecting is how an owner
+              fixes a scope or permission problem themselves. */}
+          <SearchConsoleActions
+            connected={isSearchConsoleConnected}
+            email={(dealership?.search_console_email as string | null) ?? null}
+            property={searchConsoleProperty ?? null}
+          />
         </div>
 
         {/* Google Ads */}
