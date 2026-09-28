@@ -14,18 +14,14 @@ import type { PlanKey } from "../plans";
 import { classifyResearch } from "../research/researchRouter";
 import { callComplexResearch, callDeepResearch } from "../research/perplexityClient";
 
-export interface ResearchTaskMeta {
-  key: string;
-  label: string;
-  usesWebSearch: boolean;
-}
+import { RESEARCH_TASKS, type ResearchTaskMeta } from "@/lib/departments/research";
 
-export const RESEARCH_TASKS: ResearchTaskMeta[] = [
-  { key: "industry_trends", label: "Industry Trends", usesWebSearch: true },
-  { key: "market_research", label: "Market Research", usesWebSearch: true },
-  { key: "new_opportunities", label: "New Opportunities", usesWebSearch: true },
-  { key: "customer_sentiment", label: "Customer Sentiment", usesWebSearch: false },
-];
+// Re-exported so every existing server import keeps working; the data
+// itself lives in lib/departments so client pickers can read it without
+// pulling this agent into their bundle.
+export { RESEARCH_TASKS };
+export type { ResearchTaskMeta };
+
 
 import { logPerplexityUsage } from "../usage/logUsage";
 import { callClaude, withAiFailure, type AiFailure, type AiFailureNote } from "@/lib/ai/claude";

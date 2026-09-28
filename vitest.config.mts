@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 // Vitest rather than Jest.
 //
@@ -20,7 +21,16 @@ import { defineConfig } from "vitest/config";
 // first one does.
 
 export default defineConfig({
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    // `server-only` is a marker package: React's bundler picks its empty
+    // build through the "react-server" export condition, and everything
+    // else gets a module whose only statement is a throw. That throw is
+    // the whole point in a browser bundle, and pure noise here — a test
+    // importing a server module is exactly the right thing to do. So the
+    // runner resolves it to the same empty file the server build gets.
+    alias: { "server-only": fileURLToPath(new URL("./node_modules/server-only/empty.js", import.meta.url)) },
+  },
   // tsconfig says jsx: "preserve" (Next compiles JSX itself); tests that
   // render a component to HTML need it compiled here.
   oxc: { jsx: { runtime: "automatic" } },

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Sparkles, Video, Mic2, ArrowRight } from "lucide-react";
-import { VIDEO_TASKS } from "@/lib/agents/videoMarketingAgent";
+import { VIDEO_TASKS } from "@/lib/departments/video";
 import { isFeatureEnabled } from "@/lib/featureFlags";
 import { Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";

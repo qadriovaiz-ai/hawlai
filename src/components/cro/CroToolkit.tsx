@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Sparkles, Clock, FlaskConical, ShoppingCart, Info, CheckCircle2 } from "lucide-react";
-import { CRO_TASKS } from "@/lib/agents/croAgentV2";
+import { CRO_TASKS } from "@/lib/departments/cro";
 import { Button } from "@/components/ui/Button";
 
 export default function CroToolkit() {

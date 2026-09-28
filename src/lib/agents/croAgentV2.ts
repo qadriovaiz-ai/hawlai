@@ -13,17 +13,14 @@ import { getModel } from "../models";
 import { formatFactsForPrompt, scrubCroOutput, CRO_TRUTH_RULES, type CroFacts } from "../cro/siteFacts";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 
-export interface CroTaskMeta {
-  key: string;
-  label: string;
-}
+import { CRO_TASKS, type CroTaskMeta } from "@/lib/departments/cro";
 
-export const CRO_TASKS: CroTaskMeta[] = [
-  { key: "landing_page", label: "Landing Page Optimization" },
-  { key: "cta", label: "CTA Suggestions" },
-  { key: "form", label: "Form Optimization" },
-  { key: "ux", label: "UX Suggestions" },
-];
+// Re-exported so every existing server import keeps working; the data
+// itself lives in lib/departments so client pickers can read it without
+// pulling this agent into their bundle.
+export { CRO_TASKS };
+export type { CroTaskMeta };
+
 
 export async function generateCroSuggestions(
   taskKey: string,

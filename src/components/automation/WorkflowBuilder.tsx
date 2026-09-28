@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Zap, X } from "lucide-react";
-import { EMAIL_TASKS } from "@/lib/agents/emailMarketingAgent";
+import { EMAIL_TASKS } from "@/lib/departments/email";
 import { Button, Card, EmptyState, Input, Select, Textarea } from "@/components/ui";
 
 const TRIGGERS = [

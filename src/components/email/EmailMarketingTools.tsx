@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Sparkles, Copy, Check, Clock, Users, BarChart3, Info, Pencil, Save, X } from "lucide-react";
-import { EMAIL_TASKS } from "@/lib/agents/emailMarketingAgent";
+import { EMAIL_TASKS } from "@/lib/departments/email";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";

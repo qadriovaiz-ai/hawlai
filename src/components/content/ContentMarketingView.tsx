@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { CONTENT_TYPES } from "@/lib/agents/contentMarketingAgent";
+import { CONTENT_TYPES } from "@/lib/departments/content";
 import { Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";

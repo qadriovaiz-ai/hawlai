@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Wand2, Image as ImageIcon, Download, PenTool, Plus } from "lucide-react";
-import { GRAPHIC_TYPES } from "@/lib/agents/graphicDesignAgent";
+import { GRAPHIC_TYPES } from "@/lib/departments/graphic";
 import { Button, Card, Input } from "@/components/ui";
 import PitchDeckBuilderCard from "./PitchDeckBuilderCard";
 

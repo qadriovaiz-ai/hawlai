@@ -18,6 +18,10 @@
 //
 // Modelled on lib/ads/metaRead.ts (classifyGraphError / GraphResult).
 
+// It holds the Anthropic key and writes usage rows. A client component
+// that reached this file — as a dozen did, through their department's
+// agent, until 2026-09-28 — now fails the build instead of the page.
+import "server-only";
 import { logClaudeUsage, logWebSearchUsage } from "@/lib/usage/logUsage";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { getModel } from "@/lib/models";

@@ -133,18 +133,21 @@ describe("where the write goes, and where it can't go", () => {
     expect(sql).toMatch(/create policy[^;]*api_usage_logs[^;]*for select/i);
   });
 
-  it("THE SERVICE CLIENT refuses to run in a browser, and is not reachable from one", () => {
-    // Only the module holding the key guards this way. logUsage cannot:
-    // it is still reachable from client bundles (a dozen components
-    // import a server agent for its task list), and throwing there
-    // blacked out four dashboard pages on 2026-09-28.
-    expect(readFileSync("src/lib/supabase/service.ts", "utf8")).toContain('typeof window !== "undefined"');
-    // Required lazily, so no bundler follows the edge into client code.
-    expect(readFileSync("src/lib/usage/logUsage.ts", "utf8")).toContain('require("../supabase/service")');
-    expect(readFileSync("src/lib/usage/logUsage.ts", "utf8")).not.toMatch(/^import \{ createServiceClient/m);
+  it("THE SERVICE CLIENT cannot be built into a client bundle, and refuses to run in one", () => {
+    const service = readFileSync("src/lib/supabase/service.ts", "utf8");
+    // Fails the build, naming the offending file.
+    expect(service).toMatch(/^import "server-only";$/m);
+    // And still refuses to run in a browser, if anything ever gets past that.
+    expect(service).toContain('typeof window !== "undefined"');
+    // The two modules that reach it carry the same marker, so a bad
+    // import is caught one step earlier, at the file someone actually
+    // wrote. Whether any client file reaches them is checked by walking
+    // the import graph — tests/clientBundleBoundary.test.ts.
+    expect(readFileSync("src/lib/usage/logUsage.ts", "utf8")).toMatch(/^import "server-only";$/m);
+    expect(readFileSync("src/lib/ai/claude.ts", "utf8")).toMatch(/^import "server-only";$/m);
   });
 
-  it("AND NO CLIENT COMPONENT IMPORTS EITHER — the check that keeps it out of a bundle", () => {
+  it("AND NO CLIENT COMPONENT IMPORTS EITHER DIRECTLY — the shallow half of that check", () => {
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {

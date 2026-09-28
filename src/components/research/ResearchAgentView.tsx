@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Sparkles, Bell, Plus, Trash2, ArrowRight, TrendingUp, Radar } from "lucide-react";
-import { RESEARCH_TASKS } from "@/lib/agents/researchAgentV2";
+import { RESEARCH_TASKS } from "@/lib/departments/research";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";

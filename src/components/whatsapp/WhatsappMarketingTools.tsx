@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sparkles, Loader2, Copy, Check, Clock, MessageCircle, Users, Pencil, Save, X } from "lucide-react";
-import { WHATSAPP_TASKS } from "@/lib/agents/whatsappMarketingAgent";
+import { WHATSAPP_TASKS } from "@/lib/departments/whatsapp";
 import { toWhatsAppLink } from "@/lib/utils";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import { Button, Card, Input } from "@/components/ui";

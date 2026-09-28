@@ -19,15 +19,8 @@
 // NEVER be rendered in customer-facing UI (Section 16 — never expose
 // internal provider costs). Customer surfaces show credit counts only.
 
-// Required where it is used, not imported at the top: a static import
-// here pulls lib/supabase/service into every client bundle that reaches
-// this module — researchAgentV2 does, and ResearchAgentView imports that
-// agent for its task list. See lib/usage/logUsage.ts for the outage this
-// caused.
-function serviceClient(): any {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("@/lib/supabase/service").createServiceClient();
-}
+import "server-only";
+import { createServiceClient } from "@/lib/supabase/service";
 import { isPlanGatingBypassed } from "@/lib/plans";
 import { getEffectiveLimits } from "@/lib/usage/effectiveLimits";
 
@@ -50,7 +43,7 @@ export function currentBillingMonth(): string {
  */
 export async function recordResearchCredits(dealershipId: string, costInr: number): Promise<void> {
   const credits = computeResearchCredits(costInr);
-  const service = serviceClient();
+  const service = createServiceClient();
   const billingMonth = currentBillingMonth();
 
   try {
@@ -100,7 +93,7 @@ export async function checkResearchCredits(dealershipId: string): Promise<Resear
   // touches real usage counts.
   if (isPlanGatingBypassed()) return { allowed: true, limit: null, used: 0 };
 
-  const service = serviceClient();
+  const service = createServiceClient();
   const [limits, { data: row }] = await Promise.all([
     getEffectiveLimits(service, dealershipId),
     service

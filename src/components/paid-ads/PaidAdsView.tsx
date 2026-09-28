@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Sparkles, ArrowRight, Megaphone } from "lucide-react";
-import { AD_PLATFORMS, AD_TASKS } from "@/lib/agents/paidAdsAgent";
+import { AD_PLATFORMS, AD_TASKS } from "@/lib/departments/paidAds";
 import { Button, Card } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";

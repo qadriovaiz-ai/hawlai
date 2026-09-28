@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sparkles, Wrench } from "lucide-react";
-import { SEO_TASKS } from "@/lib/agents/seoToolkitAgent";
+import { SEO_TASKS } from "@/lib/departments/seo";
 import { Button, Card } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";

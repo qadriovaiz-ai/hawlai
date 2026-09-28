@@ -1,11 +1,17 @@
+// SERVER ONLY, enforced three ways, because getting this wrong ships a
+// key that bypasses every RLS policy in the database:
+//
+//   1. `server-only` — resolves to a module that cannot be compiled into
+//      a client bundle, so a bad import fails the BUILD, naming the file.
+//      This is the one that matters; the other two are safety nets.
+//   2. the throw below, if something ever evaluates this in a browser.
+//   3. tests/clientBundleBoundary.test.ts, which walks the import graph
+//      from every "use client" file and fails on any path that reaches
+//      here — including one four modules long, which is how it got here
+//      on 2026-09-28.
+import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
-// SERVER ONLY. This client holds the service-role key and bypasses RLS
-// entirely, so an accidental import from a client component would ship it
-// to a browser. Next's `import "server-only"` would catch that at build
-// time, but that package isn't a dependency here — so this throws on
-// evaluation in a browser instead, and a test asserts no client file
-// imports it.
 if (typeof window !== "undefined") {
   throw new Error("lib/supabase/service is server-only — it holds the service-role key and must never be imported into a client bundle.");
 }

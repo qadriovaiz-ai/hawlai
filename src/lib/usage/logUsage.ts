@@ -1,19 +1,10 @@
+// Server-side telemetry, and marked so it stays that way: this module
+// writes billing rows through the service role, and a client component
+// that reached it would now fail the build rather than the page.
+import "server-only";
+import { createServiceClient } from "../supabase/service";
 import { costOfClaudeCallInr, costOfWebSearchesInr, costOfVapiCallInr, costOfGeminiImageInr, costOfVeoVideoInr, costOfElevenLabsInr, costOfPerplexityCallInr } from "./pricing";
 import { CLAUDE_MODELS } from "../models";
-
-// Server-side telemetry. This module is still reachable from client
-// bundles today — a dozen client components import a server agent just to
-// read its task-list constant, and every agent reaches lib/ai/claude,
-// which reaches this file — so it must NOT throw on evaluation in a
-// browser: doing that blacked out four dashboard pages on 2026-09-28.
-//
-// It holds no secret of its own. The thing that does, lib/supabase/service,
-// is now required lazily below and so is no longer in any client bundle,
-// and it keeps its own hard guard.
-//
-// The real fix is to stop bundling server agents into browser JavaScript
-// by moving those task-list constants to a client-safe module. That is
-// written up as follow-up work, not attempted here.
 
 // Single place every real usage log gets written from — keeps the
 // cost-calculation logic in one spot rather than duplicated at every
@@ -54,30 +45,6 @@ import { CLAUDE_MODELS } from "../models";
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * The service client, required at the moment it is needed rather than
- * imported at the top of this file.
- *
- * WHY, and it took down four dashboard pages to learn it: a static
- * `import { createServiceClient }` here put lib/supabase/service into
- * every client bundle that transitively reaches this module — and
- * fifteen of them do, because a dozen client components import a server
- * agent just to read its task-list constant, and every agent reaches
- * lib/ai/claude, which reaches this file. The service module then threw
- * on evaluation in the browser, exactly as designed, and the SEO, Social
- * and Website pages went black.
- *
- * A require inside the function is not an import edge, so no bundler
- * follows it into client code. On the server it resolves the same module
- * it always did. The deeper problem — server agents being bundled into
- * browser JavaScript at all — is older than this file and is written up
- * separately; this removes the edge that made it fatal.
- */
-function createServiceClientLazily(): any {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("../supabase/service").createServiceClient();
-}
-
-/**
  * The client usage rows are written with.
  *
  * Service role when credentials exist, so RLS cannot reject the write;
@@ -87,7 +54,7 @@ function createServiceClientLazily(): any {
 function usageClient(passed: any): any {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return passed;
   try {
-    return createServiceClientLazily();
+    return createServiceClient();
   } catch {
     // No service credentials here (tests, local without env) — the
     // caller's client is the honest fallback, not a failure.

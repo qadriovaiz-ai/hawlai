@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Sparkles, Users, ArrowRight, BarChart3 } from "lucide-react";
-import { SOCIAL_TASKS } from "@/lib/agents/socialManagementAgent";
+import { SOCIAL_TASKS } from "@/lib/departments/social";
 import { Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedOutputPanel } from "@/components/shared/GeneratedOutputPanel";
