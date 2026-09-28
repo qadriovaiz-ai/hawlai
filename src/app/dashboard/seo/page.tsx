@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target, Lock } from "lucide-react";
 import SeoToolkit from "@/components/seo/SeoToolkit";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -300,7 +301,13 @@ export default function SeoPage() {
         </div>
       )}
 
-      <SeoToolkit />
+      {/* The toolkit is the biggest and most independent piece of this
+          page — twelve tasks, each rendering whatever shape the model
+          returned. If one of those trips over a field it didn't expect,
+          the health check and keyword tools above stay usable. */}
+      <ErrorBoundary section="SEO Toolkit">
+        <SeoToolkit />
+      </ErrorBoundary>
     </div>
   );
 }
