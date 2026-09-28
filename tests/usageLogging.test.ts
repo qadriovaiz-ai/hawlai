@@ -133,10 +133,15 @@ describe("where the write goes, and where it can't go", () => {
     expect(sql).toMatch(/create policy[^;]*api_usage_logs[^;]*for select/i);
   });
 
-  it("the logger and the service client refuse to run in a browser", () => {
-    for (const file of ["src/lib/usage/logUsage.ts", "src/lib/supabase/service.ts"]) {
-      expect(readFileSync(file, "utf8"), file).toContain('typeof window !== "undefined"');
-    }
+  it("THE SERVICE CLIENT refuses to run in a browser, and is not reachable from one", () => {
+    // Only the module holding the key guards this way. logUsage cannot:
+    // it is still reachable from client bundles (a dozen components
+    // import a server agent for its task list), and throwing there
+    // blacked out four dashboard pages on 2026-09-28.
+    expect(readFileSync("src/lib/supabase/service.ts", "utf8")).toContain('typeof window !== "undefined"');
+    // Required lazily, so no bundler follows the edge into client code.
+    expect(readFileSync("src/lib/usage/logUsage.ts", "utf8")).toContain('require("../supabase/service")');
+    expect(readFileSync("src/lib/usage/logUsage.ts", "utf8")).not.toMatch(/^import \{ createServiceClient/m);
   });
 
   it("AND NO CLIENT COMPONENT IMPORTS EITHER — the check that keeps it out of a bundle", () => {
