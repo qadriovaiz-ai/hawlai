@@ -127,10 +127,14 @@ describe("who wrote each line", () => {
     expect(readFileSync("src/lib/agents/masterBrainV2.ts", "utf8")).toMatch(/generateWebsite\([^)]*await factsFor\(supabase, ctx\)\)/);
   });
 
-  it("an owner's save makes the page theirs", () => {
+  it("an owner's save makes the page theirs — when it changed the words", () => {
+    // Narrowed after Stage 1: saving the page from Website Builder sends
+    // the sections even when the owner only set a share image, so the
+    // flip is conditional on the words having changed. The full rule and
+    // its mutations live in tests/contentSourceScope.test.ts.
     const route = readFileSync("src/app/api/website-builder/pages/[id]/route.ts", "utf8");
-    expect(route).toMatch(/update\.content_source = "edited"/);
+    expect(route).toMatch(/if \(wordsChanged\(current\?\.sections, body\.sections\)\) update\.content_source = "edited";/);
     const panel = readFileSync("src/components/website-builder/blocks/PropertiesPanel.tsx", "utf8");
-    expect(panel).toMatch(/onChange\(\{ \[key\]: value, _source: "edited" \}\)/);
+    expect(panel).toMatch(/TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, _source: "edited" \}/);
   });
 });
