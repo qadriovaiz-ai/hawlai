@@ -20,6 +20,8 @@ export type LiveMeta = {
   url: string;
   title: string | null;
   description: string | null;
+  /** The og:image a link preview would actually show. */
+  image: string | null;
 };
 
 export type LiveMetaFailure = {
@@ -79,8 +81,22 @@ export function parseTitle(html: string): string | null {
  * has one.
  */
 export function parseDescription(html: string): string | null {
+  return metaContent(html, /\bname\s*=\s*["']description["']/i);
+}
+
+/**
+ * The og:image a link preview would show.
+ *
+ * On `property=` rather than `name=`, because that is what Open Graph
+ * uses and what WhatsApp and Facebook read.
+ */
+export function parseImage(html: string): string | null {
+  return metaContent(html, /\bproperty\s*=\s*["']og:image["']/i);
+}
+
+function metaContent(html: string, matcher: RegExp): string | null {
   for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
-    if (!/\bname\s*=\s*["']description["']/i.test(tag)) continue;
+    if (!matcher.test(tag)) continue;
     const content = tag.match(/\bcontent\s*=\s*["']([\s\S]*?)["']/i);
     if (content) return decodeEntities(content[1]).trim() || null;
   }
@@ -117,7 +133,7 @@ export async function readLiveMeta(
       return { ok: false, url, reason: `The live page answered ${response.status}, so I couldn't read what it's serving.` };
     }
     const html = await response.text();
-    return { ok: true, url, title: parseTitle(html), description: parseDescription(html) };
+    return { ok: true, url, title: parseTitle(html), description: parseDescription(html), image: parseImage(html) };
   } catch (err: any) {
     const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
     return {
@@ -134,7 +150,7 @@ export type MetaVerification = {
   url: string;
   /** One sentence, written to be said to the owner as-is. */
   message: string;
-  live?: { title: string | null; description: string | null };
+  live?: { title: string | null; description: string | null; image?: string | null };
 };
 
 /**
@@ -145,7 +161,7 @@ export type MetaVerification = {
  * could not be checked. Only the first may be called live.
  */
 export function verifyAgainst(
-  expected: { title?: string | null; description?: string | null },
+  expected: { title?: string | null; description?: string | null; image?: string | null },
   live: LiveMeta | LiveMetaFailure
 ): MetaVerification {
   if (!live.ok) {
@@ -160,16 +176,21 @@ export function verifyAgainst(
   if (expected.description != null && !same(expected.description, live.description)) {
     mismatched.push(`the description still reads ${live.description ? `"${live.description}"` : "(nothing)"}`);
   }
+  // A share image is only real once the page is serving og:image —
+  // saving the URL to the row proves nothing about a link preview.
+  if (expected.image != null && !same(expected.image, live.image)) {
+    mismatched.push(`the share image is still ${live.image ? live.image : "not set"}`);
+  }
 
   if (mismatched.length === 0) {
-    const what = [expected.title != null ? "title" : null, expected.description != null ? "description" : null].filter(Boolean).join(" and ");
-    return { verified: true, url: live.url, message: `Live — I read the page back and the ${what} is exactly what you approved.`, live: { title: live.title, description: live.description } };
+    const what = [expected.title != null ? "title" : null, expected.description != null ? "description" : null, expected.image != null ? "share image" : null].filter(Boolean).join(" and ");
+    return { verified: true, url: live.url, message: `Live — I read the page back and the ${what} is exactly what you approved.`, live: { title: live.title, description: live.description, image: live.image } };
   }
 
   return {
     verified: false,
     url: live.url,
     message: `Saved, but not live yet: I read the page back and ${mismatched.join(", and ")}. That usually means the site hasn't been published since the change.`,
-    live: { title: live.title, description: live.description },
+    live: { title: live.title, description: live.description, image: live.image },
   };
 }

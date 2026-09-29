@@ -178,6 +178,11 @@ export const TOOLS = [
         page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage. If unsure which they mean, the tool returns the list to choose from." },
         title: { type: "string", description: "The <title> for that page — what shows in the browser tab and as the blue line in a search result. When you write it yourself, keep it under 60 characters, because Google cuts it off there. Omit to leave it as it is." },
         metaDescription: { type: "string", description: "The description under the title in a search result. When you write it yourself, keep it WITHIN 160 characters — Google truncates around 155-160, and a sentence that ends mid-word in a search result is worse than a shorter one. Omit to leave it as it is." },
+        shareImageUrl: {
+          type: "string",
+          description:
+            "A picture for the link preview when this page is sent on WhatsApp or posted to Facebook (og:image). ONLY a URL the person gave you, or one already on a product in their catalogue — never a generated image. A drawn picture of a real product is not that product, and a link preview is exactly where someone decides whether to trust it. If they have no photo, say so and ask them to upload one in Website Builder.",
+        },
         writtenByOwner: {
           type: "array",
           items: { type: "string", enum: ["title", "metaDescription"] },
@@ -971,8 +976,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
 
       const title = typeof input.title === "string" && input.title.trim() ? input.title : undefined;
       const metaDescription = typeof input.metaDescription === "string" && input.metaDescription.trim() ? input.metaDescription : undefined;
-      if (title === undefined && metaDescription === undefined) {
-        return { error: "Tell me what to set — a search title, a description, or both." };
+      if (title === undefined && metaDescription === undefined && typeof input.shareImageUrl !== "string") {
+        return { error: "Tell me what to set — a search title, a description, a share image, or any of them together." };
       }
 
       // THE CLAIMS CHECK, and which half of it applies to whom.
@@ -1004,9 +1009,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         return kept || undefined;
       }
 
+      const shareImageUrl = typeof input.shareImageUrl === "string" && /^https?:\/\//i.test(input.shareImageUrl.trim()) ? input.shareImageUrl.trim() : undefined;
+
       const safeTitle = checkedCopy("title", title);
       const safeDescription = checkedCopy("metaDescription", metaDescription);
-      if (safeTitle === undefined && safeDescription === undefined) {
+      if (safeTitle === undefined && safeDescription === undefined && shareImageUrl === undefined) {
         return {
           error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to put on the page.",
           saved: false,
@@ -1052,7 +1059,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // tidy-up: the card warns about length and they decide.
         // claimWarnings ride along so the preview can show them — the
         // platform reads the facts of the page, not of the business.
-        requestedChanges: { seoTitle: safeTitle, metaDescription: safeDescription, claimWarnings },
+        requestedChanges: { seoTitle: safeTitle, metaDescription: safeDescription, ogImageUrl: shareImageUrl, claimWarnings },
         requestedBy: null,
         resolutionPath: "exact",
         resolutionDetail: { query: asked, candidateCount: allPages.length, matchType: "exact" },
@@ -1089,6 +1096,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         summary: created.preview.summary,
         warnings: created.preview.warnings,
         published: site.published !== false,
+        share_image_url: shareImageUrl ?? null,
         // Shown on the card, because "148/160" is the thing an owner can
         // act on and "your description is a bit long" is not. The live
         // homepage sat at 164 and the health check failed it for months.
@@ -3597,6 +3605,9 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
         // The buttons live on the card. Without the approval id the
         // owner gets a description of a change with no way to take it.
         approval: result?.approval_id ? { id: result.approval_id, publishActionId: result.action_id } : undefined,
+        // The picture itself, not its address: an owner approving a
+        // link preview should see the preview.
+        ...(result?.share_image_url ? { imageUrl: String(result.share_image_url) } : {}),
         fields: [
           { label: "Page", value: String(result?.page_label ?? result?.page ?? "") },
           ...(result?.lengths ? [{ label: "Length", value: String(result.lengths) }] : []),

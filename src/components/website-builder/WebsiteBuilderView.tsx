@@ -657,12 +657,16 @@ export default function WebsiteBuilderView() {
                   />
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-1">Open Graph image URL (shown on WhatsApp/Facebook link previews)</p>
-                  <input
-                    value={currentPage.og_image_url ?? ""}
-                    onChange={(e) => updatePageMeta(currentPage.id, "og_image_url", e.target.value)}
-                    placeholder="https://..."
-                    className="w-full text-sm bg-white text-slate-50 border border-slate-300 rounded-lg px-3 py-2"
+                  {/* An upload, not a URL to find from somewhere else.
+                      The field asked an owner to paste an address for a
+                      picture they have on their phone, which is why the
+                      health check has been reporting "no share image"
+                      on a site whose owner has plenty of photos. */}
+                  <p className="text-[11px] text-slate-400 mb-1">Share image — shown when this page is sent on WhatsApp or posted to Facebook</p>
+                  <ImageUploader
+                    kind="section"
+                    currentUrl={currentPage.og_image_url || undefined}
+                    onUploaded={(url) => updatePageMeta(currentPage.id, "og_image_url", url)}
                   />
                 </div>
                 <p className="text-[10px] text-slate-400">Saved together with the page — click "Save Page" below.</p>

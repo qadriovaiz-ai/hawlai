@@ -38,6 +38,7 @@ type PageRow = {
   title: string | null;
   seo_title: string | null;
   meta_description: string | null;
+  og_image_url: string | null;
 };
 
 type SiteRow = { id: string; slug: string; published: boolean | null; dealership_id: string };
@@ -49,7 +50,7 @@ function sameText(a: unknown, b: unknown): boolean {
 }
 
 /** The value asked for, or undefined when this card doesn't touch that field. */
-function requested(changes: Record<string, unknown>, key: "seoTitle" | "metaDescription"): string | undefined {
+function requested(changes: Record<string, unknown>, key: "seoTitle" | "metaDescription" | "ogImageUrl"): string | undefined {
   const raw = changes[key];
   if (raw === undefined || raw === null) return undefined;
   const text = String(raw);
@@ -64,7 +65,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
   async function readPage(dealershipId: string, pageId: string): Promise<ReadResult> {
     const { data: page, error } = await deps.supabase
       .from("website_pages")
-      .select("id, website_id, slug, title, seo_title, meta_description")
+      .select("id, website_id, slug, title, seo_title, meta_description, og_image_url")
       .eq("id", pageId)
       .maybeSingle();
 
@@ -114,8 +115,9 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
 
       const wantTitle = requested(action.requestedChanges, "seoTitle");
       const wantDescription = requested(action.requestedChanges, "metaDescription");
-      if (wantTitle === undefined && wantDescription === undefined) {
-        return { ok: false, reason: "Nothing to change — give me a title, a description, or both." };
+      const wantImage = requested(action.requestedChanges, "ogImageUrl");
+      if (wantTitle === undefined && wantDescription === undefined && wantImage === undefined) {
+        return { ok: false, reason: "Nothing to change — give me a title, a description, a share image, or any of them together." };
       }
 
       // What the browser tab says today. A page with no seo_title has no
@@ -127,6 +129,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       const changes: FieldChange[] = [];
       if (wantTitle !== undefined) changes.push({ field: "seoTitle", before: page.seo_title ?? null, after: wantTitle });
       if (wantDescription !== undefined) changes.push({ field: "metaDescription", before: page.meta_description ?? null, after: wantDescription });
+      if (wantImage !== undefined) changes.push({ field: "ogImageUrl", before: page.og_image_url ?? null, after: wantImage });
 
       // Warnings inform the decision and never block it. Over-long is a
       // real thing to know — Google cuts the line off — and it is the
@@ -140,6 +143,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       }
       if (wantTitle !== undefined && sameText(page.seo_title, wantTitle)) warnings.push("The title is already this — approving will change nothing.");
       if (wantDescription !== undefined && sameText(page.meta_description, wantDescription)) warnings.push("The description is already this — approving will change nothing.");
+      if (wantImage !== undefined && sameText(page.og_image_url, wantImage)) warnings.push("The share image is already this one — approving will change nothing.");
       // Raised by the claims check before this action was created: a
       // claim removed from Hawlai's own wording, or one the owner wrote
       // themselves that their Business Story doesn't back up. Shown, not
@@ -156,7 +160,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
 
       const shown = (value: string | null) => (value && value.trim() ? `"${value.length > 90 ? `${value.slice(0, 90)}…` : value}"` : "(empty)");
       const summary = changes
-        .map((c) => `${c.field === "seoTitle" ? "Search title" : "Search description"}: ${shown(c.before)} → ${shown(c.after)}`)
+        .map((c) => `${c.field === "seoTitle" ? "Search title" : c.field === "ogImageUrl" ? "Share image" : "Search description"}: ${shown(c.before)} → ${shown(c.after)}`)
         .join("  ·  ");
 
       return {
@@ -188,10 +192,10 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       if (!read.page || !read.site) return { ok: false, reason: "That page is no longer on your website." };
       const { page, site } = read;
 
-      const expected = action.preview.changes.filter((c) => c.field === "seoTitle" || c.field === "metaDescription");
+      const expected = action.preview.changes.filter((c) => c.field === "seoTitle" || c.field === "metaDescription" || c.field === "ogImageUrl");
       if (expected.length === 0) return { ok: false, reason: "The preview did not record anything to verify against." };
 
-      const currentOf = (field: string) => (field === "seoTitle" ? page.seo_title : page.meta_description);
+      const currentOf = (field: string) => (field === "seoTitle" ? page.seo_title : field === "ogImageUrl" ? page.og_image_url : page.meta_description);
 
       // ALREADY AT THE TARGET — checked BEFORE staleness, because a
       // successful write followed by a timeout and a retry would
@@ -206,7 +210,8 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       }
 
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      for (const change of expected) update[change.field === "seoTitle" ? "seo_title" : "meta_description"] = change.after;
+      const COLUMN: Record<string, string> = { seoTitle: "seo_title", metaDescription: "meta_description", ogImageUrl: "og_image_url" };
+      for (const change of expected) update[COLUMN[change.field]] = change.after;
 
       if (!atTarget) {
         publishLog("hawlai_site.write", { action: action.id, page: page.id, fields: expected.map((c) => c.field).join(", ") });
@@ -235,12 +240,16 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       // the only part that can honestly use the word "live".
       const titleChange = expected.find((c) => c.field === "seoTitle");
       const descriptionChange = expected.find((c) => c.field === "metaDescription");
+      const imageChange = expected.find((c) => c.field === "ogImageUrl");
       const verification: MetaVerification = verifyAgainst(
         {
           // For a non-home page the rendered title is "<page> | <business>",
           // so what is compared is what the page will actually serve.
           title: titleChange ? titleChange.after : undefined,
           description: descriptionChange ? descriptionChange.after : undefined,
+          // Verified as SERVED, not as stored: a share image only exists
+          // once the page emits og:image, which is what WhatsApp reads.
+          image: imageChange ? imageChange.after : undefined,
         },
         await readLiveMeta(site.slug, page.slug, { fetchImpl: deps.fetchImpl, baseUrl: deps.baseUrl })
       );

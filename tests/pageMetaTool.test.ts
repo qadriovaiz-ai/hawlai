@@ -122,3 +122,38 @@ describe("what the chat is told about applying it", () => {
     expect(chat).toContain("data?.publish?.verified === false");
   });
 });
+
+describe("the share image from chat", () => {
+  const PHOTO = "https://cdn.hawlai.test/candle.jpg";
+
+  it("passes a real photo through to the approval card", async () => {
+    created.length = 0;
+    const result = await executeTool(db([HOME]), CTX, "propose_page_meta", { shareImageUrl: PHOTO }, "");
+    expect(result.success).toBe(true);
+    expect(created[0].requestedChanges.ogImageUrl).toBe(PHOTO);
+    // The picture itself on the card, not its address: someone
+    // approving a link preview should see the preview.
+    const artifact: any = extractArtifact("propose_page_meta", {}, result);
+    expect(artifact.imageUrl).toBe(PHOTO);
+  });
+
+  it("ignores something that is not a URL rather than storing it", async () => {
+    const result = await executeTool(db([HOME]), CTX, "propose_page_meta", { shareImageUrl: "the lavender one" }, "");
+    expect(result.error).toMatch(/can't back up|Tell me what to set/);
+  });
+
+  it("tells the model never to generate one", async () => {
+    const tool: any = TOOLS.find((t: any) => t.name === "propose_page_meta");
+    expect(tool.input_schema.properties.shareImageUrl.description).toMatch(/never a generated image/);
+    expect(tool.input_schema.properties.shareImageUrl.description).toMatch(/ask them to upload one/);
+  });
+
+  it("the builder takes an upload, not a pasted URL", () => {
+    const builder = readFileSync("src/components/website-builder/WebsiteBuilderView.tsx", "utf8");
+    expect(builder).toMatch(/Share image — shown when this page is sent on WhatsApp/);
+    expect(builder).toMatch(/onUploaded=\{\(url\) => updatePageMeta\(currentPage\.id, "og_image_url", url\)\}/);
+    // The field that asked an owner to find a URL for a photo on their
+    // phone is gone.
+    expect(builder).not.toMatch(/Open Graph image URL/);
+  });
+});
