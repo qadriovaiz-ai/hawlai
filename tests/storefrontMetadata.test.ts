@@ -158,4 +158,12 @@ describe("the storefront's own header and footer", () => {
     expect(layout).toMatch(/const dealershipName = businessDisplayName\(/);
     expect(layout).not.toMatch(/dealerships\?\.dealership_name \?\? "Business"/);
   });
+
+  it("and so does the cookie banner, which every first-time visitor reads", () => {
+    // "candle_by_qaaf uses cookies" was the last raw handle on the page
+    // after the header and footer were fixed.
+    const layout = readFileSync("src/app/site/[slug]/layout.tsx", "utf8");
+    expect(layout).toMatch(/<ConsentBanner slug=\{slug\} businessName=\{dealershipName\} \/>/);
+    expect(layout).not.toMatch(/businessName=\{\(website as any\)\.dealerships\?\.dealership_name/);
+  });
 });

@@ -100,7 +100,10 @@ export default async function SiteLayout({ children, params }: { children: React
         metaPixelId={(website as any).dealerships?.meta_pixel_id}
         googleAdsConversionId={(website as any).dealerships?.google_ads_conversion_id}
       />
-      <ConsentBanner slug={slug} businessName={(website as any).dealerships?.dealership_name ?? null} />
+      {/* The formatted name, like the header and footer above it — this
+          banner says "<name> uses cookies" to every first-time visitor,
+          and it was the one place still reading the raw signup handle. */}
+      <ConsentBanner slug={slug} businessName={dealershipName} />
     </div>
   );
 }
