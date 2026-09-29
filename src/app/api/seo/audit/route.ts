@@ -16,7 +16,7 @@ export async function GET() {
     website
       // seo_title, because that is what the page serves as its <title>;
       // `title` is the navigation label (migration 203).
-      ? supabase.from("website_pages").select("slug, title, seo_title, meta_description, sections").eq("website_id", website.id)
+      ? supabase.from("website_pages").select("slug, title, seo_title, meta_description, page_type, sections").eq("website_id", website.id)
       : Promise.resolve({ data: [] as any[] }),
     // The name the title falls back to, so the audit grades the string
     // a visitor really sees rather than an empty one.

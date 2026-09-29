@@ -247,6 +247,44 @@ export function blocksText(blocks: unknown): { headings: string[]; paragraphs: s
   return out;
 }
 
+/**
+ * Whether a page shows anything at all.
+ *
+ * Beside blocksText because it is the same problem: a block keeps its
+ * picture in props.url, and code that reads a block's own keys sees only
+ * `id` and `type`. The SEO health check did exactly that and told every
+ * block-built page it had no visual.
+ */
+export function blocksHaveImage(blocks: unknown): boolean {
+  let found = false;
+  const looksLikeImageKey = (key: string) => /^(url|src|image|imageurl|backgroundimage|heroimageurl|logourl|photo)$/i.test(key.replace(/[_-]/g, ""));
+  const walk = (node: unknown): void => {
+    if (found || !node) return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (typeof node !== "object") return;
+    const b = node as Row;
+    const hasProps = b.props && typeof b.props === "object";
+    const props = (hasProps ? b.props : b) as Row;
+    for (const [key, value] of Object.entries(props)) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      // A block declares its type, so "url" on an image or video block
+      // is a picture while "url" anywhere else might be a link.
+      const typed = hasProps && (b.type === "image" || b.type === "video") && (key === "url" || key === "src");
+      if (typed || (!hasProps && looksLikeImageKey(key))) {
+        found = true;
+        return;
+      }
+      if (hasProps && looksLikeImageKey(key) && key !== "url") found = true;
+    }
+    walk(b.children);
+  };
+  walk(blocks);
+  return found;
+}
+
 function brandIdentity(profile: Row | null, kit: Row | null): BrandIdentity {
   const colors = Array.isArray(kit?.kit?.colors)
     ? kit!.kit.colors

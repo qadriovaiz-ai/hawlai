@@ -28,6 +28,7 @@ export interface SeoIdeas {
 
 import { getModel } from "../models";
 import { resolvePageTitle } from "@/lib/seo/pageTitle";
+import { blocksText, blocksHaveImage } from "@/lib/claims/businessFacts";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
 export interface BlogPost {
@@ -219,9 +220,31 @@ export interface WebsiteAudit {
 // today, not the legacy single-page car-dealership `landing_pages`
 // table auditLandingPage below still covers for its one remaining
 // consumer (croAgent.ts).
+/**
+ * How much real copy a page needs before Google has something to index.
+ *
+ * 300 characters is roughly two short paragraphs — a page with less than
+ * that is a stub whatever its layout says. The old number was 150, but
+ * it was measured against block ids rather than words, so it never meant
+ * what it looked like.
+ */
+const PAGE_MIN_TEXT = 300;
+/** A contact page is a form and an address, not an essay. */
+const CONTACT_MIN_TEXT = 120;
+
+const LEGAL_SLUGS = /(privacy|terms|refund|shipping-policy|cookie|disclaimer)/i;
+
+function isLegalPage(page: { slug: string; page_type?: string | null }): boolean {
+  return LEGAL_SLUGS.test(page.slug) || LEGAL_SLUGS.test(String(page.page_type ?? ""));
+}
+
+function isContactPage(page: { slug: string; page_type?: string | null }): boolean {
+  return page.slug === "contact" || String(page.page_type ?? "") === "contact";
+}
+
 export function auditWebsite(
   website: { published?: boolean; slug?: string | null } | null,
-  pages: { slug: string; title?: string | null; seo_title?: string | null; meta_description?: string | null; sections?: any[] | null }[],
+  pages: { slug: string; title?: string | null; seo_title?: string | null; meta_description?: string | null; page_type?: string | null; sections?: any[] | null }[],
   /** So the title check can fall back exactly as the page itself does. */
   dealershipName?: string | null
 ): WebsiteAudit {
@@ -263,30 +286,40 @@ export function auditWebsite(
       detail: descLen === 0 ? "No meta description set for this page." : descLen > 160 ? `${descLen} characters — Google will truncate this in search results.` : descLen < 50 ? `Only ${descLen} characters — could say more.` : `${descLen} characters — good length.`,
     });
 
-    // Real content-depth check — walks every section's string fields
-    // (sections is a flexible jsonb array, shape varies by section
-    // type) rather than assuming a fixed schema, since this needs to
-    // work across every site_type Hawlai supports, not just one.
+    // CONTENT DEPTH, counted from the words the page really shows.
+    //
+    // This used to read each section's own top-level string fields. A
+    // block-builder page keeps its words in props — props.text on a
+    // Heading, props.html on a Text block — so the only strings at the
+    // top level are `id` and `type`, and the check was measuring machine
+    // identifiers. A homepage with several hundred words of copy came
+    // back as "~172 characters of real content".
+    //
+    // blocksText is the extractor the claims facts already use, and it
+    // handles both block-shaped and pre-block pages.
     const sections = page.sections ?? [];
-    let totalTextLength = 0;
-    let hasImage = false;
-    for (const section of sections) {
-      for (const [key, value] of Object.entries(section ?? {})) {
-        if (typeof value === "string") totalTextLength += value.length;
-        if (key.toLowerCase().includes("image") && value) hasImage = true;
-      }
-    }
+    const words = blocksText(sections);
+    const totalTextLength = [...words.headings, ...words.paragraphs, ...words.buttons].join(" ").length;
+    const minText = isContactPage(page) ? CONTACT_MIN_TEXT : PAGE_MIN_TEXT;
     checks.push({
       label: "Content depth",
-      passed: sections.length >= 2 && totalTextLength >= 150,
-      detail: sections.length === 0 ? "No sections added — an empty page has nothing for Google to index." : `${sections.length} section(s), ~${totalTextLength} characters of real content.`,
+      passed: sections.length >= 2 && totalTextLength >= minText,
+      detail: sections.length === 0
+        ? "No sections added — an empty page has nothing for Google to index."
+        : `${sections.length} section(s), ~${totalTextLength} characters of real content${totalTextLength < minText ? ` — aim for ${minText}+` : ""}.`,
     });
 
-    checks.push({
-      label: "Has a visual",
-      passed: hasImage,
-      detail: hasImage ? "At least one image found — helps engagement and social share previews." : "No image found on this page yet.",
-    });
+    // A privacy policy does not need a photograph. Scoring one down for
+    // having no picture is noise the owner can do nothing useful about,
+    // and it capped both legal pages at 60.
+    if (!isLegalPage(page)) {
+      const hasImage = blocksHaveImage(sections);
+      checks.push({
+        label: "Has a visual",
+        passed: hasImage,
+        detail: hasImage ? "At least one image found — helps engagement and social share previews." : "No image found on this page yet.",
+      });
+    }
 
     checks.push({
       label: "URL is descriptive",

@@ -135,3 +135,77 @@ describe("the site link points at the site", () => {
     expect(seoAgent).not.toContain("`/p/${website.slug}`");
   });
 });
+
+describe("content depth counts words, not block ids", () => {
+  // A real block-built page: the copy lives in props, and the only
+  // strings at the top level of a block are its id and its type.
+  const blocks = [
+    { id: "b1", type: "section", props: { background: "none", paddingY: "md" }, children: [
+      { id: "b2", type: "heading", props: { text: "No paraffin. No synthetic shortcuts.", level: 1, align: "center" } },
+      { id: "b3", type: "text", props: { html: "<p>Hand-poured soy wax candles, made in Shahjahanpur, in small batches, with fragrance chosen because it actually works in a real room rather than on a label.</p>", align: "left" } },
+      { id: "b4", type: "image", props: { url: "https://cdn.test/hero.jpg", alt: "Candles" } },
+      { id: "b5", type: "button", props: { label: "Shop the Collection", href: "/shop" } },
+    ] },
+    { id: "b6", type: "section", props: {}, children: [
+      { id: "b7", type: "heading", props: { text: "Poured by hand, cured properly" } },
+      { id: "b8", type: "text", props: { html: "<p>Every candle is poured by hand and left to cure before it ever reaches a box. That wait is why the scent carries across a room instead of fading at the wick.</p>" } },
+    ] },
+  ];
+
+  it("measures the copy, not the identifiers", () => {
+    const audit = auditWebsite(SITE, [{ slug: "home", title: "Home", seo_title: "x".repeat(20), meta_description: "y".repeat(100), sections: blocks }], "x");
+    const depth = check(audit, "Content depth");
+    expect(depth.passed).toBe(true);
+    // Machine ids ("b1", "section") are not content. Counting those is
+    // what reported "~172 characters" for a homepage; counting the words
+    // gives 401 for this one.
+    expect(depth.detail).toContain("~401 characters");
+  });
+
+  it("finds the picture a block keeps in props.url", () => {
+    const audit = auditWebsite(SITE, [{ slug: "home", title: "Home", seo_title: "x".repeat(20), meta_description: "y".repeat(100), sections: blocks }], "x");
+    expect(check(audit, "Has a visual").passed).toBe(true);
+  });
+
+  it("still fails a genuinely thin page, and says what it is aiming for", () => {
+    const thin = [{ id: "a", type: "section", props: {}, children: [{ id: "b", type: "heading", props: { text: "Contact" } }] }];
+    const depth = check(auditWebsite(SITE, [{ slug: "about", title: "About", seo_title: "x".repeat(20), meta_description: "y".repeat(100), sections: thin }], "x"), "Content depth");
+    expect(depth.passed).toBe(false);
+    expect(depth.detail).toContain("aim for 300+");
+  });
+
+  it("asks less of a contact page, which is a form and not an essay", () => {
+    // A real contact page: a heading, an address, hours, and a form.
+    // Around 200 characters of words, and nothing wrong with that.
+    const contact = [
+      { id: "a", type: "section", props: {}, children: [{ id: "b", type: "heading", props: { text: "Get in touch with Candle by Qaaf" } }] },
+      { id: "c", type: "section", props: {}, children: [
+        { id: "d", type: "text", props: { html: "<p>We reply to every message within a day. Shahjahanpur, Uttar Pradesh. Open Monday to Saturday, 10am to 7pm.</p>" } },
+        { id: "e", type: "form", props: { heading: "Send us a message" } },
+        { id: "f", type: "button", props: { label: "Send", href: "#" } },
+      ] },
+    ];
+    const audit = auditWebsite(SITE, [{ slug: "contact", page_type: "contact", title: "Contact", seo_title: "x".repeat(20), meta_description: "y".repeat(100), sections: contact }], "x");
+    expect(check(audit, "Content depth").passed).toBe(true);
+  });
+});
+
+describe("a privacy policy is not marked down for having no photograph", () => {
+  const legalPage = (slug: string) => ({ slug, title: "Legal", seo_title: "x".repeat(20), meta_description: "y".repeat(100), sections: [
+    { id: "a", type: "section", props: {}, children: [{ id: "b", type: "text", props: { html: `<p>${"Legal wording. ".repeat(40)}</p>` } }] },
+    { id: "c", type: "section", props: {}, children: [{ id: "d", type: "text", props: { html: "<p>More legal wording that goes on for a while.</p>" } }] },
+  ] });
+
+  it("drops the visual check entirely on legal pages", () => {
+    const audit = auditWebsite(SITE, [legalPage("privacy-policy")], "x");
+    expect(audit.pages[0].checks.map((c) => c.label)).not.toContain("Has a visual");
+    // And so a complete legal page scores full marks instead of 60.
+    expect(audit.pages[0].score).toBe(100);
+  });
+
+  it("keeps the visual check on an ordinary page", () => {
+    const audit = auditWebsite(SITE, [legalPage("about")], "x");
+    expect(audit.pages[0].checks.map((c) => c.label)).toContain("Has a visual");
+    expect(audit.pages[0].score).toBeLessThan(100);
+  });
+});
