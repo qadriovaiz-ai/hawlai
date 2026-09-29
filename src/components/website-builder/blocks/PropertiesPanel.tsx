@@ -34,13 +34,16 @@ export default function PropertiesPanel({
   const def = BLOCK_REGISTRY[block.type];
   const fields = def?.propFields ?? [];
 
+  /** The props that hold words. Changing anything else is not authorship. */
+  const TEXT_PROPS = new Set(["text", "heading", "html", "label"]);
+
   function set(key: string, value: any) {
-    // Editing a block makes its words the owner's, so the machine-written
-    // mark comes off (migration 206's per-block half). It is what lets
-    // the claims review tell "Hawlai wrote this" from "I wrote this", and
-    // an owner who has rewritten a line should not be shown it as
-    // something a machine claimed on their behalf.
-    onChange({ [key]: value, _source: "edited" });
+    // Rewriting a block's WORDS makes them the owner's, so the
+    // machine-written mark comes off (migration 206's per-block half).
+    // Changing its background, its alignment or its picture does not:
+    // the sentence is still the one Hawlai wrote, and marking it edited
+    // would quietly turn an unbacked claim into owner-approved evidence.
+    onChange(TEXT_PROPS.has(key) ? { [key]: value, _source: "edited" } : { [key]: value });
   }
 
   return (

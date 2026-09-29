@@ -1,5 +1,22 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { blocksText } from "@/lib/claims/businessFacts";
+
+/**
+ * Whether a save changed any of the words on the page.
+ *
+ * Compared through blocksText, the same extractor the claims check and
+ * the SEO audit read pages with, so "the words" means exactly what it
+ * means everywhere else: headings, paragraph text and button labels.
+ * Layout, colours, images and order are not words.
+ */
+function wordsChanged(before: unknown, after: unknown): boolean {
+  const words = (blocks: unknown) => {
+    const t = blocksText(blocks);
+    return JSON.stringify([t.headings, t.paragraphs, t.buttons]);
+  };
+  return words(before) !== words(after);
+}
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -61,11 +78,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.ogImageUrl !== undefined) update.og_image_url = body.ogImageUrl || null;
   if (body.sections !== undefined) {
     update.sections = body.sections;
-    // The owner has been through this page and saved it. From here its
-    // words are theirs, not the machine's — which is what decides
-    // whether they may count as evidence for a claims check
-    // (migration 206).
-    update.content_source = "edited";
+    // ONLY WHEN THE WORDS CHANGED.
+    //
+    // Website Builder saves the whole page at once — sections, title,
+    // meta description, share image — so a "Save Page" after uploading a
+    // share image sends the sections too. Flipping on that would record
+    // the owner as having stood behind body copy they never read, which
+    // is the opposite of what this column is for.
+    //
+    // Reordering blocks, changing a colour, swapping an image: all of
+    // them leave the words alone and none of them flips it.
+    const { data: current } = await supabase.from("website_pages").select("sections").eq("id", id).maybeSingle();
+    if (wordsChanged(current?.sections, body.sections)) update.content_source = "edited";
   }
 
   const { data: updated, error } = await supabase.from("website_pages").update(update).eq("id", id).select("updated_at").single();
