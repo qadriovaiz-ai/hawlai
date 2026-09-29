@@ -2614,12 +2614,53 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       const fitInput = await loadFitInput(supabase, ctx.id, ctx.city);
       const fits = channelFit(fitInput);
       const simulation = simulate({ budgetInr: Number(input.budgetInr) || 0, fits, diagnosis: fitInput.diagnosis });
+      // WHAT HAWLAI CAN ACTUALLY DO ABOUT EACH CHANNEL, read from this
+      // business's own connections rather than from the model's sense of
+      // what a marketing platform probably does.
+      //
+      // Asked how to spend ₹50,000, chat put ₹12,500 into Local SEO with
+      // a reason the card never gave, said "I can do both from here" of
+      // work that includes Google Business Profile — which Hawlai cannot
+      // touch at all — and offered to launch a Meta campaign without
+      // knowing whether this business has a usable ad account.
+      const { getAdAccountLimits, isAccountUsable } = await import("../ads/adAccountLimits");
+      const { data: adAccount } = await supabase
+        .from("dealerships")
+        .select("fb_ad_account_id, fb_account_status, fb_min_daily_budget, fb_currency, fb_limits_checked_at")
+        .eq("id", ctx.id)
+        .maybeSingle();
+      const metaLimits = adAccount?.fb_ad_account_id ? await getAdAccountLimits(supabase, ctx.id, { row: adAccount }) : null;
+      const metaReady = Boolean(metaLimits) && isAccountUsable(adAccount?.fb_account_status).usable;
+
+      const CAN_DO: Record<string, string> = {
+        meta_ads: metaReady
+          ? "YES — launch_meta_campaign creates it here, paused, on an approval card."
+          : "NO — this business has no usable Meta ad account connected, so do not offer to launch anything. Say what they would have to connect first.",
+        google_search: "NO — Hawlai has no Google Ads integration. generate_ad_plan writes a PLAN for them to run themselves; say that plainly.",
+        local_seo: "PARTLY — generate_seo drafts the wording, and propose_page_meta can set a page's title and description live. Hawlai CANNOT touch Google Business Profile: listings, hours, posts and reviews there are the owner's own to edit.",
+        aeo: "PARTLY — generate_seo's aeo_check measures it. Nothing about it can be published from here.",
+        instagram: "PARTLY — generate_content writes the post; publishing is their tap, unless auto-posting is already on.",
+        whatsapp: "PARTLY — generate_whatsapp drafts the message; sending is always manual.",
+        email: "YES — generate_email drafts it and send_email sends a real one to a lead, customer or team member on record.",
+        calling: "PARTLY — Hawlai can place calls only through the calling feature already set up for this business.",
+      };
+
       return {
         ...simulation,
-        channels: fits.map((f) => ({ channel: f.channel, label: f.label, standing: f.standing, reasons: f.reasons, needs: f.needs, measure: f.measure })),
+        channels: fits.map((f) => ({
+          channel: f.channel,
+          label: f.label,
+          standing: f.standing,
+          reasons: f.reasons,
+          needs: f.needs,
+          measure: f.measure,
+          hawlaiCanDo: CAN_DO[f.channel] ?? "Ask before offering to act on this one.",
+        })),
         note: simulation.thin
           ? "No split could be justified — tell them why, in the words of `thin`, and what to fix first. Don't offer a plan anyway."
-          : "These are splits, not forecasts. Where `projectedLeads` is null there is NO lead number to give: say which figure is missing, from `unknowns`, instead of estimating one. Where it isn't null, quote it with the basis it names.",
+          : "These are splits, not forecasts. Where `projectedLeads` is null there is NO lead number to give: say which figure is missing, from `unknowns`, instead of estimating one. Where it isn't null, quote it with the basis it names. " +
+            "WHY a channel got its share is in that channel's `reasons` — use those words and add no reasoning of your own; a rationale you supply is one the arithmetic never made. " +
+            "Before offering to DO anything, read that channel's `hawlaiCanDo`: offer only what it says yes to, never say \"I can do that from here\" about a NO or a PARTLY without naming the part that is theirs.",
       };
     }
     case "competitor_positioning": {

@@ -81,12 +81,25 @@ const STATUSES = allowedStatuses();
 type Row = Record<string, any>;
 
 function fakeDb(seed: { websites: Row[]; website_pages: Row[] }) {
-  const tables: Record<string, Row[]> = {
-    publish_actions: [],
-    pending_approvals: [],
-    websites: [...seed.websites],
-    website_pages: [...seed.website_pages],
-  };
+  // Every table this path touches, and an empty list for any it does
+  // not know. propose_page_meta gathers the business facts for its
+  // claims check, which reads a dozen tables; without a default the fake
+  // returned undefined and the read rejected — nine unhandled rejections
+  // that left the suite exiting 1 while every test still passed.
+  const tables: Record<string, Row[]> = new Proxy(
+    {
+      publish_actions: [],
+      pending_approvals: [],
+      websites: [...seed.websites],
+      website_pages: [...seed.website_pages],
+    } as Record<string, Row[]>,
+    {
+      get: (target, name: string) => {
+        if (!(name in target)) target[name] = [];
+        return target[name];
+      },
+    }
+  );
   let ids = 0;
 
   /** The two CHECK constraints on publish_actions, enforced. */
