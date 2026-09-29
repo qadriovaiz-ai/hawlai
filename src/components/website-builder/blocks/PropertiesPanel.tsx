@@ -35,7 +35,12 @@ export default function PropertiesPanel({
   const fields = def?.propFields ?? [];
 
   function set(key: string, value: any) {
-    onChange({ [key]: value });
+    // Editing a block makes its words the owner's, so the machine-written
+    // mark comes off (migration 206's per-block half). It is what lets
+    // the claims review tell "Hawlai wrote this" from "I wrote this", and
+    // an owner who has rewritten a line should not be shown it as
+    // something a machine claimed on their behalf.
+    onChange({ [key]: value, _source: "edited" });
   }
 
   return (

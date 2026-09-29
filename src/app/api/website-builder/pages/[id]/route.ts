@@ -59,7 +59,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.seoTitle !== undefined) update.seo_title = body.seoTitle || null;
   if (body.metaDescription !== undefined) update.meta_description = body.metaDescription;
   if (body.ogImageUrl !== undefined) update.og_image_url = body.ogImageUrl || null;
-  if (body.sections !== undefined) update.sections = body.sections;
+  if (body.sections !== undefined) {
+    update.sections = body.sections;
+    // The owner has been through this page and saved it. From here its
+    // words are theirs, not the machine's — which is what decides
+    // whether they may count as evidence for a claims check
+    // (migration 206).
+    update.content_source = "edited";
+  }
 
   const { data: updated, error } = await supabase.from("website_pages").update(update).eq("id", id).select("updated_at").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

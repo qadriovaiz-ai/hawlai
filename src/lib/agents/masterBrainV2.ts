@@ -899,7 +899,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       try {
         const brandProfile = { tone_of_voice: ctx.toneOfVoice };
         const plan = await planWebsite(input.prompt, ctx.name, ctx.category, ctx.city, brandProfile, { supabase, dealershipId: ctx.id });
-        const { pages: generatedPages, fallbackWarnings } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt, { supabase, dealershipId: ctx.id }, groundingContext);
+        const { pages: generatedPages, fallbackWarnings } = await generateWebsite(ctx.name, ctx.category, ctx.city, plan.pages, plan.businessSummary, brandProfile, input.prompt, { supabase, dealershipId: ctx.id }, groundingContext, await factsFor(supabase, ctx));
         const validTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(plan.themeKey) ? plan.themeKey : "navy_amber";
 
         // saveGeneratedWebsite() is the one place both this tool and the

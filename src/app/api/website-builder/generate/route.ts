@@ -126,7 +126,9 @@ export async function POST(request: Request) {
       brandProfile,
       prompt ?? null,
       { supabase, dealershipId }
-    , factsPrompt(facts));
+    // facts last: written into the prompt AND used to strip claims this
+    // business cannot back up, the way every other copy surface does.
+    , factsPrompt(facts), facts);
 
     const resolvedTheme = ["navy_amber", "crimson_charcoal", "forest_cream", "midnight_sky"].includes(themeKey) ? themeKey : "navy_amber";
 

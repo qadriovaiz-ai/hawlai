@@ -12,6 +12,8 @@ import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
 import { getModel } from "../models";
 import { fitMetaDescription } from "@/lib/seo/metaLength";
+import { guardBlockTree, markGenerated } from "@/lib/claims/guardBlocks";
+import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { callClaude, withAiFailure, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 
 export interface SiteTypeMeta {
@@ -436,8 +438,18 @@ export async function generateWebsite(
   brandProfile?: BrandProfile | null,
   customInstructions?: string | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
-): Promise<{ pages: GeneratedPage[]; _fallback?: boolean; fallbackWarnings?: string[] }> {
+  groundingContext?: string,
+  /**
+   * What this business can actually back up.
+   *
+   * The builder wrote unchecked copy onto live sites until 2026-09-30,
+   * while every other surface ran the claims guard — and because
+   * knownText() reads the site, that copy then became the evidence that
+   * approved the same claims everywhere else. Optional so the admin test
+   * routes can still generate without a business behind them.
+   */
+  facts?: BusinessFacts | null
+): Promise<{ pages: GeneratedPage[]; _fallback?: boolean; fallbackWarnings?: string[]; claimsRemoved?: string[] }> {
   const pageList = pages && pages.length > 0 ? pages : DEFAULT_PLAN_PAGES;
 
   // Fallback content is still authored in the old flat shape (kept
@@ -494,7 +506,26 @@ export async function generateWebsite(
     .map((g, i) => (g.fellBack ? `${pageList[i].title}: ${g.reason ?? "unknown reason"}` : null))
     .filter((w): w is string => !!w);
 
-  return { pages: resultPages, _fallback: generated.some((g) => g.fellBack) || undefined, fallbackWarnings };
+  // THE CLAIMS CHECK, last thing before these pages become a website.
+  // Only the fields holding words a customer reads; hrefs, alignments and
+  // block ids are left alone. A line that loses everything is rebuilt
+  // from counted facts rather than left blank.
+  //
+  // Every block is also marked as machine-written, which is what lets the
+  // review list tell the owner's words from Hawlai's later.
+  const claimsRemoved: string[] = [];
+  const guardedPages = resultPages.map((page) => {
+    const guarded = guardBlockTree(page.sections, facts, "publish");
+    claimsRemoved.push(...guarded.removed);
+    return { ...page, sections: markGenerated(guarded.blocks) as any[] };
+  });
+
+  return {
+    pages: guardedPages,
+    _fallback: generated.some((g) => g.fellBack) || undefined,
+    fallbackWarnings,
+    ...(claimsRemoved.length ? { claimsRemoved: [...new Set(claimsRemoved)] } : {}),
+  };
 }
 
 export interface SaveWebsiteResult {
