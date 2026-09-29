@@ -39,6 +39,7 @@ vi.mock("@/lib/supabase/service", () => ({
   }),
 }));
 
+import { readFileSync } from "fs";
 import { generateMetadata as homeMetadata } from "../src/app/site/[slug]/page";
 import { generateMetadata as innerMetadata } from "../src/app/site/[slug]/[page]/page";
 // The SAME parser the read-back uses against the real live page, so a
@@ -145,5 +146,16 @@ describe("an inner page's rendered metadata", () => {
   it("says the page is missing rather than rendering a blank title", async () => {
     store.page = null;
     expect(served(await innerMetadata({ params: Promise.resolve({ slug: "qaaf", page: "ghost" }) } as any)).title).toBe("Page not found");
+  });
+});
+
+describe("the storefront's own header and footer", () => {
+  it("shows the business name formatted, never the signup handle", () => {
+    // The <title> has read businessDisplayName since migration 203; the
+    // header beside it still printed "candle_by_qaaf" to every visitor.
+    const layout = readFileSync("src/app/site/[slug]/layout.tsx", "utf8");
+    expect(layout).toContain('import { businessDisplayName } from "@/lib/business/displayName"');
+    expect(layout).toMatch(/const dealershipName = businessDisplayName\(/);
+    expect(layout).not.toMatch(/dealerships\?\.dealership_name \?\? "Business"/);
   });
 });

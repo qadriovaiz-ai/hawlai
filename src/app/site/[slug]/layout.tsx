@@ -1,3 +1,4 @@
+import { businessDisplayName } from "@/lib/business/displayName";
 import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -35,7 +36,11 @@ export default async function SiteLayout({ children, params }: { children: React
   const theme = getTheme(website.theme_key);
   const fonts = getSiteFontFamilies((website as any).font_key);
   const fontStylesheetUrl = getSiteFontStylesheetUrl((website as any).font_key);
-  const dealershipName = (website as any).dealerships?.dealership_name ?? "Business";
+  // The header and footer of the business's own public site, so the same
+  // rule as the <title>: an owner who signed up as "candle_by_qaaf" has a
+  // brand called Candle by Qaaf, and the handle they typed into a signup
+  // form should never be what their customers read.
+  const dealershipName = businessDisplayName((website as any).dealerships?.dealership_name, "Business");
   const hasStore = (pages ?? []).some((p) => p.page_type === "products");
 
   return (
