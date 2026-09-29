@@ -13,6 +13,54 @@ import { adsTokenFor } from "@/lib/ads/metaToken";
 
 const GRAPH_VERSION = "v23.0";
 
+/**
+ * What was already decided about this approval.
+ *
+ * WHY IT EXISTS: an approval card in the chat kept its verdict in React
+ * state, so the moment the message list re-rendered — a new turn, a
+ * reload — the buttons came back on a card that had already been
+ * approved. Pressing Approve again was safe (the executor refuses a
+ * spent action) but it answered in red, as an error, on a change that
+ * had gone through perfectly.
+ *
+ * Returns the stored verification too, so a card rebuilt an hour later
+ * still says what the live page read back rather than a weaker guess.
+ */
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const service = createServiceClient();
+  const { data: approval } = await service.from("pending_approvals").select("id, dealership_id, status").eq("id", id).maybeSingle();
+  if (!approval) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+
+  // Same authorization shape as PATCH below: the owner, or a genuinely
+  // active member of THIS dealership, confirmed through the caller's own
+  // RLS-protected session. Anyone else is told nothing.
+  const { data: dealership } = await service.from("dealerships").select("owner_id").eq("id", approval.dealership_id).maybeSingle();
+  if (dealership?.owner_id !== user.id) {
+    const { data: teamMember } = await supabase
+      .from("team_members").select("id").eq("user_id", user.id).eq("dealership_id", approval.dealership_id).eq("status", "active").maybeSingle();
+    if (!teamMember) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+  }
+
+  const { data: action } = await service
+    .from("publish_actions")
+    .select("status, platform_response")
+    .eq("approval_id", id)
+    .maybeSingle();
+
+  const verification = (action?.platform_response as any)?.verification ?? null;
+  return NextResponse.json({
+    status: approval.status,
+    publish: action
+      ? { status: action.status, ...(verification ? { verified: Boolean(verification.verified), message: String(verification.message) } : {}) }
+      : null,
+  });
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

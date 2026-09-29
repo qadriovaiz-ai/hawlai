@@ -544,8 +544,43 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   // list of pending approvals it otherwise has no reason to know about.
   const [decision, setDecision] = useState<"idle" | "working" | "approved" | "rejected" | "error">("idle");
   const [decisionNote, setDecisionNote] = useState<string | null>(null);
-  /** Approved and written, but the live page did not read back as expected. */
-  const [unverified, setUnverified] = useState(false);
+  /**
+   * How the decided message should read.
+   *   ok     — done, and confirmed.
+   *   warn   — written, but the live page did not read back as expected.
+   *   muted  — nothing new happened; this card was already spent.
+   */
+  const [tone, setTone] = useState<"ok" | "warn" | "muted">("ok");
+
+  // A card rendered from history has no memory of being approved — the
+  // verdict lived in this component's state, so a new turn or a reload
+  // brought the buttons back on a change that had already gone through.
+  // Pressing Approve again was harmless and answered in red, which is
+  // how a successful change came to look like a failure.
+  useEffect(() => {
+    const approvalId = artifact.approval?.id;
+    if (!approvalId || decision !== "idle") return;
+    let cancelled = false;
+    fetch(`/api/approvals/${approvalId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data || (data.status !== "approved" && data.status !== "rejected")) return;
+        setDecision(data.status);
+        setTone(data.publish?.verified === false ? "warn" : "ok");
+        setDecisionNote(
+          data.status === "rejected"
+            ? "Rejected — nothing was changed."
+            // The stored read-back, so an old card still says what the
+            // live page actually served rather than a vaguer claim.
+            : (data.publish?.message ?? "Approved.")
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifact.approval?.id]);
 
   async function decide(status: "approved" | "rejected") {
     if (!artifact.approval) return;
@@ -568,7 +603,13 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       // rejected write. The route says which; reporting only
       // "approved" would claim something the store never received.
       if (status === "approved" && data?.publish && data.publish.status !== "executed") {
-        setDecision("error");
+        // "Already went through" is not a failure. It is what the
+        // executor says when this card was spent earlier — a second
+        // click on a card rebuilt from history — and answering in red
+        // tells the owner a change that worked did not.
+        const spent = data.publish.status === "skipped" && /already went through/i.test(String(data.publish.message ?? ""));
+        setTone("muted");
+        setDecision(spent ? "approved" : "error");
         setDecisionNote(data.publish.message ?? "Approved, but the change couldn't be applied.");
         return;
       }
@@ -582,7 +623,7 @@ function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       // An unverified write is still a write, so this is not an error —
       // but it must not read as a plain green success either, or the
       // owner walks away believing something nobody confirmed.
-      setUnverified(status === "approved" && data?.publish?.verified === false);
+      setTone(status === "approved" && data?.publish?.verified === false ? "warn" : "ok");
       setDecisionNote(
         status === "approved"
           ? (data?.publish?.message ?? "Applied to your store.")
@@ -646,7 +687,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
   const approvalStrip = artifact.approval ? (
     <div className="border-t border-slate-100 px-3 py-2">
       {decision === "approved" || decision === "rejected" ? (
-        <p className={`text-[11px] font-medium ${decision === "approved" ? (unverified ? "text-amber-600" : "text-emerald-600") : "text-slate-500"}`}>
+        <p className={`text-[11px] font-medium ${decision !== "approved" || tone === "muted" ? "text-slate-500" : tone === "warn" ? "text-amber-600" : "text-emerald-600"}`}>
           {decisionNote}
         </p>
       ) : (
