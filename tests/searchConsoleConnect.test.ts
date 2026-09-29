@@ -163,7 +163,7 @@ describe("reading the real searches", () => {
       );
     }));
 
-    const rows = await fetchQueries("tok", "sc-domain:x.in", { from: "2026-08-28", to: "2026-09-24" });
+    const rows = await fetchQueries("tok", "sc-domain:x.in", { from: "2026-08-28", to: "2026-09-24" }, null);
     expect(rows).toEqual([{ query: "candle making workshop shahjahanpur", clicks: 3, impressions: 41, ctr: 0.0731, position: 8.4 }]);
     // Only finalised data, so numbers don't move under the owner later.
     expect(body.dataState).toBe("final");
@@ -173,7 +173,7 @@ describe("reading the real searches", () => {
 
   it("an error from Google is passed on, not swallowed into an empty list", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "User does not have sufficient permission" } }), { status: 403 })));
-    await expect(fetchQueries("tok", "sc-domain:x.in", { from: "a", to: "b" })).rejects.toThrow(/sufficient permission/);
+    await expect(fetchQueries("tok", "sc-domain:x.in", { from: "a", to: "b" }, null)).rejects.toThrow(/sufficient permission/);
     vi.unstubAllGlobals();
   });
 });

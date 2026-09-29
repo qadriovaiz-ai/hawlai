@@ -38,10 +38,14 @@ let upserted: Row[];
 function db() {
   const from = (table: string) => {
     const filters: [string, any][] = [];
+    const notFilters: [string, string, any][] = [];
     const orders: { col: string; asc: boolean }[] = [];
     let staged: any = null;
     let mode: "select" | "insert" | "upsert" | "update" = "select";
-    const rows = () => (tables[table] ?? []).filter((r) => filters.every(([k, v]) => r[k] === v));
+    const rows = () =>
+      (tables[table] ?? [])
+        .filter((r) => filters.every(([k, v]) => r[k] === v))
+        .filter((r) => notFilters.every(([col, op, value]) => (op === "is" && value === null ? r[col] != null : true)));
     const sorted = () => {
       let list = rows();
       for (const o of [...orders].reverse()) {
@@ -68,6 +72,13 @@ function db() {
       limit: () => api,
       order: (col: string, o: any) => (orders.push({ col, asc: o?.ascending !== false }), api),
       eq: (k: string, v: any) => (filters.push([k, v]), api),
+      // Scoping (migration 205): topQueries asks the database for rows
+      // that carry a page_filter, so the fake has to honour it or the
+      // check that hides pre-scoping rows would pass here vacuously.
+      not: (col: string, op: string, value: any) => {
+        notFilters.push([col, op, value]);
+        return api;
+      },
       insert: (r: any) => ((mode = "insert"), (staged = r), api),
       upsert: (r: any) => ((mode = "upsert"), (staged = r), api),
       update: (r: any) => ((mode = "update"), (staged = r), api),
@@ -102,7 +113,10 @@ function googleReturns(rows: unknown[]) {
 
 beforeEach(() => {
   upserted = [];
-  tables = { dealerships: [connected()], search_queries: [], business_signals: [] };
+  // A website with a slug, because the sync now scopes the read to this
+  // business's own pages and refuses to read anything without one
+  // (migration 205, privacy scoping).
+  tables = { dealerships: [connected()], websites: [{ dealership_id: DEALER, slug: "candle-by-qaaf" }], search_queries: [], business_signals: [] };
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -224,9 +238,10 @@ describe("what the numbers show", () => {
 
 describe("reading the stored terms back", () => {
   it("only the most recent window, so two windows never blend", async () => {
+    const scoped = "^https://hawlai\.online/site/candle-by-qaaf([/?#].*)?$";
     tables.search_queries = [
-      { dealership_id: DEALER, query: "old term", clicks: 1, impressions: 90, ctr: 0.1, position: 5, window_to: "2026-08-23" },
-      { dealership_id: DEALER, query: "new term", clicks: 2, impressions: 30, ctr: 0.1, position: 4, window_to: "2026-09-23" },
+      { dealership_id: DEALER, query: "old term", clicks: 1, impressions: 90, ctr: 0.1, position: 5, window_to: "2026-08-23", page_filter: scoped },
+      { dealership_id: DEALER, query: "new term", clicks: 2, impressions: 30, ctr: 0.1, position: 4, window_to: "2026-09-23", page_filter: scoped },
     ];
     const rows = await topQueries(db(), DEALER);
     expect(rows.map((r) => r.query)).toEqual(["new term"]);

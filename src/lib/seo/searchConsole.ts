@@ -122,6 +122,56 @@ export function matchProperty(sites: SiteProperty[], siteUrl: string | null | un
   return domain?.siteUrl ?? null;
 }
 
+/** Hawlai's own host, the one every storefront lives under. */
+export function platformHost(): string {
+  return hostOf(process.env.NEXT_PUBLIC_SITE_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")) || "hawlai.online";
+}
+
+/**
+ * Whether this property covers the whole of Hawlai rather than one
+ * business's own domain.
+ *
+ * THE PRIVACY DECISION THIS DRIVES: every storefront lives at
+ * hawlai.online/site/{slug}, so a property like `sc-domain:hawlai.online`
+ * reports on ALL of them at once, plus Hawlai's own marketing pages. Read
+ * unfiltered, one business's dashboard would show the searches that
+ * reached another's shop. A business that has connected its OWN domain is
+ * a different case entirely: that property is already only its own site,
+ * and filtering it to a /site/ path would return nothing.
+ */
+export function isPlatformProperty(siteUrl: string | null | undefined): boolean {
+  const host = hostOf(siteUrl);
+  if (!host) return false;
+  const platform = platformHost();
+  return host === platform || host.endsWith(`.${platform}`);
+}
+
+/** Regex-special characters in a slug, made literal. */
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The page filter that confines a read to ONE business's storefront.
+ *
+ * Anchored on purpose, and the anchoring is the whole point:
+ *
+ *   - `contains "/site/candle"` also matches /site/candle-by-qaaf, so one
+ *     business would read another's searches;
+ *   - `contains "/site/candle/"` misses the homepage, which has no
+ *     trailing slash, so the business would lose its own best data;
+ *   - anchored, `/site/candle` matches that shop and everything under it,
+ *     and `/site/candle-by-qaaf` cannot match it at all.
+ *
+ * The tail allows a path, a query string or a fragment, because Google
+ * reports the URL as it was crawled. The leading anchor also excludes
+ * hawlai.online itself and the legacy /p/ landing pages, which belong to
+ * nobody's dashboard.
+ */
+export function sitePageFilter(slug: string, host: string = platformHost()): string {
+  return `^https://${escapeRegex(host)}/site/${escapeRegex(slug)}([/?#].*)?$`;
+}
+
 function hostOf(url: string | null | undefined): string {
   const raw = String(url ?? "").trim();
   if (!raw) return "";
@@ -146,6 +196,14 @@ export async function fetchQueries(
   accessToken: string,
   siteUrl: string,
   range: { from: string; to: string },
+  /**
+   * Which pages count. REQUIRED, and required rather than optional so
+   * that a caller has to decide: a property covering all of Hawlai must
+   * pass sitePageFilter(slug), and only a business's own domain property
+   * may pass null. An optional parameter would let the next call site
+   * forget, and forgetting means reading another business's searches.
+   */
+  pageFilter: string | null,
   rowLimit = 100
 ): Promise<QueryRow[]> {
   const res = await fetch(`${API}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
@@ -157,6 +215,10 @@ export async function fetchQueries(
       dimensions: ["query"],
       rowLimit,
       dataState: "final",
+      // Applied by Google, before anything is sent back. Filtering after
+      // the fact would mean the other businesses' figures had already
+      // crossed the wire into this request.
+      ...(pageFilter ? { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "includingRegex", expression: pageFilter }] }] } : {}),
     }),
   });
   const data = await res.json();

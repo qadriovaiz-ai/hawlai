@@ -12,6 +12,8 @@ import {
   validAccessToken,
   saveRefreshed,
   fetchQueries,
+  isPlatformProperty,
+  sitePageFilter,
   type QueryRow,
 } from "./searchConsole";
 
@@ -58,10 +60,31 @@ export async function syncSearchQueries(service: any, dealershipId: string, now:
   if (!conn) return { stored: 0, window, skipped: "Search Console isn't connected" };
   if (!conn.siteUrl) return { stored: 0, window, skipped: "no verified property is selected for this business" };
 
+  // WHICH PAGES THIS BUSINESS OWNS, and the answer decides whether we
+  // read at all.
+  //
+  // Every storefront lives at hawlai.online/site/{slug}, so the platform
+  // property reports on all of them together. Without a filter, one
+  // business's dashboard shows the searches that reached another's shop.
+  //
+  // FAILS CLOSED. No website row, or a website with no slug, means there
+  // is no way to tell this business's pages from anyone else's — so
+  // nothing is fetched. A missing slug must never quietly mean
+  // "everything".
+  let pageFilter: string | null = null;
+  if (isPlatformProperty(conn.siteUrl)) {
+    const { data: site } = await service.from("websites").select("slug").eq("dealership_id", dealershipId).maybeSingle();
+    const slug = String(site?.slug ?? "").trim();
+    if (!slug) {
+      return { stored: 0, window, skipped: "this business has no Hawlai website yet, so there are no pages of its own to read searches for" };
+    }
+    pageFilter = sitePageFilter(slug);
+  }
+
   const { accessToken, refreshed } = await validAccessToken(conn);
   if (refreshed) await saveRefreshed(service, dealershipId, refreshed);
 
-  const rows = await fetchQueries(accessToken, conn.siteUrl, window);
+  const rows = await fetchQueries(accessToken, conn.siteUrl, window, pageFilter);
   if (rows.length === 0) {
     await recordNoDataSignal(service, dealershipId, window);
     return { stored: 0, window, skipped: "Google returned no searches for this window" };
@@ -78,6 +101,13 @@ export async function syncSearchQueries(service: any, dealershipId: string, now:
       window_from: window.from,
       window_to: window.to,
       fetched_at: now.toISOString(),
+      // What this row was confined to when it was read: the page regex
+      // for a shop on the platform domain, or the property itself for a
+      // business reading its OWN domain, where the property is already
+      // the scope. Always set, so `page_filter is null` means exactly
+      // one thing — written before scoping existed, when a read covered
+      // the whole of hawlai.online and nothing in the numbers said so.
+      page_filter: pageFilter ?? conn.siteUrl,
     })),
     { onConflict: "dealership_id,query,window_from,window_to" }
   );
@@ -87,13 +117,29 @@ export async function syncSearchQueries(service: any, dealershipId: string, now:
   return { stored: rows.length, window };
 }
 
-/** The stored terms for the latest window, biggest first. */
+/**
+ * The stored terms for the latest window, biggest first.
+ *
+ * SCOPED ROWS ONLY. Every row written before 2026-09-30 came from an
+ * unfiltered read of the whole hawlai.online property, so its numbers
+ * include other businesses' shops and Hawlai's own pages — and nothing in
+ * the numbers themselves says so. page_filter records what a row was
+ * confined to; a row without one predates scoping and can never be shown
+ * to anybody.
+ *
+ * This is what makes the guarantee structural rather than procedural: the
+ * three readers downstream of here — the SEO toolkit, opportunityAgent
+ * and strategy/fitInput — all come through this function, so none of them
+ * can see an un-scoped row even if the cleanup is delayed or a row is
+ * missed.
+ */
 export async function topQueries(service: any, dealershipId: string, limit = 20): Promise<QueryRow[]> {
   try {
     const { data } = await service
       .from("search_queries")
       .select("query, clicks, impressions, ctr, position, window_to")
       .eq("dealership_id", dealershipId)
+      .not("page_filter", "is", null)
       .order("window_to", { ascending: false })
       .order("impressions", { ascending: false })
       .limit(limit * 3);
