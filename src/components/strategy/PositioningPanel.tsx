@@ -19,7 +19,16 @@ type Row = {
 type Positioning = { competitorCount: number; rows: Row[]; whiteSpace: string[]; crowdedYouHave: string[]; openUnbacked: string[] };
 type Advice = { statement: string | null; angles: { theme: string; title: string; why: string }[]; removed: string[] };
 /** What the owner can accept into Brand Voice, and what's there now (step 5). */
-type Pillars = { offered: { statement: string | null; pillars: string[] }; current: string[]; statement: string | null; acceptedAt: string | null };
+type Skipped = { line: string; reason: string };
+type Pillars = {
+  offered: { statement: string | null; pillars: string[]; skipped?: Skipped[] };
+  current: string[];
+  /** What pressing "Add to them" would really do — said before the click. */
+  wouldAdd?: { adding: number; offered: number; skipped: Skipped[] };
+  limit?: number;
+  statement: string | null;
+  acceptedAt: string | null;
+};
 type Competitor = { name: string; source: "watched" | "owner_ad" | "found"; url?: string | null; claimCount: number };
 type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[]; skippedAtCeiling?: string[] }; spentInr?: number } };
 /** What pressing the button would cost now, from GET — or why it can't be pressed. */
@@ -50,6 +59,8 @@ export default function PositioningPanel() {
   const [pillars, setPillars] = useState<Pillars | null>(null);
   const [accepting, setAccepting] = useState<"replace" | "add" | null>(null);
   const [accepted, setAccepted] = useState<string | null>(null);
+  /** Offered lines that did not land, and why. Never left for the owner to count. */
+  const [skipped, setSkipped] = useState<Skipped[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [adName, setAdName] = useState("");
@@ -158,6 +169,7 @@ export default function PositioningPanel() {
       const d = await res.json().catch(() => null);
       if (!res.ok || !d) return setError(d?.error ?? "Couldn't save to your Brand Voice — try again.");
       setPillars((p) => (p ? { ...p, current: d.pillars, statement: d.statement, acceptedAt: new Date().toISOString() } : p));
+      setSkipped(Array.isArray(d.skipped) ? d.skipped : []);
       setAccepted(mode === "replace" ? "Your Brand Voice pillars now say this." : "Added to your Brand Voice pillars.");
     } catch {
       setError("Couldn't reach Hawlai — check your connection and try again.");
@@ -275,7 +287,24 @@ export default function PositioningPanel() {
             </Button>
             <span className="text-[10.5px] text-slate-400">Every email, post and ad is written from these.</span>
           </div>
+          {/* BEFORE the click. Three were once offered, two were added,
+              and nothing said which one was missing. */}
+          {!accepted && pillars.wouldAdd && pillars.wouldAdd.adding < pillars.wouldAdd.offered && (
+            <p className="text-[11px] text-amber-600">
+              &quot;Add to them&quot; would add {pillars.wouldAdd.adding} of {pillars.wouldAdd.offered}
+              {pillars.limit ? ` — Brand Voice holds ${pillars.limit} pillars` : ""}. Replace swaps all of them instead.
+            </p>
+          )}
           {accepted && <p className="text-[11px] text-green-600">{accepted}</p>}
+          {(accepted ? skipped : pillars.wouldAdd?.skipped ?? []).length > 0 && (
+            <ul className="space-y-0.5">
+              {(accepted ? skipped : pillars.wouldAdd?.skipped ?? []).map((s, i) => (
+                <li key={i} className="text-[11px] text-slate-500">
+                  Not added — &ldquo;{s.line}&rdquo;: {s.reason}.
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

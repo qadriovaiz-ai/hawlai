@@ -63,22 +63,25 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("what's on offer", () => {
   it("the kept angles become the pillars, in order — and the statement comes along", () => {
+    // Both now carry `skipped` — what was offered and did not land, and
+    // why. See tests/brandPillars.test.ts for that rule in full.
     expect(pillarsFrom(ADVICE)).toEqual({
       statement: "Candles that say exactly what they are made of.",
       pillars: ["Name your wax", "Show the 24-hour set"],
+      skipped: [],
     });
-    expect(pillarsFrom(null)).toEqual({ statement: null, pillars: [] });
+    expect(pillarsFrom(null)).toEqual({ statement: null, pillars: [], skipped: [] });
     expect(pillarsFrom({ angles: [{ title: "  Spaced   out  " }, { title: "spaced out" }, { title: "" }] }).pillars).toEqual(["Spaced out"]);
   });
 
   it("never more than the limit", () => {
     const many = { angles: Array.from({ length: 9 }, (_, i) => ({ title: `Angle ${i}` })) };
     expect(pillarsFrom(many).pillars).toHaveLength(MAX_PILLARS);
-    expect(mergePillars(["A", "B", "C", "D", "E", "F"], ["G"])).toHaveLength(MAX_PILLARS);
+    expect(mergePillars(["A", "B", "C", "D", "E", "F"], ["G"]).pillars).toHaveLength(MAX_PILLARS);
   });
 
   it("adding keeps what's there, drops repeats, and appends the rest", () => {
-    expect(mergePillars(["20 years in Shahjahanpur"], ["Name your wax", "20 YEARS IN SHAHJAHANPUR"])).toEqual(["20 years in Shahjahanpur", "Name your wax"]);
+    expect(mergePillars(["20 years in Shahjahanpur"], ["Name your wax", "20 YEARS IN SHAHJAHANPUR"]).pillars).toEqual(["20 years in Shahjahanpur", "Name your wax"]);
   });
 
   it("GET shows both sides", async () => {

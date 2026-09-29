@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { latestPositioning } from "@/lib/strategy/positioning/run";
-import { pillarsFrom, mergePillars, MAX_PILLARS } from "@/lib/strategy/pillars";
+import { pillarsFrom, mergePillars, wouldAdd, MAX_PILLARS } from "@/lib/strategy/pillars";
 
 // Advanced Strategy step 5: what the owner ACCEPTS from their positioning
 // becomes part of the Brand Voice every generator reads.
@@ -38,6 +38,11 @@ export async function GET() {
   return NextResponse.json({
     offered,
     current,
+    // Said BEFORE the click: how many of these would actually land, and
+    // what would not. The limit is real; finding out by counting
+    // afterwards is not.
+    wouldAdd: wouldAdd(current, offered.pillars),
+    limit: MAX_PILLARS,
     statement: brand?.positioning_statement ?? null,
     acceptedAt: brand?.positioning_accepted_at ?? null,
     from: run?.created_at ?? null,
@@ -62,7 +67,10 @@ export async function POST(request: Request) {
 
   const { data: brand } = await supabase.from("brand_profiles").select("messaging_pillars").eq("dealership_id", dealershipId).maybeSingle();
   const current: string[] = Array.isArray(brand?.messaging_pillars) ? brand!.messaging_pillars.map(String) : [];
-  const pillars = mode === "replace" ? offered.pillars.slice(0, MAX_PILLARS) : mergePillars(current, offered.pillars);
+  const merged = mode === "replace"
+    ? { pillars: offered.pillars.slice(0, MAX_PILLARS), skipped: offered.skipped }
+    : mergePillars(current, offered.pillars);
+  const pillars = merged.pillars;
 
   const service = createServiceClient();
   const { error } = await service.from("brand_profiles").upsert(
@@ -76,5 +84,7 @@ export async function POST(request: Request) {
   );
   if (error) return NextResponse.json({ error: `Couldn't save to your Brand Voice: ${error.message}` }, { status: 500 });
 
-  return NextResponse.json({ pillars, statement: offered.statement, replaced: mode === "replace" ? current : [] });
+  // What did NOT land, and why. Three pillars were once offered, two
+  // were added, and nothing anywhere said which one was missing.
+  return NextResponse.json({ pillars, statement: offered.statement, replaced: mode === "replace" ? current : [], skipped: merged.skipped });
 }
