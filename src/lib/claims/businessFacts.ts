@@ -255,6 +255,30 @@ export function blocksText(blocks: unknown): { headings: string[]; paragraphs: s
  * `id` and `type`. The SEO health check did exactly that and told every
  * block-built page it had no visual.
  */
+/**
+ * Only the blocks the owner wrote or edited.
+ *
+ * props._source is "generated" on everything websiteBuilderAgent
+ * produced and is cleared when the owner rewrites that block's words
+ * (migration 206). A page from before either existed has no mark at all,
+ * which counts as the owner's: their site predates this and guessing
+ * against them would strip copy they have lived with.
+ */
+export function ownerWritten(sections: unknown): unknown {
+  const keep = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(keep).filter((n) => n !== null);
+    if (!node || typeof node !== "object") return null;
+    const b = node as Row;
+    const children = b.children ? keep(b.children) : undefined;
+    const machine = b.props && typeof b.props === "object" && (b.props as Row)._source === "generated";
+    const hasKeptChildren = Array.isArray(children) && children.length > 0;
+    if (machine && !hasKeptChildren) return null;
+    return { ...b, props: machine ? {} : b.props, ...(children ? { children } : {}) };
+  };
+  const out = keep(sections);
+  return Array.isArray(out) ? out : [];
+}
+
 export function blocksHaveImage(blocks: unknown): boolean {
   let found = false;
   const looksLikeImageKey = (key: string) => /^(url|src|image|imageurl|backgroundimage|heroimageurl|logourl|photo)$/i.test(key.replace(/[_-]/g, ""));
@@ -353,11 +377,22 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
       supabase.from("website_pages").select("slug, title, page_type, meta_description, og_image_url, sections, order_index").eq("website_id", website.id).order("order_index", { ascending: true }),
       []
     );
+    // ONCE THE OWNER HAS REVIEWED THE CLAIMS ON THEIR SITE, the
+    // machine's own writing stops being evidence (Stage 2).
+    //
+    // The loop this closes: the claims guard checks copy against what the
+    // business says about itself, and that included its website — which
+    // websiteBuilderAgent wrote. So an invented line became the proof
+    // that approved the same line everywhere else. Excluding it is only
+    // safe after the owner has been through the review list, because
+    // before that it would silently strip copy they have never been
+    // shown and cannot put back.
+    const reviewed = Boolean(dealership?.claims_reviewed_at);
     pages = rows.map((p) => ({
       slug: p.slug,
       title: p.title,
       pageType: p.page_type ?? null,
-      ...blocksText(p.sections),
+      ...blocksText(reviewed ? ownerWritten(p.sections) : p.sections),
       metaDescription: p.meta_description ?? null,
       hasShareImage: Boolean(p.og_image_url),
     }));

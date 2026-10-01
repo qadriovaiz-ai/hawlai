@@ -1,0 +1,189 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Loader2, ShieldAlert, Check, Trash2, PencilLine, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+
+// "Claims on your site" — the owner going through the lines Hawlai wrote
+// on their behalf, one at a time.
+//
+// Three answers, and the first one is the interesting half: "Keep — it's
+// true" writes the line into Business Knowledge, which makes the OWNER
+// the source for it instead of the page that happened to print it. The
+// claim stops being flagged because it has become genuinely backed, and
+// every other surface may use it too.
+//
+// Nothing is removed from a live page unless they press Remove.
+
+type Item = {
+  pageId: string;
+  pageSlug: string;
+  pageTitle: string;
+  blockId: string | null;
+  field: string;
+  sentence: string;
+  reason: string;
+  kind: "claim" | "contact" | "offer";
+};
+
+const KIND_LABEL: Record<Item["kind"], string> = {
+  contact: "Contact detail",
+  offer: "Offer",
+  claim: "Claim",
+};
+
+export default function ClaimsReview() {
+  const [items, setItems] = useState<Item[] | null>(null);
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch("/api/seo/claims-review")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return setItems([]);
+        setItems(Array.isArray(data.items) ? data.items : []);
+        setReviewedAt(data.reviewedAt ?? null);
+      })
+      .catch(() => setItems([]));
+  }, []);
+
+  const key = (item: Item) => `${item.pageId}:${item.blockId ?? ""}:${item.reason}`;
+
+  async function decide(item: Item, action: "keep" | "remove") {
+    setWorking(key(item));
+    setError(null);
+    try {
+      const res = await fetch("/api/seo/claims-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, sentence: item.sentence, pageId: item.pageId, blockId: item.blockId, field: item.field }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return setError(data?.error ?? "Couldn't save that — try again.");
+      setDone((d) => ({ ...d, [key(item)]: action === "keep" ? "Kept — it's in your Business Knowledge now." : "Taken off the page." }));
+    } catch {
+      setError("Couldn't reach Hawlai — check your connection.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function finish() {
+    setWorking("finish");
+    const res = await fetch("/api/seo/claims-review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "finish" }),
+    });
+    const data = await res.json().catch(() => null);
+    setWorking(null);
+    if (!res.ok) return setError(data?.error ?? "Couldn't save that — try again.");
+    setReviewedAt(data.reviewedAt);
+  }
+
+  if (items === null) {
+    return (
+      <div className="card p-5 flex items-center gap-2 text-sm text-slate-400">
+        <Loader2 className="w-4 h-4 animate-spin" /> Reading your pages...
+      </div>
+    );
+  }
+
+  const outstanding = items.filter((i) => !done[key(i)]);
+
+  return (
+    <div className="card p-5 space-y-3">
+      <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <ShieldAlert className="w-4 h-4 text-slate-400" /> Claims on your site
+      </p>
+
+      {items.length === 0 ? (
+        <p className="text-sm text-green-600 flex items-center gap-1.5">
+          <CheckCircle2 className="w-4 h-4" /> Nothing on your pages says something your business can&apos;t back up.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-slate-500">
+            Hawlai wrote these lines when it built your site, and nothing in your catalogue or Business Knowledge backs them
+            up. You know whether they&apos;re true — keep the ones that are, and they become part of what Hawlai knows about
+            your business.
+          </p>
+
+          <div className="space-y-2.5">
+            {items.map((item) => {
+              const k = key(item);
+              const settled = done[k];
+              return (
+                <div key={k} className="border border-slate-200 rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                      {KIND_LABEL[item.kind]}
+                    </span>
+                    <span className="text-[11px] text-slate-400">{item.pageTitle} page</span>
+                  </div>
+                  <p className="text-sm text-slate-700">&ldquo;{item.sentence}&rdquo;</p>
+                  <p className="text-xs text-slate-500">Flagged because {item.reason}.</p>
+                  {settled ? (
+                    <p className="text-[11px] text-green-600">{settled}</p>
+                  ) : (
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <button
+                        onClick={() => decide(item, "keep")}
+                        disabled={working !== null}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <Check className="w-3 h-3" /> Keep — it&apos;s true
+                      </button>
+                      <Link
+                        href="/dashboard/website-builder"
+                        className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1"
+                      >
+                        <PencilLine className="w-3 h-3" /> Edit
+                      </Link>
+                      <button
+                        onClick={() => decide(item, "remove")}
+                        disabled={working !== null}
+                        className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" /> Remove from page
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {error && <p className="text-xs text-red-500">{error}</p>}
+
+      {reviewedAt ? (
+        <p className="text-[11px] text-slate-400">
+          You went through this on {new Date(reviewedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}. From then on,
+          Hawlai only treats your own words as proof of a claim — not text it wrote itself.
+        </p>
+      ) : (
+        <div className="space-y-1.5 pt-1">
+          <button
+            onClick={finish}
+            disabled={working !== null || outstanding.length > 0}
+            className="text-xs text-brand-400 hover:underline disabled:opacity-50 disabled:no-underline"
+          >
+            {working === "finish" ? "Saving..." : "I've been through this list"}
+          </button>
+          <p className="text-[10.5px] text-slate-400">
+            {outstanding.length > 0
+              ? `${outstanding.length} still to decide. `
+              : ""}
+            After this, Hawlai stops treating its own writing as proof — only your catalogue, your Business Knowledge and
+            words you wrote yourself count.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

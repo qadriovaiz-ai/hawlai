@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrendingUp, Loader2, AlertCircle, Search, Lightbulb, FileText, Copy, Check, CheckCircle2, XCircle, Gauge, Target, Lock } from "lucide-react";
 import SeoToolkit from "@/components/seo/SeoToolkit";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
+import ClaimsReview from "@/components/seo/ClaimsReview";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -177,6 +178,12 @@ export default function SeoPage() {
           </div>
         ) : null}
       </div>
+
+      {/* Under Website Health, because it is the same question asked of
+          the words rather than the markup: is what this page says true? */}
+      <ErrorBoundary section="Claims on your site">
+        <ClaimsReview />
+      </ErrorBoundary>
 
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
