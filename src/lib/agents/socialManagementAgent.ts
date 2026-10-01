@@ -6,6 +6,7 @@
 // and viral trend detection (uses Claude's web_search tool so trends
 // are actually current instead of guessed from training data).
 
+import { webSearchTool } from "@/lib/ai/searchCaps";
 import { formatDuration } from "../catalog/catalogItem";
 import { getModel } from "../models";
 import { modelForTask } from "../aiTaskRouter";
@@ -175,7 +176,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
       }],
     };
     if (isTrends) {
-      body.tools = [{ type: "web_search_20250305", name: "web_search" }];
+      body.tools = [webSearchTool("social_trends")];
     }
 
     const r = await callClaude(body, { operation: "social_task", logContext });

@@ -6,6 +6,7 @@
 // data. New Product Alerts is a separate real monitoring system, see
 // lib/automation/competitorMonitor.ts.
 
+import { webSearchTool } from "@/lib/ai/searchCaps";
 import { logPerplexityUsage } from "../usage/logUsage";
 import { getModel } from "../models";
 import type { PlanKey } from "../plans";
@@ -88,7 +89,7 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
       model: getModel("standard"),
       max_tokens: 2500,
       messages: [{ role: "user", content: prompt }],
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      tools: [webSearchTool("competitor_intel")],
     }, { operation: "competitor_intel", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const usage = r.data.usage;

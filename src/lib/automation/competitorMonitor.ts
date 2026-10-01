@@ -6,6 +6,7 @@
 // day. Uses Claude's web_search tool — this is real search-grounded
 // output, not fabricated "there's a new product" claims.
 
+import { webSearchTool } from "@/lib/ai/searchCaps";
 import { emitNotification } from "../notifications/emit";
 import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
 import { getModel } from "../models";
@@ -37,7 +38,7 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
           role: "user",
           content: `Search for recent news about "${watch.competitor_name}" (a ${dealership?.business_category ?? "business"} competitor) — new product launches, major announcements, or notable offers from the last few days. Return JSON only: {"items": [{"title": "short headline", "summary": "1-2 sentences", "sourceUrl": "the URL you found this from"}]} — up to 5 items. If you find nothing recent, return {"items": []}. Never invent items — only include what you actually found via search.`,
         }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        tools: [webSearchTool("competitor_monitor")],
       }, { operation: "competitor_monitor", logContext: { supabase, dealershipId } });
       if (!r.ok) {
         aiFailure = aiFailureNote(r.failure);

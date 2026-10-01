@@ -5,6 +5,7 @@
 // approach (only insert alerts whose title hasn't been seen before
 // for that topic) so the feed doesn't repeat the same story daily.
 
+import { webSearchTool } from "@/lib/ai/searchCaps";
 import { emitNotification } from "../notifications/emit";
 import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
 import { getModel } from "../models";
@@ -30,7 +31,7 @@ export async function checkTopicAlerts(supabase: any, dealershipId: string) {
           role: "user",
           content: `Search for recent news about "${watch.topic}" from the last few days. Return JSON only: {"items": [{"title": "short headline", "summary": "1-2 sentences", "sourceUrl": "the URL you found this from"}]} — up to 5 items. If nothing recent, return {"items": []}. Never invent items — only include what you actually found via search.`,
         }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        tools: [webSearchTool("topic_monitor")],
       }, { operation: "topic_monitor", logContext: { supabase, dealershipId } });
       if (!r.ok) {
         aiFailure = aiFailureNote(r.failure);

@@ -8,6 +8,7 @@
 // behind every design choice below (placement, mechanism, honesty
 // framing, artifact shape).
 
+import { webSearchTool } from "@/lib/ai/searchCaps";
 import { getModel } from "../models";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { recordPresence, aeoTrend, recordAeoSignals, type AeoTrend } from "@/lib/seo/aeoPresence";
@@ -128,7 +129,7 @@ Do this in order:
 Return JSON only, no markdown, no preamble, this exact shape:
 {"visibilityScore": <0-100 integer>, "scoreLabel": "Content citability", "scoreBreakdown": [{"label": "...", "value": "..."}], "competitivePositioning": [{"promptTested": "...", "mentioned": <bool>, "competitorsMentioned": ["..."]}], "recommendations": [{"title": "...", "detail": "..."}]}`,
       }],
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      tools: [webSearchTool("aeo_check")],
     }, { operation: "aeo_check", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const data = r.data;

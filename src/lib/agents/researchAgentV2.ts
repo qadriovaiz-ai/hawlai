@@ -9,6 +9,7 @@
 // since that's the actual, honest signal available, not something to
 // guess from search results about "customers in general."
 
+import { webSearchTool } from "@/lib/ai/searchCaps";
 import { getModel } from "../models";
 import type { PlanKey } from "../plans";
 import { classifyResearch } from "../research/researchRouter";
@@ -125,7 +126,7 @@ export async function generateResearch(
   // placeholder.
   const runResearch = async (prompt: string): Promise<Researched> => {
     const claudeCall = () => askClaude(
-      { model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [{ type: "web_search_20250305", name: "web_search" }] },
+      { model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [webSearchTool("deep_research")] },
       logContext
     );
     if (!usePerplexity) return claudeCall();
