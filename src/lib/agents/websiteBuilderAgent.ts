@@ -384,6 +384,8 @@ Keep every text field genuinely concise — this is a website page, not an essay
 
 ${page.pageType === "legal" ? `This is a legal page ("${page.slug}") — one section with a heading and genuinely usable, specific standard boilerplate for an Indian small business, naming "${dealershipName}" directly, not a generic disclaimer. Cover the essential clauses a small business actually needs (not an exhaustive enterprise-grade document) — standard length for this category, not maximal.` : `Include a "button" or "form" block near the end to drive leads, unless this is the contact page itself.`}
 
+NEVER WRITE A CONTACT DETAIL THAT IS NOT GIVEN TO YOU ABOVE. No email address, no phone or WhatsApp number, no street address, no Instagram or Facebook handle, not even a plausible-looking one. A generated page once said "Email: hello@candlebyqaaf.com" for a business that does not own that domain, so every enquiry sent to it disappeared with no trace — far worse than having no address on the page at all. If a value is not in the facts above, write the page WITHOUT it: no label, no placeholder, no "coming soon". The owner adds their real details in Website Builder.
+
 Never generic "Lorem ipsum" filler, never invented fake statistics/awards/client names. Call emit_page with the result.`,
       }],
     }, { operation: "website_page_generation", logContext });
