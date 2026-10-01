@@ -535,7 +535,7 @@ export default function WebsiteBuilderView() {
             </div>
             <div className="flex items-center gap-3">
               {website.published && (
-                <a href={`/site/${website.slug}`} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-500 hover:underline flex items-center gap-1">
+                <a href={`/site/${website.slug}?hw=owner`} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-500 hover:underline flex items-center gap-1" title="Opens your site and tells Hawlai not to count your own visits">
                   View live <ExternalLink className="w-3 h-3" />
                 </a>
               )}

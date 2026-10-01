@@ -108,14 +108,17 @@ function db(tables: Record<string, any[]>) {
 }
 
 const piece = (id: string, kind: string) => ({ id, dealership_id: "d1", kind, label: "Workshop", created_at: "2026-09-01T00:00:00Z" });
-const view = (id: string | null, n: number) => Array.from({ length: n }, () => ({ dealership_id: "d1", event_type: "view", marketing_piece_id: id }));
+// is_internal false on every fixture, as it is on every real row: the
+// column is NOT NULL DEFAULT false (migration 207), and every count now
+// asks for visitors only so the owner's own testing stays out.
+const view = (id: string | null, n: number) => Array.from({ length: n }, () => ({ dealership_id: "d1", event_type: "view", marketing_piece_id: id, is_internal: false }));
 
 describe("what a piece produced", () => {
   it("visits and leads are counted against the piece that carried the link", async () => {
     const r = await contentResults(
       db({
         marketing_pieces: [piece(P1, "content"), piece(P2, "email")],
-        page_events: [...view(P1, 25), ...view(P2, 3), { dealership_id: "d1", event_type: "click", marketing_piece_id: P1 }],
+        page_events: [...view(P1, 25), ...view(P2, 3), { dealership_id: "d1", event_type: "click", marketing_piece_id: P1, is_internal: false }],
         lead_touchpoints: [
           { dealership_id: "d1", lead_id: "l1", marketing_piece_id: P1 },
           { dealership_id: "d1", lead_id: "l2", marketing_piece_id: P1 },

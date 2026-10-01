@@ -67,6 +67,10 @@ export async function contentResults(
     service
       .from("page_events")
       .select("event_type, marketing_piece_id")
+      // Visitors only: the owner's own testing is marked is_internal
+      // (migration 207) and would otherwise be most of the signal on a
+      // site with 31 visits.
+      .eq("is_internal", false)
       .eq("dealership_id", dealershipId)
       .not("marketing_piece_id", "is", null)
       .gte("created_at", from),

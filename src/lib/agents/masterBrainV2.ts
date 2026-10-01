@@ -2100,7 +2100,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     }
     case "get_website_analytics": {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: events } = await supabase.from("page_events").select("event_type").eq("dealership_id", ctx.id).gte("created_at", thirtyDaysAgo);
+      const { data: events } = await supabase.from("page_events").select("event_type").eq("dealership_id", ctx.id).eq("is_internal", false).gte("created_at", thirtyDaysAgo);
       const all = events ?? [];
       const views = all.filter((e: any) => e.event_type === "view").length;
       const formSubmits = all.filter((e: any) => e.event_type === "form_submit").length;

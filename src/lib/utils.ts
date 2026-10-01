@@ -183,6 +183,27 @@ function getUtmParams(): { utm_source: string | null; utm_medium: string | null;
 // Fires a public analytics event for a landing page (view, click,
 // chat_open, form_submit). Never throws — tracking must never break
 // the page for a real visitor.
+/**
+ * Whether this browser is the owner's, not a customer's.
+ *
+ * Set by arriving from the dashboard's "View site" link (?hw=owner) and
+ * then remembered for a year, because an owner clicks through once and
+ * browses for twenty minutes. Does not detect a different device or a
+ * private window; the dashboard says so rather than implying otherwise.
+ */
+export function isOwnerVisit(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (new URLSearchParams(window.location.search).get("hw") === "owner") {
+      document.cookie = "hw_owner=1; max-age=31536000; path=/; samesite=lax";
+      return true;
+    }
+    return /(?:^|;\s*)hw_owner=1/.test(document.cookie);
+  } catch {
+    return false;
+  }
+}
+
 export function trackEvent(slug: string, eventType: string, coords?: { xPct: number; yPct: number }, variant?: string | null) {
   try {
     // Consent decides how much of this event is identifiable, not
@@ -208,6 +229,12 @@ export function trackEvent(slug: string, eventType: string, coords?: { xPct: num
         // counting visits per page. Tying it to a person still needs
         // visitorId, which stays consent-gated below.
         contentPieceId: pieceIdFrom(typeof window === "undefined" ? "" : window.location.search),
+        // The owner looking at their own shop. The server checks their
+        // session too and that is the authority; this covers the browser
+        // whose session has lapsed, and trusting the client here is safe
+        // in a way it usually is not — the only thing it can do is leave
+        // the sender's own visit out of the sender's own counts.
+        internal: isOwnerVisit(),
         visitorId: consented ? getVisitorIdIfConsented() : null,
         consentGranted: consented,
         ...(consented ? getUtmParams() : {}),

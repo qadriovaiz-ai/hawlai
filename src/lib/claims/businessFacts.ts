@@ -354,7 +354,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     ),
     read<Row[]>("products", supabase.from("products").select(CATALOG_COLUMNS).eq("dealership_id", dealershipId).eq("is_active", true).order("order_index", { ascending: true }).limit(25), []),
     read<Row[]>("offers", supabase.from("discount_codes").select("code, discount_type, value, min_order_value, max_uses, used_count, expires_at, is_active").eq("dealership_id", dealershipId).eq("is_active", true), []),
-    read<Row[]>("visitor data", supabase.from("page_events").select("event_type").eq("dealership_id", dealershipId).gte("created_at", since), []),
+    read<Row[]>("visitor data", supabase.from("page_events").select("event_type").eq("dealership_id", dealershipId).eq("is_internal", false).gte("created_at", since), []),
     read<Row[]>("orders", supabase.from("orders").select("status, created_at").eq("dealership_id", dealershipId), []),
     read<Row[]>("leads", supabase.from("leads").select("id").eq("dealership_id", dealershipId), []),
     read<Row[]>("abandoned carts", supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", since), []),

@@ -69,6 +69,13 @@ export default function WebsiteAnalyticsCard() {
           </div>
         )}
       </div>
+      {/* Said plainly rather than implied. The session check and the
+          hw=owner flag catch the owner in the browser they work in; a
+          phone, or a private window, looks like any other visitor. */}
+      <p className="text-[10.5px] text-slate-400 pt-1">
+        Your own visits aren&apos;t counted when you open your site from Hawlai. Visits from another device or a private
+        window can&apos;t be told apart from a customer&apos;s.
+      </p>
     </div>
   );
 }

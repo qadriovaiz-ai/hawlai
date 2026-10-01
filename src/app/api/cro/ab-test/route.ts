@@ -19,6 +19,10 @@ export async function GET() {
   const { data: events } = await supabase
     .from("page_events")
     .select("event_type, variant")
+    // The owner reloading their own page skews a variant comparison
+    // exactly as it skews a visit count — and worse, because a test with
+    // 30 events can be decided by five of their own refreshes.
+    .eq("is_internal", false)
     .eq("dealership_id", dealershipId)
     .not("variant", "is", null);
 
