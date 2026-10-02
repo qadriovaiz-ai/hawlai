@@ -361,3 +361,73 @@ describe("what chat may claim when nothing was written", () => {
     expect(brain).toMatch(/batch save/i);
   });
 });
+
+// ---- the same guard, for statuses ------------------------------------
+//
+// The platform check above exists because a new platform module shipped
+// without widening publish_actions_platform_check. Statuses are the same
+// hazard with a different column: pending_approvals has allowed only
+// ('pending','approved','rejected') since migration 006, so the 14-day
+// expiry had to widen it. This fails if any status the code writes is one
+// its table would refuse.
+
+/** Values a CHECK on `column` allows, read from the statements for `table`. */
+function allowedValues(table: string, column: string): string[] {
+  let allowed: string[] = [];
+  const statements = migrationSql()
+    .flatMap((sql) => sql.replace(/--.*$/gm, "").split(";"))
+    .filter((statement) => statement.toLowerCase().includes(table));
+  for (const statement of statements) {
+    // String.raw, because a plain template literal eats every backslash
+    // in a regex and leaves a pattern that matches nothing — which is
+    // how this check first "passed" against an empty list.
+    const check = new RegExp(String.raw`check\s*\(\s*${column}\s+in\s*\(([\s\S]*?)\)\s*\)`, "gi");
+    for (const match of statement.matchAll(check)) {
+      allowed = [...match[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    }
+  }
+  return allowed;
+}
+
+/** Every `status: "..."` the code writes to this table, read from its own call sites. */
+function statusesWritten(files: string[], table: string): string[] {
+  const found = new Set<string>();
+  for (const file of files) {
+    const body = readFileSync(file, "utf8");
+    const writes = new RegExp(String.raw`from\("${table}"\)[\s\S]{0,400}?\.(?:update|insert)\(\{([\s\S]{0,400}?)\}`, "g");
+    for (const call of body.matchAll(writes)) {
+      for (const m of call[1].matchAll(/status:\s*"([a-z_]+)"/g)) found.add(m[1]);
+    }
+  }
+  return [...found];
+}
+
+function allSourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) allSourceFiles(path, out);
+    else if (/\.tsx?$/.test(entry.name)) out.push(path);
+  }
+  return out;
+}
+
+describe("every status the code writes is one its table accepts", () => {
+  const files = allSourceFiles("src");
+
+  it("reads both constraints at all", () => {
+    expect(allowedValues("pending_approvals", "status")).toContain("pending");
+    expect(allowedValues("publish_actions", "status")).toContain("awaiting_approval");
+  });
+
+  it("pending_approvals — including 'expired', which migration 006 did not allow", () => {
+    const allowed = allowedValues("pending_approvals", "status");
+    expect(allowed).toContain("expired");
+    expect(statusesWritten(files, "pending_approvals").filter((s) => !allowed.includes(s))).toEqual([]);
+  });
+
+  it("publish_actions — 'stale' was already allowed, so the expiry needed no migration there", () => {
+    const allowed = allowedValues("publish_actions", "status");
+    expect(allowed).toContain("stale");
+    expect(statusesWritten(files, "publish_actions").filter((s) => !allowed.includes(s))).toEqual([]);
+  });
+});
