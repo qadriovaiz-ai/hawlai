@@ -16,6 +16,10 @@ export async function checkCompetitorAlerts(supabase: any, dealershipId: string)
   const { data: watches } = await supabase
     .from("competitor_watches")
     .select("competitor_name")
+    // Paused watches are over the plan's limit (migration 207). Kept, so
+    // an upgrade brings them straight back — but not checked tonight,
+    // because the nightly search is the cost the cap exists for.
+    .eq("paused", false)
     .eq("dealership_id", dealershipId);
   if (!watches || watches.length === 0) return { newAlerts: 0, skipped: "no watched competitors" };
 

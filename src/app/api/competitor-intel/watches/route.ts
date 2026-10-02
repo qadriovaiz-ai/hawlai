@@ -14,12 +14,25 @@ export async function GET() {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
+  // Brought in line with the plan on every read: a downgrade pauses the
+  // extras, an upgrade brings them back, and nothing is deleted either
+  // way. Idempotent, so a plan that has not changed costs nothing.
+  const { reconcileWatches, watchesAllowed, watchLimitMessage } = await import("@/lib/automation/watchLimits");
+  const { data: planRow } = await supabase.from("dealerships").select("plan").eq("id", dealershipId).maybeSingle();
+  await reconcileWatches(supabase, dealershipId, planRow?.plan);
+
   const [{ data: watches }, { data: alerts }] = await Promise.all([
     supabase.from("competitor_watches").select("*").eq("dealership_id", dealershipId).order("created_at", { ascending: false }),
     supabase.from("competitor_alerts").select("*").eq("dealership_id", dealershipId).order("detected_at", { ascending: false }).limit(20),
   ]);
 
-  return NextResponse.json({ watches: watches ?? [], alerts: alerts ?? [] });
+  return NextResponse.json({
+    watches: watches ?? [],
+    alerts: alerts ?? [],
+    limit: watchesAllowed(planRow?.plan),
+    limitMessage: watchLimitMessage(planRow?.plan),
+    plan: planRow?.plan ?? "free",
+  });
 }
 
 export async function POST(request: Request) {
@@ -34,6 +47,16 @@ export async function POST(request: Request) {
 
   const { competitorName } = await request.json();
   if (!competitorName) return NextResponse.json({ error: "competitorName required" }, { status: 400 });
+
+  // Refused before the row exists rather than added and quietly paused:
+  // an owner who types a name and sees it appear has been told it is
+  // being watched, and it would not be.
+  const { watchesAllowed: allowedFor, watchLimitMessage: limitMessage } = await import("@/lib/automation/watchLimits");
+  const { data: planFor } = await supabase.from("dealerships").select("plan").eq("id", dealershipId).maybeSingle();
+  const { data: active } = await supabase.from("competitor_watches").select("id").eq("dealership_id", dealershipId).eq("paused", false);
+  if ((active ?? []).length >= allowedFor(planFor?.plan)) {
+    return NextResponse.json({ error: limitMessage(planFor?.plan), limit: allowedFor(planFor?.plan) }, { status: 403 });
+  }
 
   const { error } = await supabase.from("competitor_watches").insert({ dealership_id: dealershipId, competitor_name: competitorName });
   if (error && !error.message.includes("duplicate")) return NextResponse.json({ error: error.message }, { status: 500 });

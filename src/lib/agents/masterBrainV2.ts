@@ -1370,9 +1370,27 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     case "manage_watch": {
       const table = input.kind === "competitor" ? "competitor_watches" : "topic_watches";
       const column = input.kind === "competitor" ? "competitor_name" : "topic";
+
+      // A watch is a searching Claude call every night, per watch, read
+      // or not — the one cost in the product that repeats forever
+      // without anyone asking. So the plan's limit is checked BEFORE the
+      // row exists, rather than letting it be added and quietly paused.
+      const { watchesAllowed, watchLimitMessage } = await import("../automation/watchLimits");
+      const { data: planRow } = await supabase.from("dealerships").select("plan").eq("id", ctx.id).maybeSingle();
+      const allowed = watchesAllowed(planRow?.plan);
+      const { data: existing } = await supabase.from(table).select("id").eq("dealership_id", ctx.id).eq("paused", false);
+      if ((existing ?? []).length >= allowed) {
+        return {
+          error: watchLimitMessage(planRow?.plan),
+          limit: allowed,
+          watching: (existing ?? []).length,
+          note: "Nothing was added. Say the limit and what it covers — a check every night — and offer the upgrade or removing one they've stopped following. Do not add it anyway and do not promise to watch it yourself.",
+        };
+      }
+
       const { error } = await supabase.from(table).insert({ dealership_id: ctx.id, [column]: input.value });
       if (error && !error.message.includes("duplicate")) return { error: error.message };
-      return { success: true };
+      return { success: true, watching: (existing ?? []).length + 1, limit: allowed };
     }
     case "set_automation_toggle": {
       const fieldMap: Record<string, string> = {

@@ -13,6 +13,8 @@ export default function CompetitorIntelView() {
   const [competitorName, setCompetitorName] = useState("");
   const [selectedTask, setSelectedTask] = useState(COMPETITOR_TASKS[0].key);
   const [watches, setWatches] = useState<any[]>([]);
+  /** The plan's allowance, and the sentence that explains it. */
+  const [limit, setLimit] = useState<{ limit: number; limitMessage: string } | null>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [newWatch, setNewWatch] = useState("");
   const {
@@ -21,7 +23,11 @@ export default function CompetitorIntelView() {
   } = useGeneratedOutput({ endpoint: "/api/competitor-intel/generate" });
 
   function loadWatches() {
-    fetch("/api/competitor-intel/watches").then((r) => r.json()).then((d) => { setWatches(d.watches ?? []); setAlerts(d.alerts ?? []); });
+    fetch("/api/competitor-intel/watches").then((r) => r.json()).then((d) => {
+      setWatches(d.watches ?? []);
+      setAlerts(d.alerts ?? []);
+      if (typeof d.limit === "number") setLimit({ limit: d.limit, limitMessage: d.limitMessage ?? "" });
+    });
   }
   useEffect(() => { loadWatches(); }, []);
 
@@ -65,12 +71,22 @@ export default function CompetitorIntelView() {
         {watches.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {watches.map((w) => (
-              <Badge key={w.id} tone="neutral" className="gap-1.5">
+              // A paused watch is still the owner's — kept, labelled, and
+              // not checked. Showing it greyed beats removing it and
+              // beats pretending it is running.
+              <Badge key={w.id} tone={w.paused ? "warning" : "neutral"} className="gap-1.5">
                 {w.competitor_name}
+                {w.paused && <span className="text-[10px]">paused</span>}
                 <button onClick={() => removeWatch(w.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
               </Badge>
             ))}
           </div>
+        )}
+        {limit && (watches.some((w) => w.paused) || watches.length >= limit.limit) && (
+          <p className="text-[11px] text-amber-600">
+            {limit.limitMessage}
+            {watches.some((w) => w.paused) ? " The paused ones are still here and start again the moment there's room." : ""}
+          </p>
         )}
         {alerts.length > 0 && (
           <div className="pt-2 border-t border-slate-200 space-y-1.5">
