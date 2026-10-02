@@ -78,7 +78,9 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     shipping: { mode: "flat", rate: 60, freeThreshold: null },
     last30: { views: 0, chatOpens: 0, leads: 0, orders: 0, abandonedCarts: 0, conversionRate: null, cartAbandonmentRate: null },
     allTime: { paidOrders: 1, leads: 0 },
-    ownerFacts: [],
+    // The owner has said how the candles are made, so ad copy that
+    // repeats it is backed (materials are CLAIM_TERMS since 2026-10-02).
+    ownerFacts: [{ category: "business_story", title: "How our candles are made", content: "Hand-poured soy wax in small batches." }],
     brand: { tone: null, voice: null, persona: null, language: null, pillars: [], description: null, colors: [], logoUrl: null },
     pillars: [],
     links: { store: null, products: [], booking: null },
@@ -119,6 +121,9 @@ beforeEach(() => {
     dealerships: [{ id: "d1", dealership_name: "candle_by_qaaf", business_category: "Home fragrance", city: "Shahjahanpur" }],
     websites: [{ id: "w1", dealership_id: "d1", slug: "candle-by-qaaf", published: true, shipping_mode: "flat", shipping_rate: 60 }],
     products: [{ id: "p1", dealership_id: "d1", name: "Lavender candle", price: 550, is_active: true, images: [] }],
+    // On record, so ad copy repeating how the candles are made is backed
+    // rather than stripped (materials joined CLAIM_TERMS on 2026-10-02).
+    business_knowledge: [{ dealership_id: "d1", category: "business_story", title: "How our candles are made", content: "Hand-poured soy wax in small batches.", is_active: true }],
   };
 });
 afterEach(() => vi.unstubAllGlobals());

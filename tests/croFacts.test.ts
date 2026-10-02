@@ -50,6 +50,10 @@ const CANDLE: Record<string, Row[]> = {
   websites: [{ id: "w1", slug: "candle-by-qaaf", published: true, shipping_mode: "flat", shipping_rate: 60, shipping_free_threshold: null }],
   website_pages: [{ slug: "home", title: "Home", page_type: "home", meta_description: "Hand-poured candles", og_image_url: null, sections: HOME_BLOCKS, order_index: 0 }],
   products: [{ name: "Lavender candle", price: 550, description: null }],
+  // The owner has confirmed how the candles are made, so a suggestion
+  // repeating it is backed. Without this row "Small-batch" is an
+  // unsupported material claim like any other (CLAIM_TERMS, 2026-10-02).
+  business_knowledge: [{ category: "business_story", title: "How our candles are made", content: "Hand-poured soy wax in small batches, no paraffin.", is_active: true }],
   discount_codes: [],
   page_events: Array.from({ length: 13 }, () => ({ event_type: "view" })),
   orders: [{ status: "delivered", created_at: recent }],

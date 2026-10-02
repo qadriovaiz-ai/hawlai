@@ -82,18 +82,34 @@ export async function POST(request: Request) {
   if (!sentence) return NextResponse.json({ error: "Which line?" }, { status: 400 });
 
   if (action === "keep") {
-    // The owner standing behind it. From here the claim is backed by
-    // them, not by the page that happened to print it — so it stops
-    // being flagged, and other surfaces may use it too.
+    // ONLY THE FLAGGED WORDS, never the sentence around them.
+    //
+    // The Contact page's Instagram line mixes a real handle with
+    // "restock alerts" nobody has promised. Attesting the whole sentence
+    // would quietly make the restock alerts true as well — and this row
+    // is evidence from here on, for every surface.
+    const claim = String(body?.claim ?? "").trim();
+    if (!claim) {
+      return NextResponse.json({ error: "I can't tell which words you're standing behind, so I won't record anything. Edit the line instead." }, { status: 400 });
+    }
+    if (!sentence.toLowerCase().includes(claim.toLowerCase())) {
+      return NextResponse.json({ error: "That claim isn't in that sentence any more — reload the list." }, { status: 409 });
+    }
+    // A comparison with someone else's product is not the owner's to
+    // attest: Hawlai has nothing to check it against whoever says it.
+    if (body?.kind === "comparative") {
+      return NextResponse.json({ error: "A comparison with another product can't be kept — reword it to say what yours is, or take it off the page." }, { status: 400 });
+    }
+
     const { error } = await service.from("business_knowledge").insert({
       dealership_id: dealershipId,
       category: "business_story",
       title: "Something I can stand behind",
-      content: sentence,
+      content: claim,
       is_active: true,
     });
     if (error) return NextResponse.json({ error: `Couldn't save that to your Business Knowledge: ${error.message}` }, { status: 500 });
-    return NextResponse.json({ kept: sentence });
+    return NextResponse.json({ kept: claim });
   }
 
   if (action === "remove") {

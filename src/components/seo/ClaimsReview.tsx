@@ -23,13 +23,19 @@ type Item = {
   field: string;
   sentence: string;
   reason: string;
-  kind: "claim" | "contact" | "offer";
+  kind: "claim" | "comparative" | "contact" | "offer";
+  /** The exact words flagged — what Keep would attest, and nothing more. */
+  claim: string | null;
+  keepable: boolean;
+  /** What the sentence becomes if Remove is pressed. */
+  removeLeaves: string;
 };
 
 const KIND_LABEL: Record<Item["kind"], string> = {
   contact: "Contact detail",
   offer: "Offer",
   claim: "Claim",
+  comparative: "Comparison",
 };
 
 export default function ClaimsReview() {
@@ -59,7 +65,9 @@ export default function ClaimsReview() {
       const res = await fetch("/api/seo/claims-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, sentence: item.sentence, pageId: item.pageId, blockId: item.blockId, field: item.field }),
+        // claim as well as sentence: Keep records the flagged words
+        // only, and the server refuses without them.
+        body: JSON.stringify({ action, sentence: item.sentence, claim: item.claim, kind: item.kind, pageId: item.pageId, blockId: item.blockId, field: item.field }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) return setError(data?.error ?? "Couldn't save that — try again.");
@@ -126,10 +134,43 @@ export default function ClaimsReview() {
                   </div>
                   <p className="text-sm text-slate-700">&ldquo;{item.sentence}&rdquo;</p>
                   <p className="text-xs text-slate-500">Flagged because {item.reason}.</p>
+                  {/* What Keep would actually attest. The Instagram line
+                      mixes a real handle with restock alerts nobody has
+                      promised, so saying which words are in question is
+                      the difference between a true statement and a
+                      blanket one. */}
+                  {item.keepable && item.claim && item.claim !== item.sentence && (
+                    <p className="text-[11px] text-slate-500">
+                      Keeping this records only <span className="font-semibold">&ldquo;{item.claim}&rdquo;</span> as true — not the rest of
+                      the sentence.
+                    </p>
+                  )}
+                  {item.kind === "comparative" && (
+                    <p className="text-[11px] text-amber-600">
+                      This compares your product with someone else&apos;s. Hawlai can&apos;t check a claim about goods you don&apos;t
+                      make, whoever says it — so there&apos;s nothing to keep. Reword it to say what yours is, or take it off.
+                    </p>
+                  )}
                   {settled ? (
                     <p className="text-[11px] text-green-600">{settled}</p>
                   ) : (
+                    <div className="space-y-1">
+                      {/* Exactly what Remove deletes, before it is
+                          pressed. A sentence that mixes a flagged claim
+                          with real information is better edited than
+                          cut, and the only way to know which is to see
+                          what would be left. */}
+                      {item.claim && item.claim !== item.sentence && (
+                        <p className="text-[11px] text-slate-500">
+                          Remove deletes the whole sentence, not just those words
+                          {item.removeLeaves.replace(/<[^>]*>/g, "").trim()
+                            ? <> — this block would read &ldquo;{item.removeLeaves.replace(/<[^>]*>/g, "").trim()}&rdquo;</>
+                            : <> and leaves this block empty</>}
+                          . Edit keeps the rest.
+                        </p>
+                      )}
                     <div className="flex items-center gap-1.5 pt-0.5">
+                      {item.keepable && (
                       <button
                         onClick={() => decide(item, "keep")}
                         disabled={working !== null}
@@ -137,6 +178,7 @@ export default function ClaimsReview() {
                       >
                         <Check className="w-3 h-3" /> Keep — it&apos;s true
                       </button>
+                      )}
                       <Link
                         href="/dashboard/website-builder"
                         className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1"
@@ -150,6 +192,7 @@ export default function ClaimsReview() {
                       >
                         <Trash2 className="w-3 h-3" /> Remove from page
                       </button>
+                    </div>
                     </div>
                   )}
                 </div>

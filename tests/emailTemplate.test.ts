@@ -51,6 +51,9 @@ const STORE = (): Record<string, Row[]> => ({
   orders: [],
   brand_kits: [{ kit: { colors: [{ name: "Cream", hex: "#F5EBDD", role: "primary" }, { name: "Clay", hex: "#B06A4F", role: "accent" }] }, logo_url: "https://cdn.example/logo.png" }],
   brand_profiles: [],
+  // The owner has said how the candles are made, so copy that
+  // repeats it is backed (CLAIM_TERMS now covers materials).
+  business_knowledge: [{ category: "business_story", title: "How our candles are made", content: "Hand-poured soy wax in small batches, no paraffin.", is_active: true }],
 });
 
 function anthropic(reply: unknown) {

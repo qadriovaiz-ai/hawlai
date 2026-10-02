@@ -50,10 +50,66 @@ const PRICE = new RegExp(
 );
 
 // Product-attribute claims a business must be able to substantiate.
+//
+// The second group — materials, ingredients and how a thing was made —
+// was approved on 2026-10-02 after a dry run, and it is the reason this
+// list matters more than it looks. A generated homepage said "No
+// paraffin. No synthetic shortcuts." for a business whose records said
+// nothing of the kind, and because the site counted as its own evidence
+// that line then backed every later mention of paraffin. With the site
+// excluded as evidence (Stage 2) and these terms enabled, five of six
+// pages on that site have something to answer for.
+//
+// Every one of these is allowed the moment the business says it
+// somewhere of its own — Business Knowledge, the catalogue, a brand
+// description. The check is not "don't claim this"; it is "say it
+// yourself first".
 const CLAIM_TERMS = [
   "phthalate free", "paraben free", "sulphate free", "sulfate free", "all natural", "100% natural", "vegan", "cruelty free", "organic",
   "non toxic", "chemical free", "toxin free", "clean burning", "soot free", "eco friendly", "award winning", "warranty", "certified", "handcrafted in",
+  // Wax and base materials.
+  // "no paraffin" and "paraffin free" are claims; the bare word is a
+  // noun. Gating it flagged a content idea about WHY paraffin was
+  // rejected, which is discussing a material rather than claiming
+  // anything — and the claim forms above already cover the real case.
+  "paraffin free", "no paraffin", "soy wax", "pure soy", "beeswax", "coconut wax", "palm free",
+  // Fragrance and additives.
+  "no synthetic fragrance", "synthetic fragrance free", "no fake fragrance", "essential oil", "essential oils",
+  "natural fragrance", "no added colour", "no added color", "dye free",
+  // Wick and burn.
+  "lead free", "cotton wick", "wooden wick", "zinc free",
+  // Make and provenance.
+  "hand poured", "handmade", "hand made", "small batch",
+  // Adjacent categories, so this generalises past candles.
+  "bpa free", "food grade", "stainless steel", "solid wood", "pure cotton", "100% cotton", "gold plated", "sterling silver",
 ];
+
+/**
+ * Wordings that mean the same claim.
+ *
+ * A business that records "paraffin-free" has said "no paraffin"; one
+ * that records "hand-poured" has said "handmade". Treating those as
+ * separate facts made the review list ask an owner to attest the same
+ * thing three times, in three spellings, which is the software failing
+ * to understand its own question.
+ *
+ * Grouped only where the wordings are genuinely interchangeable. "All
+ * natural" and "natural fragrance" are NOT in one group: a narrow claim
+ * must never license a broader one.
+ */
+const CLAIM_SYNONYMS: string[][] = [
+  ["paraffin free", "no paraffin"],
+  ["no synthetic fragrance", "synthetic fragrance free", "no fake fragrance"],
+  ["handmade", "hand made", "hand poured", "handcrafted in"],
+  ["no added colour", "no added color", "dye free"],
+  ["cruelty free", "not tested on animals"],
+];
+
+/** Whether the business has said this claim, in this wording or an equal one. */
+function saidAnyOf(known: string, term: string): boolean {
+  const family = CLAIM_SYNONYMS.find((group) => group.includes(term)) ?? [term];
+  return family.some((wording) => known.includes(wording));
+}
 
 // Every way copy says shipping costs nothing — English and Hinglish.
 const FREE_SHIPPING =
@@ -313,7 +369,14 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
     reasons.push("a first-order offer — the store has no active discount codes");
   }
   for (const term of CLAIM_TERMS) {
-    if (t.includes(term) && !known.includes(term)) reasons.push(`"${term}" — the business doesn't claim this anywhere`);
+    if (!t.includes(term)) continue;
+    // Said in ANY of its phrasings. An owner who records "paraffin-free"
+    // has said "no paraffin": they are one fact, and asking them to
+    // attest both spellings of it would be the software failing to
+    // understand its own question. Only genuinely equivalent wordings
+    // are grouped — a narrow claim never licenses a broader one.
+    if (saidAnyOf(known, term)) continue;
+    reasons.push(`"${term}" — the business doesn't claim this anywhere`);
   }
 
   // Rankings, superlatives, comparisons, guarantees and urgency

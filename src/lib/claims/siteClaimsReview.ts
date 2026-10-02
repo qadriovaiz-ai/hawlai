@@ -40,8 +40,58 @@ export type ReviewItem = {
   sentence: string;
   /** Why it is here, in the words the owner reads. */
   reason: string;
-  kind: "claim" | "contact" | "offer";
+  kind: "claim" | "comparative" | "contact" | "offer";
+  /**
+   * The exact words being flagged, when they can be isolated from the
+   * sentence around them.
+   *
+   * This is what Keep attests, and the reason it matters: the Contact
+   * page's Instagram line mixes a REAL handle with "restock alerts"
+   * nobody has promised. Attesting the whole sentence would quietly make
+   * the restock alerts true as well.
+   */
+  claim: string | null;
+  /**
+   * Whether "Keep — it's true" is offered at all.
+   *
+   * False for two reasons, both deliberate. A comparative claim about
+   * someone else's product — "safer than mass-market paraffin" — is not
+   * the owner's to attest: it is a statement about a category of goods
+   * they do not make, and Hawlai has nothing to check it against no
+   * matter who says it. And a flag whose exact words cannot be isolated
+   * cannot be scoped, so keeping it would attest more than was flagged.
+   */
+  keepable: boolean;
+  /** What the sentence becomes if Remove is pressed — shown before it is. */
+  removeLeaves: string;
 };
+
+/**
+ * The flagged words, pulled out of the reason that named them.
+ *
+ * Every pattern in the claims guard reports itself as `"the words" — why`,
+ * so the quoted span is the claim and the rest is the explanation. A few
+ * report a kind rather than a quote ("a star rating", "free shipping")
+ * and those return null, which is what withholds Keep: a claim that
+ * cannot be named cannot be attested in the owner's name.
+ */
+export function claimPhraseOf(reason: string): string | null {
+  const quoted = reason.match(/^"([^"]{2,120})"/);
+  return quoted ? quoted[1] : null;
+}
+
+/** Flat fields on a pre-block page, mapped to the field name an item reports. */
+const LEGACY_FIELDS: [string, "text" | "heading" | "html" | "label"][] = [
+  ["headline", "heading"],
+  ["subheadline", "heading"],
+  ["heading", "heading"],
+  ["title", "heading"],
+  ["body", "html"],
+  ["text", "text"],
+  ["ctaText", "label"],
+  ["buttonText", "label"],
+  ["cta", "label"],
+];
 
 /**
  * Offers a page can promise that a business may not actually run.
@@ -98,6 +148,48 @@ export function reviewPage(
   const items: ReviewItem[] = [];
   const pageTitle = String(page.title ?? page.slug);
 
+  /** Add every flag found in one field of one block. */
+  const review = (blockId: string | null, field: "text" | "heading" | "html" | "label", value: unknown): void => {
+    if (typeof value !== "string" || !value.trim()) return;
+    const base = { pageId: page.id, pageSlug: page.slug, pageTitle, blockId, field };
+
+    for (const sentence of sentencesOf(value)) {
+      const add = (reason: string, kind: ReviewItem["kind"], claim: string | null, keepable: boolean) => {
+        items.push({
+          ...base,
+          sentence,
+          reason,
+          kind,
+          claim,
+          // Keep is offered only when the exact words can be named: an
+          // attestation has to be about something specific.
+          keepable: keepable && Boolean(claim),
+          removeLeaves: withoutSentence(String(value), sentence),
+        });
+      };
+
+      // A contact detail nobody gave us. First, because it is the one
+      // that costs a customer rather than an argument.
+      const contacts = scrubInventedContacts(sentence, facts);
+      for (const reason of contacts.removed) add(reason, "contact", claimPhraseOf(reason), true);
+
+      // An offer the page promises and nothing on record mentions.
+      for (const { pattern, name } of OFFER_PATTERNS) {
+        if (!pattern.test(sentence)) continue;
+        if (offerIsOnRecord(pattern, facts)) continue;
+        const match = sentence.match(pattern);
+        add(`this page offers ${name}, and nothing in your catalogue or Business Knowledge mentions it`, "offer", match ? match[0] : name, true);
+      }
+
+      // And everything the ordinary claims check flags. A comparison
+      // with someone else's product is its own category: see keepable.
+      for (const reason of findUnsupportedClaims(sentence, facts)) {
+        const comparative = /a comparison with competitors/.test(reason);
+        add(reason, comparative ? "comparative" : "claim", claimPhraseOf(reason), !comparative);
+      }
+    }
+  };
+
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
       node.forEach(walk);
@@ -105,33 +197,21 @@ export function reviewPage(
     }
     if (!node || typeof node !== "object") return;
     const b = node as Row;
-    const props = b.props && typeof b.props === "object" ? (b.props as Row) : null;
-    if (props && props._source !== "edited") {
-      for (const field of ["text", "heading", "html", "label"] as const) {
-        const value = props[field];
-        if (typeof value !== "string" || !value.trim()) continue;
+    const blockId = typeof b.id === "string" ? b.id : null;
 
-        for (const sentence of sentencesOf(value)) {
-          const base = { pageId: page.id, pageSlug: page.slug, pageTitle, blockId: typeof b.id === "string" ? b.id : null, field };
-
-          // A contact detail nobody gave us. First, because it is the one
-          // that costs a customer rather than an argument.
-          const contacts = scrubInventedContacts(sentence, facts);
-          for (const reason of contacts.removed) items.push({ ...base, sentence, reason, kind: "contact" });
-
-          // An offer the page promises and nothing on record mentions.
-          for (const { pattern, name } of OFFER_PATTERNS) {
-            if (!pattern.test(sentence)) continue;
-            if (offerIsOnRecord(pattern, facts)) continue;
-            items.push({ ...base, sentence, reason: `this page offers ${name}, and nothing in your catalogue or Business Knowledge mentions it`, kind: "offer" });
-          }
-
-          // And everything the ordinary claims check flags.
-          for (const reason of findUnsupportedClaims(sentence, facts)) {
-            items.push({ ...base, sentence, reason, kind: "claim" });
-          }
-        }
+    if (b.props && typeof b.props === "object") {
+      const props = b.props as Row;
+      if (props._source !== "edited") {
+        for (const field of ["text", "heading", "html", "label"] as const) review(blockId, field, props[field]);
       }
+    } else {
+      // A PAGE FROM BEFORE THE BLOCK BUILDER, and skipping these is why
+      // a live comparative health claim never reached the list: a legacy
+      // node keeps its words in flat fields (headline, subheadline,
+      // body, ctaText) and has no `props` at all, so a walk that only
+      // read props saw nothing on those pages. blocksText has always
+      // handled both shapes; this did not.
+      for (const [key, field] of LEGACY_FIELDS) review(blockId, field, b[key]);
     }
     walk(b.children);
   };

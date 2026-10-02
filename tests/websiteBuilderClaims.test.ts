@@ -19,7 +19,9 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     site: { url: "/site/candle-by-qaaf", published: true, pages: [] }, home: null,
     products: [], offers: [], shipping: { mode: "flat", rate: 60, freeThreshold: null },
     last30: { views: 0, chatOpens: 0, leads: 0, orders: 0, abandonedCarts: 0, conversionRate: null, cartAbandonmentRate: null },
-    allTime: { paidOrders: 0, leads: 0 }, ownerFacts: [],
+    allTime: { paidOrders: 0, leads: 0 }, // On record, so copy repeating how the candles are made is backed
+    // (materials joined CLAIM_TERMS on 2026-10-02).
+    ownerFacts: [{ category: "business_story", title: "How our candles are made", content: "Hand-poured soy wax in small batches." } as any],
     brand: { tone: null, voice: null, persona: null, language: null, pillars: [], description: null, colors: [], logoUrl: null },
     pillars: [], links: { store: "https://hawlai.online/site/candle-by-qaaf", products: [] },
     season: seasonFor([], "2026-09-30"), unreadable: [], ...over,

@@ -50,7 +50,11 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     shipping: { mode: "flat", rate: 60, freeThreshold: null },
     last30: { views: 13, chatOpens: 0, leads: 0, orders: 1, abandonedCarts: 0, conversionRate: 7.7, cartAbandonmentRate: null },
     allTime: { paidOrders: 1, leads: 0 },
-    ownerFacts: [],
+    // On record, so "hand-poured in small batches" is backed and the only
+    // thing left to strip is the superlative this file is about. Without
+    // it the whole description goes and the tool refuses, which is
+    // correct behaviour and a different test.
+    ownerFacts: [{ category: "business_story", title: "How our candles are made", content: "Hand-poured soy wax in small batches." } as any],
     brand: { tone: null, voice: null, persona: null, language: null, pillars: [], description: null, colors: [], logoUrl: null },
     pillars: [],
     links: { store: "https://hawlai.online/site/candle-by-qaaf", products: [] },
@@ -162,17 +166,23 @@ describe("the tool and the toolkit are wired for it", () => {
   });
 });
 
-describe("the proposed materials terms are NOT enabled", () => {
-  it("stays out of CLAIM_TERMS until Ovaiz approves the dry-run list", async () => {
-    // Turning these on changes what EVERY guarded surface may say —
-    // content, email, paid ads, retargeting, WhatsApp — not just SEO.
-    // So the list lives in the dry-run script and nowhere else.
+describe("the materials terms are enabled", () => {
+  it("every approved term is live in CLAIM_TERMS", async () => {
+    // Approved 2026-10-02 after the dry run. Enabling them changes what
+    // EVERY guarded surface may say — content, email, paid ads,
+    // retargeting, WhatsApp — not just SEO, which is why it waited.
     const { PROPOSED_MATERIAL_TERMS } = await import("../scripts/materialClaimsDryRun.mjs");
     const guard = readFileSync("src/lib/claims/claimCheck.ts", "utf8");
     const live = guard.slice(guard.indexOf("const CLAIM_TERMS"), guard.indexOf("];", guard.indexOf("const CLAIM_TERMS")));
-    const enabled = PROPOSED_MATERIAL_TERMS.filter((term: string) => live.includes(`"${term}"`));
-    expect(enabled).toEqual([]);
-    expect(PROPOSED_MATERIAL_TERMS.length).toBeGreaterThan(20);
+    const missing = PROPOSED_MATERIAL_TERMS
+      // The bare noun was dropped on review: "no paraffin" and
+      // "paraffin free" are claims, "paraffin" on its own is a material
+      // being discussed, and gating it flagged a content idea about why
+      // paraffin was rejected.
+      .filter((term: string) => term !== "paraffin" && !term.includes(","))
+      .filter((term: string) => !live.includes(`"${term}"`));
+    expect(missing).toEqual([]);
+    expect(live).not.toMatch(/"paraffin",/);
   });
 
   it("the dry run flags a term the business never says, and spares one it does", async () => {
@@ -183,5 +193,37 @@ describe("the proposed materials terms are NOT enabled", () => {
     const known = "No paraffin. No synthetic shortcuts. Just clean-burning candles.";
     expect(wouldFlag("No paraffin, no fake fragrance.", known)).toEqual(["no fake fragrance"]);
     expect(wouldFlag("No paraffin here.", known)).toEqual([]);
+  });
+});
+
+describe("one fact, however it is worded", () => {
+  it("accepts paraffin-free as having said no paraffin", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const recorded = facts({ ownerFacts: [{ category: "business_story", title: "Materials", content: "Paraffin-free. Soy wax only." } as any] });
+    // The owner said it once, in their own words. Asking them to attest
+    // the same fact again in a different spelling is the software
+    // failing to understand its own question.
+    expect(findUnsupportedClaims("No paraffin in any of our candles.", recorded)).toEqual([]);
+    expect(findUnsupportedClaims("Paraffin-free soy wax.", recorded)).toEqual([]);
+  });
+
+  it("accepts hand-poured as having said handmade and handcrafted", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const recorded = facts({ ownerFacts: [{ category: "business_story", title: "How", content: "Hand-poured in small batches." } as any] });
+    expect(findUnsupportedClaims("Handmade candles.", recorded)).toEqual([]);
+    expect(findUnsupportedClaims("Handcrafted in Shahjahanpur.", recorded)).toEqual([]);
+  });
+
+  it("does NOT let a narrow claim license a broad one", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const recorded = facts({ ownerFacts: [{ category: "business_story", title: "Fragrance", content: "Natural fragrance oils." } as any] });
+    // "All natural" is a claim about the whole product, not the scent.
+    expect(findUnsupportedClaims("All natural candles.", recorded).length).toBeGreaterThan(0);
+  });
+
+  it("still flags a material nobody has mentioned", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const recorded = facts({ ownerFacts: [{ category: "business_story", title: "Materials", content: "Paraffin-free." } as any] });
+    expect(findUnsupportedClaims("Lead-free cotton wicks.", recorded).length).toBeGreaterThan(0);
   });
 });

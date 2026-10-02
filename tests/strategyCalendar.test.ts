@@ -74,7 +74,7 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
     offers: [], shipping: { mode: "flat", rate: 60, freeThreshold: null },
     last30: { views: 0, chatOpens: 0, leads: 0, orders: 0, abandonedCarts: 0, conversionRate: null, cartAbandonmentRate: null },
     allTime: { paidOrders: 1, leads: 0 },
-    ownerFacts: [{ category: "business_story", title: "Materials", content: "Soy wax from a Kanpur supplier." }],
+    ownerFacts: [{ category: "business_story", title: "Materials", content: "Hand-poured soy wax in small batches, from a Kanpur supplier." }],
     brand: { tone: "warm", voice: null, persona: null, language: null, pillars: [], description: null, colors: [], logoUrl: null },
     pillars: [], links: { store: null, products: [], booking: null }, season: { today: TODAY, now: [], launchNow: [], planAhead: [], justEnded: [], monthGuide: "", datesKnownUntil: null, outOfSeason: [] } as any, unreadable: [],
     ...over,
