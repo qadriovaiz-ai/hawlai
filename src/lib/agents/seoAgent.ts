@@ -28,6 +28,7 @@ export interface SeoIdeas {
 
 import { getModel } from "../models";
 import { resolvePageTitle } from "@/lib/seo/pageTitle";
+import { isLegalPage } from "@/lib/seo/pageKinds";
 import { blocksText, blocksHaveImage } from "@/lib/claims/businessFacts";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 
@@ -231,12 +232,6 @@ export interface WebsiteAudit {
 const PAGE_MIN_TEXT = 300;
 /** A contact page is a form and an address, not an essay. */
 const CONTACT_MIN_TEXT = 120;
-
-const LEGAL_SLUGS = /(privacy|terms|refund|shipping-policy|cookie|disclaimer)/i;
-
-function isLegalPage(page: { slug: string; page_type?: string | null }): boolean {
-  return LEGAL_SLUGS.test(page.slug) || LEGAL_SLUGS.test(String(page.page_type ?? ""));
-}
 
 function isContactPage(page: { slug: string; page_type?: string | null }): boolean {
   return page.slug === "contact" || String(page.page_type ?? "") === "contact";

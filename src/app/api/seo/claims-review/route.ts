@@ -125,6 +125,20 @@ export async function POST(request: Request) {
     const page = pages.find((p: any) => p.id === pageId);
     if (!page) return NextResponse.json({ error: "That page isn't on your website." }, { status: 404 });
 
+    // A legal page's sentence usually carries an obligation beside
+    // whatever was flagged. Refused here as well as hidden in the card,
+    // because a crafted request must not be able to delete a returns
+    // position to clear a claims flag.
+    const { isLegalPage } = await import("@/lib/seo/pageKinds");
+    const { isWholeSentence } = await import("@/lib/claims/siteClaimsReview");
+    const claimForRemoval = String(body?.claim ?? "").trim();
+    if (isLegalPage(page) && claimForRemoval && !isWholeSentence(claimForRemoval, sentence)) {
+      return NextResponse.json(
+        { error: "That sentence is on a legal page and says more than the flagged words. Edit it in Website Builder instead — removing it would take the rest of the sentence with it." },
+        { status: 400 }
+      );
+    }
+
     let touched = false;
     const strip = (node: any): any => {
       if (Array.isArray(node)) return node.map(strip);

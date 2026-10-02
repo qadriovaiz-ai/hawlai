@@ -29,6 +29,7 @@ type Item = {
   keepable: boolean;
   /** What the sentence becomes if Remove is pressed. */
   removeLeaves: string;
+  removable: boolean;
 };
 
 const KIND_LABEL: Record<Item["kind"], string> = {
@@ -145,6 +146,13 @@ export default function ClaimsReview() {
                       the sentence.
                     </p>
                   )}
+                  {!item.removable && (
+                    <p className="text-[11px] text-amber-600">
+                      This sentence is on a legal page and says more than the flagged words. Removing it would take the whole
+                      sentence, including the part that tells customers where they stand — so edit it instead, with your eyes
+                      on it.
+                    </p>
+                  )}
                   {item.kind === "comparative" && (
                     <p className="text-[11px] text-amber-600">
                       This compares your product with someone else&apos;s. Hawlai can&apos;t check a claim about goods you don&apos;t
@@ -185,6 +193,7 @@ export default function ClaimsReview() {
                       >
                         <PencilLine className="w-3 h-3" /> Edit
                       </Link>
+                      {item.removable && (
                       <button
                         onClick={() => decide(item, "remove")}
                         disabled={working !== null}
@@ -192,6 +201,7 @@ export default function ClaimsReview() {
                       >
                         <Trash2 className="w-3 h-3" /> Remove from page
                       </button>
+                      )}
                     </div>
                     </div>
                   )}

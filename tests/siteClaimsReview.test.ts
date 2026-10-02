@@ -244,3 +244,49 @@ describe("before Remove is pressed", () => {
     expect(card).toMatch(/\{item\.keepable && \(/);
   });
 });
+
+describe("a sentence on a legal page", () => {
+  // The real one, from this site's Terms: a claims flag sits inside a
+  // returns position.
+  const TERMS = "Every candle is hand-poured in small batches, so slight variations in colour are natural and not defects.";
+  const legalPage = (slug: string) => ({ id: "p-legal", slug, title: "Terms", sections: [generated("b1", { html: `<p>${TERMS}</p>` })] });
+
+  it("IS NOT REMOVED when it says more than the flagged words", () => {
+    const items = reviewPage(legalPage("terms"), facts({ ownerFacts: [] }));
+    const item = items.find((i) => i.claim && TERMS.includes(i.claim))!;
+    expect(item).toBeTruthy();
+    // Deleting it to clear a claims flag would quietly change what the
+    // business has told its customers about returns.
+    expect(item.removable).toBe(false);
+    // Edit is still the way through, and Keep is unaffected.
+    expect(item.keepable).toBe(true);
+  });
+
+  it("IS removable when the sentence is nothing but the claim", () => {
+    const only = { id: "p-legal", slug: "privacy-policy", title: "Privacy", sections: [generated("b1", { html: "<p>Handmade.</p>" })] };
+    const item = reviewPage(only, facts({ ownerFacts: [] })).find((i) => i.claim === "handmade");
+    // Nothing else is lost, so the owner may take it off from here.
+    expect(item?.removable).toBe(true);
+  });
+
+  it("leaves an ordinary page alone", () => {
+    const items = reviewPage({ ...legalPage("about"), slug: "about" }, facts({ ownerFacts: [] }));
+    expect(items.every((i) => i.removable)).toBe(true);
+  });
+
+  it("is refused by the route, not only hidden in the card", () => {
+    const route = readFileSync("src/app/api/seo/claims-review/route.ts", "utf8");
+    expect(route).toMatch(/isLegalPage\(page\) && claimForRemoval/);
+    expect(route).toMatch(/removing it would take the rest of the sentence with it/);
+    const card = readFileSync("src/components/seo/ClaimsReview.tsx", "utf8");
+    expect(card).toMatch(/\{item\.removable && \(/);
+    expect(card).toMatch(/says more than the flagged words/);
+  });
+
+  it("one rule, shared with the SEO health check", () => {
+    // Two copies of a safety rule is a safety rule that will disagree
+    // with itself.
+    expect(readFileSync("src/lib/agents/seoAgent.ts", "utf8")).toMatch(/from "@\/lib\/seo\/pageKinds"/);
+    expect(readFileSync("src/lib/claims/siteClaimsReview.ts", "utf8")).toMatch(/from "@\/lib\/seo\/pageKinds"/);
+  });
+});

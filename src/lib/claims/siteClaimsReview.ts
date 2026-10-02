@@ -23,6 +23,7 @@
 // pressed something.
 
 import { blocksText, ownerWritten } from "./businessFacts";
+import { isLegalPage } from "@/lib/seo/pageKinds";
 import { findUnsupportedClaims } from "./claimCheck";
 import { scrubInventedContacts } from "./guardBlocks";
 import type { BusinessFacts } from "./businessFacts";
@@ -64,6 +65,21 @@ export type ReviewItem = {
   keepable: boolean;
   /** What the sentence becomes if Remove is pressed — shown before it is. */
   removeLeaves: string;
+  /**
+   * Whether "Remove from page" is offered.
+   *
+   * False on a legal page whose sentence carries more than the flagged
+   * words. Remove takes the WHOLE sentence, and a sentence in Terms or a
+   * Privacy Policy usually states an obligation alongside whatever was
+   * flagged — "every candle is hand-poured in small batches, so slight
+   * variations in colour are natural and not defects" is a returns
+   * position, not a marketing line. Deleting it to clear a claims flag
+   * would quietly change what the business has told its customers.
+   *
+   * Edit stays available: the owner may absolutely change that sentence,
+   * with their eyes on it.
+   */
+  removable: boolean;
 };
 
 /**
@@ -75,6 +91,17 @@ export type ReviewItem = {
  * and those return null, which is what withholds Keep: a claim that
  * cannot be named cannot be attested in the owner's name.
  */
+/**
+ * Whether the flagged words ARE the sentence, give or take its full stop.
+ *
+ * Case-insensitive: the guard reports a term in its own lowercase form
+ * ("handmade"), and the page says "Handmade." — the same sentence.
+ */
+export function isWholeSentence(claim: string, sentence: string): boolean {
+  const bare = (value: string) => value.replace(/[.!?]+\s*$/, "").trim().toLowerCase();
+  return bare(claim) === bare(sentence);
+}
+
 export function claimPhraseOf(reason: string): string | null {
   const quoted = reason.match(/^"([^"]{2,120})"/);
   return quoted ? quoted[1] : null;
@@ -165,6 +192,9 @@ export function reviewPage(
           // attestation has to be about something specific.
           keepable: keepable && Boolean(claim),
           removeLeaves: withoutSentence(String(value), sentence),
+          // On a legal page, only a sentence that is nothing BUT the
+          // flagged claim may be removed from here.
+          removable: !isLegalPage(page) || !claim || isWholeSentence(claim, sentence),
         });
       };
 
