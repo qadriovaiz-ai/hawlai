@@ -11,6 +11,19 @@
 export const MAX_PILLARS = 6;
 const MAX_LENGTH = 120;
 
+/**
+ * Whether a saved pillar names a price.
+ *
+ * Exported so the Brand Voice card can say so beside the input. One
+ * accepted pillar froze "₹800" into the voice every generator reads, and
+ * a price is the fact in it most likely to be wrong by next month. The
+ * pillar is NEVER rewritten: it is the owner's sentence, and telling them
+ * is a better answer than editing it behind their back.
+ */
+export function namesAPrice(line: string | null | undefined): boolean {
+  return PRICE_IN_LINE.test(String(line ?? ""));
+}
+
 export type AcceptedPositioning = { statement: string | null; pillars: string[]; skipped: SkippedPillar[] };
 
 /** A line that was offered and did not make it, and why — said out loud, never dropped quietly. */

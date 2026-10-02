@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle, AlertCircle, Plus, X, Wand2, ChevronDown, ChevronUp, MessageSquare, Globe } from "lucide-react";
 import { Button } from "@/components/ui";
+import { namesAPrice } from "@/lib/strategy/pillars";
 
 interface BrandProfileFormProps {
   initial: {
@@ -287,16 +288,31 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
         <label className="text-sm font-semibold text-slate-700 block">Messaging Pillars</label>
         <p className="text-xs text-slate-400">Key points you always want represented, if relevant to the ad.</p>
         {pillars.map((p, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={p}
-              onChange={(e) => updatePillar(i, e.target.value)}
-              placeholder="e.g. 0% down payment available"
-              className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-            <Button variant="secondary" onClick={() => removePillar(i)} className="px-2 py-2">
-              <X className="w-4 h-4" />
-            </Button>
+          <div key={i} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <input
+                value={p}
+                onChange={(e) => updatePillar(i, e.target.value)}
+                placeholder="e.g. 0% down payment available"
+                className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <Button variant="secondary" onClick={() => removePillar(i)} className="px-2 py-2">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            {/* Said, not fixed. A pillar is read by every generator for as
+                long as it stands, so a price in one is the fact most
+                likely to be wrong by next month — but it is the owner's
+                sentence, and rewriting it behind their back would be a
+                worse answer than telling them. New pillars from a
+                positioning comparison are refused outright; this is for
+                the ones already saved. */}
+            {namesAPrice(p) && (
+              <p className="text-[11px] text-amber-600">
+                This names a price. Prices change — your catalogue is where that number lives, and every ad and email reads
+                it from there. Worth editing this line to drop the figure.
+              </p>
+            )}
           </div>
         ))}
         <Button variant="secondary" size="sm" onClick={addPillar}>

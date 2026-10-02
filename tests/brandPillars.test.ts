@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
-import { pillarsFrom, mergePillars, wouldAdd, MAX_PILLARS } from "@/lib/strategy/pillars";
+import { pillarsFrom, mergePillars, wouldAdd, namesAPrice, MAX_PILLARS } from "@/lib/strategy/pillars";
 
 const advice = (titles: string[]) => ({ statement: "Hand-poured in Shahjahanpur", angles: titles.map((title) => ({ title })) });
 
@@ -86,5 +86,31 @@ describe("the owner is told", () => {
   it("and lists what did not, with the reason, after it", () => {
     expect(route).toMatch(/skipped: merged\.skipped/);
     expect(panel).toMatch(/Not added/);
+  });
+});
+
+describe("a price in a pillar that is already saved", () => {
+  it("is recognised, in every way a price gets written", () => {
+    expect(namesAPrice("Workshops from ₹800")).toBe(true);
+    expect(namesAPrice("Only Rs 999")).toBe(true);
+    expect(namesAPrice("INR 550 each")).toBe(true);
+    expect(namesAPrice("550 rupees per candle")).toBe(true);
+  });
+
+  it("does not cry price over an ordinary number", () => {
+    expect(namesAPrice("40 hour burn time")).toBe(false);
+    expect(namesAPrice("Hand-poured in small batches")).toBe(false);
+    expect(namesAPrice(null)).toBe(false);
+  });
+
+  it("is SAID on the Brand Voice card, and never fixed", () => {
+    // The pillar is the owner's sentence. Rewriting it behind their back
+    // would be a worse answer than telling them, so the card explains
+    // where a price belongs and leaves the line alone.
+    const form = readFileSync("src/components/settings/BrandProfileForm.tsx", "utf8");
+    expect(form).toMatch(/namesAPrice\(p\) &&/);
+    expect(form).toMatch(/your catalogue is where that number lives/);
+    // No silent edit of the value anywhere near it.
+    expect(form).not.toMatch(/updatePillar\(i, [^)]*replace\(/);
   });
 });
