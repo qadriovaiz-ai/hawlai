@@ -212,7 +212,9 @@ describe("the monitors that already run every day", () => {
   it("A REAL PRODUCER FILLS THE STORE — the same finding becomes news for the owner AND input for the other departments", async () => {
     tables = {
       business_signals: [],
-      competitor_watches: [{ dealership_id: DEALER, competitor_name: "Aroma Co" }],
+      // paused false, as every real row is (migration 207): the nightly
+      // monitor now asks for the watches its plan allows.
+      competitor_watches: [{ dealership_id: DEALER, competitor_name: "Aroma Co", paused: false }],
       dealerships: [{ id: DEALER, business_category: "Home fragrance" }],
       competitor_alerts: [],
     };
