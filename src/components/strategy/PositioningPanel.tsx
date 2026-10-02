@@ -30,7 +30,7 @@ type Pillars = {
   acceptedAt: string | null;
 };
 type Competitor = { name: string; source: "watched" | "owner_ad" | "found"; url?: string | null; claimCount: number };
-type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[]; skippedAtCeiling?: string[] }; spentInr?: number } };
+type Run = { id: string; created_at: string; competitors: Competitor[]; analysis: { positioning: Positioning; advice: Advice | null; adviceError: string | null; notes?: { couldntCheck?: string[]; skippedAtCeiling?: string[] }; spentInr?: number; nationalBrands?: { name: string; url: string | null; scaleEvidence: string | null }[] } };
 /** What pressing the button would cost now, from GET — or why it can't be pressed. */
 type Estimate = { estimateInr?: number; needsConfirm?: boolean; blocked?: string | null; searchCalls?: number; paused?: boolean; reusing?: { competitors: number; withQuotes: number } };
 /** The run in progress, from GET — what it's doing now, or why it stopped. */
@@ -178,6 +178,7 @@ export default function PositioningPanel() {
     }
   }
 
+  const nationalBrands = run?.analysis?.nationalBrands ?? [];
   const couldntCheck = run?.analysis?.notes?.couldntCheck ?? [];
   const skippedAtCeiling = run?.analysis?.notes?.skippedAtCeiling ?? [];
   const spentInr = run?.analysis?.spentInr;
@@ -228,6 +229,26 @@ export default function PositioningPanel() {
       {!busy && nothingFound.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Nothing quotable found for: {nothingFound.join(", ")}.</p>}
       {!busy && couldntCheck.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Couldn't check right now: {couldntCheck.join(", ")} — run it again later.</p>}
       {!busy && skippedAtCeiling.length > 0 && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Info className="w-3.5 h-3.5 shrink-0" /> Stopped searching at the ₹40 limit — not read this time: {skippedAtCeiling.join(", ")}.</p>}
+      {/* Named, not compared. A brand in hundreds of stores is useful to
+          know about and impossible to measure a two-product shop against,
+          so it sits here rather than in the table above. */}
+      {!busy && nationalBrands.length > 0 && (
+        <details className="text-[11px] text-slate-500">
+          <summary className="cursor-pointer">Who you&apos;ll see everywhere: {nationalBrands.map((b) => b.name).join(", ")}</summary>
+          <ul className="pt-1 space-y-0.5 pl-3">
+            {nationalBrands.map((b) => (
+              <li key={b.name}>
+                {b.name}
+                {b.scaleEvidence ? ` — ${b.scaleEvidence}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="pt-1 text-slate-400">
+            These aren&apos;t in the comparison above. They&apos;re a different size of business, so matching them claim for
+            claim would tell you nothing you can act on.
+          </p>
+        </details>
+      )}
       {!busy && typeof spentInr === "number" && <p className="text-[11px] text-slate-400">This comparison cost ₹{spentInr.toFixed(2)} of AI credits.</p>}
 
       {!run && !busy && !error && (

@@ -20,7 +20,52 @@ import { recordResearchCredits } from "@/lib/usage/researchCredits";
 export type Citation = { url: string; title: string; quote: string };
 
 export type CompetitorSource = "watched" | "owner_ad" | "found";
-export type Competitor = { name: string; source: CompetitorSource; url?: string | null };
+/**
+ * Whether a business is one this owner is really up against.
+ *
+ * WHY THIS EXISTS: a tiny D2C candle maker in Shahjahanpur was shown
+ * EKAM — a national brand in hundreds of stores — as a "competitor", and
+ * the comparison table then measured a two-product shop against it claim
+ * for claim. The prompt already asked for "small and mid-sized sellers",
+ * which is a preference the model is free to ignore and did.
+ *
+ * comparable — same city or state, or an online seller of similar size.
+ * national   — a brand the owner will see everywhere and cannot be
+ *              compared with on equal terms. Still worth naming: knowing
+ *              they exist is useful, measuring yourself against them is
+ *              not.
+ */
+export type CompetitorTier = "comparable" | "national";
+
+/**
+ * Whether the evidence the search reported describes a national business.
+ *
+ * Read from what the model says it FOUND about size, not from what it
+ * decided about the grouping — the grouping is its suggestion and this is
+ * the check on it. A brand in four hundred stores is not something a
+ * two-product shop can be measured against, whichever list it arrived in.
+ */
+export function readsAsNational(scaleEvidence: string | null | undefined): boolean {
+  const text = String(scaleEvidence ?? "").toLowerCase();
+  if (!text || text.includes("nothing found")) return false;
+  return [
+    /\b\d{2,}\s*\+?\s*(?:stores?|outlets?|stockists?|retailers?|cities|showrooms?)\b/,
+    /\bpan[\s-]?india\b|\bnationwide\b|\bacross india\b|\ball over india\b/,
+    /\braised\b.*\b(?:crore|million|seed|series [a-z])\b|\bfunding\b|\bventure\b/,
+    /\b(?:amazon|flipkart|nykaa|myntra|big ?basket)\b/,
+    /\bstocked in\b|\bavailable in\b.*\bstores\b/,
+    /\bfranchise\b|\bchain\b/,
+  ].some((pattern) => pattern.test(text));
+}
+
+export type Competitor = {
+  name: string;
+  source: CompetitorSource;
+  url?: string | null;
+  tier?: CompetitorTier;
+  /** What the search actually FOUND about their size, in its own words. */
+  scaleEvidence?: string | null;
+};
 
 export type Claim = {
   competitor: string;
@@ -150,7 +195,7 @@ function jsonIn(data: any, key: string): any | null {
 export async function discoverCompetitors(
   input: { businessName: string; category: string; city: string | null; exclude: string[]; want: number },
   logContext?: LogContext
-): Promise<{ found: Competitor[]; failure?: AiFailure; costInr: number }> {
+): Promise<{ found: Competitor[]; national?: Competitor[]; failure?: AiFailure; costInr: number }> {
   if (input.want <= 0) return { found: [], costInr: 0 };
   const where = input.city ? `in or near ${input.city}, India, or selling online across India` : "in India, including online sellers";
   const r = await searchCall(
@@ -159,9 +204,16 @@ export async function discoverCompetitors(
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: DISCOVERY_SEARCHES }],
       messages: [{
         role: "user",
-        content: `Find up to ${input.want + 2} real businesses that compete with "${input.businessName}", a ${input.category} business, for the same customers — ${where}. Prefer small and mid-sized sellers a customer would realistically compare it with, not giant marketplaces themselves.
+        content: `Find real businesses that compete with "${input.businessName}", a ${input.category} business, for the same customers — ${where}.
+
+Sort them into TWO groups, and do not blur them:
+- "comparable": in or near the same city or state, OR an online seller of a similar size — the kind of business a customer would genuinely weigh against this one. Up to ${input.want + 2} of these.
+- "national": brands this owner will see everywhere but cannot be compared with on equal terms — multi-city retail, hundreds of stockists, big funding, national press. Up to 3 of these.
+
+For EVERY business, report what you actually found about its SIZE in a "scaleEvidence" field — "stocked in 400+ stores", "three outlets in Pune", "raised a seed round", "only an Instagram shop" — in the words of the page you read. If you found nothing about size, write "nothing found". Do not guess it; the grouping is checked against what you write there.
+
 Do not include: ${[input.businessName, ...input.exclude].map((n) => `"${n}"`).join(", ")}.
-Only name a business you found on a page you can cite. For each one, first write one sentence naming it, citing the page you found it on. Then end with this JSON and nothing after it: {"competitors":[{"name":"their business name as they write it","url":"their own site or profile, if you found one"}]}`,
+Only name a business you found on a page you can cite. For each one, first write one sentence naming it, citing the page you found it on. Then end with this JSON and nothing after it: {"comparable":[{"name":"their business name as they write it","url":"their own site or profile, if you found one","scaleEvidence":"what the page said about their size"}],"national":[{"name":"...","url":"...","scaleEvidence":"..."}]}`,
       }],
     },
     "positioning_discovery",
@@ -175,17 +227,41 @@ Only name a business you found on a page you can cite. For each one, first write
   const cat = categoryWordsOf(input.category);
   const taken = [input.businessName, ...input.exclude].map(compact);
   const found: Competitor[] = [];
-  for (const c of Array.isArray(parsed?.competitors) ? parsed.competitors : []) {
-    const name = String(c?.name ?? "").trim().slice(0, 80);
-    if (name.length < 2) continue;
-    if (taken.includes(compact(name)) || found.some((f) => compact(f.name) === compact(name))) continue;
-    // It exists only if a page the search actually returned names it.
-    if (!cites.some((x) => mentions(name, `${x.title} ${x.url} ${x.quote}`, cat))) continue;
-    const url = typeof c?.url === "string" && /^https?:\/\//.test(c.url) ? c.url.slice(0, 300) : null;
-    found.push({ name, source: "found", url });
-    if (found.length >= input.want) break;
+  const national: Competitor[] = [];
+
+  // Both lists, and an older response that returned one flat
+  // "competitors" array still reads — the model is not always on the
+  // version of the prompt you think it is.
+  const batches: { rows: unknown; claimed: CompetitorTier }[] = [
+    { rows: (parsed as any)?.comparable, claimed: "comparable" },
+    { rows: (parsed as any)?.national, claimed: "national" },
+    { rows: (parsed as any)?.competitors, claimed: "comparable" },
+  ];
+
+  for (const batch of batches) {
+    for (const c of Array.isArray(batch.rows) ? batch.rows : []) {
+      const name = String((c as any)?.name ?? "").trim().slice(0, 80);
+      if (name.length < 2) continue;
+      if (taken.includes(compact(name))) continue;
+      if ([...found, ...national].some((f) => compact(f.name) === compact(name))) continue;
+      // It exists only if a page the search actually returned names it.
+      if (!cites.some((x) => mentions(name, `${x.title} ${x.url} ${x.quote}`, cat))) continue;
+      const url = typeof (c as any)?.url === "string" && /^https?:\/\//.test((c as any).url) ? (c as any).url.slice(0, 300) : null;
+      const scaleEvidence = typeof (c as any)?.scaleEvidence === "string" ? (c as any).scaleEvidence.slice(0, 200) : null;
+
+      // THE DETERMINISTIC HALF. Whichever list it arrived in, evidence
+      // of national reach puts it in the national tier — the grouping is
+      // the model's suggestion and this is the check on it.
+      const tier: CompetitorTier = batch.claimed === "national" || readsAsNational(scaleEvidence) ? "national" : "comparable";
+      const row: Competitor = { name, source: "found", url, tier, scaleEvidence };
+      if (tier === "national") {
+        if (national.length < 3) national.push(row);
+      } else if (found.length < input.want) {
+        found.push(row);
+      }
+    }
   }
-  return { found, costInr: r.costInr };
+  return { found, national, costInr: r.costInr };
 }
 
 /**

@@ -172,11 +172,18 @@ describe("a competitor claim is a verbatim quote from a page about that competit
       )
     );
     const r = await discoverCompetitors({ businessName: "Candle by Qaaf", category: "Home fragrance", city: "Shahjahanpur", exclude: ["Old Rival"], want: 4 });
+    // tier and scaleEvidence ride along now: a competitor is only
+    // compared with when the size evidence says it is comparable, and
+    // this fixture's flat {"competitors":[…]} response reports no size,
+    // which is read as comparable rather than guessed at.
     expect(r.found).toEqual([
-      { name: "Moonlit Candles", source: "found", url: "https://moonlit.in" },
-      { name: "Aroma Hut", source: "found", url: null },
+      { name: "Moonlit Candles", source: "found", url: "https://moonlit.in", tier: "comparable", scaleEvidence: null },
+      { name: "Aroma Hut", source: "found", url: null, tier: "comparable", scaleEvidence: null },
     ]);
     expect(prompts[0]).toMatch(/first write one sentence naming it, citing the page/);
+    // Both lists, in the one call.
+    expect(prompts[0]).toMatch(/"comparable"/);
+    expect(prompts[0]).toMatch(/"national"/);
   });
 
   it("claims: only quotes from pages about that competitor (or its own site) are kept", async () => {
@@ -326,7 +333,7 @@ describe("a run, end to end", () => {
   });
 
   const route = (prompt: string) => {
-    if (prompt.startsWith("Find up to")) {
+    if (prompt.startsWith("Find real businesses")) {
       return webReply([
         { text: "Moonlit Candles sells soy candles.", url: "https://moonlit.in", title: "Moonlit Candles", quote: "Moonlit Candles small-batch soy candles" },
         { text: "Old Rival sells candles.", url: "https://oldrival.in", title: "Old Rival", quote: "Old Rival candles" },
@@ -511,7 +518,7 @@ describe("what a comparison costs, and what stops it costing more", () => {
   const sortAndWrite = (prompt: string) => {
     if (prompt.startsWith("Sort each item")) return textReply('{"claims":{"0":["price"],"1":["price"]},"facts":{"0":["materials"]}}');
     if (prompt.startsWith("You are positioning")) return textReply('{"statement":"Candles that say what they are made of.","angles":[]}');
-    if (prompt.startsWith("Find up to")) {
+    if (prompt.startsWith("Find real businesses")) {
       return webReply([{ text: "Moonlit Candles sells soy candles.", url: "https://moonlit.in", title: "Moonlit Candles", quote: "Moonlit Candles small-batch soy candles" }], '{"competitors":[{"name":"Moonlit Candles","url":"https://moonlit.in"}]}');
     }
     if (prompt.includes('"Wick & Co"')) return webReply([{ text: "x", url: "https://wickandco.in", title: "Wick & Co", quote: "Candles from ₹249, free shipping over ₹799" }]);
@@ -714,7 +721,7 @@ describe("what a comparison costs, and what stops it costing more", () => {
     if (!started.ok) throw new Error(started.error);
     await runToEnd(started.id);
     const search = (start: string) => bodies.find((b) => String(b.messages[0].content).startsWith(start))!;
-    const discovery = search("Find up to");
+    const discovery = search("Find real businesses");
     expect(discovery.model).toBe(getModel("fast"));
     expect(discovery.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 2 }]);
     expect(search('Search for how "Wick & Co"').tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 1 }]);

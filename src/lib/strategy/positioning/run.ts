@@ -170,12 +170,18 @@ export async function advancePositioning(service: any, id: string): Promise<{ mo
             { businessName: businessDisplayName(dealership?.dealership_name), category, city, exclude: [...known.map((k) => k.name), ...(dismissed ?? []).map((d: any) => String(d.competitor_name))], want: MAX_COMPETITORS - known.length },
             log
           )
-        : { found: [] as Competitor[], costInr: 0, failure: undefined };
+        : { found: [] as Competitor[], national: [] as Competitor[], costInr: 0, failure: undefined };
       if (discovery.failure && isPlatformOutage(discovery.failure.kind)) {
         await fail(service, id, failureWords(discovery.failure));
         return { more: false };
       }
+      // COMPARABLE ONLY in the comparison. A national brand in hundreds
+      // of stores cannot be measured claim-for-claim against a
+      // two-product shop, and doing it anyway is what put EKAM in front
+      // of a candle maker in Shahjahanpur as something to answer.
       const list = mergeCompetitors(watched, adNames, [...reusedFound, ...discovery.found], MAX_COMPETITORS);
+      // Named, not compared: knowing they exist is useful.
+      const nationalBrands = (discovery.national ?? []).map((c) => ({ name: c.name, url: c.url ?? null, scaleEvidence: c.scaleEvidence ?? null }));
       if (list.length === 0) {
         await fail(
           service,
@@ -196,7 +202,7 @@ export async function advancePositioning(service: any, id: string): Promise<{ mo
         step: 1,
         competitors: rows,
         claims: startClaims,
-        analysis: { plan, reused, resumes: analysis.resumes ?? 0, spentInr: spent() + discovery.costInr, notes: { ...notes, couldntCheck: discovery.failure ? ["finding more competitors"] : [] } },
+        analysis: { plan, reused, resumes: analysis.resumes ?? 0, spentInr: spent() + discovery.costInr, nationalBrands, notes: { ...notes, couldntCheck: discovery.failure ? ["finding more competitors"] : [] } },
       });
       return { more: true };
     }
