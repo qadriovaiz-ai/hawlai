@@ -68,7 +68,10 @@ vi.mock("@/lib/ai/claude", async (importOriginal) => {
     ...original,
     callClaude: async (body: any) => {
       prompts.push(JSON.stringify(body.messages));
-      return { ok: true, text: JSON.stringify(reply), data: { content: [{ type: "text", text: JSON.stringify(reply) }], usage: { input_tokens: 10, output_tokens: 10 } } };
+      // A citation about the competitor, so the Competitor Intelligence
+      // tests reach the answer rather than its (correct) refusal of an
+      // answer that cites nothing — see tests/competitorCitations.test.ts.
+      return { ok: true, text: JSON.stringify(reply), data: { content: [{ type: "text", text: JSON.stringify(reply), citations: [{ type: "web_search_result_location", url: "https://bodhicandles.in/shop", title: "Bodhi Candles", cited_text: "Bodhi Candles jar candle — ₹1,450." }] }], usage: { input_tokens: 10, output_tokens: 10 } } };
     },
   };
 });

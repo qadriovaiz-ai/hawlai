@@ -28,7 +28,9 @@ vi.mock("@/lib/ai/claude", async (importOriginal) => {
     callClaude: async () => ({
       ok: true,
       text: JSON.stringify(ANSWER),
-      data: { content: [{ type: "text", text: JSON.stringify(ANSWER) }], usage: { input_tokens: 10, output_tokens: 10 } },
+      // Cited, so the competitor path reaches its answer instead of the
+      // refusal an uncited one now gets.
+      data: { content: [{ type: "text", text: JSON.stringify(ANSWER), citations: [{ type: "web_search_result_location", url: "https://bodhicandles.in/shop", title: "Bodhi Candles", cited_text: "Bodhi Candles jar candle — ₹1,450." }] }], usage: { input_tokens: 10, output_tokens: 10 } },
     }),
   };
 });

@@ -125,7 +125,14 @@ describe("what still works as before", () => {
       { type: "server_tool_use", id: "s1", name: "web_search", input: {} },
       { type: "text", text: "Found it." },
       { type: "web_search_tool_result", tool_use_id: "s1", content: [] },
-      { type: "text", text: '{"competitorPricing":[],"comparisonNotes":"No public prices."}' },
+      {
+        type: "text",
+        text: '{"competitorPricing":[],"comparisonNotes":"No public prices."}',
+        // Cited about the competitor named, so this reaches the answer
+        // rather than the refusal an answer citing nothing about them
+        // now gets (src/lib/competitors/citationCheck.ts).
+        citations: [{ type: "web_search_result_location", url: "https://rivalcandles.in/shop", title: "Rival Candles", cited_text: "Rival Candles — prices on request." }],
+      },
     ]));
     const r = await generateCompetitorIntel("pricing_compare", "Rival Candles", "Candle by Qaaf", "Home fragrance", { supabase: { from: () => ({ insert: async () => ({}) }) }, dealershipId: "d1" });
     // The parsed answer, which is what this test is about.

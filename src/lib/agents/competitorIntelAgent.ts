@@ -17,6 +17,7 @@ import { recordResearchCredits } from "../usage/researchCredits";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { answeredByNote, type AnsweredBy } from "../research/provenance";
+import { checkCitations, unverifiedNote, tierFromSources, NOTHING_CITED, NATIONAL_NOTE } from "@/lib/competitors/citationCheck";
 
 import { COMPETITOR_TASKS, type CompetitorTaskMeta } from "@/lib/departments/competitor";
 
@@ -85,6 +86,8 @@ export async function generateCompetitorIntel(
 Task: ${meta.label}
 ${meta.instructions(competitorName, dealershipName, businessCategory)}
 
+Only state something about ${competitorName} that you found on a page you can cite. Cite the page for every price, follower count, percentage or other figure — a figure that appears on no cited page is checked for afterwards and shown to the owner as unconfirmed, so guessing one makes the answer worse rather than fuller. If you cannot find a page about this competitor at all, say exactly that instead of answering from memory.
+
 Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.${factsPrompt(facts)}`;
 
   // Section 21 — automatic provider failover. Perplexity failing at
@@ -135,7 +138,39 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    return { output: { ...JSON.parse(clean), _provider: answeredByNote(answeredBy) } };
+    const parsed = JSON.parse(clean);
+
+    // WHICH PAGE SAID SO. The right question about someone else's
+    // business — see the note on `facts` above for why the claims strip
+    // is the wrong one. Same filter Strategy's Positioning module uses:
+    // a quote from a page that isn't about this competitor isn't its
+    // claim (src/lib/competitors/citationCheck.ts).
+    const check = checkCitations(r.data, { name: competitorName }, businessCategory, parsed);
+    if (check.sources.length === 0) {
+      // A refusal, not a warning. Every task here is "go and find out
+      // what X does"; an answer assembled without one page about X is
+      // recollection, and showing it beside a sourced answer teaches the
+      // owner to trust both the same.
+      return { output: { text: NOTHING_CITED }, _fallback: true };
+    }
+
+    const note = unverifiedNote(check.unverified);
+    // Comparable or national, judged from the pages that were read. The
+    // tiering has existed since 2026-09-20 and applied only on the
+    // Strategy page — so this page, the one an owner opens to type a
+    // name, read the same whether that name belonged to a neighbour or
+    // to a brand in four hundred stores.
+    const tier = tierFromSources(check.sources, parsed);
+    return {
+      output: {
+        ...parsed,
+        _provider: answeredByNote(answeredBy),
+        _sources: check.sources,
+        _tier: tier,
+        ...(tier === "national" ? { _tierNote: NATIONAL_NOTE } : {}),
+        ...(note ? { _unverified: note } : {}),
+      },
+    };
   } catch (err: any) {
     console.error("[competitor-intel-agent] error:", err.message);
     return fallback;

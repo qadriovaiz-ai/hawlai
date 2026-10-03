@@ -117,6 +117,40 @@ export default function CompetitorIntelView() {
         </Button>
       </Card>
 
+      {/* WHERE IT CAME FROM, BESIDE WHAT IT SAYS.
+          A price with no source and a price the model remembered looked
+          identical on this page. The answer is now refused outright when
+          nothing about this competitor could be read, and when it is
+          shown, these three say how far to trust it: which pages it came
+          from, which figures appear on none of them, and whether this is
+          even a business the owner can be measured against. */}
+      {output?._tierNote && (
+        <Card className="space-y-1.5 border-amber-300">
+          <p className="text-xs font-semibold text-amber-700">Not a like-for-like comparison</p>
+          <p className="text-xs text-slate-600 leading-snug">{output._tierNote}</p>
+        </Card>
+      )}
+      {output?._unverified && (
+        <Card className="space-y-1.5 border-amber-300">
+          <p className="text-xs font-semibold text-amber-700">Unconfirmed figures</p>
+          <p className="text-xs text-slate-600 leading-snug">{output._unverified}</p>
+        </Card>
+      )}
+      {Array.isArray(output?._sources) && output._sources.length > 0 && (
+        <Card className="space-y-2">
+          <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Search className="w-4 h-4" /> Read from these pages</p>
+          {output._sources.map((s: any, i: number) => (
+            <div key={`${s.url}-${i}`} className="space-y-0.5">
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-500 hover:underline break-all">
+                {s.title || s.url}
+              </a>
+              <p className="text-[11px] text-slate-500 leading-snug">&ldquo;{s.quote}&rdquo;</p>
+            </div>
+          ))}
+          {output._provider && <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-200">{output._provider}</p>}
+        </Card>
+      )}
+
       <GeneratedOutputPanel
 
         error={error}
