@@ -14,6 +14,7 @@ import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from 
 import { soundRule, normaliseLanguage } from "@/lib/content/language";
 
 import { SOCIAL_TASKS, type SocialTaskMeta } from "@/lib/departments/social";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 // Re-exported so every existing server import keeps working; the data
 // itself lives in lib/departments so client pickers can read it without
@@ -114,10 +115,18 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
     // No reply goes out rather than a guessed one.
     if (!r.ok) return null;
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return null;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[socialManagementAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    const parsed = parsedReply.value;
     return parsed.reply ?? null;
   } catch (err: any) {
     console.error("[auto-reply] error:", err.message);
@@ -186,10 +195,18 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)
       .join("\n");
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    return { output: JSON.parse(clean) };
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[socialManagementAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
+    return { output: parsedReply.value };
   } catch (err: any) {
     console.error("[social-management-agent] error:", err.message);
     return fallback;

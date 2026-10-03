@@ -15,6 +15,7 @@ import { stripUnsupported, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { replaceLinksWithBio } from "@/lib/content/platformRules";
 import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -56,10 +57,18 @@ Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 re
     }, { operation: "social_caption", logContext });
     if (!r.ok) return { ...unchanged, aiFailure: aiFailureNote(r.failure) };
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return unchanged;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[socialMediaAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return unchanged;
+    }
+    const parsed = parsedReply.value;
     const caption: string = parsed.caption ?? prompt;
     if (!facts) return { caption, claimsRemoved: [] };
     const checked = stripUnsupported(caption, facts, claimsMode);

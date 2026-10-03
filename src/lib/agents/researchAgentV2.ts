@@ -31,6 +31,7 @@ import { recordResearchCredits } from "../usage/researchCredits";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { answeredByNote, type AnsweredBy } from "../research/provenance";
 import { guardDepartmentOutput } from "@/lib/claims/guardDepartment";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 /** The parsed JSON, or null — with the reason when the AI itself failed. */
 type Researched = { parsed: any | null; failure?: AiFailure };
@@ -47,10 +48,18 @@ async function askClaude(body: any, logContext?: { supabase: any; dealershipId: 
     }
     // Web-search replies interleave text blocks with search results.
     const text = (r.data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return { parsed: null };
-    return { parsed: JSON.parse(clean) };
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[researchAgentV2] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return { parsed: null };
+    }
+    return { parsed: parsedReply.value };
   } catch (err: any) {
     console.error("[research-agent] error:", err.message);
     return { parsed: null };
@@ -91,10 +100,18 @@ async function callPerplexityAsJson(
 ): Promise<any | null> {
   try {
     const result = await fn(`${prompt}\n\nReturn JSON only, no markdown, no preamble.`);
-    const jsonMatch = result.text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
-    if (!clean) return null;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(result.text);
+    if (!parsedReply.ok) {
+      console.error(`[researchAgentV2] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    const parsed = parsedReply.value;
 
     // Billed only AFTER the output is confirmed usable. Returning null
     // here makes the caller fall back to Claude (Section 21), which

@@ -26,6 +26,7 @@ import { flattenResultText } from "./brandVoiceValidation";
 import { guardGenerated } from "@/lib/claims/claimCheck";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import type { QueryRow } from "@/lib/seo/searchConsole";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 /**
  * What to ask for INSTEAD of the static instruction, once this business's
@@ -131,16 +132,24 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the requirem
     }, { operation: "seo_task", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[seoToolkitAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
 
     // ORDER MATTERS, and it is the whole of decision C (2026-09-29):
     // the guard runs on what HAWLAI wrote, and the owner's own wording
     // is restored afterwards. Stripping a claim the owner typed himself
     // would contradict the verbatim rule this task already keeps — his
     // sentence is his to make, and the card warns instead.
-    const generated = JSON.parse(clean);
+    const generated = parsedReply.value;
     const guarded = facts ? guardGenerated(generated, facts, "draft") : { output: generated, removed: [] as string[] };
     const output = keepOwnerWords(taskKey, guarded.output, exactText);
     return { output, ...(guarded.removed.length ? { claimsRemoved: guarded.removed } : {}) };

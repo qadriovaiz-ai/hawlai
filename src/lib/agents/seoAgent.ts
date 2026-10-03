@@ -31,6 +31,7 @@ import { resolvePageTitle } from "@/lib/seo/pageTitle";
 import { isLegalPage } from "@/lib/seo/pageKinds";
 import { blocksText, blocksHaveImage } from "@/lib/claims/businessFacts";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 export interface BlogPost {
   title: string;
@@ -97,10 +98,18 @@ Plan before you write:
     }, { operation: "seo_blog_post", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[seoAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
+    const parsed = parsedReply.value;
     const validSlugs = new Set(pages.map((p) => p.slug));
     return {
       title: parsed.title ?? fallback.title,
@@ -156,10 +165,18 @@ Return JSON only:
     }, { operation: "seo_keywords", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[seoAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
+    const parsed = parsedReply.value;
     const details: SeoKeywordIdea[] = Array.isArray(parsed.keywords) && parsed.keywords.length > 0
       ? parsed.keywords
           .filter((k: any) => k?.keyword)
