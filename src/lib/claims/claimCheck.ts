@@ -260,6 +260,22 @@ export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
   for (const p of f.links?.products ?? []) allowedHosts.add(hostOf(p.url));
   const known = knownText(f);
 
+  /**
+   * A subdomain of the owner's own host is the owner's.
+   *
+   * MEASURED 2026-10-03: cdn.hawlai.online was read as a foreign host,
+   * because the allowed set held the exact host only. An image served
+   * from a CDN subdomain, a staging host, an app subdomain — all of them
+   * were the business's own address being called somebody else's.
+   *
+   * Matched on a dot boundary, never a bare suffix: "hawlai.online" must
+   * not make "evilhawlai.online" or "hawlai.online.attacker.com" ours.
+   * Only downwards, too — owning cdn.example.com does not make
+   * example.com theirs.
+   */
+  const isOwnHost = (host: string) =>
+    Array.from(allowedHosts).some((allowed) => allowed !== "" && (host === allowed || host.endsWith(`.${allowed}`)));
+
   // Every address the owner has actually given, as whole links. Read as
   // links, not as text: "calendly.com" IS a substring of
   // "calendly.com/candlebyqaaf/workshop", and matching text was exactly
@@ -274,7 +290,7 @@ export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
   for (const m of text.matchAll(LINK)) {
     const link = m[0].replace(/[.,;:!?]+$/, "");
     const host = hostOf(link);
-    if (allowedHosts.has(host)) continue;
+    if (isOwnHost(host)) continue;
     const n = tidy(link);
     // One of the owner's own links, or a page inside one.
     const own = Array.from(ownLinks).filter((k) => k !== "");
@@ -421,9 +437,34 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
 const PIECE =
   /[^.!?।\n\p{Extended_Pictographic}]*(?:[.!?।]+["'”’)\]]*|\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)[ \t]*|[^.!?।\n\p{Extended_Pictographic}]+[ \t]*|\n/gu;
 
-/** Splits copy into sentences and lines, keeping every character so the rest reads unchanged. */
+/**
+ * Splits copy into sentences and lines, keeping every character so the
+ * rest reads unchanged.
+ *
+ * A URL IS ONE CHARACTER TO THIS FUNCTION, and that is the whole reason
+ * it is not a one-line `match`.
+ *
+ * THE BUG (measured 2026-10-03): the dots in a hostname are full stops
+ * to PIECE. "See https://cdn.hawlai.online/logos/a.png here." split
+ * after "https://cdn." — so removing the sentence that carried the link
+ * removed "See https://cdn." and left "hawlai.online/logos/a.png here."
+ * standing in the copy. Every unsupported link with a dotted host did
+ * this: a foreign URL was reported as removed and a broken fragment of
+ * it stayed in the text, on a surface the owner was about to send.
+ *
+ * So links are lifted out, the split runs on text with no dots that
+ * aren't sentence ends, and they are put back exactly as they were.
+ */
 function pieces(text: string): string[] {
-  return text.match(PIECE) ?? [text];
+  const links: string[] = [];
+  // U+0000 cannot appear in copy and is not a sentence end to PIECE, so
+  // a link reduces to one inert character for the duration of the split.
+  const masked = text.replace(LINK, (link) => {
+    links.push(link);
+    return `\u0000${links.length - 1}\u0000`;
+  });
+  const restore = (piece: string) => piece.replace(/\u0000(\d+)\u0000/g, (_, i) => links[Number(i)] ?? "");
+  return (masked.match(PIECE) ?? [masked]).map(restore);
 }
 
 /**
