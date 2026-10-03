@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateCompetitorIntel } from "@/lib/agents/competitorIntelAgent";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { requireFeature } from "@/lib/featureGate";
 import { getDealershipPlanLimits } from "@/lib/plans";
 import { checkUsage } from "@/lib/usage/usageGuard";
@@ -39,7 +40,10 @@ export async function POST(request: Request) {
     dealership?.business_category ?? "business",
     { supabase, dealershipId },
     undefined,
-    limits.plan
+    limits.plan,
+    // Grounding only — the claims strip is not run on competitor
+    // findings; see the note on generateCompetitorIntel.
+    await gatherBusinessFactsSafely(supabase, dealershipId)
   );
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   if (_aiFailure) return aiFailureResponse(_aiFailure);

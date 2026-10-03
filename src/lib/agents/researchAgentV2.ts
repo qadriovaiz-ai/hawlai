@@ -28,6 +28,8 @@ import { logPerplexityUsage } from "../usage/logUsage";
 import { callClaude, withAiFailure, type AiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
+import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { guardDepartmentOutput } from "@/lib/claims/guardDepartment";
 
 /** The parsed JSON, or null — with the reason when the AI itself failed. */
 type Researched = { parsed: any | null; failure?: AiFailure };
@@ -54,8 +56,20 @@ async function askClaude(body: any, logContext?: { supabase: any; dealershipId: 
   }
 }
 
-function researchResult(r: Researched, fallback: { output: any; _fallback: boolean }) {
-  if (r.parsed) return { output: r.parsed };
+/**
+ * The parsed answer, checked against what the business can back up.
+ *
+ * MEASURED BEFORE WIRING (2026-10-03), because a research answer is
+ * mostly about the market rather than about this business and a guard
+ * that ate its findings would be worse than none: market growth figures,
+ * cited reports and named opportunities all pass through untouched. What
+ * it catches is the sentence that turns outward research into an
+ * unbacked boast about the reader — "you are the most trusted candle
+ * brand in Shahjahanpur, with hundreds of happy customers" — which is
+ * exactly the line an owner would copy into an ad.
+ */
+function researchResult(r: Researched, fallback: { output: any; _fallback: boolean }, facts?: BusinessFacts | null) {
+  if (r.parsed) return { output: guardDepartmentOutput(r.parsed, facts, "draft").output };
   return r.failure ? withAiFailure(fallback, r.failure) : fallback;
 }
 
@@ -100,11 +114,12 @@ export async function generateResearch(
   // Defaults to "pro" (unrestricted) rather than "free" — a caller
   // that hasn't been updated to pass the real plan gets today's exact
   // behavior, not an accidental Free-tier downgrade.
-  plan: PlanKey = "pro"
+  plan: PlanKey = "pro",
+  facts?: BusinessFacts | null
 ): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const location = city ? ` in ${city}, India` : " in India";
   const fallback = { output: { text: "Couldn't complete this research right now — try again shortly." }, _fallback: true };
-  const grounding = groundingContext ?? "";
+  const grounding = `${groundingContext ?? ""}${factsPrompt(facts)}`;
 
   // Research Router — decides depth + provider for this task/plan.
   // Provider only ever resolves to Perplexity when routing.active is
@@ -144,17 +159,17 @@ export async function generateResearch(
 
   if (taskKey === "industry_trends") {
     const researched = await runResearch(`Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`);
-    return researchResult(researched, fallback);
+    return researchResult(researched, fallback, facts);
   }
 
   if (taskKey === "market_research") {
     const researched = await runResearch(`Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`);
-    return researchResult(researched, fallback);
+    return researchResult(researched, fallback, facts);
   }
 
   if (taskKey === "new_opportunities") {
     const researched = await runResearch(`Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`);
-    return researchResult(researched, fallback);
+    return researchResult(researched, fallback, facts);
   }
 
   return fallback;
@@ -167,7 +182,8 @@ export async function generateSentimentFromLeads(
   businessCategory: string,
   leadSignals: { qualificationReason: string | null; temperature: string; status: string }[],
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  facts?: BusinessFacts | null
 ): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const fallback = { output: { text: "Not enough lead data yet to analyze sentiment — this improves as more leads come in with qualification notes." }, _fallback: true };
   const withReasons = leadSignals.filter((l) => l.qualificationReason);
@@ -187,5 +203,5 @@ ${summaryInput}
 Identify recurring themes — common interests, hesitations, price sensitivity, what makes leads "hot" vs "cold". Return JSON only: {"positiveThemes": [], "concernsOrObjections": [], "summary": "2-3 sentence overall read"}. Base this ONLY on what's actually in the notes above — don't invent sentiment that isn't reflected in the data.${groundingContext ?? ""}`,
     }],
   }, logContext);
-  return researchResult(researched, fallback);
+  return researchResult(researched, fallback, facts);
 }

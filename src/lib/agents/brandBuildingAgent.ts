@@ -12,6 +12,8 @@
 
 import { getModel } from "../models";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
+import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { guardDepartmentOutput } from "@/lib/claims/guardDepartment";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -43,8 +45,16 @@ export async function generateBrandKit(
   brandProfile?: BrandProfile | null,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
-): Promise<BrandKit & { _fallback?: boolean; _aiFailure?: AiFailureNote }> {
+  groundingContext?: string,
+  // THE DEPARTMENT RAN NO CLAIMS CHECK AT ALL until 2026-10-03. A brand
+  // kit is prose the owner pastes into an Instagram bio and a Facebook
+  // About section — public copy — so "we are the number 1 candle brand in
+  // India" went out as a tagline with nothing to stop it. The facts are
+  // both the prompt's grounding and what the guard checks the result
+  // against; with none readable, nothing is stripped and nothing claims
+  // to have been.
+  facts?: BusinessFacts | null
+): Promise<BrandKit & { _fallback?: boolean; _aiFailure?: AiFailureNote; _claimsNote?: string; _contactsNote?: string }> {
   const fallback: BrandKit & { _fallback?: boolean } = {
     _fallback: true,
     colors: [
@@ -91,7 +101,7 @@ export async function generateBrandKit(
         {
           role: "user",
           content: `You are a senior brand strategist and designer building a complete brand identity kit for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
-${brandContext}${groundingContext ?? ""}
+${brandContext}${groundingContext ?? ""}${factsPrompt(facts)}
 
 Return JSON only, no markdown:
 {
@@ -115,7 +125,7 @@ Be specific to this business type and city — avoid generic startup-brand-kit f
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
     const parsed = JSON.parse(clean);
-    return {
+    const kit = {
       colors: Array.isArray(parsed.colors) && parsed.colors.length > 0 ? parsed.colors : fallback.colors,
       typography: {
         headingFont: parsed.typography?.headingFont ?? fallback.typography.headingFont,
@@ -134,6 +144,14 @@ Be specific to this business type and city — avoid generic startup-brand-kit f
       personalBranding: parsed.personalBranding ?? fallback.personalBranding,
       guidelines: Array.isArray(parsed.guidelines) && parsed.guidelines.length > 0 ? parsed.guidelines : fallback.guidelines,
     };
+
+    // Draft mode: a price left in a brand story is flagged for the owner
+    // to check rather than cut, which is the rule everywhere the owner is
+    // reviewing something before it goes anywhere.
+    //
+    // The palette and the font names survive: guardDepartmentOutput skips
+    // structural keys, so a hex value is never mistaken for a claim.
+    return guardDepartmentOutput(kit, facts, "draft").output;
   } catch (err: any) {
     console.error("[brand-building-agent] error:", err.message);
     return fallback;

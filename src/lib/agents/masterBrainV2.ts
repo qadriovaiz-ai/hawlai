@@ -880,8 +880,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
 
   switch (toolName) {
     case "generate_brand_kit": {
-      const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
-      if (!(kit as any)._fallback) await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, kit, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
+      const kit = await generateBrandKit(ctx.name, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext, await factsFor(supabase, ctx));
+      // The guard's notes are about THIS generation, not part of the kit —
+      // saved, they would reappear on the Brand Building page forever.
+      const { _claimsNote, _contactsNote, ...storable } = kit as any;
+      if (!(kit as any)._fallback) await supabase.from("brand_kits").upsert({ dealership_id: ctx.id, kit: storable, updated_at: new Date().toISOString() }, { onConflict: "dealership_id" });
       return withBrandVoiceCheck(kit, resolvedBrandVoice);
     }
     case "generate_logo": {
@@ -1189,12 +1192,12 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "research_competitor": {
-      const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
+      const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext, "pro", await factsFor(supabase, ctx));
       if (!_fallback) await saveGenerated(supabase, ctx.id, "competitor_intel_items", { task_type: input.taskType, competitor_name: input.competitorName, output });
       return output;
     }
     case "research_market": {
-      const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city, { supabase, dealershipId: ctx.id }, groundingContext);
+      const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city, { supabase, dealershipId: ctx.id }, groundingContext, "pro", await factsFor(supabase, ctx));
       if (!_fallback) await saveGenerated(supabase, ctx.id, "research_items", { task_type: input.taskType, output });
       return output;
     }
@@ -1348,7 +1351,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     }
     case "get_customer_sentiment": {
       const { data: leads } = await supabase.from("leads").select("qualification_reason, lead_temperature, status").eq("dealership_id", ctx.id).limit(200);
-      const { output } = await generateSentimentFromLeads(ctx.name, ctx.category, (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })), { supabase, dealershipId: ctx.id }, groundingContext);
+      const { output } = await generateSentimentFromLeads(ctx.name, ctx.category, (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })), { supabase, dealershipId: ctx.id }, groundingContext, await factsFor(supabase, ctx));
       return output;
     }
     case "create_workflow": {
@@ -3905,7 +3908,9 @@ export async function runMasterBrainChat(
 ${formatFactsForCopy(storeFacts)}
 
 ${COPY_TRUTH_RULES}
-- These rules cover your own replies and every tool brief, image prompts included.`
+- These rules cover your own replies and every tool brief, image prompts included.
+- If a tool result carries a \`_claimsNote\`, SAY IT. The guard has already taken the line out of what you were handed, so staying quiet presents a shortened draft as the whole answer and the owner never learns a claim was refused — or why. Repeat it in your own words, name the claim, and say what would make it allowed (adding it to Business Knowledge). The same goes for \`_contactsNote\`: a contact detail was taken out because this business has none on record, and the owner needs to add the real one.
+- When someone ASKS you to write a claim you cannot back — that they are the number 1, the best, the most trusted, the fastest growing — do not write it and do not quietly write something near it. Say plainly that you can't put that on record for them, say what the facts do support, and offer to use it once they add it to Business Knowledge.`
     : "";
   // Every guard in this file sits on what a TOOL returns. The chat AI
   // writes copy in its own replies too — a caption, a CTA, a link — and

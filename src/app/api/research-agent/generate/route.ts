@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { generateResearch, generateSentimentFromLeads } from "@/lib/agents/researchAgentV2";
 import { getDealershipPlanLimits } from "@/lib/plans";
 import { checkUsage } from "@/lib/usage/usageGuard";
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
   if (!usage.allowed) return NextResponse.json({ error: usage.message, limitReached: true }, { status: 429 });
 
   const { data: dealership } = await supabase.from("dealerships").select("dealership_name, business_category, city").eq("id", dealershipId).single();
+  // Grounds the prompt and checks the answer (src/lib/claims).
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
 
   let result;
   if (taskType === "customer_sentiment") {
@@ -38,11 +41,13 @@ export async function POST(request: Request) {
       dealership?.dealership_name ?? "the business",
       dealership?.business_category ?? "business",
       (leads ?? []).map((l: any) => ({ qualificationReason: l.qualification_reason, temperature: l.lead_temperature, status: l.status })),
-      { supabase, dealershipId }
+      { supabase, dealershipId },
+      undefined,
+      facts
     );
   } else {
     const limits = await getDealershipPlanLimits(supabase, dealershipId);
-    result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId }, undefined, limits.plan);
+    result = await generateResearch(taskType, dealership?.dealership_name ?? "the business", dealership?.business_category ?? "business", dealership?.city ?? null, { supabase, dealershipId }, undefined, limits.plan, facts);
   }
 
   const { output, _fallback, _aiFailure } = result;

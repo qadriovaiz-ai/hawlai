@@ -667,6 +667,7 @@ export const COPY_TRUTH_RULES = `TRUTH RULES — a small business owner may publ
 - NEVER make health, medical, safety or efficacy claims (cures, heals, relieves stress or anxiety, clinically proven, doctor recommended, 100% safe) unless the facts state them.
 - Hooks and calls to action follow the same rules: a bold hook is a bold idea, not an invented statistic.
 - NEVER invent a website address, domain or link. Use only the store and product links in the facts, exactly as written. If there is none, write the call to action without a link.
+- NEVER invent an email address, phone number, WhatsApp number, social handle or street address. A plausible-looking address on a domain the business doesn't own swallows every enquiry sent to it, silently. If a contact detail isn't in the facts, leave it out and say the owner should add it.
 ${SEASON_TRUTH_RULE}`;
 
 /** The facts block plus the rules — what a generation prompt appends. */

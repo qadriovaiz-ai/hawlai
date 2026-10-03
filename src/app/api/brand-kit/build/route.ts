@@ -46,8 +46,14 @@ export async function GET(request: Request) {
     dealership?.city ?? null,
     brandProfile,
     dealership?.business_category ?? "business",
-    { supabase, dealershipId }
-  , factsPrompt(facts));
+    { supabase, dealershipId },
+    // The facts went in as grounding text here from the start; what was
+    // missing was the CHECK on the way back out. Passed as facts now so
+    // the agent both grounds the prompt and guards the result, instead of
+    // the prompt being asked nicely and the answer trusted.
+    undefined,
+    facts
+  );
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   const aiFailed = aiFailedResponse(kit);
   if (aiFailed) return aiFailed;
@@ -55,9 +61,13 @@ export async function GET(request: Request) {
   // Never cache a fallback result — a transient API hiccup shouldn't
   // permanently stick the dealer with placeholder text until they
   // notice and manually hit Regenerate.
+  // The guard's notes describe THIS generation and are returned to the
+  // page, not stored — saved into the kit they would reappear as part of
+  // the brand identity on every later visit.
+  const { _claimsNote, _contactsNote, ...storable } = kit as any;
   if (!(kit as any)._fallback) {
     await supabase.from("brand_kits").upsert(
-      { dealership_id: dealershipId, kit, updated_at: new Date().toISOString() },
+      { dealership_id: dealershipId, kit: storable, updated_at: new Date().toISOString() },
       { onConflict: "dealership_id" }
     );
   }

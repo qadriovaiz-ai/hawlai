@@ -115,7 +115,21 @@ function saidAnyOf(known: string, term: string): boolean {
 const FREE_SHIPPING =
   /\bfree\s+(?:home\s+|doorstep\s+)?(?:shipping|delivery)\b|\b(?:shipping|delivery)\s+(?:is\s+|bilkul\s+|ekdum\s+)?(?:free|muft)\b|\bno\s+(?:shipping|delivery)\s+(?:charges?|fees?|cost)\b|\b(?:zero|₹\s?0)\s+(?:shipping|delivery)\b|\bships?\s+free\b/i;
 
-const RANKING = /(?<![\w#])(?:no\.?\s?1|number\s?one|#\s?1)(?![\w])/gi;
+// "number 1" IN DIGITS WAS THE ONE FORM NOTHING CAUGHT, and it is the
+// form people write. "no.1", "#1" and "number one" were all here from
+// the start; `no\.?\s?1` cannot match "number 1" because "mber" follows
+// the "no", and `number\s?one` needs the word. So Brand Kit, asked to
+// write "India's number 1 candle brand" as a tagline, wrote it.
+//
+// Added HERE rather than to SUPERLATIVE_WORDS deliberately: the
+// possessive-superlative rule would then match the same phrase as well,
+// and the owner would be shown one claim twice, described two different
+// ways. One phrase, one reason.
+//
+// It does mean "pour batch number 1" is flagged, exactly as "batch no.1"
+// already was. That costs a glance on a how-to draft, and it is what
+// keeps "#1 in Shahjahanpur" from needing a place word attached.
+const RANKING = /(?<![\w#])(?:no\.?\s?1|number\s?(?:one|1)|#\s?1)(?![\w])/gi;
 const PLACE = "india|the\\s+world|the\\s+country|the\\s+city|town|the\\s+market|the\\s+region|the\\s+state";
 const SUPERLATIVE_WORDS = "best|finest|top[- ]rated|most\\s+trusted|most\\s+loved|most\\s+popular|leading|largest|biggest|favou?rite|number\\s+one|no\\.?\\s?1";
 const POSSESSIVE_SUPERLATIVE = new RegExp(`\\b(?:india|the\\s+world|the\\s+city|the\\s+country)['’]s\\s+(?:${SUPERLATIVE_WORDS}|top)\\b`, "gi");

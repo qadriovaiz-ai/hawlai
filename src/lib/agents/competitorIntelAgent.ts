@@ -15,6 +15,7 @@ import { callComplexResearch } from "../research/perplexityClient";
 import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
+import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 
 import { COMPETITOR_TASKS, type CompetitorTaskMeta } from "@/lib/departments/competitor";
 
@@ -35,7 +36,23 @@ export async function generateCompetitorIntel(
   // Defaults to "pro" — this feature is already gated to pro+ by
   // requireFeature(..., "competitorIntel") at the route level, so
   // Free never reaches here regardless.
-  plan: PlanKey = "pro"
+  plan: PlanKey = "pro",
+  // THE OWNER'S OWN FACTS, AS GROUNDING ONLY — deliberately not run
+  // through the claims strip on the way out.
+  //
+  // Measured on 2026-10-03 against this business's real catalogue: the
+  // strip deletes "retails at ₹1,450, roughly 45% above your ₹999" and
+  // "positions itself as India's largest home fragrance brand" in full,
+  // because it checks every claim against what THIS business can back up
+  // and a competitor's price and a competitor's own boast are, correctly,
+  // not on our record. Those sentences are the findings. Stripping them
+  // leaves Pricing Compare and SEO Comparison returning empty strings.
+  //
+  // So the competitor half is guarded by the citation check below — a
+  // claim no cited page names is refused, which catches an invented price
+  // and an invented contact detail alike — and the owner's own half is
+  // guarded by putting the real catalogue in the prompt as verified fact.
+  facts?: BusinessFacts | null
 ): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
   const meta = COMPETITOR_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
@@ -55,7 +72,7 @@ export async function generateCompetitorIntel(
 Task: ${meta.label}
 ${meta.instructions(competitorName, dealershipName, businessCategory)}
 
-Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.`;
+Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.${factsPrompt(facts)}`;
 
   // Section 21 — automatic provider failover. Perplexity failing at
   // RUNTIME falls THROUGH to the Claude web_search path below rather
