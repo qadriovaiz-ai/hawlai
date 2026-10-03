@@ -27,6 +27,7 @@ export interface MarketingPlan {
 
 import { getModel } from "../models";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 export async function generateMarketingStrategy(
   dealershipName: string,
@@ -102,10 +103,18 @@ ${grounding ?? ""}`,
     }, { operation: "marketing_strategy", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[strategyAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
+    const parsed = parsedReply.value;
     return {
       overview: parsed.overview ?? fallback.overview,
       budget_allocation: Array.isArray(parsed.budget_allocation) ? parsed.budget_allocation : fallback.budget_allocation,

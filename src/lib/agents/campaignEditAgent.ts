@@ -16,6 +16,7 @@
 import { getModel } from "../models";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { callClaude } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -46,8 +47,15 @@ export async function matchCampaign(campaigns: CampaignSummary[], description: s
     }, { operation: "campaign_edit_match", logContext });
     if (!r.ok) return null;
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
+    // Tolerant read (src/lib/ai/modelJson.ts). A third variant of the
+    // same pattern: the parse inlined on one line, so the reply was
+    // never even checked for emptiness before JSON.parse ran on it.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[campaignEditAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    const parsed = parsedReply.value;
     if (parsed.index === null || parsed.index === undefined) return null;
     return campaigns[parsed.index] ?? null;
   } catch (err: any) {
@@ -80,8 +88,16 @@ Interpret this into a Meta Ads targeting change. Return JSON only:
     }, { operation: "campaign_edit_targeting", logContext });
     if (!r.ok) return null;
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
+    // Tolerant read (src/lib/ai/modelJson.ts). Returned straight out of
+    // the parse, so a malformed reply threw to the catch below and
+    // became a bare null — a targeting proposal that silently did not
+    // happen.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[campaignEditAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    return parsedReply.value;
   } catch (err: any) {
     console.error("[campaign-edit-agent] proposeTargetingChange error:", err.message);
     return null;
@@ -109,8 +125,15 @@ Work out the new daily budget in rupees (e.g. "double it" -> current * 2, "add 5
     }, { operation: "campaign_edit_budget", logContext });
     if (!r.ok) return null;
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
+    // Tolerant read (src/lib/ai/modelJson.ts). A third variant of the
+    // same pattern: the parse inlined on one line, so the reply was
+    // never even checked for emptiness before JSON.parse ran on it.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[campaignEditAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    const parsed = parsedReply.value;
     if (!parsed.new_budget || parsed.new_budget <= 0) return null;
     return parsed;
   } catch (err: any) {

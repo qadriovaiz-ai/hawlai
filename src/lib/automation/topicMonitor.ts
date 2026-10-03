@@ -10,6 +10,7 @@ import { emitNotification } from "../notifications/emit";
 import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
 import { getModel } from "../models";
 import { callClaude, aiFailureNote, isPlatformOutage, type AiFailureNote } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 export async function checkTopicAlerts(supabase: any, dealershipId: string) {
   const { data: watches } = await supabase
@@ -45,10 +46,18 @@ export async function checkTopicAlerts(supabase: any, dealershipId: string) {
       }
       // Web-search replies interleave text blocks with search results.
       const text = (r.data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-      if (!clean) continue;
-      const parsed = JSON.parse(clean);
+      // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+      // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+      // last "}", then JSON.parse inside a catch that returns the fallback
+      // below — so a spliced, cut-off or malformed reply discarded a call
+      // that had already been paid for, behind a message naming nothing.
+      // Now the complete items survive and an unreadable reply says why.
+      const parsedReply = parseModelJson(text);
+      if (!parsedReply.ok) {
+        console.error(`[topicMonitor] ${parsedReply.cause}: ${parsedReply.detail}`);
+        continue;
+      }
+      const parsed = parsedReply.value;
 
       for (const item of parsed.items ?? []) {
         if (!item.title) continue;

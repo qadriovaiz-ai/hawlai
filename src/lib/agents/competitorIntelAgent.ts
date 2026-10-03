@@ -127,9 +127,11 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
     // Unreachable today (routing.active requires PERPLEXITY_API_KEY).
     try {
       const result = await callComplexResearch(prompt);
-      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
-      const clean = (jsonMatch ? jsonMatch[0] : result.text).replace(/```json|```/g, "").trim();
-      if (clean) {
+      // Read the same way as the Claude branch below. Unreachable
+      // today, which is exactly why it would have been the next one to
+      // discard a paid call unnoticed.
+      const viaPerplexity = parseModelJson(result.text);
+      if (viaPerplexity.ok) {
         // Only bill once the call genuinely produced usable output —
         // a Perplexity response we then discard and redo on Claude
         // shouldn't cost the customer credits for both.
@@ -137,7 +139,7 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
           await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", result.inputTokens, result.outputTokens, "sonar-pro");
           await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, "sonar-pro"));
         }
-        return { output: { ...JSON.parse(clean), _provider: answeredByNote({ provider: routing.provider as AnsweredBy["provider"] }) } };
+        return { output: { ...viaPerplexity.value, _provider: answeredByNote({ provider: routing.provider as AnsweredBy["provider"] }) } };
       }
       console.warn("[competitor-intel-agent] perplexity returned no usable JSON — falling back to Claude web search.");
       answeredBy = { provider: "claude_web_search", searchCap: "competitor_intel", intended: routing.provider, fellBackBecause: "failed" };

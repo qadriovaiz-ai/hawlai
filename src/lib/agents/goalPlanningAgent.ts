@@ -18,6 +18,7 @@
 
 import { getModel } from "../models";
 import { callClaude } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 export interface GoalPlanTask {
   type: "human" | "agent";
@@ -78,8 +79,15 @@ Rules:
     }, { operation: "goal_decomposition", logContext });
     if (!r.ok) return null;
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse((jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim());
+    // Tolerant read (src/lib/ai/modelJson.ts). A third variant of the
+    // same pattern: the parse inlined on one line, so the reply was
+    // never even checked for emptiness before JSON.parse ran on it.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[goalPlanningAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    const parsed = parsedReply.value;
     // Defensive filter — never trust the model to have followed the
     // constraints perfectly; drop anything that would create a task
     // referencing a role/contentType that isn't actually valid rather

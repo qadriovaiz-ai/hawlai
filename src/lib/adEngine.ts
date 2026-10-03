@@ -27,8 +27,16 @@ async function callAdPlanOnce(promptContent: string, logContext?: { supabase: an
   const r = await callClaude({ model: getModel("standard"), max_tokens: 500, messages: [{ role: "user", content: promptContent }] }, { operation: "ad_plan", logContext });
   // Carries the reason to the fallback below, so the plan says why it's a template.
   if (!r.ok) throw Object.assign(new Error(`AI unavailable (${r.failure.kind})`), { aiFailure: r.failure });
-  const clean = r.text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  // Tolerant read (src/lib/ai/modelJson.ts). This one threw into the
+  // caller, which catches it and falls back to a template plan — so the
+  // owner got a template and no reason, for a reply that may have been
+  // one stray character away from usable.
+  const parsedReply = parseModelJson(r.text);
+  if (!parsedReply.ok) {
+    console.error(`[adEngine] ${parsedReply.cause}: ${parsedReply.detail}`);
+    throw Object.assign(new Error(parsedReply.message), { modelJson: parsedReply.cause });
+  }
+  return parsedReply.value;
 }
 
 // ------------------------------------------------------------------
@@ -227,6 +235,7 @@ export function buildTextOverlaySvg(width: number, height: number, headline: str
 // already makes 5 sequential calls (image, creative, campaign, adset,
 // ad) — every extra attempt here multiplies across all of them.
 import { metaLog, metaError } from "@/lib/ads/metaLog";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 const META_RETRYABLE_ERROR_CODES = new Set([1, 2, 4, 17, 613]);
 
