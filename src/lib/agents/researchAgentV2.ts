@@ -29,6 +29,7 @@ import { callClaude, withAiFailure, type AiFailure, type AiFailureNote } from "@
 import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { answeredByNote, type AnsweredBy } from "../research/provenance";
 import { guardDepartmentOutput } from "@/lib/claims/guardDepartment";
 
 /** The parsed JSON, or null — with the reason when the AI itself failed. */
@@ -68,9 +69,16 @@ async function askClaude(body: any, logContext?: { supabase: any; dealershipId: 
  * brand in Shahjahanpur, with hundreds of happy customers" — which is
  * exactly the line an owner would copy into an ad.
  */
-function researchResult(r: Researched, fallback: { output: any; _fallback: boolean }, facts?: BusinessFacts | null) {
-  if (r.parsed) return { output: guardDepartmentOutput(r.parsed, facts, "draft").output };
-  return r.failure ? withAiFailure(fallback, r.failure) : fallback;
+function researchResult(
+  r: Researched,
+  fallback: { output: any; _fallback: boolean },
+  facts?: BusinessFacts | null,
+  answeredBy?: AnsweredBy
+) {
+  if (!r.parsed) return r.failure ? withAiFailure(fallback, r.failure) : fallback;
+  const guarded = guardDepartmentOutput(r.parsed, facts, "draft").output;
+  // Only on a real answer: a fallback placeholder has no provider to name.
+  return { output: answeredBy ? { ...guarded, _provider: answeredByNote(answeredBy) } : guarded };
 }
 
 // Perplexity path — only ever reached when researchRouter.ts's
@@ -134,11 +142,18 @@ export async function generateResearch(
   // is what the previous version did. researchRouter's own check is
   // config-time only ("is the key set?") and can't catch this.
   //
-  // The customer never learns a provider failed, per Section 21 — but
-  // nothing pretends the failover didn't happen either: the fallback
-  // path is logged server-side, and the answer returned is a real
-  // researched answer from the substitute provider, not a degraded
-  // placeholder.
+  // The failover itself is not surfaced as an error, per Section 21 — the
+  // answer really was researched, by a real substitute, so an error would
+  // be wrong. WHICH provider answered is a different question, and until
+  // 2026-10-03 the only record of it was a console.warn nobody reads.
+  // Now it travels back with the result (src/lib/research/provenance.ts),
+  // so nothing is presented as deeper than it was.
+  let answeredBy: AnsweredBy = { provider: "claude_web_search", searchCap: "deep_research" };
+  if (!routing.active && (routing.researchMode === "complex" || routing.researchMode === "deep")) {
+    // The router already knew this and said it only to itself.
+    answeredBy = { ...answeredBy, intended: routing.researchMode === "deep" ? "perplexity_deep" : "perplexity", fellBackBecause: "not_connected" };
+  }
+
   const runResearch = async (prompt: string): Promise<Researched> => {
     const claudeCall = () => askClaude(
       { model: getModel("standard"), max_tokens: 2000, messages: [{ role: "user", content: prompt }], tools: [webSearchTool("deep_research")] },
@@ -151,25 +166,29 @@ export async function generateResearch(
       prompt,
       logContext
     );
-    if (viaPerplexity) return { parsed: viaPerplexity };
+    if (viaPerplexity) {
+      answeredBy = { provider: routing.provider as AnsweredBy["provider"] };
+      return { parsed: viaPerplexity };
+    }
 
     console.warn(`[research-agent] ${routing.provider} failed for "${taskKey}" — falling back to Claude web search.`);
+    answeredBy = { provider: "claude_web_search", searchCap: "deep_research", intended: routing.provider, fellBackBecause: "failed" };
     return claudeCall();
   };
 
   if (taskKey === "industry_trends") {
     const researched = await runResearch(`Search for current trends affecting the ${businessCategory} industry${location}, relevant to a business called "${dealershipName}". Return JSON only: {"trends": [{"trend": "...", "impact": "how this affects a business like this"}]} — 5 trends, based on what you actually find.${grounding}`);
-    return researchResult(researched, fallback, facts);
+    return researchResult(researched, fallback, facts, answeredBy);
   }
 
   if (taskKey === "market_research") {
     const researched = await runResearch(`Search for market information relevant to a ${businessCategory} business${location}: market size/growth if publicly reported, typical customer demographics, and key demand drivers. Return JSON only: {"marketOverview": "...", "customerDemographics": "...", "demandDrivers": []} — say plainly if specific numbers aren't publicly available rather than inventing them.${grounding}`);
-    return researchResult(researched, fallback, facts);
+    return researchResult(researched, fallback, facts, answeredBy);
   }
 
   if (taskKey === "new_opportunities") {
     const researched = await runResearch(`Search for underserved needs, emerging niches, or growth opportunities in the ${businessCategory} space${location} that a business like "${dealershipName}" could pursue. Return JSON only: {"opportunities": [{"opportunity": "...", "why": "..."}]} — 4-5 opportunities grounded in what you find, not generic startup advice.${grounding}`);
-    return researchResult(researched, fallback, facts);
+    return researchResult(researched, fallback, facts, answeredBy);
   }
 
   return fallback;
@@ -203,5 +222,11 @@ ${summaryInput}
 Identify recurring themes — common interests, hesitations, price sensitivity, what makes leads "hot" vs "cold". Return JSON only: {"positiveThemes": [], "concernsOrObjections": [], "summary": "2-3 sentence overall read"}. Base this ONLY on what's actually in the notes above — don't invent sentiment that isn't reflected in the data.${groundingContext ?? ""}`,
     }],
   }, logContext);
-  return researchResult(researched, fallback, facts);
+  // Customer Sentiment searches nothing — it reads this business's own
+  // lead notes, which is the honest signal available and a stronger one
+  // than anything the web could say about "customers in general". Worth
+  // saying, so nobody reads it as outward research either.
+  const { output, ...rest } = researchResult(researched, fallback, facts) as any;
+  if (rest._fallback || rest._aiFailure) return { output, ...rest };
+  return { output: { ...output, _provider: `Read from ${withReasons.length} of your own leads' qualification notes — no web search, so nothing here comes from outside your own records.` }, ...rest };
 }

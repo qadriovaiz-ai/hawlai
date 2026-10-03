@@ -44,6 +44,7 @@
 // routing" being separately scoped later.
 
 import type { PlanKey } from "../plans";
+import { isPerplexityConfigured } from "./perplexityClient";
 
 export type ResearchLevel = "quick" | "standard" | "complex" | "deep";
 export type ResearchProvider = "claude_web_search" | "perplexity" | "perplexity_deep";
@@ -119,7 +120,11 @@ export function classifyResearch(input: ResearchRouterInput): ResearchRouterOutp
     };
   }
 
-  const perplexityReady = !!process.env.PERPLEXITY_API_KEY;
+  // Asked of the client that would actually make the call, rather than
+  // read out of the environment a second time here. isPerplexityConfigured
+  // existed for this from the start and nothing had ever called it — two
+  // copies of one question is how they come to disagree.
+  const perplexityReady = isPerplexityConfigured();
   const provider: ResearchProvider = requestedLevel === "deep" ? "perplexity_deep" : "perplexity";
 
   if (!perplexityReady) {

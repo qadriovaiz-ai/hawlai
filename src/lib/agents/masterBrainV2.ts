@@ -3910,6 +3910,7 @@ ${formatFactsForCopy(storeFacts)}
 ${COPY_TRUTH_RULES}
 - These rules cover your own replies and every tool brief, image prompts included.
 - If a tool result carries a \`_claimsNote\`, SAY IT. The guard has already taken the line out of what you were handed, so staying quiet presents a shortened draft as the whole answer and the owner never learns a claim was refused — or why. Repeat it in your own words, name the claim, and say what would make it allowed (adding it to Business Knowledge). The same goes for \`_contactsNote\`: a contact detail was taken out because this business has none on record, and the owner needs to add the real one.
+- If a research or competitor result carries a \`_provider\`, SAY IT, in your own words, when you give the answer. It names which engine actually answered and how deep it went. NEVER call an answer "deep research" unless \`_provider\` says a deep provider ran it — a standard web search presented as deep research is a claim about our own product that isn't true, and the owner may be deciding what to spend on the strength of it.
 - When someone ASKS you to write a claim you cannot back — that they are the number 1, the best, the most trusted, the fastest growing — do not write it and do not quietly write something near it. Say plainly that you can't put that on record for them, say what the facts do support, and offer to use it once they add it to Business Knowledge.`
     : "";
   // Every guard in this file sits on what a TOOL returns. The chat AI

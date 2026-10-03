@@ -16,6 +16,7 @@ import { costOfClaudeCallInr, costOfPerplexityCallInr } from "../usage/pricing";
 import { recordResearchCredits } from "../usage/researchCredits";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
+import { answeredByNote, type AnsweredBy } from "../research/provenance";
 
 import { COMPETITOR_TASKS, type CompetitorTaskMeta } from "@/lib/departments/competitor";
 
@@ -67,6 +68,18 @@ export async function generateCompetitorIntel(
   // actually engages once PERPLEXITY_API_KEY is set. Until then
   // routing.active is false and this behaves exactly as before.
   const routing = classifyResearch({ plan, taskType: taskKey });
+
+  // THIS IS WHERE THE SILENT FALLBACK ACTUALLY HAPPENS. All four tasks
+  // here classify as COMPLEX, so the router genuinely wants Perplexity
+  // and genuinely substitutes Claude when it isn't connected — the
+  // Research Agent's own three tasks are STANDARD and were never routed
+  // to Perplexity at all. The owner is told which one answered
+  // (src/lib/research/provenance.ts) instead of it living in a
+  // console.warn.
+  let answeredBy: AnsweredBy = { provider: "claude_web_search", searchCap: "competitor_intel" };
+  if (!routing.active && (routing.researchMode === "complex" || routing.researchMode === "deep")) {
+    answeredBy = { ...answeredBy, intended: routing.researchMode === "deep" ? "perplexity_deep" : "perplexity", fellBackBecause: "not_connected" };
+  }
   const prompt = `You are a competitive intelligence analyst working for "${dealershipName}", a ${businessCategory} business in India, researching their competitor "${competitorName}".${groundingContext ?? ""}
 
 Task: ${meta.label}
@@ -93,11 +106,13 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
           await logPerplexityUsage(logContext.supabase, logContext.dealershipId, "competitor_intel", result.inputTokens, result.outputTokens, "sonar-pro");
           await recordResearchCredits(logContext.dealershipId, costOfPerplexityCallInr(result.inputTokens, result.outputTokens, "sonar-pro"));
         }
-        return { output: JSON.parse(clean) };
+        return { output: { ...JSON.parse(clean), _provider: answeredByNote({ provider: routing.provider as AnsweredBy["provider"] }) } };
       }
       console.warn("[competitor-intel-agent] perplexity returned no usable JSON — falling back to Claude web search.");
+      answeredBy = { provider: "claude_web_search", searchCap: "competitor_intel", intended: routing.provider, fellBackBecause: "failed" };
     } catch (err: any) {
       console.warn("[competitor-intel-agent] perplexity failed, falling back to Claude web search:", err.message);
+      answeredBy = { provider: "claude_web_search", searchCap: "competitor_intel", intended: routing.provider, fellBackBecause: "failed" };
     }
   }
 
@@ -120,7 +135,7 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
     if (!clean) return fallback;
-    return { output: JSON.parse(clean) };
+    return { output: { ...JSON.parse(clean), _provider: answeredByNote(answeredBy) } };
   } catch (err: any) {
     console.error("[competitor-intel-agent] error:", err.message);
     return fallback;

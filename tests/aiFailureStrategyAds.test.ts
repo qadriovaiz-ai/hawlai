@@ -128,7 +128,13 @@ describe("what still works as before", () => {
       { type: "text", text: '{"competitorPricing":[],"comparisonNotes":"No public prices."}' },
     ]));
     const r = await generateCompetitorIntel("pricing_compare", "Rival Candles", "Candle by Qaaf", "Home fragrance", { supabase: { from: () => ({ insert: async () => ({}) }) }, dealershipId: "d1" });
-    expect(r).toEqual({ output: { competitorPricing: [], comparisonNotes: "No public prices." } });
+    // The parsed answer, which is what this test is about.
+    expect(r.output).toMatchObject({ competitorPricing: [], comparisonNotes: "No public prices." });
+    // And, since 2026-10-03, which engine produced it — all four
+    // competitor tasks classify as COMPLEX, so with Perplexity not
+    // connected this answer IS a substitution and says so rather than
+    // leaving the owner to assume depth (src/lib/research/provenance.ts).
+    expect(r.output._provider).toMatch(/Claude web search.*Perplexity isn't connected/);
     expect(credits).toHaveLength(1);
     expect(credits[0]).toBeGreaterThan(0);
   });
