@@ -70,7 +70,10 @@ describe("a page is 'edited' only when its words are", () => {
 describe("a block is 'edited' only when its words are", () => {
   it("marks a text change and leaves a styling change alone", () => {
     expect(panel).toMatch(/const TEXT_PROPS = new Set\(\["text", "heading", "html", "label"\]\)/);
-    expect(panel).toMatch(/onChange\(TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, _source: "edited" \} : \{ \[key\]: value \}\)/);
+    // Per prop now: withOwnerProp merges this prop into the block's
+    // _edited list rather than stamping the whole block as the
+    // owner's work (src/lib/pages/provenance.ts).
+    expect(panel).toMatch(/onChange\(TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, \.\.\.withOwnerProp\(block\?\.props, key\) \} : \{ \[key\]: value \}\)/);
   });
 
   it("the per-block mark is the one the evidence rule will read", () => {

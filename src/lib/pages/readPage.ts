@@ -17,22 +17,52 @@
 // the page" means the same thing in all five places.
 
 import { isLegalPage } from "@/lib/seo/pageKinds";
+import { TEXT_PROPS, type TextProp, ownerWroteProp } from "./provenance";
 
-/** Block props holding words a visitor reads. The same four everywhere. */
-export const TEXT_PROPS = ["text", "heading", "html", "label"] as const;
-export type TextProp = (typeof TEXT_PROPS)[number];
+export { TEXT_PROPS };
+export type { TextProp };
+
+/**
+ * The flat fields a page used before the block builder, mapped to the
+ * prop they became.
+ *
+ * Read here as well as in the claims review because both now use this
+ * one reader: a line the review checks has to be a line this can see,
+ * and a legacy node has no block id at all — which is how a live page
+ * stayed invisible to a walk that only read props.
+ */
+const LEGACY_FIELDS: [string, TextProp][] = [
+  ["headline", "heading"],
+  ["subheadline", "heading"],
+  ["heading", "heading"],
+  ["title", "heading"],
+  ["body", "html"],
+  ["text", "text"],
+  ["ctaText", "label"],
+  ["buttonText", "label"],
+  ["cta", "label"],
+];
 
 export type PageLine = {
-  /** The block this text belongs to. Stable across saves. */
-  blockId: string;
+  /** The block this text belongs to, or null on a page with no ids yet. */
+  blockId: string | null;
   /** Which prop of that block. */
   prop: TextProp;
   /** The block's own type, so chat can say "the heading" or "the button". */
   blockType: string;
   /** What it says now, markup removed for reading. */
   text: string;
-  /** Written by Hawlai, or by the owner. Decides whether it is evidence. */
+  /**
+   * Written by Hawlai, or by the owner. Decides whether it is evidence.
+   *
+   * Read PER PROP (src/lib/pages/provenance.ts). A block carries one
+   * `_source`, so reading it per block meant editing a heading marked
+   * the paragraph beside it as the owner's — which exempted it from the
+   * claims review and made it evidence for itself.
+   */
   source: "generated" | "edited" | "unknown";
+  /** The flat field this came from, on a page with no block ids. */
+  legacyField?: string;
 };
 
 export type PageContent = {
@@ -111,17 +141,35 @@ export function pageLines(sections: unknown): PageLine[] {
     if (!node || typeof node !== "object") return;
     const b = node as Record<string, any>;
     const id = typeof b.id === "string" ? b.id : null;
-    if (id && b.props && typeof b.props === "object") {
-      const mark = b.props._source;
-      const source: PageLine["source"] = mark === "generated" || mark === "edited" ? mark : "unknown";
+
+    if (b.props && typeof b.props === "object") {
       for (const prop of TEXT_PROPS) {
         const value = b.props[prop];
         if (typeof value !== "string") continue;
         const text = readable(value);
         if (!text) continue;
+        // Per prop, not per block.
+        const source: PageLine["source"] = ownerWroteProp(b.props, prop)
+          ? "edited"
+          : b.props._source === "generated" || b.props._source === "edited"
+          ? "generated"
+          : "unknown";
         lines.push({ blockId: id, prop, blockType: String(b.type ?? "block"), text, source });
       }
+    } else {
+      // A PAGE FROM BEFORE THE BLOCK BUILDER. Its words live in flat
+      // fields and it has no id, so it was invisible to every reader
+      // that started from props — which is how the About page's claims
+      // never reached the review list.
+      for (const [key, prop] of LEGACY_FIELDS) {
+        const value = b[key];
+        if (typeof value !== "string") continue;
+        const text = readable(value);
+        if (!text) continue;
+        lines.push({ blockId: id, prop, blockType: String(b.type ?? "block"), text, source: "unknown", legacyField: key });
+      }
     }
+
     walk(b.children);
   };
   walk(sections);

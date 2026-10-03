@@ -27,6 +27,7 @@ import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
 import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalogItem";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
+import { TEXT_PROPS, machineWroteProp } from "@/lib/pages/provenance";
 
 type Row = Record<string, any>;
 
@@ -270,10 +271,32 @@ export function ownerWritten(sections: unknown): unknown {
     if (!node || typeof node !== "object") return null;
     const b = node as Row;
     const children = b.children ? keep(b.children) : undefined;
-    const machine = b.props && typeof b.props === "object" && (b.props as Row)._source === "generated";
     const hasKeptChildren = Array.isArray(children) && children.length > 0;
-    if (machine && !hasKeptChildren) return null;
-    return { ...b, props: machine ? {} : b.props, ...(children ? { children } : {}) };
+
+    if (!b.props || typeof b.props !== "object") {
+      return { ...b, ...(children ? { children } : {}) };
+    }
+
+    // PER PROP, NOT PER BLOCK. This used to keep a whole block whose
+    // `_source` was anything but "generated" — so a block the owner had
+    // edited in Website Builder contributed ALL its text as evidence,
+    // including the paragraph Hawlai wrote beside the heading they
+    // changed. A machine-written line then vouched for itself, which is
+    // the loop Stage 1 broke (src/lib/pages/provenance.ts).
+    const props = b.props as Row;
+    const kept: Row = { ...props };
+    let anyKept = false;
+    for (const prop of TEXT_PROPS) {
+      if (typeof props[prop] !== "string") continue;
+      // Dropped only when HAWLAI wrote it. A block with no mark at all
+      // predates the marking entirely: that is the owner's own site,
+      // which they have lived with, and guessing against them would
+      // strip copy they never asked anyone to check.
+      if (machineWroteProp(props, prop)) delete kept[prop];
+      else anyKept = true;
+    }
+    if (!anyKept && !hasKeptChildren) return null;
+    return { ...b, props: kept, ...(children ? { children } : {}) };
   };
   const out = keep(sections);
   return Array.isArray(out) ? out : [];

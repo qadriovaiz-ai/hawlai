@@ -32,7 +32,15 @@ function facts(over: Partial<BusinessFacts> = {}): BusinessFacts {
 }
 
 const generated = (id: string, props: Record<string, any>) => ({ id, type: "text", props: { ...props, _source: "generated" } });
-const edited = (id: string, props: Record<string, any>) => ({ id, type: "text", props: { ...props, _source: "edited" } });
+// A block the owner edited, marked the way the builder now marks one:
+// WHICH prop they wrote, not just that they were in the block. One mark
+// per block is what hid the About page — editing a heading exempted the
+// paragraph beside it from the review and made it evidence for itself.
+const edited = (id: string, props: Record<string, any>) => ({
+  id,
+  type: "text",
+  props: { ...props, _source: "edited", _edited: Object.keys(props).filter((k) => ["text", "heading", "html", "label"].includes(k)) },
+});
 
 const page = (sections: any[]) => ({ id: "p-home", slug: "home", title: "Home", sections });
 

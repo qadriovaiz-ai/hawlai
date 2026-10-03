@@ -25,6 +25,7 @@ import { scrubInventedContacts } from "@/lib/claims/guardBlocks";
 import { stripUnsupported } from "@/lib/claims/claimCheck";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { TEXT_PROPS, type TextProp } from "./readPage";
+import { withOwnerProp } from "./provenance";
 
 export type EditRequest = {
   blockId: string;
@@ -145,7 +146,12 @@ export function applyEdits(sections: unknown, edits: EditRequest[], facts: Busin
         const existing = props._source === "edited" || props._source === "generated" ? props._source : undefined;
         const source: AppliedEdit["source"] = edit.restore ? existing ?? "generated" : edit.writtenByOwner ? "edited" : "generated";
         props[edit.prop] = after;
-        if (!edit.restore) props._source = source;
+        if (!edit.restore) {
+          // Per prop: dictating a new heading must not make the
+          // paragraph beside it the owner's word as well.
+          if (source === "edited") Object.assign(props, withOwnerProp(props, edit.prop));
+          else props._source = "generated";
+        }
         applied.push({ blockId: edit.blockId, prop: edit.prop, blockType: String(block.type ?? "block"), before: before.replace(/<[^>]*>/g, "").trim(), after: after.replace(/<[^>]*>/g, "").trim(), source, ...(edit.restore ? { restored: true as const } : {}) });
       }
       block.props = props;

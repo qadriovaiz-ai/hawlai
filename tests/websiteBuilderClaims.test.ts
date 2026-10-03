@@ -137,6 +137,6 @@ describe("who wrote each line", () => {
     const route = readFileSync("src/app/api/website-builder/pages/[id]/route.ts", "utf8");
     expect(route).toMatch(/if \(wordsChanged\(current\?\.sections, body\.sections\)\) update\.content_source = "edited";/);
     const panel = readFileSync("src/components/website-builder/blocks/PropertiesPanel.tsx", "utf8");
-    expect(panel).toMatch(/TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, _source: "edited" \}/);
+    expect(panel).toMatch(/TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, \.\.\.withOwnerProp\(block\?\.props, key\) \}/);
   });
 });

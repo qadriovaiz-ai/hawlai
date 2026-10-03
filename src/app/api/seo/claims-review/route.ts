@@ -150,6 +150,19 @@ export async function POST(request: Request) {
           next.props = { ...next.props, [field]: after };
           touched = true;
         }
+      } else if (!next.props) {
+        // A PAGE FROM BEFORE THE BLOCK BUILDER. Its words live in flat
+        // fields and it has no id, so this matched nothing and Remove
+        // answered "that line isn't on the page any more" about a line
+        // that was — the same blindness that kept those pages off the
+        // review list until the reader was shared.
+        for (const key of ["headline", "subheadline", "heading", "title", "body", "text", "ctaText", "buttonText", "cta"]) {
+          if (typeof next[key] !== "string") continue;
+          const after = withoutSentence(next[key], sentence);
+          if (after === next[key]) continue;
+          next[key] = after;
+          touched = true;
+        }
       }
       if (next.children) next.children = strip(next.children);
       return next;

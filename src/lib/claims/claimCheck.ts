@@ -131,7 +131,12 @@ const FREE_SHIPPING =
 // keeps "#1 in Shahjahanpur" from needing a place word attached.
 const RANKING = /(?<![\w#])(?:no\.?\s?1|number\s?(?:one|1)|#\s?1)(?![\w])/gi;
 const PLACE = "india|the\\s+world|the\\s+country|the\\s+city|town|the\\s+market|the\\s+region|the\\s+state";
-const SUPERLATIVE_WORDS = "best|finest|top[- ]rated|most\\s+trusted|most\\s+loved|most\\s+popular|leading|largest|biggest|favou?rite|number\\s+one|no\\.?\\s?1";
+// The "-est" forms, added after a Terms page claimed "our candles are
+// the safest in India" and nothing flagged it: only `best` and `finest`
+// were ever on this list. Enumerated rather than matched as `\w+est`,
+// because that pattern also matches "honest" and "interest" and would
+// flag "our honest approach in India".
+const SUPERLATIVE_WORDS = "best|finest|safest|cleanest|purest|strongest|freshest|healthiest|longest[- ]lasting|top[- ]rated|most\\s+trusted|most\\s+loved|most\\s+popular|leading|largest|biggest|favou?rite|number\\s+one|no\\.?\\s?1";
 const POSSESSIVE_SUPERLATIVE = new RegExp(`\\b(?:india|the\\s+world|the\\s+city|the\\s+country)['’]s\\s+(?:${SUPERLATIVE_WORDS}|top)\\b`, "gi");
 const BEST_SELLING = /\b(?:best[- ]?sell(?:ing|ers?)|top[- ]?sell(?:ing|ers?)|fastest[- ]selling|most[- ]ordered)\b/gi;
 const SCARCITY = /\b(?:selling\s+(?:out\s+)?fast|almost\s+(?:sold\s+out|gone)|only\s+\d+\s+(?:left|pieces?\s+left|in\s+stock)|limited\s+stock|(?:just\s+)?a\s+few\s+left|while\s+stocks?\s+lasts?)\b/gi;
@@ -159,6 +164,24 @@ const SLOT_SCARCITY = new RegExp(
     ")\\b",
   "gi"
 );
+// A comparison, including the kind that never names what it is better
+// THAN.
+//
+// FOUND LIVE (3 Oct 2026) on the About page: "Our soy wax burns slower,
+// cleaner, and safer than mass-market paraffin" was caught, and the
+// sentence right after it — "It burns better and safer." — was not,
+// because every pattern here required an explicit "than X". A
+// comparison with nothing named is still a comparison; it is the same
+// claim with the other party left implicit, and it is harder to answer
+// rather than weaker.
+//
+// Bounded to how the PRODUCT performs (burns, lasts, smells, cleans,
+// holds, performs), so an ordinary "a better way to unwind" is left
+// alone — that is a promise about the reader's evening, not a measurable
+// claim against someone else's wax.
+const PRODUCT_COMPARATIVE =
+  /\b(?:burns?|burning|lasts?|lasting|smells?|cleans?|holds?|performs?|melts?|sets?)\s+(?:\w+,?\s+){0,3}(?:better|cleaner|safer|longer|slower|stronger|brighter|purer|faster)\b/gi;
+
 const COMPARATIVE =
   /\b(?:better|cheaper|stronger|safer|longer[- ]lasting|more\s+affordable)\s+than\s+(?!ever\b|before\b|yesterday\b|last\b|you\s+think\b)[\w'-]+|\bunlike\s+(?:other|most|any)\s+(?:brands?|stores?|shops?|sellers?|competitors?|companies)\b|\b(?:cheapest|lowest\s+prices?)\b/gi;
 const GUARANTEE = /\b(?:guarantee[ds]?|money[- ]back|risk[- ]free|100\s*%\s*(?:satisfaction|safe|effective|pure|genuine|results?))\b/gi;
@@ -417,6 +440,7 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
   each(POSSESSIVE_SUPERLATIVE, (m) => `"${m[0]}" — a superlative with nothing on record to back it`);
   each(BEST_SELLING, (m) => `"${m[0]}" — Hawlai has no sales ranking for this business's products`);
   each(COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports`);
+  each(PRODUCT_COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports, and it doesn't even say what it's being compared with`);
   each(GUARANTEE, (m) => `"${m[0]}" — a guarantee the business hasn't offered`);
   each(SCARCITY, (m) => `"${m[0]}" — urgency about stock that nothing on record supports`);
   each(SLOT_SCARCITY, (m) => `"${m[0]}" — how many slots are left isn't on record; a service has no stock count, so nothing here backs the hurry`);

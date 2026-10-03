@@ -24,6 +24,7 @@
 
 import { blocksText, ownerWritten } from "./businessFacts";
 import { isLegalPage } from "@/lib/seo/pageKinds";
+import { pageLines } from "@/lib/pages/readPage";
 import { findUnsupportedClaims } from "./claimCheck";
 import { scrubInventedContacts } from "./guardBlocks";
 import type { BusinessFacts } from "./businessFacts";
@@ -220,33 +221,23 @@ export function reviewPage(
     }
   };
 
-  const walk = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
-    }
-    if (!node || typeof node !== "object") return;
-    const b = node as Row;
-    const blockId = typeof b.id === "string" ? b.id : null;
-
-    if (b.props && typeof b.props === "object") {
-      const props = b.props as Row;
-      if (props._source !== "edited") {
-        for (const field of ["text", "heading", "html", "label"] as const) review(blockId, field, props[field]);
-      }
-    } else {
-      // A PAGE FROM BEFORE THE BLOCK BUILDER, and skipping these is why
-      // a live comparative health claim never reached the list: a legacy
-      // node keeps its words in flat fields (headline, subheadline,
-      // body, ctaText) and has no `props` at all, so a walk that only
-      // read props saw nothing on those pages. blocksText has always
-      // handled both shapes; this did not.
-      for (const [key, field] of LEGACY_FIELDS) review(blockId, field, b[key]);
-    }
-    walk(b.children);
-  };
-
-  walk(page.sections);
+  // ONE READER FOR BOTH. Every line read_page can show is a line this
+  // checks, because it is the same function reading them
+  // (src/lib/pages/readPage.ts).
+  //
+  // THE BUG THIS FIXES: the review had its own walk, and the About page
+  // never appeared on the card while it was live and saying "burns
+  // slower, cleaner, and safer than mass-market paraffin". Two readers
+  // of the same pages will disagree, and the one nobody is looking at is
+  // the one that goes quiet.
+  for (const line of pageLines(page.sections)) {
+    // The owner's own words are theirs. Judged PER PROP now: a block
+    // carries one `_source`, so reading it per block meant editing a
+    // heading exempted the paragraph beside it — and made that paragraph
+    // evidence for itself.
+    if (line.source === "edited") continue;
+    review(line.blockId, line.prop, line.text);
+  }
   return items;
 }
 

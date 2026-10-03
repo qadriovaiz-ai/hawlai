@@ -5,6 +5,7 @@ import { BLOCK_REGISTRY } from "@/lib/blocks/registry";
 import type { Block } from "@/lib/blocks/types";
 import RichTextArea from "../RichTextArea";
 import ImageUploader from "../ImageUploader";
+import { withOwnerProp } from "@/lib/pages/provenance";
 
 // Registry-driven — every block type declares its own `propFields`
 // schema (see registry.ts), so this form never needs a per-type branch;
@@ -43,7 +44,11 @@ export default function PropertiesPanel({
     // Changing its background, its alignment or its picture does not:
     // the sentence is still the one Hawlai wrote, and marking it edited
     // would quietly turn an unbacked claim into owner-approved evidence.
-    onChange(TEXT_PROPS.has(key) ? { [key]: value, _source: "edited" } : { [key]: value });
+    // PER PROP. This used to send only `_source: "edited"`, one mark for
+    // the whole block, so changing a heading recorded the paragraph
+    // beside it as the owner's words too — exempting it from the claims
+    // review and making it evidence for itself.
+    onChange(TEXT_PROPS.has(key) ? { [key]: value, ...withOwnerProp(block?.props, key) } : { [key]: value });
   }
 
   return (
