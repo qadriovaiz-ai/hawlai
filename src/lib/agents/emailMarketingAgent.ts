@@ -35,6 +35,7 @@ interface BrandProfile {
 }
 
 import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 export async function generateEmailContent(
   taskKey: string,
@@ -80,10 +81,18 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     }, { operation: "email_generation", logContext });
     if (!r.ok) return { output: { text: aiFailureMessage(r.failure.kind) }, _fallback: true, _aiFailure: aiFailureNote(r.failure) };
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[emailMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
+    const parsed = parsedReply.value;
     // A subject that misleads about what's inside is fixed in code, not
     // left to the prompt — and counts as a removed claim, so automation
     // (which sends only untouched emails) regenerates instead of sending.

@@ -10,6 +10,7 @@
 
 import { getModel } from "../models";
 import { callClaude, withAiFailure, type AiFailure } from "@/lib/ai/claude";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 interface RevenueForecast {
   weeklyLeadCounts: number[]; // last 8 weeks, oldest first
@@ -119,9 +120,13 @@ export async function computeRevenueForecast(supabase: any, dealershipId: string
       // On failure the honest "not enough to forecast" line stays.
       if (r.ok) {
         const text = r.text;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-        if (clean) narrative = JSON.parse(clean).narrative ?? narrative;
+        // Tolerant read (src/lib/ai/modelJson.ts). An unreadable reply
+        // leaves the honest "not enough to forecast" line standing,
+        // which is what this branch always intended — but it used to get
+        // there by throwing out of the try, so the reason was lost.
+        const parsedReply = parseModelJson(text);
+        if (parsedReply.ok) narrative = parsedReply.value?.narrative ?? narrative;
+        else console.error(`[growthAdvisorV2] ${parsedReply.cause}: ${parsedReply.detail}`);
       }
     } catch (err: any) {
       console.error("[growth-advisor-v2] forecast narrative error:", err.message);
@@ -140,10 +145,14 @@ async function askClaude(prompt: string, maxTokens = 1500, logContext?: { supaba
     const r = await callClaude({ model: getModel("premium"), max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }, { operation: "growth_advisor", logContext });
     if (!r.ok) return { parsed: null, failure: r.failure };
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return { parsed: null };
-    return { parsed: JSON.parse(clean) };
+    // Tolerant read (src/lib/ai/modelJson.ts): the complete items of a
+    // cut-off reply survive instead of the whole call being discarded.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[growthAdvisorV2] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return { parsed: null };
+    }
+    return { parsed: parsedReply.value };
   } catch (err: any) {
     console.error("[growth-advisor-v2] error:", err.message);
     return { parsed: null };
