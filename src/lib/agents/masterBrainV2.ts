@@ -1098,7 +1098,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     case "read_page":
     case "edit_page_text": {
       const { readPageContent } = await import("../pages/readPage");
-      const { applyEdits, legalWarning, CATALOGUE_REFUSAL, statesCatalogueData } = await import("../pages/editPage");
+      const { applyEdits, legalWarning, CATALOGUE_REFUSAL, statesPriceOrStock, unknownProductName, unknownNameWarning, unknownNameRefusal } = await import("../pages/editPage");
 
       const { data: pageSite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
       if (!pageSite) return { error: "This business doesn't have a Hawlai website yet, so there are no pages to read. I can build one — just say the word." };
@@ -1211,10 +1211,30 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         };
       }
 
-      // And a prose block that would STATE catalogue data anyway.
+      // A PRICE OR A STOCK FIGURE IS REFUSED WHATEVER THE NUMBER IS.
+      // The rule is that these live on the product row, not that the
+      // number happens to be wrong — so ₹999 is refused exactly as ₹499
+      // is, and the message says the rule rather than guessing about the
+      // figure.
       for (const edit of wanted) {
-        const stated = statesCatalogueData(edit.text, editFacts);
-        if (stated) return { error: stated, saved: false, note: "Do NOT retry with the same number or name. Offer the catalogue tool instead." };
+        const stated = statesPriceOrStock(edit.text);
+        if (stated) return { error: stated, saved: false, note: "Do NOT retry with a different number — no number belongs in page text. Offer the catalogue tool instead." };
+      }
+
+      // A product name Hawlai doesn't recognise. Two answers, because
+      // rule C applies: wording the OWNER dictated is saved verbatim and
+      // warned about — it may be a product they are about to add, or a
+      // phrase Hawlai simply doesn't know — while wording HAWLAI wrote
+      // is refused, since inventing a product is how a customer comes to
+      // ask for something nobody can send.
+      const nameWarnings: string[] = [];
+      for (const edit of wanted) {
+        const phrase = unknownProductName(edit.text, editFacts);
+        if (!phrase) continue;
+        if (!edit.writtenByOwner) {
+          return { error: unknownNameRefusal(phrase), saved: false, note: "Do NOT retry with the same name. Use a product that is actually in the catalogue, or ask which one they meant." };
+        }
+        nameWarnings.push(unknownNameWarning(phrase));
       }
       const result = applyEdits(liveSections, wanted, editFacts);
 
@@ -1234,7 +1254,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         };
       }
 
-      const claimWarnings = [...result.warnings];
+      const claimWarnings = [...result.warnings, ...nameWarnings];
       if (result.removed.length > 0) {
         claimWarnings.push(`Taken out, because your Business Story doesn't support it: ${result.removed.join("; ")}.`);
       }

@@ -222,33 +222,121 @@ export const CATALOGUE_REFUSAL =
   "That block shows your catalogue, so its names, prices and descriptions come from the product rows themselves — changing them on the page would leave two different answers on your site. Tell me what should change about the product and I'll put it through the catalogue instead, with its own approval card. The ordinary headings and paragraphs on that page I can change.";
 
 /** Money, however it is written. */
-const PRICE_IN_TEXT = /(?:₹|\brs\.?\s|\binr\s)\s?\d|\b\d[\d,]*(?:\.\d+)?\s*(?:rupees?|rs\.?|\/-)\b/i;
+const PRICE_IN_TEXT = /(?:₹|\brs\.?\s|\binr\s)\s?\d|\b\d[\d,]*(?:\.\d+)?\s*(?:rupees?|rs\b|\/-)/i;
+
+/** Stock and quantity, which live on the product row for the same reason. */
+const STOCK_IN_TEXT = /\b(?:only\s+)?\d+\s*(?:left|in\s+stock|remaining|available|units?|pieces?|pcs)\b|\b(?:in|out\s+of)\s+stock\b/i;
 
 /**
- * A plain-text edit that would state catalogue data anyway.
+ * A price or a stock figure in page text — refused, always.
  *
- * The block being prose is not enough: a paragraph saying "candles from
- * ₹550" is a price on the page, and the price lives in the product row —
- * where it is ₹999. The page would contradict the catalogue and neither
- * would know. Same for a product name nobody sells.
+ * THE RULE, AND IT IS THE RULE RATHER THAN A JUDGEMENT ABOUT THE NUMBER:
+ * a price lives on the product row, so a number typed into a paragraph
+ * is a second answer on the same site with nothing keeping the two in
+ * step. ₹999 is refused exactly as ₹499 is. On 3 Oct 2026 the chat
+ * explained a refusal with "₹499 isn't your real price", which invites
+ * the owner to retry with the right one — and the right one is still
+ * wrong here.
  */
-export function statesCatalogueData(text: string, facts: BusinessFacts | null | undefined): string | null {
+export function statesPriceOrStock(text: string): string | null {
   if (PRICE_IN_TEXT.test(text)) {
-    return "That line puts a price on the page. Prices live on the product itself, so a number typed here would sit next to a different one in your catalogue and nobody would know which is right — ask me to change the product's price instead and it goes through the catalogue with its own card.";
+    return "I don't put prices in page text at all — not the wrong one and not the right one. The price lives on the product itself, so a number typed into a paragraph would sit beside the catalogue's own figure with nothing keeping the two in step, and whichever changed first would make the other a lie. Ask me to change the product's price and it goes through the catalogue with its own card.";
   }
-  if (!facts) return null;
-  // A capitalised multi-word phrase that reads like a product name but
-  // matches nothing in the catalogue. Deliberately narrow: ordinary
-  // prose is full of capitalised words, and over-refusing here would
-  // undo the point of the change.
-  const names = facts.products.map((p) => p.name.toLowerCase());
-  // The leading words must be capitalised — that is what makes it read
-  // as a name rather than prose — but the noun may be either case, since
-  // "Midnight Oud Candle" and "Midnight Oud candle" are the same claim.
-  for (const candidate of text.match(/\b(?:[A-Z][a-z]+\s){1,3}(?:[Cc]andles?|[Ss]ets?|[Jj]ars?|[Kk]its?|[Bb]ox(?:es)?|[Hh]ampers?)\b/g) ?? []) {
-    const phrase = candidate.trim().toLowerCase();
-    if (names.some((name) => name.includes(phrase) || phrase.includes(name))) continue;
-    return `That line names "${candidate.trim()}", which isn't in your catalogue. Add it as a product first and I'll write about it — a page naming something you don't sell is a customer asking for it and nobody able to send it.`;
+  if (STOCK_IN_TEXT.test(text)) {
+    return "I don't put stock counts in page text. The quantity lives on the product and changes with every order, so a number written into a paragraph is out of date the moment someone buys one. The product page shows it live.";
   }
   return null;
+}
+
+/**
+ * Words that are the category, not a product.
+ *
+ * WHY THIS EXISTS: "Shop page ka heading 'The Shop' ko 'Our Candles' kar
+ * do" was REFUSED, because the name check read "Our Candles" as a
+ * product that isn't in the catalogue. The goal of the whole feature is
+ * that every page is editable from chat, and the commonest heading a
+ * candle shop could possibly want was the thing it would not allow.
+ *
+ * A heading is nearly always the category — that is what a heading is
+ * for — so the category's own words can never be evidence of a product
+ * name. Taken from the business's real category and catalogue rather
+ * than a fixed list, plus the words any shop heading uses.
+ */
+const NAME_STOPWORDS = new Set([
+  "the", "our", "my", "your", "all", "new", "best", "more", "shop", "store", "buy", "sale", "sales",
+  "collection", "collections", "range", "ranges", "gift", "gifts", "gifting", "home", "handmade",
+  "hand", "poured", "made", "craft", "crafted", "small", "batch", "batches", "premium", "luxury",
+  "natural", "pure", "fresh", "classic", "signature", "everyday", "essentials", "favourites", "favorites",
+  // Materials and forms. "Handmade Soy Candles" is a category heading,
+  // not a product nobody sells — and "soy" reached this list only
+  // because the vocabulary was built from product NAMES and the word
+  // lives in the description.
+  "soy", "wax", "beeswax", "coconut", "cotton", "wick", "wicks", "scented", "unscented",
+  "fragrance", "fragrances", "aroma", "scent", "scents", "candle", "candles", "jar", "jars", "tin", "tins",
+]);
+
+function categoryVocabulary(facts: BusinessFacts): Set<string> {
+  const words = new Set<string>(NAME_STOPWORDS);
+  const add = (value: string) => {
+    for (const word of String(value ?? "").toLowerCase().split(/[^a-z]+/)) {
+      if (word.length < 3) continue;
+      words.add(word);
+      words.add(word.endsWith("s") ? word.slice(0, -1) : `${word}s`);
+    }
+  };
+  // The category itself: a candle business's heading may say "candles".
+  if (facts.categoryKnown && facts.category) add(facts.category);
+  // And the words its own products are made of. The DESCRIPTION as well
+  // as the name: "soy" is in "Hand-poured soy wax" and nowhere in
+  // "Lavender candle", which is how "Handmade Soy Candles" came to read
+  // as a product nobody sells.
+  for (const product of facts.products) {
+    add(product.name);
+    add(String(product.description ?? ""));
+  }
+  return words;
+}
+
+/**
+ * A product name on the page that the catalogue does not have.
+ *
+ * Returns the phrase, or null. Only a phrase with at least one word that
+ * is NOT part of the category's vocabulary counts: "Our Candles" is the
+ * category, "Midnight Oud Candle" is a product nobody sells.
+ *
+ * The CALLER decides what to do with it, and the two answers differ.
+ * Rule C: wording the owner dictated is saved verbatim and warned about,
+ * because a name they typed may be a product they are about to add or a
+ * phrase Hawlai simply does not recognise — neither is ours to refuse.
+ * Wording HAWLAI wrote is refused, because inventing a product is how a
+ * customer comes to ask for something nobody can send.
+ */
+export function unknownProductName(text: string, facts: BusinessFacts | null | undefined): string | null {
+  if (!facts) return null;
+  const vocabulary = categoryVocabulary(facts);
+  const known = facts.products.map((p) => p.name.toLowerCase());
+
+  // The leading words must be capitalised — that is what makes it read
+  // as a name rather than prose — but the noun may be either case.
+  for (const candidate of text.match(/\b(?:[A-Z][a-z]+\s){1,3}(?:[Cc]andles?|[Ss]ets?|[Jj]ars?|[Kk]its?|[Bb]ox(?:es)?|[Hh]ampers?)\b/g) ?? []) {
+    const phrase = candidate.trim();
+    const lower = phrase.toLowerCase();
+    if (known.some((name) => name.includes(lower) || lower.includes(name))) continue;
+    // Every word is the category or a shop word: this is a heading, not
+    // a product. "Our Candles", "The Candle Shop", "Shop All Candles".
+    const words = lower.split(/[^a-z]+/).filter((w) => w.length >= 3);
+    if (words.every((word) => vocabulary.has(word))) continue;
+    return phrase;
+  }
+  return null;
+}
+
+/** What the owner is told about a name Hawlai does not recognise. */
+export function unknownNameWarning(phrase: string): string {
+  return `This names "${phrase}", which isn't in your catalogue. Saved exactly as you wrote it — but if it's a product you sell, add it so Hawlai can write about it properly, and if it isn't, a page naming something you don't sell is a customer asking for it and nobody able to send it.`;
+}
+
+/** What Hawlai is told when IT invented the name. */
+export function unknownNameRefusal(phrase: string): string {
+  return `I was about to write "${phrase}" onto the page, and there's no such product in your catalogue. I'm not putting a product on your site that you don't sell — add it to the catalogue and I'll write about it, or tell me which of your real products you meant.`;
 }

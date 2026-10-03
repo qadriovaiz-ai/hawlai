@@ -385,22 +385,65 @@ describe("pages whose words are not the page's to change", () => {
     expect((r.editableLines ?? []).map((l: any) => l.blockId)).toEqual(["h4", "t4"]);
   });
 
-  it("refuses a price in prose, wherever the block is", async () => {
-    // The block being ordinary text is not enough: a paragraph saying
-    // "from ₹550" sits next to ₹999 in the catalogue and nobody knows
-    // which is right.
+  it("refuses a price in prose whatever the number is, and says the rule", async () => {
     for (const text of ["Candles from ₹550.", "Candles from Rs 550.", "Candles from 550 rupees.", "Candles from INR 550."]) {
       const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "t4", prop: "html", text }] });
-      expect(r.error, text).toMatch(/puts a price on the page/);
+      expect(r.error, text).toMatch(/don't put prices in page text at all/);
       expect(r.saved, text).toBe(false);
     }
+    // THE RULE, NOT A JUDGEMENT ABOUT THE FIGURE. The catalogue price is
+    // ₹999 and it is refused too — on 3 Oct the chat explained a
+    // refusal with "₹499 isn't your real price", which invites a retry
+    // with the right one, and the right one is still wrong here.
+    const correct: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "t4", prop: "html", text: "Our Lavender candle is ₹999." }] });
+    expect(correct.error).toMatch(/not the wrong one and not the right one/);
+    expect(correct.note).toMatch(/Do NOT retry with a different number/);
     expect(created).toEqual([]);
   });
 
-  it("refuses a product name that isn't in the catalogue", async () => {
+  it("refuses a stock count too, for the same reason", async () => {
+    const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "t4", prop: "html", text: "Only 3 left in stock." }] });
+    expect(r.error).toMatch(/don't put stock counts in page text/);
+  });
+
+  it("ALLOWS the heading the owner actually asked for", async () => {
+    // "Shop page ke heading 'The Shop' ko 'Our Candles' kar do" — the
+    // commonest heading a candle shop could want, refused as a product
+    // name nobody sells. The goal of the feature is that every page is
+    // editable from chat.
+    const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "h4", prop: "text", text: "Our Candles", writtenByOwner: true }] });
+    expect(r.success).toBe(true);
+    expect(r.changed).toEqual([{ what: "heading", from: "The Shop", to: "Our Candles" }]);
+    expect((created[0].requestedChanges.claimWarnings ?? []).join(" ")).not.toMatch(/isn't in your catalogue/);
+  });
+
+  it("allows every ordinary shop heading, dictated or written", async () => {
+    for (const text of ["Our Candles", "The Candle Shop", "Shop All Candles", "Our Collection", "Handmade Soy Candles", "Home Fragrance"]) {
+      for (const writtenByOwner of [true, false]) {
+        created.length = 0;
+        const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "h4", prop: "text", text, writtenByOwner }] });
+        expect(r.success, `${text} (owner: ${writtenByOwner})`).toBe(true);
+      }
+    }
+  });
+
+  it("WARNS rather than refuses when the owner dictates a name Hawlai doesn't know", async () => {
+    // Rule C: their wording is theirs. It may be a product they are
+    // about to add, or a phrase Hawlai simply doesn't recognise —
+    // neither is ours to refuse.
+    const r: any = await tool("edit_page_text", { page: "home", edits: [{ blockId: "t1", prop: "html", text: "Try our Midnight Oud Candle today.", writtenByOwner: true }] });
+    expect(r.success).toBe(true);
+    expect(created[0].requestedChanges.edits[0].after).toBe("Try our Midnight Oud Candle today.");
+    const warnings = (created[0].requestedChanges.claimWarnings ?? []).join(" ");
+    expect(warnings).toMatch(/names "Midnight Oud Candle", which isn't in your catalogue/);
+    expect(warnings).toMatch(/Saved exactly as you wrote it/);
+  });
+
+  it("still refuses a name HAWLAI invented", async () => {
     const r: any = await tool("edit_page_text", { page: "home", edits: [{ blockId: "t1", prop: "html", text: "Try our Midnight Oud Candle today." }] });
-    expect(r.error).toMatch(/isn't in your catalogue/);
-    expect(r.error).toMatch(/Add it as a product first/);
+    expect(r.success).toBeUndefined();
+    expect(r.error).toMatch(/I was about to write "Midnight Oud Candle" onto the page/);
+    expect(r.error).toMatch(/not putting a product on your site that you don't sell/);
   });
 
   it("allows a product name that IS in the catalogue", async () => {
@@ -608,5 +651,33 @@ describe("the card shows both wordings, in full", () => {
     expect(chat).toMatch(/Show the full wording/);
     expect(chat).toMatch(/\{before\.trim\(\) \? before : "\(empty\)"\}/);
     expect(chat).toMatch(/\{after\}/);
+  });
+});
+
+// ---- the sentence that was refused -----------------------------------
+
+describe("\"Shop page ke heading 'The Shop' ko 'Our Candles' kar do\"", () => {
+  it("reads the page, then changes the heading, with no refusal anywhere", async () => {
+    // The exact request, run the way the chat runs it: read the page for
+    // the block id, then edit that block. It was REFUSED on 3 Oct —
+    // "Our Candles" read as a product nobody sells — which is the
+    // commonest heading a candle shop could want and the whole point of
+    // the feature.
+    const read: any = await tool("read_page", { page: "products" });
+    const heading = read.lines.find((l: any) => l.text === "The Shop");
+    expect(heading).toBeTruthy();
+    expect(heading.catalogueDriven).toBe(false);
+
+    const edit: any = await tool("edit_page_text", {
+      page: "products",
+      edits: [{ blockId: heading.blockId, prop: heading.prop, text: "Our Candles", writtenByOwner: true }],
+    });
+
+    expect(edit.error).toBeUndefined();
+    expect(edit.success).toBe(true);
+    expect(edit.changed).toEqual([{ what: "heading", from: "The Shop", to: "Our Candles" }]);
+    // Saved verbatim, with nothing to warn about.
+    expect(created[0].requestedChanges.edits[0].after).toBe("Our Candles");
+    expect(created[0].requestedChanges.claimWarnings.join(" ")).not.toMatch(/catalogue/i);
   });
 });
