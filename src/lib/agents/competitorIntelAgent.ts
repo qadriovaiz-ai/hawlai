@@ -18,6 +18,7 @@ import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { answeredByNote, type AnsweredBy } from "../research/provenance";
 import { checkCitations, unverifiedNote, tierFromSources, NOTHING_CITED, NATIONAL_NOTE } from "@/lib/competitors/citationCheck";
+import { parseModelJson, wastedCallNote } from "@/lib/ai/modelJson";
 
 import { COMPETITOR_TASKS, type CompetitorTaskMeta } from "@/lib/departments/competitor";
 
@@ -26,6 +27,31 @@ import { COMPETITOR_TASKS, type CompetitorTaskMeta } from "@/lib/departments/com
 // pulling this agent into their bundle.
 export { COMPETITOR_TASKS };
 export type { CompetitorTaskMeta };
+
+/**
+ * What one answer may spend on output.
+ *
+ * Left at 2500 rather than raised, and the PROMPT shortened instead. The
+ * reply that broke on 3 Oct was ~6900 characters of JSON by line 147 —
+ * the answer was long, not the budget small, and raising the ceiling
+ * would buy a longer answer at a higher price rather than a complete
+ * one. A bounded item count and quote length are what make it fit; the
+ * ceiling is the backstop, and a reply that hits it now salvages its
+ * complete items instead of being discarded.
+ */
+const MAX_OUTPUT_TOKENS = 2500;
+
+/**
+ * The size rules, in the prompt because that is the only thing that
+ * actually shrinks an answer.
+ *
+ * COST, MEASURED (3 Oct 2026, two real calls): ₹11.52 and ₹11.72 for the
+ * Claude call against ₹1.74 for the searches — about 4x, and most of it
+ * INPUT, because every page the search returns is fed back into the
+ * context. Output is the part a prompt can bound, so it is bounded; the
+ * input side belongs to the search cap, which is already 3.
+ */
+const OUTPUT_BUDGET = `Keep the answer SHORT. At most 5 items in any list. Quote at most 200 characters from any page and never paste a page's text back at length — a citation and one line of it is what makes a finding checkable, and anything more is cost without information. If you can only fill some fields, return those and leave the rest out rather than padding.`;
 
 
 export async function generateCompetitorIntel(
@@ -55,7 +81,7 @@ export async function generateCompetitorIntel(
   // and an invented contact detail alike — and the owner's own half is
   // guarded by putting the real catalogue in the prompt as verified fact.
   facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; _cause?: string; _detail?: string }> {
   const meta = COMPETITOR_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -87,6 +113,8 @@ Task: ${meta.label}
 ${meta.instructions(competitorName, dealershipName, businessCategory)}
 
 Only state something about ${competitorName} that you found on a page you can cite. Cite the page for every price, follower count, percentage or other figure — a figure that appears on no cited page is checked for afterwards and shown to the owner as unconfirmed, so guessing one makes the answer worse rather than fuller. If you cannot find a page about this competitor at all, say exactly that instead of answering from memory.
+
+${OUTPUT_BUDGET}
 
 Return JSON only, no markdown, no preamble. Base your answer on what you actually find via search — never fabricate specific numbers, prices, or facts you didn't find. If information isn't publicly available, say so plainly in the relevant field.${factsPrompt(facts)}`;
 
@@ -122,7 +150,7 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
   try {
     const r = await callClaude({
       model: getModel("standard"),
-      max_tokens: 2500,
+      max_tokens: MAX_OUTPUT_TOKENS,
       messages: [{ role: "user", content: prompt }],
       tools: [webSearchTool("competitor_intel")],
     }, { operation: "competitor_intel", logContext });
@@ -135,10 +163,33 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
       .filter((block: any) => block.type === "text")
       .map((block: any) => block.text)
       .join("\n");
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
+    // READ TOLERANTLY, AND NEVER THROW A PAID CALL AWAY SILENTLY.
+    //
+    // THE LIVE FAILURE (3 Oct 2026). This was a greedy match plus
+    // JSON.parse, and for "Karessa Candles" it threw
+    //   Expected ',' or ']' after array element at position 6934
+    // twice, inside the catch below, which returns the generic "try
+    // again shortly". The search had run, the model had answered, about
+    // ₹27 was spent across two attempts, and all of it was discarded
+    // behind a sentence that named nothing — so the chat invented a
+    // reason, twice, and both were wrong.
+    //
+    // The greedy match ran from the FIRST "{" anywhere in the reply to
+    // the LAST "}". A web-search reply is many text blocks with search
+    // results between them and prose around the JSON, so that span can
+    // splice two fragments together — which is exactly that error.
+    const read = parseModelJson(text, {
+      stopReason: r.data.stop_reason ?? null,
+      outputTokens: usage?.output_tokens ?? null,
+      maxTokens: MAX_OUTPUT_TOKENS,
+    });
+    if (!read.ok) {
+      console.error(`[competitor-intel-agent] ${read.cause}: ${read.detail}`);
+      // The real cause in the result, so the chat relays it instead of
+      // guessing — and the cost, so a wasted call is visible.
+      return { output: { text: wastedCallNote(read, r.costInr) }, _fallback: true, _cause: read.cause, _detail: read.detail };
+    }
+    const parsed = read.value;
 
     // WHICH PAGE SAID SO. The right question about someone else's
     // business — see the note on `facts` above for why the claims strip
@@ -169,6 +220,9 @@ Return JSON only, no markdown, no preamble. Base your answer on what you actuall
         _tier: tier,
         ...(tier === "national" ? { _tierNote: NATIONAL_NOTE } : {}),
         ...(note ? { _unverified: note } : {}),
+        // Salvaged from a cut-off reply: the complete items, with the
+        // owner told it is not the whole answer.
+        ...(read.partial && read.note ? { _partial: read.note } : {}),
       },
     };
   } catch (err: any) {
