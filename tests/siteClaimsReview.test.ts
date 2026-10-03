@@ -253,7 +253,9 @@ describe("before Remove is pressed", () => {
     const card = readFileSync("src/components/seo/ClaimsReview.tsx", "utf8");
     expect(card).toMatch(/Remove deletes the whole sentence, not just those words/);
     expect(card).toMatch(/Edit keeps the rest/);
-    expect(card).toMatch(/\{item\.keepable && \(/);
+    // One Keep button per keepable phrase now, because a row is a
+    // sentence and a sentence can have more than one thing in question.
+    expect(card).toMatch(/\{item\.keepableClaims\.map\(\(claim\) => \(/);
   });
 });
 

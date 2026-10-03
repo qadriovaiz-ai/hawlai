@@ -277,6 +277,73 @@ export function reviewPage(
   return items;
 }
 
+export type ReviewGroup = {
+  pageId: string;
+  pageSlug: string;
+  pageTitle: string;
+  blockId: string | null;
+  field: string;
+  sentence: string;
+  /** Every reason this one sentence was flagged, in the guard's words. */
+  reasons: string[];
+  kinds: ReviewItem["kind"][];
+  /** The distinct phrases Keep could attest. Empty when Keep isn't offered. */
+  keepableClaims: string[];
+  removeLeaves: string;
+  removable: boolean;
+};
+
+/**
+ * One row per sentence, however many rules it tripped.
+ *
+ * WHY: the live card listed 17 items for about 11 sentences. "Safer than
+ * mass-market" appeared twice on Home, once from the comparative rule
+ * and once from the material-claim rule; the Contact page's "Diwali
+ * hampers / wedding favours" line appeared twice; "Har candle" three
+ * times across two pages. Asking someone to decide twice about one
+ * sentence is asking them to decide what the difference is, and there
+ * isn't one — Keep and Remove both act on the sentence.
+ *
+ * "N still to decide" counts sentences for the same reason.
+ */
+export function groupBySentence(items: ReviewItem[]): ReviewGroup[] {
+  const groups = new Map<string, ReviewGroup>();
+  for (const item of items) {
+    const id = `${item.pageId}|${item.blockId ?? ""}|${item.field}|${item.sentence}`;
+    const existing = groups.get(id);
+    if (!existing) {
+      groups.set(id, {
+        pageId: item.pageId,
+        pageSlug: item.pageSlug,
+        pageTitle: item.pageTitle,
+        blockId: item.blockId,
+        field: item.field,
+        sentence: item.sentence,
+        reasons: [item.reason],
+        kinds: [item.kind],
+        keepableClaims: item.keepable && item.claim ? [item.claim] : [],
+        removeLeaves: item.removeLeaves,
+        // Removable only if EVERY rule on this sentence allows it: a
+        // legal-page sentence that is more than its flagged words stays.
+        removable: item.removable,
+      });
+      continue;
+    }
+    if (!existing.reasons.includes(item.reason)) existing.reasons.push(item.reason);
+    if (!existing.kinds.includes(item.kind)) existing.kinds.push(item.kind);
+    if (item.keepable && item.claim && !existing.keepableClaims.includes(item.claim)) existing.keepableClaims.push(item.claim);
+    existing.removable = existing.removable && item.removable;
+  }
+
+  // A comparison is never keepable, and that governs the whole sentence:
+  // the owner cannot attest half of a line whose other half compares
+  // them with somebody else.
+  for (const group of groups.values()) {
+    if (group.kinds.includes("comparative")) group.keepableClaims = [];
+  }
+  return [...groups.values()];
+}
+
 /**
  * What the review actually looked at, per page.
  *

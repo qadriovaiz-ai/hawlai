@@ -337,6 +337,6 @@ describe("a contact detail can be kept", () => {
 
   it("says 'it's mine' rather than 'it's true' for a contact", () => {
     const card = readFileSync("src/components/seo/ClaimsReview.tsx", "utf8");
-    expect(card).toMatch(/item\.kind === "contact" \? <>Keep — it&apos;s mine<\/>/);
+    expect(card).toMatch(/item\.kinds\.includes\("contact"\) \? \(\s*<>Keep — it&apos;s mine<\/>/);
   });
 });

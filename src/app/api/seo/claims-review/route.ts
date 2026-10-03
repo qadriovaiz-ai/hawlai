@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
-import { reviewPage, factsWithoutGeneratedCopy, withoutSentence, pageCoverage } from "@/lib/claims/siteClaimsReview";
+import { reviewPage, factsWithoutGeneratedCopy, withoutSentence, pageCoverage, groupBySentence } from "@/lib/claims/siteClaimsReview";
 
 async function who(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -53,14 +53,18 @@ export async function GET() {
   // Measured against facts with the machine's own writing taken out —
   // the site cannot be the evidence for the site.
   const honest = factsWithoutGeneratedCopy(facts, pages);
-  const items = pages.flatMap((page: any) => reviewPage(page, honest));
+  // GROUPED BY SENTENCE. One row per line, however many rules it
+  // tripped — the live card asked the owner to decide twice about the
+  // same sentence, and Keep and Remove both act on the sentence anyway.
+  const flags = pages.flatMap((page: any) => reviewPage(page, honest));
+  const items = groupBySentence(flags);
 
   // WHAT WAS LOOKED AT, beside what was found. A card that lists seven
   // items and says nothing about the pages it was silent on makes a
   // suppressed line and a clean line look the same from outside.
   const coverage = pages.map((page: any) => {
     const c = pageCoverage(page);
-    return { ...c, items: items.filter((i: any) => i.pageSlug === page.slug).length, contentSource: page.content_source ?? null };
+    return { ...c, items: items.filter((i: any) => i.pageSlug === page.slug).length, flags: flags.filter((i: any) => i.pageSlug === page.slug).length, contentSource: page.content_source ?? null };
   });
 
   return NextResponse.json({
@@ -73,6 +77,7 @@ export async function GET() {
       read: coverage.reduce((n: number, c: any) => n + c.read, 0),
       checked: coverage.reduce((n: number, c: any) => n + c.checked, 0),
       items: items.length,
+      flags: flags.length,
       unreadable: coverage.filter((c: any) => c.unreadable).length,
     },
   });

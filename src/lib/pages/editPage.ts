@@ -279,6 +279,21 @@ const NAME_STOPWORDS = new Set([
   // lives in the description.
   "soy", "wax", "beeswax", "coconut", "cotton", "wick", "wicks", "scented", "unscented",
   "fragrance", "fragrances", "aroma", "scent", "scents", "candle", "candles", "jar", "jars", "tin", "tins",
+  // HINGLISH DETERMINERS. "Har candle ke peeche ek kahaani hai" is "every
+  // candle has a story behind it" — a sentence about the whole range,
+  // read as a product called "Har candle" and put on the review list
+  // three times. Every Indian business writing the way its customers
+  // speak would hit this.
+  "har", "sab", "sabhi", "ek", "koi", "yeh", "ye", "woh", "wo", "apni", "apna", "apne",
+  "humari", "hamari", "humara", "hamara", "hamare", "humare", "mera", "meri", "mere",
+  // Craft words. "handmade" was here and "handcrafted" was not, so
+  // "Handcrafted Candles" — the category, on a heading — was flagged.
+  "handcrafted", "handpoured", "artisan", "artisanal", "bespoke", "curated", "crafted",
+  // HEADING STARTERS. "Why Candle by Qaaf" is a heading asking a
+  // question, and it was read as a product called "Why Candle" — which
+  // also made the BUSINESS'S OWN NAME into something it doesn't sell.
+  "why", "how", "what", "when", "where", "who", "about", "meet", "welcome", "introducing", "discover",
+  "light", "season", "warm", "christmas", "up",
 ]);
 
 function categoryVocabulary(facts: BusinessFacts): Set<string> {
@@ -292,6 +307,12 @@ function categoryVocabulary(facts: BusinessFacts): Set<string> {
   };
   // The category itself: a candle business's heading may say "candles".
   if (facts.categoryKnown && facts.category) add(facts.category);
+  // THE BUSINESS'S OWN NAME IS NEVER A PRODUCT IT DOESN'T SELL. "Why
+  // Candle by Qaaf" — a heading on their own About page — was flagged as
+  // a product called "Why Candle", which is the brand with a question
+  // word stuck to the front.
+  add(facts.businessName);
+  if (facts.brand?.description) add(String(facts.brand.description).slice(0, 200));
   // And the words its own products are made of. The DESCRIPTION as well
   // as the name: "soy" is in "Hand-poured soy wax" and nowhere in
   // "Lavender candle", which is how "Handmade Soy Candles" came to read
@@ -328,11 +349,24 @@ export function unknownProductName(text: string, facts: BusinessFacts | null | u
     const phrase = candidate.trim();
     const lower = phrase.toLowerCase();
     if (known.some((name) => name.includes(lower) || lower.includes(name))) continue;
-    // Every word is the category or a shop word: this is a heading, not
-    // a product. "Our Candles", "The Candle Shop", "Shop All Candles".
-    const words = lower.split(/[^a-z]+/).filter((w) => w.length >= 3);
-    if (words.every((word) => vocabulary.has(word))) continue;
-    return phrase;
+
+    // A NAME NEEDS A NAME IN IT, and that is what the stoplist alone
+    // could not establish. Every word being in the vocabulary was the
+    // old test, so one word outside it — "har", "why", "handcrafted" —
+    // was enough to call a heading a product. What actually marks a
+    // product is a PROPER NOUN: a capitalised word that is neither the
+    // category, nor the brand, nor a word any heading uses. "Diwali
+    // sets" has one. "Har candle", "Why Candle by Qaaf" and
+    // "Handcrafted Candles" have none, and all three were on the live
+    // review card.
+    const leading = phrase.split(/\s+/).slice(0, -1);
+    const named = leading.filter((word) => /^[A-Z]/.test(word) && !vocabulary.has(word.toLowerCase()));
+    if (named.length === 0) continue;
+
+    // Reported from the first real name onwards, so "Our Diwali hampers"
+    // is shown as "Diwali hampers" — the words that are the problem.
+    const from = phrase.split(/\s+/).findIndex((word) => word === named[0]);
+    return phrase.split(/\s+/).slice(from).join(" ");
   }
   return null;
 }

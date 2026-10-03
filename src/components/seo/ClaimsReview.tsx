@@ -15,6 +15,16 @@ import Link from "next/link";
 //
 // Nothing is removed from a live page unless they press Remove.
 
+type Kind = "claim" | "comparative" | "contact" | "offer" | "product";
+
+/**
+ * ONE ROW PER SENTENCE, however many rules it tripped.
+ *
+ * The live card listed 17 items for about 11 sentences — "safer than
+ * mass-market" twice on Home, "Har candle" three times across two pages
+ * — and asked the owner to decide separately about each. There is no
+ * separate decision to make: Keep and Remove both act on the sentence.
+ */
 type Item = {
   pageId: string;
   pageSlug: string;
@@ -22,11 +32,10 @@ type Item = {
   blockId: string | null;
   field: string;
   sentence: string;
-  reason: string;
-  kind: "claim" | "comparative" | "contact" | "offer" | "product";
-  /** The exact words flagged — what Keep would attest, and nothing more. */
-  claim: string | null;
-  keepable: boolean;
+  reasons: string[];
+  kinds: Kind[];
+  /** The distinct phrases Keep could attest. Empty when Keep isn't offered. */
+  keepableClaims: string[];
   /** What the sentence becomes if Remove is pressed. */
   removeLeaves: string;
   removable: boolean;
@@ -35,7 +44,7 @@ type Item = {
 type Coverage = { slug: string; title: string; read: number; checked: number; ownerWritten: number; unreadable: boolean; items: number; contentSource: string | null };
 type Totals = { pages: number; read: number; checked: number; items: number; unreadable: number };
 
-const KIND_LABEL: Record<Item["kind"], string> = {
+const KIND_LABEL: Record<Kind, string> = {
   contact: "Contact detail",
   offer: "Offer",
   claim: "Claim",
@@ -67,9 +76,11 @@ export default function ClaimsReview() {
       .catch(() => setItems([]));
   }, []);
 
-  const key = (item: Item) => `${item.pageId}:${item.blockId ?? ""}:${item.reason}`;
+  // Keyed by the SENTENCE now, not by one of its reasons: a row is a
+  // sentence, and a decision settles the whole row.
+  const key = (item: Item) => `${item.pageId}:${item.blockId ?? ""}:${item.field}:${item.sentence}`;
 
-  async function decide(item: Item, action: "keep" | "remove") {
+  async function decide(item: Item, action: "keep" | "remove", claim?: string) {
     setWorking(key(item));
     setError(null);
     try {
@@ -78,7 +89,7 @@ export default function ClaimsReview() {
         headers: { "Content-Type": "application/json" },
         // claim as well as sentence: Keep records the flagged words
         // only, and the server refuses without them.
-        body: JSON.stringify({ action, sentence: item.sentence, claim: item.claim, kind: item.kind, pageId: item.pageId, blockId: item.blockId, field: item.field }),
+        body: JSON.stringify({ action, sentence: item.sentence, claim: claim ?? item.keepableClaims[0] ?? null, kind: item.kinds.includes("contact") ? "contact" : item.kinds[0], pageId: item.pageId, blockId: item.blockId, field: item.field }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) return setError(data?.error ?? "Couldn't save that — try again.");
@@ -169,23 +180,42 @@ export default function ClaimsReview() {
               const settled = done[k];
               return (
                 <div key={k} className="border border-slate-200 rounded-lg p-3 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
-                      {KIND_LABEL[item.kind]}
-                    </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {item.kinds.map((kind) => (
+                      <span key={kind} className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                        {KIND_LABEL[kind]}
+                      </span>
+                    ))}
                     <span className="text-[11px] text-slate-400">{item.pageTitle} page</span>
                   </div>
                   <p className="text-sm text-slate-700">&ldquo;{item.sentence}&rdquo;</p>
-                  <p className="text-xs text-slate-500">Flagged because {item.reason}.</p>
+                  {item.reasons.length === 1 ? (
+                    <p className="text-xs text-slate-500">Flagged because {item.reasons[0]}.</p>
+                  ) : (
+                    <div className="text-xs text-slate-500">
+                      <p>Flagged because:</p>
+                      <ul className="list-disc pl-4 mt-0.5 space-y-0.5">
+                        {item.reasons.map((reason, i) => (
+                          <li key={i}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {/* What Keep would actually attest. The Instagram line
                       mixes a real handle with restock alerts nobody has
                       promised, so saying which words are in question is
                       the difference between a true statement and a
                       blanket one. */}
-                  {item.keepable && item.claim && item.claim !== item.sentence && (
+                  {item.keepableClaims.length === 1 && item.keepableClaims[0] !== item.sentence && (
                     <p className="text-[11px] text-slate-500">
-                      Keeping this records only <span className="font-semibold">&ldquo;{item.claim}&rdquo;</span> as true — not the rest of
-                      the sentence.
+                      Keeping this records only <span className="font-semibold">&ldquo;{item.keepableClaims[0]}&rdquo;</span> as true —
+                      not the rest of the sentence.
+                    </p>
+                  )}
+                  {item.keepableClaims.length > 1 && (
+                    <p className="text-[11px] text-slate-500">
+                      This sentence has more than one thing in question, so there is a button per phrase — each one records only
+                      those words.
                     </p>
                   )}
                   {!item.removable && (
@@ -195,7 +225,7 @@ export default function ClaimsReview() {
                       on it.
                     </p>
                   )}
-                  {item.kind === "comparative" && (
+                  {item.kinds.includes("comparative") && (
                     <p className="text-[11px] text-amber-600">
                       This compares your product with someone else&apos;s. Hawlai can&apos;t check a claim about goods you don&apos;t
                       make, whoever says it — so there&apos;s nothing to keep. Reword it to say what yours is, or take it off.
@@ -210,7 +240,7 @@ export default function ClaimsReview() {
                           with real information is better edited than
                           cut, and the only way to know which is to see
                           what would be left. */}
-                      {item.claim && item.claim !== item.sentence && (
+                      {item.keepableClaims.length > 0 && item.keepableClaims[0] !== item.sentence && (
                         <p className="text-[11px] text-slate-500">
                           Remove deletes the whole sentence, not just those words
                           {item.removeLeaves.replace(/<[^>]*>/g, "").trim()
@@ -220,15 +250,23 @@ export default function ClaimsReview() {
                         </p>
                       )}
                     <div className="flex items-center gap-1.5 pt-0.5">
-                      {item.keepable && (
+                      {item.keepableClaims.map((claim) => (
                       <button
-                        onClick={() => decide(item, "keep")}
+                        key={claim}
+                        onClick={() => decide(item, "keep", claim)}
                         disabled={working !== null}
                         className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
                       >
-                        <Check className="w-3 h-3" /> {item.kind === "contact" ? <>Keep — it&apos;s mine</> : <>Keep — it&apos;s true</>}
+                        <Check className="w-3 h-3" />{" "}
+                        {item.keepableClaims.length > 1 ? (
+                          <>Keep &ldquo;{claim.length > 24 ? `${claim.slice(0, 24)}…` : claim}&rdquo;</>
+                        ) : item.kinds.includes("contact") ? (
+                          <>Keep — it&apos;s mine</>
+                        ) : (
+                          <>Keep — it&apos;s true</>
+                        )}
                       </button>
-                      )}
+                      ))}
                       <Link
                         href="/dashboard/website-builder"
                         className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1"
