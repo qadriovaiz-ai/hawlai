@@ -12,6 +12,7 @@ import { webSearchTool } from "@/lib/ai/searchCaps";
 import { getModel } from "../models";
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 import { recordPresence, aeoTrend, recordAeoSignals, type AeoTrend } from "@/lib/seo/aeoPresence";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 export interface AeoCheckResult {
   visibilityScore: number;
@@ -134,10 +135,18 @@ Return JSON only, no markdown, no preamble, this exact shape:
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const data = r.data;
     const text = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
-    const parsed = JSON.parse(clean);
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[aeoAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
+    const parsed = parsedReply.value;
     const output: AeoCheckResult = {
       visibilityScore: Math.max(0, Math.min(100, Number(parsed.visibilityScore) || 0)),
       scoreLabel: String(parsed.scoreLabel || "Content citability"),

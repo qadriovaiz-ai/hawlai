@@ -14,6 +14,7 @@ import { formatFactsForPrompt, scrubCroOutput, CRO_TRUTH_RULES, type CroFacts } 
 import { callClaude, withAiFailure, type AiFailureNote } from "@/lib/ai/claude";
 
 import { CRO_TASKS, type CroTaskMeta } from "@/lib/departments/cro";
+import { parseModelJson } from "@/lib/ai/modelJson";
 
 // Re-exported so every existing server import keeps working; the data
 // itself lives in lib/departments so client pickers can read it without
@@ -62,14 +63,22 @@ Return JSON only, no markdown, no preamble. Be specific to this business's actua
     }, { operation: "cro_suggestions", logContext });
     if (!r.ok) return withAiFailure(fallback, r.failure);
     const text = r.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const clean = (jsonMatch ? jsonMatch[0] : text).replace(/```json|```/g, "").trim();
-    if (!clean) return fallback;
+    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
+    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
+    // last "}", then JSON.parse inside a catch that returns the fallback
+    // below — so a spliced, cut-off or malformed reply discarded a call
+    // that had already been paid for, behind a message naming nothing.
+    // Now the complete items survive and an unreadable reply says why.
+    const parsedReply = parseModelJson(text);
+    if (!parsedReply.ok) {
+      console.error(`[croAgentV2] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return fallback;
+    }
 
     // The rules above are instructions; this is the check. Anything that
     // still claims something the facts don't support is removed, and
     // the output says so.
-    const { output, removed } = scrubCroOutput(JSON.parse(clean), facts);
+    const { output, removed } = scrubCroOutput(parsedReply.value, facts);
     if (removed.length) console.warn("[cro-agent-v2] removed unsupported claims:", removed.join(" | "));
     return { output, removed };
   } catch (err: any) {
