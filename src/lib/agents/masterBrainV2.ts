@@ -3565,6 +3565,9 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
           expectedUpdatedAt: result.expectedUpdatedAt,
           published: Boolean(result.published),
           siteUrl: result.siteUrl,
+          // The approved wording, so the endpoint can fetch the public
+          // page and check it is serving it before anyone says "live".
+          newText: (result.changed ?? []).map((c: any) => String(c.to ?? "")),
         }),
       };
     }

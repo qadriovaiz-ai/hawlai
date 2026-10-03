@@ -241,7 +241,18 @@ describe("the chat tool proposes — it no longer writes", () => {
   it("on a published site the confirm says it goes live immediately", async () => {
     const artifact = extractArtifact("update_landing_page", {}, await run({ headline: "New" }))!;
     expect(artifact.publish!.confirm).toMatch(/LIVE homepage.*straight away/);
-    expect(artifact.publish!.done).toBe("✅ Updated your live homepage");
+    // AND THE RESULT NO LONGER CLAIMS LIVE FROM THE WRITE ALONE.
+    //
+    // This assertion used to read "✅ Updated your live homepage", which
+    // pinned the bug in place: a 200 from the page endpoint says the row
+    // was written, not that /site/{slug} is serving it. The approved
+    // wording now travels with the payload so the endpoint can fetch the
+    // public page and answer with evidence — see
+    // tests/homepageCopyLiveReadBack.test.ts. `done` is only the fallback
+    // for when no check ran, so it claims the save and nothing more.
+    expect(artifact.publish!.done).not.toMatch(/live homepage/);
+    expect(artifact.publish!.done).toMatch(/haven't confirmed the live page/);
+    expect(artifact.publish!.payload.verifyText).toEqual(["New"]);
   });
 
   it("on an unpublished site it says the site isn't public yet", async () => {

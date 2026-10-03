@@ -86,9 +86,17 @@ export function websitePublishAction(): PublishAction {
  *
  * expectedUpdatedAt rides along so an edit made elsewhere since the chat
  * proposed this one is rejected by the endpoint instead of clobbered.
+ *
+ * `newText` is the approved wording, sent so the endpoint can fetch the
+ * public page afterwards and check it is being served. Until that was
+ * added, `done` said "✅ Updated your live homepage" on the strength of a
+ * 200 from the write — the same claim the meta flow was corrected for on
+ * 2026-09-28. The card now prefers the endpoint's read-back sentence and
+ * falls back to this one only when no check was run.
  */
-export function homepageCopyAction(opts: { pageId: string; sections: unknown; expectedUpdatedAt?: string | null; published: boolean; siteUrl?: string | null }): PublishAction {
+export function homepageCopyAction(opts: { pageId: string; sections: unknown; expectedUpdatedAt?: string | null; published: boolean; siteUrl?: string | null; newText?: string[] }): PublishAction {
   const where = opts.siteUrl ? ` at ${opts.siteUrl}` : "";
+  const newText = (opts.newText ?? []).filter((value) => typeof value === "string" && value.trim());
   return {
     target: "website",
     label: "Approve & Publish",
@@ -97,8 +105,14 @@ export function homepageCopyAction(opts: { pageId: string; sections: unknown; ex
       : "This updates your homepage copy. Your site isn't published yet, so nothing becomes public until you publish it.",
     endpoint: `/api/website-builder/pages/${opts.pageId}`,
     method: "PATCH",
-    payload: { sections: opts.sections, ...(opts.expectedUpdatedAt ? { expectedUpdatedAt: opts.expectedUpdatedAt } : {}) },
-    done: opts.published ? "✅ Updated your live homepage" : "✅ Updated your homepage draft",
+    payload: {
+      sections: opts.sections,
+      ...(opts.expectedUpdatedAt ? { expectedUpdatedAt: opts.expectedUpdatedAt } : {}),
+      ...(newText.length ? { verifyText: newText } : {}),
+    },
+    // Said only when the endpoint ran no check at all — with wording that
+    // claims the save, not the page.
+    done: opts.published ? "✅ Saved to your homepage — I haven't confirmed the live page is serving it" : "✅ Updated your homepage draft",
   };
 }
 
