@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
-import { reviewPage, factsWithoutGeneratedCopy, withoutSentence } from "@/lib/claims/siteClaimsReview";
+import { reviewPage, factsWithoutGeneratedCopy, withoutSentence, pageCoverage } from "@/lib/claims/siteClaimsReview";
 
 async function who(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -55,10 +55,26 @@ export async function GET() {
   const honest = factsWithoutGeneratedCopy(facts, pages);
   const items = pages.flatMap((page: any) => reviewPage(page, honest));
 
+  // WHAT WAS LOOKED AT, beside what was found. A card that lists seven
+  // items and says nothing about the pages it was silent on makes a
+  // suppressed line and a clean line look the same from outside.
+  const coverage = pages.map((page: any) => {
+    const c = pageCoverage(page);
+    return { ...c, items: items.filter((i: any) => i.pageSlug === page.slug).length, contentSource: page.content_source ?? null };
+  });
+
   return NextResponse.json({
     items,
     reviewedAt: dealership?.claims_reviewed_at ?? null,
     pages: pages.map((p: any) => ({ slug: p.slug, title: p.title, contentSource: p.content_source })),
+    coverage,
+    totals: {
+      pages: coverage.length,
+      read: coverage.reduce((n: number, c: any) => n + c.read, 0),
+      checked: coverage.reduce((n: number, c: any) => n + c.checked, 0),
+      items: items.length,
+      unreadable: coverage.filter((c: any) => c.unreadable).length,
+    },
   });
 }
 
@@ -101,15 +117,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A comparison with another product can't be kept — reword it to say what yours is, or take it off the page." }, { status: 400 });
     }
 
+    // WHERE A KEPT CONTACT DETAIL HAS TO LAND.
+    //
+    // A claim goes under business_story, which is what knownText reads.
+    // A contact detail has to reach allowedContacts() instead — the
+    // scrub that takes an invented email off a page — and that reads
+    // ownerFacts' title and content. So it goes in as a fact too, under
+    // 'general' (one of the six categories the live CHECK allows:
+    // hours, pricing_note, policy, faq, general, business_story) with a
+    // title a person reading their own Business Knowledge will
+    // recognise. No migration, and the value is allowed on every
+    // surface from the moment it is saved rather than only this page.
+    const isContact = body?.kind === "contact";
     const { error } = await service.from("business_knowledge").insert({
       dealership_id: dealershipId,
-      category: "business_story",
-      title: "Something I can stand behind",
+      category: isContact ? "general" : "business_story",
+      title: isContact ? "Contact detail I confirmed is mine" : "Something I can stand behind",
       content: claim,
       is_active: true,
     });
     if (error) return NextResponse.json({ error: `Couldn't save that to your Business Knowledge: ${error.message}` }, { status: 500 });
-    return NextResponse.json({ kept: claim });
+    return NextResponse.json({ kept: claim, storedAs: isContact ? "general" : "business_story" });
   }
 
   if (action === "remove") {

@@ -23,7 +23,7 @@ type Item = {
   field: string;
   sentence: string;
   reason: string;
-  kind: "claim" | "comparative" | "contact" | "offer";
+  kind: "claim" | "comparative" | "contact" | "offer" | "product";
   /** The exact words flagged — what Keep would attest, and nothing more. */
   claim: string | null;
   keepable: boolean;
@@ -32,11 +32,15 @@ type Item = {
   removable: boolean;
 };
 
+type Coverage = { slug: string; title: string; read: number; checked: number; ownerWritten: number; unreadable: boolean; items: number; contentSource: string | null };
+type Totals = { pages: number; read: number; checked: number; items: number; unreadable: number };
+
 const KIND_LABEL: Record<Item["kind"], string> = {
   contact: "Contact detail",
   offer: "Offer",
   claim: "Claim",
   comparative: "Comparison",
+  product: "Product you don't sell",
 };
 
 export default function ClaimsReview() {
@@ -45,6 +49,10 @@ export default function ClaimsReview() {
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Record<string, string>>({});
+  /** What was looked at, beside what was found. */
+  const [coverage, setCoverage] = useState<Coverage[]>([]);
+  const [totals, setTotals] = useState<Totals | null>(null);
+  const [showCoverage, setShowCoverage] = useState(false);
 
   useEffect(() => {
     fetch("/api/seo/claims-review")
@@ -53,6 +61,8 @@ export default function ClaimsReview() {
         if (!data) return setItems([]);
         setItems(Array.isArray(data.items) ? data.items : []);
         setReviewedAt(data.reviewedAt ?? null);
+        setCoverage(Array.isArray(data.coverage) ? data.coverage : []);
+        setTotals(data.totals ?? null);
       })
       .catch(() => setItems([]));
   }, []);
@@ -108,6 +118,38 @@ export default function ClaimsReview() {
       <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
         <ShieldAlert className="w-4 h-4 text-slate-400" /> Claims on your site
       </p>
+
+      {/* WHAT WAS LOOKED AT. A card that lists items and says nothing
+          about the pages it was silent on makes a suppressed line and a
+          clean line look identical — which is how the About page stayed
+          invisible until somebody queried the database by hand. */}
+      {totals && (
+        <div className="text-[11px] text-slate-500">
+          <button onClick={() => setShowCoverage((v) => !v)} className="hover:underline">
+            Checked {totals.pages} {totals.pages === 1 ? "page" : "pages"}, {totals.checked} of {totals.read}{" "}
+            {totals.read === 1 ? "line" : "lines"}
+            {totals.unreadable > 0 ? ` — ${totals.unreadable} I couldn't read` : ""} ·{" "}
+            {showCoverage ? "hide" : "show"} the breakdown
+          </button>
+          {showCoverage && (
+            <div className="mt-1.5 space-y-1 border-l-2 border-slate-200 pl-2">
+              {coverage.map((c) => (
+                <div key={c.slug} className="flex items-baseline gap-1.5">
+                  <span className="font-medium text-slate-600">{c.title}</span>
+                  <span>
+                    {c.unreadable
+                      ? "has blocks I couldn't read any words out of — tell Hawlai, this is a bug"
+                      : `${c.checked} of ${c.read} lines checked${c.ownerWritten > 0 ? `, ${c.ownerWritten} yours and left alone` : ""} · ${c.items} flagged`}
+                  </span>
+                </div>
+              ))}
+              <p className="text-slate-400 pt-0.5">
+                Lines you wrote yourself are skipped on purpose — they&apos;re your words, not Hawlai&apos;s.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {items.length === 0 ? (
         <p className="text-sm text-green-600 flex items-center gap-1.5">
@@ -184,7 +226,7 @@ export default function ClaimsReview() {
                         disabled={working !== null}
                         className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
                       >
-                        <Check className="w-3 h-3" /> Keep — it&apos;s true
+                        <Check className="w-3 h-3" /> {item.kind === "contact" ? <>Keep — it&apos;s mine</> : <>Keep — it&apos;s true</>}
                       </button>
                       )}
                       <Link

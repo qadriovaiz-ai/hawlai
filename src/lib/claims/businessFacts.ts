@@ -265,7 +265,7 @@ export function blocksText(blocks: unknown): { headings: string[]; paragraphs: s
  * which counts as the owner's: their site predates this and guessing
  * against them would strip copy they have lived with.
  */
-export function ownerWritten(sections: unknown): unknown {
+export function ownerWritten(sections: unknown, pageSource?: string | null): unknown {
   const keep = (node: unknown): unknown => {
     if (Array.isArray(node)) return node.map(keep).filter((n) => n !== null);
     if (!node || typeof node !== "object") return null;
@@ -292,7 +292,7 @@ export function ownerWritten(sections: unknown): unknown {
       // predates the marking entirely: that is the owner's own site,
       // which they have lived with, and guessing against them would
       // strip copy they never asked anyone to check.
-      if (machineWroteProp(props, prop)) delete kept[prop];
+      if (machineWroteProp(props, prop, pageSource)) delete kept[prop];
       else anyKept = true;
     }
     if (!anyKept && !hasKeptChildren) return null;

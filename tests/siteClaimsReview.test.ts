@@ -156,7 +156,11 @@ describe("the decisions the owner can take", () => {
 
   it("Keep writes it into Business Knowledge, making them the source", () => {
     expect(route).toMatch(/\.from\("business_knowledge"\)\.insert/);
-    expect(route).toMatch(/category: "business_story"/);
+    // A claim goes under business_story, which is what knownText reads.
+    // A CONTACT detail goes under 'general' instead, because the scrub
+    // that takes an invented email off a page reads ownerFacts rather
+    // than knownText — see tests/claimsReviewProductionShape.test.ts.
+    expect(route).toMatch(/isContact \? "general" : "business_story"/);
   });
 
   it("Remove edits only this business's own page", () => {

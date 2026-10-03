@@ -25,6 +25,7 @@
 import { blocksText, ownerWritten } from "./businessFacts";
 import { isLegalPage } from "@/lib/seo/pageKinds";
 import { pageLines } from "@/lib/pages/readPage";
+import { unknownProductName } from "@/lib/pages/editPage";
 import { findUnsupportedClaims } from "./claimCheck";
 import { scrubInventedContacts } from "./guardBlocks";
 import type { BusinessFacts } from "./businessFacts";
@@ -42,7 +43,7 @@ export type ReviewItem = {
   sentence: string;
   /** Why it is here, in the words the owner reads. */
   reason: string;
-  kind: "claim" | "comparative" | "contact" | "offer";
+  kind: "claim" | "comparative" | "contact" | "offer" | "product";
   /**
    * The exact words being flagged, when they can be isolated from the
    * sentence around them.
@@ -105,7 +106,18 @@ export function isWholeSentence(claim: string, sentence: string): boolean {
 
 export function claimPhraseOf(reason: string): string | null {
   const quoted = reason.match(/^"([^"]{2,120})"/);
-  return quoted ? quoted[1] : null;
+  if (quoted) return quoted[1];
+  // A QUOTE ANYWHERE IN THE REASON, not only at the start.
+  //
+  // THE BUG: the contact scrub words its reasons as `email address
+  // "candlesbyqaaaf@gmail.com" — this business has no email address on
+  // record`, which does not begin with a quote. So this returned null,
+  // `keepable` collapsed to false, and the owner's real email — the one
+  // he logs into Hawlai with — was offered only Edit or Remove. There
+  // was no way to say "that one's mine", which is the one answer a
+  // correct contact detail needs.
+  const anywhere = reason.match(/"([^"]{2,120})"/);
+  return anywhere ? anywhere[1] : null;
 }
 
 /** Flat fields on a pre-block page, mapped to the field name an item reports. */
@@ -170,7 +182,7 @@ export function sentencesOf(value: string): string[] {
  * needs their approval.
  */
 export function reviewPage(
-  page: { id: string; slug: string; title?: string | null; sections?: unknown },
+  page: { id: string; slug: string; title?: string | null; sections?: unknown; content_source?: string | null },
   facts: BusinessFacts
 ): ReviewItem[] {
   const items: ReviewItem[] = [];
@@ -212,6 +224,25 @@ export function reviewPage(
         add(`this page offers ${name}, and nothing in your catalogue or Business Knowledge mentions it`, "offer", match ? match[0] : name, true);
       }
 
+      // A PRODUCT THE PAGE NAMES AND THE CATALOGUE DOES NOT HAVE.
+      //
+      // "Premium, personal packaging made for gifting — especially our
+      // Diwali sets" was live on the About page and reached nothing: the
+      // offer patterns look for discounts and free shipping, and "Diwali
+      // sets" promises neither. It promises a PRODUCT, and the
+      // catalogue has a Lavender candle and a workshop. A page naming
+      // something nobody sells is a customer asking for it and nobody
+      // able to send it — the same instrument the chat editor uses
+      // (src/lib/pages/editPage.ts), so one answer to one question.
+      //
+      // Not keepable: the fix is to add the product, not to attest it in
+      // Business Knowledge, which would leave the page selling something
+      // the shop still cannot ship.
+      const unknownName = unknownProductName(sentence, facts);
+      if (unknownName) {
+        add(`this page offers "${unknownName}", and there is no such product in your catalogue`, "product", unknownName, false);
+      }
+
       // And everything the ordinary claims check flags. A comparison
       // with someone else's product is its own category: see keepable.
       for (const reason of findUnsupportedClaims(sentence, facts)) {
@@ -230,7 +261,12 @@ export function reviewPage(
   // slower, cleaner, and safer than mass-market paraffin". Two readers
   // of the same pages will disagree, and the one nobody is looking at is
   // the one that goes quiet.
-  for (const line of pageLines(page.sections)) {
+  // THE PAGE'S OWN MARK, passed down. On candle_by_qaaf the Home and
+  // About rows say content_source 'generated' while the blocks inside
+  // them carry no mark at all — so reading the block alone made that
+  // copy the owner's, the site became its own evidence, and every claim
+  // on it was "supported".
+  for (const line of pageLines(page.sections, { pageSource: page.content_source ?? null })) {
     // The owner's own words are theirs. Judged PER PROP now: a block
     // carries one `_source`, so reading it per block meant editing a
     // heading exempted the paragraph beside it — and made that paragraph
@@ -242,6 +278,43 @@ export function reviewPage(
 }
 
 /**
+ * What the review actually looked at, per page.
+ *
+ * WHY THE CARD NEEDS THIS. On candle_by_qaaf the card listed seven
+ * items and said nothing about the pages it had been silent on — so a
+ * line that was suppressed and a line that was clean looked identical
+ * from the outside, and the only way anyone found out was by querying
+ * the database by hand. A count the owner can see is the difference
+ * between "nothing to flag here" and "I could not read this".
+ *
+ * `read` is every line the reader could see; `checked` is the ones the
+ * claims rules ran on. The gap between them is lines the owner wrote,
+ * which are theirs and deliberately skipped — and a gap of ALL of them
+ * on a page is exactly the shape of the bug this exposes.
+ */
+export function pageCoverage(page: { slug: string; title?: string | null; sections?: unknown; content_source?: string | null }): {
+  slug: string;
+  title: string;
+  read: number;
+  checked: number;
+  ownerWritten: number;
+  /** True when the page holds blocks but no words could be read out of them. */
+  unreadable: boolean;
+} {
+  const lines = pageLines(page.sections, { pageSource: page.content_source ?? null });
+  const ownerWritten = lines.filter((l) => l.source === "edited").length;
+  const hasBlocks = Array.isArray(page.sections) && page.sections.length > 0;
+  return {
+    slug: page.slug,
+    title: String(page.title ?? page.slug),
+    read: lines.length,
+    checked: lines.length - ownerWritten,
+    ownerWritten,
+    unreadable: hasBlocks && lines.length === 0,
+  };
+}
+
+/**
  * Facts with the machine's own writing taken out of the evidence.
  *
  * What the review list is measured against: the site cannot vouch for
@@ -250,7 +323,7 @@ export function reviewPage(
 export function factsWithoutGeneratedCopy(facts: BusinessFacts, pages: Row[]): BusinessFacts {
   const ownPages = (facts.site?.pages ?? []).map((sitePage) => {
     const row = pages.find((p) => p.slug === sitePage.slug);
-    const kept = blocksText(ownerWritten(row?.sections));
+    const kept = blocksText(ownerWritten(row?.sections, (row as any)?.content_source ?? null));
     return { ...sitePage, headings: kept.headings, paragraphs: kept.paragraphs, buttons: kept.buttons, metaDescription: null };
   });
   return { ...facts, site: facts.site ? { ...facts.site, pages: ownPages } : null, home: ownPages.find((p) => p.slug === "home") ?? facts.home };

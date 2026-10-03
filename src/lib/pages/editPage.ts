@@ -263,6 +263,12 @@ export function statesPriceOrStock(text: string): string | null {
  * than a fixed list, plus the words any shop heading uses.
  */
 const NAME_STOPWORDS = new Set([
+  // Determiners and quantifiers. "Every candle is hand-poured in small
+  // batches" is a sentence about the whole range, and reading "Every
+  // candle" as a product name put a returns position from the Terms
+  // page on the review list as something nobody sells.
+  "every", "each", "this", "that", "these", "those", "any", "some", "both", "either", "no", "none",
+  "first", "next", "last", "other", "another", "same", "such", "most", "many", "few",
   "the", "our", "my", "your", "all", "new", "best", "more", "shop", "store", "buy", "sale", "sales",
   "collection", "collections", "range", "ranges", "gift", "gifts", "gifting", "home", "handmade",
   "hand", "poured", "made", "craft", "crafted", "small", "batch", "batches", "premium", "luxury",

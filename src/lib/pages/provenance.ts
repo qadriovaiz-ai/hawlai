@@ -50,14 +50,27 @@ export function ownerWroteProp(props: unknown, prop: string): boolean {
 }
 
 /** Whether Hawlai wrote this prop — the inverse, for a block with no mark at all. */
-export function machineWroteProp(props: unknown, prop: string): boolean {
+export function machineWroteProp(props: unknown, prop: string, pageSource?: string | null): boolean {
   if (!props || typeof props !== "object") return false;
   const p = props as Props;
   if (ownerWroteProp(p, prop)) return false;
-  // An unmarked block predates the marks. Its words are the owner's
-  // site, which they have lived with, so they are not treated as
-  // machine-written — only an explicit "generated" is.
-  return p._source === "generated" || p._source === "edited";
+  if (p._source === "generated" || p._source === "edited") return true;
+  // THE PAGE'S OWN MARK, when the block has none.
+  //
+  // THE LIVE SUPPRESSION (3 Oct 2026): on candle_by_qaaf the Home and
+  // About rows both carry content_source 'generated', while the blocks
+  // inside them carry no _source at all — they were written before the
+  // per-block marking existed. Reading the block alone made that copy
+  // the OWNER's, so the site became its own evidence and every claim on
+  // it was "supported": "safer than mass-market paraffin" proved itself.
+  //
+  // website_pages.content_source is the authority Hawlai actually has
+  // for those rows, and it says plainly who wrote the page.
+  if (pageSource === "generated") return true;
+  // Neither marked: the site predates all of this. Their own words,
+  // which they have lived with, and guessing against them would strip
+  // copy nobody asked to check.
+  return false;
 }
 
 /**

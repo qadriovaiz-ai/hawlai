@@ -439,8 +439,25 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
   each(superlative, (m) => `"${m[0]}" — a superlative with nothing on record to back it`);
   each(POSSESSIVE_SUPERLATIVE, (m) => `"${m[0]}" — a superlative with nothing on record to back it`);
   each(BEST_SELLING, (m) => `"${m[0]}" — Hawlai has no sales ranking for this business's products`);
-  each(COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports`);
-  each(PRODUCT_COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports, and it doesn't even say what it's being compared with`);
+  // A COMPARISON IS NEVER SUPPORTED BY OUR OWN FACTS, so `said` must not
+  // suppress it.
+  //
+  // THE LIVE SUPPRESSION (3 Oct 2026). `said(phrase)` skips a flag when
+  // the phrase appears in knownText — and knownText includes the
+  // business's own site. So "safer than mass-market paraffin", written
+  // on the About page by Hawlai, was its own evidence: the check found
+  // the words on the site and concluded the business had said them. The
+  // only items that reached the review card were the ones that bypass
+  // `said` entirely — the offer patterns and the contact scrub — which
+  // is exactly what the owner saw.
+  //
+  // Nothing a business says about ITSELF can establish a comparison with
+  // somebody else's product. Whatever is on record, this is flagged.
+  const always = (re: RegExp, reason: (m: RegExpMatchArray) => string) => {
+    for (const m of text.matchAll(re)) reasons.push(reason(m));
+  };
+  always(COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports`);
+  always(PRODUCT_COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports, and it doesn't even say what it's being compared with`);
   each(GUARANTEE, (m) => `"${m[0]}" — a guarantee the business hasn't offered`);
   each(SCARCITY, (m) => `"${m[0]}" — urgency about stock that nothing on record supports`);
   each(SLOT_SCARCITY, (m) => `"${m[0]}" — how many slots are left isn't on record; a service has no stock count, so nothing here backs the hurry`);
