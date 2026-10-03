@@ -209,6 +209,46 @@ export function legalWarning(applied: AppliedEdit[]): string | null {
     .join(" ");
 }
 
-/** Said when the page's content belongs to the catalogue, not to the page. */
+/**
+ * Said when the BLOCK's content belongs to the catalogue.
+ *
+ * Narrowed on 2026-10-03 from refusing the whole page. The Shop page's
+ * "The Shop" heading and its intro paragraph are ordinary prose, and
+ * refusing them taught the owner that chat could not touch their shop
+ * page at all — then the chat asked them for wording it would have
+ * refused next, which was worse than the refusal.
+ */
 export const CATALOGUE_REFUSAL =
-  "That page is built from your catalogue, so its prices, names and descriptions come from the products themselves — editing the page text would leave two different answers on your site. Tell me what should change about the product and I'll put it through the catalogue instead, with its own approval card.";
+  "That block shows your catalogue, so its names, prices and descriptions come from the product rows themselves — changing them on the page would leave two different answers on your site. Tell me what should change about the product and I'll put it through the catalogue instead, with its own approval card. The ordinary headings and paragraphs on that page I can change.";
+
+/** Money, however it is written. */
+const PRICE_IN_TEXT = /(?:₹|\brs\.?\s|\binr\s)\s?\d|\b\d[\d,]*(?:\.\d+)?\s*(?:rupees?|rs\.?|\/-)\b/i;
+
+/**
+ * A plain-text edit that would state catalogue data anyway.
+ *
+ * The block being prose is not enough: a paragraph saying "candles from
+ * ₹550" is a price on the page, and the price lives in the product row —
+ * where it is ₹999. The page would contradict the catalogue and neither
+ * would know. Same for a product name nobody sells.
+ */
+export function statesCatalogueData(text: string, facts: BusinessFacts | null | undefined): string | null {
+  if (PRICE_IN_TEXT.test(text)) {
+    return "That line puts a price on the page. Prices live on the product itself, so a number typed here would sit next to a different one in your catalogue and nobody would know which is right — ask me to change the product's price instead and it goes through the catalogue with its own card.";
+  }
+  if (!facts) return null;
+  // A capitalised multi-word phrase that reads like a product name but
+  // matches nothing in the catalogue. Deliberately narrow: ordinary
+  // prose is full of capitalised words, and over-refusing here would
+  // undo the point of the change.
+  const names = facts.products.map((p) => p.name.toLowerCase());
+  // The leading words must be capitalised — that is what makes it read
+  // as a name rather than prose — but the noun may be either case, since
+  // "Midnight Oud Candle" and "Midnight Oud candle" are the same claim.
+  for (const candidate of text.match(/\b(?:[A-Z][a-z]+\s){1,3}(?:[Cc]andles?|[Ss]ets?|[Jj]ars?|[Kk]its?|[Bb]ox(?:es)?|[Hh]ampers?)\b/g) ?? []) {
+    const phrase = candidate.trim().toLowerCase();
+    if (names.some((name) => name.includes(phrase) || phrase.includes(name))) continue;
+    return `That line names "${candidate.trim()}", which isn't in your catalogue. Add it as a product first and I'll write about it — a page naming something you don't sell is a customer asking for it and nobody able to send it.`;
+  }
+  return null;
+}

@@ -63,6 +63,16 @@ export type PageLine = {
   source: "generated" | "edited" | "unknown";
   /** The flat field this came from, on a page with no block ids. */
   legacyField?: string;
+  /**
+   * True when this line belongs to a block that RENDERS catalogue data.
+   *
+   * Per block, not per page. The Shop page's "The Shop" heading and its
+   * intro paragraph are ordinary prose and the owner may change them;
+   * the product grid underneath states names, prices and stock that
+   * live in the product rows, and changing those words on the page
+   * would leave two different answers on one site.
+   */
+  catalogueDriven: boolean;
 };
 
 export type PageContent = {
@@ -136,11 +146,14 @@ function readable(value: string): string {
  */
 export function pageLines(sections: unknown): PageLine[] {
   const lines: PageLine[] = [];
-  const walk = (node: unknown): void => {
-    if (Array.isArray(node)) return node.forEach(walk);
+  const walk = (node: unknown, inCatalogue = false): void => {
+    if (Array.isArray(node)) return node.forEach((child) => walk(child, inCatalogue));
     if (!node || typeof node !== "object") return;
     const b = node as Record<string, any>;
     const id = typeof b.id === "string" ? b.id : null;
+    // Inherited downwards: a heading inside a product card belongs to
+    // the catalogue even though "heading" is an ordinary block type.
+    const catalogueDriven = inCatalogue || (typeof b.type === "string" && CATALOGUE_BLOCKS.test(b.type));
 
     if (b.props && typeof b.props === "object") {
       for (const prop of TEXT_PROPS) {
@@ -154,7 +167,7 @@ export function pageLines(sections: unknown): PageLine[] {
           : b.props._source === "generated" || b.props._source === "edited"
           ? "generated"
           : "unknown";
-        lines.push({ blockId: id, prop, blockType: String(b.type ?? "block"), text, source });
+        lines.push({ blockId: id, prop, blockType: String(b.type ?? "block"), text, source, catalogueDriven });
       }
     } else {
       // A PAGE FROM BEFORE THE BLOCK BUILDER. Its words live in flat
@@ -166,11 +179,11 @@ export function pageLines(sections: unknown): PageLine[] {
         if (typeof value !== "string") continue;
         const text = readable(value);
         if (!text) continue;
-        lines.push({ blockId: id, prop, blockType: String(b.type ?? "block"), text, source: "unknown", legacyField: key });
+        lines.push({ blockId: id, prop, blockType: String(b.type ?? "block"), text, source: "unknown", legacyField: key, catalogueDriven });
       }
     }
 
-    walk(b.children);
+    walk(b.children, catalogueDriven);
   };
   walk(sections);
   return lines;

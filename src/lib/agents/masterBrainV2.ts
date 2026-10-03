@@ -208,7 +208,7 @@ export const TOOLS = [
   {
     name: "edit_page_text",
     description:
-      "Change the words ON one page of the business's own Hawlai website — a heading, a paragraph or a button label — addressed by the block id read_page gave you. CALL read_page FIRST, always: without the real current text you would be replacing a line you have not seen. It shows an approval card with the exact before → after for every line and nothing changes until they approve; after approval Hawlai fetches the live page and reads the new wording back, and only says it is live when it is really being served. This does NOT touch the search title or meta description — that is propose_page_meta, and it must stay that way. It cannot add, remove or reorder sections, or add a page: say so plainly and point at Website Builder rather than attempting it another way. On a product or shop page it refuses and points at the catalogue tools, because those words belong to the product rows. On a legal page (privacy, terms, refunds) it still works but the card warns that legal wording is changing — never quietly drop a sentence from one.",
+      "Change the words ON one page of the business's own Hawlai website — a heading, a paragraph or a button label — addressed by the block id read_page gave you. CALL read_page FIRST, always: without the real current text you would be replacing a line you have not seen. It shows an approval card with the exact before → after for every line and nothing changes until they approve; after approval Hawlai fetches the live page and reads the new wording back, and only says it is live when it is really being served. This does NOT touch the search title or meta description — that is propose_page_meta, and it must stay that way. It cannot add, remove or reorder sections, or add a page: say so plainly and point at Website Builder rather than attempting it another way. On a shop or product page it changes ordinary headings, paragraphs and button labels like anywhere else, but refuses the blocks that show catalogue data — product names, prices, descriptions, stock — and points at the catalogue tools, because those words belong to the product rows. It also refuses any line that would put a price or an unsold product's name on the page. On a legal page (privacy, terms, refunds) it still works but the card warns that legal wording is changing — never quietly drop a sentence from one.",
     input_schema: {
       type: "object",
       properties: {
@@ -1098,7 +1098,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     case "read_page":
     case "edit_page_text": {
       const { readPageContent } = await import("../pages/readPage");
-      const { applyEdits, legalWarning, CATALOGUE_REFUSAL } = await import("../pages/editPage");
+      const { applyEdits, legalWarning, CATALOGUE_REFUSAL, statesCatalogueData } = await import("../pages/editPage");
 
       const { data: pageSite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
       if (!pageSite) return { error: "This business doesn't have a Hawlai website yet, so there are no pages to read. I can build one — just say the word." };
@@ -1165,16 +1165,29 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           catalogueDriven: content.catalogueDriven,
           lines: content.lines,
           otherPages: sitePages.filter((p) => p.id !== target.id).map((p) => ({ page: p.slug, title: p.title ?? p.slug })),
-          note:
-            content.lines.length === 0
-              ? "This page has no editable text blocks — it's built from blocks that hold no words, or from your catalogue."
-              : `Use these blockIds with edit_page_text.${content.catalogueDriven ? " This page is driven by your catalogue, so page-text edits are refused — product wording changes go through the catalogue tools." : ""}${content.legal ? " This is a legal page: it can be edited, but never drop a sentence from it quietly." : ""}`,
+          // SAID CONSISTENTLY. This used to invite the model to use the
+          // blockIds and, in the same sentence, say edits were refused —
+          // so the chat asked the owner for wording that would then be
+          // turned down. Each line now says which it is.
+          note: (() => {
+            if (content.lines.length === 0) return "This page has no editable text blocks — it's built from blocks that hold no words, or entirely from your catalogue.";
+            const editable = content.lines.filter((l) => !l.catalogueDriven).length;
+            const catalogue = content.lines.length - editable;
+            const parts = [
+              editable > 0
+                ? `${editable} of these ${content.lines.length} lines are ordinary text you can change with edit_page_text — use their blockIds.`
+                : "None of these lines are ordinary text.",
+              catalogue > 0
+                ? `The other ${catalogue} are marked catalogueDriven: they show product names, prices or stock from the product rows, so edit_page_text refuses them and a change there goes through the catalogue tools instead. Say that plainly if asked about one — do NOT ask for replacement wording for it.`
+                : "",
+              content.legal ? "This is a legal page: it can be edited, but never drop a sentence from it quietly." : "",
+            ];
+            return parts.filter(Boolean).join(" ");
+          })(),
         };
       }
 
       // ---- edit_page_text -------------------------------------------
-      if (content.catalogueDriven) return { error: CATALOGUE_REFUSAL, saved: false };
-
       const rawEdits = Array.isArray(input.edits) ? input.edits : [];
       const wanted = rawEdits
         .filter((e: any) => e && typeof e.blockId === "string" && typeof e.text === "string" && String(e.text).trim())
@@ -1182,6 +1195,27 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       if (wanted.length === 0) return { error: "Tell me which line to change and what it should say." };
 
       const editFacts = await factsFor(supabase, ctx);
+
+      // PER BLOCK, not per page. The Shop page's heading and intro are
+      // ordinary prose; only the blocks that render catalogue data are
+      // refused, and the refusal says which so the chat does not ask for
+      // wording it would turn down next.
+      const refusedBlocks = wanted.filter((e: any) => content.lines.some((l) => l.blockId === e.blockId && l.catalogueDriven));
+      if (refusedBlocks.length > 0) {
+        return {
+          error: CATALOGUE_REFUSAL,
+          saved: false,
+          refusedBlocks: refusedBlocks.map((e: any) => e.blockId),
+          editableLines: content.lines.filter((l) => !l.catalogueDriven).map((l) => ({ blockId: l.blockId, prop: l.prop, text: l.text })),
+          note: "Do NOT ask them for different wording for that block — any wording would be refused for the same reason. Say what lives in the catalogue and offer the catalogue tool, or offer one of the editable lines listed here.",
+        };
+      }
+
+      // And a prose block that would STATE catalogue data anyway.
+      for (const edit of wanted) {
+        const stated = statesCatalogueData(edit.text, editFacts);
+        if (stated) return { error: stated, saved: false, note: "Do NOT retry with the same number or name. Offer the catalogue tool instead." };
+      }
       const result = applyEdits(liveSections, wanted, editFacts);
 
       if (result.applied.length === 0) {
@@ -3053,6 +3087,17 @@ export interface Artifact {
   url?: string; // visual: direct viewable src. link: the URL to open.
   html?: string; // 3d_scene inline content, avoids a second fetch
   fields?: { label: string; value: string }[]; // structured facts for record/metric kinds
+  /**
+   * One line of copy changing, shown in FULL on the card.
+   *
+   * Separate from `fields` because a field renders on one truncated
+   * line, and on 3 Oct 2026 that meant an owner approving a page edit
+   * saw only the old wording, cut off — the new wording was in the chat
+   * message beside the card. They were approving what the chat said
+   * rather than what the card said, which is the whole point of having
+   * a card.
+   */
+  changes?: { label: string; before: string; after: string }[];
   imageUrl?: string; // a picture rendered INSIDE the card. Separate from `url`, which on a record card means a link and is ignored — an ad creative passed as `url` rendered nothing at all
   groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
   /**
@@ -3898,12 +3943,15 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return {
         kind: "document",
         label: `${result.page === "home" ? "Homepage" : result.page} — ${toolName === "undo_page_edit" ? "approve to put the old wording back" : "approve to change the words"}`,
-        // THE OLD WORDING BESIDE THE NEW ONE, per line. Approving this
-        // replaces what a visitor reads, so the card shows exactly what
-        // is being replaced rather than a summary of the intent.
-        fields: (result.changed ?? []).map((c: any) => ({
+        // THE OLD WORDING AND THE NEW ONE, BOTH IN FULL, per line.
+        // Approving this replaces what a visitor reads, so the card
+        // shows both texts whole — not a truncated field, and not a
+        // summary that sends the owner to the chat message to find out
+        // what they are agreeing to.
+        changes: (result.changed ?? []).map((c: any) => ({
           label: WHAT_CHANGED[c.what] ?? String(c.what),
-          value: `"${c.from || "(empty)"}" → "${c.to}"`,
+          before: String(c.from ?? ""),
+          after: String(c.to ?? ""),
         })),
         summary: [result.note, ...(result.warnings ?? [])].filter(Boolean).join(" "),
         // The decision lives on the card, through publish_actions — not
@@ -4169,6 +4217,8 @@ ${formatFactsForCopy(storeFacts)}
 ${COPY_TRUTH_RULES}
 - These rules cover your own replies and every tool brief, image prompts included.
 - If a tool result carries a \`_claimsNote\`, SAY IT. The guard has already taken the line out of what you were handed, so staying quiet presents a shortened draft as the whole answer and the owner never learns a claim was refused — or why. Repeat it in your own words, name the claim, and say what would make it allowed (adding it to Business Knowledge). The same goes for \`_contactsNote\`: a contact detail was taken out because this business has none on record, and the owner needs to add the real one.
+- WHEN A TOOL REFUSES, EXPLAIN THE REFUSAL AND DO NOT ASK FOR ANOTHER GO AT IT. Say in your own plain words why it was refused — the result's error text is the reason — and then offer something that would actually work. NEVER invite wording, a rewrite, a different phrasing or "batao kya likhna hai" for the thing that was just refused: any wording would be refused for the same reason, and asking makes the owner do work you will throw away. On 3 Oct 2026 chat answered a shop-page refusal with "Aap kya banana chahti hain? Koi specific wording batao, main wahi rakhunga — bilkul as-is", which was a promise it could not keep, and never said why the edit had been refused at all.
+- NEVER promise that wording will be kept "as-is", "bilkul waise hi", verbatim or exactly as typed BEFORE a tool has accepted it. Until the card exists, you do not know that it will be kept: the claims guard may take a line out, a price may be refused, the block may not be yours to change. Say what you are about to try, not what the result will be.
 - WHEN A TOOL FAILS, SAY WHAT IT SAID AND NOTHING MORE. The result's own text is the only account of the failure you have. NEVER supply a reason of your own — not "the research tool returned nothing", not "it looks temporarily unavailable", not an API or a server or a quota — unless those exact words came back from the tool. On 3 Oct 2026 a competitor lookup failed because the model's reply was malformed JSON; the result said only "try again shortly", and both invented explanations were wrong. If the result does not say why, say that you do not know why, and offer to try again. A guessed cause sends the owner to fix the wrong thing.
 - If a result carries \`_cause\`, \`_detail\` or \`_partial\`, those are the real account: relay them. \`_partial\` means the answer was cut off and only the complete items are shown — say so, because a short answer read as a whole one is a wrong answer.
 - A competitor result carries \`_sources\` — the pages it was actually read from. Show them as links so the owner can check for themselves, and if it carries \`_unverified\`, say that too: those figures appear on no page I could read, and an owner may be about to set a price against one of them.

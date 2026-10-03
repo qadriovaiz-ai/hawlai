@@ -136,7 +136,14 @@ beforeEach(() => {
     { id: "p1", slug: "home", title: "Home", page_type: "home", sections: hero(), content_source: "generated", seo_title: "Candle by Qaaf", meta_description: "Hand-poured candles." },
     { id: "p2", slug: "about", title: "About", page_type: "about", sections: [{ id: "s2", type: "section", props: {}, children: [{ id: "h2", type: "heading", props: { text: "Our story" }, children: [] }] }], content_source: "generated" },
     { id: "p3", slug: "privacy-policy", title: "Privacy", page_type: "legal", sections: [{ id: "s3", type: "section", props: {}, children: [{ id: "t3", type: "text", props: { html: "We keep your order details for 7 years as required by law. We never sell your data." }, children: [] }] }], content_source: "generated" },
-    { id: "p4", slug: "products", title: "Shop", page_type: "products", sections: [{ id: "s4", type: "section", props: {}, children: [{ id: "h4", type: "heading", props: { text: "Our candles" }, children: [] }] }], content_source: "generated" },
+    // A real shop page: prose at the top, the catalogue underneath.
+    { id: "p4", slug: "products", title: "Shop", page_type: "products", sections: [{ id: "s4", type: "section", props: {}, children: [
+      { id: "h4", type: "heading", props: { text: "The Shop" }, children: [] },
+      { id: "t4", type: "text", props: { html: "Everything we pour, in one place." }, children: [] },
+      { id: "g4", type: "product_catalog", props: { heading: "All candles" }, children: [
+        { id: "pc1", type: "heading", props: { text: "Lavender candle" }, children: [] },
+      ] },
+    ] }], content_source: "generated" },
     { id: "p5", slug: "old", title: "Old", page_type: "custom", sections: [{ type: "hero", headline: "A mood, not just a candle.", subheadline: "Poured by hand.", ctaText: "Shop the Collection" }], content_source: "generated" },
   ];
   site = { id: "w1", slug: "candle-by-qaaf", published: true, dealership_id: "d1" };
@@ -158,9 +165,9 @@ describe("read_page gives every line an address", () => {
   it("returns the current text with block ids and what kind of line it is", async () => {
     const r: any = await tool("read_page", { page: "home" });
     expect(r.lines).toEqual([
-      { blockId: "h1", prop: "text", blockType: "heading", text: "Candles by Qaaf", source: "generated" },
-      { blockId: "t1", prop: "html", blockType: "text", text: "Small-batch soy candles, poured by hand.", source: "generated" },
-      { blockId: "b1", prop: "label", blockType: "button", text: "Shop now", source: "generated" },
+      { blockId: "h1", prop: "text", blockType: "heading", text: "Candles by Qaaf", source: "generated", catalogueDriven: false },
+      { blockId: "t1", prop: "html", blockType: "text", text: "Small-batch soy candles, poured by hand.", source: "generated", catalogueDriven: false },
+      { blockId: "b1", prop: "label", blockType: "button", text: "Shop now", source: "generated", catalogueDriven: false },
     ]);
     expect(r.url).toBe("/site/candle-by-qaaf");
     expect(r.published).toBe(true);
@@ -174,11 +181,24 @@ describe("read_page gives every line an address", () => {
     expect(r.lines).toBeUndefined();
   });
 
-  it("marks a legal page and a catalogue page for what they are", async () => {
+  it("marks a legal page, and says which shop lines are editable and which aren't", async () => {
     expect((await tool("read_page", { page: "privacy-policy" }) as any).legal).toBe(true);
     const shop: any = await tool("read_page", { page: "products" });
-    expect(shop.catalogueDriven).toBe(true);
-    expect(shop.note).toMatch(/driven by your catalogue/);
+
+    // CONSISTENT WORDING. The note used to invite the model to use the
+    // blockIds and, in the same sentence, say edits were refused — so
+    // the chat asked the owner for wording it would then turn down.
+    expect(shop.note).toMatch(/ordinary text you can change/);
+    expect(shop.note).toMatch(/marked catalogueDriven/);
+    expect(shop.note).toMatch(/do NOT ask for replacement wording/i);
+
+    const by = (id: string) => shop.lines.find((l: any) => l.blockId === id);
+    expect(by("h4").catalogueDriven).toBe(false);
+    expect(by("t4").catalogueDriven).toBe(false);
+    // The grid, and anything inside it — a heading in a product card
+    // belongs to the catalogue however ordinary its block type looks.
+    expect(by("g4").catalogueDriven).toBe(true);
+    expect(by("pc1").catalogueDriven).toBe(true);
   });
 
   it("writes nothing", async () => {
@@ -339,11 +359,53 @@ describe("the claims guard and the contact scrub run here too", () => {
 // ---- the page kinds ---------------------------------------------------
 
 describe("pages whose words are not the page's to change", () => {
-  it("refuses a product page and points at the catalogue", async () => {
-    const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "h4", prop: "text", text: "Our range" }] });
-    expect(r.error).toMatch(/built from your catalogue/);
-    expect(r.error).toMatch(/approval card/);
+  it("CHANGES the ordinary heading on a shop page", async () => {
+    // Amended 2026-10-03. Refusing the whole page taught the owner that
+    // chat could not touch their shop page at all — and then the chat
+    // asked them for wording it would have refused next, which was
+    // worse than the refusal.
+    const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "h4", prop: "text", text: "Everything we pour" }] });
+    expect(r.success).toBe(true);
+    expect(r.changed).toEqual([{ what: "heading", from: "The Shop", to: "Everything we pour" }]);
+  });
+
+  it("refuses the catalogue block, and the card inside it", async () => {
+    for (const blockId of ["g4", "pc1"]) {
+      const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId, prop: blockId === "g4" ? "heading" : "text", text: "Our range" }] });
+      expect(r.error, blockId).toMatch(/shows your catalogue/);
+      expect(r.refusedBlocks, blockId).toContain(blockId);
+    }
     expect(created).toEqual([]);
+  });
+
+  it("tells the chat not to ask for different wording for a refused block", async () => {
+    const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "g4", prop: "heading", text: "Our range" }] });
+    expect(r.note).toMatch(/Do NOT ask them for different wording/);
+    // And offers what IS editable, so the chat has something true to say.
+    expect((r.editableLines ?? []).map((l: any) => l.blockId)).toEqual(["h4", "t4"]);
+  });
+
+  it("refuses a price in prose, wherever the block is", async () => {
+    // The block being ordinary text is not enough: a paragraph saying
+    // "from ₹550" sits next to ₹999 in the catalogue and nobody knows
+    // which is right.
+    for (const text of ["Candles from ₹550.", "Candles from Rs 550.", "Candles from 550 rupees.", "Candles from INR 550."]) {
+      const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "t4", prop: "html", text }] });
+      expect(r.error, text).toMatch(/puts a price on the page/);
+      expect(r.saved, text).toBe(false);
+    }
+    expect(created).toEqual([]);
+  });
+
+  it("refuses a product name that isn't in the catalogue", async () => {
+    const r: any = await tool("edit_page_text", { page: "home", edits: [{ blockId: "t1", prop: "html", text: "Try our Midnight Oud Candle today." }] });
+    expect(r.error).toMatch(/isn't in your catalogue/);
+    expect(r.error).toMatch(/Add it as a product first/);
+  });
+
+  it("allows a product name that IS in the catalogue", async () => {
+    const r: any = await tool("edit_page_text", { page: "home", edits: [{ blockId: "t1", prop: "html", text: "Our Lavender candle is poured by hand." }] });
+    expect(r.success).toBe(true);
   });
 
   it("edits a legal page, with a warning, and never silently", async () => {
@@ -485,5 +547,66 @@ describe("undo replays what the line said before", () => {
     const r: any = await tool("undo_page_edit", {});
     expect(r.error).toMatch(/already says what it said before/);
     expect(created).toEqual([]);
+  });
+});
+
+// ---- what the chat is allowed to say ---------------------------------
+
+describe("after a refusal the chat explains, and does not ask for a retry", () => {
+  it("is told to relay the reason and never invite wording that would be refused", () => {
+    const brain = readFileSync("src/lib/agents/masterBrainV2.ts", "utf8");
+    expect(brain).toMatch(/WHEN A TOOL REFUSES, EXPLAIN THE REFUSAL AND DO NOT ASK FOR ANOTHER GO AT IT/);
+    // The exact sentence it produced on 3 Oct, so the rule is testable.
+    expect(brain).toMatch(/Koi specific wording batao/);
+    expect(brain).toMatch(/any wording would be refused for the same reason/);
+  });
+
+  it("is told not to promise 'as-is' before a tool has accepted it", () => {
+    const brain = readFileSync("src/lib/agents/masterBrainV2.ts", "utf8");
+    expect(brain).toMatch(/NEVER promise that wording will be kept "as-is"/);
+    expect(brain).toMatch(/Until the card exists, you do not know that it will be kept/);
+  });
+
+  it("the refused result carries the reason and the alternative, so there is no need to guess", async () => {
+    const r: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "pc1", prop: "text", text: "Our range" }] });
+    // Three things the chat needs in order to answer honestly: why, what
+    // it cannot do, and what it can.
+    expect(r.error).toMatch(/shows your catalogue/);
+    expect(r.error).toMatch(/ordinary headings and paragraphs on that page I can change/);
+    expect(r.note).toMatch(/Do NOT ask them for different wording/);
+    expect(Array.isArray(r.editableLines)).toBe(true);
+  });
+});
+
+describe("the card shows both wordings, in full", () => {
+  it("sends them as a change, not as a truncated field", async () => {
+    const { extractArtifact } = await import("@/lib/agents/masterBrainV2");
+    const result = await tool("edit_page_text", {
+      page: "home",
+      edits: [{ blockId: "t1", prop: "html", text: "Hand-poured soy candles, made in Shahjahanpur, from wax we choose ourselves and fragrances picked because they actually last the evening." }],
+    });
+    const artifact: any = extractArtifact("edit_page_text", {}, result);
+    expect(artifact.changes).toEqual([
+      {
+        label: "Paragraph",
+        before: "Small-batch soy candles, poured by hand.",
+        after: "Hand-poured soy candles, made in Shahjahanpur, from wax we choose ourselves and fragrances picked because they actually last the evening.",
+      },
+    ]);
+    // THE BUG: a `fields` row renders on one truncated line, so the
+    // owner saw the old wording cut off and the new wording only in the
+    // chat message beside the card — approving what the chat said rather
+    // than what the card said.
+    expect(artifact.fields).toBeUndefined();
+  });
+
+  it("the card renders both, and collapses rather than truncating", () => {
+    const chat = readFileSync("src/components/chat/MasterChatPage.tsx", "utf8");
+    expect(chat).toMatch(/function CopyChange/);
+    expect(chat).toMatch(/artifact\.changes\.map/);
+    // Full text, wrapped — never `truncate`, which cannot be opened.
+    expect(chat).toMatch(/Show the full wording/);
+    expect(chat).toMatch(/\{before\.trim\(\) \? before : "\(empty\)"\}/);
+    expect(chat).toMatch(/\{after\}/);
   });
 });

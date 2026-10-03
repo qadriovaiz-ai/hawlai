@@ -52,6 +52,7 @@ interface Artifact {
   url?: string;
   html?: string;
   fields?: { label: string; value: string }[];
+  changes?: { label: string; before: string; after: string }[];
   groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[];
   draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string };
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
@@ -427,6 +428,45 @@ function flattenDraftBody(raw: Record<string, any>): { heading: string | null; b
  * (src/lib/chat/publishActions.ts); chat never gets its own publish
  * route.
  */
+/**
+ * One line of copy changing, old and new, both in full.
+ *
+ * WHY NOT A `fields` ROW: a field renders on one line with `truncate`,
+ * and on 3 Oct 2026 that meant an owner approving a page edit saw the
+ * OLD wording, cut off mid-sentence, while the new wording sat in the
+ * chat message beside the card. They were approving what the chat said
+ * rather than what the card said — and the card is the thing with the
+ * button on it.
+ *
+ * Long text collapses rather than truncating: a clamp the owner can
+ * open is a different promise from an ellipsis they cannot.
+ */
+function CopyChange({ label, before, after }: { label: string; before: string; after: string }) {
+  const long = before.length + after.length > 220;
+  const [open, setOpen] = useState(!long);
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <div className={`mt-1 space-y-1 ${open ? "" : "line-clamp-3"}`}>
+        <p className="text-[11px] text-slate-500 leading-snug">
+          <span className="text-slate-400">Now: </span>
+          {before.trim() ? before : "(empty)"}
+        </p>
+        <p className="text-[11px] text-slate-800 font-medium leading-snug">
+          <span className="text-emerald-600 font-semibold">New: </span>
+          {after}
+        </p>
+      </div>
+      {long && (
+        <button onClick={() => setOpen((v) => !v)} className="mt-1 text-[10px] font-medium text-brand-500 hover:underline">
+          {open ? "Show less" : "Show the full wording"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
   const publish = artifact.publish!;
   const [state, setState] = useState<"idle" | "confirming" | "working" | "done" | "rejected" | "error">("idle");
@@ -983,6 +1023,13 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
                 </div>
               ))}
             </dl>
+          )}
+          {artifact.changes && artifact.changes.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {artifact.changes.map((c, i) => (
+                <CopyChange key={i} label={c.label} before={c.before} after={c.after} />
+              ))}
+            </div>
           )}
           {artifact.groups && artifact.groups.length > 0 && (
             <div className="mt-2 space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
