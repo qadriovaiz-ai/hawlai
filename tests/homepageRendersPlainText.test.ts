@@ -16,13 +16,18 @@
 // These tests render the REAL blocks through the REAL renderer and look
 // at the markup, rather than asserting on the stored value, because the
 // stored value is not what was wrong for the owner — the page was.
+//
+// Carried over from the old chat copy path (src/lib/chat/homepageCopy.ts,
+// retired 2026-10-03) onto the one that replaced it. The bug was in how
+// the writer treated the prop, so the guarantee has to travel with
+// whichever writer is live, not with the file that happened to hold it.
 
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import BlockRenderer from "@/components/website-builder/blocks/BlockRenderer";
-import { applyHomepageCopy } from "@/lib/chat/homepageCopy";
+import { applyEdits } from "@/lib/pages/editPage";
 import { getTheme } from "@/lib/landingThemes";
 import { stripTags } from "@/lib/richText";
 
@@ -62,10 +67,14 @@ function visibleText(markup: string): string {
 
 describe("an approved homepage edit renders as words, not tags", () => {
   it("THE LIVE CASE: the subheadline has no tag characters anywhere in the page", () => {
-    const { sections, changed } = applyHomepageCopy(hero(), { headline: HEAD, subheadline: SUB, ctaText: "Book a workshop" });
-    expect(changed.map((c) => c.field)).toEqual(["headline", "subheadline", "ctaText"]);
+    const { sections, applied } = applyEdits(hero(), [
+      { blockId: "h1", prop: "text", text: HEAD },
+      { blockId: "t1", prop: "html", text: SUB },
+      { blockId: "b1", prop: "label", text: "Book a workshop" },
+    ], null);
+    expect(applied.map((a) => a.blockType)).toEqual(["heading", "text", "button"]);
 
-    const markup = render(sections);
+    const markup = render(sections as any[]);
     const seen = visibleText(markup);
 
     expect(seen).toContain(SUB);
@@ -80,12 +89,12 @@ describe("an approved homepage edit renders as words, not tags", () => {
   it("every text field on the page, not just the one that broke", () => {
     // Each field gets a tag put into it deliberately; none may reach the
     // page as characters.
-    const { sections } = applyHomepageCopy(hero(), {
-      headline: "<h1>Hand-poured candles</h1>",
-      subheadline: "<p>Clean-burning, <strong>always</strong>.</p>",
-      ctaText: "<span>Book now</span>",
-    });
-    const markup = render(sections);
+    const { sections } = applyEdits(hero(), [
+      { blockId: "h1", prop: "text", text: "<h1>Hand-poured candles</h1>" },
+      { blockId: "t1", prop: "html", text: "<p>Clean-burning, <strong>always</strong>.</p>" },
+      { blockId: "b1", prop: "label", text: "<span>Book now</span>" },
+    ], null);
+    const markup = render(sections as any[]);
     expect(markup).not.toContain("&lt;");
     const seen = visibleText(markup);
     expect(seen).toContain("Hand-poured candles");
@@ -116,7 +125,7 @@ describe("an approved homepage edit renders as words, not tags", () => {
   it("the stored value is plain text now, so nothing downstream has to undo it", () => {
     // The card's diff, the facts read for copy, and the builder's own
     // editor all read this value directly.
-    const { sections } = applyHomepageCopy(hero(), { subheadline: SUB });
+    const { sections } = applyEdits(hero(), [{ blockId: "t1", prop: "html", text: SUB }], null);
     const block = (sections as any)[0].children[0].children[1];
     expect(block.props.html).toBe(SUB);
     expect(block.props.html).not.toContain("<p>");

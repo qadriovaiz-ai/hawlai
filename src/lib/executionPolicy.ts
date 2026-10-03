@@ -85,6 +85,10 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // public copy about the business, written from a chat message, so it
   // is gated like the rest of this group rather than on cost.
   update_page_meta: { actionType: "edit", riskLevel: "medium", description: "Change the search title or meta description on a page of the merchant's own site — what Google and link previews show", requiresApproval: true },
+  // The words a visitor reads on the page itself. There is no draft
+  // layer inside a published site — website_pages IS what /site/{slug}
+  // renders — so an approved edit is public the moment it saves.
+  update_page_text: { actionType: "edit", riskLevel: "medium", description: "Change a heading, paragraph or button label on a page of the merchant's own site — what a visitor reads", requiresApproval: true },
 };
 
 export function getActionPolicy(actionKey: string): ActionPolicy | null {

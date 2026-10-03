@@ -431,9 +431,6 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   const publish = artifact.publish!;
   const [state, setState] = useState<"idle" | "confirming" | "working" | "done" | "rejected" | "error">("idle");
   const [note, setNote] = useState<string | null>(null);
-  // Saved, but the page isn't serving it yet — a third outcome that is
-  // neither the green tick nor an error, and must not be shown as either.
-  const [savedNotLive, setSavedNotLive] = useState(false);
 
   async function run(action: "publish" | "reject") {
     const spec = action === "publish" ? publish : publish.discard;
@@ -461,18 +458,6 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       // Instagram is best-effort inside the same call: say so rather than
       // letting "Posted" imply both channels got it.
       const igError = action === "publish" ? (data?.instagram?.error as string | undefined) : undefined;
-      // THE ENDPOINT'S READ-BACK WINS OVER `done`.
-      //
-      // `done` is written before anything happens, so it can only ever
-      // claim the save. When the endpoint went and fetched the public
-      // page, its sentence is the one with evidence behind it \u2014 including
-      // when the answer is that the page isn't serving the new wording.
-      const liveCheck = action === "publish" ? (data?.liveCheck as { verified: boolean; message: string } | undefined) : undefined;
-      if (liveCheck) {
-        setSavedNotLive(!liveCheck.verified);
-        setNote(liveCheck.verified ? `\u2705 ${liveCheck.message}` : liveCheck.message);
-        return;
-      }
       setNote(igError ? `${spec.done.replace(" and Instagram", "")} \u2014 Instagram skipped: ${igError}` : spec.done);
     } catch {
       setState("error");
@@ -483,7 +468,7 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   if (state === "done" || state === "rejected") {
     return (
       <div className="border-t border-slate-100 px-3 py-2">
-        <p className={`text-[11px] font-medium leading-snug ${state !== "done" ? "text-slate-500" : savedNotLive ? "text-amber-600" : "text-emerald-600"}`}>{note}</p>
+        <p className={`text-[11px] font-medium leading-snug ${state === "done" ? "text-emerald-600" : "text-slate-500"}`}>{note}</p>
       </div>
     );
   }

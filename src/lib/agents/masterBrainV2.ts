@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { websitePublishAction, socialPublishAction, homepageCopyAction, emailSendAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { websitePublishAction, socialPublishAction, emailSendAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
 import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
@@ -189,6 +189,59 @@ export const TOOLS = [
           description:
             "Which of these the person typed themselves, word for word. Their own wording is saved exactly as written — never shortened, never claim-checked away — and the card warns them if it says something their Business Story doesn't back up. Anything you wrote yourself must NOT be listed here: that goes through the claims check like every other piece of copy Hawlai writes.",
         },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "read_page",
+    description:
+      "Read what one page of the business's OWN Hawlai website says RIGHT NOW — every heading, paragraph and button, each with the block id that identifies it. ALWAYS call this before changing any wording on a page: edit_page_text needs a block id, and the ids only come from here. Call it too whenever they refer to something on their site — \"ye line hata do\", \"isko chhota karo\", \"about page pe kya likha hai\" — instead of answering from memory or from an earlier message, because Website Builder may have changed it since. It reads only; nothing changes and nothing needs approving. If the page isn't there it returns the list of pages that are — show that rather than guessing which one they meant.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"contact\", or its menu title. Defaults to the homepage." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "edit_page_text",
+    description:
+      "Change the words ON one page of the business's own Hawlai website — a heading, a paragraph or a button label — addressed by the block id read_page gave you. CALL read_page FIRST, always: without the real current text you would be replacing a line you have not seen. It shows an approval card with the exact before → after for every line and nothing changes until they approve; after approval Hawlai fetches the live page and reads the new wording back, and only says it is live when it is really being served. This does NOT touch the search title or meta description — that is propose_page_meta, and it must stay that way. It cannot add, remove or reorder sections, or add a page: say so plainly and point at Website Builder rather than attempting it another way. On a product or shop page it refuses and points at the catalogue tools, because those words belong to the product rows. On a legal page (privacy, terms, refunds) it still works but the card warns that legal wording is changing — never quietly drop a sentence from one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", description: "Which page — the slug or menu title read_page reported. Defaults to the homepage." },
+        edits: {
+          type: "array",
+          description: "One entry per line you are changing. Change only lines the person actually asked about.",
+          items: {
+            type: "object",
+            properties: {
+              blockId: { type: "string", description: "The block id from read_page. Never invent one, and never reuse an id from an earlier conversation — re-read the page." },
+              prop: { type: "string", enum: ["text", "heading", "html", "label"], description: "Which part of that block, exactly as read_page reported it: \"text\" or \"heading\" for a heading, \"html\" for a paragraph, \"label\" for a button." },
+              text: { type: "string", description: "The new wording. Plain text, or the markdown subset the site renders (**bold**, *italic*, [text](url)). NEVER HTML tags — the prop is called html for historical reasons and anything tag-like is printed to the visitor literally." },
+              writtenByOwner: {
+                type: "boolean",
+                description: "True ONLY when the person dictated these exact words. Their wording is then saved verbatim — never shortened, never claim-checked away — and it becomes something Hawlai may treat as a fact about the business afterwards. Anything you wrote yourself, including a draft they then approved, must be false: approving a draft is approving its publication, not vouching for it.",
+              },
+            },
+            required: ["blockId", "prop", "text"],
+          },
+        },
+      },
+      required: ["edits"],
+    },
+  },
+  {
+    name: "undo_page_edit",
+    description:
+      "Put a page's wording back to what it was before the last chat edit. USE THIS when they say \"undo that\", \"wapas kar do\", \"purana wala better tha\" about words on their website. It replays the exact previous text recorded on the edit that changed it, so nothing is regenerated and nothing is guessed. It shows an approval card like any other edit and changes nothing until they approve. It can only undo an edit made through chat — a change made in Website Builder has no record here, and a second undo does not go two steps back.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", description: "Which page, if they named one. Omit to undo the most recent chat edit on any page." },
       },
       required: [],
     },
@@ -499,24 +552,6 @@ export const TOOLS = [
     name: "get_website_analytics",
     description: "Get real website visitor analytics for the last 30 days — page views, chat opens, leads captured, engagement/conversion rate.",
     input_schema: { type: "object", properties: {}, required: [] },
-  },
-  {
-    name: "update_landing_page",
-    description: "Propose new wording for one section of the business's homepage — its heading, its supporting paragraph, or its button. Defaults to the hero (the top of the page); pass `section` whenever the person names a different part, e.g. \"the Diwali Gifting section\". NOTHING changes when you call this: it returns a card showing the old wording beside the new, and the owner approves it there. On a published site, approving makes it visible immediately. Only include the fields the person actually specified. It cannot add, delete or reorder sections, or change images — say so plainly if that is what was asked.",
-    input_schema: {
-      type: "object",
-      properties: {
-        headline: { type: "string" },
-        subheadline: { type: "string" },
-        offerText: { type: "string", description: "New button text." },
-        section: {
-          type: "string",
-          description:
-            "The section of the page to change, when the person names one (e.g. \"the Diwali Gifting section\", \"the gifting block below the hero\"). ALWAYS pass this if they referred to any part of the page other than the top — leaving it out edits the hero, which would be the wrong part of the page.",
-        },
-      },
-      required: [],
-    },
   },
   {
     name: "generate_3d_scene",
@@ -971,6 +1006,245 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id), input.exactText, seoFacts ?? await factsFor(supabase, ctx));
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck({ ...output, note: seoDraftNote(input.taskType, output) }, resolvedBrandVoice);
+    }
+    case "undo_page_edit": {
+      // REPLAYED FROM THE RECORD, never regenerated. The previous
+      // wording is stored on the publish action that changed it
+      // (preview.changes[].before), which is why this needs no new table
+      // and cannot drift from what was actually on the page.
+      const { data: lastAction } = await supabase
+        .from("publish_actions")
+        .select("id, target_ref, target_label, preview, executed_at")
+        .eq("dealership_id", ctx.id)
+        .eq("action_key", "update_page_text")
+        .eq("status", "executed")
+        .order("executed_at", { ascending: false })
+        .limit(5);
+      const candidates = (lastAction ?? []) as any[];
+      const askedPage = typeof input.page === "string" ? input.page.trim().toLowerCase() : null;
+      const chosen = askedPage
+        ? candidates.find((a) => String(a.target_label ?? "").toLowerCase().includes(askedPage))
+        : candidates[0];
+      if (!chosen) {
+        return {
+          error: askedPage
+            ? `I have no record of changing the words on "${input.page}" from chat, so there's nothing for me to put back. If it was changed in Website Builder, its history is there.`
+            : "I haven't changed any wording on your site from chat yet, so there's nothing to undo. A change made in Website Builder isn't recorded here.",
+          saved: false,
+        };
+      }
+
+      const previous = (chosen.preview?.changes ?? [])
+        .filter((c: any) => typeof c.field === "string" && c.field.includes(":") && typeof c.before === "string" && c.before.trim())
+        .map((c: any) => {
+          const [blockId, prop] = String(c.field).split(":");
+          return { blockId, prop: prop as any, text: String(c.before), restore: true as const };
+        });
+      if (previous.length === 0) {
+        return { error: "That edit didn't record what the line said before, so I can't put it back without guessing — and I won't guess at your page copy.", saved: false };
+      }
+
+      const { data: undoSite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
+      const { data: undoPage } = await supabase
+        .from("website_pages")
+        .select("id, slug, title, sections")
+        .eq("id", chosen.target_ref)
+        .eq("website_id", undoSite?.id ?? "")
+        .maybeSingle();
+      if (!undoSite || !undoPage) return { error: "That page isn't on your website any more, so there's nothing to put back.", saved: false };
+
+      const { applyEdits: applyUndo } = await import("../pages/editPage");
+      const undone = applyUndo(undoPage.sections, previous, null);
+      if (undone.applied.length === 0) {
+        return {
+          error: "The page already says what it said before that edit — there's nothing to put back.",
+          saved: false,
+        };
+      }
+
+      const { createPublishAction: createUndoAction } = await import("../publish/create");
+      const { createHawlaiSitePlatform: createUndoPlatform } = await import("../publish/platforms/hawlaiSite");
+      const { createServiceClient: makeUndoService } = await import("../supabase/service");
+      const undoService = makeUndoService();
+      const createdUndo = await createUndoAction(undoService, createUndoPlatform({ supabase: undoService }), {
+        dealershipId: ctx.id,
+        platform: "hawlai_site",
+        actionKey: "update_page_text",
+        targetRef: undoPage.id,
+        targetLabel: String(chosen.target_label ?? undoPage.slug),
+        requestedChanges: {
+          edits: undone.applied,
+          claimWarnings: ["This puts back exactly what the line said before, word for word — it isn't rewritten."],
+        },
+        requestedBy: null,
+        resolutionPath: "exact",
+        // The edit being undone, recorded as the query so the audit
+        // trail says which action this reverses.
+        resolutionDetail: { query: `undo of ${chosen.id}`, candidateCount: candidates.length, matchType: "direct", chosenRef: String(chosen.id) },
+      });
+      if (!createdUndo.ok) return { error: createdUndo.reason, saved: false };
+
+      return {
+        success: true,
+        approval_id: createdUndo.approvalId,
+        action_id: createdUndo.actionId,
+        page: undoPage.slug,
+        changed: undone.applied.map((a) => ({ what: a.blockType, from: a.before, to: a.after })),
+        summary: createdUndo.preview?.summary ?? "",
+        warnings: createdUndo.preview?.warnings ?? [],
+        note: "Waiting for approval — nothing has changed yet. This is one step back, to exactly what the line said before that edit.",
+      };
+    }
+    case "read_page":
+    case "edit_page_text": {
+      const { readPageContent } = await import("../pages/readPage");
+      const { applyEdits, legalWarning, CATALOGUE_REFUSAL } = await import("../pages/editPage");
+
+      const { data: pageSite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
+      if (!pageSite) return { error: "This business doesn't have a Hawlai website yet, so there are no pages to read. I can build one — just say the word." };
+
+      const { data: siteRows } = await supabase
+        .from("website_pages")
+        .select("id, slug, title, page_type, sections, content_source")
+        .eq("website_id", pageSite.id)
+        .order("order_index", { ascending: true });
+      const sitePages = (siteRows ?? []) as any[];
+      if (sitePages.length === 0) return { error: "Your website has no pages yet." };
+
+      const askedFor = String(input.page ?? "home").trim().toLowerCase();
+      const target =
+        sitePages.find((p) => String(p.slug).toLowerCase() === askedFor) ??
+        sitePages.find((p) => String(p.title ?? "").toLowerCase() === askedFor) ??
+        (askedFor === "home" ? sitePages.find((p) => p.slug === "home") ?? sitePages[0] : null);
+      // Asked for a page that isn't there: show what is. The predecessor
+      // fell through to the hero and reported success.
+      if (!target) {
+        return {
+          needs_clarification: true,
+          question: "Which page did you mean?",
+          candidates: sitePages.map((p) => ({ page: p.slug, title: p.title ?? p.slug })),
+        };
+      }
+
+      // The tree as it stands. Replaced by the converted one below when
+      // the page is still in the pre-block shape, so everything after
+      // this point reads one definition of "the page's sections".
+      let liveSections: unknown = target.sections;
+      let content = readPageContent(target);
+
+      // A page stored in the pre-block shape has no ids, so nothing on it
+      // can be addressed. Converted on first read — legacyToBlocks is the
+      // one place that knows what the old shapes meant, and the storefront
+      // already renders through it, so the page looks identical after.
+      // Saved rather than converted in memory each time: an id that
+      // changes between the read and the edit is not an address.
+      if (content.legacyShape) {
+        const { legacyToBlocks } = await import("../blocks/convertLegacy");
+        const converted = legacyToBlocks(target.sections as any);
+        const { error: convertError } = await supabase
+          .from("website_pages")
+          // content_source is deliberately NOT touched: converting the
+          // storage shape is not authorship of the words.
+          .update({ sections: converted, updated_at: new Date().toISOString() })
+          .eq("id", target.id)
+          .eq("website_id", pageSite.id);
+        if (convertError) {
+          return { error: `That page is stored in an older format and I couldn't convert it just now, so I can't address its lines: ${convertError.message}` };
+        }
+        liveSections = converted;
+        content = readPageContent({ ...target, sections: converted });
+      }
+
+      if (toolName === "read_page") {
+        return {
+          page: content.slug,
+          title: content.title,
+          url: `/site/${pageSite.slug}${content.slug === "home" ? "" : `/${content.slug}`}`,
+          published: Boolean(pageSite.published),
+          legal: content.legal,
+          catalogueDriven: content.catalogueDriven,
+          lines: content.lines,
+          otherPages: sitePages.filter((p) => p.id !== target.id).map((p) => ({ page: p.slug, title: p.title ?? p.slug })),
+          note:
+            content.lines.length === 0
+              ? "This page has no editable text blocks — it's built from blocks that hold no words, or from your catalogue."
+              : `Use these blockIds with edit_page_text.${content.catalogueDriven ? " This page is driven by your catalogue, so page-text edits are refused — product wording changes go through the catalogue tools." : ""}${content.legal ? " This is a legal page: it can be edited, but never drop a sentence from it quietly." : ""}`,
+        };
+      }
+
+      // ---- edit_page_text -------------------------------------------
+      if (content.catalogueDriven) return { error: CATALOGUE_REFUSAL, saved: false };
+
+      const rawEdits = Array.isArray(input.edits) ? input.edits : [];
+      const wanted = rawEdits
+        .filter((e: any) => e && typeof e.blockId === "string" && typeof e.text === "string" && String(e.text).trim())
+        .map((e: any) => ({ blockId: String(e.blockId), prop: String(e.prop ?? "text") as any, text: String(e.text), writtenByOwner: e.writtenByOwner === true }));
+      if (wanted.length === 0) return { error: "Tell me which line to change and what it should say." };
+
+      const editFacts = await factsFor(supabase, ctx);
+      const result = applyEdits(liveSections, wanted, editFacts);
+
+      if (result.applied.length === 0) {
+        const unknown = result.missing.filter((m) => !content.lines.some((l) => l.blockId === m.blockId));
+        if (unknown.length > 0) {
+          return {
+            error: "I don't have those lines on that page — read the page again and use the blockIds it gives you.",
+            saved: false,
+            lines: content.lines.map((l) => ({ blockId: l.blockId, prop: l.prop, text: l.text })),
+          };
+        }
+        return {
+          error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left on the page.",
+          saved: false,
+          note: "Write it again from what the business can actually support, or ask them to add the missing fact to their Business Story first. Do not simply resend the same wording.",
+        };
+      }
+
+      const claimWarnings = [...result.warnings];
+      if (result.removed.length > 0) {
+        claimWarnings.push(`Taken out, because your Business Story doesn't support it: ${result.removed.join("; ")}.`);
+      }
+      if (result.contactsRemoved.length > 0 && result.warnings.length === 0) {
+        claimWarnings.push(`Left off the page, because Hawlai has no record of ${result.contactsRemoved.length === 1 ? "it" : "them"}: ${result.contactsRemoved.join("; ")}.`);
+      }
+      const legalNote = content.legal ? legalWarning(result.applied) : null;
+      if (legalNote) claimWarnings.push(legalNote);
+
+      const { createPublishAction: createTextAction } = await import("../publish/create");
+      const { createHawlaiSitePlatform: createTextPlatform } = await import("../publish/platforms/hawlaiSite");
+      const { createServiceClient: makeTextService } = await import("../supabase/service");
+      const textService = makeTextService();
+      const createdText = await createTextAction(textService, createTextPlatform({ supabase: textService }), {
+        dealershipId: ctx.id,
+        platform: "hawlai_site",
+        actionKey: "update_page_text",
+        targetRef: target.id,
+        targetLabel: `${target.title ?? target.slug} (/site/${pageSite.slug}${target.slug === "home" ? "" : `/${target.slug}`})`,
+        requestedChanges: { edits: result.applied, claimWarnings },
+        requestedBy: null,
+        resolutionPath: "exact",
+        resolutionDetail: { query: askedFor, candidateCount: sitePages.length, matchType: "exact" },
+      });
+      if (!createdText.ok) {
+        return {
+          error: createdText.reason,
+          saved: false,
+          note:
+            "Nothing was saved anywhere — this failed before any record was written, so there is no draft and no retry waiting. " +
+            "Do NOT tell them their wording is being held or that you will apply it later: none of that is true. Say plainly that it did not go through and nothing was stored.",
+        };
+      }
+
+      return {
+        success: true,
+        approval_id: createdText.approvalId,
+        action_id: createdText.actionId,
+        page: target.slug,
+        changed: result.applied.map((a) => ({ what: a.blockType, from: a.before, to: a.after })),
+        summary: createdText.preview?.summary ?? "",
+        warnings: createdText.preview?.warnings ?? [],
+        note: `Waiting for approval — nothing on the page has changed yet.${pageSite.published ? " When they approve, it's live immediately and I'll read the page back to confirm." : " Their site isn't published, so it won't be public until they publish it."}`,
+      };
     }
     case "propose_page_meta": {
       const { createPublishAction: createMetaAction } = await import("../publish/create");
@@ -2127,55 +2401,6 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const formSubmits = all.filter((e: any) => e.event_type === "form_submit").length;
       return { views, chatOpens: all.filter((e: any) => e.event_type === "chat_open").length, formSubmits, conversionRate: views > 0 ? (formSubmits / views) * 100 : null };
     }
-    case "update_landing_page": {
-      // WRITES NOTHING. This used to update the legacy `landing_pages`
-      // table and answer "changes are live immediately" — but
-      // /site/{slug} renders website_pages.sections, so the change could
-      // never appear there, and for a business with no landing_pages row
-      // the update matched ZERO rows, which Supabase reports as success
-      // with error: null. Reported live, actually nothing, twice over.
-      //
-      // Now it proposes an edit to the page the site really renders, and
-      // the owner approves it on the card (src/lib/chat/publishActions).
-      const requested = { headline: input.headline, subheadline: input.subheadline, ctaText: input.offerText };
-      if (!requested.headline && !requested.subheadline && !requested.ctaText) return { error: "Nothing to update" };
-
-      const { data: website, error: siteError } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
-      if (siteError) return { error: "Couldn't read your website just now — nothing was changed. Try again in a moment." };
-      if (!website?.id) return { error: "There's no website built yet, so there's no homepage to change — ask me to build your website first." };
-
-      const { data: page, error: pageError } = await supabase.from("website_pages").select("id, sections, updated_at").eq("website_id", website.id).eq("slug", "home").maybeSingle();
-      if (pageError) return { error: "Couldn't read your home page just now — nothing was changed. Try again in a moment." };
-      if (!page?.id) return { error: "Your site doesn't have a home page yet — open Website Builder and generate it first." };
-
-      const { applyHomepageCopy } = await import("../chat/homepageCopy");
-      const { sections, changed, sectionHeading, sectionNotFound, available } = applyHomepageCopy(page.sections, requested, { section: input.section });
-      // Named a section that isn't on the page: say which sections ARE,
-      // rather than editing the hero and calling it done.
-      if (sectionNotFound) {
-        return {
-          error: `I couldn't find a "${input.section}" section on your home page. The sections I can see are: ${available.length ? available.map((h: string) => `"${h}"`).join(", ") : "(none with a heading)"}. Tell me which one to change, or edit it directly in Website Builder.`,
-        };
-      }
-      if (changed.length === 0) {
-        return {
-          error: `I couldn't find a heading, paragraph or button to change in ${sectionHeading ? `"${sectionHeading}"` : "that part of the page"}. I can only rewrite existing text — adding, removing or reordering sections has to be done in Website Builder.`,
-        };
-      }
-
-      return {
-        success: true,
-        proposed: true,
-        pageId: page.id,
-        sections,
-        expectedUpdatedAt: page.updated_at ?? null,
-        published: Boolean(website.published),
-        siteUrl: `/site/${website.slug}`,
-        changed,
-        sectionHeading,
-        note: `Nothing has changed yet — the new wording for ${sectionHeading ? `the "${sectionHeading}" section` : "your homepage"} is on the card below, waiting for your approval.${website.published ? " Your site is live, so approving makes it visible straight away." : ""}`,
-      };
-    }
     case "generate_3d_scene": {
       const { data: scene, error: insertError } = await supabase.from("three_d_scenes").insert({
         dealership_id: ctx.id, name: input.prompt.slice(0, 60), prompt: input.prompt, status: "pending",
@@ -2906,7 +3131,6 @@ const DEPARTMENT_HREF: Record<string, string> = {
   get_follow_up_reminders: "/dashboard/leads-hub",
   get_booking_link: "/dashboard/appointments",
   get_website_analytics: "/dashboard/analytics",
-  update_landing_page: "/dashboard/website-builder",
   generate_3d_scene: "/dashboard/3d-studio",
   publish_to_youtube: "/dashboard/video-marketing",
   create_product_ad: "/design-editor",
@@ -3551,29 +3775,6 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: "Watch added", departmentHref };
     case "remember_insight":
       return { kind: "record", label: "Remembered for next time", summary: result.note, departmentHref };
-    case "update_landing_page": {
-      if (!result.proposed || !result.pageId) return { kind: "record", label: "Homepage copy", summary: result.note, departmentHref };
-      const FIELD_LABEL: Record<string, string> = { headline: "Headline", subheadline: "Subheadline", ctaText: "Button" };
-      return {
-        kind: "document",
-        label: `${result.sectionHeading ? `"${result.sectionHeading}"` : "Homepage"} — ${result.published ? "approve to make it live" : "approve to update the draft"}`,
-        // The old wording beside the new one: approving replaces what a
-        // visitor reads, so the card shows what is being replaced.
-        fields: (result.changed ?? []).map((c: any) => ({ label: FIELD_LABEL[c.field] ?? c.field, value: `"${c.from || "(empty)"}" → "${c.to}"` })),
-        summary: result.note,
-        departmentHref,
-        publish: homepageCopyAction({
-          pageId: result.pageId,
-          sections: result.sections,
-          expectedUpdatedAt: result.expectedUpdatedAt,
-          published: Boolean(result.published),
-          siteUrl: result.siteUrl,
-          // The approved wording, so the endpoint can fetch the public
-          // page and check it is serving it before anyone says "live".
-          newText: (result.changed ?? []).map((c: any) => String(c.to ?? "")),
-        }),
-      };
-    }
     case "publish_to_youtube":
       return { kind: "link", label: "Published to YouTube", url: result.url, departmentHref };
 
@@ -3650,6 +3851,64 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
               ]
             : undefined,
         },
+        departmentHref,
+      };
+    }
+
+    case "read_page": {
+      if (result?.needs_clarification) {
+        return {
+          kind: "document",
+          label: "Which page?",
+          groups: [{ heading: "Pages on your site", items: (result.candidates ?? []).map((c: any) => ({ label: c.title, note: `/${c.page}` })) }],
+          departmentHref,
+        };
+      }
+      if (!Array.isArray(result?.lines)) return { kind: "record", label: "Page", summary: result?.note ?? "", departmentHref };
+      // Read-only: no approval, no buttons. The block ids are for the
+      // model to address lines with, not for the owner to read, so the
+      // card shows the words and which part of the page they are.
+      const WHAT: Record<string, string> = { text: "Heading", heading: "Heading", html: "Paragraph", label: "Button" };
+      return {
+        kind: "document",
+        label: `${result.title ?? result.page} — what it says now`,
+        groups: [
+          {
+            heading: String(result.url ?? ""),
+            items: result.lines.map((l: any) => ({ label: String(l.text), note: WHAT[l.prop] ?? l.prop })),
+          },
+        ],
+        summary: result.note ?? "",
+        departmentHref,
+      };
+    }
+
+    case "undo_page_edit":
+    case "edit_page_text": {
+      if (result?.needs_clarification) {
+        return {
+          kind: "document",
+          label: "Which page?",
+          groups: [{ heading: "Pages on your site", items: (result.candidates ?? []).map((c: any) => ({ label: c.title, note: `/${c.page}` })) }],
+          departmentHref,
+        };
+      }
+      if (!result?.approval_id) return { kind: "record", label: "Page copy", summary: result?.error ?? result?.note ?? "", departmentHref };
+      const WHAT_CHANGED: Record<string, string> = { heading: "Heading", text: "Paragraph", button: "Button" };
+      return {
+        kind: "document",
+        label: `${result.page === "home" ? "Homepage" : result.page} — ${toolName === "undo_page_edit" ? "approve to put the old wording back" : "approve to change the words"}`,
+        // THE OLD WORDING BESIDE THE NEW ONE, per line. Approving this
+        // replaces what a visitor reads, so the card shows exactly what
+        // is being replaced rather than a summary of the intent.
+        fields: (result.changed ?? []).map((c: any) => ({
+          label: WHAT_CHANGED[c.what] ?? String(c.what),
+          value: `"${c.from || "(empty)"}" → "${c.to}"`,
+        })),
+        summary: [result.note, ...(result.warnings ?? [])].filter(Boolean).join(" "),
+        // The decision lives on the card, through publish_actions — not
+        // through a second publish path of chat's own.
+        approval: { id: result.approval_id, publishActionId: result.action_id },
         departmentHref,
       };
     }

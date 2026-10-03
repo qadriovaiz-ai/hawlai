@@ -62,7 +62,23 @@ export type ActionKey =
    * together in a search result and an owner approving one without
    * seeing the other is approving half a sentence.
    */
-  | "update_page_meta";
+  | "update_page_meta"
+  /**
+   * Change the words IN one page of the business's own site — a heading,
+   * a paragraph, a button label — addressed by block id.
+   *
+   * Separate from update_page_meta on purpose, and the separation is a
+   * safety property rather than tidiness: the meta action owns seo_title
+   * and meta_description, the two lines Google reads, and this one must
+   * never touch them. One action key that could write either would make
+   * "chat changed my search title" and "chat changed my homepage" the
+   * same audit record.
+   *
+   * Approval-gated because there is no draft layer inside a published
+   * site: website_pages IS what /site/{slug} renders, so an approved
+   * edit is public the moment it saves.
+   */
+  | "update_page_text";
 
 /**
  * One field changing, in terms a person can check.
@@ -235,6 +251,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "launch_ad_campaign",
   "activate_ad_campaign",
   "update_page_meta",
+  "update_page_text",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -253,4 +270,8 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   // Nothing spends, but it changes what every stranger who finds this
   // business in a search result reads first.
   update_page_meta: "medium",
+  // Nothing spends, and it is reversible — but a published site has no
+  // draft layer, so an approved edit is what every visitor reads from
+  // the moment it saves.
+  update_page_text: "medium",
 };

@@ -39,6 +39,10 @@ type PageRow = {
   seo_title: string | null;
   meta_description: string | null;
   og_image_url: string | null;
+  /** The block tree. Read for update_page_text; untouched by the meta action. */
+  sections?: unknown;
+  page_type?: string | null;
+  content_source?: string | null;
 };
 
 type SiteRow = { id: string; slug: string; published: boolean | null; dealership_id: string };
@@ -65,7 +69,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
   async function readPage(dealershipId: string, pageId: string): Promise<ReadResult> {
     const { data: page, error } = await deps.supabase
       .from("website_pages")
-      .select("id, website_id, slug, title, seo_title, meta_description, og_image_url")
+      .select("id, website_id, slug, title, seo_title, meta_description, og_image_url, sections, page_type, content_source")
       .eq("id", pageId)
       .maybeSingle();
 
@@ -94,9 +98,220 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
     return { ok: true, page: page as PageRow, site: site as SiteRow };
   }
 
+  /**
+   * One line's current text on the page, for the staleness check.
+   *
+   * The baseline for a body edit cannot be a column — it is one prop of
+   * one block inside a JSON tree. So execute re-reads the tree and looks
+   * the block up again by id, which is also what makes "someone changed
+   * this in Website Builder while the card was open" detectable.
+   */
+  function lineNow(sections: unknown, blockId: string, prop: string): string | null {
+    let found: string | null = null;
+    const walk = (node: unknown): void => {
+      if (found !== null || !node) return;
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (typeof node !== "object") return;
+      const b = node as Record<string, any>;
+      if (b.id === blockId && b.props && typeof b.props === "object" && typeof b.props[prop] === "string") {
+        found = String(b.props[prop]).replace(/<[^>]*>/g, "").trim();
+        return;
+      }
+      walk(b.children);
+    };
+    walk(sections);
+    return found;
+  }
+
+  /** The body-text edits a card carries, as the chat tool recorded them. */
+  function textEdits(changes: Record<string, unknown>): { blockId: string; prop: string; blockType: string; before: string; after: string; source: string }[] {
+    const raw = changes.edits;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((e: any) => e && typeof e.blockId === "string" && typeof e.prop === "string" && typeof e.after === "string")
+      .map((e: any) => ({
+        blockId: String(e.blockId),
+        prop: String(e.prop),
+        blockType: String(e.blockType ?? "block"),
+        before: String(e.before ?? ""),
+        after: String(e.after),
+        source: e.source === "edited" ? "edited" : "generated",
+      }));
+  }
+
+  async function previewText(action: PublishActionRecord): Promise<PreviewResult> {
+    if (!action.targetRef) return { ok: false, reason: "No page was specified." };
+    const read = await readPage(action.dealershipId, action.targetRef);
+    if (!read.ok) return { ok: false, reason: read.reason };
+    if (!read.page || !read.site) return { ok: false, reason: "That page is no longer on your website." };
+    const { page, site } = read;
+
+    const edits = textEdits(action.requestedChanges);
+    if (edits.length === 0) return { ok: false, reason: "Nothing to change — tell me which line to change and what it should say." };
+
+    // WHAT IT SAYS NOW, re-read from the page rather than trusted from
+    // the card. The whole value of a preview is that it shows the
+    // approver the page's real current wording, not the wording the chat
+    // message happened to quote.
+    const changes: FieldChange[] = [];
+    const vanished: string[] = [];
+    for (const edit of edits) {
+      const now = lineNow(page.sections, edit.blockId, edit.prop);
+      if (now === null) {
+        vanished.push(edit.before || edit.blockId);
+        continue;
+      }
+      changes.push({ field: `${edit.blockId}:${edit.prop}`, before: now, after: edit.after });
+    }
+    if (changes.length === 0) {
+      return { ok: false, reason: "The lines I was going to change aren't on the page any more — ask me to read the page again and we'll start from what's there now." };
+    }
+
+    const warnings: string[] = [];
+    if (vanished.length > 0) {
+      warnings.push(`${vanished.length === 1 ? "One line has" : `${vanished.length} lines have`} been changed or removed on the page since I read it, so ${vanished.length === 1 ? "it isn't" : "they aren't"} included: "${vanished.slice(0, 2).join('", "')}".`);
+    }
+    for (const change of changes) {
+      if (sameText(change.before, change.after)) warnings.push(`"${change.after.slice(0, 50)}" is already what that line says — approving will change nothing.`);
+    }
+    // Claims, contact details and the legal-page notice, raised when the
+    // action was created. Shown, never enforced: the approver decides.
+    for (const warning of Array.isArray(action.requestedChanges.claimWarnings) ? action.requestedChanges.claimWarnings : []) {
+      if (typeof warning === "string" && warning.trim()) warnings.push(warning);
+    }
+    // There is no draft layer: website_pages IS what /site/{slug}
+    // renders, so this says which of the two situations the owner is in
+    // rather than one vague sentence for both.
+    warnings.push(
+      site.published === false
+        ? "This website isn't published, so nothing becomes public until you publish it in Website Builder."
+        : `This changes your LIVE page straight away — anyone visiting /site/${site.slug}${page.slug === "home" ? "" : `/${page.slug}`} sees the new wording immediately.`
+    );
+
+    const shown = (value: string | null) => (value && value.trim() ? `"${value.length > 70 ? `${value.slice(0, 70)}…` : value}"` : "(empty)");
+    return {
+      ok: true,
+      preview: {
+        summary: `${page.title ?? page.slug} page — ${changes.map((c) => `${shown(c.before)} → ${shown(c.after)}`).join("  ·  ")}`,
+        target: {
+          title: `${page.title ?? page.slug} (/site/${site.slug}${page.slug === "home" ? "" : `/${page.slug}`})`,
+          variantTitle: null,
+          currentPrice: null,
+          currency: null,
+          currencyLabel: null,
+          imageUrl: null,
+          resolutionPath: action.resolutionPath ?? undefined,
+        },
+        changes,
+        warnings,
+      },
+    };
+  }
+
+  async function executeText(action: PublishActionRecord): Promise<ExecuteResult> {
+    if (!action.targetRef) return { ok: false, reason: "No page was specified." };
+    if (!action.preview) return { ok: false, reason: "This action was never previewed." };
+
+    const read = await readPage(action.dealershipId, action.targetRef);
+    if (!read.ok) return { ok: false, reason: read.reason };
+    if (!read.page || !read.site) return { ok: false, reason: "That page is no longer on your website." };
+    const { page, site } = read;
+
+    const expected = action.preview.changes.filter((c) => c.field.includes(":"));
+    if (expected.length === 0) return { ok: false, reason: "The preview did not record anything to verify against." };
+
+    // ALREADY AT THE TARGET before STALE, same order as the meta action
+    // and for the same reason: a successful write followed by a timeout
+    // and a retry would otherwise compare the new text against the
+    // recorded before and demand re-approval for something that worked.
+    const atTarget = expected.every((c) => sameText(lineNow(page.sections, c.field.split(":")[0], c.field.split(":")[1]), c.after));
+    const moved = expected.filter((c) => {
+      const now = lineNow(page.sections, c.field.split(":")[0], c.field.split(":")[1]);
+      return now !== null && !sameText(now, c.before) && !sameText(now, c.after);
+    });
+    if (!atTarget && moved.length > 0) {
+      publishError("hawlai_site.text_stale", { action: action.id, page: page.id, fields: moved.map((c) => c.field).join(", ") });
+      return {
+        ok: false,
+        stale: true,
+        changed: moved.map((c) => ({ field: c.field, before: c.before, after: String(lineNow(page.sections, c.field.split(":")[0], c.field.split(":")[1]) ?? "") })),
+      };
+    }
+
+    const edits = textEdits(action.requestedChanges);
+    if (!atTarget) {
+      // Re-applied to the tree AS IT IS NOW, not to the copy taken at
+      // preview time — an unrelated block someone edited in Website
+      // Builder meanwhile must not be rolled back by this save.
+      const { applyEdits, contentSourceAfter } = await import("@/lib/pages/editPage");
+      const result = applyEdits(
+        page.sections,
+        // Already guarded when the card was built; re-guarding here with
+        // no facts would be a second, different answer. The text that was
+        // APPROVED is what goes on the page.
+        expected.map((c) => {
+          const [blockId, prop] = c.field.split(":");
+          const edit = edits.find((e) => e.blockId === blockId && e.prop === prop);
+          return { blockId, prop: prop as any, text: c.after, writtenByOwner: edit?.source === "edited" };
+        }),
+        null
+      );
+      if (result.applied.length === 0) {
+        publishError("hawlai_site.text_matched_nothing", { action: action.id, page: page.id });
+        return { ok: false, reason: "The lines I was going to change aren't on the page any more, so nothing was saved." };
+      }
+
+      const update: Record<string, unknown> = { sections: result.sections, updated_at: new Date().toISOString() };
+      // ONLY WHEN THE OWNER WROTE THE WORDS. Approving a draft Hawlai
+      // wrote is approving its publication, not vouching for it — and a
+      // line Hawlai wrote must never become the evidence that the same
+      // line is true. The page endpoint flipped this on any word change,
+      // which reopened exactly that loop.
+      const nextSource = contentSourceAfter(result.applied);
+      if (nextSource) update.content_source = nextSource;
+
+      publishLog("hawlai_site.text_write", { action: action.id, page: page.id, lines: result.applied.length, owner: Boolean(nextSource) });
+      const { data: updated, error } = await deps.supabase
+        .from("website_pages")
+        .update(update)
+        .eq("id", page.id)
+        .eq("website_id", site.id)
+        .select("id")
+        .maybeSingle();
+      if (error) {
+        publishError("hawlai_site.text_write_failed", { action: action.id, page: page.id, detail: error.message });
+        return { ok: false, reason: `Couldn't save the change to your website: ${error.message}` };
+      }
+      if (!updated) {
+        publishError("hawlai_site.text_write_matched_nothing", { action: action.id, page: page.id });
+        return { ok: false, reason: "The change matched no page on your website, so nothing was saved." };
+      }
+    }
+
+    // THE READ-BACK. The write is above; this is the only part that can
+    // honestly use the word "live". A failed read downgrades the
+    // message — it never reports a failed write.
+    const { readLiveText, verifyTextLive } = await import("@/lib/seo/liveText");
+    const verification =
+      site.published === false
+        ? { verified: false, url: "", message: "Saved. Your site isn't published yet, so nothing is public — publish it and the new wording goes live.", missing: [] }
+        : verifyTextLive(expected.map((c) => c.after), await readLiveText(site.slug, page.slug, { fetchImpl: deps.fetchImpl, baseUrl: deps.baseUrl }));
+
+    publishLog("hawlai_site.text_write_ok", { action: action.id, page: page.id, verified: verification.verified, url: verification.url });
+    return {
+      ok: true,
+      platformResponse: {
+        pageId: page.id,
+        fields: expected.map((c) => c.field),
+        skipped: atTarget ? "already at the requested wording" : undefined,
+        verification,
+      },
+    };
+  }
+
   return {
     id: "hawlai_site",
-    supports: ["update_page_meta"] as const,
+    supports: ["update_page_meta", "update_page_text"] as const,
 
     async isConnected(dealershipId: string): Promise<boolean> {
       const { data, error } = await deps.supabase.from("websites").select("id").eq("dealership_id", dealershipId).limit(1);
@@ -105,6 +320,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
     },
 
     async preview(action: PublishActionRecord): Promise<PreviewResult> {
+      if (action.actionKey === "update_page_text") return previewText(action);
       if (action.actionKey !== "update_page_meta") return { ok: false, reason: `Your website can't do "${action.actionKey}".` };
       if (!action.targetRef) return { ok: false, reason: "No page was specified." };
 
@@ -183,6 +399,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
     },
 
     async execute(action: PublishActionRecord): Promise<ExecuteResult> {
+      if (action.actionKey === "update_page_text") return executeText(action);
       if (action.actionKey !== "update_page_meta") return { ok: false, reason: `Execute for "${action.actionKey}" is not built yet.` };
       if (!action.targetRef) return { ok: false, reason: "No page was specified." };
       if (!action.preview) return { ok: false, reason: "This action was never previewed." };

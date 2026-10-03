@@ -28,25 +28,6 @@ async function ownsPage(supabase: any, pageId: string, dealershipId: string) {
   return data && (data as any).websites?.dealership_id === dealershipId;
 }
 
-/**
- * Where this page is public, read from the page itself.
- *
- * Deliberately NOT taken from the request: the caller asks for a
- * read-back and nothing more. A client-supplied slug would let the check
- * be pointed at a page that does have the text, and report "live" about
- * one that doesn't.
- */
-async function publicAddressOf(supabase: any, pageId: string) {
-  const { data } = await supabase
-    .from("website_pages")
-    .select("slug, websites!inner(slug, published)")
-    .eq("id", pageId)
-    .maybeSingle();
-  if (!data) return null;
-  const site = (data as any).websites;
-  return { pageSlug: String((data as any).slug ?? "home"), siteSlug: String(site?.slug ?? ""), published: Boolean(site?.published) };
-}
-
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -114,33 +95,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data: updated, error } = await supabase.from("website_pages").update(update).eq("id", id).select("updated_at").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // READ THE PAGE BACK, when the caller is about to tell someone it's live.
-  //
-  // Only chat asks for this. Website Builder saves while the owner is
-  // looking at the canvas and can see the result for themselves, so
-  // spending an outbound request on every keystroke-driven save would buy
-  // nothing. Chat's approval card, by contrast, had no way to know: it
-  // read a 200 from this route and answered "✅ Updated your live
-  // homepage" — the same unfounded claim the meta flow was fixed for.
-  //
-  // A failed read is never reported as a failed write. The row is saved
-  // either way; what's in doubt is only whether the page is serving it.
-  const verifyText: string[] = Array.isArray(body.verifyText)
-    ? body.verifyText.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
-    : [];
-  let liveCheck: { verified: boolean; url: string; message: string; missing: string[] } | undefined;
-  if (verifyText.length > 0) {
-    const address = await publicAddressOf(supabase, id);
-    if (!address?.siteSlug) {
-      liveCheck = { verified: false, url: "", message: "Saved. I couldn't work out this site's public address, so I haven't confirmed the page is serving it.", missing: verifyText };
-    } else if (!address.published) {
-      // Not a failure, and not live: there is no public page to read.
-      liveCheck = { verified: false, url: "", message: "Saved to your homepage. Your site isn't published yet, so nothing is public — publish it and the new wording goes live.", missing: [] };
-    } else {
-      const { readLiveText, verifyTextLive } = await import("@/lib/seo/liveText");
-      liveCheck = verifyTextLive(verifyText, await readLiveText(address.siteSlug, address.pageSlug));
-    }
-  }
-
-  return NextResponse.json({ success: true, updatedAt: updated?.updated_at, ...(liveCheck ? { liveCheck } : {}) });
+  return NextResponse.json({ success: true, updatedAt: updated?.updated_at });
 }
