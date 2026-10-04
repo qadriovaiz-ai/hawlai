@@ -201,3 +201,74 @@ describe("the card counts sentences", () => {
     expect(route).toMatch(/flags: flags\.length/);
   });
 });
+
+// ---- a fact recorded once, in any tense -----------------------------
+
+/** The owner's Business Story rows, Hinglish included, as recorded. */
+const STORY = [
+  { category: "business_story", title: "Wax", content: "Paraffin-free. Soy wax only." },
+  { category: "business_story", title: "How", content: "Hand-poured in small batches." },
+  { category: "business_story", title: "Where", content: "Made in Shahjahanpur, Uttar Pradesh." },
+  { category: "business_story", title: "Promise", content: "Jab candle jalti hai, woh cheez jo main promise karti hoon (clean burn) woh khatam ho jaati hai." },
+] as any;
+
+describe("'clean burning' against a Business Story that says 'clean burn'", () => {
+  it("counts the verb form as evidence for the adjective", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const f = { ...facts(), ownerFacts: STORY } as BusinessFacts;
+    // THE BUG: "clean burning" was flagged as something the business
+    // "doesn't claim anywhere" while their own story said "(clean
+    // burn)". They had claimed it, in the verb form. The Hinglish was
+    // never the problem — ownerFacts go into knownText verbatim
+    // whatever the language — it was "burning" against "burn", which
+    // would have bitten an English sentence identically.
+    expect(findUnsupportedClaims("Just clean burning candles, poured by hand.", f)).toEqual([]);
+    expect(findUnsupportedClaims("Clean-burning soy wax.", f)).toEqual([]);
+  });
+
+  it("still flags a material the story never mentions", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const f = { ...facts(), ownerFacts: STORY } as BusinessFacts;
+    // The grouping must not become a licence for everything nearby.
+    for (const claim of ["Lead-free cotton wicks.", "Made with essential oils.", "Award winning candles."]) {
+      expect(findUnsupportedClaims(claim, f).length, claim).toBeGreaterThan(0);
+    }
+  });
+
+  it("and a comparison is flagged even with the story in hand", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    const f = { ...facts(), ownerFacts: STORY } as BusinessFacts;
+    expect(findUnsupportedClaims("Safer than mass-market paraffin.", f).length).toBeGreaterThan(0);
+  });
+
+  it("matches tense in both directions, not only -ing to bare", async () => {
+    const { findUnsupportedClaims } = await import("@/lib/claims/claimCheck");
+    // A story written "hand-pours every candle" backs "hand poured".
+    const f = { ...facts(), ownerFacts: [{ category: "business_story", title: "How", content: "She hand pours every candle herself." }] as any } as BusinessFacts;
+    expect(findUnsupportedClaims("Hand-poured candles.", f)).toEqual([]);
+  });
+});
+
+// ---- the Christmas headline in October ------------------------------
+
+describe("the website builder writes to the festival calendar", () => {
+  it("puts the facts, the season and the truth rules in its prompt", async () => {
+    const { readFileSync } = await import("fs");
+    const agent = readFileSync("src/lib/agents/websiteBuilderAgent.ts", "utf8");
+    // THE CAUSE of "Light Up the Season — Handcrafted Candles for a Warm
+    // Christmas Gift" on an Indian candle shop's homepage in October,
+    // with Navratri eight days away: the builder took `facts` only to
+    // run guardBlockTree over the FINISHED page. A check on the way out
+    // with nothing on the way in, so it wrote from instinct — and the
+    // Season block and SEASON_TRUTH_RULE both existed already.
+    expect(agent).toMatch(/\$\{factsPrompt\(facts\)\}/);
+    expect(agent).toMatch(/facts\?: BusinessFacts \| null/);
+  });
+
+  it("and the rule it now receives is the one about festival timing", async () => {
+    const { COPY_TRUTH_RULES, formatFactsForCopy } = await import("@/lib/claims/businessFacts");
+    expect(COPY_TRUTH_RULES).toMatch(/write for a festival only while it's happening or its campaign window is open/);
+    // The Season facts travel with it, so "which festival" is answerable.
+    expect(formatFactsForCopy(facts())).toMatch(/Today is/i);
+  });
+});

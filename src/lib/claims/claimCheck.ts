@@ -105,10 +105,53 @@ const CLAIM_SYNONYMS: string[][] = [
   ["cruelty free", "not tested on animals"],
 ];
 
+/**
+ * The grammatical forms of the same claim.
+ *
+ * WHY THIS EXISTS: "clean burning" was flagged as something the business
+ * "doesn't claim anywhere", while their own Business Story said, in
+ * Hinglish, "…woh cheez jo main promise karti hoon (clean burn) woh
+ * khatam ho jaati hai". They had claimed it — in the verb form. The
+ * evidence set is matched as plain text, so "clean burning" was not a
+ * substring of "clean burn" and the owner was asked to confirm a fact
+ * they had already written down.
+ *
+ * The Hinglish was never the problem: ownerFacts go into knownText
+ * verbatim, whatever language they are in. The problem was "burning" vs
+ * "burn", and it would have bitten an English sentence identically.
+ */
+function wordForms(term: string): string[] {
+  const forms = new Set<string>([term]);
+  const words = term.split(" ");
+  const last = words[words.length - 1];
+  const rest = words.slice(0, -1).join(" ");
+  const with_ = (tail: string) => (rest ? `${rest} ${tail}` : tail);
+
+  if (last.endsWith("ing") && last.length > 5) {
+    const stem = last.slice(0, -3);
+    forms.add(with_(stem));
+    forms.add(with_(`${stem}s`));
+    forms.add(with_(`${stem}ed`));
+    // "burning" -> "burn", but also doubled consonants: "potting" ->
+    // "pot". Only when the doubled letter is the same.
+    if (stem.length > 2 && stem[stem.length - 1] === stem[stem.length - 2]) forms.add(with_(stem.slice(0, -1)));
+  } else if (last.endsWith("ed") && last.length > 4) {
+    const stem = last.slice(0, -2);
+    forms.add(with_(stem));
+    forms.add(with_(`${stem}ing`));
+  } else if (last.length > 2) {
+    forms.add(with_(`${last}ing`));
+    forms.add(with_(`${last}s`));
+  }
+  return [...forms];
+}
+
 /** Whether the business has said this claim, in this wording or an equal one. */
 function saidAnyOf(known: string, term: string): boolean {
   const family = CLAIM_SYNONYMS.find((group) => group.includes(term)) ?? [term];
-  return family.some((wording) => known.includes(wording));
+  // Every synonym, in every form of its last word. A fact recorded once
+  // should not have to be recorded again in a different tense.
+  return family.flatMap(wordForms).some((wording) => known.includes(wording));
 }
 
 // Every way copy says shipping costs nothing — English and Hinglish.

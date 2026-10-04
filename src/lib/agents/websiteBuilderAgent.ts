@@ -10,10 +10,16 @@
 
 import { BLOCK_REGISTRY, generateBlockId } from "@/lib/blocks/registry";
 import { legacyToBlocks } from "@/lib/blocks/convertLegacy";
+// THE BUILDER HAD THE FACTS AND NEVER PUT THEM IN ITS PROMPT. It took
+// `facts` only to run guardBlockTree over the finished page — a check on
+// the way out with nothing on the way in — so it wrote from instinct and
+// was corrected afterwards. That is why an Indian candle shop's homepage
+// said "Warm Christmas Gift" in October: the Season block and
+// SEASON_TRUTH_RULE both existed and neither reached the model.
+import { factsPrompt, type BusinessFacts } from "@/lib/claims/businessFacts";
 import { getModel } from "../models";
 import { fitMetaDescription } from "@/lib/seo/metaLength";
 import { guardBlockTree, markGenerated } from "@/lib/claims/guardBlocks";
-import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { callClaude, withAiFailure, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 
@@ -358,7 +364,8 @@ async function generatePageBlocks(
   customInstructions: string | null,
   fallback: GeneratedPage,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  groundingContext?: string,
+  facts?: BusinessFacts | null
 ): Promise<{ page: GeneratedPage; fellBack: boolean; reason?: string; aiFailure?: AiFailureNote }> {
   try {
     const r = await callClaude({
@@ -380,7 +387,7 @@ async function generatePageBlocks(
       messages: [{
         role: "user",
         content: `You are building the "${page.title}" page (slug: ${page.slug}, type: ${page.pageType}) for a REAL, SPECIFIC business: "${dealershipName}", a ${businessCategory} business${city ? ` in ${city}, India` : " in India"}. This business identity is fixed — the page must be genuinely about this business, never a different industry or an invented example.
-${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}${groundingContext ?? ""}
+${businessSummary ? `\nBusiness summary: ${businessSummary}\n` : ""}${brandContext}${groundingContext ?? ""}${factsPrompt(facts)}
 ${customInstructions?.trim() ? `\nThe owner's own description of what they want: "${customInstructions.trim()}" — follow this closely, it takes priority over generic assumptions.\n` : ""}
 Block vocabulary (use ONLY these types):
 ${blockVocabularyNote()}
@@ -491,7 +498,7 @@ export async function generateWebsite(
     : "No brand voice set yet — keep it natural, honest, and specific to this business.";
 
   const generated = await mapWithConcurrency(pageList, 3, (page) =>
-    generatePageBlocks(dealershipName, businessCategory, city, page, pageList, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext, groundingContext)
+    generatePageBlocks(dealershipName, businessCategory, city, page, pageList, businessSummary ?? null, brandContext, customInstructions ?? null, fallbackPages.find((f) => f.slug === page.slug)!, logContext, groundingContext, facts)
   );
 
   // Pages meant to list real products (shop/products/menu/listings)
