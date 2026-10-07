@@ -66,7 +66,20 @@ export type CatalogProduct = {
   active: boolean;
 };
 
-export type KnowledgeFact = { category: string; title: string; content: string };
+export type KnowledgeFact = {
+  category: string;
+  title: string;
+  content: string;
+  /**
+   * The owner has confirmed she has the third party's permission to use
+   * this in public marketing copy (business_knowledge.public_use_consent).
+   *
+   * Only ever set by her answering that question. Default false, and a
+   * row that needs it and has not got it is withheld from generation
+   * (src/lib/claims/personalStories.ts).
+   */
+  consented?: boolean;
+};
 
 /** How the business sounds and looks — the owner's own brand decisions. */
 export type BrandIdentity = {
@@ -193,8 +206,25 @@ export function matchProducts(products: CatalogProduct[], term: string): Catalog
 
 /** The owner's own stated facts (Business Knowledge). */
 export async function fetchKnowledgeFacts(supabase: any, dealershipId: string): Promise<KnowledgeFact[]> {
-  const { data } = await supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", dealershipId).eq("is_active", true);
-  return (data ?? []) as KnowledgeFact[];
+  const { data } = await supabase.from("business_knowledge").select("category, title, content, public_use_consent").eq("dealership_id", dealershipId).eq("is_active", true);
+  return (data ?? []).filter((k: Row) => k?.title || k?.content).map(toKnowledgeFact);
+}
+
+/**
+ * One row, one shape.
+ *
+ * This existed inline in two places and they drifted the moment the
+ * consent column arrived: one mapped it to `consented`, the other
+ * returned the raw row, and tests/canonicalFacts caught the two readers
+ * of one table disagreeing. Which is what that test is for.
+ */
+function toKnowledgeFact(k: Row): KnowledgeFact {
+  return {
+    category: String(k.category ?? ""),
+    title: String(k.title ?? ""),
+    content: String(k.content ?? ""),
+    consented: k.public_use_consent === true,
+  };
 }
 
 function stripHtml(html: string): string {
@@ -382,7 +412,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     read<Row[]>("orders", supabase.from("orders").select("status, created_at").eq("dealership_id", dealershipId), []),
     read<Row[]>("leads", supabase.from("leads").select("id").eq("dealership_id", dealershipId), []),
     read<Row[]>("abandoned carts", supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", since), []),
-    read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content").eq("dealership_id", dealershipId).eq("is_active", true), []),
+    read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content, public_use_consent").eq("dealership_id", dealershipId).eq("is_active", true), []),
     read<Row | null>("brand profile", supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
     read<Row | null>("brand kit", supabase.from("brand_kits").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
     // Platform-wide, not per business. A window around today is enough
@@ -482,7 +512,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
       cartAbandonmentRate: orders30 + cartCount >= 5 ? Math.round((cartCount / (orders30 + cartCount)) * 1000) / 10 : null,
     },
     allTime: { paidOrders: orders.filter((o) => PAID_ORDER_STATUSES.has(o.status)).length, leads: leads.length },
-    ownerFacts: knowledge.filter((k) => k?.title || k?.content).map((k) => ({ category: String(k.category ?? ""), title: String(k.title ?? ""), content: String(k.content ?? "") })),
+    ownerFacts: knowledge.filter((k) => k?.title || k?.content).map(toKnowledgeFact),
     // Always the Hawlai address, never websites.custom_domain: nothing in
     // the app routes a custom domain to the site yet, so a link to one
     // would be a link to nothing.

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Trash2, Pencil, Save, X, BookOpen } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Save, X, BookOpen, ShieldAlert } from "lucide-react";
+import { needsConsent } from "@/lib/claims/personalStories";
 import { Button, Card, EmptyState, Input, Select, Textarea } from "@/components/ui";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -68,6 +69,23 @@ export default function KnowledgeBaseView() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: fact.id, is_active: !fact.is_active }),
+    });
+  }
+
+  /**
+   * "I have their permission."
+   *
+   * The only way business_knowledge.public_use_consent is ever set.
+   * Nothing infers it and no generator writes it: it is a statement
+   * about somebody else's permission, and only the owner can make it.
+   */
+  async function toggleConsent(fact: any) {
+    const next = !fact.public_use_consent;
+    setFacts((prev) => prev.map((f) => (f.id === fact.id ? { ...f, public_use_consent: next } : f)));
+    await fetch("/api/business-knowledge", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: fact.id, public_use_consent: next }),
     });
   }
 
@@ -141,6 +159,32 @@ export default function KnowledgeBaseView() {
                       <p className="text-sm font-medium text-slate-700">{f.title}</p>
                       <p className="text-xs text-slate-500 mt-0.5">{f.content}</p>
                       {!f.is_active && <p className="text-[10px] text-amber-500 mt-1">Off — not used on calls</p>}
+                      {/* SOMEBODY ELSE'S PRIVATE SITUATION.
+                          Hawlai will not write from this until the owner
+                          says she has that person's permission — it is
+                          not hers to publish and not ours to infer
+                          (src/lib/claims/personalStories.ts). */}
+                      {needsConsent(f) && (
+                        <div className="mt-1.5 rounded-md border border-amber-300 bg-amber-50 p-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-amber-700 flex items-center gap-1">
+                            <ShieldAlert className="w-3 h-3" /> This mentions someone else&apos;s private situation
+                          </p>
+                          <p className="text-[10px] text-slate-600 leading-snug">
+                            {f.public_use_consent
+                              ? "You've confirmed you have their permission, so Hawlai may write from this."
+                              : "Hawlai won't use this in anything public — your website, ads, emails, social posts — until you confirm that person agreed to it. Your note stays here either way."}
+                          </p>
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!f.public_use_consent}
+                              onChange={() => toggleConsent(f)}
+                              className="w-3 h-3 accent-amber-600"
+                            />
+                            I have their permission to use this in my marketing
+                          </label>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button

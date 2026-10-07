@@ -48,7 +48,7 @@ export async function PATCH(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { id, title, content, category, is_active } = await request.json();
+  const { id, title, content, category, is_active, public_use_consent } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const update: any = { updated_at: new Date().toISOString() };
@@ -56,6 +56,11 @@ export async function PATCH(request: Request) {
   if (content !== undefined) update.content = content;
   if (category !== undefined && CATEGORIES.includes(category)) update.category = category;
   if (is_active !== undefined) update.is_active = !!is_active;
+  // THE ONLY WAY THIS COLUMN IS EVER SET. It records that the owner has
+  // the third party's permission to use their situation in marketing —
+  // a statement only she can make, so nothing infers it, and no
+  // generator writes it (src/lib/claims/personalStories.ts).
+  if (public_use_consent !== undefined) update.public_use_consent = public_use_consent === true;
 
   const { error } = await supabase.from("business_knowledge").update(update).eq("id", id).eq("dealership_id", dealershipId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

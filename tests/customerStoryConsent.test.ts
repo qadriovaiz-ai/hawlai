@@ -189,3 +189,78 @@ describe("the chat's own grounding block is gated too", () => {
     expect(brain).toContain("withheldNote(withheldFacts)");
   });
 });
+
+// ---- the owner's answer ----------------------------------------------
+
+describe("'I have their permission' is the owner's to give", () => {
+  it("withholds the story while consent is false", () => {
+    expect(withheldFromCopy({ ...HOSPITAL, consented: false })).toBeTruthy();
+    // Default, with the column absent from an older row.
+    expect(withheldFromCopy(HOSPITAL)).toBeTruthy();
+  });
+
+  it("allows it once she has confirmed", () => {
+    expect(withheldFromCopy({ ...HOSPITAL, consented: true })).toBeNull();
+  });
+
+  it("puts it back into the prompt, in full, when she has", async () => {
+    const { formatFactsForCopy } = await import("@/lib/claims/businessFacts");
+    const allowed = formatFactsForCopy(facts([OWN_CRAFT, { ...HOSPITAL, consented: true }]));
+    expect(allowed).toContain(HOSPITAL.content.slice(0, 40));
+    expect(allowed).not.toMatch(/WITHHELD FROM YOU ON PURPOSE/);
+
+    const withheld = formatFactsForCopy(facts([OWN_CRAFT, { ...HOSPITAL, consented: false }]));
+    expect(withheld).not.toContain(HOSPITAL.content.slice(0, 40));
+    expect(withheld).toMatch(/WITHHELD FROM YOU ON PURPOSE/);
+  });
+
+  it("asks the question on the row whether or not she has answered yes", async () => {
+    const { needsConsent } = await import("@/lib/claims/personalStories");
+    // Separate from withheldFromCopy on purpose: if the control vanished
+    // once she agreed, there would be no way to change her mind.
+    expect(needsConsent({ ...HOSPITAL, consented: true })).toBe(true);
+    expect(needsConsent({ ...HOSPITAL, consented: false })).toBe(true);
+    // And never appears on a row that doesn't need it.
+    expect(needsConsent(OWN_CRAFT)).toBe(false);
+    expect(needsConsent(ORDINARY_CUSTOMER)).toBe(false);
+  });
+
+  it("reads the column into the facts, so the gate can see it", () => {
+    const facts_ts = readFileSync("src/lib/claims/businessFacts.ts", "utf8");
+    expect(facts_ts).toMatch(/select\("category, title, content, public_use_consent"\)/);
+    expect(facts_ts).toMatch(/consented: k\.public_use_consent === true/);
+  });
+
+  it("is settable only by the owner, through her own page", () => {
+    const route = readFileSync("src/app/api/business-knowledge/route.ts", "utf8");
+    // Nothing infers it and no generator writes it: it is a statement
+    // about somebody else's permission.
+    expect(route).toMatch(/if \(public_use_consent !== undefined\) update\.public_use_consent = public_use_consent === true;/);
+
+    const view = readFileSync("src/components/settings/KnowledgeBaseView.tsx", "utf8");
+    expect(view).toMatch(/I have their permission to use this in my marketing/);
+    expect(view).toMatch(/needsConsent\(f\)/);
+    // And says what withholding actually means for her.
+    expect(view).toMatch(/Your note stays here either way/);
+  });
+
+  it("no generator and no agent writes the column", () => {
+    const { execFileSync } = require("child_process") as typeof import("child_process");
+    const files = execFileSync("git", ["ls-files", "src"], { encoding: "utf8" })
+      .split("\n")
+      .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+      .filter((f) => f !== "src/app/api/business-knowledge/route.ts");
+
+    // A WRITE, not a read. businessFacts selects the column and maps it
+    // into the facts, which is how the gate sees it at all — what must
+    // not exist anywhere else is code that SETS it.
+    const writers: string[] = [];
+    for (const file of files) {
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        if (!line.includes("public_use_consent")) continue;
+        if (/update\.public_use_consent|public_use_consent:\s*(?:true|false|!)/.test(line)) writers.push(`${file}: ${line.trim().slice(0, 80)}`);
+      }
+    }
+    expect(writers, `only the owner's own page may set consent:\n${writers.join("\n")}`).toEqual([]);
+  });
+});

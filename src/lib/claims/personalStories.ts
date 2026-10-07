@@ -29,7 +29,13 @@
 // the customer's consent, and until there is somewhere to record that
 // answer the safe default is the one that cannot hurt anybody.
 
-export type StoryFact = { category: string; title: string; content: string };
+export type StoryFact = {
+  category: string;
+  title: string;
+  content: string;
+  /** The owner has confirmed she has that person's permission. */
+  consented?: boolean;
+};
 
 /** Someone who is not the owner and not the business. */
 const THIRD_PARTY = [
@@ -79,7 +85,25 @@ export function withheldFromCopy(fact: StoryFact): string | null {
   if (!text.trim()) return null;
   if (!matches(THIRD_PARTY, text)) return null;
   if (!matches(PRIVATE_EVENT, text)) return null;
+  // THE OWNER HAS ANSWERED THE QUESTION. Only she can: it is the
+  // customer's permission, not Hawlai's to infer, and not something a
+  // pattern can establish. Set by her alone, on the row itself
+  // (business_knowledge.public_use_consent, default false).
+  if (fact.consented === true) return null;
   return "it tells someone else's private situation, and only you can say whether they agreed to it being used in your marketing";
+}
+
+/**
+ * Whether this row is the KIND that needs consent, consent aside.
+ *
+ * What the Business Knowledge page asks the question on. Separate from
+ * withheldFromCopy so the toggle appears on a row she has already
+ * agreed to — otherwise saying yes would make the control vanish and
+ * there would be no way back.
+ */
+export function needsConsent(fact: StoryFact): boolean {
+  const text = `${fact.title ?? ""} ${fact.content ?? ""}`;
+  return Boolean(text.trim()) && matches(THIRD_PARTY, text) && matches(PRIVATE_EVENT, text);
 }
 
 export type SplitStories = {
