@@ -31,7 +31,26 @@ export function ProductImageGallery({ images, alt }: { images: string[]; alt: st
   const [index, setIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
 
-  if (images.length === 0) return <div className="aspect-square bg-neutral-100" />;
+  // A PRODUCT WITH NO PHOTO STILL HAS TO READ AS A PRODUCT.
+  //
+  // THE LIVE CASE (3 Oct 2026): the Shop page's second card — the Candle
+  // Making Workshop, which has no image — rendered as an empty grey
+  // rectangle. Its name, price and button were underneath all along,
+  // but an aspect-square blank at the top of a card is the whole card as
+  // far as a reader's eye is concerned, and it looks broken rather than
+  // photo-less.
+  //
+  // So the square carries the product's name instead of nothing. Not a
+  // generated picture — never that, and not a "no image" apology a
+  // customer should have to read either. Just type, which looks like a
+  // decision rather than a fault.
+  if (images.length === 0) {
+    return (
+      <div className="aspect-square bg-neutral-100 flex items-center justify-center p-4">
+        <span className="text-center text-sm font-medium text-neutral-500 line-clamp-4">{alt}</span>
+      </div>
+    );
+  }
 
   function go(delta: number) {
     setIndex((i) => (i + delta + images.length) % images.length);
