@@ -26,6 +26,7 @@ import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
 import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalogItem";
+import { splitStories, withheldNote } from "./personalStories";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 import { TEXT_PROPS, machineWroteProp } from "@/lib/pages/provenance";
 
@@ -651,10 +652,25 @@ export function formatFactsForCopy(f: BusinessFacts): string {
   // THIS business impossible to write about any other one. Never truncated
   // to 200 characters the way the other notes are: the detail IS the point.
   const story = f.ownerFacts.filter((k) => k.category === STORY_CATEGORY);
-  if (story.length) {
+  // A CUSTOMER'S PRIVATE SITUATION IS NOT MARKETING MATERIAL.
+  //
+  // This block goes into the prompt IN FULL, never truncated, under
+  // "use these specifics" — and it reaches every public-copy generator.
+  // One of these rows is a real customer writing that her husband had
+  // been in an accident and she lit a candle through the waiting at the
+  // hospital. The owner wrote it down because it moved her; it is not
+  // hers to publish, and an AEO recommendation had already pointed at it
+  // as "genuine content" (src/lib/claims/personalStories.ts).
+  const { usable: usableStory, withheld: withheldStory } = splitStories(story);
+  if (usableStory.length) {
     lines.push("The owner's own story — use these specifics; they are what makes this business different:");
-    for (const k of story) lines.push(`- ${k.title}: ${k.content}`);
+    for (const k of usableStory) lines.push(`- ${k.title}: ${k.content}`);
   }
+  // Named rather than silently dropped: a model that cannot see a story
+  // will sometimes invent one to fill the same gap, and an invented
+  // customer anecdote is a fabricated testimonial.
+  const withheldText = withheldNote(withheldStory);
+  if (withheldText) lines.push(withheldText);
   const otherFacts = f.ownerFacts.filter((k) => k.category !== STORY_CATEGORY);
   if (otherFacts.length) {
     lines.push("What the owner says about the business:");

@@ -68,6 +68,7 @@ import { tokenSelect, readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 import { checkAndRecordGenerationUsage, generationLimitMessage, type GenerationResource } from "../usage/generationLimits";
 import { formatCurrency } from "../utils";
 import { randomBytes } from "crypto";
+import { splitStories, withheldNote } from "../claims/personalStories";
 
 // Tools that map to one of the 7 plan-gated features (migration 079's
 // plan_limits) — checked once at the top of executeTool so a Free/Basic
@@ -4198,8 +4199,16 @@ export async function runMasterBrainChat(
   // shared getBusinessContext() migration — a real gap, not a
   // deliberate scoping choice, now closed for free since ctx already
   // carries it.
+  // A SECOND PATH FOR THE SAME STORY, and the one the AEO
+  // recommendation came down. This block is built from every knowledge
+  // row and goes into groundingContext, which reaches the chat's own
+  // replies and every generator — bypassing formatFactsForCopy and the
+  // gate it now carries. So a customer's private situation was being
+  // handed over twice, by two different routes
+  // (src/lib/claims/personalStories.ts).
+  const { usable: usableFacts, withheld: withheldFacts } = splitStories(ctx.knowledgeFacts as any);
   const businessFactsSection = ctx.knowledgeFacts.length > 0
-    ? `\n\n## Real facts about this business\nOwner-entered facts you can state with confidence — don't extend or guess beyond them:\n${ctx.knowledgeFacts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`
+    ? `\n\n## Real facts about this business\nOwner-entered facts you can state with confidence — don't extend or guess beyond them:\n${usableFacts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}${withheldFacts.length ? `\n\n${withheldNote(withheldFacts)}` : ""}`
     : "";
 
   // Real semantic retrieval against a curated marketing knowledge base
