@@ -116,14 +116,42 @@ describe("the live case, through the real chat tools", () => {
     expect(result._claimsNote).toMatch(/Free shipping.*₹60 flat/);
   });
 
+  it("generate_graphic is refused outright while Graphic Design is on hold", async () => {
+    anthropic({});
+    delete process.env.NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED;
+    const held = await executeTool(db(), CTX, "generate_graphic", { designType: "poster", prompt: "Diwali poster" }, "");
+    expect(held.unavailable).toBe(true);
+    expect(held._imageQuote).toBeUndefined();
+    expect(generateGraphic).not.toHaveBeenCalled();
+    // Not an upgrade prompt: no plan buys back something Hawlai has
+    // switched off.
+    expect(held.error).not.toMatch(/upgrade/i);
+  });
+
   it("generate_graphic: 'Free shipping' never reaches the image model, and the owner is told it was left out", async () => {
     anthropic({});
+    process.env.NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED = "true";
     const result = await executeTool(db(), CTX, "generate_graphic", { designType: "poster", prompt: "Diwali poster for the Lavender candle. Sirf ₹550 mein. Free shipping." }, "");
 
-    const brief = generateGraphic.mock.calls[0][3] as string;
-    expect(brief).toBe("Diwali poster for the Lavender candle. Sirf ₹550 mein.");
+    // The tool now QUOTES instead of generating (8 Oct 2026: one
+    // sentence in chat spent money on a paid image call). So the thing
+    // to check is the brief carried by the quote DASH that is the exact
+    // text the button will post to the generating endpoint.
+    expect(generateGraphic).not.toHaveBeenCalled();
+    expect(result._imageQuote.prompt).toBe("Diwali poster for the Lavender candle. Sirf ₹550 mein.");
     expect(result._claimsNote).toMatch(/₹60 flat/);
-    expect(result.note).toMatch(/Left out of the image/);
+  });
+
+  it("and the endpoint that actually spends strips them again", async () => {
+    // The brief reaches the generator through a request body, so the
+    // guarantee cannot rest on the quote having been polite.
+    const { stripUnsupported } = await import("@/lib/claims/claimCheck");
+    const { gatherBusinessFacts } = await import("@/lib/claims/businessFacts");
+    const facts = await gatherBusinessFacts(db(), "d1");
+    const stripped = stripUnsupported("Diwali poster. Free shipping.", facts);
+    expect(stripped.text).not.toMatch(/Free shipping/);
+    expect(stripped.removed.join(" ")).toMatch(/Free shipping/);
+    delete process.env.NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED;
   });
 
   it("the chat AI itself is told the real shipping — for its replies and every brief it writes", async () => {

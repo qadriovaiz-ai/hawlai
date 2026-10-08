@@ -20,7 +20,7 @@
 import { publicPostConfirm, type Destination } from "./destinations";
 
 export type PublishAction = {
-  target: "website" | "social_post" | "email";
+  target: "website" | "social_post" | "email" | "image";
   /** The button. */
   label: string;
   /** Shown after the button is pressed, before anything happens. */
@@ -52,6 +52,40 @@ export function emailSendAction(opts: { to: string; businessName: string; payloa
     method: "POST",
     payload: { to: opts.to, ...opts.payload },
     done: `✅ Sent to ${opts.to} — accepted for delivery, not yet confirmed in their inbox`,
+  };
+}
+
+/**
+ * Spending money on an image, with the price said first.
+ *
+ * THE LIVE INCIDENT (8 Oct 2026). "MAKE POST AND WRITE A INSTAGRAM
+ * CAPTION FOR LAVENDER CANDLE" ran Generate Graphic. One sentence, a
+ * paid Gemini call, no mention of cost, no agreement to spend anything
+ * — while Graphic Design was on hold for exactly that reason.
+ *
+ * The chat tool no longer generates. It quotes, and this button is what
+ * spends: it calls the SAME endpoint the Graphic Design page uses, which
+ * runs the plan's monthly image cap again at generation time, so the
+ * quote cannot bypass it.
+ */
+export function imageGenerateAction(opts: {
+  designType: string;
+  prompt: string;
+  costInr: number;
+  /** Said plainly when there is no photo of the product to build around. */
+  depictionNote?: string | null;
+}): PublishAction {
+  const price = `about ₹${opts.costInr.toFixed(2)}`;
+  return {
+    target: "image",
+    label: `Generate the image (${price})`,
+    confirm: `This makes one AI image now. It costs ${price} and counts against your plan's monthly image allowance.${
+      opts.depictionNote ? ` ${opts.depictionNote}` : ""
+    }`,
+    endpoint: "/api/graphic-design/generate",
+    method: "POST",
+    payload: { designType: opts.designType, prompt: opts.prompt },
+    done: "✅ Image generated — saved to Graphic Design",
   };
 }
 

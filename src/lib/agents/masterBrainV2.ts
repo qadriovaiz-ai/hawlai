@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { websitePublishAction, socialPublishAction, emailSendAction, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { websitePublishAction, socialPublishAction, emailSendAction, imageGenerateAction, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
 import { composePost } from "../chat/socialPost";
 import { readDestinations } from "../chat/destinations";
 import { getCampaignPerformanceState } from "./analyticsAgent";
@@ -353,7 +353,7 @@ export const TOOLS = [
   },
   {
     name: "generate_graphic",
-    description: `Generate an actual AI image (ad creative, social graphic, banner, poster, logo-style asset, backdrop, etc) and save it to Graphic Design. Valid designType values: ${GRAPHIC_TYPES.map((t) => t.key).join(", ")}. The image can and should be shown directly in your reply using markdown image syntax (![description](url)) — it renders inline in the chat. NEVER use this to stand in for a photograph of a REAL product the business sells — a generated picture of their candle is not their candle, and putting it on a storefront listing or an ad for that product misrepresents what the customer is buying. For a real product, use the photo already in their catalogue, or ask them to upload one.`,
+    description: `Propose an AI image and QUOTE ITS COST. This does NOT generate anything: it returns a card with a button the person presses to spend the money, so never say the image is ready, never describe what it looks like, and never use markdown image syntax after calling it. Good for an ad creative, social graphic, banner, poster or backdrop. Valid designType values: ${GRAPHIC_TYPES.map((t) => t.key).join(", ")}. NEVER use this to stand in for a photograph of a REAL product the business sells — a generated picture of their candle is not their candle, and putting it on a storefront listing or an ad for that product misrepresents what the customer is buying. For a real product, use the photo already in their catalogue, or ask them to upload one; if there is no photo, the image is made WITHOUT the product in it and you must say so.`,
     input_schema: { type: "object", properties: { designType: { type: "string", enum: GRAPHIC_TYPES.map((t) => t.key) }, prompt: { type: "string", description: "What the image should depict" } }, required: ["designType"] },
   },
   {
@@ -1662,35 +1662,43 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       return generateSeoIdeas(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
     }
     case "generate_graphic": {
-      try {
-        const { data: existingKit } = await supabase.from("brand_kits").select("kit").eq("dealership_id", ctx.id).maybeSingle();
-        const existingColors = existingKit?.kit?.colors ?? null;
-        // The image model paints the brief's words onto the picture, and in
-        // chat that brief is written by the AI, not the owner — so it gets
-        // the same claims check as copy (src/lib/claims). "Sirf ₹550 mein.
-        // Free shipping." must never be drawn for a store that charges
-        // shipping.
+      // THE TOOL DOES NOT GENERATE. IT QUOTES.
+      //
+      // 8 Oct 2026: one sentence in chat ran a paid Gemini call, and the
+      // invented product it produced went public on a Facebook Page.
+      // Graphic Design was on hold for cost at the time, and nothing in
+      // this path checked either the hold or the owner's willingness to
+      // spend. Both now happen before anything is spent, and the button
+      // that spends calls the Graphic Design page's own endpoint, which
+      // runs the monthly image cap again at generation time.
+      //
+      // Deliberately placed ahead of checkAndRecordGenerationUsage
+      // (above): a quote must not consume a month's allowance.
+      if (!isFeatureEnabled("graphicDesign")) {
+        return { error: unavailableMessage("graphicDesign"), unavailable: true };
+      }
+      {
+        const quoteFacts = await factsFor(supabase, ctx);
         const { stripUnsupported, claimsNote } = await import("../claims/claimCheck");
-        // Already gathered for this turn (getBusinessContext) — one read per
-        // turn, not one per tool call.
-        const facts = await factsFor(supabase, ctx);
-        const brief = facts ? stripUnsupported(input.prompt ?? "", facts) : { text: input.prompt ?? "", removed: [] as string[] };
-        const buffer = await generateGraphic(input.designType, ctx.name, ctx.category, brief.text, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, existingColors, ctx.brandVoice, facts);
-        const { createServiceClient } = await import("../supabase/service");
-        const serviceClient = createServiceClient();
-        const filePath = `graphic-designs/${ctx.id}/${input.designType}-${Date.now()}.png`;
-        await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
-        const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
-        await supabase.from("graphic_designs").insert({ dealership_id: ctx.id, design_type: input.designType, prompt: brief.text, image_url: publicUrlData.publicUrl });
-        const leftOut = brief.removed.length ? ` Left out of the image because Hawlai couldn't verify it: ${brief.removed.join("; ")} — tell the person in one short line.` : "";
+        const { productDepictionFor, depictionNoteFor } = await import("../claims/imageBrief");
+        const quoteBrief = quoteFacts
+          ? stripUnsupported(input.prompt ?? "", quoteFacts)
+          : { text: input.prompt ?? "", removed: [] as string[] };
+        const { costOfGeminiImageInr } = await import("../usage/pricing");
+        const depictionNote =
+          quoteFacts && productDepictionFor(quoteFacts) === "forbidden" ? depictionNoteFor(quoteFacts) : null;
         return {
-          success: true,
-          imageUrl: publicUrlData.publicUrl,
-          ...(brief.removed.length ? { _claimsNote: claimsNote(brief.removed) } : {}),
-          note: `Saved to Graphic Design. Show it to the person directly in your reply using markdown image syntax: ![Generated image](${publicUrlData.publicUrl}) — it will render inline in the chat, don't just tell them to go check another tab.${leftOut}`,
+          _imageQuote: {
+            designType: input.designType,
+            prompt: quoteBrief.text,
+            costInr: costOfGeminiImageInr(1),
+            depictionNote,
+          },
+          ...(quoteBrief.removed.length ? { _claimsNote: claimsNote(quoteBrief.removed) } : {}),
+          note: `NOTHING HAS BEEN GENERATED YET and nothing has been spent. The person gets a button that costs money, so do not describe the image, do not use markdown image syntax, and do not say it is ready. Tell them in one line what you would make and that it costs about ₹${costOfGeminiImageInr(1).toFixed(2)}.${
+            depictionNote ? ` Also say this: ${depictionNote}` : ""
+          }`,
         };
-      } catch (err: any) {
-        return { error: err.message };
       }
     }
     case "get_customer_sentiment": {
@@ -3117,7 +3125,7 @@ export interface Artifact {
   // whole point being the person can see what happened without leaving
   // the conversation to go check a department page manually.
   kind: "visual" | "document" | "record" | "metric" | "link" | "aeo_report";
-  type?: "image" | "website" | "3d_scene" | "canvas_design"; // only set when kind === "visual"
+  type?: "image" | "image_quote" | "website" | "3d_scene" | "canvas_design"; // only set when kind === "visual"
   label: string;
   summary?: string; // one or two lines of what actually happened/was produced
   url?: string; // visual: direct viewable src. link: the URL to open.
@@ -3564,6 +3572,18 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     case "generate_logo":
       return result.logoUrl ? { kind: "visual", type: "image", label: "Logo", url: result.logoUrl, departmentHref } : null;
     case "generate_graphic":
+      // A QUOTE, not an image. The tool no longer spends; this card is
+      // what asks, with the price in the button.
+      if (result?._imageQuote) {
+        return {
+          kind: "visual",
+          type: "image_quote",
+          label: "Image to generate",
+          summary: result._imageQuote.prompt,
+          departmentHref,
+          publish: imageGenerateAction(result._imageQuote),
+        };
+      }
       return result.imageUrl ? { kind: "visual", type: "image", label: "Generated Image", url: result.imageUrl, departmentHref } : null;
     case "build_website":
       // Built as a draft; publishing is the owner's call, made here

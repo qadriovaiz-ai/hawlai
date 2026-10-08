@@ -253,8 +253,8 @@ describe("which generated things get a publish button", () => {
   });
 });
 
-describe("a caption and an image generated in one chat turn", () => {
-  it("come back paired, so the button offers Instagram too", async () => {
+describe("a caption and an image asked for in one chat turn", () => {
+  it("the caption comes back; the image comes back as a PRICE, not a picture", async () => {
     // The orchestrator asks for both tools, then replies; the agent call
     // in between is told apart by having no tools of its own.
     let turn = 0;
@@ -285,15 +285,29 @@ describe("a caption and an image generated in one chat turn", () => {
       })
     );
 
+    process.env.NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED = "true";
     const result = await runMasterBrainChat(db(), "d1", [], "Christmas Instagram post with an image");
+
+    // NOTHING WAS SPENT. On 8 Oct 2026 this same sentence ran a paid
+    // image call and the result went public on a Facebook Page, while
+    // Graphic Design was on hold for cost. The image is now a quote with
+    // the price in the button.
+    const quote = result.artifacts.find((a: any) => a.type === "image_quote")!;
+    expect(quote.publish!.target).toBe("image");
+    expect(quote.publish!.label).toMatch(/Generate the image \(about ₹3\.39\)/);
+    expect(quote.publish!.confirm).toMatch(/monthly image allowance/);
+    // The button calls the Graphic Design page's own endpoint, which runs
+    // the cap again where the money is actually spent.
+    expect(quote.publish!.endpoint).toBe("/api/graphic-design/generate");
+    expect(result.artifacts.some((a: any) => a.type === "image")).toBe(false);
+
+    // The caption still comes back, and still names its destination. It
+    // carries no image, because no image exists yet.
     const caption = result.artifacts.find((a: any) => a.publish?.target === "social_post")!;
-    expect(caption.publish!.payload.image_url).toBe("https://cdn.example/uploaded.png");
-    expect(caption.publish!.payload.post_to_instagram).toBe(true);
     expect(caption.publish!.payload.destination).toBe("instagram");
-    // The owner asked for an Instagram post. It says Instagram, and only
-    // Instagram — the route posts nothing to the Page for this payload.
-    expect(caption.publish!.done).toBe("✅ Posted to your Instagram");
+    expect(caption.publish!.payload.image_url).toBeNull();
     expect(caption.publish!.label).toBe("Publish to your Instagram");
+    delete process.env.NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED;
   });
 });
 

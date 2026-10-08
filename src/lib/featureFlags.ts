@@ -20,7 +20,7 @@
 // offer a page the API refuses to serve.
 // ------------------------------------------------------------------
 
-export type KillSwitchFeature = "videoGeneration" | "studio3d";
+export type KillSwitchFeature = "videoGeneration" | "studio3d" | "graphicDesign";
 
 /**
  * Each branch names its variable as a literal `process.env.NEXT_PUBLIC_*`
@@ -35,12 +35,23 @@ export function isFeatureEnabled(feature: KillSwitchFeature): boolean {
       return process.env.NEXT_PUBLIC_VIDEO_GENERATION_ENABLED === "true";
     case "studio3d":
       return process.env.NEXT_PUBLIC_STUDIO_3D_ENABLED === "true";
+    // ON HOLD by the owner's decision, for cost: every AI image is a
+    // paid Gemini call, and on 8 Oct 2026 the master chat made one from
+    // a single sentence, published the result to a real Facebook Page,
+    // and nobody had agreed to spend anything. Set
+    // NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED=true to lift the hold.
+    //
+    // Scoped to Graphic Design on purpose: logo generation, ad creatives
+    // and website images are separate paths and are not touched.
+    case "graphicDesign":
+      return process.env.NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED === "true";
   }
 }
 
 export const KILL_SWITCH_LABELS: Record<KillSwitchFeature, string> = {
   videoGeneration: "AI Video Generation",
   studio3d: "3D Studio",
+  graphicDesign: "AI Graphic Design",
 };
 
 /**

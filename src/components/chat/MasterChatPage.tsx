@@ -35,7 +35,7 @@ interface Artifact {
   publish?: PublishAction;
   /** An email about to be sent, exactly as the recipient will see it. */
   emailPreview?: { to: string; subject: string; html: string | null; text: string };
-  type?: "image" | "website" | "3d_scene" | "canvas_design";
+  type?: "image" | "image_quote" | "website" | "3d_scene" | "canvas_design";
   /**
    * A picture to render INSIDE the card.
    *
@@ -524,6 +524,8 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   // The message, and whether it is good news: "I couldn't check" must not
   // look like "removed".
   const [removal, setRemoval] = useState<{ text: string; ok: boolean } | null>(null);
+  /** The image this card's button paid for, once it exists. */
+  const [made, setMade] = useState<string | null>(null);
 
   async function remove() {
     if (!postId) return;
@@ -574,6 +576,11 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       // letting "Posted" imply both channels got it.
       const igError = action === "publish" ? (data?.instagram?.error as string | undefined) : undefined;
       setNote(igError ? `${spec.done.replace(" and Instagram", "")} \u2014 Instagram skipped: ${igError}` : spec.done);
+      // An image that was just paid for has to be SHOWN, here, not
+      // described and left in another tab.
+      if (action === "publish" && publish.target === "image" && typeof data?.url === "string") {
+        setMade(data.url);
+      }
       if (action === "publish" && publish.target === "social_post") {
         // The read-back, and the id that can undo this. On 8 Oct 2026 the
         // post went out missing its hashtags and the card still said
@@ -592,6 +599,10 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
     return (
       <div className="border-t border-slate-100 px-3 py-2 space-y-1.5">
         <p className={`text-[11px] font-medium leading-snug ${state === "done" ? "text-emerald-600" : "text-slate-500"}`}>{note}</p>
+        {made && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={made} alt="" className="w-full max-h-64 object-contain rounded-md border border-slate-200" />
+        )}
         {landed?.verified === "differs" && (
           <div className="space-y-1">
             <p className="text-[11px] text-amber-600 leading-snug">
@@ -644,7 +655,13 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
               onClick={() => run("publish")}
               className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
             >
-              {publish.target === "website" ? "Yes, publish the site" : publish.target === "email" ? "Yes, send it now" : "Yes, post it now"}
+              {publish.target === "website"
+                ? "Yes, publish the site"
+                : publish.target === "email"
+                  ? "Yes, send it now"
+                  : publish.target === "image"
+                    ? "Yes, generate it"
+                    : "Yes, post it now"}
             </button>
             <button
               onClick={() => setState("idle")}
@@ -662,7 +679,13 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
               disabled={state === "working"}
               className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
             >
-              {state === "working" ? (publish.target === "email" ? "Sending..." : "Publishing...") : publish.label}
+              {state === "working"
+                ? publish.target === "email"
+                  ? "Sending..."
+                  : publish.target === "image"
+                    ? "Generating..."
+                    : "Publishing..."
+                : publish.label}
             </button>
             {!artifact.draft?.patchUrl &&
               (artifact.departmentHref ? (

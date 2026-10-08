@@ -26,9 +26,21 @@ export type ImageBrief = {
   referenceImageUrl: string | null;
   /** True when the brief didn't name what the business sells, so the anchor was added. */
   anchored: boolean;
-  /** Set when there is nothing to anchor to — the owner needs to fix that. */
+  /** Set when there is nothing to anchor to DASH the owner needs to fix that. */
   warning: string | null;
+  /**
+   * Whether this image may show the business's product at all.
+   *
+   * "real_photo"     a photo of it is attached; the model restyles around it
+   * "forbidden"      a real product exists but there is NO photo of it
+   * "not_applicable" nothing product-shaped to misrepresent
+   */
+  productDepiction: ProductDepiction;
+  /** What the owner must be told when depiction was forbidden. */
+  depictionNote: string | null;
 };
+
+export type ProductDepiction = "real_photo" | "forbidden" | "not_applicable";
 
 // Words too generic to prove a brief is about the real product.
 const STOP = new Set([
@@ -90,18 +102,93 @@ export function heroSubjectLine(f: BusinessFacts): string | null {
 }
 
 /**
+ * MAY THIS IMAGE SHOW THE PRODUCT?
+ *
+ * THE LIVE INCIDENT (8 Oct 2026). "MAKE POST AND WRITE A INSTAGRAM
+ * CAPTION FOR LAVENDER CANDLE" produced, and published to a real
+ * Facebook Page, a pink candle in a glass jar with lavender sprigs and
+ * the words "LAVENDER SOY WAX / Candle by Qaaf" printed on it. No such
+ * candle and no such label exist. The owner never supplied a photo; the
+ * generator invented the product AND its packaging.
+ *
+ * The cause was HERE, not in the prompt. b182ed5 told the chat not to
+ * OFFER generated product images, and the generate_graphic tool
+ * description repeats it in words — but heroSubjectLine does the
+ * opposite in code: "The hero subject is this business's own product:
+ * Lavender candle ... show that product as the main subject." A
+ * code-level instruction beats advice in a tool description every time.
+ * It was written for the case where a photo IS attached, where it means
+ * "restyle this, don't swap it". With no photo attached, the same
+ * sentence means "invent it".
+ *
+ * So the photo is what decides. A real physical product may be drawn
+ * only with its own photograph in the frame as reference. Without one,
+ * the product is off limits and the graphic is made of the things that
+ * cannot misrepresent it: type, colour, texture, an ingredient.
+ */
+export function productDepictionFor(f: BusinessFacts | null | undefined): ProductDepiction {
+  if (!f) return "not_applicable";
+  const hero = heroProduct(f);
+  // A service has nothing a customer receives as an object, so a scene
+  // of it being provided is not a fabricated product.
+  if (!hero || isService(hero)) return "not_applicable";
+  return hero.images[0] ? "real_photo" : "forbidden";
+}
+
+/**
+ * What the model is forbidden from drawing, in the model's own terms.
+ *
+ * Deliberately enumerates the jar, the label and the brand name as
+ * packaging text, because that is exactly what came back: the shape of
+ * the product and a label that does not exist.
+ */
+export const NO_PRODUCT_DEPICTION_RULE =
+  "DO NOT DEPICT THIS BUSINESS'S PRODUCT OR ITS PACKAGING. There is no photograph of it on file, so anything you draw would be invented, and this image may be published as the business's own. Draw none of the following: the product itself, a look-alike of it, its jar, bottle, tin, box, label, wrapper or lid, or the business or product name rendered as packaging text on an object. Make instead a graphic that carries the message without the product: typography on a plain or brand-coloured ground, texture, pattern, or a raw ingredient or setting shown on its own. Any words must read as a designed caption, not as a label on a thing.";
+
+/** The subject line for a brief that is not allowed to show the product. */
+export function noDepictionSubjectLine(f: BusinessFacts): string | null {
+  if (!f.categoryKnown) return null;
+  return `This is for a ${f.category} business. Keep the mood and the subject matter of that trade, but the product itself must not appear.`;
+}
+
+/** What the owner is told, naming the product whose photo is missing. */
+export function depictionNoteFor(f: BusinessFacts): string {
+  const hero = heroProduct(f);
+  const name = hero?.name ? `"${hero.name}"` : "your product";
+  return `There's no photo of ${name} on file, so I haven't drawn it — a generated picture of your product isn't your product, and this could end up public. This graphic is type and colour only. Add a real photo to ${name} in Products and I'll build around the actual one.`;
+}
+
+/**
  * The brief an image model should be given: the words asked for, plus
  * the product anchor when they don't already name the real product, plus
  * the product photo to match.
  */
 export function buildImageBrief(brief: string, f: BusinessFacts | null | undefined): ImageBrief {
   const text = (brief ?? "").trim();
-  if (!f) return { prompt: text, referenceImageUrl: null, anchored: false, warning: null };
+  if (!f)
+    return {
+      prompt: text,
+      referenceImageUrl: null,
+      anchored: false,
+      warning: null,
+      productDepiction: "not_applicable",
+      depictionNote: null,
+    };
 
   const hero = heroProduct(f);
-  const anchor = heroSubjectLine(f);
+  const depiction = productDepictionFor(f);
+  const forbidden = depiction === "forbidden";
+  // With no photo, the hero-subject line is the instruction that
+  // invented the candle. It is replaced, not merely softened.
+  const anchor = forbidden ? noDepictionSubjectLine(f) : heroSubjectLine(f);
   const needsAnchor = !mentionsProduct(text, f);
-  const prompt = needsAnchor && anchor ? [text, anchor].filter(Boolean).join(" ") : text;
+  const anchored = needsAnchor && Boolean(anchor);
+  // The rule goes on whether or not an anchor was added: the owner's own
+  // words ("lavender candle on a wooden table") ask for the product just
+  // as directly, and that brief skips anchoring entirely.
+  const prompt = [anchored ? [text, anchor].filter(Boolean).join(" ") : text, forbidden ? NO_PRODUCT_DEPICTION_RULE : null]
+    .filter(Boolean)
+    .join(" ");
 
   return {
     prompt,
@@ -109,7 +196,9 @@ export function buildImageBrief(brief: string, f: BusinessFacts | null | undefin
     // service's photo (a salon chair, a treatment room) isn't the thing to
     // reproduce, and REFERENCE_PHOTO_RULE is written for products.
     referenceImageUrl: hero && !isService(hero) ? hero.images[0] ?? null : null,
-    anchored: needsAnchor && Boolean(anchor),
+    anchored,
+    productDepiction: depiction,
+    depictionNote: forbidden ? depictionNoteFor(f) : null,
     warning:
       !f.products.length && !f.categoryKnown
         ? "Hawlai doesn't know what this business sells yet — add your products or services, or set your business category in Settings, so generated images match."
