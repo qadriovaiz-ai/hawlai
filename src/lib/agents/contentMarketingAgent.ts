@@ -15,7 +15,7 @@ import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import { usesOwnStory, storyForRetry, GENERIC_NOTE } from "@/lib/content/storyEcho";
 import { soundRule, languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
-import { applyLinkRule, linkRuleNote } from "@/lib/content/platformRules";
+import { applyLinkRule, linkRuleNote, applyBioRule, bioRuleNote } from "@/lib/content/platformRules";
 
 // WHY THIS EXISTS (approved 2026-09-18): every caption came out in the
 // same shape — hook line, product line, price, CTA, question — whatever
@@ -220,9 +220,16 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     // Enforced, not requested: a real booking link in the facts is exactly
     // what put a dead URL into an Instagram caption.
     const linked = applyLinkRule(linkRuleFor, guarded.output);
-    const output: any = linked.output;
+    // AND THE OTHER DIRECTION. A Facebook post that says "Link in bio."
+    // sends the reader nowhere: there is no bio, and the link would have
+    // worked. Replaced with the business's own store address when it has
+    // one, removed when it does not, never invented.
+    const bio = applyBioRule(linkRuleFor, linked.output, facts.links?.store ?? null);
+    const output: any = bio.output;
     const linkNote = linkRuleNote(linked.replaced);
     if (linkNote) output._claimsNote = [output._claimsNote, linkNote].filter(Boolean).join(" ");
+    const bioNote = bioRuleNote(bio.fixed, bio.dropped);
+    if (bioNote) output._claimsNote = [output._claimsNote, bioNote].filter(Boolean).join(" ");
     return { output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, ...(revised ? { revised } : {}) };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);

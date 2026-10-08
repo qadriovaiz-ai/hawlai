@@ -77,6 +77,17 @@ const CLAIM_TERMS = [
   "no synthetic fragrance", "synthetic fragrance free", "no fake fragrance", "essential oil", "essential oils",
   "natural fragrance", "no added colour", "no added color", "dye free",
   // Wick and burn.
+  //
+  // THE LIVE CAPTION (8 Oct 2026) said "The candle burns clean, with no
+  // soot collecting at the rim." The list already held "clean burning"
+  // and "soot free" and neither matched: the model wrote the OTHER
+  // surface form of both claims. One phrasing of a claim on a term list
+  // is a list that catches the drafts that happen to agree with it.
+  //
+  // The Business Story says paraffin gives more smoke. It does not say
+  // this candle gives none, and "more than paraffin" is not "none".
+  "no soot", "without soot", "burns clean", "clean burn",
+  "no smoke", "smoke free", "smokeless", "without smoke", "doesn't smoke", "does not smoke",
   "lead free", "cotton wick", "wooden wick", "zinc free",
   // Make and provenance.
   "hand poured", "handmade", "hand made", "small batch",
@@ -103,6 +114,12 @@ const CLAIM_SYNONYMS: string[][] = [
   ["handmade", "hand made", "hand poured", "handcrafted in"],
   ["no added colour", "no added color", "dye free"],
   ["cruelty free", "not tested on animals"],
+  // One fact, six phrasings. An owner who records "soot free" has said
+  // "no soot"; asking her to attest both would be the software failing
+  // to understand its own question.
+  ["soot free", "no soot", "without soot"],
+  ["clean burning", "burns clean", "clean burn"],
+  ["smoke free", "no smoke", "smokeless", "without smoke", "doesn't smoke", "does not smoke"],
 ];
 
 /**
@@ -224,6 +241,65 @@ const SLOT_SCARCITY = new RegExp(
 // claim against someone else's wax.
 const PRODUCT_COMPARATIVE =
   /\b(?:burns?|burning|lasts?|lasting|smells?|cleans?|holds?|performs?|melts?|sets?)\s+(?:\w+,?\s+){0,3}(?:better|cleaner|safer|longer|slower|stronger|brighter|purer|faster)\b/gi;
+
+// A COMPARISON THAT USES NO COMPARATIVE WORD AT ALL.
+//
+// FOUND LIVE (8 Oct 2026), on a public Facebook post: "Soy wax carries
+// fragrance differently from paraffin." Both detectors above missed it,
+// and for the same reason: COMPARATIVE needs one of a handful of
+// comparative adjectives plus the word "than", and PRODUCT_COMPARATIVE
+// needs a performance verb plus a comparative adjective. This sentence
+// has neither. It names the rival material outright and asserts a
+// difference in behaviour, which is a comparison in every sense that
+// matters to whoever has to answer for it.
+//
+// Scoped to the shapes that can only be comparisons — "different(ly)
+// from/than/to X", "compared to/with X", "versus X". "unlike" keeps its
+// narrower existing rule rather than being widened here, because
+// "unlike anything you've smelled" is flourish, not a claim about
+// somebody else's wax.
+//
+// Second person is excluded: "different to your usual" compares with the
+// reader's own last candle, which names no rival and asserts nothing
+// about one. The trade-off is real and taken deliberately — "different
+// from your old brand" goes unflagged too. The alternative was flagging
+// every sentence that uses the word "different" about the customer,
+// which is ordinary copy, and a guard nobody can keep is a guard that
+// gets switched off.
+const NAMED_COMPARISON =
+  /\b(?:differently|different)\s+(?:from|than|to)\s+(?!you\b|your\b|me\b|my\b|us\b|our\b|each\s+other\b)[\w'-]+|\bcompared\s+(?:to|with)\s+[\w'-]+|\b(?:versus|vs\.?)\s+[\w'-]+/gi;
+
+// DISPARAGEMENT BY NEGATION.
+//
+// The sentence straight after the one above: "It releases slowly,
+// evenly, and without the sharp synthetic hit that fades almost as
+// quickly as it arrives." Nothing is named, and nothing has to be: "the
+// sharp synthetic hit" is an attribute asserted about the alternative,
+// and saying this product is without it says the others have it. It is
+// the same claim as "ours is better", with the comparison moved into an
+// assumption the reader is invited to share.
+//
+// Only the pejoratives a competitor would dispute. "without the fuss",
+// "without the wait" are about the customer's experience and are left
+// alone.
+//
+// The quote stops at the noun the pejorative modifies ("without the
+// sharp synthetic hit") rather than running a fixed number of
+// characters, which cut the first version off mid-word: an owner being
+// asked to justify a phrase should be shown a phrase.
+const RIVAL_DISPARAGEMENT =
+  /\b(?:without|no|none\s+of)\s+(?:the|that|those|any)?\s*(?:[\w-]+[\s-]){0,2}(?:synthetic|artificial|chemical|chemically|toxic|harsh|cheap|nasty|fake)(?:\s+[\w-]+)?/gi;
+
+// PRECISION THE BUSINESS NEVER CLAIMED.
+//
+// "The wick is set at the exact centre, by hand." The Business Story
+// says the wick must be fixed in the right centre — an intention, not a
+// tolerance. "Exact" is a measurement claim, and nothing measures it.
+//
+// Narrow on purpose: the absolute word has to be attached to something
+// physical about the making. "exactly what you need" is not touched.
+const EXACTNESS =
+  /\b(?:exact|exactly|precisely|perfectly)\s+(?:the\s+)?(?:centre|center|centred|centered|aligned|level|even|measured|uniform|straight|same\s+(?:size|weight|height))\b/gi;
 
 const COMPARATIVE =
   /\b(?:better|cheaper|stronger|safer|longer[- ]lasting|more\s+affordable)\s+than\s+(?!ever\b|before\b|yesterday\b|last\b|you\s+think\b)[\w'-]+|\bunlike\s+(?:other|most|any)\s+(?:brands?|stores?|shops?|sellers?|competitors?|companies)\b|\b(?:cheapest|lowest\s+prices?)\b/gi;
@@ -501,6 +577,12 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
   };
   always(COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports`);
   always(PRODUCT_COMPARATIVE, (m) => `"${m[0]}" — a comparison with competitors that nothing on record supports, and it doesn't even say what it's being compared with`);
+  // Both of these are comparisons, so both bypass `said` for the reason
+  // recorded above: nothing a business writes about itself can establish
+  // a claim about somebody else's product.
+  always(NAMED_COMPARISON, (m) => `"${m[0].trim()}" — a comparison with another product that nothing on record supports`);
+  always(RIVAL_DISPARAGEMENT, (m) => `"${m[0].trim()}" — this says other products have that fault, which is a claim about them, not about yours`);
+  each(EXACTNESS, (m) => `"${m[0]}" — nothing on record measures this, and "exact" is a measurement`);
   each(GUARANTEE, (m) => `"${m[0]}" — a guarantee the business hasn't offered`);
   each(SCARCITY, (m) => `"${m[0]}" — urgency about stock that nothing on record supports`);
   each(SLOT_SCARCITY, (m) => `"${m[0]}" — how many slots are left isn't on record; a service has no stock count, so nothing here backs the hurry`);

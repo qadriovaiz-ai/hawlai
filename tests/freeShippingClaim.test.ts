@@ -112,7 +112,13 @@ describe("the live case, through the real chat tools", () => {
     anthropic({ text: "Is Diwali, ghar ko khushboo se bhar do. 🪔 Lavender candle — sirf ₹550 mein. Free shipping. Order via link in bio!" });
     const result = await executeTool(db(), CTX, "generate_content", { contentType: "facebook_post", topic: "Diwali sale" }, "");
 
-    expect(result.text).toBe("Is Diwali, ghar ko khushboo se bhar do. 🪔 Lavender candle — sirf ₹550 mein. Order via link in bio!");
+    // "Order via link in bio!" on a FACEBOOK post is a dead end: there
+    // is no bio, and links work here. Found live on 8 Oct 2026, and it
+    // is now replaced with the business's own store address (never an
+    // invented one) — see tests/captionClaims.test.ts.
+    expect(result.text).toBe(
+      "Is Diwali, ghar ko khushboo se bhar do. 🪔 Lavender candle — sirf ₹550 mein. Order via https://hawlai.online/site/candle-by-qaaf!"
+    );
     expect(result._claimsNote).toMatch(/Free shipping.*₹60 flat/);
   });
 
