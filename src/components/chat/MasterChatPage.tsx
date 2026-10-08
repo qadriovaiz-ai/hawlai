@@ -53,6 +53,14 @@ interface Artifact {
   html?: string;
   fields?: { label: string; value: string }[];
   changes?: { label: string; before: string; after: string }[];
+  /**
+   * There is nowhere to post this, so there is no publish button.
+   *
+   * The card offers Copy caption / Download image instead and says why
+   * — rather than a button whose destination the owner discovers after
+   * pressing it (src/lib/chat/destinations.ts).
+   */
+  cannotPublish?: { reason: string; text: string };
   groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[];
   draft?: { heading: string; subheading?: string; body: string; wordCount: number; id?: string; raw?: any; patchUrl?: string };
   metric?: { heroValue: string; heroLabel: string; trend?: { direction: "up" | "down" | "flat"; label: string }; sparkline?: number[]; cells?: { label: string; value: string }[] };
@@ -255,6 +263,9 @@ export default function MasterChatPage({
                         {/* A website draft is a visual artifact, and publishing it is
                             the point of generating it — so the actions live here, not
                             only on the department page. */}
+                        {artifact.cannotPublish && (
+                          <CannotPublishStrip reason={artifact.cannotPublish.reason} text={artifact.cannotPublish.text} />
+                        )}
                         {artifact.publish && (
                           <div className="rounded-lg border border-slate-200 bg-white">
                             <PublishStrip artifact={artifact} onEdit={(text) => setMessage(text)} />
@@ -467,10 +478,67 @@ function CopyChange({ label, before, after }: { label: string; before: string; a
   );
 }
 
+/**
+ * Nowhere to post, so no button that posts.
+ *
+ * THE LIVE INCIDENT (8 Oct 2026): a card titled "Instagram Post"
+ * carried Approve & Publish, the button published to a Facebook Page,
+ * and "no Instagram account is connected" arrived after the post was
+ * public. A content card for a destination that is not connected now
+ * offers the caption and says why, which is the honest version of the
+ * same help.
+ */
+function CannotPublishStrip({ reason, text }: { reason: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-slate-100 px-3 py-2 space-y-1.5">
+      <p className="text-[11px] text-amber-600 leading-snug">{reason}</p>
+      <button
+        onClick={copy}
+        className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors"
+      >
+        {copied ? "Copied" : "Copy caption"}
+      </button>
+    </div>
+  );
+}
+
 function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
   const publish = artifact.publish!;
   const [state, setState] = useState<"idle" | "confirming" | "working" | "done" | "rejected" | "error">("idle");
   const [note, setNote] = useState<string | null>(null);
+  // What the platform served back, and the id needed to take it down.
+  const [landed, setLanded] = useState<{ verified: string; text?: string } | null>(null);
+  const [postId, setPostId] = useState<string | null>(null);
+  const [removal, setRemoval] = useState<string | null>(null);
+
+  async function remove() {
+    if (!postId) return;
+    setRemoval("Removing...");
+    try {
+      const res = await fetch("/api/social/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: postId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setRemoval(res.ok ? data?.message ?? "Removed." : data?.error ?? "Couldn't remove it \u2014 delete it from the Page directly.");
+      if (res.ok && data?.removed) setPostId(null);
+    } catch {
+      setRemoval("Couldn't reach the server \u2014 the post is still up.");
+    }
+  }
 
   async function run(action: "publish" | "reject") {
     const spec = action === "publish" ? publish : publish.discard;
@@ -499,6 +567,14 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       // letting "Posted" imply both channels got it.
       const igError = action === "publish" ? (data?.instagram?.error as string | undefined) : undefined;
       setNote(igError ? `${spec.done.replace(" and Instagram", "")} \u2014 Instagram skipped: ${igError}` : spec.done);
+      if (action === "publish" && publish.target === "social_post") {
+        // The read-back, and the id that can undo this. On 8 Oct 2026 the
+        // post went out missing its hashtags and the card still said
+        // "Posted" \u2014 because nothing compared the two, and nothing
+        // offered to take it back down.
+        if (typeof data?.post_id === "string") setPostId(data.post_id);
+        if (typeof data?.verified === "string") setLanded({ verified: data.verified, text: data?.landed_text });
+      }
     } catch {
       setState("error");
       setNote(publish.target === "email" ? "Couldn't reach the server \u2014 the email was not sent." : "Couldn't reach the server \u2014 nothing was published.");
@@ -507,8 +583,30 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
 
   if (state === "done" || state === "rejected") {
     return (
-      <div className="border-t border-slate-100 px-3 py-2">
+      <div className="border-t border-slate-100 px-3 py-2 space-y-1.5">
         <p className={`text-[11px] font-medium leading-snug ${state === "done" ? "text-emerald-600" : "text-slate-500"}`}>{note}</p>
+        {landed?.verified === "differs" && (
+          <div className="space-y-1">
+            <p className="text-[11px] text-amber-600 leading-snug">
+              What the Page is showing isn&apos;t what you approved. These are the words that went out:
+            </p>
+            <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans bg-slate-100 rounded-md px-2 py-1.5">{landed.text || "(no text at all)"}</pre>
+          </div>
+        )}
+        {landed?.verified === "unreadable" && (
+          <p className="text-[11px] text-amber-600 leading-snug">
+            I couldn&apos;t read the post back, so I can&apos;t confirm the words landed as approved \u2014 check the Page.
+          </p>
+        )}
+        {state === "done" && postId && (
+          <button
+            onClick={remove}
+            className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors"
+          >
+            Remove the post
+          </button>
+        )}
+        {removal && <p className="text-[11px] text-slate-500 leading-snug">{removal}</p>}
       </div>
     );
   }
@@ -517,6 +615,20 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
     <div className="border-t border-slate-100 px-3 py-2">
       {state === "confirming" ? (
         <div className="space-y-1.5">
+          {publish.target === "social_post" && (
+            // THE POST, as the Page will carry it: the image and the
+            // caption together, in one place, before it is public. The
+            // card used to show the caption in one block and the
+            // generated image as a separate artifact further up, so the
+            // two were never seen as the single thing being published.
+            <div className="rounded-md border border-slate-200 overflow-hidden">
+              {typeof publish.payload.image_url === "string" && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={publish.payload.image_url} alt="" className="w-full max-h-48 object-cover" />
+              )}
+              <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans px-2 py-1.5">{String(publish.payload.caption ?? "")}</pre>
+            </div>
+          )}
           <p className="text-[11px] text-slate-700 leading-snug">{publish.confirm}</p>
           <div className="flex items-center gap-1.5">
             <button
@@ -768,7 +880,11 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
       )}
     </div>
   ) : null;
-  const publishStrip = artifact.publish ? <PublishStrip artifact={artifact} onEdit={onEdit} /> : null;
+  const publishStrip = artifact.publish ? (
+    <PublishStrip artifact={artifact} onEdit={onEdit} />
+  ) : artifact.cannotPublish ? (
+    <CannotPublishStrip reason={artifact.cannotPublish.reason} text={artifact.cannotPublish.text} />
+  ) : null;
   const [draftEdit, setDraftEdit] = useState<any>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);

@@ -176,6 +176,35 @@ export async function readPostMessage(postId: string, pageAccessToken: string): 
   }
 }
 
+/**
+ * Taking a post back down.
+ *
+ * Needed because of 8 Oct 2026: a post the owner never meant to make
+ * went public, and the only way to remove it was to open Facebook. A
+ * button that publishes irreversibly should be matched by one that
+ * undoes what it can — the post stops being visible, though anyone who
+ * already saw it has already seen it.
+ *
+ * Graph refuses to delete some object types (a photo's story, posts
+ * older than the token's grant), so the failure message is passed
+ * through verbatim rather than reported as success.
+ */
+export async function deletePostFromPage(postId: string, pageAccessToken: string): Promise<{ deleted: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${postId}?access_token=${encodeURIComponent(pageAccessToken)}`,
+      { method: "DELETE" }
+    );
+    const data = await res.json().catch(() => null);
+    if (!res.ok || data?.error) {
+      return { deleted: false, error: data?.error?.message ?? `Facebook refused the delete (HTTP ${res.status})` };
+    }
+    return { deleted: data?.success !== false };
+  } catch (err: any) {
+    return { deleted: false, error: err?.message ?? "Could not reach Facebook to delete the post." };
+  }
+}
+
 // Finds the Instagram Business Account connected to this Facebook
 // Page — Instagram posting always goes through a linked Page's own
 // access token, there's no separate Instagram-only auth needed if

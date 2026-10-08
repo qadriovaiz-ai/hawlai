@@ -17,6 +17,8 @@
 // and a social post is instantly visible to followers. The button asks
 // first, in words that say exactly what is about to happen.
 
+import { publicPostConfirm, type Destination } from "./destinations";
+
 export type PublishAction = {
   target: "website" | "social_post" | "email";
   /** The button. */
@@ -77,32 +79,63 @@ export function websitePublishAction(): PublishAction {
 }
 
 /**
- * Posting a generated caption.
+ * Posting a generated caption — to a named destination.
  *
- * Instagram needs a picture — its API has no text-only post — so a
- * caption with no image is Facebook-only, and the confirm says which
- * channels are actually about to receive it rather than promising both.
+ * THE LIVE INCIDENT (8 Oct 2026). The owner asked for an Instagram
+ * caption, the card said "Instagram Post", and the button published
+ * PUBLICLY to a Facebook Page with a generated image. The label came
+ * from the content TYPE and the button came from here, and nothing
+ * reconciled the two. The owner pressed a button that did not say where
+ * it was going.
+ *
+ * So the destination is resolved first (src/lib/chat/destinations.ts)
+ * and passed in. The button says the Page's name, the confirmation says
+ * what will be public, and a destination that is not connected gets no
+ * button at all — the caller offers Copy caption instead.
  */
-export function socialPublishAction(opts: { caption: string; imageUrl?: string | null; draftId?: string | null }): PublishAction | null {
-  const caption = (opts.caption ?? "").trim();
-  if (!caption) return null;
+export function socialPublishAction(opts: {
+  /** The exact text the card is showing — composePost, not a second pass. */
+  text: string;
+  to: Destination;
+  imageUrl?: string | null;
+  /** Where the picture came from, so the card can say so. */
+  imageSource?: "uploaded" | "site" | "ai" | null;
+  draftId?: string | null;
+}): PublishAction | null {
+  const text = (opts.text ?? "").trim();
+  if (!text) return null;
+  // No button for somewhere we cannot post. This is the check that ran
+  // after the press instead of before it.
+  if (!opts.to.connected) return null;
 
   const imageUrl = opts.imageUrl ?? null;
-  const channels = imageUrl ? "Facebook and Instagram" : "Facebook";
+  const toInstagram = opts.to.platform === "instagram";
+  const where = toInstagram ? "Instagram" : `Facebook Page${opts.to.name ? `: ${opts.to.name}` : ""}`;
 
   return {
     target: "social_post",
-    label: "Approve & Publish",
-    confirm: imageUrl
-      ? "This posts live to your Facebook Page and Instagram right now, where your followers will see it. It can be deleted afterwards, but not unseen."
-      : "This posts live to your Facebook Page right now, where your followers will see it. There's no image on this one, so Instagram is skipped — ask me to generate an image first if you want it there too.",
+    label: `Publish to your ${where}`,
+    confirm: publicPostConfirm(opts.to, { hasImage: Boolean(imageUrl) }),
     endpoint: "/api/social/post",
     method: "POST",
-    // The draft's id travels with the post so a visit arriving from it
-    // can be counted against it (Hawlai Brain, Phase 0). It is the same
-    // id Reject uses to discard the draft — one piece, one identity.
-    payload: { caption, image_url: imageUrl, post_to_instagram: Boolean(imageUrl), content_piece_id: opts.draftId ?? null },
-    done: `✅ Posted to ${channels}`,
+    payload: {
+      // THE SAME TEXT THE CARD SHOWED. `captionFrom` used to recompute
+      // it here and dropped the hashtags on the way.
+      caption: text,
+      image_url: imageUrl,
+      post_to_instagram: toInstagram,
+      // WHICH platform, not "Facebook plus maybe Instagram". The
+      // endpoint posts to Facebook first and treats Instagram as an
+      // extra; naming the destination is what stops an Instagram card
+      // publishing to a Facebook Page.
+      destination: opts.to.platform,
+      image_source: opts.imageSource ?? null,
+      destination_name: opts.to.name ?? null,
+      content_piece_id: opts.draftId ?? null,
+      // The endpoint reads the post back and compares against this.
+      expect_text: text,
+    },
+    done: `✅ Posted to your ${where}`,
     ...(opts.draftId
       ? {
           discard: {
@@ -114,17 +147,6 @@ export function socialPublishAction(opts: { caption: string; imageUrl?: string |
         }
       : {}),
   };
-}
-
-/** The caption out of a generated content result, whatever shape the model returned. */
-export function captionFrom(result: any): string {
-  if (!result || typeof result !== "object") return "";
-  for (const key of ["text", "caption", "post", "content"]) {
-    const value = result[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  const firstString = Object.entries(result).find(([k, v]) => !k.startsWith("_") && typeof v === "string" && (v as string).trim());
-  return firstString ? (firstString[1] as string).trim() : "";
 }
 
 /**
@@ -141,9 +163,25 @@ export function attachTurnImages<T extends { kind: string; type?: string; url?: 
   for (const artifact of artifacts) {
     const publish = artifact.publish;
     if (publish?.target === "social_post" && !publish.payload.image_url) {
-      publish.payload = { ...publish.payload, image_url: image, post_to_instagram: true };
-      publish.confirm = socialPublishAction({ caption: String(publish.payload.caption ?? ""), imageUrl: image })!.confirm;
-      publish.done = "✅ Posted to Facebook and Instagram";
+      // THE IMAGE IS ATTACHED. THE DESTINATION IS NOT CHANGED.
+      //
+      // This used to set `post_to_instagram: true` here, which sent the
+      // post to a second public platform the confirmation had never
+      // named — the owner approved "your Facebook Page" and Instagram
+      // was added by a function that only knew an image existed.
+      publish.payload = { ...publish.payload, image_url: image };
+      // The confirmation does have to mention the image now that there
+      // is one. Rebuilt from the destination this action already
+      // carries, so the Page's name does not quietly disappear.
+      publish.confirm = publicPostConfirm(
+        {
+          platform: (publish.payload.destination as "facebook" | "instagram") ?? "facebook",
+          name: (publish.payload.destination_name as string | null) ?? null,
+          connected: true,
+          why: null,
+        },
+        { hasImage: true }
+      );
     }
   }
   return artifacts;

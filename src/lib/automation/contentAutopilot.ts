@@ -1,7 +1,6 @@
 import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
 import { generateContent } from "@/lib/agents/contentMarketingAgent";
 import { postPhotoToPage, getConnectedInstagramAccountId, postPhotoToInstagram, readPostMessage } from "@/lib/agents/socialMediaAgent";
-import { captionFrom } from "@/lib/chat/publishActions";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readMetaPageToken, hasMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
@@ -25,8 +24,31 @@ import { registerPiece } from "@/lib/attribution/pieces";
  * Now the caption is a real string or nothing, and nothing means nothing
  * is posted.
  */
+
+/**
+ * Deliberately NOT composePost.
+ *
+ * composePost (src/lib/chat/socialPost.ts) joins every written field and
+ * the hashtags, because it feeds a card the owner reads before pressing
+ * publish — showing her less than will be posted is the bug it exists to
+ * fix. The autopilot posts with nobody looking, so it is strict instead:
+ * one named caption field, and a result that is only hashtags composes to
+ * nothing and posts nothing. Unifying the two would let an unsupervised
+ * run post "#candles #diwali" as a caption, which is what the tests
+ * below call THE LIVE CASE.
+ */
+function captionTextOnly(result: any): string {
+  if (!result || typeof result !== "object") return "";
+  for (const key of ["text", "caption", "post", "content"]) {
+    const value = result[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  const firstString = Object.entries(result).find(([k, v]) => !k.startsWith("_") && typeof v === "string" && (v as string).trim());
+  return firstString ? (firstString[1] as string).trim() : "";
+}
+
 export function captionForPost(output: any): string {
-  const caption = captionFrom(output);
+  const caption = captionTextOnly(output);
   if (!caption) return "";
   const tags: string[] = Array.isArray(output?.hashtags)
     ? output.hashtags

@@ -15,7 +15,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   websitePublishAction,
   socialPublishAction,
-  captionFrom,
   attachTurnImages,
   SOCIAL_POST_TYPES,
 } from "@/lib/chat/publishActions";
@@ -60,6 +59,11 @@ const CANDLE = (): Record<string, Row[]> => ({
   chat_conversations: [], chat_messages: [], api_usage_logs: [], daily_message_usage: [],
 });
 
+const FB_PAGE = { platform: "facebook" as const, name: "Candle by Qaaf", connected: true, why: null };
+const FB_OFF = { platform: "facebook" as const, name: null, connected: false, why: "Your Facebook Page isn't connected." };
+const IG = { platform: "instagram" as const, name: null, connected: true, why: null };
+const IG_OFF = { platform: "instagram" as const, name: null, connected: false, why: "Posting to Instagram isn't connected." };
+
 describe("what the owner is asked before anything goes live", () => {
   it("publishing the site says it publishes the WHOLE site, and points at the existing endpoint", () => {
     const a = websitePublishAction();
@@ -69,58 +73,75 @@ describe("what the owner is asked before anything goes live", () => {
     expect(a.done).toBe("✅ Published to your live site");
   });
 
-  it("a caption with no image is Facebook-only, and the confirm says Instagram is skipped", () => {
-    const a = socialPublishAction({ caption: "Slow evenings start here." })!;
-    // content_piece_id rides along for attribution (Phase 0) — null here
-    // because this caption was never saved as a draft.
-    expect(a.payload).toEqual({ caption: "Slow evenings start here.", image_url: null, post_to_instagram: false, content_piece_id: null });
-    expect(a.confirm).toMatch(/Facebook Page right now/);
-    expect(a.confirm).toMatch(/Instagram is skipped/);
-    expect(a.done).toBe("✅ Posted to Facebook");
+  it("the button says WHICH Facebook Page, and the confirm says it will be public", () => {
+    const a = socialPublishAction({ text: "Slow evenings start here.", to: FB_PAGE })!;
+    expect(a.label).toBe("Publish to your Facebook Page: Candle by Qaaf");
+    expect(a.confirm).toMatch(/posts publicly to your Facebook Page: Candle by Qaaf/);
+    expect(a.confirm).toMatch(/Anyone can see it/);
+    expect(a.done).toBe("✅ Posted to your Facebook Page: Candle by Qaaf");
+    // The endpoint gets the EXACT text the card showed, to compare after.
+    expect(a.payload).toMatchObject({
+      caption: "Slow evenings start here.",
+      expect_text: "Slow evenings start here.",
+      post_to_instagram: false,
+      destination_name: "Candle by Qaaf",
+      content_piece_id: null,
+    });
   });
 
-  it("a caption with an image offers both channels and says the post can't be unseen", () => {
-    const a = socialPublishAction({ caption: "Diwali warmth", imageUrl: "https://cdn.example/diwali.png" })!;
+  it("an Instagram destination never produces a Facebook button", () => {
+    const a = socialPublishAction({ text: "Diwali warmth", to: IG })!;
+    expect(a.label).toBe("Publish to your Instagram");
     expect(a.payload.post_to_instagram).toBe(true);
-    expect(a.confirm).toMatch(/Facebook Page and Instagram/);
+    expect(a.label).not.toMatch(/Facebook/);
+    expect(a.confirm).not.toMatch(/Facebook/);
+  });
+
+  it("THE INCIDENT: a destination that is not connected gets NO button", () => {
+    // 8 Oct 2026: this check lived inside /api/social/post and ran after
+    // the press, so the owner learned Instagram wasn't connected from a
+    // message that arrived after a public Facebook post.
+    expect(socialPublishAction({ text: "Diwali warmth", to: IG_OFF })).toBeNull();
+    expect(socialPublishAction({ text: "Diwali warmth", to: FB_OFF })).toBeNull();
+  });
+
+  it("an image in the confirm, and the Page's name survives the rebuild", () => {
+    const a = socialPublishAction({ text: "Diwali warmth", to: FB_PAGE, imageUrl: "https://cdn.example/diwali.png" })!;
+    expect(a.confirm).toMatch(/this image and this caption/);
     expect(a.confirm).toMatch(/not unseen/);
   });
 
   it("no caption means no publish button at all", () => {
-    expect(socialPublishAction({ caption: "   " })).toBeNull();
+    expect(socialPublishAction({ text: "   ", to: FB_PAGE })).toBeNull();
   });
 
   it("Reject discards the saved draft only when there is one to discard", () => {
-    expect(socialPublishAction({ caption: "hi", draftId: "cp1" })!.discard).toEqual({
+    expect(socialPublishAction({ text: "hi", to: FB_PAGE, draftId: "cp1" })!.discard).toEqual({
       endpoint: "/api/content-marketing/generate",
       method: "DELETE",
       payload: { id: "cp1" },
       done: "❌ Rejected — draft discarded",
     });
-    expect(socialPublishAction({ caption: "hi" })!.discard).toBeUndefined();
-  });
-
-  it("reads the caption out of whatever shape the model returned", () => {
-    expect(captionFrom({ text: "a" })).toBe("a");
-    expect(captionFrom({ caption: "b" })).toBe("b");
-    expect(captionFrom({ somethingElse: "c" })).toBe("c");
-    expect(captionFrom({ _claimsNote: "note", hashtags: ["#x"] })).toBe("");
+    expect(socialPublishAction({ text: "hi", to: FB_PAGE })!.discard).toBeUndefined();
   });
 
   it("a caption generated beside an image is paired with it, and only social posts are touched", () => {
     const artifacts: any[] = [
-      { kind: "document", label: "Instagram post", publish: socialPublishAction({ caption: "Diwali warmth" }) },
+      { kind: "document", label: "Instagram post", publish: socialPublishAction({ text: "Diwali warmth", to: FB_PAGE }) },
       { kind: "document", label: "Blog" },
       { kind: "visual", type: "image", url: "https://cdn.example/diwali.png", label: "Generated Image" },
     ];
     attachTurnImages(artifacts);
-    expect(artifacts[0].publish.payload).toMatchObject({ image_url: "https://cdn.example/diwali.png", post_to_instagram: true });
-    expect(artifacts[0].publish.confirm).toMatch(/Facebook Page and Instagram/);
+    // The image is attached. The DESTINATION is not changed: this used
+    // to flip post_to_instagram to true, adding a second public platform
+    // the confirmation never named.
+    expect(artifacts[0].publish.payload).toMatchObject({ image_url: "https://cdn.example/diwali.png", post_to_instagram: false, destination: "facebook" });
+    expect(artifacts[0].publish.confirm).toMatch(/this image and this caption/);
     expect(artifacts[1].publish).toBeUndefined();
   });
 
-  it("with no image in the turn, the caption stays Facebook-only", () => {
-    const artifacts: any[] = [{ kind: "document", publish: socialPublishAction({ caption: "hi" }) }];
+  it("with no image in the turn, the caption stays on the destination it had", () => {
+    const artifacts: any[] = [{ kind: "document", publish: socialPublishAction({ text: "hi", to: FB_PAGE }) }];
     attachTurnImages(artifacts);
     expect(artifacts[0].publish.payload.post_to_instagram).toBe(false);
   });
@@ -191,9 +212,38 @@ describe("which generated things get a publish button", () => {
   });
 
   it("an Instagram caption does, carrying the caption and the saved draft id", () => {
-    const artifact = extractArtifact("generate_content", { contentType: "instagram_post" }, { text: "Slow evenings.", _savedId: "cp1" })!;
+    const artifact = extractArtifact(
+      "generate_content",
+      { contentType: "instagram_post" },
+      { text: "Slow evenings.", _savedId: "cp1", _destinations: { facebook: FB_PAGE, instagram: IG, anyConnected: true } }
+    )!;
     expect(artifact.publish!.payload.caption).toBe("Slow evenings.");
+    expect(artifact.publish!.payload.destination).toBe("instagram");
     expect(artifact.publish!.discard!.payload).toEqual({ id: "cp1" });
+  });
+
+  it("THE INCIDENT, end to end: an Instagram card with no Instagram gets no button and says why", () => {
+    const artifact = extractArtifact(
+      "generate_content",
+      { contentType: "instagram_post" },
+      { text: "Slow evenings.", _savedId: "cp1", _destinations: { facebook: FB_PAGE, instagram: IG_OFF, anyConnected: true } }
+    )!;
+    // Facebook IS connected here — and that is exactly the trap. The
+    // owner asked for Instagram; a Facebook button on an Instagram card
+    // is what put a post on the Page on 8 Oct 2026.
+    expect(artifact.publish).toBeUndefined();
+    expect(artifact.cannotPublish!.reason).toMatch(/Instagram/);
+    expect(artifact.cannotPublish!.text).toBe("Slow evenings.");
+  });
+
+  it("with nothing connected at all, the caption is still offered — just not a button", () => {
+    const artifact = extractArtifact(
+      "generate_content",
+      { contentType: "facebook_post" },
+      { text: "Slow evenings.", _destinations: { facebook: FB_OFF, instagram: IG_OFF, anyConnected: false } }
+    )!;
+    expect(artifact.publish).toBeUndefined();
+    expect(artifact.cannotPublish!.text).toBe("Slow evenings.");
   });
 
   it("a blog outline does not — it is something you keep, not something you post", () => {
@@ -239,7 +289,11 @@ describe("a caption and an image generated in one chat turn", () => {
     const caption = result.artifacts.find((a: any) => a.publish?.target === "social_post")!;
     expect(caption.publish!.payload.image_url).toBe("https://cdn.example/uploaded.png");
     expect(caption.publish!.payload.post_to_instagram).toBe(true);
-    expect(caption.publish!.done).toBe("✅ Posted to Facebook and Instagram");
+    expect(caption.publish!.payload.destination).toBe("instagram");
+    // The owner asked for an Instagram post. It says Instagram, and only
+    // Instagram — the route posts nothing to the Page for this payload.
+    expect(caption.publish!.done).toBe("✅ Posted to your Instagram");
+    expect(caption.publish!.label).toBe("Publish to your Instagram");
   });
 });
 

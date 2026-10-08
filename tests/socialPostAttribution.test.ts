@@ -47,6 +47,8 @@ vi.mock("@/lib/agents/socialMediaAgent", () => ({
   postPhotoToPage: async (_p: string, _t: string, _u: string, caption: string) => ((posted.fb = caption), { id: "fb1" }),
   postTextToPage: async (_p: string, _t: string, message: string) => ((posted.fb = message), { id: "fb1" }),
   getConnectedInstagramAccountId: async () => "IG1",
+  // The route reads its own post back now; serve what was posted.
+  readPostMessage: async () => posted.fb,
   postPhotoToInstagram: async (_i: string, _t: string, _u: string, caption: string) => ((posted.ig = caption), { id: "ig1" }),
 }));
 
@@ -71,14 +73,16 @@ beforeEach(() => {
   };
 });
 
+const FB_PAGE = { platform: "facebook" as const, name: "Candle by Qaaf", connected: true, why: null };
+
 describe("the approval card carries the draft's identity", () => {
   it("the id that Reject would discard is the id the post is counted against", () => {
-    const action = socialPublishAction({ caption: "Slots open", imageUrl: null, draftId: PIECE })!;
+    const action = socialPublishAction({ text: "Slots open", to: FB_PAGE, imageUrl: null, draftId: PIECE })!;
     expect(action.payload.content_piece_id).toBe(PIECE);
     expect(action.discard?.payload).toMatchObject({ id: PIECE });
     // An ad-hoc caption with no saved draft carries nothing, rather than
     // inventing an identity for a piece that was never saved.
-    expect(socialPublishAction({ caption: "Slots open" })!.payload.content_piece_id).toBeNull();
+    expect(socialPublishAction({ text: "Slots open", to: FB_PAGE })!.payload.content_piece_id).toBeNull();
   });
 });
 

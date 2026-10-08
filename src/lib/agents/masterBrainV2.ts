@@ -48,7 +48,9 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { websitePublishAction, socialPublishAction, emailSendAction, captionFrom, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { websitePublishAction, socialPublishAction, emailSendAction, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { composePost } from "../chat/socialPost";
+import { readDestinations } from "../chat/destinations";
 import { getCampaignPerformanceState } from "./analyticsAgent";
 import { matchCampaign, proposeBudgetChange, proposeTargetingChange } from "./campaignEditAgent";
 import { decomposeGoal } from "./goalPlanningAgent";
@@ -989,7 +991,16 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [], preferred_language: facts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft", { recent: await recentCopy(supabase, ctx.id) });
       if (_aiFailure) return { error: _aiFailure.message };
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
-      return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
+      // WHERE THIS COULD GO, resolved now — before any card offers to
+      // publish it. extractArtifact is synchronous and cannot ask the
+      // database, which is how a button that published to a Facebook
+      // Page came to be labelled "Instagram Post"
+      // (src/lib/chat/destinations.ts).
+      const destinations = SOCIAL_POST_TYPES.has(String(input.contentType))
+        ? await readDestinations(supabase, ctx.id)
+        : null;
+      const withDest = destinations ? { ...output, _destinations: destinations } : output;
+      return withBrandVoiceCheck(savedId ? { ...withDest, _savedId: savedId } : withDest, resolvedBrandVoice);
     }
     case "generate_seo": {
       // aeo_check is registered in SEO_TASKS (chat-reachable, appears in
@@ -3123,6 +3134,14 @@ export interface Artifact {
    * a card.
    */
   changes?: { label: string; before: string; after: string }[];
+  /**
+   * There is nowhere to post this, so there is no publish button.
+   *
+   * The card offers Copy caption / Download image instead and says why
+   * — rather than a button whose destination the owner discovers after
+   * pressing it (src/lib/chat/destinations.ts).
+   */
+  cannotPublish?: { reason: string; text: string };
   imageUrl?: string; // a picture rendered INSIDE the card. Separate from `url`, which on a record card means a link and is ignored — an ad creative passed as `url` rendered nothing at all
   groups?: { heading: string; items: { label: string; note?: string; imageUrl?: string }[] }[]; // sectioned lists — e.g. keyword research grouped by search intent — so a document card never has to fall back to dumping raw JSON structure
   /**
@@ -4045,8 +4064,45 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       // A caption is something you POST; a blog outline is something
       // you keep. Only the first gets a publish button.
       if (SOCIAL_POST_TYPES.has(String(input?.contentType))) {
-        const publish = socialPublishAction({ caption: captionFrom(result), draftId: result?._savedId ?? null });
+        // THE DESTINATION IS RESOLVED BEFORE THE BUTTON EXISTS, in the
+        // tool (which has the database); extractArtifact is synchronous
+        // and cannot ask. It travels on the result as _destinations.
+        //
+        // The owner asked for "an Instagram caption", got a card titled
+        // "Instagram Post", and the button published to a Facebook Page.
+        // Instagram is only offered when Meta says an account is linked
+        // to the Page, and Facebook only when the Page is connected.
+        // THE CONTENT TYPE NAMES THE PLATFORM, AND THERE IS NO FALLBACK.
+        //
+        // An instagram_post goes to Instagram or nowhere. The version
+        // that shipped on 8 Oct 2026 effectively fell back to Facebook,
+        // which is how a card titled "Instagram Post" came to carry a
+        // button that published to a Facebook Page. Offering the other
+        // platform in WORDS is help; offering it as a button on a card
+        // labelled for the first one is the bug.
+        const type = String(input?.contentType);
+        const wanted: "facebook" | "instagram" | null =
+          type === "instagram_post" ? "instagram" : type === "facebook_post" ? "facebook" : null;
+        const to = wanted ? result?._destinations?.[wanted] : null;
+        const composed = composePost(result);
+        const publish = to
+          ? socialPublishAction({ text: composed.text, to, draftId: result?._savedId ?? null })
+          : null;
         if (publish) artifact.publish = publish;
+        // No button: say why, and name the platform that IS connected
+        // rather than quietly posting there.
+        if (!publish) {
+          const other = wanted === "instagram" ? result?._destinations?.facebook : result?._destinations?.instagram;
+          const offer = other?.connected
+            ? ` Your ${other.platform === "facebook" ? "Facebook Page" : "Instagram"} is connected — ask me to make this a ${other.platform === "facebook" ? "Facebook" : "Instagram"} post instead.`
+            : "";
+          artifact.cannotPublish = {
+            reason: wanted
+              ? `${to?.why ?? "That account isn't connected for posting."}${offer}`
+              : "Hawlai can't post to Threads — copy the text and post it yourself.",
+            text: composed.text,
+          };
+        }
       }
       return artifact;
     }
