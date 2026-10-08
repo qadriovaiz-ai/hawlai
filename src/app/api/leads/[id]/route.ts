@@ -17,10 +17,18 @@ export async function PATCH(
   // delay_days correctly (leads had no timestamp for this before).
   const update = body.status === "converted" ? { ...body, converted_at: new Date().toISOString() } : body;
 
+  // SCOPED TO THIS BUSINESS as well as this id. RLS already enforces it,
+  // so this changes nothing for a legitimate caller — it means a crafted
+  // request cannot reach another business's lead if a policy is ever
+  // loosened, and the row count says plainly when nothing matched.
+  const { data: owner } = await supabase.from("profiles").select("dealership_id").eq("id", user.id).single();
+  if (!owner?.dealership_id) return NextResponse.json({ error: "No dealership" }, { status: 400 });
+
   const { data, error } = await supabase
     .from("leads")
     .update(update)
     .eq("id", id)
+    .eq("dealership_id", owner.dealership_id)
     .select()
     .single();
 

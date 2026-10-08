@@ -65,6 +65,15 @@ export type LeadRow = {
   deal_value?: number | string | null;
   meta_campaign_id?: string | null;
   is_test?: boolean | null;
+  /**
+   * This row was found to be a duplicate and folded into another lead.
+   *
+   * Kept, never deleted (migration 136): the same person arriving by DM
+   * and by phone is one lead, and the losing row stays so the trail is
+   * readable. It must not be a second lead in any count — a duplicate
+   * in the denominator halves the conversion rate on its own.
+   */
+  merged_into_lead_id?: string | null;
 };
 
 /** How a link was established — never an inference presented as a fact. */
@@ -104,9 +113,32 @@ function emailOf(value: unknown): string {
  */
 export function linkOrders(orders: OrderRow[], leads: LeadRow[]): LinkedOrder[] {
   const byId = new Map(leads.map((l) => [l.id, l]));
+
+  /**
+   * The lead a duplicate was folded into — following the chain, since a
+   * merge can happen twice.
+   *
+   * An order pointing at a row that has since been merged still belongs
+   * to that person; it belongs to their SURVIVING row. Dropping the link
+   * instead would turn a tidied duplicate into an unlinked order.
+   */
+  const survivorOf = (lead: LeadRow | undefined): LeadRow | undefined => {
+    let current = lead;
+    for (let hops = 0; current?.merged_into_lead_id && hops < 5; hops++) {
+      const next = byId.get(current.merged_into_lead_id);
+      if (!next || next.id === current.id) break;
+      current = next;
+    }
+    return current;
+  };
+
+  // Only surviving rows are matchable: a merged duplicate holds the same
+  // phone number as its survivor, so indexing it would make the match
+  // depend on which row happened to be first.
   const byPhone = new Map<string, LeadRow>();
   const byEmail = new Map<string, LeadRow>();
   for (const lead of leads) {
+    if (lead.merged_into_lead_id) continue;
     const phone = digitsOf(lead.phone);
     if (phone.length === 10 && !byPhone.has(phone)) byPhone.set(phone, lead);
     const email = emailOf(lead.email);
@@ -118,7 +150,8 @@ export function linkOrders(orders: OrderRow[], leads: LeadRow[]): LinkedOrder[] 
     let leadBasis: LinkBasis = "none";
 
     if (order.lead_id && byId.has(order.lead_id)) {
-      leadId = order.lead_id;
+      // Through the merge, to the row that is still a lead.
+      leadId = survivorOf(byId.get(order.lead_id))?.id ?? order.lead_id;
       leadBasis = "recorded";
     } else {
       const phone = digitsOf(order.customer_phone);
@@ -174,6 +207,23 @@ export function linkOrders(orders: OrderRow[], leads: LeadRow[]): LinkedOrder[] 
   });
 }
 
+/**
+ * Whether this row counts as a lead at all.
+ *
+ * ONE DEFINITION, because the same two conditions were about to be
+ * pasted into three separate queries and would have drifted the moment a
+ * fourth condition appeared. Applied in CODE rather than in the SQL so
+ * every caller shares it — and so a row that is missing the columns
+ * (an older fixture, a narrower select) counts normally instead of
+ * silently vanishing.
+ *
+ * A merged duplicate is not a second person. The owner's own test is not
+ * a customer. Both stay in the table; neither belongs in a denominator.
+ */
+export function countsAsLead(lead: { merged_into_lead_id?: string | null; is_test?: boolean | null }): boolean {
+  return !lead.merged_into_lead_id && lead.is_test !== true;
+}
+
 export type AttributionView = {
   /** Every order, linked. */
   orders: LinkedOrder[];
@@ -188,13 +238,18 @@ export type AttributionView = {
   convertedLeadIds: Set<string>;
   /** Leads excluded as the owner's own tests. */
   testLeadIds: Set<string>;
+  /** Leads excluded as duplicates folded into another row. */
+  mergedLeadIds: Set<string>;
   /** Leads that count in a denominator: real, not tests. */
   countedLeads: LeadRow[];
 };
 
 export function attribute(orders: OrderRow[], leads: LeadRow[]): AttributionView {
   const testLeadIds = new Set(leads.filter((l) => l.is_test === true).map((l) => l.id));
-  const countedLeads = leads.filter((l) => !testLeadIds.has(l.id));
+  const mergedLeadIds = new Set(leads.filter((l) => Boolean(l.merged_into_lead_id)).map((l) => l.id));
+  // A merged duplicate is not a second lead, and the owner's own test is
+  // not a customer. Both are kept in the table and out of the count.
+  const countedLeads = leads.filter((l) => !testLeadIds.has(l.id) && !mergedLeadIds.has(l.id));
   const linked = linkOrders(orders, leads);
   const paidOrders = linked.filter((o) => o.paid);
 
@@ -206,6 +261,7 @@ export function attribute(orders: OrderRow[], leads: LeadRow[]): AttributionView
     inferredOrders: paidOrders.filter((o) => o.leadBasis === "matched_phone" || o.leadBasis === "matched_email"),
     convertedLeadIds: new Set(paidOrders.map((o) => o.leadId).filter((id): id is string => Boolean(id))),
     testLeadIds,
+    mergedLeadIds,
     countedLeads,
   };
 }

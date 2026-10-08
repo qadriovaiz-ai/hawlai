@@ -18,6 +18,7 @@ import { AT_RISK_DAYS, getCustomerRiskList } from "@/lib/agents/churnAgent";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { PAID_ORDER_STATUSES } from "@/lib/claims/businessFacts";
 import type { BusinessModel } from "@/lib/business/businessModel";
+import { countsAsLead } from "@/lib/analytics/orderLinkage";
 
 export const WINDOW_DAYS = 90;
 /** A step needs this many people entering it before it can be called the weakest. */
@@ -194,12 +195,15 @@ export async function loadDiagnosis(supabase: any, dealershipId: string, today =
     loadBusinessModels(supabase, dealershipId).catch(() => [] as BusinessModel[]),
     supabase.from("dealerships").select("created_at").eq("id", dealershipId).maybeSingle(),
     supabase.from("page_events").select("event_type").eq("dealership_id", dealershipId).eq("is_internal", false).gte("created_at", since),
-    supabase.from("leads").select("id, source, status").eq("dealership_id", dealershipId).gte("created_at", since),
+    supabase.from("leads").select("id, source, status, merged_into_lead_id, is_test").eq("dealership_id", dealershipId).gte("created_at", since),
     supabase.from("orders").select("status").eq("dealership_id", dealershipId).gte("created_at", since),
     supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", since),
   ]);
 
-  const leads = (leadRows ?? []) as DiagnosisInput["leads"];
+  // A merged duplicate is not a second person and the owner's own test
+  // is not a customer — the Diagnosis funnel counted both
+  // (src/lib/analytics/orderLinkage.ts).
+  const leads = ((leadRows ?? []) as any[]).filter(countsAsLead) as DiagnosisInput["leads"];
   const firstTouch: Record<string, string> = {};
   if (leads.length) {
     const { data: touches } = await supabase

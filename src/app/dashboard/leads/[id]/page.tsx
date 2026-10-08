@@ -11,6 +11,7 @@ import LeadCrmPanel from "@/components/leads/LeadCrmPanel";
 import LeadPrivacyActions from "@/components/leads/LeadPrivacyActions";
 import TriggerAICallButton from "@/components/calls/TriggerAICallButton";
 import DndOptOutToggle from "@/components/leads/DndOptOutToggle";
+import TestLeadToggle from "@/components/leads/TestLeadToggle";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -75,6 +76,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <CreateAppointmentModal leadId={lead.id} leadName={lead.name} dealershipId={lead.dealership_id} />
             <GenerateMessageButton leadId={lead.id} phone={lead.phone} email={lead.email} />
             <DndOptOutToggle leadId={lead.id} optedOut={!!lead.dnd_opt_out} />
+            <TestLeadToggle leadId={lead.id} isTest={!!lead.is_test} />
           </div>
         </div>
       </div>

@@ -18,6 +18,7 @@
 // retries), not a sum of daily campaign_performance_history snapshots.
 
 import { getCampaignPerformanceState } from "@/lib/agents/analyticsAgent";
+import { countsAsLead } from "@/lib/analytics/orderLinkage";
 
 /** Paid, real orders — the same statuses campaign attribution counts. */
 export const PAID_ORDER_STATUSES = new Set(["confirmed", "shipped", "delivered"]);
@@ -59,7 +60,7 @@ const money = (v: number) => Math.round(v * 100) / 100;
 
 export async function gatherBusinessNumbers(supabase: any, dealershipId: string): Promise<BusinessNumbers> {
   const [leadsR, approvalsR, campaignsR, apptsR, callsR, ordersR, dealershipR, performance] = await Promise.all([
-    supabase.from("leads").select("lead_temperature, status, deal_value").eq("dealership_id", dealershipId),
+    supabase.from("leads").select("lead_temperature, status, deal_value, merged_into_lead_id, is_test").eq("dealership_id", dealershipId),
     supabase.from("pending_approvals").select("id").eq("dealership_id", dealershipId).eq("status", "pending"),
     supabase.from("ad_creatives").select("id").eq("dealership_id", dealershipId).eq("status", "launched"),
     supabase.from("appointments").select("status").eq("dealership_id", dealershipId),
@@ -73,7 +74,11 @@ export async function gatherBusinessNumbers(supabase: any, dealershipId: string)
     if (r?.error) console.error(`[business-numbers] ${label} read failed:`, r.error.message);
   }
 
-  const leads: any[] = leadsR?.data ?? [];
+  const allLeads: any[] = leadsR?.data ?? [];
+  // A merged duplicate is not a second person and the owner's own test
+  // is not a customer. Filtered once, here, so every number below is
+  // computed from the same set (src/lib/analytics/orderLinkage.ts).
+  const leads = allLeads.filter(countsAsLead);
   const leadsByStage: Record<string, number> = {};
   for (const l of leads) leadsByStage[l.status] = (leadsByStage[l.status] ?? 0) + 1;
   const converted = leads.filter((l) => l.status === "converted");

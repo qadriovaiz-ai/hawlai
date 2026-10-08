@@ -29,6 +29,7 @@ import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalog
 import { splitStories, withheldNote } from "./personalStories";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 import { TEXT_PROPS, machineWroteProp } from "@/lib/pages/provenance";
+import { countsAsLead } from "@/lib/analytics/orderLinkage";
 
 type Row = Record<string, any>;
 
@@ -410,7 +411,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     read<Row[]>("offers", supabase.from("discount_codes").select("code, discount_type, value, min_order_value, max_uses, used_count, expires_at, is_active").eq("dealership_id", dealershipId).eq("is_active", true), []),
     read<Row[]>("visitor data", supabase.from("page_events").select("event_type").eq("dealership_id", dealershipId).eq("is_internal", false).gte("created_at", since), []),
     read<Row[]>("orders", supabase.from("orders").select("status, created_at").eq("dealership_id", dealershipId), []),
-    read<Row[]>("leads", supabase.from("leads").select("id").eq("dealership_id", dealershipId), []),
+    read<Row[]>("leads", supabase.from("leads").select("id, merged_into_lead_id, is_test").eq("dealership_id", dealershipId), []),
     read<Row[]>("abandoned carts", supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", since), []),
     read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content, public_use_consent").eq("dealership_id", dealershipId).eq("is_active", true), []),
     read<Row | null>("brand profile", supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
@@ -511,7 +512,12 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
       conversionRate: views >= 10 ? Math.round((orders30 / views) * 1000) / 10 : null,
       cartAbandonmentRate: orders30 + cartCount >= 5 ? Math.round((cartCount / (orders30 + cartCount)) * 1000) / 10 : null,
     },
-    allTime: { paidOrders: orders.filter((o) => PAID_ORDER_STATUSES.has(o.status)).length, leads: leads.length },
+    // COUNTED LEADS ONLY. A merged duplicate is not a second person and
+    // the owner's own test is not a customer — and this number is the
+    // ceiling findUnsupportedClaims judges "hundreds of happy
+    // customers" against, so a double count made an unbacked claim
+    // easier to pass (src/lib/analytics/orderLinkage.ts).
+    allTime: { paidOrders: orders.filter((o) => PAID_ORDER_STATUSES.has(o.status)).length, leads: leads.filter(countsAsLead).length },
     ownerFacts: knowledge.filter((k) => k?.title || k?.content).map(toKnowledgeFact),
     // Always the Hawlai address, never websites.custom_domain: nothing in
     // the app routes a custom domain to the site yet, so a link to one
