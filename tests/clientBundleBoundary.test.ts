@@ -31,6 +31,11 @@ const SERVER_ONLY = [
   // the database. It throws on evaluation in a browser; being in a bundle
   // at all is the bug, and the throw is only the symptom.
   "src/lib/supabase/service.ts",
+  // Reads MARKETING_ENCRYPTION_KEY / COMMERCE_ENCRYPTION_KEY and
+  // decrypts stored OAuth tokens. A chat card nearly pulled it into the
+  // browser by naming the one pure function that happened to sit next
+  // to it (lib/chat/postConfirm.ts exists because of that).
+  "src/lib/crypto/secretCrypto.ts",
 ];
 
 const SOURCE = /\.tsx?$/;

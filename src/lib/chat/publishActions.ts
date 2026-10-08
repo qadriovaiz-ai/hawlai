@@ -17,7 +17,7 @@
 // and a social post is instantly visible to followers. The button asks
 // first, in words that say exactly what is about to happen.
 
-import { publicPostConfirm, type Destination } from "./destinations";
+import { publicPostConfirm, type Destination } from "./postConfirm";
 
 export type PublishAction = {
   target: "website" | "social_post" | "email" | "image";

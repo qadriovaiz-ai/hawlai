@@ -17,15 +17,12 @@
 // the answer: a platform that cannot receive a post gets no button.
 
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
-
-export type Destination = {
-  platform: "facebook" | "instagram";
-  /** The name a human would recognise — the Page, not an id. */
-  name: string | null;
-  connected: boolean;
-  /** Why not, in words the owner can act on. Null when connected. */
-  why: string | null;
-};
+// The type and the confirmation sentence live in a module with no
+// server imports, so the chat card can use them without dragging the
+// token decryption into the browser bundle. Re-exported here so every
+// existing caller keeps working.
+export { publicPostConfirm, type Destination } from "./postConfirm";
+import { type Destination } from "./postConfirm";
 
 export type Destinations = {
   facebook: Destination;
@@ -97,10 +94,4 @@ export async function readDestinations(
   }
 
   return { facebook, instagram, anyConnected: facebook.connected || instagram.connected };
-}
-
-/** The sentence a public-post confirmation has to say. */
-export function publicPostConfirm(to: Destination, opts: { hasImage: boolean }): string {
-  const where = to.platform === "facebook" ? `your Facebook Page${to.name ? `: ${to.name}` : ""}` : "your Instagram account";
-  return `This posts publicly to ${where} right now, with ${opts.hasImage ? "this image and this caption" : "this caption"} exactly as shown above. Anyone can see it. It can be deleted afterwards, but not unseen.`;
 }

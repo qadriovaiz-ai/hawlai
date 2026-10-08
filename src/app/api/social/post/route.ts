@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   // Three ways in, one posting path: an uploaded photo (the Social
   // page), an image already in storage (chat, which generated it a
   // moment ago and has its URL), or words alone.
-  const { photo_base64, image_url, caption, scheduled_time, post_to_instagram, content_piece_id, destination, expect_text } =
+  const { photo_base64, image_url, caption, scheduled_time, post_to_instagram, content_piece_id, destination, expect_text, image_source } =
     await request.json();
   if (!caption || caption.trim().length < 1) return NextResponse.json({ error: "Caption is required" }, { status: 400 });
 
@@ -40,13 +40,15 @@ export async function POST(request: Request) {
   // be counted against it (Hawlai Brain, Phase 0). Confirmed to belong to
   // this business before it is used — the id arrives in a request body.
   let pieceId: string | null = null;
+  let draftRow: { id: string; output?: Record<string, unknown> | null } | null = null;
   if (isPieceId(content_piece_id)) {
     const { data: draft } = await supabase
       .from("content_pieces")
-      .select("id, topic")
+      .select("id, topic, output")
       .eq("id", content_piece_id)
       .eq("dealership_id", dealershipId)
       .maybeSingle();
+    draftRow = draft ?? null;
     // Registered on publish, not on generation: a draft that is never
     // posted is not a published piece and gets no identity.
     if (draft?.id) pieceId = await registerPiece(supabase, { dealershipId, kind: "content", sourceId: draft.id, label: draft.topic });
@@ -113,6 +115,14 @@ export async function POST(request: Request) {
         );
       }
       const igRes = await postPhotoToInstagram(igUserId, pageAccessToken, imageUrl, caption);
+      if (draftRow?.id) {
+        const existing = draftRow.output && typeof draftRow.output === "object" ? draftRow.output : {};
+        await supabase
+          .from("content_pieces")
+          .update({ output: { ...existing, _imageUrl: imageUrl, _imageSource: image_source ?? null } })
+          .eq("id", draftRow.id)
+          .eq("dealership_id", dealershipId);
+      }
       return NextResponse.json({
         success: true,
         destination: "instagram",
@@ -179,6 +189,24 @@ export async function POST(request: Request) {
     // attribution mark on the link, not against the approved text —
     // those differ by design and a false alarm every time would make
     // this check worthless.
+    // WHERE THE PICTURE CAME FROM, ON THE PIECE ITSELF.
+    //
+    // An owner looking at a published post months later cannot tell a
+    // photo of her candle from a graphic a model made, and neither could
+    // Hawlai DASH which is how an invented product went out as the real
+    // one. Written onto the draft's own `output`, under underscore keys
+    // the composer already skips, so no column and no migration is
+    // needed and the post's text is untouched. Additive only: the
+    // existing output is read and merged, never replaced.
+    if (draftRow?.id && (imageUrl || image_source)) {
+      const existing = draftRow.output && typeof draftRow.output === "object" ? draftRow.output : {};
+      await supabase
+        .from("content_pieces")
+        .update({ output: { ...existing, _imageUrl: imageUrl, _imageSource: image_source ?? null } })
+        .eq("id", draftRow.id)
+        .eq("dealership_id", dealershipId);
+    }
+
     let verified: "match" | "differs" | "unreadable" | "scheduled" = "scheduled";
     let landedText: string | undefined;
     if (!scheduledPublishTime) {

@@ -54,14 +54,25 @@ let hasToken = true;
 vi.mock("@/lib/crypto/oauthSecrets", () => ({ readMetaPageToken: () => (hasToken ? "TOKEN" : null) }));
 
 let dealership: Record<string, any> = { id: "d1", fb_page_id: "PAGE1", fb_page_name: "Candle by Qaaf" };
+let draft: Record<string, any> | null = null;
+let updates: { table: string; values: Record<string, any>; filters: [string, any][] }[] = [];
 function db() {
   const from = (table: string) => {
+    const filters: [string, any][] = [];
+    let op = "select";
+    let values: Record<string, any> = {};
+    const row = () => (table === "profiles" ? { dealership_id: "d1" } : table === "content_pieces" ? draft : dealership);
     const api: any = {
       select: () => api,
-      eq: () => api,
+      eq: (k: string, v: any) => (filters.push([k, v]), api),
       insert: () => api,
-      single: async () => ({ data: table === "profiles" ? { dealership_id: "d1" } : dealership, error: null }),
-      maybeSingle: async () => ({ data: table === "profiles" ? { dealership_id: "d1" } : dealership, error: null }),
+      update: (v: Record<string, any>) => ((op = "update"), (values = v), api),
+      single: async () => ({ data: row(), error: null }),
+      maybeSingle: async () => ({ data: row(), error: null }),
+      then: (res: any, rej: any) => {
+        if (op === "update") updates.push({ table, values, filters: [...filters] });
+        return Promise.resolve({ data: [], error: null }).then(res, rej);
+      },
     };
     return api;
   };
@@ -86,6 +97,8 @@ beforeEach(() => {
   deleteOutcome = { deleted: true };
   presence = { state: "gone" };
   dealership = { id: "d1", fb_page_id: "PAGE1", fb_page_name: "Candle by Qaaf" };
+  draft = null;
+  updates = [];
   postPhotoToPage.mockClear();
   postTextToPage.mockClear();
   postPhotoToInstagram.mockClear();
@@ -347,5 +360,74 @@ describe("the post is read back, and can be removed", () => {
     const res = await call(unpublish, { post_id: "PAGE1_photo" });
     expect(res.status).toBe(502);
     expect((await res.json()).error).toMatch(/does not support deletions/);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Addendum 7: three honest places to get a picture, and a record of
+// which one it was.
+// ---------------------------------------------------------------------
+
+describe("where the picture came from is kept", () => {
+  const PIECE = "11111111-1111-4111-8111-111111111111";
+
+  it("the piece records the image AND its source, without losing what was there", async () => {
+    // Months later, an owner cannot tell a photo of her candle from a
+    // graphic a model made, and neither could Hawlai - which is how an
+    // invented product went out as the real one.
+    draft = { id: PIECE, topic: "Lavender candle", output: { text: "Warm light.", hashtags: ["#candles"] } };
+    landedText = "Warm light.";
+    const res = await call(socialPost, {
+      caption: "Warm light.",
+      destination: "facebook",
+      image_url: "https://cdn.example/post-images/d1/1.jpg",
+      image_source: "uploaded",
+      content_piece_id: PIECE,
+    });
+    expect(res.status).toBe(200);
+    const update = updates.find((u) => u.table === "content_pieces")!;
+    expect(update.values.output).toEqual({
+      text: "Warm light.",
+      hashtags: ["#candles"],
+      _imageUrl: "https://cdn.example/post-images/d1/1.jpg",
+      _imageSource: "uploaded",
+    });
+    // Scoped to this business, not just to the row id.
+    expect(update.filters).toEqual(expect.arrayContaining([["dealership_id", "d1"]]));
+  });
+
+  it("an AI graphic is recorded as one", async () => {
+    draft = { id: PIECE, topic: "Lavender candle", output: { text: "Warm light." } };
+    landedText = "Warm light.";
+    await call(socialPost, {
+      caption: "Warm light.",
+      destination: "facebook",
+      image_url: "https://cdn.example/graphic.png",
+      image_source: "ai",
+      content_piece_id: PIECE,
+    });
+    expect(updates.find((u) => u.table === "content_pieces")!.values.output._imageSource).toBe("ai");
+  });
+
+  it("a post with no picture writes nothing to the piece", async () => {
+    draft = { id: PIECE, topic: "Lavender candle", output: { text: "Warm light." } };
+    landedText = "Warm light.";
+    await call(socialPost, { caption: "Warm light.", destination: "facebook", content_piece_id: PIECE });
+    expect(updates.find((u) => u.table === "content_pieces")).toBeUndefined();
+  });
+
+  it("ANOTHER BUSINESS'S PIECE ID records nothing", async () => {
+    // The id arrives in a request body. The lookup is already scoped, so
+    // a foreign id resolves to no draft at all.
+    draft = null;
+    landedText = "Warm light.";
+    await call(socialPost, {
+      caption: "Warm light.",
+      destination: "facebook",
+      image_url: "https://cdn.example/x.jpg",
+      image_source: "uploaded",
+      content_piece_id: PIECE,
+    });
+    expect(updates.find((u) => u.table === "content_pieces")).toBeUndefined();
   });
 });

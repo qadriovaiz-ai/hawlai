@@ -9,6 +9,8 @@ import remarkGfm from "remark-gfm";
 import { EditableOutput } from "@/components/shared/GeneratedOutputEditor";
 import type { PublishAction } from "@/lib/chat/publishActions";
 import { isSimpleConfirmation } from "@/lib/chat/cardLayout";
+import { publicPostConfirm } from "@/lib/chat/postConfirm";
+import { imageSourceLabel, type ImageSource, type OwnImage } from "@/lib/chat/postImages";
 
 const EXAMPLES = [
   "Build my brand kit — logo colors, tagline, brand story",
@@ -479,6 +481,159 @@ function CopyChange({ label, before, after }: { label: string; before: string; a
 }
 
 /**
+ * THREE HONEST PLACES TO GET A PICTURE.
+ *
+ * The chat stopped inventing product photos on 8 October 2026, which
+ * left captions with nothing to post. "No image, because we can't draw
+ * your candle" is correct and useless — the owner has photos of her
+ * candles on her phone and on her own site.
+ *
+ * Her own photo first, her own site second, an AI graphic last, because
+ * that is the order of how truthful each one is: the first two ARE the
+ * product, the third never can be, and it is also the only one that
+ * costs money.
+ */
+function ImageChooser({
+  onPick,
+  onAsk,
+  compact,
+}: {
+  onPick: (url: string, source: ImageSource) => void;
+  onAsk: (text: string) => void;
+  compact?: boolean;
+}) {
+  const [mode, setMode] = useState<"idle" | "library" | "busy">("idle");
+  const [library, setLibrary] = useState<OwnImage[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function upload(file: File) {
+    setMode("busy");
+    setError(null);
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/social/post-image/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        setError(data?.error ?? "That didn't upload.");
+        setMode("idle");
+        return;
+      }
+      onPick(data.url, "uploaded");
+    } catch {
+      setError("Couldn't read that file.");
+      setMode("idle");
+    }
+  }
+
+  async function openLibrary() {
+    setMode("busy");
+    setError(null);
+    try {
+      const res = await fetch("/api/social/post-image/library");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error ?? "Couldn't load your photos.");
+        setMode("idle");
+        return;
+      }
+      setLibrary(data.images ?? []);
+      setMode("library");
+    } catch {
+      setError("Couldn't load your photos.");
+      setMode("idle");
+    }
+  }
+
+  if (mode === "library") {
+    return (
+      <div className="space-y-1.5">
+        {library && library.length > 0 ? (
+          <div className="grid grid-cols-4 gap-1.5">
+            {library.map((image) => (
+              <button
+                key={image.url}
+                onClick={() => onPick(image.url, "site")}
+                title={image.label}
+                className="relative aspect-square rounded-md overflow-hidden border border-slate-200 hover:border-emerald-500 transition-colors"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image.url} alt={image.label} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-500 leading-snug">
+            You don&apos;t have any photos on file yet — add one to a product, or upload one here.
+          </p>
+        )}
+        <button
+          onClick={() => setMode("idle")}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {!compact && (
+        <p className="text-[11px] text-slate-600 leading-snug">This post has no picture yet. Three ways to give it one:</p>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) upload(file);
+            e.target.value = "";
+          }}
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={mode === "busy"}
+          className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+        >
+          {mode === "busy" ? "Working..." : "Upload a photo"}
+        </button>
+        <button
+          onClick={openLibrary}
+          disabled={mode === "busy"}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+        >
+          Use one of your photos
+        </button>
+        <button
+          onClick={() => onAsk("Make a graphic for this post")}
+          disabled={mode === "busy"}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+          // Asks in the chat rather than spending here: the price is
+          // shown on its own card, which is the whole point of the quote.
+          title="Costs about ₹3.39 and won't show your product"
+        >
+          Make an AI graphic
+        </button>
+      </div>
+      {error && <p className="text-[11px] text-amber-600 leading-snug">{error}</p>}
+    </div>
+  );
+}
+
+/**
  * Nowhere to post, so no button that posts.
  *
  * THE LIVE INCIDENT (8 Oct 2026): a card titled "Instagram Post"
@@ -526,6 +681,31 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   const [removal, setRemoval] = useState<{ text: string; ok: boolean } | null>(null);
   /** The image this card's button paid for, once it exists. */
   const [made, setMade] = useState<string | null>(null);
+  /** The picture the owner attached here, and where it came from. */
+  const [chosen, setChosen] = useState<{ url: string; source: ImageSource } | null>(null);
+  const [swapping, setSwapping] = useState(false);
+
+  const imageUrl = chosen?.url ?? (typeof publish.payload.image_url === "string" ? publish.payload.image_url : null);
+  const imageSource: ImageSource | null =
+    chosen?.source ?? ((publish.payload.image_source as ImageSource | null | undefined) ?? null);
+  const isSocial = publish.target === "social_post";
+  // Instagram has no text-only post. Offering a publish button that the
+  // endpoint would refuse is the same shape of mistake as the incident,
+  // so the chooser comes first and the button waits.
+  const needsImage = isSocial && publish.payload.destination === "instagram" && !imageUrl;
+  // Rebuilt here because attaching a picture changes what goes public,
+  // and the sentence the owner reads has to say so.
+  const confirmText = isSocial
+    ? publicPostConfirm(
+        {
+          platform: (publish.payload.destination as "facebook" | "instagram") ?? "facebook",
+          name: (publish.payload.destination_name as string | null) ?? null,
+          connected: true,
+          why: null,
+        },
+        { hasImage: Boolean(imageUrl) }
+      )
+    : publish.confirm;
 
   async function remove() {
     if (!postId) return;
@@ -563,7 +743,14 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
       const res = await fetch(spec.endpoint, {
         method: spec.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(spec.payload),
+        // THE IMAGE THE OWNER IS LOOKING AT, not the one the card was
+        // built with. The preview above and this payload are the same
+        // two values, which is the rule the hashtags broke.
+        body: JSON.stringify(
+          action === "publish" && isSocial
+            ? { ...spec.payload, image_url: imageUrl, image_source: imageSource }
+            : spec.payload
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -642,14 +829,19 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
             // generated image as a separate artifact further up, so the
             // two were never seen as the single thing being published.
             <div className="rounded-md border border-slate-200 overflow-hidden">
-              {typeof publish.payload.image_url === "string" && (
+              {imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={publish.payload.image_url} alt="" className="w-full max-h-48 object-cover" />
+                <img src={imageUrl} alt="" className="w-full max-h-48 object-cover" />
+              )}
+              {imageUrl && imageSourceLabel(imageSource) && (
+                <p className={`text-[10px] px-2 pt-1 ${imageSource === "ai" ? "text-amber-600" : "text-slate-500"}`}>
+                  {imageSourceLabel(imageSource)}
+                </p>
               )}
               <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans px-2 py-1.5">{String(publish.payload.caption ?? "")}</pre>
             </div>
           )}
-          <p className="text-[11px] text-slate-700 leading-snug">{publish.confirm}</p>
+          <p className="text-[11px] text-slate-700 leading-snug">{confirmText}</p>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => run("publish")}
@@ -673,10 +865,34 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
         </div>
       ) : (
         <>
+          {/* Her own photo, her own site, or a graphic DASH before the
+              button, because an Instagram post with no picture cannot be
+              published at all and a Facebook one reads better with one. */}
+          {isSocial && (!imageUrl || swapping) && (
+            <div className="mb-1.5">
+              <ImageChooser
+                compact={swapping}
+                onPick={(url, source) => {
+                  setChosen({ url, source });
+                  setSwapping(false);
+                }}
+                onAsk={(text) => onEdit?.(text)}
+              />
+              {swapping && (
+                <button
+                  onClick={() => setSwapping(false)}
+                  className="mt-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Keep the one I had
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setState("confirming")}
-              disabled={state === "working"}
+              disabled={state === "working" || needsImage}
+              title={needsImage ? "Instagram posts need a picture" : undefined}
               className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
             >
               {state === "working"
@@ -687,6 +903,15 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
                     : "Publishing..."
                 : publish.label}
             </button>
+            {isSocial && imageUrl && !swapping && (
+              <button
+                onClick={() => setSwapping(true)}
+                disabled={state === "working"}
+                className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+              >
+                Change image
+              </button>
+            )}
             {!artifact.draft?.patchUrl &&
               (artifact.departmentHref ? (
                 <a
