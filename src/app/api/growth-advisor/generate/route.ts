@@ -63,8 +63,12 @@ export async function POST(request: Request) {
     const growth = await generateGrowthReport(supabase, dealershipId, category);
     const { data: leads } = await supabase.from("leads").select("status").eq("dealership_id", dealershipId);
     const converted = (leads ?? []).filter((l: any) => l.status === "converted").length;
-    const context = `Health score: ${growth.healthScore}/100. Total leads: ${(leads ?? []).length}. Converted: ${converted}. Known risks: ${growth.risks.join("; ") || "none flagged"}.`;
-    result = await generateExpansionStrategy(name, category, dealership?.city ?? null, growth.healthScore, context, undefined, { supabase, dealershipId });
+    // "not scored" travels as words, not as a 0 — a 0 would tell the
+    // strategy agent the business is failing when the truth is that too
+    // little has happened to say (src/lib/reports/healthScore.ts).
+    const scoreText = growth.healthScore === null ? `not scored yet — ${growth.healthNote ?? "too little data"}` : `${growth.healthScore}/100`;
+    const context = `Health score: ${scoreText}. Total leads: ${(leads ?? []).length}. Converted: ${converted}. Known risks: ${growth.risks.join("; ") || "none flagged"}.`;
+    result = await generateExpansionStrategy(name, category, dealership?.city ?? null, growth.healthScore ?? 0, context, undefined, { supabase, dealershipId });
   } else {
     return NextResponse.json({ error: "Unknown taskType" }, { status: 400 });
   }

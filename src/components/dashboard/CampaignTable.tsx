@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { ArrowUp, ArrowDown, SlidersHorizontal, Check } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { statusCell, toggleState, type LiveDelivery, type StatusTone } from "@/lib/ads/campaignDeliveryDisplay";
+import { statusCell, toggleState, notDeliveringNote, type LiveDelivery, type StatusTone } from "@/lib/ads/campaignDeliveryDisplay";
 import { DEFAULT_VISIBLE, resolveVisibleColumns, serializeColumns, type ColumnKey } from "@/lib/analytics/campaignColumns";
 
 // Sortable, column-configurable campaign table — Ads Manager style.
@@ -85,11 +85,27 @@ function liveFor(row: CampaignRow, live: LiveMap): LiveDelivery | "loading" | nu
 }
 
 function StatusBadge({ row, live }: { row: CampaignRow; live: LiveMap }) {
-  const cell = statusCell(liveFor(row, live), row.recorded ?? null, row.localStatus ?? null);
+  const delivery = liveFor(row, live);
+  const cell = statusCell(delivery, row.recorded ?? null, row.localStatus ?? null);
+  // Active and delivering nothing is its own thing to say, and the one
+  // the owner most needs: it is why a campaign looked live for 19 days
+  // while reaching nobody.
+  const stalled = notDeliveringNote({
+    state: delivery && delivery !== "loading" ? delivery.state : null,
+    impressions: row.impressions,
+    spend: row.spend,
+    activeSince: row.recorded?.date ?? null,
+  });
   return (
     <div className="min-w-[8.5rem]">
-      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${TONE_CLASS[cell.tone]}`}>{cell.text}</span>
-      {cell.sub && <p className="text-[11px] text-slate-400 mt-0.5 leading-snug max-w-[16rem]">{cell.sub}</p>}
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${stalled ? TONE_CLASS.warn : TONE_CLASS[cell.tone]}`}>
+        {stalled ? "Active, not delivering" : cell.text}
+      </span>
+      {stalled ? (
+        <p className="text-[11px] text-amber-600 mt-0.5 leading-snug max-w-[18rem]">{stalled}</p>
+      ) : (
+        cell.sub && <p className="text-[11px] text-slate-400 mt-0.5 leading-snug max-w-[16rem]">{cell.sub}</p>
+      )}
     </div>
   );
 }

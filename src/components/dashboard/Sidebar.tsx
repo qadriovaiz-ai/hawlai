@@ -43,7 +43,11 @@ export default function Sidebar({ dealershipName, productMode, isAgency }: { dea
       <div className="p-3 border-t border-slate-100">
         <div className="bg-brand-900/40 border border-brand-700/40 rounded-lg p-3">
           <p className="text-xs font-semibold text-brand-300 mb-0.5">AI Engine Active</p>
-          <p className="text-xs text-brand-400">Scoring leads automatically</p>
+          {/* It scores leads from the website form, Meta lead ads and
+              calls — not ones added from chat or by hand. Saying
+              "automatically" with no qualifier made an unscored lead
+              look like a broken feature. */}
+          <p className="text-xs text-brand-400">Scoring leads from forms, ads and calls</p>
           <div className="mt-2 flex items-center gap-1.5">
             <span className="relative flex w-2 h-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>

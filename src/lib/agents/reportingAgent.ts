@@ -11,7 +11,7 @@
 
 import { getModel } from "../models";
 import { gatherBusinessNumbers, type BusinessNumbers } from "@/lib/reports/businessNumbers";
-import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
+import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, droppedNote, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 /** The report's numbers — one definition, shared with the health-score narrative. */
@@ -28,7 +28,7 @@ function deterministicSummary(stats: ReportStats): string {
   return `You have ${stats.totalLeads} lead${stats.totalLeads === 1 ? "" : "s"} (${stats.hotLeads} hot) and ${stats.paidOrders} paid order${stats.paidOrders === 1 ? "" : "s"}, with ${stats.pendingApprovals} action${stats.pendingApprovals === 1 ? "" : "s"} waiting for your approval.`;
 }
 
-async function summarizeWithClaude(stats: ReportStats, businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ summary: string; priorities: string[] }> {
+async function summarizeWithClaude(stats: ReportStats, businessCategory: string, logContext?: { supabase: any; dealershipId: string }): Promise<{ summary: string; priorities: string[]; droppedNote?: string | null }> {
   const fallback = {
     summary: deterministicSummary(stats),
     priorities: stats.pendingApprovals > 0 ? ["Review pending approvals"] : [],
@@ -70,14 +70,16 @@ Write it like a sharp marketing manager briefing a busy founder — plain langua
     // figure they state must be one of the cards' figures. A sentence
     // that disagrees is replaced or dropped — never shown.
     const allowed = allowedNumbers(stats);
-    const summaryOk = typeof parsed.summary === "string" && narrativeProblems(parsed.summary, allowed).length === 0;
-    const priorities = keepConsistent(parsed.priorities, allowed);
+    const sample = { leads: stats.totalLeads, orders: stats.paidOrders };
+    const summaryOk = typeof parsed.summary === "string" && narrativeProblems(parsed.summary, allowed, sample).length === 0;
+    const priorities = keepConsistent(parsed.priorities, allowed, sample);
     const dropped = [...(summaryOk || !parsed.summary ? [] : [`summary: ${parsed.summary}`]), ...priorities.dropped];
     if (dropped.length) console.warn("[reporting-agent] dropped narrative that disagreed with the numbers:", dropped.join(" | "));
 
     return {
       summary: summaryOk ? parsed.summary : fallback.summary,
       priorities: Array.isArray(parsed.priorities) ? priorities.kept : fallback.priorities,
+      droppedNote: droppedNote(dropped),
     };
   } catch (err: any) {
     console.error("[reporting-agent] summarizeWithClaude error:", err.message);

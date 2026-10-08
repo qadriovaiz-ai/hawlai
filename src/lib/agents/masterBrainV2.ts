@@ -1570,7 +1570,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         return output;
       }
       const growth = await generateGrowthReport(supabase, ctx.id, ctx.category);
-      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore, `Health score: ${growth.healthScore}/100. Risks: ${growth.risks.join("; ") || "none"}.`, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
+      // "not scored" travels as words. A 0 would tell the strategy agent
+      // the business is failing when the truth is that too little has
+      // happened to say (src/lib/reports/healthScore.ts).
+      const scoreText = growth.healthScore === null ? `not scored yet — ${growth.healthNote ?? "too little data"}` : `${growth.healthScore}/100`;
+      const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore ?? 0, `Health score: ${scoreText}. Risks: ${growth.risks.join("; ") || "none"}.`, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
       if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "expansion_strategy", output });
       return output;
     }

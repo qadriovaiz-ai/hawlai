@@ -99,13 +99,17 @@ export default async function DashboardOverviewPage({
       : null;
   const recentLeads = leads?.slice(0, 5) ?? [];
 
-  const scoreColorClass = !growth
-    ? "bg-slate-200 text-slate-500"
-    : growth.healthScore >= 70
-    ? "bg-green-500/10 text-green-400"
-    : growth.healthScore >= 40
-    ? "bg-amber-500/10 text-amber-400"
-    : "bg-red-500/10 text-red-400";
+  // No score is its own state, not a red one. A business with five leads
+  // has not earned a 60 and has not earned an 18 — it has not earned a
+  // number, and colouring "unknown" red reads as a verdict.
+  const scoreColorClass =
+    !growth || growth.healthScore === null
+      ? "bg-slate-200 text-slate-500"
+      : growth.healthScore >= 70
+      ? "bg-green-500/10 text-green-400"
+      : growth.healthScore >= 40
+      ? "bg-amber-500/10 text-amber-400"
+      : "bg-red-500/10 text-red-400";
 
   // Ordered actionable-today-first, longer-horizon-last: what changed
   // recently belongs above what's true in general.
@@ -120,10 +124,17 @@ export default async function DashboardOverviewPage({
   const kpis: { label: string; value: string | number; icon: typeof Gauge; color: string; title?: string }[] = [
     {
       label: "Business Health",
-      value: growth ? `${growth.healthScore}/100` : "—",
+      // "—" when there is no score, and the hover says WHY and what the
+      // score is built from. A number out of 100 invites a decision, so
+      // when there is nothing to decide from it must not show one.
+      value: growth?.healthScore != null ? `${growth.healthScore}/100` : "—",
       icon: Gauge,
       color: scoreColorClass,
-      title: growth?.headline ?? "Couldn't load right now",
+      title: !growth
+        ? "Couldn't load right now"
+        : growth.healthScore === null
+        ? (growth.healthNote ?? growth.headline)
+        : [growth.headline, ...growth.healthLines.map((l) => `${l.label}: ${l.earned}/${l.max} — ${l.basis}`), growth.healthNote].filter(Boolean).join("\n"),
     },
     { label: "Revenue (Lifetime)", value: totalRevenue === null ? "—" : formatCurrency(totalRevenue), icon: IndianRupee, color: "bg-green-500/10 text-green-400", title: totalRevenue === null ? "Ad account not connected, so attributed revenue can not be read" : undefined },
   ];

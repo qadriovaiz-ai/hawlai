@@ -40,8 +40,54 @@ const COUNTS =
   /\b(\d+|zero|no|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:(?:hot|warm|cold|new|live|active|paid|pending|launched|converted|completed|scheduled|total)\s+)?(leads?|orders?|sales?|customers?|campaigns?|appointments?|approvals?)\b/gi;
 
 /** Every way `text` disagrees with the report's own numbers. Empty when it's consistent. */
-export function narrativeProblems(text: string, allowed: AllowedNumbers): string[] {
+/**
+ * The least data a verdict needs before it is a reading rather than a
+ * guess.
+ *
+ * Five leads and one order produced "healthy", "20% (1 of 5), healthy"
+ * and "something is stopping them at the door" — three confident
+ * statements about a sample that cannot support one.
+ */
+export const VERDICT_FLOOR = { leads: 30, orders: 10 };
+
+/** Words that pass judgement on how the business is doing. */
+const VERDICT =
+  /\b(?:healthy|unhealthy|broken|strong|weak|poor|solid|excellent|terrible|good|bad|great|fine|worrying|concerning|working well|not working|failing|underperform\w*|outperform\w*)\b/gi;
+
+/** Claims that something is stopping or blocking customers. */
+const BLOCKED = /\b(?:stopping|blocking|putting off|turning away|losing)\s+(?:them|customers|buyers|people|visitors)\b|\bat the door\b/gi;
+
+/** A benchmark asserted without a source. */
+const BENCHMARK =
+  /\b(?:decent|normal|typical|average|above average|below average|industry standard|benchmark|on par|respectable|healthy)\s+(?:for|in)\s+(?:a|an|the|this|that|most|any)\b/gi;
+
+/** Views described as people. */
+const VIEWS_AS_PEOPLE = /\b\d[\d,]*\s+(?:people|visitors|users|customers)\s+(?:visited|viewed|came|landed|browsed)/gi;
+
+export function narrativeProblems(
+  text: string,
+  allowed: AllowedNumbers,
+  /** How much data there is, so a verdict can be judged against it. */
+  sample?: { leads: number; orders: number }
+): string[] {
   const problems: string[] = [];
+
+  // A VERDICT ON A HANDFUL. Checked before the figures, because this is
+  // the one that sends an owner to fix the wrong thing.
+  if (sample && sample.leads < VERDICT_FLOOR.leads && sample.orders < VERDICT_FLOOR.orders) {
+    for (const m of text.matchAll(VERDICT)) {
+      problems.push(`calls something "${m[0]}" on ${sample.leads} lead(s) and ${sample.orders} paid order(s) — too few to judge`);
+    }
+    for (const m of text.matchAll(BLOCKED)) {
+      problems.push(`says something is "${m[0].trim()}" without the traffic to show it`);
+    }
+  }
+  for (const m of text.matchAll(BENCHMARK)) {
+    problems.push(`treats "${m[0].trim()}" as a known standard, and no benchmark with a source is on the page`);
+  }
+  for (const m of text.matchAll(VIEWS_AS_PEOPLE)) {
+    problems.push(`says "${m[0].trim()}" — the analytics count views, not unique visitors`);
+  }
   for (const m of text.matchAll(RUPEES)) {
     const after = text.slice((m.index ?? 0) + m[0].length);
     if (RATE_AFTER.test(after)) continue;
@@ -67,12 +113,12 @@ export function narrativeProblems(text: string, allowed: AllowedNumbers): string
 }
 
 /** The items consistent with the numbers; the rest dropped, with why. */
-export function keepConsistent(items: unknown, allowed: AllowedNumbers): { kept: string[]; dropped: string[] } {
+export function keepConsistent(items: unknown, allowed: AllowedNumbers, sample?: { leads: number; orders: number }): { kept: string[]; dropped: string[] } {
   const kept: string[] = [];
   const dropped: string[] = [];
   for (const item of Array.isArray(items) ? items : []) {
     if (typeof item !== "string") continue;
-    const problems = narrativeProblems(item, allowed);
+    const problems = narrativeProblems(item, allowed, sample);
     if (problems.length) dropped.push(`${item} — ${problems.join("; ")}`);
     else kept.push(item);
   }
@@ -95,7 +141,25 @@ export function describeNumbersForPrompt(n: BusinessNumbers): string {
   ].join("\n");
 }
 
+/**
+ * Said in the report when the guard removed something.
+ *
+ * A DROP MUST NOT BE SILENT. The guard works — the Vercel log for 3 Oct
+ * shows it catching an invented "₹200–₹300/day" twice — but the owner
+ * saw a report with a suggestion missing and no reason, which looks like
+ * the product having nothing to say. Worse, a section can end up empty
+ * or short with no explanation for the gap.
+ */
+export function droppedNote(dropped: string[]): string | null {
+  if (dropped.length === 0) return null;
+  const n = dropped.length;
+  return `${n === 1 ? "One suggestion was" : `${n} suggestions were`} removed from this report because ${n === 1 ? "it contained" : "they contained"} a figure or a judgement Hawlai can't stand behind from your own numbers. Nothing was changed about your business — only about what this page is willing to claim.`;
+}
+
 export const NARRATIVE_RULES = `Rules:
 - Use only the numbers above, exactly as written. Never state, estimate or imply any other figure — the page shows these same numbers beside your words, and a mismatch reads as a mistake.
-- A suggested budget (e.g. "₹200/day") is fine; anything about what has happened must come from the numbers above.
+- NO RUPEE FIGURE OF YOUR OWN, including a suggested budget. Not "₹200/day", not "even ₹200–₹300/day to start", not a range, not an example. If you want to recommend starting a budget, say so WITHOUT a number: "set a daily budget" or "start small". The Budget Simulator is the only thing that may propose an amount, because it is the only thing that computes one.
+- NO VERDICT ON A HANDFUL. Do not call anything healthy, broken, strong, weak, good, poor, working or failing — and do not say what is "stopping" customers — when the figure behind it is a handful. Under 30 leads or under 10 orders, say what the numbers are and that there are too few to judge yet. A confident read of 5 leads is a guess wearing a measurement's clothes.
+- NO BENCHMARK WITHOUT A SOURCE. Never say a figure is normal, decent, low, above or below average for anything — not for a category, a price point or a channel — unless the benchmark is in the numbers above with its source. "20% is decent for a ₹999 product" is an invented standard.
+- VIEWS ARE NOT PEOPLE. The analytics count page views, not unique visitors, so write "views" and never "people visited" or "visitors".
 - Be direct and honest, but respectful: never call the business, its campaigns or its setup a "placeholder", a joke, or anything similar.`;

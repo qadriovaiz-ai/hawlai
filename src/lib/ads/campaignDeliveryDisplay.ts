@@ -102,6 +102,40 @@ export const RECONNECT_WHERE = "Settings → Integrations → Facebook";
  * @param recorded  the latest definitive status on a daily snapshot, and that snapshot's date
  * @param localStatus ad_creatives.meta_status — Hawlai's own last write, never verified with Meta
  */
+/**
+ * "Active" with nothing delivered is not the same as running.
+ *
+ * THE LIVE CASE (candle_by_qaaf, 3 Oct 2026): "Ghar ko do lavender ki
+ * shanti" read Active on Meta for 19 days with 0 impressions and ₹0
+ * spend, and the dashboard reported it as a live campaign — then
+ * credited it with a lead, a sale and ₹550. Meta's status field means
+ * "not paused by you"; it does not mean anyone has been shown the ad.
+ *
+ * WHAT HAWLAI CANNOT TELL, and must not guess: WHY. Payment
+ * verification, an ad set still in review, a budget that was never set,
+ * a schedule that hasn't started, an audience too narrow to fill —
+ * Meta's own delivery message is the only place that says, and that is
+ * where this sends the owner rather than inventing a cause. The one
+ * suggestion it refuses to make is "spend more", which is what the
+ * advisor was doing (b3 log addition, 3 Oct).
+ */
+export function notDeliveringNote(row: {
+  state?: string | null;
+  impressions?: number | null;
+  spend?: number | null;
+  /** When it was launched or last confirmed active, for "for N days". */
+  activeSince?: string | null;
+}): string | null {
+  if (row.state !== "active") return null;
+  const impressions = Number(row.impressions ?? 0);
+  const spend = Number(row.spend ?? 0);
+  if (impressions > 0 || spend > 0) return null;
+
+  const days = row.activeSince ? Math.floor((Date.now() - new Date(row.activeSince).getTime()) / 86400000) : null;
+  const forHowLong = days !== null && days >= 1 ? ` for ${days} day${days === 1 ? "" : "s"}` : "";
+  return `Meta says this is Active, but it has shown nobody anything${forHowLong} — 0 impressions and ₹0 spent. "Active" there means you haven't paused it, not that it's running. Open it in Meta Ads Manager and read the delivery message on the ad set: the usual causes are payment verification, an ad set still in review, or no budget set. Nothing here can tell which, and spending more won't fix a campaign that isn't delivering.`;
+}
+
 export function statusCell(
   live: LiveDelivery | "loading" | null,
   recorded: { state: string; date: string } | null,

@@ -22,8 +22,11 @@ export default async function ReportsPage() {
   const { report, growth } = await generateReportBundle(supabase, dealershipId, dealershipInfo?.business_category ?? "business");
   const { stats } = report;
 
-  const scoreColor = growth.healthScore >= 70 ? "text-green-400" : growth.healthScore >= 40 ? "text-amber-400" : "text-red-400";
-  const scoreRing = growth.healthScore >= 70 ? "stroke-green-500" : growth.healthScore >= 40 ? "stroke-amber-500" : "stroke-red-500";
+  // null is "not enough has happened to score this", which is neither
+  // good nor bad and must not be painted as either.
+  const score = growth.healthScore;
+  const scoreColor = score === null ? "text-slate-400" : score >= 70 ? "text-green-400" : score >= 40 ? "text-amber-400" : "text-red-400";
+  const scoreRing = score === null ? "stroke-slate-400" : score >= 70 ? "stroke-green-500" : score >= 40 ? "stroke-amber-500" : "stroke-red-500";
 
   const cards = [
     { label: "Total Leads", value: stats.totalLeads, icon: Flame, color: "bg-red-500/10 text-red-400" },
@@ -74,15 +77,34 @@ export default async function ReportsPage() {
               <circle
                 cx="18" cy="18" r="15.5" fill="none" strokeWidth="3" strokeLinecap="round"
                 className={scoreRing}
-                strokeDasharray={`${(growth.healthScore / 100) * 97.4} 97.4`}
+                strokeDasharray={`${((score ?? 0) / 100) * 97.4} 97.4`}
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className={`text-lg font-bold ${scoreColor}`}>{growth.healthScore}</span>
+              <span className={`text-lg font-bold ${scoreColor}`}>{score ?? "—"}</span>
             </div>
           </div>
           <div className="flex-1 space-y-3">
             <p className="text-sm text-slate-700">{growth.headline}</p>
+            {/* THE ARITHMETIC, the way the Strategy page shows its own.
+                The score used to come from the model — 60/100 one week
+                and 18/100 the next with nothing underneath it changing —
+                so showing the lines is what makes it a measurement
+                rather than an opinion (src/lib/reports/healthScore.ts). */}
+            {growth.healthNote && <p className="text-xs text-amber-600 leading-snug">{growth.healthNote}</p>}
+            {growth.healthLines.length > 0 && (
+              <dl className="space-y-0.5">
+                {growth.healthLines.map((l) => (
+                  <div key={l.label} className="flex items-baseline gap-1.5 text-[11px]">
+                    <dt className="text-slate-500">{l.label}</dt>
+                    <dd className="text-slate-700 font-medium">
+                      {l.earned}/{l.max}
+                    </dd>
+                    <dd className="text-slate-400">{l.basis}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             {growth.risks.length > 0 && (
               <div className="space-y-1">
                 {growth.risks.map((r, i) => (

@@ -14,12 +14,29 @@
 
 import { getModel } from "../models";
 import { gatherBusinessNumbers, type BusinessNumbers } from "@/lib/reports/businessNumbers";
-import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
+import { allowedNumbers, narrativeProblems, keepConsistent, describeNumbersForPrompt, droppedNote, NARRATIVE_RULES } from "@/lib/reports/narrativeCheck";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { computeHealthScore, type ScoreLine } from "@/lib/reports/healthScore";
 
 export interface GrowthReport {
-  healthScore: number; // 0-100
+  /**
+   * 0-100, COUNTED (src/lib/reports/healthScore.ts), or null when too
+   * little has happened for a score out of 100 to mean anything.
+   *
+   * It used to come from the model: the prompt asked for
+   * `healthScore: integer 0-100 (honest — …)` and the answer was
+   * printed. On candle_by_qaaf it read 60/100 on 28 September and
+   * 18/100 on 1 October with nothing underneath it changing. Neither
+   * number was wrong, because neither meant anything.
+   */
+  healthScore: number | null;
+  /** The arithmetic, so an owner can see which line they disagree with. */
+  healthLines: ScoreLine[];
+  /** Said when there is no score, or when part of it could not be read. */
+  healthNote: string | null;
+  /** Said when the number guard removed a sentence. Null when it didn't. */
+  droppedNote?: string | null;
   headline: string;
   strengths: string[];
   risks: string[];
@@ -35,6 +52,16 @@ export async function generateGrowthReport(
 ): Promise<GrowthReport> {
   const n = numbers ?? (await gatherBusinessNumbers(supabase, dealershipId));
 
+  // COUNTED ONCE, here, and the same object on every path below —
+  // including the fallbacks, which used to carry their own invented
+  // numbers (10, 50, 30, 60).
+  const health = computeHealthScore(n);
+  const healthFields = {
+    healthScore: health.scored ? health.score : null,
+    healthLines: health.lines,
+    healthNote: health.scored ? (health.unreadable.length ? health.unreadable.join(" ") : null) : health.reason,
+  };
+
   // Ad data UNREADABLE — not connected, or the load failed. Scored on
   // leads alone and never presented as a measurement of ad performance.
   // "no_data" (no campaigns launched) falls through: that genuinely
@@ -42,7 +69,7 @@ export async function generateGrowthReport(
   if (n.adDataState === "not_connected" || n.adDataState === "error") {
     const notConnected = n.adDataState === "not_connected";
     return {
-      healthScore: n.totalLeads === 0 ? 10 : 50,
+      ...healthFields,
       headline: notConnected
         ? "Your Meta ad account isn't connected, so ad performance is missing from this."
         : "Ad performance couldn't be loaded, so this is based on leads only.",
@@ -55,7 +82,7 @@ export async function generateGrowthReport(
   }
 
   const fallback: GrowthReport = {
-    healthScore: n.totalLeads === 0 ? 10 : n.liveCampaigns === 0 ? 30 : 60,
+    ...healthFields,
     headline: n.totalLeads === 0 ? "Just getting started — no leads yet." : "Building momentum.",
     strengths: [],
     risks: n.totalLeads === 0 ? ["No leads yet — launch your first campaign"] : [],
@@ -76,7 +103,7 @@ Onboarding complete: ${n.onboardingCompleted ? "yes" : "no"}
 ${NARRATIVE_RULES}
 
 Return JSON only:
-{"healthScore":integer 0-100 (honest — a business with 0 leads or 0 live campaigns should score low),"headline":"one honest sentence summarizing where they stand","strengths":["1-2 honest positives, or empty array if none yet"],"risks":["1-3 real risks/gaps, most urgent first"],"nextActions":["1-3 concrete next actions, most impactful first, specific enough to act on today"]}`,
+{"headline":"one honest sentence summarizing where they stand","strengths":["1-2 honest positives, or empty array if none yet"],"risks":["1-3 real risks/gaps, most urgent first"],"nextActions":["1-3 concrete next actions, most impactful first, specific enough to act on today"]}`,
         },
       ],
     }, { operation: "growth_report", logContext: { supabase, dealershipId } });
@@ -98,19 +125,27 @@ Return JSON only:
     // The check: anything that disagrees with the page's own numbers is
     // dropped, not shown.
     const allowed = allowedNumbers(n);
-    const headlineOk = typeof parsed.headline === "string" && narrativeProblems(parsed.headline, allowed).length === 0;
-    const strengths = keepConsistent(parsed.strengths, allowed);
-    const risks = keepConsistent(parsed.risks, allowed);
-    const nextActions = keepConsistent(parsed.nextActions, allowed);
+    // HOW MUCH DATA THERE IS, so a verdict can be judged against it. A
+    // confident "healthy" on 5 leads is a guess wearing a measurement's
+    // clothes (src/lib/reports/narrativeCheck.ts).
+    const sample = { leads: n.totalLeads, orders: n.paidOrders };
+    const headlineOk = typeof parsed.headline === "string" && narrativeProblems(parsed.headline, allowed, sample).length === 0;
+    const strengths = keepConsistent(parsed.strengths, allowed, sample);
+    const risks = keepConsistent(parsed.risks, allowed, sample);
+    const nextActions = keepConsistent(parsed.nextActions, allowed, sample);
     const dropped = [...(headlineOk || !parsed.headline ? [] : [`headline: ${parsed.headline}`]), ...strengths.dropped, ...risks.dropped, ...nextActions.dropped];
     if (dropped.length) console.warn("[growth-advisor-agent] dropped narrative that disagreed with the numbers:", dropped.join(" | "));
 
     return {
-      healthScore: typeof parsed.healthScore === "number" ? parsed.healthScore : fallback.healthScore,
+      // NOT from the model. Counted above, whatever it replied.
+      ...healthFields,
       headline: headlineOk ? parsed.headline : fallback.headline,
       strengths: strengths.kept,
       risks: risks.kept,
       nextActions: nextActions.kept.length ? nextActions.kept : fallback.nextActions,
+      // Shown, not only logged: a report with a suggestion missing and
+      // no reason reads as the product having nothing to say.
+      droppedNote: droppedNote(dropped),
     };
   } catch (err: any) {
     console.error("[growth-advisor-agent] error:", err.message);

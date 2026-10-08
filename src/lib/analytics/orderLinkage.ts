@@ -296,6 +296,47 @@ export function conversionOf(view: AttributionView): {
 }
 
 /**
+ * The order value a forecast may use, and what it is honestly called.
+ *
+ * THE LIVE CASE: a forecast showed ₹999 as "average order value
+ * (known)". ₹999 is the Lavender candle's CATALOGUE PRICE today. The one
+ * real order was ₹550, placed before the price went up — so the figure
+ * was neither the average nor known, and "(known)" is the word that
+ * makes it a claim rather than an assumption.
+ *
+ * Real order history wins whenever there is any. With none, a catalogue
+ * price is a reasonable assumption and must be labelled as one; the
+ * caller prints `basis` beside the number rather than inventing a word
+ * for it.
+ */
+export function averageOrderValue(
+  view: AttributionView,
+  catalogueFallback?: number | null
+): { value: number | null; basis: "real_orders" | "catalogue_price" | "unknown"; label: string; sample: number } {
+  const paid = view.paidOrders;
+  if (paid.length > 0) {
+    const value = Math.round(paid.reduce((sum, o) => sum + o.total, 0) / paid.length);
+    return {
+      value,
+      basis: "real_orders",
+      // The sample size travels with it: an average of one is a price,
+      // not an average, and saying so is cheaper than being asked.
+      label: paid.length === 1 ? "your one paid order so far" : `average of your ${paid.length} paid orders`,
+      sample: paid.length,
+    };
+  }
+  if (catalogueFallback && catalogueFallback > 0) {
+    return {
+      value: Math.round(catalogueFallback),
+      basis: "catalogue_price",
+      label: "your catalogue price — you have no paid orders yet, so this is an assumption, not a measurement",
+      sample: 0,
+    };
+  }
+  return { value: null, basis: "unknown", label: "no orders and no price on record, so there is nothing to forecast with", sample: 0 };
+}
+
+/**
  * Said on any surface that reports a conversion rate.
  *
  * An order nobody can tie to a lead is not a zero and not a rounding

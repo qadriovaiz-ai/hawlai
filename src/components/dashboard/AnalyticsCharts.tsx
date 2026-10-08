@@ -21,9 +21,24 @@ export default function AnalyticsCharts({
   const sourceRevenueTotal = sourceData.reduce((sum, s) => sum + s.revenue, 0);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      {/* AI Score Distribution */}
+      {/* AI Score Distribution.
+          ALL ZEROS IS A SENTENCE, NOT A CHART. ai_score is written by
+          exactly three paths — the website form (/api/public/leads), the
+          Meta lead-ads webhook and Vapi calls — so a lead added from
+          chat or by hand has none. candle_by_qaaf's five leads are all
+          "manual chat", so every bucket read zero while the sidebar
+          said "Scoring leads automatically", and the owner could only
+          conclude the scoring was broken. */}
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-slate-900 mb-4">AI Score Distribution</h3>
+        {scoreBuckets.every((b: { count: number }) => b.count === 0) ? (
+          <div className="h-52 flex items-center justify-center px-4">
+            <p className="text-slate-400 text-sm text-center leading-snug">
+              None of your leads have a score yet. Hawlai scores a lead when it arrives through your website form, a Meta
+              lead ad, or a phone call — leads you or Hawlai added from chat aren&apos;t scored, so they don&apos;t appear here.
+            </p>
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={scoreBuckets} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#232329" />
@@ -33,6 +48,7 @@ export default function AnalyticsCharts({
             <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} name="Leads" />
           </BarChart>
         </ResponsiveContainer>
+        )}
       </div>
 
       {/* Lead Source */}
