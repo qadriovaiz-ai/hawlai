@@ -294,10 +294,37 @@ describe("Content Marketing: written from the facts, checked against them", () =
     expect(r.output._claimsNote).toMatch(/Hawlai removed/);
   });
 
-  it("without facts it behaves exactly as before — callers not yet wired are unaffected", async () => {
+  // REPLACES "without facts it behaves exactly as before — callers not
+  // yet wired are unaffected", which asserted that `facts: null` returned
+  // the draft untouched. That was true, and it was the defect: the audit
+  // (F-01) found that one transient failure inside
+  // gatherBusinessFactsSafely turned the whole claims layer off, with no
+  // note and no marker, so the owner could not tell a checked draft from
+  // an unchecked one. The original intent — "a caller that passes no
+  // facts still gets its copy back" — is preserved below: the copy comes
+  // back, it is just no longer presented as verified.
+  it("WITHOUT FACTS IT FAILS CLOSED: the copy comes back, marked, never as verified", async () => {
     anthropic([{ text: "Loved by 500+ homes!" }]);
     const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "lavender", null);
-    expect(r).toEqual({ output: { text: "Loved by 500+ homes!" } });
+    // With no records, a customer count is unsupported by definition —
+    // the records are what could have excused it.
+    expect(r.output.text).toBe("");
+    expect(r.claimsRemoved?.join(" ")).toMatch(/500\+ homes/);
+    expect(r.output._factsState).toBe("FACTS_UNAVAILABLE");
+    expect(r.output._claimsNote).toMatch(/couldn't read your store records/);
+    // And it must not read as a clean check.
+    expect(r.output._claimsNote).not.toMatch(/Hawlai removed/);
+  });
+
+  it("and the truth rules are still in the prompt when the facts are not", async () => {
+    const prompts = anthropic([{ text: "A quiet evening, bottled." }]);
+    await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "lavender", null);
+    // The rules are a static string that depends on nothing. They used
+    // to be interpolated behind `facts ?`, so the one moment the model
+    // knew least was the moment it was told least.
+    expect(prompts[0]).toMatch(/NEVER invent numbers/);
+    expect(prompts[0]).toMatch(/VERIFIED FACTS: NONE AVAILABLE RIGHT NOW/);
+    expect(prompts[0]).toMatch(/nothing here can be checked/);
   });
 });
 

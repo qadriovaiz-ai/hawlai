@@ -11,11 +11,12 @@
 import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { getModel } from "../models";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
-import { stripUnsupported, type ClaimsMode } from "@/lib/claims/claimCheck";
+import { stripUnsupported, stripUnverifiable, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { replaceLinksWithBio } from "@/lib/content/platformRules";
 import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { truthBlock, unverifiedNote } from "@/lib/claims/factsGate";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -28,7 +29,14 @@ export async function generateSocialCaption(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews the caption before posting: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ caption: string; claimsRemoved: string[]; priceWarnings?: string[]; aiFailure?: AiFailureNote }> {
+): Promise<{
+  caption: string;
+  claimsRemoved: string[];
+  priceWarnings?: string[];
+  aiFailure?: AiFailureNote;
+  /** Set only when the business's records could not be read, so nothing here was checked against them (F-01). */
+  unverified?: string;
+}> {
   // The owner's settings, as rules rather than fields (lib/content/language.ts):
   // "Preferred language: english" sitting in a sentence lost to the Hinglish
   // examples around it.
@@ -50,7 +58,7 @@ export async function generateSocialCaption(
           role: "user",
           content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
 What the post is about: "${resolveFestiveTopic(prompt, facts?.season)}"
-${brandContext}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${brandContext}${truthBlock(facts)}
 Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end. Return JSON only: {"caption":"the caption text"}`,
         },
       ],
@@ -70,7 +78,19 @@ Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 re
     }
     const parsed = parsedReply.value;
     const caption: string = parsed.caption ?? prompt;
-    if (!facts) return { caption, claimsRemoved: [] };
+    // F-01: with no facts this returned the caption unchecked and said
+    // claimsRemoved was empty — indistinguishable from a clean check.
+    // The fact-independent rules still apply: with nothing on record, a
+    // count, a ranking or a comparison is unsupported by definition.
+    if (!facts) {
+      const unchecked = stripUnverifiable(caption);
+      return {
+        caption: unchecked.text,
+        claimsRemoved: unchecked.removed,
+        priceWarnings: [],
+        unverified: unverifiedNote(unchecked.removed, unchecked.unverifiable) ?? undefined,
+      };
+    }
     const checked = stripUnsupported(caption, facts, claimsMode);
     return { caption: checked.text, claimsRemoved: checked.removed, priceWarnings: checked.priceWarnings };
   } catch (err: any) {

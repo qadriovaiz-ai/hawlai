@@ -15,6 +15,8 @@ import { soundRule, normaliseLanguage } from "@/lib/content/language";
 
 import { SOCIAL_TASKS, type SocialTaskMeta } from "@/lib/departments/social";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
 // Re-exported so every existing server import keeps working; the data
 // itself lives in lib/departments so client pickers can read it without
@@ -140,6 +142,23 @@ interface BrandProfile {
   preferred_language?: string | null;
 }
 
+/**
+ * Which of these tasks a CUSTOMER reads.
+ *
+ * F-03 (audit, 8 Oct 2026). This agent had no facts parameter at all, no
+ * truth rules and no claims guard — while three of its seven tasks
+ * produce words that go straight to a customer. A DM reply quoting a
+ * price it was never given, or offering a discount that does not exist,
+ * had nothing standing in its way.
+ *
+ * The other four are advice to the OWNER (a growth plan, engagement
+ * tips, a community playbook). Running the copy guard over those would
+ * strip legitimate guidance — "post three times a week" is not a claim
+ * about the business. Same split, same reason, as
+ * paidAdsAgent's CUSTOMER_COPY_TASKS.
+ */
+const CUSTOMER_COPY_TASKS = new Set(["reply_suggestions", "comment_replies", "dm_automation"]);
+
 export async function generateSocialTask(
   taskKey: string,
   dealershipName: string,
@@ -148,8 +167,10 @@ export async function generateSocialTask(
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
   recentPostsContext?: string | null,
-  groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
+  groundingContext?: string,
+  /** Verified business facts (src/lib/claims). Customer-facing tasks are written from them and checked against them. */
+  facts?: BusinessFacts | null
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[] ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = SOCIAL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -174,7 +195,7 @@ export async function generateSocialTask(
       messages: [{
         role: "user",
         content: `You are a social media manager for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}
+${brandContext}${groundingContext ?? ""}${CUSTOMER_COPY_TASKS.has(taskKey) ? truthBlock(facts) : ""}
 ${recentPostsContext ? `\nActually posted recently (last 10, real — don't repeat these angles/hooks, find fresh ones):\n${recentPostsContext}` : ""}
 ${meta.needsInput ? `Incoming message to respond to: "${inputText || "(no message provided — write generic examples)"}"` : ""}
 
@@ -204,9 +225,18 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const parsedReply = parseModelJson(text);
     if (!parsedReply.ok) {
       console.error(`[socialManagementAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
+      // F-22: the fallback used to go back as a plain `_fallback` whose
+      // output was a sentence, and the chat then had to notice it was
+      // not copy. The parser's own account travels with it now, so the
+      // chat can say what actually happened instead of guessing
+      // (the system prompt's `_cause` / `_detail` rule).
+      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
     }
-    return { output: parsedReply.value };
+    // Advice to the owner is returned as written; words a customer will
+    // read are checked against the business's own records first.
+    if (!CUSTOMER_COPY_TASKS.has(taskKey)) return { output: parsedReply.value };
+    const guarded = guardOrMark(parsedReply.value, facts, "draft");
+    return { output: guarded.output, claimsRemoved: guarded.removed };
   } catch (err: any) {
     console.error("[social-management-agent] error:", err.message);
     return fallback;

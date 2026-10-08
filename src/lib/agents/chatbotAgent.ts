@@ -28,6 +28,10 @@
 import { getModel } from "../models";
 import { callClaude } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { truthBlock } from "@/lib/claims/factsGate";
+import { stripUnsupported, stripUnverifiable } from "@/lib/claims/claimCheck";
+import type { BusinessFacts } from "@/lib/claims/businessFacts";
+import { splitStories } from "@/lib/claims/personalStories";
 
 interface DealershipContext {
   dealershipName: string;
@@ -44,11 +48,35 @@ interface DealershipContext {
   // be a hardcoded sales-shaped goals list.
   personaGoals?: string | null;
   hasBookingLink: boolean;
+  /**
+   * The canonical facts (src/lib/claims) — products, prices, offers,
+   * shipping, links.
+   *
+   * F-15 (audit, 8 Oct 2026). This surface had the owner's knowledge
+   * rows and nothing about what the business SELLS, under a prompt that
+   * asked it not to guess. A visitor asking "how much is this?" was
+   * answered by a model that had never been told the price. It is also
+   * the surface with no human between the model and the reader.
+   */
+  facts?: BusinessFacts | null;
 }
 
 function formatKnowledgeFacts(facts?: DealershipContext["knowledgeFacts"]): string {
   if (!facts || facts.length === 0) return "";
-  return `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${facts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`;
+  // A CUSTOMER'S PRIVATE SITUATION IS NOT WEBSITE COPY, and this is the
+  // surface where a visitor would read it back.
+  //
+  // Every row went into this prompt in full. One of them is a real
+  // customer writing that her husband had been in an accident and she
+  // lit a candle through the waiting at the hospital. The owner wrote it
+  // down because it moved her; it is not hers to repeat to strangers.
+  // The same gate formatFactsForCopy already applies
+  // (src/lib/claims/personalStories.ts).
+  const { usable } = splitStories(facts as any);
+  if (usable.length === 0) return "";
+  return `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${usable
+    .map((f: any) => `- ${f.title}: ${f.content}`)
+    .join("\n")}`;
 }
 
 export interface SalesAgentResult {
@@ -83,7 +111,7 @@ ${context.headline ? `Tagline: ${context.headline}` : ""}
 ${context.offerText ? `Current offer: ${context.offerText}` : ""}
 ${context.toneOfVoice ? `Tone to use: ${context.toneOfVoice}` : "Tone: friendly and helpful"}
 ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.join("; ")}` : ""}
-${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}`;
+${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}${truthBlock(context.facts, "customer")}`;
 
   try {
     const r = await callClaude({
@@ -93,7 +121,7 @@ ${context.hasBookingLink ? "A booking page exists — you may suggest booking a 
 ${contextBlock}${personaBlock}
 
 Your job in this conversation, as relevant to what the visitor says:
-- Answer questions honestly using the context above. If you don't know something specific (exact pricing, exact stock/availability), say so plainly and don't invent numbers.
+- Answer questions honestly using the context above. Prices, stock and what is for sale are in the VERIFIED FACTS — quote them exactly when asked. If something genuinely is not there, say so plainly and don't invent a number.
 - Recommend what fits their stated needs, based only on the context you have — don't invent products/features that weren't mentioned.
 - Handle objections (price, trust, timing) empathetically and honestly — acknowledge the concern before responding to it, never dismiss it.
 - Once the visitor shows genuine interest (not just browsing), naturally ask for their name and phone number so the team can follow up — don't demand this on the first message.
@@ -121,8 +149,23 @@ Return JSON only, no markdown: {"reply": "your conversational reply", "leadCaptu
       return fallback;
     }
     const parsed = parsedReply.value;
+    // WITHHELD, NOT FLAGGED. Everywhere else a claims note goes to the
+    // owner, who can act on it. Here the reader is a visitor, so there is
+    // nobody to show a warning to: an invented discount has to not reach
+    // them. "publish" mode, for the same reason DASH there is no review step
+    // after this.
+    const spoken = String(parsed.reply ?? "").trim();
+    const checked = context.facts
+      ? stripUnsupported(spoken, context.facts, "publish")
+      : stripUnverifiable(spoken);
+    const reply = checked.text.trim();
+    if (spoken && checked.removed.length) {
+      console.error(`[ai-sales-agent] withheld ${checked.removed.length} unsupported claim(s) from a visitor reply: ${checked.removed.join("; ")}`);
+    }
     return {
-      reply: parsed.reply ?? fallback.reply,
+      // A reply emptied by the check becomes the honest hand-off rather
+      // than a blank bubble.
+      reply: reply || fallback.reply,
       leadCapture: parsed.leadCapture && parsed.leadCapture.name && parsed.leadCapture.phone ? parsed.leadCapture : null,
       suggestBooking: !!parsed.suggestBooking && context.hasBookingLink,
     };

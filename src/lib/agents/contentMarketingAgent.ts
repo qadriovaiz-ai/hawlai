@@ -10,7 +10,8 @@
 import { getModel } from "../models";
 import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/claims/businessFacts";
-import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
+import { type ClaimsMode } from "@/lib/claims/claimCheck";
+import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import { usesOwnStory, storyForRetry, GENERIC_NOTE } from "@/lib/content/storyEcho";
@@ -137,7 +138,7 @@ export async function generateContent(
      */
     keepLinks?: boolean;
   } = {}
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
 
@@ -161,7 +162,7 @@ export async function generateContent(
         {
           role: "user",
           content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${brandContext}${groundingContext ?? ""}${truthBlock(facts)}
 Topic/product/context: "${resolveFestiveTopic(topic, facts?.season) || "general brand content, use good judgement for this business type"}"
 
 ${sound}
@@ -185,7 +186,12 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     const parsedReply = parseModelJson(text);
     if (!parsedReply.ok) {
       console.error(`[contentMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
+      // F-22: the fallback used to go back as a plain `_fallback` whose
+      // output was a sentence, and the chat then had to notice it was
+      // not copy. The parser's own account travels with it now, so the
+      // chat can say what actually happened instead of guessing
+      // (the system prompt's `_cause` / `_detail` rule).
+      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
     }
     let parsed = parsedReply.value;
     let revised = false;
@@ -213,10 +219,12 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     }
     if (generic) parsed = { ...parsed, _storyNote: GENERIC_NOTE };
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
-    if (!facts) return { output: applyLinkRule(linkRuleFor, parsed).output, ...(revised ? { revised } : {}) };
-    // Sentences making claims the facts don't support are removed, and
-    // the owner is told (output._claimsNote) — never silently kept.
-    const guarded = guardGenerated(parsed, facts, claimsMode);
+    // F-01: this used to be `if (!facts) return parsed` — the guard
+    // skipped and the output indistinguishable from a checked draft.
+    // guardOrMark runs the full guard when the records are readable and
+    // the fact-independent subset when they are not, and marks which
+    // happened either way (src/lib/claims/factsGate.ts).
+    const guarded = guardOrMark(parsed, facts, claimsMode);
     // Enforced, not requested: a real booking link in the facts is exactly
     // what put a dead URL into an Instagram caption.
     const linked = applyLinkRule(linkRuleFor, guarded.output);
@@ -224,7 +232,9 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     // sends the reader nowhere: there is no bio, and the link would have
     // worked. Replaced with the business's own store address when it has
     // one, removed when it does not, never invented.
-    const bio = applyBioRule(linkRuleFor, linked.output, facts.links?.store ?? null);
+    // With no facts there is no store address to swap a bio line for, so
+    // the rule drops the dead sentence rather than inventing a URL.
+    const bio = applyBioRule(linkRuleFor, linked.output, facts?.links?.store ?? null);
     const output: any = bio.output;
     const linkNote = linkRuleNote(linked.replaced);
     if (linkNote) output._claimsNote = [output._claimsNote, linkNote].filter(Boolean).join(" ");

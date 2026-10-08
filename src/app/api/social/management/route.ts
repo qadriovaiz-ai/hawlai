@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateSocialTask } from "@/lib/agents/socialManagementAgent";
 import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -34,7 +35,12 @@ export async function POST(request: Request) {
     inputText ?? "",
     brandProfile,
     { supabase, dealershipId },
-    recentPostsContext
+    recentPostsContext,
+    undefined,
+    // F-03: reply suggestions and DM templates are read by customers and
+    // had no facts and no claims guard. Same canonical facts every other
+    // generator uses.
+    await gatherBusinessFactsSafely(supabase, dealershipId)
   );
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   if (_aiFailure) return aiFailureResponse(_aiFailure);

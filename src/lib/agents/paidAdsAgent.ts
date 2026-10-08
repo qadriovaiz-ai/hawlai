@@ -23,6 +23,7 @@ import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "../cla
 import { guardGenerated } from "../claims/claimCheck";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 
 // Tasks whose output is copy a customer will read. Only these are
 // claims-checked; the rest are advice to the owner, where a sentence about
@@ -44,7 +45,7 @@ export async function generateAdPlan(
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). Ad copy is written from them and checked against them. */
   facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[] }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[] ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const platform = AD_PLATFORMS.find((p) => p.key === platformKey);
   const task = AD_TASKS.find((t) => t.key === taskKey);
   if (!platform || !task) return { output: { text: "Unknown platform or task." }, _fallback: true };
@@ -61,7 +62,7 @@ export async function generateAdPlan(
       messages: [{
         role: "user",
         content: `You are a paid advertising strategist helping an Indian ${businessCategory} business called "${dealershipName}" plan for ${platform.label}. This platform isn't connected to any ad account yet — this is planning content the dealer will use manually or hand to whoever sets up the account.
-${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : ""}${groundingContext ?? ""}${truthBlock(facts)}
 ${performanceContext ? `\nReal performance from campaigns already run (use this to ground budget/targeting advice in what's actually working, not generic guesses):\n${performanceContext}` : ""}
 
 Task: ${task.label}
@@ -81,14 +82,22 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const parsedReply = parseModelJson(text);
     if (!parsedReply.ok) {
       console.error(`[paidAdsAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
+      // F-22: the fallback used to go back as a plain `_fallback` whose
+      // output was a sentence, and the chat then had to notice it was
+      // not copy. The parser's own account travels with it now, so the
+      // chat can say what actually happened instead of guessing
+      // (the system prompt's `_cause` / `_detail` rule).
+      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
     }
     const parsed = parsedReply.value;
     // Ad copy is what a customer reads: invented offers, prices and
     // claims are removed (an unverified price is kept and flagged — the
     // owner reviews this before using it), and the note goes on the result.
-    if (!facts || !CUSTOMER_COPY_TASKS.has(taskKey)) return { output: parsed };
-    const guarded = guardGenerated(parsed, facts, "draft");
+    // A task that isn't customer copy is left alone, as before. A
+    // customer-facing one is always checked — F-01: missing facts used
+    // to take the same exit as "not customer copy".
+    if (!CUSTOMER_COPY_TASKS.has(taskKey)) return { output: parsed };
+    const guarded = guardOrMark(parsed, facts, "draft");
     return { output: guarded.output, claimsRemoved: guarded.removed };
   } catch (err: any) {
     console.error("[paid-ads-agent] error:", err.message);

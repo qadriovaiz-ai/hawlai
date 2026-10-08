@@ -880,6 +880,36 @@ function seoDraftNote(taskType: string, output: any): string {
   );
 }
 
+/**
+ * A GENERATION THAT DID NOT PRODUCE ANYTHING IS AN ERROR, NOT A RESULT.
+ *
+ * F-22 (audit, 8 Oct 2026). A generator signals two different failures
+ * the same way. `_aiFailure` means the API call itself failed, and the
+ * chat already turned that into `{ error }`. `_fallback` on its own means
+ * the call succeeded and its reply could not be read — and that came
+ * back as a RESULT whose output was `{ text: "<an apology sentence>" }`.
+ *
+ * So `savedId` was null (correct) while the apology still travelled on
+ * to extractArtifact, became a card, and the model had to work out for
+ * itself that it was holding an error rather than a draft. On a social
+ * content type it would have been handed a publish action pointing at a
+ * sentence. Nothing published — the destination and expect_text checks
+ * would have refused it — but a card offering to publish an apology is
+ * not a thing that should exist.
+ *
+ * `_cause` and `_detail` are the parser's own words, which the system
+ * prompt already tells the model to relay rather than explain.
+ */
+function malformedToolError(result: { _fallback?: boolean; _aiFailure?: unknown; _cause?: string; _detail?: string; output?: any }): { error: string; _cause?: string; _detail?: string } | null {
+  if (!result?._fallback || result._aiFailure) return null;
+  const spoken = typeof result.output?.text === "string" ? result.output.text.trim() : "";
+  return {
+    error: spoken || "That didn't produce anything I could read. Nothing was saved — ask me again.",
+    ...(result._cause ? { _cause: result._cause } : {}),
+    ...(result._detail ? { _detail: result._detail } : {}),
+  };
+}
+
 // Exported for tests: every chat tool's real behaviour runs through here.
 export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
   const gatedFeature: GatedFeatureKey | undefined =
@@ -990,6 +1020,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // the opening and rhythm of the last one (the page already did this).
       const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [], preferred_language: facts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft", { recent: await recentCopy(supabase, ctx.id) });
       if (_aiFailure) return { error: _aiFailure.message };
+      // F-22: a reply that could not be read is an error, not a draft.
+      const malformed = malformedToolError({ output, _fallback } as any);
+      if (malformed) return malformed;
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "content_pieces", { content_type: input.contentType, topic: input.topic ?? "", output });
       // WHERE THIS COULD GO, resolved now — before any card offers to
       // publish it. extractArtifact is synchronous and cannot ask the
@@ -1016,6 +1049,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const { output, _fallback } = input.taskType === "aeo_check"
         ? await generateAeoCheck(ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, aeoQuestionsFor({ business_category: ctx.category, city: ctx.city }, seoFacts))
         : await generateSeoTask(input.taskType, ctx.name, ctx.city, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, await (await import("../seo/searchQueries")).topQueries(supabase, ctx.id), input.exactText, seoFacts ?? await factsFor(supabase, ctx));
+      // F-22: a reply that could not be read is an error, not a draft.
+      {
+        const malformed = malformedToolError({ output, _fallback } as any);
+        if (malformed) return malformed;
+      }
       if (!_fallback) await saveGenerated(supabase, ctx.id, "seo_toolkit_items", { task_type: input.taskType, output });
       return withBrandVoiceCheck({ ...output, note: seoDraftNote(input.taskType, output) }, resolvedBrandVoice);
     }
@@ -1463,7 +1501,10 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         ? (recentPosts as any[]).map((r) => r.output?.caption || r.output?.hook || r.output?.headline || JSON.stringify(r.output).slice(0, 150)).filter(Boolean).join("\n")
         : null;
       const socialFacts = await factsFor(supabase, ctx);
-      const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice, preferred_language: socialFacts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, recentPostsContext, groundingContext);
+      const { output, _fallback } = await generateSocialTask(input.taskType, ctx.name, ctx.category, input.inputText ?? "", { tone_of_voice: ctx.toneOfVoice, preferred_language: socialFacts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, recentPostsContext, groundingContext, socialFacts);
+      // F-22: a reply that could not be read is an error, not a draft.
+      const malformed = malformedToolError({ output, _fallback } as any);
+      if (malformed) return malformed;
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "social_management_items", { task_type: input.taskType, input_text: input.inputText ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
@@ -1472,12 +1513,18 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // Chat drafts are shown to the owner before anything is sent or posted.
       const { output, _fallback, _aiFailure } = await generateEmailContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft");
       if (_aiFailure) return { error: _aiFailure.message };
+      // F-22: a reply that could not be read is an error, not a draft.
+      const malformed = malformedToolError({ output, _fallback } as any);
+      if (malformed) return malformed;
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "email_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "generate_whatsapp": {
       const facts = await factsFor(supabase, ctx);
       const { output, _fallback } = await generateWhatsappContent(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft");
+      // F-22: a reply that could not be read is an error, not a draft.
+      const malformed = malformedToolError({ output, _fallback } as any);
+      if (malformed) return malformed;
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "whatsapp_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
@@ -1490,6 +1537,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           ? "Past campaign performance could not be read — do not assume there is none."
           : null;
       const { output, _fallback } = await generateAdPlan(input.platform, input.taskType, ctx.name, ctx.category, { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, performanceContext, groundingContext, await factsFor(supabase, ctx));
+      // F-22: a reply that could not be read is an error, not a draft.
+      {
+        const malformed = malformedToolError({ output, _fallback } as any);
+        if (malformed) return malformed;
+      }
       if (!_fallback) await saveGenerated(supabase, ctx.id, "paid_ads_plans", { platform: input.platform, task_type: input.taskType, output });
 
       // LAYER 4 — the real floor, from the merchant's OWN ad account.
@@ -1528,16 +1580,29 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     }
     case "generate_video_task": {
       const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
+      // F-22: a reply that could not be read is an error, not a draft.
+      const malformed = malformedToolError({ output, _fallback } as any);
+      if (malformed) return malformed;
       const savedId = _fallback ? null : await saveGenerated(supabase, ctx.id, "video_marketing_pieces", { task_type: input.taskType, topic: input.topic ?? "", output });
       return withBrandVoiceCheck(savedId ? { ...output, _savedId: savedId } : output, resolvedBrandVoice);
     }
     case "research_competitor": {
       const { output, _fallback } = await generateCompetitorIntel(input.taskType, input.competitorName, ctx.name, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext, "pro", await factsFor(supabase, ctx));
+      // F-22: a reply that could not be read is an error, not a draft.
+      {
+        const malformed = malformedToolError({ output, _fallback } as any);
+        if (malformed) return malformed;
+      }
       if (!_fallback) await saveGenerated(supabase, ctx.id, "competitor_intel_items", { task_type: input.taskType, competitor_name: input.competitorName, output });
       return output;
     }
     case "research_market": {
       const { output, _fallback } = await generateResearch(input.taskType, ctx.name, ctx.category, ctx.city, { supabase, dealershipId: ctx.id }, groundingContext, "pro", await factsFor(supabase, ctx));
+      // F-22: a reply that could not be read is an error, not a draft.
+      {
+        const malformed = malformedToolError({ output, _fallback } as any);
+        if (malformed) return malformed;
+      }
       if (!_fallback) await saveGenerated(supabase, ctx.id, "research_items", { task_type: input.taskType, output });
       return output;
     }
@@ -1547,6 +1612,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const { gatherCroFacts } = await import("../cro/siteFacts");
       const facts = await gatherCroFacts(supabase, ctx.id);
       const { output, _fallback } = await generateCroSuggestions(input.taskType, facts, { supabase, dealershipId: ctx.id }, groundingContext);
+      // F-22: a reply that could not be read is an error, not a draft.
+      {
+        const malformed = malformedToolError({ output, _fallback } as any);
+        if (malformed) return malformed;
+      }
       if (!_fallback) await saveGenerated(supabase, ctx.id, "cro_items", { task_type: input.taskType, output });
       return output;
     }
@@ -1562,6 +1632,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         const byStatus: Record<string, number> = {};
         for (const l of all) byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
         const { output, _fallback } = await generateGrowthOpportunities(ctx.name, ctx.category, `Total leads: ${all.length}. By status: ${JSON.stringify(byStatus)}.`, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
+        // F-22: a reply that could not be read is an error, not a draft.
+        {
+          const malformed = malformedToolError({ output, _fallback } as any);
+          if (malformed) return malformed;
+        }
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "growth_opportunities", output });
         return output;
       }
@@ -1577,6 +1652,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             ? "Campaign performance could not be read. Do not recommend budget changes based on past results — say the ad account needs reconnecting first."
             : "No campaign data yet.";
         const { output, _fallback } = await generateBudgetRecommendations(ctx.name, ctx.category, context, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
+        // F-22: a reply that could not be read is an error, not a draft.
+        {
+          const malformed = malformedToolError({ output, _fallback } as any);
+          if (malformed) return malformed;
+        }
         if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "budget_recommendations", output });
         return output;
       }
@@ -1586,6 +1666,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // happened to say (src/lib/reports/healthScore.ts).
       const scoreText = growth.healthScore === null ? `not scored yet — ${growth.healthNote ?? "too little data"}` : `${growth.healthScore}/100`;
       const { output, _fallback } = await generateExpansionStrategy(ctx.name, ctx.category, ctx.city, growth.healthScore ?? 0, `Health score: ${scoreText}. Risks: ${growth.risks.join("; ") || "none"}.`, groundingContext, { supabase, dealershipId: ctx.id }) as { output: any; _fallback?: boolean };
+      // F-22: a reply that could not be read is an error, not a draft.
+      {
+        const malformed = malformedToolError({ output, _fallback } as any);
+        if (malformed) return malformed;
+      }
       if (!_fallback) await saveGenerated(supabase, ctx.id, "growth_advisor_items", { task_type: "expansion_strategy", output });
       return output;
     }
@@ -4315,15 +4400,17 @@ export async function runMasterBrainChat(
   // picture). It gets the same verified store facts and truth rules the
   // generators do (src/lib/claims), so it can't say "free shipping" for a
   // store that charges ₹60.
-  const { formatFactsForCopy, COPY_TRUTH_RULES } = await import("../claims/businessFacts");
   const storeFacts = await factsFor(supabase, ctx);
-  const storeFactsSection = storeFacts
-    ? `
+  // F-01: this whole block, the truth rules included, used to vanish
+  // when the facts could not be read — so the one turn the chat knew
+  // least about the business was the turn it was told least about what
+  // it must not say. truthBlock keeps the rules unconditional and states
+  // the absence instead (src/lib/claims/factsGate.ts).
+  const { truthBlock } = await import("../claims/factsGate");
+  const storeFactsSection = `
 
 ## Verified store facts — what you, and any brief you write for a tool, may claim
-${formatFactsForCopy(storeFacts)}
-
-${COPY_TRUTH_RULES}
+${truthBlock(storeFacts).trim()}
 - These rules cover your own replies and every tool brief, image prompts included.
 - If a tool result carries a \`_claimsNote\`, SAY IT. The guard has already taken the line out of what you were handed, so staying quiet presents a shortened draft as the whole answer and the owner never learns a claim was refused — or why. Repeat it in your own words, name the claim, and say what would make it allowed (adding it to Business Knowledge). The same goes for \`_contactsNote\`: a contact detail was taken out because this business has none on record, and the owner needs to add the real one.
 - WHEN A TOOL REFUSES, EXPLAIN THE REFUSAL AND DO NOT ASK FOR ANOTHER GO AT IT. Say in your own plain words why it was refused — the result's error text is the reason — and then offer something that would actually work. NEVER invite wording, a rewrite, a different phrasing or "batao kya likhna hai" for the thing that was just refused: any wording would be refused for the same reason, and asking makes the owner do work you will throw away. On 3 Oct 2026 chat answered a shop-page refusal with "Aap kya banana chahti hain? Koi specific wording batao, main wahi rakhunga — bilkul as-is", which was a promise it could not keep, and never said why the edit had been refused at all.
@@ -4332,8 +4419,7 @@ ${COPY_TRUTH_RULES}
 - If a result carries \`_cause\`, \`_detail\` or \`_partial\`, those are the real account: relay them. \`_partial\` means the answer was cut off and only the complete items are shown — say so, because a short answer read as a whole one is a wrong answer.
 - A competitor result carries \`_sources\` — the pages it was actually read from. Show them as links so the owner can check for themselves, and if it carries \`_unverified\`, say that too: those figures appear on no page I could read, and an owner may be about to set a price against one of them.
 - If a research or competitor result carries a \`_provider\`, SAY IT, in your own words, when you give the answer. It names which engine actually answered and how deep it went. NEVER call an answer "deep research" unless \`_provider\` says a deep provider ran it — a standard web search presented as deep research is a claim about our own product that isn't true, and the owner may be deciding what to spend on the strength of it.
-- When someone ASKS you to write a claim you cannot back — that they are the number 1, the best, the most trusted, the fastest growing — do not write it and do not quietly write something near it. Say plainly that you can't put that on record for them, say what the facts do support, and offer to use it once they add it to Business Knowledge.`
-    : "";
+- When someone ASKS you to write a claim you cannot back — that they are the number 1, the best, the most trusted, the fastest growing — do not write it and do not quietly write something near it. Say plainly that you can't put that on record for them, say what the facts do support, and offer to use it once they add it to Business Knowledge.`;
   // Every guard in this file sits on what a TOOL returns. The chat AI
   // writes copy in its own replies too — a caption, a CTA, a link — and
   // that text went back to the owner unchecked. It sent one workshop
@@ -4341,9 +4427,21 @@ ${COPY_TRUTH_RULES}
   // booking page. Links in the reply are now checked against the
   // business's real ones (src/lib/chat/replyLinks.ts).
   const { fixReplyLinks, linkFixNote } = await import("../chat/replyLinks");
+  // F-02: the reply's LINKS were checked and its CLAIMS were not, so a
+  // sentence the model typed into the conversation reached the owner
+  // unchecked while a tool's output two lines up was stripped and
+  // explained. Same guard, same wording, quoted claims left alone so the
+  // product can still explain its own refusals (src/lib/chat/replyClaims.ts).
+  const { checkReplyClaims } = await import("../chat/replyClaims");
+  // REPAIR FIRST, THEN JUDGE. Order matters and the existing
+  // chatReplyLinks test caught it: with the claims check first, a reply
+  // carrying "[Book here](https://calendly.com)" lost the whole sentence
+  // as an unsupported link — when fixReplyLinks would have pointed it at
+  // the workshop's real booking URL a moment later.
   const checkedReply = (text: string): string => {
     const fix = fixReplyLinks(text, storeFacts);
-    return `${fix.reply}${linkFixNote(fix) ?? ""}`;
+    const claims = checkReplyClaims(fix.reply, storeFacts);
+    return `${claims.reply}${linkFixNote(fix) ?? ""}${claims.note ?? ""}`;
   };
 
   // The owner set Preferred Ad Language to English and chat kept writing

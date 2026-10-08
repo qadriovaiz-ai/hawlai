@@ -657,7 +657,23 @@ export function formatFactsForPrompt(f: BusinessFacts): string {
 }
 
 /** The VERIFIED FACTS block for marketing copy — what a post, email, message or plan may claim. */
-export function formatFactsForCopy(f: BusinessFacts): string {
+/**
+ * WHO IS GOING TO READ THE THING THIS PROMPT PRODUCES.
+ *
+ * "owner" (the default, and every existing caller) is a draft the owner
+ * reviews, so the block carries the track record — how many orders and
+ * leads are on file — because the guard needs it to judge a social-proof
+ * claim and the owner is entitled to see her own numbers.
+ *
+ * "customer" is the website chat widget (F-15), where the reader is a
+ * visitor. Order and lead counts are the business's internal position
+ * and are left out: nothing in a reply to a visitor should depend on
+ * knowing them, and the claims guard runs on that reply afterwards
+ * anyway. The private-story gate applies in both cases.
+ */
+export type FactsAudience = "owner" | "customer";
+
+export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "owner"): string {
   const lines: string[] = [`VERIFIED FACTS about ${describeBusiness(f)} — the only things you may state as true:`];
   lines.push(
     f.categoryKnown
@@ -683,7 +699,13 @@ export function formatFactsForCopy(f: BusinessFacts): string {
   } else {
     lines.push("Store link: none — the website isn't published, so do not include any website link at all.");
   }
-  lines.push(`Track record: ${f.allTime.paidOrders} paid order(s) and ${f.allTime.leads} lead(s) on record. No ratings or reviews on record.`);
+  if (audience === "owner") {
+    lines.push(`Track record: ${f.allTime.paidOrders} paid order(s) and ${f.allTime.leads} lead(s) on record. No ratings or reviews on record.`);
+  } else {
+    // The visitor must not be told the numbers, and must still be told
+    // there is nothing to quote.
+    lines.push("No ratings, reviews or customer counts are on record — never state or imply any.");
+  }
   // The owner's own story, in full — the specifics that make copy about
   // THIS business impossible to write about any other one. Never truncated
   // to 200 characters the way the other notes are: the detail IS the point.

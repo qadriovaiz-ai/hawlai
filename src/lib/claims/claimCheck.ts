@@ -692,6 +692,103 @@ export function stripUnsupported(
   return { text: cleaned, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), linksFixed: repair.fixed };
 }
 
+// ---------------------------------------------------------------------
+// WHEN THE FACTS COULD NOT BE READ AT ALL.
+//
+// F-01 (audit, 8 Oct 2026). Every guard above answers "is this claim on
+// record" by reading the record, so the generators were written as
+// `facts ? guard(...) : return output`. One transient failure inside
+// gatherBusinessFactsSafely therefore turned the whole layer off —
+// silently, with no _claimsNote, so the owner could not tell a checked
+// draft from an unchecked one.
+//
+// This is the subset of the rules above that needs NO facts, and it is
+// not a weaker check: with nothing on record, a claim about counts,
+// ratings, sales, rankings, stock, guarantees, health or a competitor is
+// unsupported BY DEFINITION. The facts are what could have excused it.
+//
+// Deliberately NOT included: prices and shipping amounts. Those cannot
+// be judged either way without the store's numbers, and deleting a
+// correct price would be its own kind of wrong. They are reported as
+// unverifiable instead, for the caller to present as unverified.
+// ---------------------------------------------------------------------
+
+/** Rules whose verdict does not depend on the business's own records. */
+const FACT_INDEPENDENT: { re: RegExp; why: (m: RegExpMatchArray) => string }[] = [
+  { re: SOCIAL_PROOF, why: (m) => `"${m[0].trim()}" — a customer or review count, and no records could be read to support it` },
+  { re: VAGUE_CROWD, why: (m) => `"${m[0].trim()}" — a crowd claim, and no records could be read to support it` },
+  { re: UNITS_SOLD, why: (m) => `"${m[0].trim()}" — a sales figure, and no records could be read to support it` },
+  { re: BEST_SELLING, why: (m) => `"${m[0]}" — a sales ranking, and no records could be read to support it` },
+  { re: RANKING, why: (m) => `"${m[0]}" — a ranking claim with no records behind it` },
+  { re: POSSESSIVE_SUPERLATIVE, why: (m) => `"${m[0]}" — a superlative with no records behind it` },
+  { re: SCARCITY, why: (m) => `"${m[0]}" — urgency about stock, and no stock could be read` },
+  { re: SLOT_SCARCITY, why: (m) => `"${m[0]}" — how many slots are left could not be read` },
+  { re: GUARANTEE, why: (m) => `"${m[0]}" — a guarantee, and nothing could be read to show the business offers it` },
+  { re: HEALTH, why: (m) => `"${m[0]}" — a health or efficacy claim that needs real evidence` },
+  { re: RESULTS, why: (m) => `"${m[0]}" — a promised result that can't be verified` },
+  // Comparisons bypass `said` even when the records CAN be read, because
+  // nothing a business says about itself establishes a claim about
+  // somebody else's product. With no records they are no different.
+  { re: COMPARATIVE, why: (m) => `"${m[0]}" — a comparison with competitors that nothing supports` },
+  { re: PRODUCT_COMPARATIVE, why: (m) => `"${m[0]}" — a comparison with competitors that nothing supports` },
+  { re: NAMED_COMPARISON, why: (m) => `"${m[0].trim()}" — a comparison with another product that nothing supports` },
+  { re: RIVAL_DISPARAGEMENT, why: (m) => `"${m[0].trim()}" — this says other products have that fault, which is a claim about them` },
+];
+
+/** Money and offer claims that need the store's numbers to judge. Reported, never stripped. */
+const NEEDS_THE_STORE: { re: RegExp; label: string }[] = [
+  { re: FREE_SHIPPING, label: "free shipping" },
+  { re: PERCENT_OFF, label: "a discount" },
+  { re: FLAT_OFF, label: "a discount" },
+  { re: PRICE, label: "a price" },
+];
+
+/** A fresh global copy — the shared literals above carry lastIndex between calls. */
+function everyMatch(re: RegExp, text: string): RegExpMatchArray[] {
+  const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+  return [...text.matchAll(new RegExp(re.source, flags))];
+}
+
+/**
+ * What can still be said about copy when the facts are unreadable.
+ *
+ * `removed` are claims that are unsupported whatever the records say.
+ * `unverifiable` are claims that might be true and cannot be checked
+ * right now — the caller presents them as unverified rather than
+ * deleting a possibly-correct price.
+ */
+export function findUnverifiableClaims(text: string): { removed: string[]; unverifiable: string[] } {
+  const removed: string[] = [];
+  for (const { re, why } of FACT_INDEPENDENT) {
+    for (const m of everyMatch(re, text)) removed.push(why(m));
+  }
+  const unverifiable: string[] = [];
+  for (const { re, label } of NEEDS_THE_STORE) {
+    if (new RegExp(re.source, re.flags.replace("g", "")).test(text)) unverifiable.push(label);
+  }
+  return { removed: Array.from(new Set(removed)), unverifiable: Array.from(new Set(unverifiable)) };
+}
+
+/**
+ * The same sentence-scoped removal stripUnsupported does, for the
+ * fact-independent rules only. Shares `pieces` so a link is never split
+ * mid-URL and an emoji still ends a sentence.
+ */
+export function stripUnverifiable(text: string): { text: string; removed: string[]; unverifiable: string[] } {
+  const all = findUnverifiableClaims(text);
+  if (all.removed.length === 0) return { text, removed: [], unverifiable: all.unverifiable };
+  const kept: string[] = [];
+  const removed: string[] = [];
+  for (const piece of pieces(text)) {
+    const found = findUnverifiableClaims(piece);
+    if (found.removed.length === 0) kept.push(piece);
+    else removed.push(...found.removed);
+  }
+  // The same tidy-up stripUnsupported does after removing a sentence.
+  const cleaned = kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: cleaned, removed: Array.from(new Set(removed)), unverifiable: all.unverifiable };
+}
+
 /**
  * Applies stripUnsupported to every piece of text in a generated result,
  * whatever its shape (a caption, slides, a 7-day calendar, an email

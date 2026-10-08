@@ -14,6 +14,7 @@ import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "../cla
 import { guardGenerated } from "../claims/claimCheck";
 import { businessDisplayName } from "../business/displayName";
 import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
+import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 
 // THE BUG (2026-09-18): the abandoned-cart prompt told the model to
 // "assume a small discount or free shipping might be offered — mention it
@@ -92,7 +93,7 @@ export async function generateRetargetingCopy(
           role: "user",
           content: `${promptBuilder(segmentContext)}${groundingContext ?? ""}
 
-Business: ${name} (${category})${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+Business: ${name} (${category})${truthBlock(facts)}
 
 Respond ONLY with JSON, no markdown fences:
 {"headline": "...", "primaryText": "...", "cta": "...", "variant2Headline": "...", "variant2PrimaryText": "..."}`,
@@ -111,11 +112,11 @@ Respond ONLY with JSON, no markdown fences:
       variant2Headline: parsed.variant2Headline ?? fallback.variant2Headline,
       variant2PrimaryText: parsed.variant2PrimaryText ?? fallback.variant2PrimaryText,
     };
-    if (!facts) return copy;
     // The owner reviews this before using it: invented claims are removed,
     // an unverified price is kept and flagged. A field emptied by the check
     // falls back to the honest line rather than going out blank.
-    const guarded = guardGenerated(copy, facts, "draft");
+    // F-01: missing facts used to return the copy unchecked and unmarked.
+    const guarded = guardOrMark(copy, facts, "draft");
     const out = guarded.output as RetargetingCopy;
     for (const k of ["headline", "primaryText", "cta", "variant2Headline", "variant2PrimaryText"] as const) {
       if (!String(out[k] ?? "").trim()) out[k] = fallback[k];

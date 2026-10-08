@@ -36,6 +36,7 @@ interface BrandProfile {
 
 import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 
 export async function generateEmailContent(
   taskKey: string,
@@ -49,7 +50,7 @@ export async function generateEmailContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's sent: unverified prices are flagged, not removed. Automation never passes it. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; email?: ComposedEmail }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; email?: ComposedEmail ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -68,7 +69,7 @@ export async function generateEmailContent(
       messages: [{
         role: "user",
         content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${brandContext}${groundingContext ?? ""}${truthBlock(facts)}
 ${EMAIL_RULES}
 
 Topic/context: "${resolveFestiveTopic(topic, facts?.season) || "general, use good judgement for this business type"}"
@@ -90,7 +91,12 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     const parsedReply = parseModelJson(text);
     if (!parsedReply.ok) {
       console.error(`[emailMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
+      // F-22: the fallback used to go back as a plain `_fallback` whose
+      // output was a sentence, and the chat then had to notice it was
+      // not copy. The parser's own account travels with it now, so the
+      // chat can say what actually happened instead of guessing
+      // (the system prompt's `_cause` / `_detail` rule).
+      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
     }
     const parsed = parsedReply.value;
     // A subject that misleads about what's inside is fixed in code, not
@@ -98,13 +104,10 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     // (which sends only untouched emails) regenerates instead of sending.
     const subjectProblems = fixSubjects(parsed, dealershipName);
     const subjectNote = subjectProblems.length ? `Hawlai changed the subject line so it doesn't mislead: ${subjectProblems.join(" ")}` : null;
-    if (!facts) {
-      if (subjectNote) parsed._claimsNote = subjectNote;
-      return { output: parsed, claimsRemoved: subjectProblems.length ? subjectProblems : undefined };
-    }
-    // Sentences making claims the facts don't support are removed, and
-    // the owner is told (output._claimsNote) — never silently kept.
-    const guarded = guardGenerated(parsed, facts, claimsMode);
+    // F-01: with no facts this used to return the draft unguarded and
+    // unmarked. guardOrMark runs the fact-independent subset instead and
+    // says which state it was in (src/lib/claims/factsGate.ts).
+    const guarded = guardOrMark(parsed, facts, claimsMode);
     const removed = [...guarded.removed, ...subjectProblems];
     const output: any = guarded.output;
     const note = [claimsNote(guarded.removed), priceWarningNote(guarded.priceWarnings), subjectNote].filter(Boolean).join(" ");
@@ -112,7 +115,10 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     // The finished visual email, built from the checked words and the
     // real links, photo and brand. Returned beside the output, never
     // inside it — the output is saved and shown as the editable draft.
-    const email = VISUAL_EMAIL_TASKS.has(taskKey) ? composeMarketingEmail(output, facts) : undefined;
+    // No facts, no visual email: the composer builds it from the real
+    // links, photo and brand, and there is nothing to build from. The
+    // words still come back, marked unverified by the gate above.
+    const email = facts && VISUAL_EMAIL_TASKS.has(taskKey) ? composeMarketingEmail(output, facts) : undefined;
     return { output, claimsRemoved: removed, priceWarnings: guarded.priceWarnings, email };
   } catch (err: any) {
     console.error("[email-marketing-agent] error:", err.message);

@@ -50,6 +50,11 @@ export async function POST(request: Request) {
       knowledgeFacts: businessCtx.knowledgeFacts,
       personaGoals: persona.goals,
       hasBookingLink: !!dealership?.booking_slug,
+      // F-15: the widget knew the owner's notes and nothing about what
+      // the business sells, so a visitor asking a price was answered by
+      // a model that had never been given one. getBusinessContext
+      // already gathered these for this request.
+      facts: businessCtx.facts,
     },
     Array.isArray(history) ? history.slice(-6) : [],
     message.trim(),

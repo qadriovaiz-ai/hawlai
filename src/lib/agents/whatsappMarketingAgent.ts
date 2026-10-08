@@ -34,6 +34,7 @@ import { WHATSAPP_RULES, addWhatsappOptOut } from "@/lib/expertise/channelRules"
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -47,7 +48,7 @@ export async function generateWhatsappContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's used: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[] }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[] ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
 
@@ -75,7 +76,7 @@ export async function generateWhatsappContent(
       messages: [{
         role: "user",
         content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}${facts ? `\n\n${formatFactsForCopy(facts)}\n\n${COPY_TRUTH_RULES}\n` : ""}
+${brandContext}${groundingContext ?? ""}${truthBlock(facts)}
 ${WHATSAPP_RULES}
 
 Topic/context: "${resolveFestiveTopic(topic, facts?.season) || "general, use good judgement for this business type"}"
@@ -97,15 +98,20 @@ Return JSON only, no markdown, no preamble. WhatsApp messages should read like a
     const parsedReply = parseModelJson(text);
     if (!parsedReply.ok) {
       console.error(`[whatsappMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
+      // F-22: the fallback used to go back as a plain `_fallback` whose
+      // output was a sentence, and the chat then had to notice it was
+      // not copy. The parser's own account travels with it now, so the
+      // chat can say what actually happened instead of guessing
+      // (the system prompt's `_cause` / `_detail` rule).
+      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
     }
     const parsed = parsedReply.value;
     // The opt-out line goes on after the claims check, so it can never
     // be stripped as a "claim", and on in code so it's never forgotten.
-    if (!facts) return { output: addWhatsappOptOut(taskKey, parsed) };
     // Sentences making claims the facts don't support are removed, and
     // the owner is told (output._claimsNote) — never silently kept.
-    const guarded = guardGenerated(parsed, facts, claimsMode);
+    // F-01: missing facts used to skip this entirely.
+    const guarded = guardOrMark(parsed, facts, claimsMode);
     return { output: addWhatsappOptOut(taskKey, guarded.output), claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings };
   } catch (err: any) {
     console.error("[whatsapp-marketing-agent] error:", err.message);
