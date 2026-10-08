@@ -32,6 +32,7 @@ let landedText: string | undefined = undefined;
 let deleted: string[] = [];
 let stillReadableAfterDelete = false;
 let deleteOutcome: { deleted: boolean; error?: string } = { deleted: true };
+let presence: { state: "gone" | "present" | "unknown"; detail?: string } = { state: "gone" };
 const postPhotoToPage = vi.fn(async (..._a: any[]) => ({ id: "PAGE1_photo" }));
 const postTextToPage = vi.fn(async (..._a: any[]) => ({ id: "PAGE1_text" }));
 const postPhotoToInstagram = vi.fn(async (..._a: any[]) => ({ id: "ig_1" }));
@@ -46,6 +47,7 @@ vi.mock("@/lib/agents/socialMediaAgent", () => ({
   },
   readPostMessage: async (id: string) => (deleted.includes(id) && !stillReadableAfterDelete ? undefined : landedText),
   deletePostFromPage: async (id: string) => (deleted.push(id), deleteOutcome),
+  checkPostPresence: async () => presence,
 }));
 
 let hasToken = true;
@@ -82,6 +84,7 @@ beforeEach(() => {
   deleted = [];
   stillReadableAfterDelete = false;
   deleteOutcome = { deleted: true };
+  presence = { state: "gone" };
   dealership = { id: "d1", fb_page_id: "PAGE1", fb_page_name: "Candle by Qaaf" };
   postPhotoToPage.mockClear();
   postTextToPage.mockClear();
@@ -306,19 +309,37 @@ describe("the post is read back, and can be removed", () => {
   });
 
   it("a post on this Page is deleted and READ BACK to confirm it is gone", async () => {
+    presence = { state: "gone" };
     const body = await (await call(unpublish, { post_id: "PAGE1_photo" })).json();
     expect(deleted).toEqual(["PAGE1_photo"]);
-    expect(body.removed).toBe(true);
+    expect(body).toMatchObject({ removed: true, checked: true, state: "gone" });
     // No claim that nobody saw it.
     expect(body.message).toMatch(/already seen it/);
   });
 
   it("Facebook saying yes is not the post being gone", async () => {
-    stillReadableAfterDelete = true;
-    landedText = "Warm light.";
+    presence = { state: "present" };
+    const body = await (await call(unpublish, { post_id: "PAGE1_photo" })).json();
+    expect(body).toMatchObject({ removed: false, checked: true, state: "present" });
+    expect(body.message).toMatch(/still on the Page/);
+  });
+
+  it("COULDN'T CHECK IS NOT REMOVED: a Graph failure after the delete says so", async () => {
+    // The first version of this endpoint used readPostMessage, whose
+    // undefined means BOTH "not there" and "couldn't ask". A rate limit
+    // or an expired token would have told the owner her still-public
+    // post was gone.
+    presence = { state: "unknown", detail: "Facebook answered HTTP 503" };
     const body = await (await call(unpublish, { post_id: "PAGE1_photo" })).json();
     expect(body.removed).toBe(false);
-    expect(body.message).toMatch(/still reads back/);
+    expect(body.checked).toBe(false);
+    expect(body.state).toBe("unknown");
+    expect(body.message).toMatch(/couldn't check/i);
+    expect(body.message).toMatch(/look at your Page/);
+    // Facebook's own words, not a paraphrase.
+    expect(body.message).toMatch(/HTTP 503/);
+    // And it must not claim removal in passing.
+    expect(body.message).not.toMatch(/Removed from your Facebook Page/);
   });
 
   it("a refused delete is reported as a refusal, with Facebook's own reason", async () => {

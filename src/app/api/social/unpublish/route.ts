@@ -12,7 +12,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { deletePostFromPage, readPostMessage } from "@/lib/agents/socialMediaAgent";
+import { deletePostFromPage, checkPostPresence } from "@/lib/agents/socialMediaAgent";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 
 export async function POST(request: Request) {
@@ -62,16 +62,29 @@ export async function POST(request: Request) {
   }
 
   // READ BACK, because "success: true" from Graph is not the post being
-  // gone. A post that still reads back exists; only an unreadable post
-  // is one that has actually been removed, and the difference is
-  // reported rather than assumed.
-  const still = await readPostMessage(post_id, pageAccessToken);
+  // gone. And the read-back has THREE answers, not two.
+  //
+  // The first version of this used readPostMessage and treated its
+  // undefined as proof of removal. That undefined also means "Facebook
+  // could not be asked" — a rate limit, an expired token, a 503 — so a
+  // post that was still public would have been reported as removed. An
+  // unverified assumption stated as a fact is the same mistake as the
+  // incident this endpoint was built for, so "I couldn't check" is now
+  // its own answer, and it says to look at the Page.
+  const presence = await checkPostPresence(post_id, pageAccessToken);
+  const message =
+    presence.state === "gone"
+      ? "Removed from your Facebook Page. Anyone who already saw it has already seen it."
+      : presence.state === "present"
+        ? "Facebook accepted the delete but the post is still on the Page — remove it from the Page directly."
+        : `Facebook accepted the delete, but I couldn't check whether the post is actually gone${presence.detail ? ` (${presence.detail})` : ""} — please look at your Page.`;
+
   return NextResponse.json({
     success: true,
-    removed: still === undefined,
-    message:
-      still === undefined
-        ? "Removed from your Facebook Page. Anyone who already saw it has already seen it."
-        : "Facebook accepted the delete but the post still reads back — check the Page directly.",
+    // Only Facebook saying the object cannot be loaded counts as removed.
+    removed: presence.state === "gone",
+    checked: presence.state !== "unknown",
+    state: presence.state,
+    message,
   });
 }

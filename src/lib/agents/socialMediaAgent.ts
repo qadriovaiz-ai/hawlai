@@ -177,6 +177,55 @@ export async function readPostMessage(postId: string, pageAccessToken: string): 
 }
 
 /**
+ * Whether a post is still on the Page, as THREE answers.
+ *
+ * `readPostMessage` returns undefined for two unrelated things: the post
+ * is not there, and Facebook could not be asked. The unpublish route
+ * read that undefined as "removed", so a rate limit, an expired token or
+ * a 503 would have told the owner her post was gone while it was still
+ * public. That is the same mistake as the incident this whole change is
+ * about — an unverified assumption reported as a fact.
+ *
+ * "gone"    Graph said the object cannot be loaded.
+ * "present" Graph returned the object.
+ * "unknown" Graph could not be asked, or answered something else.
+ *
+ * On code 100: the message Facebook returns is "Object with ID ... does
+ * not exist, cannot be loaded due to missing permissions, or does not
+ * exist" — which conflates deleted with not-permitted. It is read as
+ * "gone" ONLY because the caller has just used this same token on this
+ * same object successfully, so permission was there a moment ago. Any
+ * other error code is `unknown`, including auth (190) and the rate-limit
+ * family, because those say nothing about the post at all.
+ */
+export async function checkPostPresence(
+  postId: string,
+  pageAccessToken: string
+): Promise<{ state: "gone" | "present" | "unknown"; detail?: string }> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${postId}?fields=id&access_token=${encodeURIComponent(pageAccessToken)}`
+    );
+    const data = await res.json().catch(() => null);
+    if (data?.error) {
+      const code = Number(data.error.code);
+      if (code === 100) return { state: "gone" };
+      return { state: "unknown", detail: data.error.message ?? `Graph error ${code}` };
+    }
+    if (!res.ok) {
+      // 404 with no error body is still Facebook saying it isn't there.
+      if (res.status === 404) return { state: "gone" };
+      return { state: "unknown", detail: `Facebook answered HTTP ${res.status}` };
+    }
+    if (data?.id) return { state: "present" };
+    // A 200 with nothing recognisable in it is not evidence either way.
+    return { state: "unknown", detail: "Facebook's answer didn't say whether the post is there." };
+  } catch (err: any) {
+    return { state: "unknown", detail: err?.message ?? "Couldn't reach Facebook." };
+  }
+}
+
+/**
  * Taking a post back down.
  *
  * Needed because of 8 Oct 2026: a post the owner never meant to make

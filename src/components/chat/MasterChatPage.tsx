@@ -521,11 +521,13 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   // What the platform served back, and the id needed to take it down.
   const [landed, setLanded] = useState<{ verified: string; text?: string } | null>(null);
   const [postId, setPostId] = useState<string | null>(null);
-  const [removal, setRemoval] = useState<string | null>(null);
+  // The message, and whether it is good news: "I couldn't check" must not
+  // look like "removed".
+  const [removal, setRemoval] = useState<{ text: string; ok: boolean } | null>(null);
 
   async function remove() {
     if (!postId) return;
-    setRemoval("Removing...");
+    setRemoval({ text: "Removing...", ok: true });
     try {
       const res = await fetch("/api/social/unpublish", {
         method: "POST",
@@ -533,10 +535,15 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
         body: JSON.stringify({ post_id: postId }),
       });
       const data = await res.json().catch(() => ({}));
-      setRemoval(res.ok ? data?.message ?? "Removed." : data?.error ?? "Couldn't remove it \u2014 delete it from the Page directly.");
+      setRemoval({
+        text: res.ok ? data?.message ?? "Removed." : data?.error ?? "Couldn't remove it \u2014 delete it from the Page directly.",
+        // Only a confirmed removal reads as done. An unchecked one keeps
+        // the Remove button, so the owner can try again.
+        ok: Boolean(res.ok && data?.removed),
+      });
       if (res.ok && data?.removed) setPostId(null);
     } catch {
-      setRemoval("Couldn't reach the server \u2014 the post is still up.");
+      setRemoval({ text: "Couldn't reach the server \u2014 the post is still up.", ok: false });
     }
   }
 
@@ -606,7 +613,9 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
             Remove the post
           </button>
         )}
-        {removal && <p className="text-[11px] text-slate-500 leading-snug">{removal}</p>}
+        {removal && (
+          <p className={`text-[11px] leading-snug ${removal.ok ? "text-slate-500" : "text-amber-600"}`}>{removal.text}</p>
+        )}
       </div>
     );
   }
