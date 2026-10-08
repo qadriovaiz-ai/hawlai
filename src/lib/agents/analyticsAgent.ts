@@ -15,6 +15,7 @@ import { readCampaignState } from "@/lib/ads/campaignStatus";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
 import { adsTokenFor } from "@/lib/ads/metaToken";
 import { metaRead } from "@/lib/ads/metaRead";
+import { attribute, revenueByCampaign } from "@/lib/analytics/orderLinkage";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -34,6 +35,8 @@ export interface CampaignPerformance {
   roas: number | null;
   /** False when Meta's insights couldn't be read; spend/impressions/clicks are then 0 for display, and null in a snapshot. */
   insights_ok?: boolean;
+  /** Revenue carrying this campaign's id that it cannot have earned. */
+  refused_credits?: { campaignId: string; revenue: number; reason: string }[];
 }
 
 /**
@@ -206,27 +209,58 @@ async function getCampaignPerformance(
   // Paid orders only. An unpaid COD order is a stated intention, and
   // counting it as revenue would flatter ROAS on exactly the campaigns
   // most likely to attract abandoned orders.
-  const { data: attributedOrders } = await supabase
+  // EVERY paid order, linked, not only the ones already carrying a
+  // campaign id — the linkage decides what is attributable, and it has
+  // to see the orders that are not (src/lib/analytics/orderLinkage.ts).
+  const { data: allOrders } = await supabase
     .from("orders")
-    .select("meta_campaign_id, total")
-    .eq("dealership_id", dealershipId)
-    .not("meta_campaign_id", "is", null)
-    .in("status", ["confirmed", "shipped", "delivered"]);
+    .select("id, total, status, created_at, customer_phone, customer_email, lead_id, meta_campaign_id, utm_source, utm_campaign")
+    .eq("dealership_id", dealershipId);
 
-  const revenueByCampaign: Record<string, { revenue: number; conversions: number }> = {};
-  const credit = (cid: string | null, amount: unknown) => {
-    if (!cid) return;
-    if (!revenueByCampaign[cid]) revenueByCampaign[cid] = { revenue: 0, conversions: 0 };
-    revenueByCampaign[cid].revenue += Number(amount ?? 0);
-    revenueByCampaign[cid].conversions += 1;
-  };
+  const { data: allLeads } = await supabase
+    .from("leads")
+    .select("id, created_at, status, source, phone, email, deal_value, meta_campaign_id")
+    .eq("dealership_id", dealershipId);
 
-  for (const lead of convertedLeads ?? []) credit(lead.meta_campaign_id, lead.deal_value);
-  for (const order of attributedOrders ?? []) credit(order.meta_campaign_id, order.total);
+  // Insights FIRST, because a campaign that has served no impressions
+  // cannot have sold anything and the credit depends on knowing that.
+  const insightsByCampaign = new Map<string, any>();
+  await Promise.all(
+    launchedAds.map(async (ad: any) => {
+      insightsByCampaign.set(ad.meta_campaign_id, await fetchInsights(ad.meta_campaign_id, token, dealershipId));
+    })
+  );
+
+  const view = attribute((allOrders ?? []) as any, (allLeads ?? []) as any);
+  const { credited, refused } = revenueByCampaign(view, (cid) => {
+    const insights = insightsByCampaign.get(cid);
+    // null is "Meta could not be read" — unknown, not zero. Refusing a
+    // credit on an outage would turn our own failure into a claim about
+    // the business.
+    if (insights === null || insights === undefined) return null;
+    return Number(insights.impressions ?? 0);
+  });
+
+  // A converted lead's own deal_value, for campaigns that generate leads
+  // rather than orders. Same impression guard.
+  for (const lead of convertedLeads ?? []) {
+    const cid = lead.meta_campaign_id as string | null;
+    if (!cid) continue;
+    const insights = insightsByCampaign.get(cid);
+    const impressions = insights === null || insights === undefined ? null : Number(insights.impressions ?? 0);
+    if (impressions === 0) {
+      refused.push({ campaignId: cid, revenue: Number(lead.deal_value ?? 0), reason: "this campaign has never served an impression, so the lead credited to it did not arrive through the ad" });
+      continue;
+    }
+    const entry = credited.get(cid) ?? { revenue: 0, conversions: 0 };
+    entry.revenue += Number(lead.deal_value ?? 0);
+    entry.conversions += 1;
+    credited.set(cid, entry);
+  }
 
   const campaigns: CampaignPerformance[] = await Promise.all(
     launchedAds.map(async (ad: any) => {
-      const insights = await fetchInsights(ad.meta_campaign_id, token, dealershipId);
+      const insights = insightsByCampaign.get(ad.meta_campaign_id) ?? null;
       const spend = insights?.spend ? Number(insights.spend) : 0;
       const impressions = insights?.impressions ? Number(insights.impressions) : 0;
       const clicks = insights?.clicks ? Number(insights.clicks) : 0;
@@ -244,10 +278,15 @@ async function getCampaignPerformance(
         ctr,
         leads: leadCount,
         cost_per_lead: leadCount > 0 ? spend / leadCount : null,
-        revenue: revenueByCampaign[ad.meta_campaign_id]?.revenue ?? 0,
-        conversions: revenueByCampaign[ad.meta_campaign_id]?.conversions ?? 0,
-        roas: spend > 0 && revenueByCampaign[ad.meta_campaign_id]?.revenue ? revenueByCampaign[ad.meta_campaign_id].revenue / spend : null,
+        revenue: credited.get(ad.meta_campaign_id)?.revenue ?? 0,
+        conversions: credited.get(ad.meta_campaign_id)?.conversions ?? 0,
+        roas: spend > 0 && credited.get(ad.meta_campaign_id) ? credited.get(ad.meta_campaign_id)!.revenue / spend : null,
         insights_ok: insights !== null,
+        // What was NOT counted against this campaign, and why. A quiet
+        // zero and a refused credit look identical on a card, and the
+        // owner needs to know a sale carrying this campaign's name was
+        // not the ad's doing.
+        refused_credits: refused.filter((r) => r.campaignId === ad.meta_campaign_id),
       };
     })
   );

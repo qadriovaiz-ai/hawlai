@@ -162,11 +162,17 @@ describe("resolving the tag into a campaign the dashboard can join", () => {
 describe("an attributed order reaches the campaign's revenue", () => {
   // Meta's insights call. Spend is what ROAS divides by; the revenue
   // side is what these tests are about.
+  let insights: any = { spend: "100", impressions: "1000", clicks: "10", ctr: "1" };
+  /** What Meta reports for this test — impressions decide the credit. */
+  function metaReturns(next: any) {
+    insights = next;
+  }
   beforeEach(() => {
+    insights = { spend: "100", impressions: "1000", clicks: "10", ctr: "1" };
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ data: [{ spend: "100", impressions: "1000", clicks: "10", ctr: "1" }] }),
+      json: async () => ({ data: [insights] }),
     })));
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -217,7 +223,7 @@ describe("an attributed order reaches the campaign's revenue", () => {
       perfDb({
         ads: [{ id: "draft-1", headline: "Lavender Candle Sale", meta_campaign_id: "camp_123", meta_status: "ACTIVE" }],
         leads: [],
-        orders: [{ meta_campaign_id: "camp_123", total: 550 }],
+        orders: [{ id: "o1", meta_campaign_id: "camp_123", total: 550, status: "confirmed", created_at: "2026-09-20T10:00:00Z" }],
       }) as any,
       "d1"
     );
@@ -240,8 +246,8 @@ describe("an attributed order reaches the campaign's revenue", () => {
     const state = await getCampaignPerformanceState(
       perfDb({
         ads: [{ id: "draft-1", headline: "x", meta_campaign_id: "camp_123", meta_status: "ACTIVE" }],
-        leads: [{ meta_campaign_id: "camp_123", deal_value: 1000 }],
-        orders: [{ meta_campaign_id: "camp_123", total: 550 }],
+        leads: [{ id: "l1", meta_campaign_id: "camp_123", deal_value: 1000, status: "converted", created_at: "2026-09-18T10:00:00Z" }],
+        orders: [{ id: "o1", meta_campaign_id: "camp_123", total: 550, status: "confirmed", created_at: "2026-09-20T10:00:00Z" }],
       }) as any,
       "d1"
     );
@@ -249,5 +255,62 @@ describe("an attributed order reaches the campaign's revenue", () => {
     const campaign = state.value.campaigns.find((c: any) => c.id === "draft-1");
     expect(campaign?.revenue).toBe(1550);
     expect(campaign?.conversions).toBe(2);
+  });
+  describe("a campaign that has served nothing is not credited", () => {
+    it("refuses the ₹550 and says why", async () => {
+      // THE LIVE CASE: "Ghar ko do lavender ki shanti", Active on Meta for
+      // 19 days, 0 impressions, ₹0 spend — and the Campaign Performance
+      // History credited it 1 lead, 1 sale and ₹550. Zero impressions
+      // means nobody was shown the ad, so nobody reached the shop through
+      // it, whatever stamped the campaign id on the order.
+      const db = perfDb({
+        ads: [{ id: "a1", headline: "Ghar ko do lavender ki shanti", meta_campaign_id: "camp_zero", meta_status: "ACTIVE" }],
+        leads: [],
+        orders: [{ id: "o1", meta_campaign_id: "camp_zero", total: 550, status: "confirmed", created_at: "2026-09-20T10:00:00Z" }],
+      });
+      metaReturns({ spend: "0", impressions: "0", clicks: "0", ctr: "0" });
+
+      const { getCampaignPerformanceState } = await import("@/lib/agents/analyticsAgent");
+      const state = await getCampaignPerformanceState(db as any, "d1");
+      if (state.state !== "ok") return expect(state.state).toBe("ok");
+      const result = state.value;
+      const campaign = result.campaigns[0];
+      expect(campaign.revenue).toBe(0);
+      expect(campaign.conversions).toBe(0);
+      expect(campaign.roas).toBeNull();
+      // Not a quiet zero: the card can say what it did not count.
+      expect(campaign.refused_credits).toHaveLength(1);
+      expect(campaign.refused_credits![0]).toMatchObject({ revenue: 550 });
+      expect(campaign.refused_credits![0].reason).toMatch(/never served an impression/);
+    });
+
+    it("credits the same order once the ad has actually run", async () => {
+      const db = perfDb({
+        ads: [{ id: "a1", headline: "x", meta_campaign_id: "camp_ok", meta_status: "ACTIVE" }],
+        leads: [],
+        orders: [{ id: "o1", meta_campaign_id: "camp_ok", total: 550, status: "confirmed", created_at: "2026-09-20T10:00:00Z" }],
+      });
+      metaReturns({ spend: "100", impressions: "1000", clicks: "10", ctr: "1" });
+
+      const { getCampaignPerformanceState } = await import("@/lib/agents/analyticsAgent");
+      const state = await getCampaignPerformanceState(db as any, "d1");
+      if (state.state !== "ok") return expect(state.state).toBe("ok");
+      const result = state.value;
+      expect(result.campaigns[0].revenue).toBe(550);
+      expect(result.campaigns[0].refused_credits).toEqual([]);
+    });
+
+    it("does not count an unconfirmed order as revenue", async () => {
+      const db = perfDb({
+        ads: [{ id: "a1", headline: "x", meta_campaign_id: "camp_ok", meta_status: "ACTIVE" }],
+        leads: [],
+        orders: [{ id: "o1", meta_campaign_id: "camp_ok", total: 550, status: "new", created_at: "2026-09-20T10:00:00Z" }],
+      });
+      metaReturns({ spend: "100", impressions: "1000", clicks: "10", ctr: "1" });
+      const { getCampaignPerformanceState } = await import("@/lib/agents/analyticsAgent");
+    const state = await getCampaignPerformanceState(db as any, "d1");
+    if (state.state !== "ok") return expect(state.state).toBe("ok");
+    expect(state.value.campaigns[0].revenue).toBe(0);
+    });
   });
 });
