@@ -37,7 +37,13 @@ import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { looksHinglish, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
 
 /** Words too common to make anything distinctive — English and the Hinglish a caption is written in. */
-const COMMON = new Set([
+/**
+ * Exported for narrativeProvenance.ts: deciding whether a sentence traces
+ * to the owner's records asks the same question this does — which of
+ * these words are distinctive enough to mean anything — and a second
+ * copy of this list would drift from this one.
+ */
+export const COMMON = new Set([
   "with", "that", "this", "from", "your", "you", "our", "the", "and", "for", "but", "not", "are", "was", "were", "have", "has", "had", "can", "will", "just", "only", "also", "when", "what", "which", "each", "every", "some", "made", "make", "makes", "making", "like", "into", "than", "then", "they", "them", "their", "there", "here", "about", "after", "before", "because", "would", "could", "should", "more", "most", "very", "much", "many", "been", "being", "does", "done", "over", "under", "same", "other", "such", "these", "those",
   "hai", "hain", "tha", "thi", "the", "kar", "karo", "karta", "karti", "karte", "karna", "kiya", "kiye", "liye", "mein", "main", "aur", "par", "phir", "bhi", "koi", "kuch", "jab", "tab", "abhi", "apna", "apni", "apne", "hum", "humne", "hamara", "mera", "meri", "mere", "tumhara", "tumhari", "yeh", "woh", "kya", "kyun", "nahi", "haan", "sab", "bahut", "thoda", "zyada", "achha", "accha", "banao", "banaya", "banate",
   // What the second slip-through was built from: the words any handmade

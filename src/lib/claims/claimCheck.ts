@@ -621,7 +621,13 @@ const PIECE =
  * So links are lifted out, the split runs on text with no dots that
  * aren't sentence ends, and they are put back exactly as they were.
  */
-function pieces(text: string): string[] {
+/**
+ * Exported for src/lib/claims/narrativeProvenance.ts, which has to judge
+ * copy one sentence at a time for the same reason this does — and must
+ * not reimplement the link masking, because a URL's dots are not
+ * sentence ends.
+ */
+export function pieces(text: string): string[] {
   const links: string[] = [];
   // U+0000 cannot appear in copy and is not a sentence end to PIECE, so
   // a link reduces to one inert character for the duration of the split.
