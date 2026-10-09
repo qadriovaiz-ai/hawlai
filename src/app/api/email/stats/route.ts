@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { countsAsSent } from "@/lib/email/sendClaim";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -14,8 +15,17 @@ export async function GET() {
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { data } = await supabase.from("email_sends").select("via, opened, clicked, created_at").eq("dealership_id", dealershipId).gte("created_at", thirtyDaysAgo);
-  const sends = data ?? [];
+  const { data } = await supabase.from("email_sends").select("via, opened, clicked, created_at, handoff_state").eq("dealership_id", dealershipId).gte("created_at", thirtyDaysAgo);
+  // A CLAIM IS NOT A SEND. Since migration 208 a row is written BEFORE
+  // the send, so this table now holds rows for emails that are still in
+  // flight ('claimed') and for ones that never left ('failed'). Counting
+  // those would overstate the owner's send volume and quietly deflate
+  // every open and click rate computed from it.
+  //
+  // `null` DOES count: it means the row was written by a path that only
+  // inserts after the send already succeeded (sendClaim.countsAsSent
+  // explains why that is permanent, not a leftover).
+  const sends = (data ?? []).filter(countsAsSent);
 
   const resendSends = sends.filter((s) => s.via === "resend");
   const gmailSends = sends.filter((s) => s.via === "gmail");

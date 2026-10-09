@@ -18,7 +18,12 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { to, subject: plainSubject, body: plainBody, draft, piece_id } = await request.json();
+  const { to, subject: plainSubject, body: plainBody, draft, piece_id, request_id } = await request.json();
+  // ONE ID PER COMPOSED EMAIL, from the client. A retry reuses it and is
+  // refused by migration 208's unique index; a deliberate second send is
+  // a new press with a new id and goes through. The content-hash window
+  // below cannot make that distinction, which is why both exist.
+  const requestId = typeof request_id === "string" && request_id.trim() ? request_id.trim().slice(0, 100) : null;
   // Either words written by hand ({subject, body}) or a visual email
   // draft ({draft}) — the one chat's preview card confirms.
   const subject = draft?.subject ?? plainSubject;
@@ -39,7 +44,12 @@ export async function POST(request: Request) {
   // (src/lib/email/duplicateSend.ts explains what this does and does
   // not guarantee).
   const dupe = await recentDuplicateSend(supabase, dealershipId, to, subject);
-  if (dupe.duplicate) return NextResponse.json({ error: dupe.error, duplicate: true, firstSentAt: dupe.sentAt }, { status: 409 });
+  // `lastSentAt`, not `firstSentAt`: the query orders newest-first, so
+  // this is the most recent matching send. A mutation check that
+  // reversed the ordering survived, which is how the wrong name was
+  // noticed — nothing reads this field yet, so it is renamed now
+  // rather than left to mislead whoever first does.
+  if (dupe.duplicate) return NextResponse.json({ error: dupe.error, duplicate: true, lastSentAt: dupe.sentAt }, { status: 409 });
 
   // Same rules as every marketing email: only people on record, never
   // anyone who unsubscribed, always the address and unsubscribe footer.
@@ -90,11 +100,16 @@ export async function POST(request: Request) {
   let result;
   if (sendDraft) {
     if (!facts) return NextResponse.json({ error: "Not sent — your store details couldn't be read to build the email. Try again." }, { status: 503 });
-    result = await sendMarketingEmail(supabase, dealershipId, to, { draft: sendDraft, facts });
+    result = await sendMarketingEmail(supabase, dealershipId, to, { draft: sendDraft, facts }, requestId);
   } else {
     const { data: dealership } = await supabase.from("dealerships").select("dealership_name").eq("id", dealershipId).single();
-    result = await sendMarketingEmail(supabase, dealershipId, to, { subject: sendSubject, text: sendBody, businessName: dealership?.dealership_name ?? "" });
+    result = await sendMarketingEmail(supabase, dealershipId, to, { subject: sendSubject, text: sendBody, businessName: dealership?.dealership_name ?? "" }, requestId);
   }
-  if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (!result.success) {
+    // A double-press is 409 and "already sent", not 400 and "couldn't be
+    // sent" — the second reads as a failure and invites a third press.
+    if ((result as any).duplicate) return NextResponse.json({ error: result.error, duplicate: true }, { status: 409 });
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
   return NextResponse.json({ success: true });
 }

@@ -49,18 +49,26 @@ export async function recentDuplicateSend(
   try {
     const { data, error } = await supabase
       .from("email_sends")
-      .select("created_at")
+      .select("created_at, handoff_state")
       .eq("dealership_id", dealershipId)
       .eq("to_email", toEmail)
       .eq("subject", subject)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
-      .limit(1);
+      // A FEW, not one. Since migration 208 this table also holds rows
+      // for sends that FAILED, and a failed row must not suppress the
+      // retry of itself. Taking only the newest row would let one
+      // failure block the window for five minutes; the filter below
+      // needs the next one down.
+      .limit(5);
     if (error) {
       console.error("[duplicate-send] couldn't check for a duplicate:", error.message);
       return { duplicate: false };
     }
-    const previous = (data ?? [])[0];
+    // Filtered here rather than in the query: `handoff_state <> 'failed'`
+    // evaluates to NULL for the rows written before migration 208, which
+    // would silently drop every historical send out of the window.
+    const previous = (data ?? []).find((r: any) => r?.handoff_state !== "failed");
     if (!previous) return { duplicate: false };
     return {
       duplicate: true,

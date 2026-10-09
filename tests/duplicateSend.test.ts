@@ -21,17 +21,24 @@ function db() {
   const from = (_table: string) => {
     const filters: [string, any][] = [];
     let since: string | null = null;
+    let take: number | null = null;
     const api: any = {
       select: () => api,
       eq: (k: string, v: any) => (filters.push([k, v]), queried.push([k, v]), api),
       gte: (_k: string, v: string) => ((since = v), api),
       order: () => api,
-      limit: () => api,
+      // THE LIMIT IS HONOURED, not swallowed. It was a no-op here, and a
+      // mutation check proved what that cost: narrowing the query back
+      // to .limit(1) broke nothing, because the mock returned every
+      // matching row regardless. A harness that ignores the thing under
+      // test cannot test it.
+      limit: (n: number) => ((take = n), api),
       then: (res: any, rej: any) => {
         if (readError) return Promise.resolve({ data: null, error: { message: readError } }).then(res, rej);
-        const matched = rows.filter(
-          (r) => filters.every(([k, v]) => r[k] === v) && (!since || r.created_at >= since)
-        );
+        const matched = rows
+          .filter((r) => filters.every(([k, v]) => r[k] === v) && (!since || r.created_at >= since))
+          .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+          .slice(0, take ?? undefined);
         return Promise.resolve({ data: matched, error: null }).then(res, rej);
       },
     };
@@ -97,6 +104,43 @@ describe("the same email twice", () => {
 
   it("nothing on record is not a duplicate", async () => {
     expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(false);
+  });
+
+  it("A FAILED SEND DOES NOT SUPPRESS THE RETRY OF ITSELF", async () => {
+    // Migration 208 made this table hold rows for sends that FAILED.
+    // Without this, one failure would block the retry for five minutes —
+    // the opposite of what the owner needs. Found by a mutation check:
+    // reverting the filter here broke nothing, because this file had no
+    // case for it.
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1), handoff_state: "failed" }];
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(false);
+  });
+
+  it("A SEND STILL IN FLIGHT ('claimed') DOES suppress a second press", async () => {
+    // This is the concurrent double-click the window is actually for:
+    // the first request has claimed but not finished, and the second
+    // must not send.
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1), handoff_state: "claimed" }];
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(true);
+  });
+
+  it("a failed row does not hide an earlier REAL send behind it", async () => {
+    // Why the query takes a few rows rather than the newest one: if the
+    // most recent attempt failed, the genuine send underneath it still
+    // has to be found.
+    rows = [
+      { dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1), handoff_state: "failed" },
+      { dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(2), handoff_state: "sent" },
+    ];
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(true);
+  });
+
+  it("rows written before migration 208 still count, null state and all", async () => {
+    // `handoff_state <> 'failed'` would be NULL for these and drop every
+    // historical send out of the window, which is why the filter is in
+    // JS and not in the query.
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1) }];
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(true);
   });
 
   it("THE WINDOW IS SHORT ON PURPOSE", () => {

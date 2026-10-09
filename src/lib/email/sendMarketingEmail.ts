@@ -27,12 +27,29 @@ export type MarketingContent =
 export type MarketingSendResult =
   | { success: true; via: "gmail" | "resend"; resendMessageId?: string }
   | { success: false; refused: "no_address" | "suppressed" | "unsubscribe_unavailable"; error: string }
-  | { success: false; refused?: undefined; error: string };
+  /**
+   * `duplicate` is the one refusal the endpoint must answer differently:
+   * a 409 and "already sent", not a 400 and "couldn't be sent". Without
+   * it here, a double-press reads to the owner as a failure and invites
+   * a third press.
+   */
+  | { success: false; refused?: undefined; duplicate?: boolean; error: string };
 
 export const NO_ADDRESS_ERROR =
   "Marketing email needs your business address — it goes in every email's footer. Add it in Settings → Brand Voice, then send again.";
 
-export async function sendMarketingEmail(supabase: any, dealershipId: string, to: string, content: MarketingContent): Promise<MarketingSendResult> {
+export async function sendMarketingEmail(
+  supabase: any,
+  dealershipId: string,
+  to: string,
+  content: MarketingContent,
+  /**
+   * One id per composed email, passed straight through to
+   * sendDealerEmail's claim (migration 208). Optional: a caller with no
+   * concept of a press keeps the old insert-after-success path.
+   */
+  idempotencyKey?: string | null
+): Promise<MarketingSendResult> {
   const service = createServiceClient();
 
   const { data: dealership, error: dealershipError } = await service.from("dealerships").select("business_address").eq("id", dealershipId).maybeSingle();
@@ -59,12 +76,12 @@ export async function sendMarketingEmail(supabase: any, dealershipId: string, to
 
   if ("draft" in content) {
     const email = composeMarketingEmail(content.draft, content.facts, { address, unsubscribeUrl: links.page });
-    const result = await sendDealerEmail(supabase, dealershipId, to, email.subject, email.text, { html: email.html, headers });
-    return result.success ? { success: true, via: result.via, resendMessageId: result.resendMessageId } : { success: false, error: result.error ?? "Email couldn't be sent." };
+    const result = await sendDealerEmail(supabase, dealershipId, to, email.subject, email.text, { html: email.html, headers, idempotencyKey });
+    return result.success ? { success: true, via: result.via, resendMessageId: result.resendMessageId } : { success: false, duplicate: result.duplicate, error: result.error ?? "Email couldn't be sent." };
   }
 
   const name = senderDisplayName(content.businessName);
   const text = `${content.text.trimEnd()}\n\n—\n${name} · ${address}\nUnsubscribe: ${links.page}`;
-  const result = await sendDealerEmail(supabase, dealershipId, to, content.subject, text, { headers });
-  return result.success ? { success: true, via: result.via, resendMessageId: result.resendMessageId } : { success: false, error: result.error ?? "Email couldn't be sent." };
+  const result = await sendDealerEmail(supabase, dealershipId, to, content.subject, text, { headers, idempotencyKey });
+  return result.success ? { success: true, via: result.via, resendMessageId: result.resendMessageId } : { success: false, duplicate: result.duplicate, error: result.error ?? "Email couldn't be sent." };
 }
