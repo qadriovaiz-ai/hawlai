@@ -19,8 +19,12 @@ const generateGraphic = vi.fn(async (..._a: any[]) => Buffer.from("png"));
 vi.mock("@/lib/agents/graphicDesignAgent", () => ({
   generateGraphic: (...a: any[]) => generateGraphic(...a),
 }));
+// Configurable, because a mock that always allows made the cap check
+// untestable: a mutation deleting it entirely survived, and the cap is
+// the guard that stops the owner's monthly image allowance being spent.
+let capAllows = true;
 vi.mock("@/lib/usage/generationLimits", () => ({
-  checkAndRecordGenerationUsage: async () => ({ allowed: true }),
+  checkAndRecordGenerationUsage: async () => ({ allowed: capAllows }),
   generationLimitMessage: () => "over the cap",
 }));
 
@@ -63,12 +67,15 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 import { POST as generate } from "@/app/api/graphic-design/generate/route";
+import { generateDesign } from "@/lib/graphicDesign/generateDesign";
+import { code } from "./helpers/source";
 
 const call = (body: any) =>
   generate(new Request("https://hawlai.online/api/graphic-design/generate", { method: "POST", body: JSON.stringify(body) }));
 
 beforeEach(() => {
   generateGraphic.mockClear();
+  capAllows = true;
   delete process.env[HELD];
   tables = {
     profiles: [{ id: "u1", dealership_id: "d1" }],
@@ -124,5 +131,101 @@ describe("the depiction guard applies on this path too", () => {
     const brief = generateGraphic.mock.calls[0][3] as string;
     expect(brief).not.toMatch(/Free shipping/);
     expect((await res.json()).leftOut.join(" ")).toMatch(/Free shipping/);
+  });
+});
+
+describe("G-3 step 1a: the work moved, and the guards moved WITH it", () => {
+  // The approvals route will call generateDesign directly rather than
+  // fetching this app over HTTP — a route calling its own app gets a
+  // Vercel 508 after about four hops, which this codebase already
+  // rebuilt away from once.
+  //
+  // The risk of an extraction is that a check stays behind in the route
+  // and the second caller silently skips it. Every assertion above still
+  // runs through the ROUTE, so those prove the route path. These prove
+  // the same guards fire when the function is called directly.
+
+  it("THE HOLD HOLDS WHEN CALLED DIRECTLY, not only through the route", async () => {
+    const r = await generateDesign(db(), "d1", { designType: "social_graphic", prompt: "a candle" });
+    expect(r.ok).toBe(false);
+    expect((r as any).status).toBe(403);
+    expect((r as any).unavailable).toBe(true);
+    expect(generateGraphic).not.toHaveBeenCalled();
+  });
+
+  it("and it generates when the hold is lifted", async () => {
+    process.env[HELD] = "true";
+    const r = await generateDesign(db(), "d1", { designType: "social_graphic", prompt: "a candle" });
+    expect(r.ok).toBe(true);
+    expect((r as any).url).toBe("https://cdn.example/made.png");
+  });
+
+  it("THE FACTS STILL REACH THE GENERATOR on the direct call", async () => {
+    // The bug this file was written for. An extraction that dropped the
+    // facts argument would type-check and look fine.
+    process.env[HELD] = "true";
+    await generateDesign(db(), "d1", { designType: "social_graphic", prompt: "a candle" });
+    const facts = (generateGraphic.mock.calls[0] as any[])[8];
+    expect(facts).toBeTruthy();
+    expect(facts.products?.[0]?.name).toBe("Lavender Soy Wax Candle");
+  });
+
+  it("an unbacked claim is stripped before it is painted, on the direct call too", async () => {
+    process.env[HELD] = "true";
+    const r = await generateDesign(db(), "d1", { designType: "social_graphic", prompt: "India's number 1 candle. A lavender candle." });
+    const brief = (generateGraphic.mock.calls[0] as any[])[3];
+    expect(brief).not.toMatch(/number 1/i);
+    expect((r as any).leftOut?.length).toBeGreaterThan(0);
+  });
+
+  it("THE ROUTE DOES NOT RE-IMPLEMENT ANY OF THE GUARDS", () => {
+    // This is what stops the two callers drifting apart. If a check gets
+    // copied back into the route, the route becomes the only place it
+    // runs and the approvals path loses it.
+    const route = code("src/app/api/graphic-design/generate/route.ts");
+    expect(route).toMatch(/generateDesign\(/);
+    expect(route).not.toMatch(/isFeatureEnabled/);
+    expect(route).not.toMatch(/checkAndRecordGenerationUsage/);
+    expect(route).not.toMatch(/stripUnsupported/);
+    expect(route).not.toMatch(/generateGraphic/);
+  });
+
+  it("the plan cap is not consulted for a request the hold refuses", () => {
+    // Order matters because the cap RECORDS usage: counting an image
+    // against the allowance for a request that was never going to run
+    // would charge the owner for nothing.
+    // The CALL sites, not the imports — indexOf on the bare names found
+    // the import block, where the order is alphabetical and means
+    // nothing.
+    const src = code("src/lib/graphicDesign/generateDesign.ts");
+    const hold = src.indexOf('isFeatureEnabled("graphicDesign")');
+    const cap = src.indexOf("checkAndRecordGenerationUsage(dealershipId");
+    expect(hold).toBeGreaterThan(-1);
+    expect(cap).toBeGreaterThan(-1);
+    expect(hold).toBeLessThan(cap);
+  });
+});
+
+describe("the plan cap refuses, and nothing is generated", () => {
+  // The cap both CHECKS and RECORDS, so these two tests are about the
+  // owner's money twice over: nothing is generated, and the refusal is
+  // reported as a plan problem rather than a failure.
+  it("THROUGH THE ROUTE: 429, and the generator is never called", async () => {
+    process.env[HELD] = "true";
+    capAllows = false;
+    const res = await call({ designType: "social_graphic", prompt: "a candle" });
+    expect(res.status).toBe(429);
+    expect((await res.json()).limitReached).toBe(true);
+    expect(generateGraphic).not.toHaveBeenCalled();
+  });
+
+  it("ON THE DIRECT CALL TOO, so the approvals path cannot skip it", async () => {
+    process.env[HELD] = "true";
+    capAllows = false;
+    const r = await generateDesign(db(), "d1", { designType: "social_graphic", prompt: "a candle" });
+    expect(r.ok).toBe(false);
+    expect((r as any).status).toBe(429);
+    expect((r as any).limitReached).toBe(true);
+    expect(generateGraphic).not.toHaveBeenCalled();
   });
 });

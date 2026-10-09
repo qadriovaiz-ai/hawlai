@@ -1,10 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { generateGraphic } from "@/lib/agents/graphicDesignAgent";
-import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
-import { isFeatureEnabled, unavailableMessage } from "@/lib/featureFlags";
-import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
+import { generateDesign } from "@/lib/graphicDesign/generateDesign";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -18,70 +14,30 @@ export async function POST(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  // The hold, enforced where the money is actually spent. The chat's
-  // button calls this endpoint, so checking it only in the chat tool
-  // would leave the spending path open.
-  if (!isFeatureEnabled("graphicDesign")) {
-    return NextResponse.json({ error: unavailableMessage("graphicDesign"), unavailable: true }, { status: 403 });
-  }
-
   const { designType, prompt } = await request.json();
-  if (!designType) return NextResponse.json({ error: "designType required" }, { status: 400 });
 
-  const usage = await checkAndRecordGenerationUsage(dealershipId, "image");
-  if (!usage.allowed) return NextResponse.json({ error: generationLimitMessage(usage), limitReached: true }, { status: 429 });
-
-  const [{ data: dealership }, { data: brandProfile }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, business_category").eq("id", dealershipId).single(),
-    supabase.from("brand_profiles").select("tone_of_voice").eq("dealership_id", dealershipId).maybeSingle(),
-  ]);
-
-  try {
-    // THE FACTS WERE MISSING HERE.
-    //
-    // Without them buildImageBrief has nothing to anchor to and
-    // productDepictionFor returns "not_applicable", so the guard that
-    // stops an invented product being drawn (src/lib/claims/imageBrief)
-    // did not apply on this path at all — only in chat. Both paths
-    // reach the same generator; both now hand it the same facts.
-    const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-    // The image model paints the brief's words onto the picture, so an
-    // unbacked claim in the brief becomes an unbacked claim on a
-    // graphic. Chat already stripped them before quoting; this runs
-    // again because the prompt arrives in a request body, and this is
-    // the call that spends the money.
-    const { stripUnsupported } = await import("@/lib/claims/claimCheck");
-    const brief = facts ? stripUnsupported(prompt ?? "", facts) : { text: prompt ?? "", removed: [] as string[] };
-    const buffer = await generateGraphic(
-      designType,
-      dealership?.dealership_name ?? "the business",
-      dealership?.business_category ?? "business",
-      brief.text,
-      brandProfile,
-      { supabase, dealershipId },
-      null,
-      null,
-      facts
+  // The work itself lives in src/lib/graphicDesign/generateDesign.ts so
+  // the approvals route can run it without calling this app over HTTP
+  // (G-3 step 1). This route is now authz plus a thin translation to
+  // HTTP; every check that guards the money - the feature hold, the plan
+  // cap, the claims strip - moved WITH the work rather than being left
+  // here and re-implemented there.
+  const result = await generateDesign(supabase, dealershipId, { designType, prompt });
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        error: result.error,
+        ...(result.unavailable ? { unavailable: true } : {}),
+        ...(result.limitReached ? { limitReached: true } : {}),
+      },
+      { status: result.status }
     );
-    const serviceClient = createServiceClient();
-    const filePath = `graphic-designs/${dealershipId}/${designType}-${Date.now()}.png`;
-    await serviceClient.storage.from("ad-creatives").upload(filePath, buffer, { contentType: "image/png", upsert: true });
-    const { data: publicUrlData } = serviceClient.storage.from("ad-creatives").getPublicUrl(filePath);
-
-    const { data: saved } = await supabase
-      .from("graphic_designs")
-      .insert({ dealership_id: dealershipId, design_type: designType, prompt: brief.text, image_url: publicUrlData.publicUrl })
-      .select()
-      .single();
-
-    return NextResponse.json({
-      url: publicUrlData.publicUrl,
-      id: saved?.id ?? null,
-      ...(brief.removed.length ? { leftOut: brief.removed } : {}),
-    });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
   }
+  return NextResponse.json({
+    url: result.url,
+    id: result.id,
+    ...(result.leftOut ? { leftOut: result.leftOut } : {}),
+  });
 }
 
 export async function GET() {
