@@ -220,7 +220,13 @@ describe("a generic draft is retried once, at the same length", () => {
 describe("chat asks the same way the page does", () => {
   it("the chat tool passes the last few pieces, so captions don't repeat each other", () => {
     const brain = readFileSync("src/lib/agents/masterBrainV2.ts", "utf8");
-    expect(brain).toContain("{ recent: await recentCopy(supabase, ctx.id) }");
+    // The braces came off on 2026-10-09 when `revise: true` joined it in
+    // the same opts object (F-Q1). The fact this test exists for is
+    // unchanged: the chat tool passes the last few pieces.
+    expect(brain).toContain("recent: await recentCopy(supabase, ctx.id)");
+    // And it is still the generate_content opts it goes into, not some
+    // other call that happens to mention recentCopy.
+    expect(brain).toMatch(/generate_content[\s\S]{0,4000}recent: await recentCopy\(supabase, ctx\.id\)/);
   });
 
   it("the note reaches the person reading it — on the page AND on a chat card", () => {

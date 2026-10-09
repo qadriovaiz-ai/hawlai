@@ -1018,7 +1018,21 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const facts = await factsFor(supabase, ctx);
       // The last few pieces, so a caption asked for in chat doesn't repeat
       // the opening and rhythm of the last one (the page already did this).
-      const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [], preferred_language: facts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft", { recent: await recentCopy(supabase, ctx.id) });
+      const { output, _fallback, _aiFailure } = await generateContent(input.contentType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice, messaging_pillars: [], preferred_language: facts?.brand?.language ?? null }, { supabase, dealershipId: ctx.id }, groundingContext, facts, "draft", {
+        recent: await recentCopy(supabase, ctx.id),
+        // F-Q1. reviseForSpecificity was built, tested, and wired to the
+        // DEPARTMENT PAGE only - so the five caption sentences that went
+        // public on 8 October 2026 came through this line, and the
+        // specificity editor never ran on them. The page got it; the
+        // surface the owner actually uses did not.
+        //
+        // Safe here for the reason the flag exists: a card in chat is
+        // reviewed by a human before anything is published, which is
+        // exactly the condition the opts comment names. The unattended
+        // path (contentAutopilot) still does not pass it, deliberately -
+        // there is nobody there to benefit from the second model call.
+        revise: true,
+      });
       if (_aiFailure) return { error: _aiFailure.message };
       // F-22: a reply that could not be read is an error, not a draft.
       const malformed = malformedToolError({ output, _fallback } as any);
