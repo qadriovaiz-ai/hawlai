@@ -71,9 +71,17 @@ source-grep test is defeated by a comment *about* the thing it looks
 for. That failure was harmless — a present guard looked absent. **The
 reverse is not:** a test asserting a guard *is* present passes on a
 comment that merely mentions it, so a guard deleted from the code but
-still described above it reads as protected. Measured on 2026-10-09:
-**140 presence assertions across 39 test files** read raw source, and
-are exposed to exactly that.
+still described above it reads as protected.
+
+Measured on 2026-10-09: **82 test files, 1,128 `toMatch`/`toContain`
+assertions** read raw source. (An earlier count said 39 files and 140
+assertions — that sweep matched assertions only on a handful of variable
+names and missed every file using another one. Corrected.) Those files
+are allowlisted in
+[tests/sourceGrepDiscipline.test.ts](tests/sourceGrepDiscipline.test.ts)
+with a date and a migration priority; **nothing new goes on the list**,
+and migrating a file to `code()` fails the suite until its entry is
+deleted, so the backlog shrinks visibly instead of rotting.
 
 ---
 
