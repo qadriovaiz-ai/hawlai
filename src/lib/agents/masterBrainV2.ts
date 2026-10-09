@@ -1840,9 +1840,34 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       };
       const field = fieldMap[input.toggle];
       if (!field) return { error: "Unknown toggle" };
-      const { error } = await supabase.from("dealerships").update({ [field]: !!input.enabled }).eq("id", ctx.id);
-      if (error) return { error: error.message };
-      return { success: true, toggle: input.toggle, enabled: !!input.enabled };
+      const { toggleRisk } = await import("../executionPolicy");
+      const risk = toggleRisk(input.toggle);
+      if (!risk) return { error: `"${input.toggle}" isn't a known automation, so nothing was changed.` };
+
+      // SWITCHING OFF IS SAFE. Stopping unattended sending needs no
+      // approval, for the same reason pause_meta_campaign needs none:
+      // the safe direction should never be the slow one.
+      if (!input.enabled) {
+        const { error } = await supabase.from("dealerships").update({ [field]: false }).eq("id", ctx.id);
+        if (error) return { error: error.message };
+        return { success: true, toggle: input.toggle, enabled: false, note: `Switched off. It ${risk.what} — that has stopped.` };
+      }
+
+      // SWITCHING ON TURNS OFF EVERY OTHER GATE IN THE PRODUCT. After
+      // this, content publishes and emails send with nobody looking, so
+      // it is the one write in the file that most needs a human saying
+      // yes. Its only previous safeguard was a line in the system
+      // prompt asking the model not to do it unprompted.
+      const { requestApproval } = await import("../chat/requestApproval");
+      return await requestApproval(supabase, ctx.id, {
+        actionType: "set_automation_toggle",
+        requestedBy: "master_chat:set_automation_toggle",
+        // This toggle's own level, not the action's generic one:
+        // auto-calling every new lead is not a welcome email.
+        risk: risk.risk,
+        details: { toggle: input.toggle, field, enabled: true },
+        confirm: `This switches on an automation that ${risk.what}. Nobody reviews what it sends. You can switch it off again any time.`,
+      });
     }
     case "propose_price_change": {
       // Resolution, preview and the approval request all live behind
@@ -2594,9 +2619,17 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         });
         if (refreshed) await supabase.from("dealerships").update({ ...tokenWrite("youtube", "access_token", refreshed.accessToken), youtube_token_expiry: refreshed.expiry }).eq("id", ctx.id);
 
-        const result = await uploadVideoToYouTube(accessToken, video.video_url, input.title || video.prompt.slice(0, 90), video.prompt);
-        await supabase.from("video_generations").update({ youtube_video_id: result.videoId, youtube_url: result.url }).eq("id", video.id);
-        return { success: true, url: result.url, note: `Published to YouTube: ${result.url}` };
+        // PUBLIC THE MOMENT IT UPLOADS. The token refresh above has to
+        // happen to know the channel is reachable at all; the upload
+        // itself waits for the owner.
+        const title = input.title || video.prompt.slice(0, 90);
+        const { requestApproval } = await import("../chat/requestApproval");
+        return await requestApproval(supabase, ctx.id, {
+          actionType: "publish_video",
+          requestedBy: "master_chat:publish_to_youtube",
+          details: { video_id: video.id, title, description: video.prompt },
+          confirm: `This publishes the video publicly to your YouTube channel as "${title}". Anyone with the link can watch it.`,
+        });
       } catch (err: any) {
         return { error: err.message };
       }
@@ -2778,9 +2811,17 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       const lead = matches[0];
       if (!lead.phone) return { error: `${lead.name} has no phone number on file, so a call can't be placed.` };
       if (lead.dnd_opt_out) return { error: `${lead.name} has opted out of contact (DND) — a call can't be placed.` };
-      const result = await triggerVapiCall(supabase, lead);
-      if (!result.success) return { error: result.error };
-      return { success: true, calledLead: lead.name, note: `Call placed to ${lead.name}. Tell the person the call is in progress — the transcript and an updated lead score will appear once it ends.` };
+      // A PLACED CALL CANNOT BE UNPLACED. Every check above is about
+      // whether a call is permitted at all (lead exists, one match, a
+      // number on file, not opted out); none of them was the owner
+      // saying yes to this particular call.
+      const { requestApproval } = await import("../chat/requestApproval");
+      return await requestApproval(supabase, ctx.id, {
+        actionType: "place_outbound_call",
+        requestedBy: "master_chat:trigger_call",
+        details: { lead_id: lead.id, lead_name: lead.name },
+        confirm: `This places a real phone call to ${lead.name} now. It can't be unplaced.`,
+      });
     }
     case "export_leads": {
       // The CSV itself is built by the download route on request — the
@@ -2947,6 +2988,27 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       }
 
       // A note to a team member is internal mail, sent as asked.
+      //
+      // WORTH CORRECTING THE RECORD: the audit reported send_email as
+      // ungated, and that was only half true. Mail to a LEAD OR
+      // CUSTOMER already returns `proposed: true` with a preview and a
+      // Send button, as the branch above shows. Only this branch, to a
+      // colleague, sends directly.
+      //
+      // Phase 2B gated this too, briefly, and then put it back. The
+      // direct send is a DATED, APPROVED DECISION (2026-09-14, Part 1
+      // step 3) with two tests encoding it: tests/emailPreview.ts and
+      // tests/emailConsent.ts both assert internal mail sends straight
+      // away. The recipient is an active team member of this same
+      // business, already on record; no customer sees it, nothing is
+      // published and nothing is spent. The instruction's target is an
+      // ungated OUTBOUND action, and this is not one.
+      //
+      // send_email stays in ACTION_POLICIES at requiresApproval: true
+      // and the approvals route keeps its branch, because the CUSTOMER
+      // path's card still posts straight to /api/email/send with no
+      // approval record (audit finding G-3). That is where this lands
+      // when G-3 is closed.
       const result = await sendDealerEmail(supabase, ctx.id, toEmail, input.subject, input.body);
       if (!result.success) return { error: result.error };
       // "Accepted", not "delivered": the provider taking the email is all
@@ -3164,15 +3226,23 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       if (!/^[A-Z0-9_-]{3,20}$/.test(code)) return { error: "Code must be 3-20 letters/numbers, e.g. WELCOME10" };
       const { data: existing } = await supabase.from("discount_codes").select("id").eq("dealership_id", ctx.id).eq("code", code).maybeSingle();
       if (existing) return { error: `A code "${code}" already exists.` };
-      const { data, error } = await supabase.from("discount_codes").insert({
-        dealership_id: ctx.id,
-        code,
-        discount_type: input.discountType,
-        value: input.value,
-        min_order_value: input.minOrderValue ?? null,
-      }).select("id").single();
-      if (error) return { error: error.message };
-      return { success: true, code, note: `Code ${code} is live now — customers can use it at checkout immediately.` };
+      // THE REGISTRY ALREADY SAID THIS NEEDED APPROVAL and this code
+      // path inserted anyway, then told the owner the code was "live
+      // now". executionPolicy has had create_discount_code at
+      // requiresApproval: true since migration 170's work; the chat
+      // simply never asked it.
+      const { requestApproval } = await import("../chat/requestApproval");
+      return await requestApproval(supabase, ctx.id, {
+        actionType: "create_discount_code",
+        requestedBy: "master_chat:create_discount_code",
+        details: {
+          code,
+          discount_type: input.discountType,
+          value: input.value,
+          min_order_value: input.minOrderValue ?? null,
+        },
+        confirm: `This creates discount code ${code} and customers can use it at checkout straight away. Money off every order that uses it.`,
+      });
     }
     case "get_report_links": {
       const { data: dealership } = await supabase.from("dealerships").select("report_share_token").eq("id", ctx.id).single();

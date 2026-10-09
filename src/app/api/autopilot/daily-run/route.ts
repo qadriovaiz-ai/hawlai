@@ -6,6 +6,7 @@ import { DAILY_RUNNERS } from "@/lib/automation/dailyRunners";
 import { runDailyInvocation, type DailyGroup } from "@/lib/automation/dailyJobs";
 import { GROUPS } from "@/lib/automation/cronGroups";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
+import { authorizeCron } from "@/lib/cronAuth";
 
 // The daily automation run. Vercel Cron calls it twice a day (vercel.json:
 // signals at 8:30 AM IST, heavy at 9:00) with `Authorization: Bearer
@@ -29,17 +30,13 @@ import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    const { searchParams } = new URL(request.url);
-    const querySecret = searchParams.get("secret");
-    const isAuthorized = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
-    if (!isAuthorized) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  } else {
-    console.warn("[autopilot] CRON_SECRET is not set — this endpoint is currently unprotected.");
+  // Fails CLOSED when the secret is unset, and the HEADER ONLY: the
+  // `?secret=` form this accepted put the credential in access logs,
+  // proxy logs and referrers (src/lib/cronAuth.ts).
+  const auth = authorizeCron(request);
+  if (!auth.ok) {
+    if (auth.status === 503) console.error("[autopilot]", auth.reason);
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const url = new URL(request.url);

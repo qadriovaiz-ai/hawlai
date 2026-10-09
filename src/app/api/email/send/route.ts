@@ -7,6 +7,7 @@ import { findUnsupportedLinks } from "@/lib/claims/claimCheck";
 import { misleadingSubject } from "@/lib/expertise/channelRules";
 import { isPieceId, markTrackedLinks } from "@/lib/attribution/contentLink";
 import { registerPiece } from "@/lib/attribution/pieces";
+import { recentDuplicateSend } from "@/lib/email/duplicateSend";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -28,6 +29,17 @@ export async function POST(request: Request) {
   // what actually sends.
   const subjectProblem = misleadingSubject(subject);
   if (subjectProblem) return NextResponse.json({ error: `Not sent: the subject "${subject}" ${subjectProblem}.` }, { status: 400 });
+
+  // THE SAME EMAIL TWICE, because a button was pressed twice.
+  //
+  // This endpoint had no idempotency of any kind: a retry, a
+  // double-click or a card re-pressed after a slow response sent it
+  // again, and nothing in the product would have noticed. Checked
+  // BEFORE the recipient and footer work so a duplicate costs nothing
+  // (src/lib/email/duplicateSend.ts explains what this does and does
+  // not guarantee).
+  const dupe = await recentDuplicateSend(supabase, dealershipId, to, subject);
+  if (dupe.duplicate) return NextResponse.json({ error: dupe.error, duplicate: true, firstSentAt: dupe.sentAt }, { status: 409 });
 
   // Same rules as every marketing email: only people on record, never
   // anyone who unsubscribed, always the address and unsubscribe footer.

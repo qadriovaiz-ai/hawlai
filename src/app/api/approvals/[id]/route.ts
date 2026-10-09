@@ -207,6 +207,136 @@ export async function PATCH(
 
       await service.from("ad_creatives").update({ meta_status: "ACTIVE" }).eq("id", details.campaign_id);
     }
+
+    // ---- One-shot outbound actions raised from chat (Phase 2B) ------
+    //
+    // Five actions used to run the moment a chat sentence asked for
+    // them: a real email, a real phone call, a public video, a live
+    // discount code, and the toggles that switch on unattended posting
+    // and emailing. They create a pending_approvals row now and the
+    // work happens HERE, after the authz and authority checks above —
+    // so pressing a button in a browser is not what performs them.
+    //
+    // Each branch returns an error WITHOUT marking the approval
+    // approved, which is the behaviour the three branches above already
+    // have: a failed action must not leave a row claiming it succeeded.
+    // NOT RAISED BY ANY TOOL TODAY, and kept deliberately. Internal
+    // team mail sends directly by an approved 2026-09-14 decision, and
+    // the customer path's preview card still posts to /api/email/send
+    // without an approval record (audit finding G-3). This is where that
+    // path lands when G-3 is closed; the policy entry already says the
+    // action needs approval.
+    if (approval?.action_type === "send_email") {
+      const d = approval.action_details as any;
+      const { sendDealerEmail } = await import("@/lib/email/sendDealerEmail");
+      const sent = await sendDealerEmail(service, approval.dealership_id, d.to, d.subject, d.body);
+      if (!sent.success) {
+        return NextResponse.json({ error: sent.error ?? "The email didn't go out, so nothing was approved." }, { status: 500 });
+      }
+    }
+
+    if (approval?.action_type === "place_outbound_call") {
+      const d = approval.action_details as any;
+      // Re-read the lead rather than trusting the row: a number may have
+      // changed, or they may have opted out since the card was made.
+      const { data: lead } = await service
+        .from("leads")
+        .select("id, name, phone, dealership_id, dnd_opt_out")
+        .eq("id", d.lead_id)
+        .eq("dealership_id", approval.dealership_id)
+        .maybeSingle();
+      if (!lead) return NextResponse.json({ error: "That lead is no longer on file, so no call was placed." }, { status: 400 });
+      if (!lead.phone) return NextResponse.json({ error: `${lead.name} has no phone number on file, so no call was placed.` }, { status: 400 });
+      if (lead.dnd_opt_out) return NextResponse.json({ error: `${lead.name} has opted out of contact, so no call was placed.` }, { status: 400 });
+      const { triggerVapiCall } = await import("@/lib/agents/vapiCallAgent");
+      const called = await triggerVapiCall(service, lead);
+      if (!called.success) {
+        return NextResponse.json({ error: called.error ?? "The call didn't go through, so nothing was approved." }, { status: 500 });
+      }
+    }
+
+    if (approval?.action_type === "publish_video") {
+      const d = approval.action_details as any;
+      const { data: dealership } = await service
+        .from("dealerships")
+        .select("youtube_access_token, youtube_refresh_token, youtube_access_token_encrypted, youtube_refresh_token_encrypted, youtube_token_expiry")
+        .eq("id", approval.dealership_id)
+        .maybeSingle();
+      const { readToken, tokenWrite } = await import("@/lib/crypto/oauthSecrets");
+      const refresh = readToken(dealership, "youtube", "refresh_token");
+      if (!refresh) return NextResponse.json({ error: "YouTube isn't connected any more, so nothing was published." }, { status: 400 });
+      const { data: video } = await service
+        .from("video_generations")
+        .select("id, video_url, prompt")
+        .eq("id", d.video_id)
+        .eq("dealership_id", approval.dealership_id)
+        .maybeSingle();
+      if (!video?.video_url) return NextResponse.json({ error: "That video is no longer available, so nothing was published." }, { status: 400 });
+      const { getValidYoutubeAccessToken, uploadVideoToYouTube } = await import("@/lib/agents/youtubeAgent");
+      const { accessToken, refreshed } = await getValidYoutubeAccessToken({
+        accessToken: readToken(dealership, "youtube", "access_token") ?? "",
+        refreshToken: refresh,
+        tokenExpiry: dealership?.youtube_token_expiry,
+      });
+      if (refreshed) {
+        await service
+          .from("dealerships")
+          .update({ ...tokenWrite("youtube", "access_token", refreshed.accessToken), youtube_token_expiry: refreshed.expiry })
+          .eq("id", approval.dealership_id);
+      }
+      try {
+        const uploaded = await uploadVideoToYouTube(accessToken, video.video_url, d.title, d.description ?? video.prompt);
+        await service.from("video_generations").update({ youtube_video_id: uploaded.videoId, youtube_url: uploaded.url }).eq("id", video.id);
+      } catch (err: any) {
+        return NextResponse.json({ error: err?.message ?? "YouTube refused the upload, so nothing was published." }, { status: 500 });
+      }
+    }
+
+    if (approval?.action_type === "create_discount_code") {
+      const d = approval.action_details as any;
+      // Checked again here: a code with the same name may have been
+      // created between the card being made and this press.
+      const { data: existing } = await service
+        .from("discount_codes")
+        .select("id")
+        .eq("dealership_id", approval.dealership_id)
+        .eq("code", d.code)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({ error: `A code "${d.code}" already exists, so none was created.` }, { status: 400 });
+      }
+      const { error: codeError } = await service.from("discount_codes").insert({
+        dealership_id: approval.dealership_id,
+        code: d.code,
+        discount_type: d.discount_type,
+        value: d.value,
+        min_order_value: d.min_order_value ?? null,
+      });
+      if (codeError) return NextResponse.json({ error: codeError.message }, { status: 500 });
+    }
+
+    if (approval?.action_type === "set_automation_toggle") {
+      const d = approval.action_details as any;
+      // The FIELD NAME comes from the registry, never from the row. A
+      // stored action_details is still a value the server should not
+      // interpolate into an update blindly.
+      const { AUTOMATION_TOGGLES } = await import("@/lib/executionPolicy");
+      const TOGGLE_FIELDS: Record<string, string> = {
+        dm_auto_reply: "dm_auto_reply_enabled",
+        comment_auto_reply: "comment_auto_reply_enabled",
+        welcome_email: "welcome_email_auto_enabled",
+        follow_up_email: "follow_up_email_auto_enabled",
+        content_autopilot: "content_autopilot_enabled",
+        auto_call_new_leads: "auto_call_new_leads",
+      };
+      const field = AUTOMATION_TOGGLES[d.toggle] ? TOGGLE_FIELDS[d.toggle] : undefined;
+      if (!field) return NextResponse.json({ error: "That automation isn't one Hawlai knows, so nothing was changed." }, { status: 400 });
+      const { error: toggleError } = await service
+        .from("dealerships")
+        .update({ [field]: true })
+        .eq("id", approval.dealership_id);
+      if (toggleError) return NextResponse.json({ error: toggleError.message }, { status: 500 });
+    }
   }
 
   const { data, error } = await service

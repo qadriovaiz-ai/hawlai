@@ -1,0 +1,121 @@
+// The same email, sent twice, because a button was pressed twice.
+//
+// /api/email/send had no idempotency of any kind: a retried request, a
+// double-click, or an approval card re-pressed after a slow response
+// sent the email again, and nothing in the product would have noticed.
+//
+// These tests also pin what the mechanism does NOT guarantee, because
+// the honest description matters more than the reassuring one: it is a
+// duplicate-suppression WINDOW over `email_sends`, not an idempotency
+// key, and it is not atomic.
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { recentDuplicateSend, DUPLICATE_WINDOW_MINUTES } from "@/lib/email/duplicateSend";
+
+type Row = Record<string, any>;
+let rows: Row[];
+let readError: string | null;
+let queried: [string, any][];
+
+function db() {
+  const from = (_table: string) => {
+    const filters: [string, any][] = [];
+    let since: string | null = null;
+    const api: any = {
+      select: () => api,
+      eq: (k: string, v: any) => (filters.push([k, v]), queried.push([k, v]), api),
+      gte: (_k: string, v: string) => ((since = v), api),
+      order: () => api,
+      limit: () => api,
+      then: (res: any, rej: any) => {
+        if (readError) return Promise.resolve({ data: null, error: { message: readError } }).then(res, rej);
+        const matched = rows.filter(
+          (r) => filters.every(([k, v]) => r[k] === v) && (!since || r.created_at >= since)
+        );
+        return Promise.resolve({ data: matched, error: null }).then(res, rej);
+      },
+    };
+    return api;
+  };
+  return { from };
+}
+
+const NOW = new Date("2026-10-09T12:00:00.000Z").getTime();
+const now = () => NOW;
+const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
+
+beforeEach(() => {
+  rows = [];
+  readError = null;
+  queried = [];
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("the same email twice", () => {
+  it("A SECOND IDENTICAL SEND INSIDE THE WINDOW IS REFUSED", async () => {
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1) }];
+    const result = await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now);
+    expect(result.duplicate).toBe(true);
+    expect((result as any).error).toMatch(/already went to asha@example.com/);
+    // It says how to proceed deliberately — a refusal with no way
+    // forward reads as a bug.
+    expect((result as any).error).toMatch(/change the subject or wait/);
+  });
+
+  it("the same send OUTSIDE the window goes through", async () => {
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(DUPLICATE_WINDOW_MINUTES + 1) }];
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(false);
+  });
+
+  it("A DIFFERENT RECIPIENT OR SUBJECT IS NOT A DUPLICATE", async () => {
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1) }];
+    expect((await recentDuplicateSend(db(), "d1", "ravi@example.com", "Diwali offer", now)).duplicate).toBe(false);
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "New stock", now)).duplicate).toBe(false);
+  });
+
+  it("ANOTHER BUSINESS'S SEND IS NOT THIS BUSINESS'S DUPLICATE", async () => {
+    rows = [{ dealership_id: "d2", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1) }];
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(false);
+    // And the query is scoped, not filtered after the fact.
+    expect(queried).toEqual(expect.arrayContaining([["dealership_id", "d1"]]));
+  });
+
+  it("FAILS OPEN on a read error, and says so in the log", async () => {
+    // A database hiccup must not block an email the owner already
+    // approved. The rare double costs less than a silent refusal.
+    readError = "connection reset";
+    rows = [{ dealership_id: "d1", to_email: "asha@example.com", subject: "Diwali offer", created_at: minutesAgo(1) }];
+    const result = await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now);
+    expect(result.duplicate).toBe(false);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("a thrown client also fails open", async () => {
+    const broken = { from: () => { throw new Error("no connection"); } };
+    expect((await recentDuplicateSend(broken, "d1", "a@b.com", "x", now)).duplicate).toBe(false);
+  });
+
+  it("nothing on record is not a duplicate", async () => {
+    expect((await recentDuplicateSend(db(), "d1", "asha@example.com", "Diwali offer", now)).duplicate).toBe(false);
+  });
+
+  it("THE WINDOW IS SHORT ON PURPOSE", () => {
+    // It cannot tell a double-submit from a deliberate second send of
+    // the same subject, so the window has to be measured in minutes. A
+    // window of hours would start refusing legitimate sends.
+    expect(DUPLICATE_WINDOW_MINUTES).toBeLessThanOrEqual(15);
+    expect(DUPLICATE_WINDOW_MINUTES).toBeGreaterThan(0);
+  });
+});
+
+describe("the send endpoint consults it", () => {
+  it("THE CHECK IS WIRED, and runs before the send", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/app/api/email/send/route.ts", "utf8");
+    const code = src.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    expect(code).toMatch(/recentDuplicateSend\(/);
+    expect(code).toMatch(/status: 409/);
+    // Before the sender, or it costs nothing to check.
+    expect(code.indexOf("recentDuplicateSend(")).toBeLessThan(code.indexOf("sendMarketingEmail("));
+  });
+});

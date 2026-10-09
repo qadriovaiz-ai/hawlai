@@ -54,6 +54,33 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   lead_update: { actionType: "edit", riskLevel: "low", description: "Update a lead record", requiresApproval: false },
   generate_draft: { actionType: "create", riskLevel: "low", description: "Generate a content/creative draft — nothing goes live", requiresApproval: false },
 
+  // ---- One-shot outbound actions reachable from chat (Phase 2B) ----
+  //
+  // THE GAP THESE CLOSE. The A-to-Z audit found five actions that one
+  // sentence in chat could run with no approval at all, none of them in
+  // any registry: a real email to a customer, a real phone call to a
+  // customer, a public YouTube video, a live discount code, and the
+  // toggles that switch on unattended posting, emailing and calling.
+  //
+  // They are NOT platform publish actions. The pipeline in src/lib/publish
+  // edits a resource on a surface — it has previewDiff, targetRef and
+  // staleness, all of which are about changing a thing that already
+  // exists. Sending a message is not that shape, so these are gated the
+  // way auto_call_new_lead and auto_reply_dm already are: a policy here,
+  // a pending_approvals row, and execution inside the approvals route
+  // after its authz and threshold checks.
+  //
+  // `requiresApproval: true` on every one. None of these is reversible
+  // in the way that matters: a sent email, a placed call and a published
+  // video cannot be unsent, unplaced or unseen.
+  send_email: { actionType: "send", riskLevel: "high", description: "Send a real marketing or follow-up email to a lead, customer or team member — cannot be unsent", requiresApproval: true },
+  place_outbound_call: { actionType: "send", riskLevel: "high", description: "Place a real phone call to a customer — cannot be unplaced", requiresApproval: true },
+  publish_video: { actionType: "publish", riskLevel: "high", description: "Publish a video publicly to the business's YouTube channel", requiresApproval: true },
+  // THE ONE THAT TURNS OFF EVERY OTHER GATE. After this runs, content
+  // publishes and emails send with nobody looking, so it is gated even
+  // though the write itself is a single boolean.
+  set_automation_toggle: { actionType: "edit", riskLevel: "high", description: "Switch an unattended automation on or off — auto-posting, auto-email, auto-replies or auto-calling", requiresApproval: true },
+
   // ---- Publish actions (migration 170, src/lib/publish) ------------
   // Writes to a merchant's own store or site. requiresApproval is
   // true on EVERY one of these, unconditionally, and that is a
@@ -93,4 +120,33 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
 
 export function getActionPolicy(actionKey: string): ActionPolicy | null {
   return ACTION_POLICIES[actionKey] ?? null;
+}
+
+/**
+ * Every automation toggle, and how bad it is to switch on.
+ *
+ * All six are approval-gated. The levels differ because the consequence
+ * differs: four of them put words in front of a customer or dial a phone
+ * with nobody watching, and two only send a transactional email the owner
+ * already asked for.
+ *
+ * DELIBERATE ADDITION, worth naming: the instruction listed
+ * dm_auto_reply, comment_auto_reply and auto_call_new_leads as the high-
+ * risk three. content_autopilot is here with them because it POSTS
+ * PUBLICLY with no review, which is the same class of consequence — a
+ * public post cannot be unseen any more than a placed call can be
+ * unplaced.
+ */
+export const AUTOMATION_TOGGLES: Record<string, { risk: RiskLevel; what: string }> = {
+  dm_auto_reply: { risk: "critical", what: "replies to every customer DM with nobody reading it first" },
+  comment_auto_reply: { risk: "critical", what: "replies publicly to comments with nobody reading it first" },
+  auto_call_new_leads: { risk: "critical", what: "places a real phone call to every new lead automatically" },
+  content_autopilot: { risk: "critical", what: "posts to your social accounts on a schedule with no review" },
+  welcome_email: { risk: "high", what: "emails every new lead automatically" },
+  follow_up_email: { risk: "high", what: "emails leads a follow-up automatically" },
+};
+
+/** The risk of switching one toggle, or null when the name isn't a known toggle. */
+export function toggleRisk(toggle: string): { risk: RiskLevel; what: string } | null {
+  return AUTOMATION_TOGGLES[toggle] ?? null;
 }

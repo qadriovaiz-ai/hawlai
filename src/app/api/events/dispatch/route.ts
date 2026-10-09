@@ -5,6 +5,7 @@ import { TASK_EXECUTORS } from "@/lib/tasks/taskExecutors";
 import { emitEvent } from "@/lib/events/emitEvent";
 import { dailyRunStalled } from "@/lib/automation/dailyJobs";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
+import { authorizeCron } from "@/lib/cronAuth";
 
 // Triggered by pg_cron every 2 minutes (see migration 129's commented
 // manual setup) via pg_net, which sends the same
@@ -16,14 +17,12 @@ import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 // Event Bus's existing pg_cron/pg_net trigger rather than standing up
 // a second frequent-poll schedule (per the confirmed Wave 3 decision).
 export async function POST(request: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  } else {
-    console.warn("[event-dispatch] CRON_SECRET is not set — this endpoint is currently unprotected.");
+  // Fails CLOSED when the secret is unset (src/lib/cronAuth.ts). It
+  // used to log "currently unprotected" and run anyway.
+  const auth = authorizeCron(request);
+  if (!auth.ok) {
+    if (auth.status === 503) console.error("[event-dispatch]", auth.reason);
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
   }
 
   const supabase = createServiceClient();
@@ -132,7 +131,13 @@ export async function POST(request: Request) {
         const next = new URL("/api/autopilot/daily-run", new URL(request.url).origin);
         next.searchParams.set("group", group);
         next.searchParams.set("continue", "1");
-        await fetch(next, { headers: cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}, signal: AbortSignal.timeout(10_000) });
+        // The nudge carries the same header the scheduler does. It is
+        // unconditional now: daily-run refuses a request without it, so
+        // a missing header would simply fail rather than run unguarded.
+        await fetch(next, {
+          headers: { Authorization: `Bearer ${process.env.CRON_SECRET ?? ""}` },
+          signal: AbortSignal.timeout(10_000),
+        });
         dailyRunNudged.push(group);
       }
     } catch (err: any) {
