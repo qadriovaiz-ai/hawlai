@@ -20,6 +20,7 @@
 // `_claimsNote`.
 
 import { stripUnsupported, findUnsupportedClaims, stripUnverifiable } from "@/lib/claims/claimCheck";
+import { checkNarrative, narrativeNote } from "@/lib/claims/narrativeProvenance";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
 /**
@@ -79,29 +80,51 @@ export function checkReplyClaims(reply: string, facts: BusinessFacts | null | un
 
   const { masked, restore } = maskQuotes(text);
 
+  // A BACKSTORY TYPED STRAIGHT INTO THE CONVERSATION (item 4.10).
+  //
+  // The generators got narrative provenance through guardOrMark, but a
+  // caption the model writes in its own reply never reaches a generator.
+  // Everything below this line checks FACTS; an invented founding story
+  // or an invented customer quote carries no fact to check, so it passed
+  // both of those branches untouched.
+  //
+  // "draft" mode here, like the price rule below: this is a conversation
+  // the owner is reading, and silently deleting half an explanation reads
+  // as a bug. The sentence stays and is named.
+  const story = checkNarrative(masked, facts, "draft");
+  const storyNote = narrativeNote(story.findings, "draft");
+
   if (facts) {
     // "draft" mode: an unverified PRICE in conversation is flagged, not
     // deleted. The owner is reading this and may have just told it the
     // price themselves.
     const found = findUnsupportedClaims(masked, facts);
-    if (found.length === 0) return { reply: text, removed: [], note: null };
+    if (found.length === 0) return { reply: text, removed: [], note: storyNote };
     const stripped = stripUnsupported(masked, facts, "draft");
     return {
       reply: restore(stripped.text) || text,
       removed: stripped.removed,
-      note: replyClaimsNote(stripped.removed),
+      note: joinNotes(replyClaimsNote(stripped.removed), storyNote),
     };
   }
 
   const unchecked = stripUnverifiable(masked);
   if (unchecked.removed.length === 0 && unchecked.unverifiable.length === 0) {
-    return { reply: text, removed: [], note: null };
+    return { reply: text, removed: [], note: storyNote };
   }
   return {
     reply: restore(unchecked.text) || text,
     removed: unchecked.removed,
-    note: replyClaimsNote(unchecked.removed, unchecked.unverifiable),
+    note: joinNotes(replyClaimsNote(unchecked.removed, unchecked.unverifiable), storyNote),
   };
+}
+
+/** Two notes read as one block, not as two stacked warnings. */
+function joinNotes(a: string | null, b: string | null): string | null {
+  const parts = [a, b].filter(Boolean).map((x) => String(x).trim());
+  return parts.length ? `
+
+${parts.join(" ")}` : null;
 }
 
 /**

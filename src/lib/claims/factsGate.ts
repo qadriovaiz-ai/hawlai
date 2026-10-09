@@ -36,6 +36,7 @@ import {
   stripUnverifiable,
   type ClaimsMode,
 } from "./claimCheck";
+import { guardNarrative, narrativeNote, type NarrativeFinding } from "./narrativeProvenance";
 
 export type FactsState = "FACTS_AVAILABLE" | "FACTS_UNAVAILABLE";
 
@@ -81,6 +82,8 @@ export type GateResult<T> = {
   unverifiable: string[];
   priceWarnings: string[];
   linksFixed: string[];
+  /** Backstory with no record behind it (src/lib/claims/narrativeProvenance.ts). */
+  narrative: NarrativeFinding[];
   state: FactsState;
 };
 
@@ -100,12 +103,25 @@ export function guardOrMark<T extends object>(
 ): GateResult<T> {
   if (facts) {
     const r = guardGenerated(output, facts, mode);
+    // AND THE STORY, not only the facts. Every check inside
+    // guardGenerated asks whether a FACT is on record; none asked
+    // whether a STORY is, so a sentence carrying no checkable fact
+    // could be wholly invented and pass all of them. Run here rather
+    // than in each generator for F-16's reason: a protection that lives
+    // in a generator leaves the next generator unguarded.
+    const n = guardNarrative(r.output, facts, mode);
+    const note = narrativeNote(n.findings, mode);
     return {
-      output: { ...r.output, _factsState: "FACTS_AVAILABLE" as FactsState },
+      output: {
+        ...n.output,
+        _factsState: "FACTS_AVAILABLE" as FactsState,
+        ...(note ? { _claimsNote: joinNotes((n.output as any)._claimsNote, note) } : {}),
+      },
       removed: r.removed,
       unverifiable: [],
       priceWarnings: r.priceWarnings,
       linksFixed: r.linksFixed,
+      narrative: n.findings,
       state: "FACTS_AVAILABLE",
     };
   }
@@ -148,10 +164,17 @@ export function guardOrMark<T extends object>(
     return v;
   };
 
-  const walked = walk(output) as T;
+  // With no records at all, a story is unsupported BY DEFINITION — the
+  // records are what could have excused it. Same reasoning as
+  // stripUnverifiable above, and the same fail-closed direction a
+  // transient read error has to take.
+  const narrativeChecked = guardNarrative(walk(output) as T, null, mode);
+  const walked = narrativeChecked.output;
   const uniqueRemoved = Array.from(new Set(removed));
   const uniqueUnverifiable = Array.from(new Set(unverifiable));
-  const note = unverifiedNote(uniqueRemoved, uniqueUnverifiable);
+  const note = [unverifiedNote(uniqueRemoved, uniqueUnverifiable), narrativeNote(narrativeChecked.findings, mode)]
+    .filter(Boolean)
+    .join(" ") || null;
 
   return {
     output: {
@@ -164,6 +187,7 @@ export function guardOrMark<T extends object>(
     unverifiable: uniqueUnverifiable,
     priceWarnings: [],
     linksFixed: [],
+    narrative: narrativeChecked.findings,
     state: "FACTS_UNAVAILABLE",
   };
 }

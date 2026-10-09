@@ -233,3 +233,62 @@ export function narrativeNote(findings: NarrativeFinding[], mode: ClaimsMode = "
   const verb = mode === "draft" ? "I've left in but can't back up" : "I took out";
   return `${verb} ${list} — nothing in your records says it. Write it down once in Business Knowledge and I can use it everywhere.`;
 }
+
+/**
+ * The same check over a whole generated object, not one string.
+ *
+ * WIRED INTO guardOrMark RATHER THAN INTO EACH GENERATOR, deliberately.
+ * Finding F-16 was that every protection in this product lived inside a
+ * generator, so each new path started unguarded and nobody noticed until
+ * something went out. guardOrMark is the one place all eight generators
+ * already go through, so a ninth gets this for free.
+ *
+ * The walk mirrors guardOutput's: strings checked, `_` keys left alone,
+ * and an array item whose text was emptied dropped with it — a hook that
+ * was only an invented anecdote, a slide with no headline left. That
+ * shape is now written out three times in this directory (guardOutput,
+ * guardOrMark, here) and is worth collapsing into one walker — but not
+ * in the same commit that changes what the walk DOES, because then a
+ * regression could be either.
+ */
+export function guardNarrative<T>(
+  output: T,
+  facts: BusinessFacts | null | undefined,
+  mode: ClaimsMode = "publish"
+): { output: T; findings: NarrativeFinding[] } {
+  const findings: NarrativeFinding[] = [];
+  const emptied = (before: any, after: any) =>
+    typeof before === "string" && before.trim() !== "" && String(after ?? "").trim() === "";
+
+  const walk = (v: any): any => {
+    if (typeof v === "string") {
+      const r = checkNarrative(v, facts, mode);
+      findings.push(...r.findings);
+      return r.text;
+    }
+    if (Array.isArray(v)) {
+      const out: any[] = [];
+      for (const item of v) {
+        const next = walk(item);
+        if (emptied(item, next)) continue;
+        if (
+          item &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          Object.keys(item).some((k) => !k.startsWith("_") && emptied(item[k], next[k]))
+        )
+          continue;
+        out.push(next);
+      }
+      return out;
+    }
+    if (v && typeof v === "object") {
+      const o: Record<string, unknown> = {};
+      for (const [k, x] of Object.entries(v)) o[k] = k.startsWith("_") ? x : walk(x);
+      return o;
+    }
+    return v;
+  };
+
+  return { output: walk(output) as T, findings };
+}
