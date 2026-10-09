@@ -120,7 +120,7 @@ export default function CollabBoardManager() {
                 <option value="paid">Paid only</option>
                 <option value="both">Product + Paid</option>
               </select>
-              <input value={compensationDetails} onChange={(e) => setCompensationDetails(e.target.value)} placeholder="e.g. Free candle set + ₹500" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
+              <input value={compensationDetails} onChange={(e) => setCompensationDetails(e.target.value)} placeholder="e.g. a free product + ₹500" className="flex-1 text-sm bg-slate-100 border border-slate-200 rounded-lg px-3 py-2" />
             </div>
             <Button onClick={createListing}>Post to board</Button>
           </div>

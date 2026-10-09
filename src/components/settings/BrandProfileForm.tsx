@@ -190,7 +190,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. Hum ek car dealership hain Lucknow mein, 20 saal se. Family-friendly hain, honest dealings pe focus karte hain, EMI options bhi dete hain..."
+                  placeholder="e.g. Hum Lucknow mein mithai ka shop chalate hain, 20 saal se. / We run a small coaching centre for class 10-12. / Hum ghar se handmade candles banate hain..."
                   className="w-full h-24 p-2.5 text-sm border border-purple-700/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 bg-slate-100"
                 />
               </>
@@ -246,7 +246,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
             <input
               value={income}
               onChange={(e) => setIncome(e.target.value)}
-              placeholder="e.g. Middle class"
+              placeholder="e.g. Middle class families, students, small businesses"
               className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
@@ -256,7 +256,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
           <input
             value={concerns}
             onChange={(e) => setConcerns(e.target.value)}
-            placeholder="e.g. EMI affordability, resale value, service cost"
+            placeholder="e.g. price, quality, how long it lasts, delivery time"
             className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
@@ -293,7 +293,7 @@ export default function BrandProfileForm({ initial }: BrandProfileFormProps) {
               <input
                 value={p}
                 onChange={(e) => updatePillar(i, e.target.value)}
-                placeholder="e.g. 0% down payment available"
+                placeholder="e.g. free delivery above 999, or whatever you actually offer"
                 className="bg-slate-100 text-slate-900 flex-1 p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <Button variant="secondary" onClick={() => removePillar(i)} className="px-2 py-2">

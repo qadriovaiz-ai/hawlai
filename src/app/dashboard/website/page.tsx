@@ -11,7 +11,9 @@ import PopupAndTrackingSettings from "@/components/website/PopupAndTrackingSetti
 import SeoPagesManager from "@/components/website/SeoPagesManager";
 import UtmLinkGenerator from "@/components/website/UtmLinkGenerator";
 
-interface CarListing {
+// The DB column stays `car_listings`; only the names in this file stop
+// saying "car". Renaming the column would break existing rows.
+interface FeaturedItem {
   name: string;
   price?: string;
   image_url?: string;
@@ -33,7 +35,7 @@ export default function WebsitePage() {
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [published, setPublished] = useState(false);
   const [theme, setTheme] = useState("navy_amber");
-  const [cars, setCars] = useState<CarListing[]>([]);
+  const [cars, setCars] = useState<FeaturedItem[]>([]);
   const [externalUrl, setExternalUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const carFileInputRef = useRef<HTMLInputElement>(null);
@@ -127,7 +129,7 @@ export default function WebsitePage() {
   function addCar() {
     setCars((prev) => [...prev, { name: "", price: "" }]);
   }
-  function updateCar(index: number, field: keyof CarListing, value: string) {
+  function updateCar(index: number, field: keyof FeaturedItem, value: string) {
     setCars((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
   }
   function removeCar(index: number) {
@@ -311,12 +313,12 @@ export default function WebsitePage() {
 
       <div className="card p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-semibold text-slate-700">Featured Cars (optional)</label>
+          <label className="text-sm font-semibold text-slate-700">Featured items (optional)</label>
           <Button onClick={addCar} variant="secondary" size="sm">
-            <Plus className="w-3.5 h-3.5" /> Add car
+            <Plus className="w-3.5 h-3.5" /> Add item
           </Button>
         </div>
-        {cars.length === 0 && <p className="text-xs text-slate-400">Add specific cars/offers to show in a gallery on the page.</p>}
+        {cars.length === 0 && <p className="text-xs text-slate-400">Add specific products, services or items to show in a gallery on the page.</p>}
         {cars.map((car, i) => (
           <div key={i} className="bg-slate-200 text-slate-900 flex items-center gap-2 border border-slate-100 rounded-lg p-2.5">
             <input

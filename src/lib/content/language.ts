@@ -24,7 +24,7 @@ export function normaliseLanguage(value: unknown): CopyLanguage {
 }
 
 const RULES: Record<CopyLanguage, string> = {
-  english: `Write EVERY word of this piece in English. The owner's notes, story answers and quotes below are mostly in Hinglish — that is their record of what happened, NOT the language of this piece. Take the detail and say it in English; never carry their Hinglish phrasing across, and never leave a Hindi word in Roman script (a candle, not a mombatti). Indian English is right — plain, warm, not American.`,
+  english: `Write EVERY word of this piece in English. The owner's notes, story answers and quotes below are mostly in Hinglish — that is their record of what happened, NOT the language of this piece. Take the detail and say it in English; never carry their Hinglish phrasing across, and never leave a Hindi word in Roman script (say it in English, not a Hindi word in Roman script). Indian English is right — plain, warm, not American.`,
   hindi: `Write EVERY word of this piece in Hindi, in Devanagari script. The owner's notes below may be in Roman-script Hinglish; take the detail and write it in Hindi. Keep the English words Indian customers actually use in Hindi speech (online, delivery, workshop) rather than forcing rare translations.`,
   hinglish: `Write this piece in natural Hinglish — Roman script, the way the owner speaks to customers in their notes below. Not translated Hindi, not English with a word or two sprinkled in.`,
 };

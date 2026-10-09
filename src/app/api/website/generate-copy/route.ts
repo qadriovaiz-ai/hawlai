@@ -27,9 +27,26 @@ export async function POST() {
 
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const copy = await generateLandingPageCopy(dealership?.dealership_name ?? "Our Dealership", dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  // "Our Dealership" was the fallback name — from the car-dealership
+  // era, and wrong for every business since. A business always has a
+  // name; if the read failed, say so rather than naming them something
+  // they are not.
+  const name = (dealership?.dealership_name ?? "").trim();
+  if (!name) {
+    return NextResponse.json(
+      { error: "Couldn't read your business name, so no page copy was written. Try again in a moment." },
+      { status: 503 }
+    );
+  }
+  const copy = await generateLandingPageCopy(name, dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   const aiFailed = aiFailedResponse(copy);
   if (aiFailed) return aiFailed;
-  return NextResponse.json(copy);
+  // A field the fallback deliberately left empty is the owner's to
+  // write — an invented claim on their live page is not recoverable.
+  const toWrite = (["subheadline", "offer_text"] as const).filter((k) => !String((copy as any)[k] ?? "").trim());
+  return NextResponse.json({
+    ...copy,
+    ...(toWrite.length ? { needsOwnerInput: toWrite, note: `Hawlai couldn't write ${toWrite.join(" and ").replace(/_/g, " ")} from what's on record — add ${toWrite.length === 1 ? "it" : "them"} yourself in Website Builder.` } : {}),
+  });
 }

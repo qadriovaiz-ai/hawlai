@@ -23,5 +23,10 @@ export async function POST(request: Request) {
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  // No scenes means nothing was written. Said plainly rather than
+  // returned as an empty script the page renders as a blank storyboard.
+  if (!script.scenes.length) {
+    return NextResponse.json({ error: script.fallbackReason ?? "Couldn't write the script just now. Try again." }, { status: 503 });
+  }
   return NextResponse.json(script);
 }

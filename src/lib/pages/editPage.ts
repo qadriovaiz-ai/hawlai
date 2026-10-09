@@ -273,12 +273,37 @@ const NAME_STOPWORDS = new Set([
   "collection", "collections", "range", "ranges", "gift", "gifts", "gifting", "home", "handmade",
   "hand", "poured", "made", "craft", "crafted", "small", "batch", "batches", "premium", "luxury",
   "natural", "pure", "fresh", "classic", "signature", "everyday", "essentials", "favourites", "favorites",
-  // Materials and forms. "Handmade Soy Candles" is a category heading,
-  // not a product nobody sells — and "soy" reached this list only
-  // because the vocabulary was built from product NAMES and the word
-  // lives in the description.
+  // MATERIALS AND FORMS, ACROSS CATEGORIES.
+  //
+  // This cluster held one category's words only — soy, wax, wick,
+  // scented, candle, jar, tin — because that is the business the bug
+  // was found on. Removing them was tried and regresses a real
+  // protection: "Premium Scented Candles" is a category heading and
+  // "scented" appears in no product name or description, so nothing
+  // derives it.
+  //
+  // The list's effect is PERMISSIVENESS: a word here means "this is
+  // category language, do not refuse the heading". Its failure mode is
+  // being too NARROW, which is the bug it was written for — a sweet
+  // shop's "Kaju Katli Box" has no cover at all. So the fix is to widen
+  // it to the categories Hawlai actually serves, not to privilege one.
   "soy", "wax", "beeswax", "coconut", "cotton", "wick", "wicks", "scented", "unscented",
   "fragrance", "fragrances", "aroma", "scent", "scents", "candle", "candles", "jar", "jars", "tin", "tins",
+  // Food and sweets.
+  "sweet", "sweets", "mithai", "box", "boxes", "pack", "packs", "ghee", "khoya", "kaju", "besan",
+  "laddu", "barfi", "katli", "halwa", "namkeen", "snack", "snacks", "bakery", "cake", "cakes",
+  "biscuit", "biscuits", "chocolate", "masala", "spice", "spices", "pickle", "achar", "tea", "coffee",
+  // Clothing and textiles.
+  "saree", "sarees", "kurta", "kurti", "suit", "suits", "dupatta", "lehenga", "fabric", "cotton",
+  "silk", "linen", "embroidered", "printed", "stitched", "unstitched", "size", "sizes", "wear",
+  // Beauty and personal care.
+  "soap", "cream", "oil", "oils", "serum", "balm", "butter", "shampoo", "skincare", "haircare",
+  // Services, classes and coaching.
+  "class", "classes", "course", "courses", "batch", "session", "sessions", "workshop", "workshops",
+  "coaching", "tuition", "demo", "trial", "consultation", "plan", "plans", "package", "packages",
+  "service", "services", "repair", "installation", "visit", "booking", "slot", "slots",
+  // Home, decor and furnishing.
+  "decor", "lamp", "lamps", "vase", "cushion", "planter", "pot", "pots", "frame", "frames",
   // HINGLISH DETERMINERS. "Har candle ke peeche ek kahaani hai" is "every
   // candle has a story behind it" — a sentence about the whole range,
   // read as a product called "Har candle" and put on the review list
@@ -293,7 +318,10 @@ const NAME_STOPWORDS = new Set([
   // question, and it was read as a product called "Why Candle" — which
   // also made the BUSINESS'S OWN NAME into something it doesn't sell.
   "why", "how", "what", "when", "where", "who", "about", "meet", "welcome", "introducing", "discover",
-  "light", "season", "warm", "christmas", "up",
+  // "christmas" was here from the same single-category pass. A festival
+  // name is not category language — it is a seasonal claim, and
+  // seasonalCalendar already governs those. The rest are generic.
+  "light", "season", "warm", "up",
 ]);
 
 function categoryVocabulary(facts: BusinessFacts): Set<string> {

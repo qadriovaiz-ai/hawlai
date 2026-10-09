@@ -18,7 +18,7 @@ export default function CreativeStudioPage() {
   const [variationsError, setVariationsError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  const [carModel, setCarModel] = useState("");
+  const [productName, setProductName] = useState("");
   const [carDetails, setCarDetails] = useState("");
   const [listingLoading, setListingLoading] = useState(false);
   const [listing, setListing] = useState<any>(null);
@@ -93,13 +93,14 @@ export default function CreativeStudioPage() {
 
   async function handleGenerateListing() {
     setListingError(null);
-    if (carModel.trim().length < 2) return setListingError("Enter a product/item name");
+    if (productName.trim().length < 2) return setListingError("Enter a product/item name");
     setListingLoading(true);
     try {
       const res = await fetch("/api/creative/product-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ carModel, details: carDetails }),
+        // Both keys: the route reads productName and still accepts carModel.
+        body: JSON.stringify({ productName, carModel: productName, details: carDetails }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
@@ -298,8 +299,8 @@ export default function CreativeStudioPage() {
       <div className="card p-5 space-y-3">
         <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Tag className="w-4 h-4 text-slate-400" /> Product Listing</p>
         <input
-          value={carModel}
-          onChange={(e) => setCarModel(e.target.value)}
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
           placeholder="Product/item name, e.g. 2BHK Apartment in Sector 45"
           className="bg-slate-100 text-slate-900 w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
@@ -335,7 +336,7 @@ export default function CreativeStudioPage() {
             Generate
           </Button>
         </div>
-        <p className="text-xs text-slate-400">Uses your dealership name and brand tone. Generate a few and pick your favorite — treat these as starting concepts, not final production files.</p>
+        <p className="text-xs text-slate-400">Uses your business name and brand tone. Generate a few and pick your favorite — treat these as starting concepts, not final production files.</p>
         {logoError && <p className="text-xs text-red-400">{logoError}</p>}
         {logos.length > 0 && (
           <div className="grid grid-cols-3 gap-3">

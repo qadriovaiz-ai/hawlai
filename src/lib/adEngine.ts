@@ -84,9 +84,11 @@ async function draftAdPlan(prompt: string, brandProfile: any, businessCategory: 
     // Null is a good answer: resolveLocation reads it as All India,
     // which is broad but never WRONG.
     const basePrompt = `You are an expert Facebook ad strategist for Indian ${businessCategory} businesses.
-Based on this dealer's requirement: "${prompt}"${brandContext}${factsPrompt(facts)}
+Based on this business's requirement: "${prompt}"${brandContext}${factsPrompt(facts)}
+
+${soundRule(normaliseLanguage(brandProfile?.preferred_language ?? facts?.brand?.language), brandProfile?.tone_of_voice ?? facts?.brand?.tone)}
 Return JSON only (no markdown, no explanation):
-{"headline":"short punchy headline under 40 chars in Hinglish","body":"ad body text under 125 chars — give a real reason to act now; an offer, discount or free shipping ONLY if the verified facts list it as active, otherwise sell the product itself","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"the city to advertise in — extract it from the request if they named one; otherwise use ${businessCity ? JSON.stringify(businessCity) : "null"}; NEVER invent or guess a city, null is correct when there is none","background_style":"one of: studio_white, showroom, road, sunset — pick the best fit","image_scene_prompt":"a short English phrase describing an ideal background scene for this ad, e.g. 'sunset highway with dramatic lighting'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`;
+{"headline":"short punchy headline under 40 chars, in the language named above","body":"ad body text under 125 chars — give a real reason to act now; an offer, discount or free shipping ONLY if the verified facts list it as active, otherwise sell the product itself","daily_budget":500,"car_type":"the main product/service/item extracted from the request, or null","targeting_city":"the city to advertise in — extract it from the request if they named one; otherwise use ${businessCity ? JSON.stringify(businessCity) : "null"}; NEVER invent or guess a city, null is correct when there is none","background_style":"one of: studio_white, showroom, road, sunset — these are template NAMES, not subjects: studio_white is a clean plain ground, showroom is an indoor interior, road is an outdoor scene, sunset is warm light. Pick whichever suits this business","image_scene_prompt":"a short English phrase describing an ideal background scene for THIS business, e.g. 'warm indoor light on a wooden surface' or 'bright open shopfront'","confidence_score":"integer 0-100, your honest prediction of how well THIS SPECIFIC headline+body will convert for an Indian customer audience — judge on clarity, urgency, specificity, and whether it gives a real reason to act now. Be genuinely critical, not always high.","score_reasoning":"one short sentence explaining the score — what's working or what would make it stronger","estimated_leads_low":"integer, honest low-end estimate of monthly leads at this budget","estimated_leads_high":"integer, honest high-end estimate of monthly leads at this budget"}`;
 
     const first = await callAdPlanOnce(basePrompt, logContext);
 
@@ -236,6 +238,7 @@ export function buildTextOverlaySvg(width: number, height: number, headline: str
 // ad) — every extra attempt here multiplies across all of them.
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { parseModelJson } from "@/lib/ai/modelJson";
+import { soundRule, normaliseLanguage } from "@/lib/content/language";
 
 const META_RETRYABLE_ERROR_CODES = new Set([1, 2, 4, 17, 613]);
 

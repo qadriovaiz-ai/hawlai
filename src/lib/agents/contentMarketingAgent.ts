@@ -84,7 +84,7 @@ ${angleFor(topic, recent)}
       : "The owner hasn't written their story down yet, so specifics are thin — write only what the facts support, stay plain, and don't pad with adjectives to fill the gap."
   }
 - Use the owner's story as MATERIAL, not text to paste: take the fact, then write your own sentences about it for this reader. At most ONE short phrase (a few words) in the owner's exact words, where their phrasing is the point. Two pieces about the same fact should share the fact, never the sentences.
-- SHORT DOES NOT MEAN GENERIC. However short the piece — "punchy", "one line", a Reel hook — the specific detail stays; everything else gets cut first. Compress it into a phrase instead of spending a sentence on it. A workshop whose owner once ruined a whole batch by rushing the temperature: "90 minute mein apni pehli candle — bina poora batch jalaaye" says the real thing in four extra words. "Ek candle jo tumhari apni hai" says nothing a competitor couldn't.
+- SHORT DOES NOT MEAN GENERIC. However short the piece — "punchy", "one line", a Reel hook — the specific detail stays; everything else gets cut first. Compress it into a phrase instead of spending a sentence on it. A class whose teacher still marks every paper by hand: "har copy khud check hoti hai, isi liye batch chhota hai" says the real thing in a few extra words. "Quality education for your child" says nothing a competitor couldn't.
 - Write it as one person telling another something true. No stacked adjectives, no rented enthusiasm.
 - These openings and phrasings are worn out — never use them or anything close to them:
 ${TIRED_MOVES.map((m) => `  - ${m}`).join("\n")}

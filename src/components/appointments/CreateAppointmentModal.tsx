@@ -11,6 +11,9 @@ interface Props {
   dealershipId: string;
 }
 
+/** The generic set the dropdown offers. Anything else is owner-defined or legacy. */
+const KNOWN_TYPES = ["visit", "consultation", "demo", "meeting", "delivery", "pickup"];
+
 export default function CreateAppointmentModal({ leadId, leadName, dealershipId }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -18,9 +21,10 @@ export default function CreateAppointmentModal({ leadId, leadName, dealershipId 
   const [form, setForm] = useState({
     date: "",
     time: "10:00",
-    type: "showroom_visit",
+    type: "visit",
     notes: "",
   });
+  const [customType, setCustomType] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,7 +39,8 @@ export default function CreateAppointmentModal({ leadId, leadName, dealershipId 
         lead_id: leadId,
         dealership_id: dealershipId,
         appointment_date: appointmentDate,
-        appointment_type: form.type,
+        // "__other" is a UI token, never a stored value.
+        appointment_type: form.type === "__other" ? (customType.trim() || "meeting") : form.type,
         notes: form.notes,
         status: "scheduled",
       }),
@@ -97,9 +102,31 @@ export default function CreateAppointmentModal({ leadId, leadName, dealershipId 
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
               className="input"
             >
-              <option value="showroom_visit">Showroom Visit</option>
-              <option value="test_ride">Test Ride</option>
+              {/* Generic across categories. The database has no CHECK
+                  constraint (migration 038) and existing rows keep their
+                  own values, so "Something else" lets a business name
+                  what it actually does. */}
+              <option value="visit">Visit</option>
+              <option value="consultation">Consultation</option>
+              <option value="demo">Demo / trial</option>
+              <option value="meeting">Meeting</option>
+              <option value="delivery">Delivery</option>
+              <option value="pickup">Pickup</option>
+              <option value="__other">Something else...</option>
+              {/* A legacy row's own value stays selectable so editing an
+                  old appointment does not silently change its type. */}
+              {!KNOWN_TYPES.includes(form.type) && form.type !== "__other" && (
+                <option value={form.type}>{form.type.replace(/_/g, " ")}</option>
+              )}
             </select>
+            {form.type === "__other" && (
+              <input
+                value={customType}
+                onChange={(e) => setCustomType(e.target.value)}
+                placeholder="What do you call it? e.g. fitting, tasting, site visit"
+                className="input mt-2"
+              />
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>

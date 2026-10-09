@@ -93,7 +93,11 @@ export const MONTH_GUIDE: Record<number, string> = {
   4: "summer begins — comfort and heat-relief angles where they fit; wedding season (April–June) is a big gifting window for home and lifestyle brands",
   5: "summer and wedding season — gifting for weddings and housewarmings; Mother's Day",
   6: "summer and the tail of wedding season; Father's Day",
-  7: "monsoon — cosy, indoor themes (a natural fit for candles and home fragrance)",
+  // Was "(a natural fit for candles and home fragrance)" — one
+  // category named in a guide every business reads. The angle is the
+  // season, not the product; `angleFor` already adapts it per business
+  // model.
+  7: "monsoon — cosy, indoor, stay-at-home themes",
   8: "monsoon, Raksha Bandhan and Independence Day",
   9: "Ganesh Chaturthi, then Navratri — the festive build-up begins and ad competition rises",
   10: "Navratri, Dussehra and the run-up to Diwali — festive campaigns should already be live",

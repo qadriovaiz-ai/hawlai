@@ -28,7 +28,7 @@ export default async function AppointmentsPage() {
     <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Appointments</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Scheduled test rides and showroom visits</p>
+        <p className="text-slate-500 text-sm mt-0.5">Scheduled visits, consultations and bookings</p>
       </div>
 
       <BookingLinkCard />

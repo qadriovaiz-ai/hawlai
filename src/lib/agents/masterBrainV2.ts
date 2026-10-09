@@ -353,7 +353,7 @@ export const TOOLS = [
   },
   {
     name: "generate_graphic",
-    description: `Propose an AI image and QUOTE ITS COST. This does NOT generate anything: it returns a card with a button the person presses to spend the money, so never say the image is ready, never describe what it looks like, and never use markdown image syntax after calling it. Good for an ad creative, social graphic, banner, poster or backdrop. Valid designType values: ${GRAPHIC_TYPES.map((t) => t.key).join(", ")}. NEVER use this to stand in for a photograph of a REAL product the business sells — a generated picture of their candle is not their candle, and putting it on a storefront listing or an ad for that product misrepresents what the customer is buying. For a real product, use the photo already in their catalogue, or ask them to upload one; if there is no photo, the image is made WITHOUT the product in it and you must say so.`,
+    description: `Propose an AI image and QUOTE ITS COST. This does NOT generate anything: it returns a card with a button the person presses to spend the money, so never say the image is ready, never describe what it looks like, and never use markdown image syntax after calling it. Good for an ad creative, social graphic, banner, poster or backdrop. Valid designType values: ${GRAPHIC_TYPES.map((t) => t.key).join(", ")}. NEVER use this to stand in for a photograph of a REAL product the business sells — a generated picture of their product is not their product, and putting it on a storefront listing or an ad for that product misrepresents what the customer is buying. For a real product, use the photo already in their catalogue, or ask them to upload one; if there is no photo, the image is made WITHOUT the product in it and you must say so.`,
     input_schema: { type: "object", properties: { designType: { type: "string", enum: GRAPHIC_TYPES.map((t) => t.key) }, prompt: { type: "string", description: "What the image should depict" } }, required: ["designType"] },
   },
   {
@@ -471,7 +471,7 @@ export const TOOLS = [
       properties: {
         description: {
           type: "string",
-          description: "What they want to advertise, in their own words, e.g. 'diwali sale on scented candles'",
+          description: "What they want to advertise, in their own words, e.g. 'diwali sale on mithai boxes', 'new saree collection', 'weekend coaching batch'",
         },
         daily_budget: {
           type: "string",
@@ -480,7 +480,7 @@ export const TOOLS = [
         product_description: {
           type: "string",
           description:
-            "Which product the ad is for, in their own words, e.g. 'lavender candle'. Used to pull the REAL product photo from their store. Pass this whenever they name or imply a product — an ad with the actual product photo is worth far more than a generated one.",
+            "Which product the ad is for, in their own words, e.g. 'the lavender candle', 'kaju katli box', 'weekend coaching batch'. Used to pull the REAL product photo from their store. Pass this whenever they name or imply a product — an ad with the actual product photo is worth far more than a generated one.",
         },
         variant_id: {
           type: "string",
@@ -503,7 +503,7 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        campaign_description: { type: "string", description: "Which campaign, in their words, e.g. 'the lavender candle ad'" },
+        campaign_description: { type: "string", description: "Which campaign, in their words, e.g. 'the Diwali gift box ad'" },
         campaign_id: { type: "string", description: "Only on a FOLLOW-UP call, after a numbered list was shown and they picked one. Pass that campaign_id exactly. Never invent one." },
       },
       required: [],
@@ -531,7 +531,7 @@ export const TOOLS = [
       properties: {
         url: {
           type: "string",
-          description: "The website address exactly as they gave it. A bare domain like 'candlesbyqaaf.com' is fine.",
+          description: "The website address exactly as they gave it. A bare domain like 'mithaiwala.in' is fine.",
         },
         confirmed: {
           type: "boolean",
@@ -567,7 +567,7 @@ export const TOOLS = [
   },
   {
     name: "publish_to_youtube",
-    description: "Publish a ready, already-generated video to the business's connected YouTube channel — this makes it publicly live on YouTube immediately. Only use this on a clear, explicit request (\"publish this to YouTube\", \"upload the candle video\"). If no video is specified, uses the most recently generated ready video.",
+    description: "Publish a ready, already-generated video to the business's connected YouTube channel — this makes it publicly live on YouTube immediately. Only use this on a clear, explicit request (\"publish this to YouTube\", \"upload that product video\"). If no video is specified, uses the most recently generated ready video.",
     input_schema: {
       type: "object",
       properties: {
@@ -694,7 +694,7 @@ export const TOOLS = [
   },
   {
     name: "add_product",
-    description: "Add a real product OR SERVICE to the business's catalogue (Website Builder's Products tab / live storefront). Any business can list both — a candle shop can run a workshop, a salon can sell products. Use kind \"product\" for something customers buy (\"add a Mogra Nights candle at 599 rupees\") and kind \"service\" for something customers book — a session, class, workshop, consultation or appointment (\"add a candle-making workshop, ₹800, 90 minutes\"). Never refuse a service or add it as a product instead. This is not a mockup or suggestion — it's saved and will genuinely appear on their live site once published.",
+    description: "Add a real product OR SERVICE to the business's catalogue (Website Builder's Products tab / live storefront). Any business can list both — a sweet shop can run a tasting, a salon can sell products, a coaching centre can sell a workbook. Use kind \"product\" for something customers buy (\"add a kaju katli box at 599 rupees\") and kind \"service\" for something customers book — a session, class, workshop, consultation or appointment (\"add a weekend coaching batch, ₹800, 90 minutes\"). Never refuse a service or add it as a product instead. This is not a mockup or suggestion — it's saved and will genuinely appear on their live site once published.",
     input_schema: {
       type: "object",
       properties: {
@@ -2454,7 +2454,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
 
       const normalized = normalizeUrl(input.url);
       if (!normalized) {
-        return { error: `"${String(input.url ?? "").slice(0, 80)}" doesn't look like a web address. Give me something like candlesbyqaaf.com and I'll save it.` };
+        return { error: `"${String(input.url ?? "").slice(0, 80)}" doesn't look like a web address. Give me something like yourshop.in and I'll save it.` };
       }
 
       const { data: current } = await supabase
@@ -4488,8 +4488,8 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 - **You cannot hold anything for later.** There is no drafts box you can put a message in, no queue you can add to, and nothing of yours survives this conversation. So never say you have kept, saved, remembered or noted something down unless a tool result says it was written, and never promise to do a thing later by yourself — you only ever act inside a turn the person started. When something fails, say it failed and nothing was stored; if you need their words again, ask for them. "Your wording is safe with me, I'll apply it once this is fixed" was said to an owner after a write that never happened, and it has been invented before as a "batch save" that did not exist. An offer you cannot keep costs more than the retype you were trying to save them.
 - **Saved is not live, and only the tool can tell you which one happened.** Generating something and changing what a customer sees are different events. When a result carries a \`note\`, that note is the truth about what changed — say what it says. If it says a draft was saved, never write "done", "that's set", "your site is updated" or anything an owner would read as the change being live; say where the draft is and what they still have to do. This has already gone wrong: an owner was told their meta description was set when a suggestion had been written to a list, and they stopped checking. A confirmation you can't back up is worse than no confirmation.
 - **When the person gives you their own words, those words are the answer.** If they paste a line and ask you to use it, pass it to the tool in the field meant for it (generate_seo takes \`exactText\`) and show what comes back unchanged. Never rewrite, shorten, translate or improve their town, their product name or their call to action — "Shahjahanpur" does not become "Uttar Pradesh", and "Shop now" does not become a slogan. Never invent a length limit to justify an edit: if their text really is too long for a field, give the real count and the real limit and let them choose. Their sentence, kept whole, is almost always better than yours.
-- **Never write a contact detail you were not given.** No email address, no phone or WhatsApp number, no street address, no Instagram or Facebook handle — not in a caption, not on a website page, not in an email, not even one that looks exactly right. Hawlai stores no public email or phone for a business, so if you have not been handed one, there isn't one: leave it out and tell the owner to add it. A generated Contact page once read "Email: hello@candlebyqaaf.com" for a business that does not own that domain, and every enquiry sent there vanished without a trace. A wrong claim is an argument; a wrong address is a lost customer nobody can find.
-- **A generated image is never a real product's photo.** You can make images, and for an ad backdrop, a banner or a social graphic that is exactly right. For a specific product the business actually sells, it is not: a picture a model drew of their Lavender Candle is not their Lavender Candle, and a customer who buys from it was shown something that does not exist. So never offer to "generate a clean product-style image" of a real product. Offer the photo already on that product in their catalogue, or ask them to send one — and if they have neither, say that plainly rather than filling the gap with something invented.
+- **Never write a contact detail you were not given.** No email address, no phone or WhatsApp number, no street address, no Instagram or Facebook handle — not in a caption, not on a website page, not in an email, not even one that looks exactly right. Hawlai stores no public email or phone for a business, so if you have not been handed one, there isn't one: leave it out and tell the owner to add it. A generated Contact page once carried an invented address on a domain the business does not own, and every enquiry sent there vanished without a trace. A wrong claim is an argument; a wrong address is a lost customer nobody can find.
+- **A generated image is never a real product's photo.** You can make images, and for an ad backdrop, a banner or a social graphic that is exactly right. For a specific product the business actually sells, it is not: a picture a model drew of their product is not that product, and a customer who buys from it was shown something that does not exist. So never offer to "generate a clean product-style image" of a real product. Offer the photo already on that product in their catalogue, or ask them to send one — and if they have neither, say that plainly rather than filling the gap with something invented.
 - generate_graphic and generate_logo produce real images that render directly in this chat — use markdown image syntax ![description](url) with the returned URL so the person sees it immediately, in addition to confirming it's saved on its dashboard page.
 - set_automation_toggle turns on LIVE automation (auto-replies, auto-posting, auto-emails sent with no review). Only call it when the person explicitly says to turn something on/off by name — never proactively suggest turning it on and never call it just because a related topic came up in conversation.
 - add_lead and create_workflow make real changes (a new CRM record, a real automated sequence) — fine to do whenever the person gives you the details and clearly wants it done, since these aren't live customer-facing sends by themselves (create_workflow defaults to disabled unless they say to turn it on now).

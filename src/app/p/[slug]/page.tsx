@@ -75,18 +75,27 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
   if (!page) notFound();
 
   const dealership = (page as any).dealerships;
-  const dealershipName = dealership?.dealership_name ?? "Our Dealership";
+  // "Our Dealership" — the car-dealership era's fallback, shown to a
+  // real visitor on a real page. A business always has a name; an empty
+  // string is honest where a wrong one is not.
+  const dealershipName = (dealership?.dealership_name ?? "").trim();
   const city = dealership?.city;
   const theme = getTheme(page.theme);
-  const carListings: { name: string; price?: string; image_url?: string }[] = page.car_listings ?? [];
+  // The DB column stays `car_listings` so existing rows keep working;
+  // only the name in this file stops saying "car". Nothing a visitor
+  // reads mentions one.
+  const featuredItems: { name: string; price?: string; image_url?: string }[] = page.car_listings ?? [];
 
   const { data: brandProfile } = dealership?.id
     ? await supabase.from("brand_profiles").select("messaging_pillars").eq("dealership_id", dealership.id).maybeSingle()
     : { data: null };
 
-  const pillars: string[] = (brandProfile?.messaging_pillars ?? []).filter(Boolean).slice(0, 3);
-  const defaultPillars = ["Transparent pricing, no hidden charges", "Verified, quality-checked vehicles", "Support that continues after the sale"];
-  const displayPillars = pillars.length > 0 ? pillars : defaultPillars;
+  // NO DEFAULT PILLARS. These three read "Transparent pricing, no hidden
+  // charges", "Verified, quality-checked vehicles" and "Support that
+  // continues after the sale" — three claims about a business nobody
+  // checked, on a public page, for a business that may sell mithai. A
+  // business with no pillars on record shows no pillars.
+  const displayPillars: string[] = (brandProfile?.messaging_pillars ?? []).filter(Boolean).slice(0, 3);
 
   // A/B testing — a random variant is assigned per page request (not
   // sticky per-visitor across multiple visits, but consistent for the
@@ -102,7 +111,10 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
     : (page.headline ?? dealershipName);
   const displayOfferText = abTest?.element === "cta" && assignedVariant
     ? (assignedVariant === "A" ? abTest.variant_a : abTest.variant_b)
-    : (page.offer_text ?? "Book a Free Test Drive");
+    // "Book a Free Test Drive" invented BOTH the action and the word
+    // "Free". With nothing on record the button is the neutral one every
+    // business can honour.
+    : (String(page.offer_text ?? "").trim() || "Get in touch");
 
   return (
     <div className="font-sans" style={{ backgroundColor: theme.bg, color: "#1C1917", ["--font-display" as string]: "'Oswald', sans-serif" } as React.CSSProperties}>
@@ -129,7 +141,9 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
             {displayHeadline}
           </h1>
           <p className="text-lg sm:text-xl text-neutral-300 max-w-lg mb-8 leading-relaxed">
-            {page.subheadline ?? (city ? `Serving ${city} with trust and transparency.` : "Your trusted car partner.")}
+            {/* No invented promise: the city is a fact, "trust and
+                transparency" and "your trusted car partner" are not. */}
+            {String(page.subheadline ?? "").trim() || (city ? `Serving ${city}.` : "")}
           </p>
           <a
             href="#get-in-touch"
@@ -154,24 +168,25 @@ export default async function PublicLandingPage({ params }: { params: Promise<{ 
         </div>
       </section>
 
-      {/* Featured cars — optional gallery the dealer adds themselves */}
-      {carListings.length > 0 && (
+      {/* Featured items — an optional gallery the owner adds themselves.
+          Whatever the business sells: candles, sarees, courses, cars. */}
+      {featuredItems.length > 0 && (
         <section className="max-w-3xl mx-auto px-6 pb-14 sm:pb-16">
           <p className="text-xs font-semibold tracking-widest uppercase mb-2" style={{ color: `${theme.dark}80` }}>Featured</p>
           <div className="w-10 h-[3px] mb-8" style={{ backgroundColor: theme.accent }} />
           <div className="grid sm:grid-cols-3 gap-5">
-            {carListings.map((car, i) => (
+            {featuredItems.map((item, i) => (
               <div key={i} className="bg-white rounded-xl overflow-hidden border border-neutral-200/70 shadow-sm">
-                {car.image_url ? (
-                  <img src={car.image_url} alt={car.name} className="w-full h-36 object-cover" />
+                {item.image_url ? (
+                  <img src={item.image_url} alt={item.name} className="w-full h-36 object-cover" />
                 ) : (
                   <div className="w-full h-36 bg-neutral-100" />
                 )}
                 <div className="p-3.5">
-                  <p className="font-semibold text-sm">{car.name}</p>
-                  {car.price && (
+                  <p className="font-semibold text-sm">{item.name}</p>
+                  {item.price && (
                     <p className="text-sm flex items-center gap-0.5 mt-0.5" style={{ color: theme.dark }}>
-                      <IndianRupee className="w-3 h-3" /> {car.price}
+                      <IndianRupee className="w-3 h-3" /> {item.price}
                     </p>
                   )}
                 </div>

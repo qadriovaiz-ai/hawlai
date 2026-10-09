@@ -23,5 +23,14 @@ export async function POST(request: Request) {
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
   const variations = await generateCopyVariations(topic.trim(), brandProfile, 3, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  // The old fallback here was one hand-written variation reading
+  // "Limited Stock! Hurry, offer ends soon. Book your test drive today."
+  // — an invented stock claim, an invented offer and the wrong
+  // business, on a path the claims guard never saw. Empty now, and an
+  // empty list is reported as a failure.
+  if (!variations.length) {
+    return NextResponse.json({ error: "Couldn't write the variations just now, and nothing was invented. Try again." }, { status: 503 });
+  }
+
   return NextResponse.json({ variations });
 }

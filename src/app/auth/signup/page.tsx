@@ -106,7 +106,7 @@ export default function SignupPage() {
 
         <div className="bg-slate-100 rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-semibold text-slate-900 mb-1">Create account</h2>
-          <p className="text-slate-500 text-sm mb-6">Register your dealership</p>
+          <p className="text-slate-500 text-sm mb-6">Register your business</p>
 
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -123,8 +123,8 @@ export default function SignupPage() {
                 <input name="password" type="password" value={form.password} onChange={handleChange} placeholder="Min 8 characters" required minLength={8} className="input" />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Dealership Name</label>
-                <input name="dealershipName" type="text" value={form.dealershipName} onChange={handleChange} placeholder="Hero Motors, Andheri" required className="input" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Business Name</label>
+                <input name="dealershipName" type="text" value={form.dealershipName} onChange={handleChange} placeholder="Your business name" required className="input" />
               </div>
               <div className="col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">City</label>

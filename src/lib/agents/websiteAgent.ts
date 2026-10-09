@@ -1,9 +1,10 @@
 // ------------------------------------------------------------------
 // Website Agent — basic landing page copy
 // ------------------------------------------------------------------
-// Generates headline/subheadline/offer copy for a dealership's public
+// Generates headline/subheadline/offer copy for a business's public
 // landing page, using the same Brand Profile as every other agent so
-// tone stays consistent site-wide.
+// tone stays consistent site-wide. Nothing here is category-specific:
+// businessCategory arrives as a parameter and the copy follows it.
 // ------------------------------------------------------------------
 
 interface BrandProfile {
@@ -31,10 +32,24 @@ export async function generateLandingPageCopy(
   /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
   grounding?: string
 ): Promise<LandingPageCopy> {
+  // A FALLBACK IS BUILT FROM THE BUSINESS'S OWN NAME, OR IT IS NOTHING.
+  //
+  // This file is from the car-dealership era and its fallback still read
+  // "Your Trusted Car Partner", "Best deals, honest advice, and a
+  // hassle-free buying experience" and "Book a free test drive today."
+  // For a sweet shop or a coaching centre that is three wrong sentences;
+  // for anyone it is two invented CLAIMS ("best deals", "honest advice")
+  // and an invented OFFER ("free") that nothing on record supports.
+  //
+  // The name and the city are the only things known here without a
+  // model call, so they are the only things the fallback may use. The
+  // other two fields come back empty and the caller tells the owner to
+  // write them — an empty field the owner fills is recoverable, a
+  // confident wrong sentence on their live page is not.
   const fallback: LandingPageCopy = {
-    headline: `${dealershipName} — Your Trusted Car Partner${city ? ` in ${city}` : ""}`,
-    subheadline: "Best deals, honest advice, and a hassle-free buying experience.",
-    offer_text: "Book a free test drive today.",
+    headline: city ? `${dealershipName} — ${city}` : dealershipName,
+    subheadline: "",
+    offer_text: "",
   };
 
   const brandContext = brandProfile
@@ -50,7 +65,7 @@ export async function generateLandingPageCopy(
           role: "user",
           content: `Write landing page copy for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
 ${brandContext}
-Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 chars, builds trust","offer_text":"under 80 chars, a clear call-to-action like booking a test drive"}
+Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 chars, builds trust","offer_text":"under 80 chars, a clear call-to-action that fits what this business actually sells — booking, ordering, visiting or enquiring, whichever applies. Never an offer, discount or 'free' anything unless the verified facts list it."}
 ${grounding ?? ""}`,
         },
       ],
@@ -70,9 +85,9 @@ ${grounding ?? ""}`,
     }
     const parsed = parsedReply.value;
     return {
-      headline: parsed.headline ?? fallback.headline,
-      subheadline: parsed.subheadline ?? fallback.subheadline,
-      offer_text: parsed.offer_text ?? fallback.offer_text,
+      headline: String(parsed.headline ?? "").trim() || fallback.headline,
+      subheadline: String(parsed.subheadline ?? "").trim() || fallback.subheadline,
+      offer_text: String(parsed.offer_text ?? "").trim() || fallback.offer_text,
     };
   } catch (err: any) {
     console.error("[website-agent] generateLandingPageCopy error:", err.message);

@@ -12,8 +12,15 @@ export async function POST(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { carModel, details } = await request.json();
-  if (!carModel || carModel.trim().length < 2) return NextResponse.json({ error: "Car model is required" }, { status: 400 });
+  // `productName` is the field; `carModel` is the car-dealership era's
+  // name for the same thing, still accepted so an older client (or a
+  // cached page) keeps working.
+  const body = await request.json();
+  const productName: string = String(body.productName ?? body.carModel ?? "");
+  const details = body.details;
+  if (productName.trim().length < 2) {
+    return NextResponse.json({ error: "A product or item name is required." }, { status: 400 });
+  }
 
   const [{ data: brandProfile }, { data: dealership }] = await Promise.all([
     supabase.from("brand_profiles").select("tone_of_voice, messaging_pillars, preferred_language").eq("dealership_id", dealershipId).maybeSingle(),
@@ -21,6 +28,6 @@ export async function POST(request: Request) {
   ]);
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const listing = await generateProductDescription(carModel.trim(), details ?? "", brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  const listing = await generateProductDescription(productName.trim(), details ?? "", brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
   return NextResponse.json(listing);
 }

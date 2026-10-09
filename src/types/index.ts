@@ -11,7 +11,28 @@ export type LeadStatus =
 // the final outcome. getCallStatusColor()/getCallStatusLabel() must
 // handle it or every in-flight call renders an unstyled/blank badge.
 export type CallStatus = "initiated" | "completed" | "no_answer" | "busy" | "failed" | "voicemail";
-export type AppointmentType = "test_ride" | "showroom_visit";
+/**
+ * What kind of appointment this is.
+ *
+ * The two car-dealership values are kept because rows in the database
+ * still carry them — every reader renders the raw string with
+ * underscores swapped for spaces, so an old row shows "showroom visit"
+ * and nothing breaks. The database dropped its CHECK constraint in
+ * migration 038 and defaults to 'meeting', so the type is open: a
+ * business names its own if none of these fit.
+ */
+export type AppointmentType =
+  | "visit"
+  | "consultation"
+  | "demo"
+  | "meeting"
+  | "delivery"
+  | "pickup"
+  /** Legacy, pre-2026 car-dealership rows. */
+  | "test_ride"
+  | "showroom_visit"
+  /** Owner-defined. */
+  | (string & {});
 export type AppointmentStatus = "scheduled" | "completed" | "cancelled";
 
 export interface Dealership {

@@ -28,6 +28,12 @@ export interface VideoScript {
   title: string;
   total_duration_seconds: number;
   scenes: VideoScene[];
+  /**
+   * Set when nothing could be written. Empty `scenes` plus this is the
+   * honest shape; the previous fallback was a car-showroom script that
+   * a sweet shop could not tell apart from a real one.
+   */
+  fallbackReason?: string;
 }
 
 export interface CopyVariation {
@@ -82,14 +88,22 @@ export async function generateVideoScript(
   /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
   grounding?: string
 ): Promise<VideoScript> {
+  // NO SCRIPT RATHER THAN THE WRONG BUSINESS'S SCRIPT.
+  //
+  // This fallback was a car showroom: "Wide shot of the car in the
+  // showroom", "Packed with everything you need", "Book your test drive
+  // today!". A sweet shop asking for a Reel script got a car advert, and
+  // a model failure was indistinguishable from a real script.
+  //
+  // Only the topic the owner typed is known here without a model call,
+  // so the fallback is one scene built from it and nothing else — no
+  // invented feature, no invented action, no invented urgency. The
+  // caller sees `scenes.length === 1` and `fallbackReason`, and says so.
   const fallback: VideoScript = {
     title: topic,
-    total_duration_seconds: 20,
-    scenes: [
-      { scene_number: 1, visual: "Wide shot of the car in the showroom", voiceover_or_caption: `Introducing ${topic}`, duration_seconds: 5 },
-      { scene_number: 2, visual: "Close-up of key features", voiceover_or_caption: "Packed with everything you need", duration_seconds: 8 },
-      { scene_number: 3, visual: "Call-to-action text on screen", voiceover_or_caption: "Book your test drive today!", duration_seconds: 7 },
-    ],
+    total_duration_seconds: 0,
+    scenes: [],
+    fallbackReason: "Hawlai couldn't write the script just now, so nothing was invented. Ask again and it will try afresh.",
   };
 
   const parsed = await askClaudeJson(
@@ -122,9 +136,17 @@ export async function generateCopyVariations(
   /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
   grounding?: string
 ): Promise<CopyVariation[]> {
-  const fallback: CopyVariation[] = [
-    { angle: "Urgency", headline: `${topic} — Limited Stock!`, body: "Hurry, offer ends soon. Book your test drive today.", score: 50 },
-  ];
+  // THE WORST FALLBACK IN THE FILE, and it shipped as ad copy.
+  //
+  // "Limited Stock!" is a stock claim nothing on record supports;
+  // "offer ends soon" is an invented offer AND invented urgency; "Book
+  // your test drive" is the wrong business. All three are exactly what
+  // the claims guard exists to strip, written in by hand where the
+  // guard never ran.
+  //
+  // An empty list is the honest answer: the caller reports that nothing
+  // could be written rather than handing the owner a variation to run.
+  const fallback: CopyVariation[] = [];
 
   const parsed = await askClaudeJson(
     `You are an ad copywriter for an Indian ${businessCategory} business, A/B testing different angles for the same offer.

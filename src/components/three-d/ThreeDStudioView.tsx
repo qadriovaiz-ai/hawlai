@@ -75,7 +75,7 @@ export default function ThreeDStudioView() {
         <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="e.g. A glass jar candle with a warm glowing flame, slowly rotating, dark elegant background"
+          placeholder="e.g. your product slowly rotating on a dark elegant background, warm lighting"
           rows={3}
         />
         {error && <p className="text-xs text-red-500">{error}</p>}
