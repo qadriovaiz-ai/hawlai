@@ -153,16 +153,29 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
       let success = true;
       let errorMsg: string | null = null;
       try {
-        replyText = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals, { supabase, dealershipId: dealership.id });
-        if (replyText) {
+        // businessCtx.facts was already gathered for this request and
+        // was the one thing this call never received (G-5). Null means
+        // the records are unreadable and generateAutoReply refuses.
+        const outcome = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals, { supabase, dealershipId: dealership.id }, businessCtx.facts);
+        replyText = outcome.reply;
+        if (outcome.reply) {
           if (channel === "instagram") {
-            await sendInstagramDmReply(replyToken, entryId, senderId, replyText);
+            await sendInstagramDmReply(replyToken, entryId, senderId, outcome.reply);
           } else {
-            await sendDmReply(replyToken, senderId, replyText);
+            await sendDmReply(replyToken, senderId, outcome.reply);
           }
         } else {
+          // ESCALATED, NOT SWALLOWED. "No reply generated" was logged
+          // for five different causes, so the owner could not tell a
+          // withheld claim from an outage — and either way a customer
+          // was left waiting with nobody told.
           success = false;
-          errorMsg = "No reply generated";
+          // The withheld claims go into `error`, which the owner
+          // already sees — auto_reply_log has no column for them and
+          // this needs no migration.
+          errorMsg = [outcome.escalate ?? "No reply generated.", (outcome.withheld ?? []).join("; ")]
+            .filter(Boolean)
+            .join(" ");
         }
       } catch (err: any) {
         success = false;
@@ -197,12 +210,18 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
         // No pastInsights on the comment path — a public comment has
         // no resolved lead identity (resolveDmLead is DM-only, P2
         // 27a-iii), so there's no specific person's history to draw on.
-        replyText = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, null, persona.goals, { supabase, dealershipId: dealership.id });
-        if (replyText) {
-          await sendCommentReply(replyToken, commentId, replyText);
+        const outcome = await generateAutoReply("comment", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, null, persona.goals, { supabase, dealershipId: dealership.id }, businessCtx.facts);
+        replyText = outcome.reply;
+        if (outcome.reply) {
+          await sendCommentReply(replyToken, commentId, outcome.reply);
         } else {
           success = false;
-          errorMsg = "No reply generated";
+          // The withheld claims go into `error`, which the owner
+          // already sees — auto_reply_log has no column for them and
+          // this needs no migration.
+          errorMsg = [outcome.escalate ?? "No reply generated.", (outcome.withheld ?? []).join("; ")]
+            .filter(Boolean)
+            .join(" ");
         }
       } catch (err: any) {
         success = false;

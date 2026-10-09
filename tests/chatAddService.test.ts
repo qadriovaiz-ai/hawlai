@@ -106,6 +106,19 @@ describe("DM and comment auto-replies know a service is booked", () => {
     expect(catalog[1]).toMatchObject({ kind: "service", durationMinutes: 90, bookingLink: "https://hawlai.online/book/qaaf", inventoryCount: null });
   });
 
+  /** The least facts this path needs. formatFactsForCopy reads many fields. */
+  function autoReplyFacts(products: any[]) {
+    return {
+      businessName: "candle_by_qaaf", category: "Home fragrance", categoryKnown: true, city: "Lucknow",
+      products, offers: [], shipping: { mode: "flat", rate: 60, freeThreshold: null },
+      last30: { views: 0, chatOpens: 0, leads: 0, orders: 0, abandonedCarts: 0, conversionRate: null, cartAbandonmentRate: null },
+      allTime: { paidOrders: 0, leads: 0 }, ownerFacts: [], businessModels: null,
+      brand: { tone: null, voice: null, persona: null, language: null, pillars: [], description: null, colors: [], logoUrl: null },
+      pillars: [], links: { store: null, products: [], booking: null }, site: null, home: null,
+      season: null, unreadable: [],
+    } as any;
+  }
+
   it("the reply prompt calls it a service with its booking link, not 'in stock'", async () => {
     let prompt = "";
     vi.stubGlobal("fetch", vi.fn(async (_u: any, init: any) => {
@@ -113,7 +126,10 @@ describe("DM and comment auto-replies know a service is booked", () => {
       return new Response(JSON.stringify({ content: [{ type: "text", text: '{"reply":"hi"}' }], usage: {} }), { status: 200 });
     }));
     try {
-      await generateAutoReply("dm", "is the workshop available?", "candle_by_qaaf", "Home fragrance", null, autoReplyCatalog(items, "https://hawlai.online/book/qaaf"));
+      // Facts are required now: without them generateAutoReply fails
+      // closed before the model call (Phase 2A), so the prompt this
+      // test reads would never be built. The assertions are unchanged.
+      await generateAutoReply("dm", "is the workshop available?", "candle_by_qaaf", "Home fragrance", null, autoReplyCatalog(items, "https://hawlai.online/book/qaaf"), [], [], null, undefined, autoReplyFacts(items));
     } finally {
       vi.unstubAllGlobals();
     }

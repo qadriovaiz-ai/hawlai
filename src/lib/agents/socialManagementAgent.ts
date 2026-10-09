@@ -16,6 +16,8 @@ import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { SOCIAL_TASKS, type SocialTaskMeta } from "@/lib/departments/social";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+import { guardGenerated } from "@/lib/claims/claimCheck";
+import { splitStories } from "@/lib/claims/personalStories";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
 // Re-exported so every existing server import keeps working; the data
@@ -32,6 +34,25 @@ export type { SocialTaskMeta };
 // safe reply, and a tighter prompt that explicitly avoids committing
 // to anything risky (prices, promises, complaint resolutions) since
 // nobody reviews this before it goes out.
+/**
+ * What came back, and when nothing did, why.
+ *
+ * Was `string | null`, and null meant five different things: the model
+ * failed, the reply was unreadable, the guard emptied it, the records
+ * were unreadable, or there was simply nothing to say. The handler
+ * logged "No reply generated" for all of them, so the owner could not
+ * tell a quiet failure from a deliberate withholding.
+ */
+export type AutoReplyResult =
+  | { reply: string; withheld?: never; escalate?: never }
+  | {
+      reply: null;
+      /** What was taken out, when the guard took something out. */
+      withheld?: string[];
+      /** The sentence the owner reads in the log. */
+      escalate: string;
+    };
+
 export async function generateAutoReply(
   channel: "dm" | "comment",
   incomingText: string,
@@ -56,8 +77,23 @@ export async function generateAutoReply(
    * with nobody reviewing it, and until 2026-09-27 it was the highest-
    * frequency Claude call in the product that recorded nothing at all.
    */
-  logContext?: { supabase: any; dealershipId: string }
-): Promise<string | null> {
+  logContext?: { supabase: any; dealershipId: string },
+  /**
+   * The canonical facts (src/lib/claims).
+   *
+   * F-U1 / G-5 (audit, 8 Oct 2026). This is the highest-frequency
+   * customer-facing model call in the product and it had none of the
+   * layer every other surface has: no verified facts, no truth rules,
+   * no claims guard, and the owner's knowledge rows passed through raw
+   * so a customer's private story could be repeated to a stranger. It
+   * had a hand-rolled catalogue string instead, which is how it could
+   * quote a real price while inventing a discount beside it.
+   *
+   * Null here means the records could not be read, and this path FAILS
+   * CLOSED: no reply at all. Nothing else sends without review.
+   */
+  facts?: BusinessFacts | null
+): Promise<AutoReplyResult> {
   // An auto-reply is sent to a customer with nobody reading it first —
   // if any copy follows the owner's chosen language, this does.
   const brandContext = [
@@ -73,8 +109,20 @@ export async function generateAutoReply(
     ? `\nReal current catalogue (use this for any question about a specific product or service — price, availability, booking):\n${productCatalog.map((p) => `- ${p.name}: ₹${p.price}${p.kind === "service" ? ` (a SERVICE — booked, not bought or shipped${p.durationMinutes ? `, ${formatDuration(p.durationMinutes)}` : ""}; ${p.bookingLink ? `book at ${p.bookingLink}` : "no booking link — offer to help them book in this conversation"})` : p.inventoryCount !== undefined && p.inventoryCount !== null ? (p.inventoryCount > 0 ? ` (in stock)` : ` (out of stock)`) : ""}${p.description ? ` — ${p.description.slice(0, 80)}` : ""}`).join("\n")}`
     : "";
 
-  const knowledgeContext = knowledgeFacts && knowledgeFacts.length > 0
-    ? `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${knowledgeFacts.map((f) => `- ${f.title}: ${f.content}`).join("\n")}`
+  // A CUSTOMER'S PRIVATE SITUATION IS NOT AN AUTO-REPLY.
+  //
+  // Every knowledge row went into this prompt in full, and this prompt
+  // answers strangers in public comment threads. One of those rows is a
+  // real customer writing that her husband had been in an accident and
+  // she lit a candle through the waiting at the hospital. The owner
+  // wrote it down because it moved her; it is not hers to repeat to
+  // someone asking about delivery.
+  //
+  // The same gate formatFactsForCopy and the website widget already
+  // apply (src/lib/claims/personalStories.ts).
+  const { usable: usableKnowledge } = splitStories((knowledgeFacts ?? []) as any);
+  const knowledgeContext = usableKnowledge.length > 0
+    ? `\nReal facts about this business you can state with confidence (only these — don't extend or guess beyond them):\n${usableKnowledge.map((f: any) => `- ${f.title}: ${f.content}`).join("\n")}`
     : "";
 
   // Comments are public and effectively anonymous per-thread — past
@@ -94,6 +142,20 @@ export async function generateAutoReply(
     ? "This reply is PUBLIC on a comment thread — keep it brief, warm, and generic. Never share prices, personal details, or specific commitments publicly, even if the catalog above has the answer; if the comment needs specifics, invite them to DM instead."
     : `This is a private DM auto-reply sent with NO human review before sending. If the question is about a specific product's price/availability AND it's genuinely in the catalog above, answer it directly and confidently — that's a normal, safe question to answer instantly. For anything else (a complaint, a custom request, a product genuinely not in the catalog, or anything you're not confident about), reply with acknowledgement + "our team will get back to you shortly" rather than guessing or promising something specific. Never invent a price or availability for a product not actually listed above.`;
 
+  // FAIL CLOSED, BEFORE THE MODEL CALL.
+  //
+  // Every other surface degrades when the records cannot be read: the
+  // copy comes back marked unverified and a human decides. There is no
+  // human here — the reply goes to a customer the moment it exists —
+  // so "unverified" has nobody to warn. No reply, and the owner is told
+  // in the log that a message is waiting for them.
+  if (!facts) {
+    return {
+      reply: null,
+      escalate: "Your store records couldn't be read, so Hawlai didn't auto-reply to this one. Answer it yourself.",
+    };
+  }
+
   try {
     const r = await callClaude({
       // Haiku — a safe, single, auto-sent reply is a tightly
@@ -107,7 +169,7 @@ export async function generateAutoReply(
       messages: [{
         role: "user",
         content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}
+${brandContext}${truthBlock(facts, "customer")}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}
 ${safety}
 Incoming message: "${incomingText}"
 
@@ -115,7 +177,7 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
       }],
     }, { operation: "auto_reply", logContext });
     // No reply goes out rather than a guessed one.
-    if (!r.ok) return null;
+    if (!r.ok) return { reply: null, escalate: "Hawlai couldn't reach the AI to answer this one. Reply yourself." };
     const text = r.text;
     // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
     // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
@@ -126,13 +188,37 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
     const parsedReply = parseModelJson(text);
     if (!parsedReply.ok) {
       console.error(`[socialManagementAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return null;
+      return { reply: null, escalate: "The AI's answer couldn't be read, so nothing was sent. Reply yourself." };
     }
-    const parsed = parsedReply.value;
-    return parsed.reply ?? null;
+    const spoken = String(parsedReply.value?.reply ?? "").trim();
+    if (!spoken) {
+      return { reply: null, escalate: "The AI returned nothing to send. Reply yourself." };
+    }
+
+    // THE GUARD, IN PUBLISH MODE.
+    //
+    // "publish" and not "draft" for the same reason the website widget
+    // uses it: an unverified price flagged for review has nobody to
+    // review it. The whole sentence goes rather than reaching the
+    // customer with a question mark over it.
+    const checked = guardGenerated({ reply: spoken }, facts, "publish");
+    const safeReply = String((checked.output as any).reply ?? "").trim();
+    if (!safeReply) {
+      // The guard emptied it. An auto-reply with its only sentence
+      // removed is not a reply.
+      return {
+        reply: null,
+        withheld: checked.removed,
+        escalate: `Hawlai had an answer but it claimed something your records don't back, so nothing was sent${checked.removed.length ? ` (${checked.removed[0]})` : ""}. Reply yourself.`,
+      };
+    }
+    if (checked.removed.length) {
+      console.error(`[auto-reply] withheld ${checked.removed.length} unsupported claim(s) from a customer reply: ${checked.removed.join("; ")}`);
+    }
+    return { reply: safeReply };
   } catch (err: any) {
     console.error("[auto-reply] error:", err.message);
-    return null;
+    return { reply: null, escalate: "Something went wrong writing the reply, so nothing was sent. Reply yourself." };
   }
 }
 

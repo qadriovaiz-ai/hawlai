@@ -135,12 +135,35 @@ describe("customer-facing words never carry Hawlai's outage notice", () => {
     expect(msg).not.toContain("Hawlai");
   });
 
+  /** The least facts this path needs. formatFactsForCopy reads many fields. */
+  function autoReplyFacts(products: any[] = [{ id: "p1", name: "Lavender candle", price: 550, description: "Hand-poured soy wax", images: [], inventoryCount: 5, category: null }]) {
+    return {
+      businessName: "Candle by Qaaf", category: "Home fragrance", categoryKnown: true, city: "Lucknow",
+      products, offers: [], shipping: { mode: "flat", rate: 60, freeThreshold: null },
+      last30: { views: 0, chatOpens: 0, leads: 0, orders: 0, abandonedCarts: 0, conversionRate: null, cartAbandonmentRate: null },
+      allTime: { paidOrders: 0, leads: 0 }, ownerFacts: [], businessModels: null,
+      brand: { tone: null, voice: null, persona: null, language: null, pillars: [], description: null, colors: [], logoUrl: null },
+      pillars: [], links: { store: null, products: [], booking: null }, site: null, home: null,
+      season: null, unreadable: [],
+    } as any;
+  }
+
   it("an auto-reply to a DM or comment: nothing is sent", async () => {
+    // SHAPE CHANGE, SAME INTENT. generateAutoReply returned `string |
+    // null`, and null meant five different things; it now returns the
+    // reply or a stated reason (Phase 2A). "Nothing is sent" is still
+    // exactly what this asserts. It also needs FACTS now: without them
+    // the function fails closed BEFORE the model call, so a test about
+    // the model failing would never reach the model.
+    const facts = autoReplyFacts();
     anthropic(CREDITS);
-    expect(await generateAutoReply("dm", "Price kya hai?", "Candle by Qaaf", "Home fragrance")).toBeNull();
+    const failed = await generateAutoReply("dm", "Price kya hai?", "Candle by Qaaf", "Home fragrance", null, [], [], [], null, undefined, facts);
+    expect(failed.reply).toBeNull();
+    expect(failed.escalate).toBeTruthy();
     // …whereas a working AI's reply does go out.
-    anthropic(okText('{"reply":"Lavender candle ₹550 hai — DM mein order kar sakte hain!"}'));
-    expect(await generateAutoReply("dm", "Price kya hai?", "Candle by Qaaf", "Home fragrance")).toBe("Lavender candle ₹550 hai — DM mein order kar sakte hain!");
+    anthropic(okText(JSON.stringify({ reply: "Lavender candle ₹550 hai, DM mein order kar sakte hain." })));
+    const ok = await generateAutoReply("dm", "Price kya hai?", "Candle by Qaaf", "Home fragrance", null, [], [], [], null, undefined, facts);
+    expect(ok.reply).toBe("Lavender candle ₹550 hai, DM mein order kar sakte hain.");
   });
 
   it("a call the AI couldn't score says to review it manually", async () => {
