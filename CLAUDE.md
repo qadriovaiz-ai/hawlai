@@ -57,6 +57,24 @@ safe direction must not be the slow one.
 Bring it to the owner instead. This has been the right call every time
 it has come up.
 
+**8. A test that greps source must strip comments first.** Use
+`code()` from [tests/helpers/source.ts](tests/helpers/source.ts) — never
+a local copy of the stripping logic. When the comment itself is what is
+being asserted (this codebase records the dated incident behind each
+guard, and that record is worth protecting), use `sourceWithComments()`
+so the choice is visible.
+
+*Why:* on 2026-10-09 two tests asserting that `taskExecutors.ts` does
+**not** pass `revise: true` failed, because the comment above that call
+says those words while explaining that it is deliberately not passed. A
+source-grep test is defeated by a comment *about* the thing it looks
+for. That failure was harmless — a present guard looked absent. **The
+reverse is not:** a test asserting a guard *is* present passes on a
+comment that merely mentions it, so a guard deleted from the code but
+still described above it reads as protected. Measured on 2026-10-09:
+**140 presence assertions across 39 test files** read raw source, and
+are exposed to exactly that.
+
 ---
 
 ## How to read a guard here

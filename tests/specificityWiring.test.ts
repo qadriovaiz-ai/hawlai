@@ -11,6 +11,7 @@
 // page path. These tests run executeTool and count the model calls.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { code, sourceWithComments } from "./helpers/source";
 
 type Row = Record<string, any>;
 
@@ -82,27 +83,6 @@ function db(): any {
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
 
 import { executeTool } from "@/lib/agents/masterBrainV2";
-
-/**
- * Source with comments stripped.
- *
- * WHY THIS EXISTS: the first version of the tests below grepped the raw
- * file, and both failed — because the comment I had just written in
- * taskExecutors says the words `revise: true` and "draft" while
- * explaining that neither is passed. A source-grep test is defeated by a
- * comment ABOUT the thing it looks for, and the failure mode is the
- * dangerous direction: a future comment could just as easily make a
- * missing guard look present.
- */
-function code(path: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { readFileSync } = require("fs") as typeof import("fs");
-  return readFileSync(path, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .join("\n");
-}
 
 const CTX: any = { id: "d1", name: "Test Business", category: "home fragrance", toneOfVoice: "warm", city: "Lucknow" };
 
@@ -183,8 +163,7 @@ describe("the queued-task path deliberately does NOT either", () => {
     expect(code(TASKS)).not.toMatch(/revise:\s*true/);
     // The reason is written down, not left to be rediscovered — checked
     // against the RAW file, since that is where a comment belongs.
-    const { readFileSync } = require("fs") as typeof import("fs");
-    expect(readFileSync(TASKS, "utf8")).toMatch(/DELIBERATELY/);
+    expect(sourceWithComments(TASKS)).toMatch(/DELIBERATELY/);
   });
 
   it("IT PASSES NO claimsMode, so it gets the STRICTEST guard", () => {

@@ -145,6 +145,25 @@ reads these before changing anything, without being told to.
 
 ---
 
+## How a test reads this codebase
+
+Guards here carry their dated incident in a comment, which makes
+comments load-bearing — and makes a test that greps source unreliable
+unless it strips them. `code()` in `tests/helpers/source.ts` is the one
+implementation; `sourceWithComments()` is for when the record itself is
+what a test protects. Rule 8 in `CLAUDE.md` has the incident and the
+measured exposure.
+
+The deeper point: a source grep proves a *string* exists, not that
+behaviour happens. Where a test can execute the thing instead, it
+should. Two findings in October 2026 came from exactly this — a grep for
+`revise: true` could not tell the chat path from the page path, and a
+grep for `sendMarketingEmail(...requestId)` was satisfied by either of
+two call sites while one was broken. Both were replaced with tests that
+run the code and count what it did.
+
+---
+
 ## How to read a guard in this codebase
 
 Almost every guard carries the dated incident that caused it. That is
