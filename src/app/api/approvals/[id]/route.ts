@@ -292,6 +292,31 @@ export async function PATCH(
       }
     }
 
+    if (approval?.action_type === "generate_graphic") {
+      // G-3 step 1b. The work is in src/lib/graphicDesign/generateDesign.ts
+      // so it runs HERE rather than by fetching this app over HTTP - a
+      // route calling its own app gets a Vercel 508 after about four hops.
+      //
+      // Every guard travels with it: the feature hold, the plan cap and
+      // the claims strip all live in that function, so this path cannot
+      // spend money the Graphic Design page could not.
+      //
+      // RE-READ AT THE PRESS, like every other branch here. The plan cap
+      // is checked inside generateDesign at the moment of approval, not
+      // when the card was made - an owner who used up the allowance in
+      // between is refused now.
+      const d = approval.action_details as any;
+      const { generateDesign } = await import("@/lib/graphicDesign/generateDesign");
+      const made = await generateDesign(service, approval.dealership_id, {
+        designType: d.design_type,
+        prompt: d.prompt ?? null,
+      });
+      // The approval is NOT marked approved when the work fails: the row
+      // stays pending so the owner can press again once the reason is
+      // gone, rather than being told it succeeded.
+      if (!made.ok) return NextResponse.json({ error: made.error }, { status: made.status });
+    }
+
     if (approval?.action_type === "create_discount_code") {
       const d = approval.action_details as any;
       // Checked again here: a code with the same name may have been

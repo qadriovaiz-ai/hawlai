@@ -1786,6 +1786,38 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         const { costOfGeminiImageInr } = await import("../usage/pricing");
         const depictionNote =
           quoteFacts && productDepictionFor(quoteFacts) === "forbidden" ? depictionNoteFor(quoteFacts) : null;
+        // G-3 STEP 1b. The card used to carry {endpoint, payload} for the
+        // browser to POST. That made the decision the BROWSER's: the
+        // price, the confirm sentence and the depiction note were all
+        // client strings, and a request sent straight to the endpoint
+        // with the same payload skipped every one of them.
+        //
+        // Now the server writes a pending_approvals row and the only
+        // path to spending is PATCH /api/approvals/{id}, which re-reads
+        // the row and checks who is asking. The rupee figure goes into
+        // `amount`, where the authority threshold can see it - until
+        // today the agreed price existed only in a browser label.
+        const { requestApproval } = await import("../chat/requestApproval");
+        const confirmText = `This makes one AI image now. It costs about ₹${costOfGeminiImageInr(1).toFixed(2)} and counts against your plan's monthly image allowance.${
+          depictionNote ? ` ${depictionNote}` : ""
+        }`;
+        const asked = await requestApproval(supabase, ctx.id, {
+          actionType: "generate_graphic",
+          details: {
+            design_type: input.designType,
+            prompt: quoteBrief.text,
+            // THE WORDS THE OWNER WAS SHOWN, stored server-side. Until
+            // today the confirm sentence and the price were browser
+            // strings: nothing recorded what was agreed to. "Who
+            // approved this and what did it say" is now answerable.
+            confirm: confirmText,
+            ...(depictionNote ? { depiction_note: depictionNote } : {}),
+          },
+          amount: costOfGeminiImageInr(1),
+          requestedBy: "graphic_design_agent",
+          confirm: confirmText,
+        });
+        if ("error" in asked) return { error: asked.error };
         return {
           _imageQuote: {
             designType: input.designType,
@@ -1793,6 +1825,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             costInr: costOfGeminiImageInr(1),
             depictionNote,
           },
+          approvalId: asked.approvalId,
+          risk: asked.risk,
+          confirm: asked.confirm,
           ...(quoteBrief.removed.length ? { _claimsNote: claimsNote(quoteBrief.removed) } : {}),
           note: `NOTHING HAS BEEN GENERATED YET and nothing has been spent. The person gets a button that costs money, so do not describe the image, do not use markdown image syntax, and do not say it is ready. Tell them in one line what you would make and that it costs about ₹${costOfGeminiImageInr(1).toFixed(2)}.${
             depictionNote ? ` Also say this: ${depictionNote}` : ""
@@ -3288,6 +3323,16 @@ export interface Artifact {
    * duplication invites.
    */
   approval?: { id: string; publishActionId?: string };
+  /**
+   * The sentence the owner reads before approving, when the card's only
+   * button is the approvals PATCH (G-3).
+   *
+   * Carried on the artifact AND stored in the approval row's
+   * action_details on purpose: the row is the record of what was agreed
+   * to, and the card must show the same words rather than a client
+   * string that happens to resemble them.
+   */
+  confirm?: string;
   // "visual" = renders in the side workspace panel (image/website/3d/canvas,
   // unchanged from before). Everything else renders as an inline summary
   // card directly under the assistant's message in the chat feed — the
@@ -3750,7 +3795,11 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
           label: "Image to generate",
           summary: result._imageQuote.prompt,
           departmentHref,
-          publish: imageGenerateAction(result._imageQuote),
+          // NO `publish` DESCRIPTOR ANY MORE (G-3 step 1b). An approval
+          // id instead, so the card's only button is the approvals PATCH
+          // the server authorises - not a browser fetch to the endpoint
+          // that spends.
+          ...(result.approvalId ? { approval: { id: result.approvalId }, confirm: result.confirm } : {}),
         };
       }
       return result.imageUrl ? { kind: "visual", type: "image", label: "Generated Image", url: result.imageUrl, departmentHref } : null;

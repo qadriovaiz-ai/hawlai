@@ -98,6 +98,16 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // written to Shopify is live the moment it lands.
   update_product_price: { actionType: "edit", riskLevel: "critical", description: "Change a product's price in the merchant's own store — live and public immediately", requiresApproval: true },
   create_discount_code: { actionType: "create", riskLevel: "high", description: "Create a working discount code in the merchant's store — redeemable as soon as it exists", requiresApproval: true },
+  // G-3 step 1. The chat card for this used to post straight to
+  // /api/graphic-design/generate, so the price the owner agreed to
+  // existed only as a string in a browser label and nothing server-side
+  // recorded the decision. The rupee figure now lands in
+  // pending_approvals.amount, where the authority threshold can read it.
+  //
+  // "high" rather than "critical": the money is real but bounded - the
+  // plan cap runs inside generateDesign, so the worst case is the
+  // month's image allowance, and nothing reaches a customer.
+  generate_graphic: { actionType: "create", riskLevel: "high", description: "Spend money generating one AI image, against the plan's monthly image allowance", requiresApproval: true },
   update_product_name: { actionType: "edit", riskLevel: "medium", description: "Change a product's public name in the merchant's store", requiresApproval: true },
   update_product_description: { actionType: "edit", riskLevel: "medium", description: "Change a product's public description in the merchant's store", requiresApproval: true },
   publish_post: { actionType: "publish", riskLevel: "high", description: "Publish a post or page to the merchant's live site", requiresApproval: true },

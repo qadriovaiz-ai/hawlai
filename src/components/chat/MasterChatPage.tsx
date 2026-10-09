@@ -33,6 +33,16 @@ interface Artifact {
    * way to say yes.
    */
   approval?: { id: string; publishActionId?: string };
+  /**
+   * The sentence to read before approving (G-3).
+   *
+   * Mirrored from masterBrainV2's Artifact, and that mirroring is why
+   * this comment exists: the two are separate declarations, and the
+   * first live test found this one missing `approval` entirely. A card
+   * that drops this field shows an Approve button for an action that
+   * spends money without saying what it costs.
+   */
+  confirm?: string;
   /** Set when this can be pushed live from the chat (src/lib/chat/publishActions.ts). */
   publish?: PublishAction;
   /** An email about to be sent, exactly as the recipient will see it. */
@@ -1095,6 +1105,14 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
 
   const approvalStrip = artifact.approval ? (
     <div className="border-t border-slate-100 px-3 py-2">
+      {/* WHAT IS ABOUT TO HAPPEN, before the button that does it. The
+          image card used to carry its own confirm text through a
+          PublishAction; now the server writes it into the approval row
+          and sends it here, so the words on screen are the words on
+          record. */}
+      {artifact.confirm && decision !== "approved" && decision !== "rejected" ? (
+        <p className="mb-2 text-[11px] leading-snug text-slate-600">{artifact.confirm}</p>
+      ) : null}
       {decision === "approved" || decision === "rejected" ? (
         <p className={`text-[11px] font-medium ${decision !== "approved" || tone === "muted" ? "text-slate-500" : tone === "warn" ? "text-amber-600" : "text-emerald-600"}`}>
           {decisionNote}

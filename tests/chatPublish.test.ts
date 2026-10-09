@@ -293,12 +293,20 @@ describe("a caption and an image asked for in one chat turn", () => {
     // Graphic Design was on hold for cost. The image is now a quote with
     // the price in the button.
     const quote = result.artifacts.find((a: any) => a.type === "image_quote")!;
-    expect(quote.publish!.target).toBe("image");
-    expect(quote.publish!.label).toMatch(/Generate the image \(about ₹3\.39\)/);
-    expect(quote.publish!.confirm).toMatch(/monthly image allowance/);
-    // The button calls the Graphic Design page's own endpoint, which runs
-    // the cap again where the money is actually spent.
-    expect(quote.publish!.endpoint).toBe("/api/graphic-design/generate");
+    // G-3 step 1b (2026-10-09): the card no longer carries a {endpoint,
+    // payload} for the browser to POST. That made the decision the
+    // BROWSER's - the price and the confirm were client strings, and a
+    // request sent straight to the endpoint with the same payload
+    // skipped both. The server writes an approval row instead, and the
+    // only path to spending is the approvals PATCH.
+    //
+    // The intent of this test is unchanged and the guarantee is
+    // stronger: nothing was spent, and the price the owner agreed to now
+    // exists where the server can read it.
+    expect(quote.publish).toBeUndefined();
+    expect(quote.approval?.id).toBeTruthy();
+    expect(quote.confirm).toMatch(/₹3\.39/);
+    expect(quote.confirm).toMatch(/monthly image allowance/);
     expect(result.artifacts.some((a: any) => a.type === "image")).toBe(false);
 
     // The caption still comes back, and still names its destination. It
