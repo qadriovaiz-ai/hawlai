@@ -94,8 +94,11 @@ afterEach(() => {
 });
 
 describe("the workshop caption, with English selected", () => {
-  const ask = (brand: any, f: BusinessFacts) =>
-    generateContent("instagram_post", "Candle by Qaaf", "Home fragrance", "Candle Making Workshop ke liye ek chhota, punchy caption", brand, undefined, undefined, f, "draft");
+  // `opts` added 2026-10-09: the specificity retry is gated behind
+  // `revise`, so only the test that exercises the retry passes it. The
+  // others assert a single call and must keep doing so.
+  const ask = (brand: any, f: BusinessFacts, opts: Record<string, unknown> = {}) =>
+    generateContent("instagram_post", "Candle by Qaaf", "Home fragrance", "Candle Making Workshop ke liye ek chhota, punchy caption", brand, undefined, undefined, f, "draft", opts as any);
 
   it("the brand profile's setting reaches the prompt as an instruction", async () => {
     anthropic(ENGLISH_CAPTION);
@@ -157,9 +160,12 @@ describe("the workshop caption, with English selected", () => {
   it("the retry is in the owner's language too", async () => {
     // First draft: English but nothing of the story — so it's retried.
     anthropic({ text: "Make your own candle in 90 minutes. ₹800, link in bio." }, ENGLISH_CAPTION);
-    const r = await ask({ tone_of_voice: "warm", preferred_language: "english" }, facts("english"));
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toContain("Write EVERY word of this piece in English");
+    const r = await ask({ tone_of_voice: "warm", preferred_language: "english" }, facts("english"), { revise: true });
+    // Three now, not two: the revise pass AND the specificity retry both
+    // run on a reviewed path. The assertion that matters is unchanged -
+    // the RETRY's prompt carries the language rule.
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    expect(prompts[prompts.length - 1]).toContain("Write EVERY word of this piece in English");
     expect(r.output.text).toBe(ENGLISH_CAPTION.text);
   });
 });

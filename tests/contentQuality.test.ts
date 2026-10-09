@@ -420,7 +420,12 @@ describe("D — the editor that cuts what any competitor could have said", () =>
     }));
     try {
       const r = await generateContent("instagram_post", "candle_by_qaaf", "Home fragrance", "workshop", null, undefined, undefined, facts(), "draft", { revise: true });
-      expect(call).toBe(2);
+      // THREE from 2026-10-09: draft, revise, then the specificity retry,
+      // because the "revision" this fixture returns is still something
+      // any competitor could have published (lib/content/antiGeneric.ts).
+      // The assertion that matters is unchanged and below: the claims
+      // guard still runs on whatever came back last.
+      expect(call).toBe(3);
       expect(r.revised).toBe(true);
       expect(r.output.text).toBe("Lavender comes in as dried buds.");
       expect(r.claimsRemoved?.join(" ")).toMatch(/star rating/);

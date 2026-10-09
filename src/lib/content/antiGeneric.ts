@@ -264,9 +264,39 @@ export function specificsIn(output: unknown, facts: BusinessFacts | null | undef
 export function missingSpecific(facts: BusinessFacts | null | undefined): string {
   if (!facts) return "something only your business could say";
   const hasStory = (facts.ownerFacts ?? []).some((k) => k.category === STORY_CATEGORY);
-  if ((facts.products ?? []).length) return "the product's name or price";
+  // NOT "or price": a price is not a distinguishing specific
+  // (DISTINGUISHING above), so asking for one would tell the owner to do
+  // the thing that does not fix it.
+  if ((facts.products ?? []).length) return "the product's name, or what makes it yours";
   if (hasStory) return "a detail from your own notes";
   return "what's included, or the occasion people buy it for";
+}
+
+/**
+ * The specifics that actually DISTINGUISH this business.
+ *
+ * A PRICE IS NOT ON THIS LIST, and that correction came from reading
+ * storyEcho's own header rather than from my own reasoning. It says, of
+ * the caption that started this whole thread:
+ *
+ *   "The price (₹800) and the duration (90 minutes) come from the
+ *    catalogue — every competitor has those too, and counting them would
+ *    have passed the very caption that started this."
+ *
+ * My first version of this rule counted a real price as sufficient. It
+ * would therefore have passed that exact caption — the one the owner
+ * complained about — and the module next door had already written down
+ * why. A price supports a piece; it does not make it this business's.
+ */
+const DISTINGUISHING = new Set(["a product name", "a real offer", "where the business is", "a detail you recorded"]);
+
+/** Has this business written down anything a piece could be specific about? */
+export function hasAnythingRecorded(facts: BusinessFacts | null | undefined): boolean {
+  if (!facts) return false;
+  if ((facts.products ?? []).length) return true;
+  if ((facts.offers ?? []).length) return true;
+  if (String(facts.city ?? "").trim()) return true;
+  return (facts.ownerFacts ?? []).some((k) => String(k?.content ?? "").trim());
 }
 
 export type GenericVerdict = {
@@ -275,6 +305,8 @@ export type GenericVerdict = {
   opener: string | null;
   /** The one thing to add, when nothing of this business is in the piece. */
   missing: string | null;
+  /** Everything found, including the table-stakes ones, for the note and for tests. */
+  specifics?: string[];
 };
 
 /**
@@ -293,10 +325,25 @@ export function isGeneric(
   language: CopyLanguage = "hinglish"
 ): GenericVerdict {
   const opener = openerProblem(output, language);
-  if (!facts) return { generic: Boolean(opener), opener, missing: null };
+  if (!facts) return { generic: Boolean(opener), opener, missing: null, specifics: [] };
+
+  // NOTHING RECORDED MEANS NOTHING TO BE SPECIFIC ABOUT.
+  //
+  // Mirrors usesOwnStory, whose own comment says it best: "True when
+  // there's no story to use: a business that hasn't written one can't be
+  // failed for missing it." The same has to hold here, and an existing
+  // test caught it when the gate was inverted — a business with no
+  // products, no offers, no city and no notes was being marked generic
+  // and told to add something it had no way to add.
+  //
+  // The worn-opener rule still applies: that one needs no records.
+  if (!hasAnythingRecorded(facts)) return { generic: Boolean(opener), opener, missing: null, specifics: [] };
+
   const specifics = specificsIn(output, facts);
-  const missing = specifics.length === 0 ? missingSpecific(facts) : null;
-  return { generic: Boolean(opener) || Boolean(missing), opener, missing };
+  // A price or a duration does not rescue a piece — see DISTINGUISHING.
+  const distinguishing = specifics.filter((s) => DISTINGUISHING.has(s));
+  const missing = distinguishing.length === 0 ? missingSpecific(facts) : null;
+  return { generic: Boolean(opener) || Boolean(missing), opener, missing, specifics };
 }
 
 /**
@@ -339,9 +386,24 @@ export function retryBrief(verdict: GenericVerdict, facts: BusinessFacts | null 
       const price = typeof p?.price === "number" && p.price > 0 ? ` (₹${p.price})` : "";
       return `${p?.name ?? ""}${price}`.trim();
     }).filter(Boolean);
-    lines.push(`- Put ONE thing from this business into it — ${verdict.missing}. Not a new claim, not a number you invent: only what is listed below.`);
-    if (products.length) lines.push(`  On record: ${products.join(" · ")}`);
-    if (facts?.city) lines.push(`  Where: ${facts.city}`);
+    const offers = (facts?.offers ?? []).slice(0, 2).map((o: any) => String(o?.label ?? "").trim()).filter(Boolean);
+    const city = String(facts?.city ?? "").trim();
+
+    // NOTHING CONCRETE TO HAND OVER MEANS NO RETRY AT ALL.
+    //
+    // Caught by an existing test when the gate was inverted: a business
+    // with no products, no offers, no city and no notes still produced a
+    // brief, so the retry ran. That call could not have made the piece
+    // specific — there is nothing to be specific ABOUT — so the only
+    // thing it could do is invent, which is the failure this entire
+    // phase exists to prevent. An empty brief makes the caller skip,
+    // exactly as `storyForRetry` returning [] used to.
+    if (products.length || offers.length || city) {
+      lines.push(`- Put ONE thing from this business into it — ${verdict.missing}. Not a new claim, not a number you invent: only what is listed below.`);
+      if (products.length) lines.push(`  On record: ${products.join(" · ")}`);
+      if (offers.length) lines.push(`  Offers on record: ${offers.join(" · ")}`);
+      if (city) lines.push(`  Where: ${city}`);
+    }
   }
   return lines.join("\n");
 }

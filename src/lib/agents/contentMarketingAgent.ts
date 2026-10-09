@@ -14,7 +14,16 @@ import { type ClaimsMode } from "@/lib/claims/claimCheck";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { STORY_CATEGORY } from "@/lib/business/businessStory";
-import { usesOwnStory, storyForRetry, GENERIC_NOTE } from "@/lib/content/storyEcho";
+// storyEcho is no longer imported here. After the inversion its
+// usesOwnStory, storyForRetry and GENERIC_NOTE have NO production
+// caller anywhere in src — said plainly rather than left for someone
+// to discover. The module stays: storyVocabulary and textOfOutput are
+// the base of antiGeneric and narrativeProvenance, and the three above
+// are the intended machinery for About-type content, where the story
+// IS the subject and the gate was always correct. Deleting working,
+// tested code to express a change of mind is how a codebase loses what
+// it later wants.
+import { isGeneric, genericNote, retryBrief, type GenericVerdict } from "@/lib/content/antiGeneric";
 import { soundRule, languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
 import { applyLinkRule, linkRuleNote, applyBioRule, bioRuleNote } from "@/lib/content/platformRules";
 
@@ -203,21 +212,53 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
       }
     }
 
-    // The draft used nothing of the owner's own story: ONE retry at the
-    // same length, told to compress a detail in rather than add words
-    // (lib/content/storyEcho.ts). Only when there IS a story to use, and
-    // only when the first draft missed it — a retry on every piece would
-    // double the cost of the many to fix the few.
+    // THE INVERSION (2026-10-09, P1 in docs/PRINCIPLES.md).
+    //
+    // This block used to ask "did the piece use the owner's STORY?" and
+    // retry toward the founder's backstory when it had not. The retry
+    // machinery was right; the thing it retried TOWARD was wrong. A
+    // caption about a Diwali offer has no business carrying a
+    // batch-ruining anecdote, and forcing it produced sentences no buyer
+    // asked for.
+    //
+    // It now asks "could any business in this line of work have
+    // published this?" — a worn opener, or no recorded specific at all
+    // (lib/content/antiGeneric.ts). The CONTROL FLOW IS DELIBERATELY
+    // UNCHANGED: one retry, keep the retry's answer even when it still
+    // fails, tell the owner either way, and never retry a business with
+    // nothing to retry toward. That shape is what six integration tests
+    // pin, and keeping it is what lets them keep testing something real.
     let generic = false;
-    if (!usesOwnStory(parsed, facts, language)) {
-      const retried = await retryWithStory(parsed, meta.label, meta.instructions, topic, facts, logContext, language);
-      if (retried && usesOwnStory(retried, facts, language)) parsed = retried;
+    // THE VERDICT IS FREE, THE REPAIR IS NOT.
+    //
+    // isGeneric is pure code, so it runs everywhere: even the
+    // unattended path tells the owner, on the Content Marketing page,
+    // that a caption read like anyone's.
+    //
+    // The RETRY is a model call, and it is gated behind the same
+    // `revise` flag as reviseForSpecificity because of an existing test
+    // named "without the flag there is no second call - the auto-publish
+    // path stays single-shot", asserting calls === 1. That is a written
+    // contract and it outranks my own judgement about whether the call
+    // is worth it. It also closes a pre-existing hole: the story retry
+    // this replaces was NOT gated, so it broke that same contract
+    // whenever a business had recorded a story - the test only passed
+    // because its fixture had none.
+    const verdict = isGeneric(parsed, facts, language);
+    if (verdict.generic) {
+      const retried = opts.revise
+        ? await retryForSpecificity(parsed, meta.label, meta.instructions, verdict, facts, logContext, language)
+        : null;
+      if (retried && !isGeneric(retried, facts, language).generic) parsed = retried;
       else {
         if (retried) parsed = retried;
         generic = true;
       }
     }
-    if (generic) parsed = { ...parsed, _storyNote: GENERIC_NOTE };
+    // `_storyNote` keeps its name on purpose: GeneratedOutputPanel and
+    // the chat card both read that key, and renaming it would silently
+    // stop the owner seeing any of this. What CHANGED is the words.
+    if (generic) parsed = { ...parsed, _storyNote: genericNote(verdict) };
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
     // F-01: this used to be `if (!facts) return parsed` — the guard
     // skipped and the output indistinguishable from a checked draft.
@@ -248,41 +289,49 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
 }
 
 /**
- * The retry for a draft that used none of the owner's story: the same
- * piece, the same length, with one detail compressed in.
+ * The retry for a draft any competitor could have published: the same
+ * piece, the same length, with one RECORDED SPECIFIC compressed in.
  *
  * Deliberately not "write it again": a fresh generation would drift off
  * the topic the owner asked for. This edits what's there, which is also
  * why it keeps the JSON shape.
+ *
+ * WAS retryWithStory, until 2026-10-09. The mechanism is unchanged, down
+ * to the shape check and the tolerant JSON read — only its target moved,
+ * from the founder's backstory to a product fact (P1). Renamed rather
+ * than kept under the old name, because a function called retryWithStory
+ * that no longer mentions the story is how the next reader is misled.
  */
-export async function retryWithStory(
+export async function retryForSpecificity(
   draft: any,
   contentLabel: string,
   formatInstructions: string,
-  topic: string,
+  verdict: GenericVerdict,
   facts: BusinessFacts | null | undefined,
   logContext?: { supabase: any; dealershipId: string },
   language: CopyLanguage = "hinglish"
 ): Promise<any | null> {
-  const story = storyForRetry(facts);
-  if (!story.length) return null;
+  // Nothing to retry TOWARD is not a failure to report — it is a
+  // business that has recorded nothing yet, and a second model call
+  // would produce the same words. Same early return storyForRetry gave.
+  const brief = retryBrief(verdict, facts);
+  if (!brief.trim()) return null;
   try {
     const r = await callClaude({
       model: getModel("standard"),
       max_tokens: 2000,
       messages: [{
         role: "user",
-        content: `This draft ${contentLabel} uses nothing that belongs to this business. Any competitor could publish it as-is.
+        content: `This draft ${contentLabel} could have been published by any business in the same line of work. Fix that, without inventing anything.
 
-The owner's own story — use ONE of these, whichever fits the topic "${topic}":
-${story.map((s) => `- ${s}`).join("\n")}
+${brief}
 
-Rewrite the draft so one of those details is IN it:
+Rewrite the draft:
 - Keep the same JSON shape and the same length. This is a rewrite, not an expansion — if the detail needs room, cut a generic line to make it.
 - ${languageRule(language)}
 - Compress the detail into a phrase where the piece is short. A whole sentence about it is only for a piece that has room.
-- Use the detail as material, not a quote: at most a few words in the owner's own phrasing.
-- Never invent anything that isn't in that story, and don't add a claim, number or offer.
+- Write about the customer and the product. Do NOT reach for the owner's personal history unless this piece is actually about it.
+- Never invent anything: no claim, no number, no offer, no testimonial that is not listed above.
 - Keep the format's requirements: ${formatInstructions}
 
 Draft JSON:
@@ -290,7 +339,7 @@ ${JSON.stringify(draft).slice(0, 6000)}
 
 Return the edited JSON only — same shape, no markdown, no commentary.`,
       }],
-    }, { operation: "content_story_retry", logContext });
+    }, { operation: "content_specificity_retry", logContext });
     if (!r.ok) return null;
     // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
     // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
@@ -307,7 +356,7 @@ Return the edited JSON only — same shape, no markdown, no commentary.`,
     const sameShape = Object.keys(draft ?? {}).every((k) => k.startsWith("_") || k in retried);
     return sameShape ? retried : null;
   } catch (err: any) {
-    console.error("[content-marketing-agent] story retry failed:", err.message);
+    console.error("[content-marketing-agent] specificity retry failed:", err.message);
     return null;
   }
 }

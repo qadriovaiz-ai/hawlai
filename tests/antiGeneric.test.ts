@@ -18,6 +18,7 @@ import {
   isGeneric,
   genericNote,
   retryBrief,
+  hasAnythingRecorded,
 } from "@/lib/content/antiGeneric";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
@@ -175,7 +176,7 @@ describe("the verdict", () => {
     const v = isGeneric({ text: "Beautiful scents for a calmer home." }, facts(), "english");
     expect(v.generic).toBe(true);
     expect(v.opener).toBeNull();
-    expect(v.missing).toBe("the product's name or price");
+    expect(v.missing).toBe("the product's name, or what makes it yours");
   });
 
   it("honest specific copy passes", () => {
@@ -204,8 +205,8 @@ describe("the verdict", () => {
 
 describe("what the owner is told", () => {
   it("THE NOTE NAMES THE FIX, not the fault", () => {
-    const note = genericNote({ missing: "the product's name or price" });
-    expect(note).toMatch(/Add the product's name or price/);
+    const note = genericNote({ missing: "the product's name, or what makes it yours" });
+    expect(note).toMatch(/Add the product's name, or what makes it yours/);
     expect(note).toMatch(/any business in your line of work/);
   });
 
@@ -224,7 +225,7 @@ describe("what the owner is told", () => {
   it("only ONE thing is asked for, and only something this business could supply", () => {
     // A list of five is a lecture; asking a business with no products
     // for a price is noise.
-    expect(missingSpecific(facts())).toBe("the product's name or price");
+    expect(missingSpecific(facts())).toBe("the product's name, or what makes it yours");
     const noProducts = facts({ products: [] });
     expect(missingSpecific(noProducts)).toBe("a detail from your own notes");
     const nothing = facts({ products: [], ownerFacts: [] });
@@ -245,14 +246,14 @@ describe("the retry brief", () => {
   it("HANDS IT THE RECORD RATHER THAN ASKING IT TO INVENT", () => {
     // The whole failure mode this product has is a model filling a gap.
     // The retry gets the catalogue, and is told not to add to it.
-    const brief = retryBrief({ generic: true, opener: null, missing: "the product's name or price" }, facts());
+    const brief = retryBrief({ generic: true, opener: null, missing: "the product's name, or what makes it yours" }, facts());
     expect(brief).toMatch(/Lavender jar \(₹450\)/);
     expect(brief).toMatch(/Lucknow/);
     expect(brief).toMatch(/not a number you invent/);
   });
 
   it("asks for ONE thing, not everything on record", () => {
-    const brief = retryBrief({ generic: true, opener: null, missing: "the product's name or price" }, facts());
+    const brief = retryBrief({ generic: true, opener: null, missing: "the product's name, or what makes it yours" }, facts());
     expect(brief).toMatch(/Put ONE thing/);
   });
 
@@ -260,5 +261,119 @@ describe("the retry brief", () => {
     const brief = retryBrief({ generic: true, opener: null, missing: "a detail from your own notes" }, facts({ products: [], city: null }));
     expect(brief).not.toMatch(/On record:/);
     expect(brief).not.toMatch(/Where:/);
+  });
+});
+
+describe("THE CAPTION THAT STARTED THIS MUST BE CAUGHT", () => {
+  // My first version of the specific rule counted a real PRICE as
+  // sufficient — and storeEcho's own header had already written down why
+  // that is wrong, about this exact caption:
+  //
+  //   "The price (₹800) and the duration (90 minutes) come from the
+  //    catalogue — every competitor has those too, and counting them
+  //    would have passed the very caption that started this."
+  //
+  // It would have passed it. These are the fixtures that stop that
+  // happening again.
+  const workshopFacts = facts({
+    businessName: "Test Business",
+    category: "home fragrance",
+    city: "Shahjahanpur",
+    products: [{ name: "Candle Making Workshop", price: 800, description: "90 minutes" }] as any,
+    offers: [],
+    ownerFacts: [
+      { category: "business_story", title: "Curing", content: "Har candle 24 ghante cure hoti hai — ek poora batch kharab karke seekha." },
+    ] as any,
+  });
+
+  const REAL_GENERIC = {
+    text: "Wax pighlaao, fragrance chunno, apne haathon se banao. 90 minutes. Ek candle jo tumhari apni hai. Workshop ₹800 mein — link in bio se book karo.",
+  };
+
+  it("A REAL PRICE DOES NOT RESCUE IT", () => {
+    const v = isGeneric(REAL_GENERIC, workshopFacts, "hinglish");
+    // The price IS found — it is real.
+    expect(specificsIn(REAL_GENERIC, workshopFacts)).toContain("a real price");
+    // And it is still generic, because a price is table stakes.
+    expect(v.generic).toBe(true);
+    expect(v.missing).toBeTruthy();
+  });
+
+  it("the compressed version, with a recorded detail, passes", () => {
+    const specific = {
+      text: "Pighlaao, khushboo chuno, dhaalo — 90 minute mein apni pehli candle. Temperature ka sabr: ek poora batch kharab karke seekha. ₹800, link in bio.",
+    };
+    expect(isGeneric(specific, workshopFacts, "hinglish").generic).toBe(false);
+  });
+
+  it("A DURATION DOES NOT RESCUE IT EITHER", () => {
+    // "90 minutes" is in the product description, so a naive
+    // catalogue-word check would count it.
+    const v = isGeneric({ text: "90 minutes aur ek candle tumhari." }, workshopFacts, "hinglish");
+    expect(v.generic).toBe(true);
+  });
+
+  it("the full product NAME does rescue it — that is this business's", () => {
+    const v = isGeneric({ text: "Candle Making Workshop is open this Saturday." }, workshopFacts, "english");
+    expect(v.generic).toBe(false);
+  });
+
+  it("and the city does", () => {
+    expect(isGeneric({ text: "Shahjahanpur mein banti hai." }, workshopFacts, "hinglish").generic).toBe(false);
+  });
+});
+
+describe("a business that has recorded nothing cannot be faulted", () => {
+  // Mirrors usesOwnStory, whose comment says it best: "a business that
+  // hasn't written one can't be failed for missing it." An existing
+  // integration test caught this when the gate was inverted — such a
+  // business was being marked generic and told to add something it had
+  // no way to add, and the retry would have run with nothing to hand the
+  // model but an instruction to be specific.
+  const empty = facts({ products: [], offers: [], city: null, ownerFacts: [] });
+
+  it("HAS NOTHING RECORDED is detected", () => {
+    expect(hasAnythingRecorded(empty)).toBe(false);
+    expect(hasAnythingRecorded(facts())).toBe(true);
+    expect(hasAnythingRecorded(null)).toBe(false);
+  });
+
+  it("one product is enough to count as recorded", () => {
+    expect(hasAnythingRecorded(facts({ offers: [], city: null, ownerFacts: [] }))).toBe(true);
+  });
+
+  it("a city alone counts", () => {
+    expect(hasAnythingRecorded(facts({ products: [], offers: [], ownerFacts: [] }))).toBe(true);
+  });
+
+  it("an EMPTY owner note does not count as recorded", () => {
+    // A blank row saved by a half-finished interview is not a fact.
+    const blank = facts({ products: [], offers: [], city: null, ownerFacts: [{ category: "business_story", title: "x", content: "   " }] as any });
+    expect(hasAnythingRecorded(blank)).toBe(false);
+  });
+
+  it("IT IS NOT MARKED GENERIC, and is asked for nothing", () => {
+    const v = isGeneric({ text: "Beautiful scents for a calmer home." }, empty, "english");
+    expect(v.generic).toBe(false);
+    expect(v.missing).toBeNull();
+  });
+
+  it("but a worn opener is STILL caught — that needs no records", () => {
+    const v = isGeneric({ text: "Elevate your evenings." }, empty, "english");
+    expect(v.generic).toBe(true);
+    expect(v.opener).toBe("Elevate your…");
+  });
+
+  it("THE RETRY BRIEF IS EMPTY, so no model call is made with nothing to offer", () => {
+    // Defence in depth: even if the verdict said generic, a brief with
+    // nothing concrete in it makes the caller skip the retry. A call that
+    // can only make the model invent is worse than no call.
+    const brief = retryBrief({ generic: true, opener: null, missing: "anything at all" }, empty);
+    expect(brief.trim()).toBe("");
+  });
+
+  it("and with an opener it is NOT empty, because that is fixable without records", () => {
+    const brief = retryBrief({ generic: true, opener: "Elevate your…", missing: null }, empty);
+    expect(brief).toMatch(/Do NOT open with/);
   });
 });

@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 
 import { storyVocabulary, usesOwnStory, textOfOutput, storyForRetry, GENERIC_NOTE } from "@/lib/content/storyEcho";
+import { isGeneric } from "@/lib/content/antiGeneric";
 import { craftSection, generateContent } from "@/lib/agents/contentMarketingAgent";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 
@@ -167,56 +168,124 @@ afterEach(() => {
 });
 
 describe("a generic draft is retried once, at the same length", () => {
-  const ask = (f = facts()) => generateContent("instagram_post", "Candle by Qaaf", "Home fragrance", "Candle Making Workshop ke liye ek chhota, punchy caption", null, undefined, undefined, f, "draft");
+  // THE INVERSION (2026-10-09). Every test in this block used to assert
+  // that a draft missing the owner's STORY was retried toward it. The
+  // mechanism asserted here is unchanged — one retry, the retry's answer
+  // kept even when it still fails, the owner told either way, and no
+  // retry for a business with nothing to retry toward. Only the TARGET
+  // moved, from the founder's backstory to a recorded product specific
+  // (docs/PRINCIPLES.md P1).
+  //
+  // The two captions the owner actually received stay as fixtures, and
+  // they are why this block is worth keeping: whatever the rule is,
+  // those two must be caught.
+  // `revise: true` added 2026-10-09. The specificity retry is gated
+  // behind it now, honouring the "auto-publish path stays single-shot"
+  // contract in contentQuality.test.ts. These tests are ABOUT the retry,
+  // so they ask on a reviewed path - which is the only path it runs on.
+  const ask = (f = facts()) => generateContent("instagram_post", "Candle by Qaaf", "Home fragrance", "Candle Making Workshop ke liye ek chhota, punchy caption", null, undefined, undefined, f, "draft", { revise: true });
 
-  it("the retry gets the owner's story and the format's rules — and its answer is kept", async () => {
-    anthropic(GENERIC, SPECIFIC);
+  it("the retry gets a recorded specific and the format's rules — and its answer is kept", async () => {
+    // BEFORE: asserted the prompt contained "uses nothing that belongs
+    // to this business" and a story answer ("poora batch kharab kiya
+    // tha").
+    // AFTER: the prompt names the business's own catalogue instead. The
+    // length and format-rule assertions are UNTOUCHED — they are what
+    // stop the retry becoming a fresh generation that drifts off topic.
+    // THREE replies, because the reviewed path is draft -> revise ->
+    // specificity retry. The revise pass hands back a still-generic
+    // caption so the retry is the thing under test.
+    anthropic(GENERIC, GENERIC, SPECIFIC);
     const r = await ask();
     expect(r.output.text).toBe(SPECIFIC.text);
     expect(r.output._storyNote).toBeUndefined();
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toContain("uses nothing that belongs to this business");
-    expect(prompts[1]).toContain("poora batch kharab kiya tha");
-    expect(prompts[1]).toContain("the same length");
-    expect(prompts[1]).toContain("under 150 words"); // the format's own rules
+    expect(prompts).toHaveLength(3);
+    const retry = prompts[2];
+    expect(retry).toContain("could have been published by any business");
+    expect(retry).toContain("Candle Making Workshop");
+    expect(retry).toContain("the same length");
+    expect(retry).toContain("under 150 words"); // the format's own rules
+    // AND THE NEW RULE, stated: the retry must not be told to reach for
+    // the owner's personal history.
+    expect(retry).toContain("Do NOT reach for the owner's personal history");
   });
 
-  it("a first draft that already uses the story is left alone — no second call", async () => {
-    anthropic(SPECIFIC);
+  it("a first draft that already carries a specific is left alone — no second call", async () => {
+    // BEFORE: "already uses the story". AFTER: already carries a
+    // recorded specific. Intent identical — one retry costs money, so
+    // do not retry what passed.
+    anthropic(SPECIFIC, SPECIFIC);
     const r = await ask();
     expect(r.output.text).toBe(SPECIFIC.text);
-    expect(prompts).toHaveLength(1);
+    // Two, not three: the revise pass runs (it is opt-in and asked for
+    // here), the specificity RETRY does not, because nothing was wrong.
+    expect(prompts).toHaveLength(2);
   });
 
   it("still generic after the retry: the owner is told, not quietly shipped", async () => {
-    anthropic(GENERIC, { text: "Wax melt karo, candle banao. ₹800. Link in bio." });
+    // BEFORE: expected the note to equal GENERIC_NOTE exactly.
+    // AFTER: stronger — the note must NAME something to add, and must
+    // not ask for the founder's story (P1).
+    const stillGeneric = { text: "Wax melt karo, candle banao. Link in bio." };
+    anthropic(GENERIC, GENERIC, stillGeneric);
     const r = await ask();
-    expect(r.output._storyNote).toBe(GENERIC_NOTE);
-    expect(prompts).toHaveLength(2);
+    // THE RETRY'S ANSWER IS KEPT EVEN THOUGH IT STILL FAILED. A
+    // mutation check found this unpinned: deleting the line that keeps
+    // it left the original draft in place and nothing noticed. The
+    // choice is deliberate - a second attempt is not worse than the
+    // first, and the owner is told either way - so it is asserted.
+    expect(r.output.text).toBe(stillGeneric.text);
+    expect(r.output._storyNote).toBeTruthy();
+    expect(r.output._storyNote).toMatch(/any business in your line of work/);
+    expect(r.output._storyNote).toMatch(/Add /);
+    expect(r.output._storyNote).not.toMatch(/story/i);
+    expect(prompts).toHaveLength(3);
   });
 
   it("the second caption the owner got is retried too, not passed as specific", async () => {
-    anthropic(GENERIC_TWO, SPECIFIC);
+    // Unchanged in substance. Both real captions must be caught by
+    // whatever the rule is, and this is the one that slipped through the
+    // FIRST version of the story check in September.
+    anthropic(GENERIC_TWO, GENERIC_TWO, SPECIFIC);
     const r = await ask();
-    expect(prompts).toHaveLength(2);
+    expect(prompts).toHaveLength(3);
     expect(r.output.text).toBe(SPECIFIC.text);
   });
 
-  it("a business with no story is never retried", async () => {
-    anthropic(GENERIC);
-    const r = await ask(facts({ ownerFacts: [] }));
-    expect(prompts).toHaveLength(1);
+  it("A REAL PRICE IN THE DRAFT IS NOT ENOUGH TO SKIP THE RETRY", () => {
+    // New, and it is the correction storyEcho's header had already
+    // written down: "the price (₹800) and the duration (90 minutes) come
+    // from the catalogue — every competitor has those too, and counting
+    // them would have passed the very caption that started this."
+    //
+    // GENERIC contains ₹800, this workshop's real price. My first
+    // version of the specific rule counted that as sufficient and would
+    // have passed this caption.
+    expect(GENERIC.text).toContain("₹800");
+    expect(isGeneric(GENERIC, facts(), "hinglish").generic).toBe(true);
+  });
+
+  it("a business with nothing recorded is never retried", async () => {
+    // BEFORE: "no story". AFTER: nothing recorded at all — no products
+    // and no notes, so there is nothing to retry toward and a second
+    // model call would produce the same words.
+    anthropic(GENERIC, GENERIC);
+    const r = await ask(facts({ ownerFacts: [], products: [], offers: [], city: null }));
+    // The revise pass still runs; the specificity retry does not, because
+    // there is nothing to retry toward.
+    expect(prompts).toHaveLength(2);
     expect(r.output._storyNote).toBeUndefined();
   });
 
   it("a retry that comes back the wrong shape is ignored, and the owner is told", async () => {
-    anthropic(GENERIC, { somethingElse: "not a caption" });
+    // Unchanged: a bad second call must not silently replace a good
+    // first one.
+    anthropic(GENERIC, GENERIC, { somethingElse: "not a caption" });
     const r = await ask();
     expect(r.output.text).toBe(GENERIC.text);
-    expect(r.output._storyNote).toBe(GENERIC_NOTE);
+    expect(r.output._storyNote).toBeTruthy();
   });
 });
-
 describe("chat asks the same way the page does", () => {
   it("the chat tool passes the last few pieces, so captions don't repeat each other", () => {
     const brain = readFileSync("src/lib/agents/masterBrainV2.ts", "utf8");
