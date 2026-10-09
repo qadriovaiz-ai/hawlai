@@ -138,6 +138,42 @@ If Hawlai loses, the report says Hawlai lost.
 
 ---
 
+## Known, logged, not yet fixed
+
+### Phase 5 — the strip takes the whole sentence
+
+The claims guard removes by **sentence**, so a true price in the same
+sentence as an unbacked claim goes with it. *"Pure cotton kurta fabric,
+₹480"* loses the ₹480 too.
+
+This is deliberate and it was the right first choice: rewriting a
+sentence around a deleted clause reads as a bug, and the owner cannot
+tell what changed. But it costs the owner true information, and it is
+the reason the third tier exists at all — a draft now keeps composition
+claims rather than deleting the sentence they sit in.
+
+Two ways out, neither chosen yet:
+
+1. **Claim-only strip.** Remove the offending phrase and repair the
+   sentence. Needs real clause awareness; a naive version produces
+   "Order via ." which this codebase has already shipped once
+   (`bioPhrase`, September 2026) and had to fix.
+2. **Ask the owner.** Show the sentence, the phrase in question, and
+   three buttons: it's true (record it), drop the phrase, drop the
+   sentence. More screen, no guessing, and it turns a deletion into a
+   fact the business keeps.
+
+**(2) is the better shape** — it matches how the site claims review
+already works (`reviewPage` offers Keep / Edit / Remove per row, and
+refuses Remove when the sentence says more than the flagged words). The
+work is extending that to generated copy rather than inventing a
+mechanism.
+
+Logged 2026-10-09, at Ovaiz's instruction, while enabling the widened
+`CLAIM_TERMS`.
+
+---
+
 ## Where this is linked from
 
 `CLAUDE.md` at the repository root points here first, so the next agent

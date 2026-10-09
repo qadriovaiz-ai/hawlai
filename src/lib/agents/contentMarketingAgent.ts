@@ -147,7 +147,7 @@ export async function generateContent(
      */
     keepLinks?: boolean;
   } = {}
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; revised?: boolean ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; revised?: boolean ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
 
@@ -281,7 +281,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     if (linkNote) output._claimsNote = [output._claimsNote, linkNote].filter(Boolean).join(" ");
     const bioNote = bioRuleNote(bio.fixed, bio.dropped);
     if (bioNote) output._claimsNote = [output._claimsNote, bioNote].filter(Boolean).join(" ");
-    return { output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, ...(revised ? { revised } : {}) };
+    return { output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, substantiation: guarded.substantiation, ...(revised ? { revised } : {}) };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;

@@ -102,20 +102,31 @@ describe("the proposed list itself", () => {
     }
   });
 
-  it("IS NOT ENABLED — claimCheck's own list is untouched", () => {
-    // The whole point of the script. If this ever fails, the dry run
-    // stopped being a dry run.
+  it("IS NOW ENABLED, and the script stays as the record of what was decided", () => {
+    // Flipped on 2026-10-09 after the dry run was read and approved.
+    // Until that moment this test asserted the OPPOSITE, and its failing
+    // is what proved the switch actually happened rather than being
+    // described in a commit message.
     //
-    // code() rather than a raw read, and the enforcement test caught me
-    // writing it the other way (rule 8 in CLAUDE.md). It matters here
-    // more than usual: claimCheck's comments DISCUSS these very terms —
-    // the allowlist note in multiTenantVocabulary mentions widening to
-    // ghee, silk and cotton — so a raw read would report the list as
-    // enabled on the strength of a comment saying it is not.
+    // code() rather than a raw read (rule 8), and it matters more here
+    // than usual: claimCheck's comments DISCUSS these very terms, so a
+    // raw read could report either state on the strength of prose.
     const src = code("src/lib/claims/claimCheck.ts");
-    const onlyProposed = ["pure ghee", "a2 milk", "handloom", "khadi", "gi tagged", "azo free"];
-    for (const term of onlyProposed) {
-      expect(src, `${term} appears in claimCheck but is still only proposed`).not.toContain(`"${term}"`);
+    for (const term of PROPOSED_CLAIM_TERMS) {
+      expect(src, `${term} was approved but is not in claimCheck`).toContain(`"${term}"`);
     }
+  });
+
+  it("EVERY ENABLED TERM IS SORTED INTO ONE OF THE TWO TIERS", () => {
+    // A composition claim a draft may keep, or a performance claim it
+    // must lose. A term in neither list would silently take the default,
+    // and the default is the lenient one — the wrong way to be wrong.
+    const src = code("src/lib/claims/claimCheck.ts");
+    const performanceBlock = src.slice(src.indexOf("const PERFORMANCE_CLAIMS"), src.indexOf("const CLAIM_SYNONYMS"));
+    const composition = PROPOSED_CLAIM_TERMS.filter((t: string) => !performanceBlock.includes(`"${t}"`));
+    // All 27 proposed terms are composition claims by design — none of
+    // them is about what the product DOES. If that ever stops being
+    // true, this test says so instead of letting it pass quietly.
+    expect(composition.length).toBe(PROPOSED_CLAIM_TERMS.length);
   });
 });

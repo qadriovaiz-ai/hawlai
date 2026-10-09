@@ -156,7 +156,11 @@ describe("low friction: only the offending sentence goes, the rest reads exactly
 
   it("clean copy comes back identical, with nothing removed", () => {
     const caption = "Light it, breathe out, stay a while. 🕯️ Shop the Lavender candle — ₹550.";
-    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [], linksFixed: [] });
+    // `substantiation` added 2026-10-09 — a third channel beside
+    // `removed` and `priceWarnings`, for a composition claim a draft
+    // keeps and flags. Kept as a full deep-equal rather than loosened to
+    // a partial match, so a FOURTH channel cannot appear here unnoticed.
+    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [], substantiation: [], linksFixed: [] });
   });
 
   it("works on every output shape: a hook that was only a claim is dropped, and so is a calendar day left with no caption", () => {

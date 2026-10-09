@@ -81,6 +81,8 @@ export type GateResult<T> = {
   /** Claims that may be true and could not be checked. Only ever set when facts are unavailable. */
   unverifiable: string[];
   priceWarnings: string[];
+  /** Kept in a draft but unbacked: the owner can make it true by recording it. */
+  substantiation: string[];
   linksFixed: string[];
   /** Backstory with no record behind it (src/lib/claims/narrativeProvenance.ts). */
   narrative: NarrativeFinding[];
@@ -120,6 +122,7 @@ export function guardOrMark<T extends object>(
       removed: r.removed,
       unverifiable: [],
       priceWarnings: r.priceWarnings,
+      substantiation: r.substantiation,
       linksFixed: r.linksFixed,
       narrative: n.findings,
       state: "FACTS_AVAILABLE",
@@ -186,6 +189,10 @@ export function guardOrMark<T extends object>(
     removed: uniqueRemoved,
     unverifiable: uniqueUnverifiable,
     priceWarnings: [],
+    // Nothing is "substantiable" with no records at all: stripUnverifiable
+    // is the fact-independent subset and it has no CLAIM_TERMS rule, so
+    // there is nothing to keep-and-flag here.
+    substantiation: [],
     linksFixed: [],
     narrative: narrativeChecked.findings,
     state: "FACTS_UNAVAILABLE",

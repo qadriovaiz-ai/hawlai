@@ -115,6 +115,29 @@ const CLAIM_TERMS = [
   "hand poured", "handmade", "hand made", "small batch",
   // Adjacent categories, so this generalises past candles.
   "bpa free", "food grade", "stainless steel", "solid wood", "pure cotton", "100% cotton", "gold plated", "sterling silver",
+  // ------------------------------------------------------------------
+  // ENABLED 2026-10-09 (phase 3, item 4.2), after the three-category dry
+  // run in scripts/claimTermsDryRun.mjs was read and approved.
+  //
+  // WHY. The allowlist entry in tests/multiTenantVocabulary.test.ts
+  // recorded the gap in its own words: "the list leans toward one
+  // category's materials because that is where the incidents happened,
+  // and widening it to ghee, silk and cotton is follow-up work, not a
+  // leak to strip." This is that follow-up work.
+  //
+  // Every term here is a COMPOSITION claim, so a draft keeps it with a
+  // note saying what to write down; published copy drops it. The ones a
+  // draft must still lose are in PERFORMANCE_CLAIMS above.
+  // ------------------------------------------------------------------
+  // Food and dairy.
+  "pure ghee", "desi ghee", "a2 milk", "cold pressed", "stone ground", "fssai",
+  "no preservatives", "preservative free", "farm fresh", "export quality",
+  // Textiles.
+  "pure silk", "100% silk", "handloom", "khadi", "colour fast", "color fast", "azo free",
+  // Cross-category marks and grades. "100%" bare is deliberate: it
+  // double-reports alongside "100% cotton", which the dry run showed and
+  // which is accepted — an absolute is a claim whatever follows it.
+  "100%", "a grade", "isi", "bis", "gi tagged", "iso certified",
 ];
 
 /**
@@ -130,6 +153,70 @@ const CLAIM_TERMS = [
  * natural" and "natural fragrance" are NOT in one group: a narrow claim
  * must never license a broader one.
  */
+/**
+ * Does this claim term actually appear, as a term rather than as letters
+ * inside another word?
+ *
+ * THE FALSE POSITIVE THAT FORCED THIS (2026-10-09). "isi" — the ISI mark
+ * — was matched by `text.includes("isi")`, which is true of "visitors",
+ * "vision", "decision", "precision" and "revision". The real CRO test
+ * caught it: a perfectly honest suggestion reading "13 visitors, 0%
+ * engagement" was refused as an unsubstantiated ISI certification claim.
+ * My own three-category dry run missed it entirely, because none of my
+ * invented fixture lines happened to contain a word like "visitors".
+ * "bis" (the BIS mark) carries the same risk with "bistro" or "Bisleri".
+ *
+ * So a term is bounded at whichever end is a word character. "100%"
+ * cannot take a boundary after the "%", and "pure cotton" is unaffected
+ * either way — the rule only bites on the short acronyms, which is
+ * exactly where it is needed.
+ */
+function termAppears(text: string, term: string): boolean {
+  // A BOUNDARY AT THE START, ALWAYS. That alone kills the family of
+  // false positives: "isi" inside "visitors", "vision", "decision",
+  // "precision"; "a grade" inside "mega grade". In every one of those
+  // the term sits MID-word, so requiring a word start is enough.
+  //
+  // AND AT THE END ONLY FOR SHORT SINGLE TOKENS. Closing the boundary on
+  // everything broke plurals: "small batch" stopped matching "small
+  // batches", and tests/siteClaimsReview.test.ts caught it on a real
+  // Terms page. Substring matching at the tail is what lets one recorded
+  // phrasing cover the forms the model actually writes. The only terms
+  // that need the tail closed are the two- to four-letter marks, where a
+  // word like "bistro" would otherwise match "bis".
+  const shortToken = !/\s/.test(term) && /^[a-z]{2,4}$/.test(term);
+  const open = /^[a-z0-9]/.test(term) ? "\\b" : "";
+  const close = shortToken ? "\\b" : "";
+  return new RegExp(`${open}${escapeRe(term)}${close}`, "i").test(text);
+}
+
+/**
+ * CLAIM_TERMS that a DRAFT must still lose, not merely flag.
+ *
+ * What the product DOES (burn, smoke, soot, toxicity), what it is
+ * medically or legally certified as, and anything a customer could be
+ * harmed by relying on. Everything else in CLAIM_TERMS is a composition
+ * claim and becomes draft-lenient — see findProblems for the reasoning
+ * and the incident behind it.
+ *
+ * Deliberately OVER-inclusive: a composition term wrongly listed here
+ * costs the owner one flagged sentence in a draft. A performance term
+ * wrongly left out costs a real customer a false expectation, published.
+ */
+const PERFORMANCE_CLAIMS = new Set([
+  // Burn and emissions — the 8 October caption's own words.
+  "clean burning", "burns clean", "clean burn", "soot free", "no soot", "without soot",
+  "no smoke", "smoke free", "smokeless", "without smoke", "doesn't smoke", "does not smoke",
+  // Safety and toxicity.
+  "non toxic", "toxin free", "chemical free", "lead free", "zinc free", "bpa free",
+  "phthalate free", "paraben free", "sulphate free", "sulfate free",
+  // Regulatory marks and awards: a claim to hold one is true or false,
+  // never a matter of the owner's own wording.
+  "certified", "award winning", "warranty", "food grade",
+  // Absolutes about content, which read as safety assurances.
+  "all natural", "100% natural", "chemical free", "cruelty free",
+]);
+
 const CLAIM_SYNONYMS: string[][] = [
   ["paraffin free", "no paraffin"],
   ["no synthetic fragrance", "synthetic fragrance free", "no fake fragrance"],
@@ -142,6 +229,16 @@ const CLAIM_SYNONYMS: string[][] = [
   ["soot free", "no soot", "without soot"],
   ["clean burning", "burns clean", "clean burn"],
   ["smoke free", "no smoke", "smokeless", "without smoke", "doesn't smoke", "does not smoke"],
+  // ENABLED 2026-10-09 with the terms above. One fact, two phrasings:
+  // the dry run's first version ignored these families and OVERSTATED
+  // the damage, reporting that a candle maker who writes "hand-poured"
+  // would lose "handmade".
+  ["pure ghee", "desi ghee"],
+  ["no preservatives", "preservative free"],
+  ["pure cotton", "100% cotton"],
+  ["pure silk", "100% silk"],
+  ["colour fast", "color fast"],
+  ["export quality", "export grade"],
 ];
 
 /**
@@ -379,7 +476,26 @@ function isRealAmount(amounts: Set<number>, v: number): boolean {
 }
 
 export type ClaimsMode = "publish" | "draft";
-type Problem = { reason: string; kind: "price" | "claim" };
+/**
+ * THREE TIERS, not two (2026-10-09).
+ *
+ * "price"  — the owner knows whether it is right, so a DRAFT keeps it
+ *            with a warning. Publishing removes it.
+ * "claim"  — removed in both modes. A fabricated review count, a
+ *            ranking, a star rating: Hawlai holds the data that would
+ *            settle these, and it says they are false. Nothing the owner
+ *            can tell us makes "500 reviews" true when there are three
+ *            orders on record.
+ * "substantiation" — NEW, and it behaves like "price" for the same
+ *            reason. "pure cotton", "organic", "FSSAI" are facts only
+ *            the OWNER holds; Hawlai has no data that contradicts them,
+ *            it simply has none that supports them. Deleting such a
+ *            sentence from a draft tells a truthful owner their own
+ *            product is a lie. So a draft keeps it, names it, and says
+ *            what to write down; the publish path still removes it,
+ *            because nobody is reading there.
+ */
+type Problem = { reason: string; kind: "price" | "claim" | "substantiation" };
 
 // A link: with a scheme, starting www., or a bare domain on a common TLD.
 // Never the domain half of an email address — "someone@gmail.com" is an
@@ -496,6 +612,10 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
     push: (...rs: string[]) => {
       for (const reason of rs) problems.push({ reason, kind: "claim" });
     },
+    /** A claim only the owner can substantiate — see the Problem type. */
+    substantiation: (...rs: string[]) => {
+      for (const reason of rs) problems.push({ reason, kind: "substantiation" });
+    },
   };
   const known = knownText(f);
   const t = normalise(text);
@@ -563,14 +683,33 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
     reasons.push("a first-order offer — the store has no active discount codes");
   }
   for (const term of CLAIM_TERMS) {
-    if (!t.includes(term)) continue;
+    if (!termAppears(t, term)) continue;
     // Said in ANY of its phrasings. An owner who records "paraffin-free"
     // has said "no paraffin": they are one fact, and asking them to
     // attest both spellings of it would be the software failing to
     // understand its own question. Only genuinely equivalent wordings
     // are grouped — a narrow claim never licenses a broader one.
     if (saidAnyOf(known, term)) continue;
-    reasons.push(`"${term}" — the business doesn't claim this anywhere`);
+    const message = `"${term}" — nothing on record backs it. If it's true, write it once ("${term}") in Business Knowledge or a product description and Hawlai can use it everywhere.`;
+    // WHICH TERMS MAY SURVIVE A DRAFT, and the line is drawn by what the
+    // claim is ABOUT rather than by how likely it is to be true.
+    //
+    // A claim about what the product IS — pure cotton, pure ghee,
+    // handloom, soy wax — is a fact only the OWNER holds. Hawlai has
+    // nothing that contradicts it, just nothing that supports it, and
+    // deleting it from a draft tells a truthful owner their own product
+    // is a lie.
+    //
+    // A claim about what the product DOES, or is certified as, is
+    // different: a customer will test it. "The candle burns clean, with
+    // no soot collecting at the rim" went out on 8 October 2026 and is
+    // the reason this directory exists. Those stay strict in BOTH modes,
+    // because a draft-lenient "no soot" is exactly the hole that caption
+    // came through — tests/captionClaims.test.ts proves it, on draft
+    // mode, under the name "THE WHOLE THING IS CAUGHT ON THE PATH THAT
+    // PUBLISHED IT".
+    if (PERFORMANCE_CLAIMS.has(term)) reasons.push(message);
+    else reasons.substantiation(message);
   }
 
   // Rankings, superlatives, comparisons, guarantees and urgency
@@ -701,23 +840,39 @@ export function stripUnsupported(
   text: string,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { text: string; removed: string[]; priceWarnings: string[]; linksFixed: string[] } {
+): { text: string; removed: string[]; priceWarnings: string[]; substantiation: string[]; linksFixed: string[] } {
   const repair = repairBookingLinks(text, f);
   text = repair.text;
-  if (findProblems(text, f).length === 0) return { text, removed: [], priceWarnings: [], linksFixed: repair.fixed };
+  if (findProblems(text, f).length === 0) return { text, removed: [], priceWarnings: [], substantiation: [], linksFixed: repair.fixed };
   const kept: string[] = [];
   const removed: string[] = [];
   const priceWarnings: string[] = [];
+  const substantiation: string[] = [];
   for (const piece of pieces(text)) {
     const problems = findProblems(piece, f);
+    // A SENTENCE IS JUDGED BY ITS WORST PROBLEM. Existing precedent,
+    // pinned by "a sentence with a price AND another claim is removed
+    // even in a draft": leniency applies only when EVERY problem in the
+    // sentence is a lenient kind. A true "pure cotton" beside a
+    // fabricated review count does not rescue the count.
+    const lenient = mode === "draft" && problems.every((p) => p.kind === "price" || p.kind === "substantiation");
     if (!problems.length) kept.push(piece);
-    else if (mode === "draft" && problems.every((p) => p.kind === "price")) {
+    else if (lenient) {
       kept.push(piece);
-      priceWarnings.push(...problems.map((p) => p.reason));
+      for (const problem of problems) {
+        if (problem.kind === "price") priceWarnings.push(problem.reason);
+        else substantiation.push(problem.reason);
+      }
     } else removed.push(...problems.map((p) => p.reason));
   }
   const cleaned = kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: cleaned, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), linksFixed: repair.fixed };
+  return {
+    text: cleaned,
+    removed: Array.from(new Set(removed)),
+    priceWarnings: Array.from(new Set(priceWarnings)),
+    substantiation: Array.from(new Set(substantiation)),
+    linksFixed: repair.fixed,
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -823,9 +978,10 @@ export function stripUnverifiable(text: string): { text: string; removed: string
  * sequence). An array item whose main text is removed entirely is
  * dropped; keys starting with "_" are metadata and left alone.
  */
-export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[]; linksFixed: string[] } {
+export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[]; substantiation: string[]; linksFixed: string[] } {
   const removed: string[] = [];
   const priceWarnings: string[] = [];
+  const substantiation: string[] = [];
   const linksFixed: string[] = [];
   const emptied = (before: any, after: any) => typeof before === "string" && before.trim() !== "" && String(after ?? "").trim() === "";
 
@@ -834,6 +990,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "
       const r = stripUnsupported(v, f, mode);
       removed.push(...r.removed);
       priceWarnings.push(...r.priceWarnings);
+      substantiation.push(...r.substantiation);
       linksFixed.push(...r.linksFixed);
       return r.text;
     }
@@ -859,7 +1016,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "
   };
 
   const out = walk(output);
-  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), linksFixed: Array.from(new Set(linksFixed)) };
+  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), substantiation: Array.from(new Set(substantiation)), linksFixed: Array.from(new Set(linksFixed)) };
 }
 
 /** What the owner is told — said plainly, never silently hidden. */
@@ -876,6 +1033,20 @@ export function linkFixedNote(fixed: string[], booking: string | null): string |
 }
 
 /** What the owner is told about prices left in a draft. */
+/**
+ * What was KEPT but cannot be backed, and what to write so it stays.
+ *
+ * Three things, because a flag with no way forward reads as a bug: what
+ * is unbacked, why it was left in, and the exact words to record. The
+ * reason strings already carry the phrase to write (findProblems builds
+ * them that way), so this frames rather than repeats.
+ */
+export function substantiationNote(warnings: string[]): string | null {
+  if (warnings.length === 0) return null;
+  const n = warnings.length;
+  return `${n === 1 ? "One claim here isn't" : `${n} claims here aren't`} on your record: ${warnings.slice(0, 2).join(" ")}${n > 2 ? " …" : ""} ${n === 1 ? "It was" : "They were"} kept because you're reviewing this draft — published copy drops ${n === 1 ? "it" : "them"} instead.`;
+}
+
 export function priceWarningNote(warnings: string[]): string | null {
   if (warnings.length === 0) return null;
   const n = warnings.length;
@@ -887,9 +1058,9 @@ export function guardGenerated<T extends object>(
   output: T,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[]; linksFixed: string[] } {
+): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[]; substantiation: string[]; linksFixed: string[] } {
   const r = guardOutput(output, f, mode);
   const booking = f.links?.booking ?? f.products.find((p) => p.bookingUrl)?.bookingUrl ?? null;
-  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
-  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings, linksFixed: r.linksFixed };
+  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), substantiationNote(r.substantiation), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
+  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings, substantiation: r.substantiation, linksFixed: r.linksFixed };
 }
