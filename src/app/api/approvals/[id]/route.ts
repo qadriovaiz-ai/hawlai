@@ -292,6 +292,17 @@ export async function PATCH(
       }
     }
 
+    if (approval?.action_type === "publish_site") {
+      // G-3 step 2b. The flag is flipped by
+      // src/lib/website/setSitePublished.ts, so the placeholder check
+      // runs HERE too - a page that fell back to placeholder content
+      // between the card being made and this press still stops the
+      // publish. That re-read at the press is the point of the record.
+      const { setSitePublished } = await import("@/lib/website/setSitePublished");
+      const done = await setSitePublished(service, approval.dealership_id, true);
+      if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status });
+    }
+
     if (approval?.action_type === "generate_graphic") {
       // G-3 step 1b. The work is in src/lib/graphicDesign/generateDesign.ts
       // so it runs HERE rather than by fetching this app over HTTP - a

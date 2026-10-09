@@ -206,9 +206,32 @@ afterEach(() => {
 });
 
 describe("which generated things get a publish button", () => {
-  it("a website draft does — and it publishes through the Website Builder's own endpoint", () => {
+  it("A WEBSITE DRAFT GETS AN APPROVAL RECORD, not a browser PATCH", () => {
+    // G-3 step 2b (2026-10-09). The card used to carry a PATCH to
+    // /api/website-builder/publish, which made the decision the
+    // BROWSER's: the sentence warning that the ENTIRE site goes public
+    // was a client string, and a request with the same body skipped it.
+    //
+    // The intent of this test is unchanged - a draft gets a way to go
+    // live from the chat - and the guarantee is stronger: the words are
+    // on the server, and the only path to publishing is the approvals
+    // PATCH the server authorises.
+    const artifact = extractArtifact("build_website", {}, {
+      note: "Built 5 pages as a draft",
+      approvalId: "appr-9",
+      confirm: "This publishes your ENTIRE live site — every page, not just this one.",
+    })!;
+    expect(artifact.publish).toBeUndefined();
+    expect(artifact.approval?.id).toBe("appr-9");
+    expect(artifact.confirm).toMatch(/ENTIRE live site/);
+  });
+
+  it("and with no approval row there is NO button at all", () => {
+    // Better than a button whose authority nobody recorded. The owner
+    // publishes from Website Builder, which is where they always could.
     const artifact = extractArtifact("build_website", {}, { note: "Built 5 pages as a draft" })!;
-    expect(artifact.publish).toMatchObject({ target: "website", endpoint: "/api/website-builder/publish" });
+    expect(artifact.publish).toBeUndefined();
+    expect(artifact.approval).toBeUndefined();
   });
 
   it("an Instagram caption does, carrying the caption and the saved draft id", () => {

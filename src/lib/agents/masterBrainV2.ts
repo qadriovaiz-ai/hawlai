@@ -1009,6 +1009,36 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         };
         const websiteBrandVoiceCheck = validateBrandVoiceCompliance(flattenResultText(generatedPages), resolvedBrandVoice);
         if (!websiteBrandVoiceCheck.compliant) websiteResult._brandVoiceCheck = websiteBrandVoiceCheck;
+
+        // G-3 STEP 2b. The card used to carry a PATCH to
+        // /api/website-builder/publish for the browser to send, so the
+        // sentence warning that the ENTIRE site goes public was a client
+        // string and a request with the same body skipped it.
+        //
+        // Only offered for a site that is NOT already live: approving
+        // "publish" for something already published is a button that
+        // does nothing, and the note above already tells the owner their
+        // changes went out directly.
+        if (!saveResult.published) {
+          const { requestApproval } = await import("../chat/requestApproval");
+          const confirmText =
+            "This publishes your ENTIRE live site — every page, not just this one — and anyone with the link can see it straight away. You can unpublish again from Website Builder.";
+          const asked = await requestApproval(supabase, ctx.id, {
+            actionType: "publish_site",
+            details: { slug: saveResult.slug, pages: generatedPages.map((pg) => pg.title), confirm: confirmText },
+            requestedBy: "website_agent",
+            confirm: confirmText,
+          });
+          if (!("error" in asked)) {
+            websiteResult.approvalId = asked.approvalId;
+            websiteResult.confirm = asked.confirm;
+          }
+          // A failed row is NOT fatal here, unlike the image card: the
+          // website draft itself was built and saved, and losing it
+          // because the approval insert failed would throw away real
+          // work. The owner keeps the draft and publishes from Website
+          // Builder, which is where they always could.
+        }
         return websiteResult;
       } catch (err: any) {
         return { error: err.message };
@@ -1908,14 +1938,19 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // yes. Its only previous safeguard was a line in the system
       // prompt asking the model not to do it unprompted.
       const { requestApproval } = await import("../chat/requestApproval");
+      const toggleConfirm = `This switches on an automation that ${risk.what}. Nobody reviews what it sends. You can switch it off again any time.`;
       return await requestApproval(supabase, ctx.id, {
         actionType: "set_automation_toggle",
         requestedBy: "master_chat:set_automation_toggle",
         // This toggle's own level, not the action's generic one:
         // auto-calling every new lead is not a welcome email.
         risk: risk.risk,
-        details: { toggle: input.toggle, field, enabled: true },
-        confirm: `This switches on an automation that ${risk.what}. Nobody reviews what it sends. You can switch it off again any time.`,
+        // THE AGREED WORDS ON THE ROW, not only on the screen. An
+        // invariant test found this missing on all four Phase 2B
+        // actions: the card showed a sentence nothing recorded, so
+        // "what did it say" was answerable only from a client string.
+        details: { toggle: input.toggle, field, enabled: true, confirm: toggleConfirm },
+        confirm: toggleConfirm,
       });
     }
     case "propose_price_change": {
@@ -2673,11 +2708,12 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // itself waits for the owner.
         const title = input.title || video.prompt.slice(0, 90);
         const { requestApproval } = await import("../chat/requestApproval");
+        const videoConfirm = `This publishes the video publicly to your YouTube channel as "${title}". Anyone with the link can watch it.`;
         return await requestApproval(supabase, ctx.id, {
           actionType: "publish_video",
           requestedBy: "master_chat:publish_to_youtube",
-          details: { video_id: video.id, title, description: video.prompt },
-          confirm: `This publishes the video publicly to your YouTube channel as "${title}". Anyone with the link can watch it.`,
+          details: { video_id: video.id, title, description: video.prompt, confirm: videoConfirm },
+          confirm: videoConfirm,
         });
       } catch (err: any) {
         return { error: err.message };
@@ -2865,11 +2901,12 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       // number on file, not opted out); none of them was the owner
       // saying yes to this particular call.
       const { requestApproval } = await import("../chat/requestApproval");
+      const callConfirm = `This places a real phone call to ${lead.name} now. It can't be unplaced.`;
       return await requestApproval(supabase, ctx.id, {
         actionType: "place_outbound_call",
         requestedBy: "master_chat:trigger_call",
-        details: { lead_id: lead.id, lead_name: lead.name },
-        confirm: `This places a real phone call to ${lead.name} now. It can't be unplaced.`,
+        details: { lead_id: lead.id, lead_name: lead.name, confirm: callConfirm },
+        confirm: callConfirm,
       });
     }
     case "export_leads": {
@@ -3281,6 +3318,7 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       // requiresApproval: true since migration 170's work; the chat
       // simply never asked it.
       const { requestApproval } = await import("../chat/requestApproval");
+      const codeConfirm = `This creates discount code ${code} and customers can use it at checkout straight away. Money off every order that uses it.`;
       return await requestApproval(supabase, ctx.id, {
         actionType: "create_discount_code",
         requestedBy: "master_chat:create_discount_code",
@@ -3289,8 +3327,9 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
           discount_type: input.discountType,
           value: input.value,
           min_order_value: input.minOrderValue ?? null,
+          confirm: codeConfirm,
         },
-        confirm: `This creates discount code ${code} and customers can use it at checkout straight away. Money off every order that uses it.`,
+        confirm: codeConfirm,
       });
     }
     case "get_report_links": {
@@ -3805,8 +3844,22 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return result.imageUrl ? { kind: "visual", type: "image", label: "Generated Image", url: result.imageUrl, departmentHref } : null;
     case "build_website":
       // Built as a draft; publishing is the owner's call, made here
-      // rather than on another page.
-      return { kind: "visual", type: "website", label: "Website Draft", url: departmentHref, summary: result.note, departmentHref, publish: websitePublishAction() };
+      // rather than on another page — but recorded server-side now
+      // (G-3 step 2b) instead of handed to the browser as a PATCH.
+      return {
+        kind: "visual",
+        type: "website",
+        label: "Website Draft",
+        url: departmentHref,
+        summary: result.note,
+        departmentHref,
+        ...(result.approvalId
+          ? { approval: { id: result.approvalId }, confirm: result.confirm }
+          : // No row, so no button. The owner publishes from Website
+            // Builder, which is where they always could — better than a
+            // button whose authority nobody recorded.
+            {}),
+      };
     case "generate_3d_scene":
       return result.sceneId ? { kind: "visual", type: "3d_scene", label: "3D Scene", url: departmentHref, departmentHref } : null;
     case "create_product_ad":

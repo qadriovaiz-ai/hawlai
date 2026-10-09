@@ -111,6 +111,16 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   update_product_name: { actionType: "edit", riskLevel: "medium", description: "Change a product's public name in the merchant's store", requiresApproval: true },
   update_product_description: { actionType: "edit", riskLevel: "medium", description: "Change a product's public description in the merchant's store", requiresApproval: true },
   publish_post: { actionType: "publish", riskLevel: "high", description: "Publish a post or page to the merchant's live site", requiresApproval: true },
+  // G-3 step 2. There is no per-page publish: websites.published is ONE
+  // flag for the whole site, so approving this makes every page public
+  // at once. The chat card used to POST the flag straight from the
+  // browser.
+  //
+  // "high" and not "critical" because it is fully reversible with the
+  // same flag, from Website Builder - no notification fires and no third
+  // party is told. Taking it DOWN is deliberately not an action here at
+  // all: P4 says the safe direction is never gated.
+  publish_site: { actionType: "publish", riskLevel: "high", description: "Make the merchant's ENTIRE site public - every page at once", requiresApproval: true },
   update_post: { actionType: "edit", riskLevel: "medium", description: "Change a post or page already live on the merchant's site", requiresApproval: true },
   // Creates a campaign, ad set and ad on Meta, all PAUSED. Spends
   // nothing by itself -- activation is a separate, separately-gated
