@@ -27,8 +27,30 @@ import { describeShipping, knownText, normalise, physicalProducts, serviceItems,
 import { computeShippingAmount } from "@/lib/shipping";
 
 const NOUNS = "homes|customers|families|buyers|people|clients|orders|reviews|ratings|shoppers|users|households|students|patients|members|subscribers";
+// THE MODIFIER BETWEEN THE NUMBER AND THE NOUN (2026-10-09).
+//
+// "We have over 500 five-star reviews" was caught by NOTHING — not with
+// facts, not without — while "500 reviews" and "1,000+ happy reviews"
+// were both refused. `reviews` is in NOUNS and the bare form worked; the
+// hole was this group. It was a fixed allowlist of six phrasings, and it
+// is optional-but-ANCHORED, so ANY unlisted adjective between the number
+// and the noun broke the whole match. "five-star" spelled out,
+// "genuine", "glowing" — all invisible. A fake review count is social
+// proof a stranger acts on.
+//
+// WHY NOT `(?:[a-z-]+\s+){0,2}`, WHICH UNITS_SOLD BELOW DOES USE.
+// Arbitrary words would make "Flat 500 off on orders above 2000" match
+// as a claim of 500 orders — measured, not guessed: that line is clean
+// today and the money rules already read it correctly. A second rule
+// inventing a count from honest discount copy is a false positive on the
+// commonest sentence in Indian retail. So this is a FAMILY of praise
+// words, allowed to repeat up to twice ("500 genuine five-star
+// reviews"), rather than any word at all.
+const PRAISE = "happy|satisfied|loyal|delighted|verified|genuine|glowing|real|trusted|repeat|returning|positive|rave|authentic|certified";
+/** Star ratings, in digits and spelled out, hyphenated or spaced. */
+const STARS = "(?:5|4|five|four)[- ]?star";
 const SOCIAL_PROOF = new RegExp(
-  `(\\d[\\d,]*(?:\\.\\d+)?)\\s*(k|lakhs?|lacs?)?\\s*\\+?\\s*(?:happy\\s+|satisfied\\s+|loyal\\s+|delighted\\s+|verified\\s+|5[- ]star\\s+)?(${NOUNS})\\b`,
+  `(\\d[\\d,]*(?:\\.\\d+)?)\\s*(k|lakhs?|lacs?)?\\s*\\+?\\s*(?:(?:${PRAISE}|${STARS})\\s+){0,2}(${NOUNS})\\b`,
   "gi"
 );
 const VAGUE_CROWD = new RegExp(`\\b(hundreds|thousands|lakhs|millions)\\s+of\\s+(?:happy\\s+|satisfied\\s+|loyal\\s+)?(?:${NOUNS})\\b`, "gi");
