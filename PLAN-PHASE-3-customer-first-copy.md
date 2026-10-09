@@ -123,22 +123,131 @@ Grouped in `CLAIM_SYNONYMS` where equivalent, so recording one phrasing
 licenses its forms.
 
 **Risk:** every addition makes the guard stricter and may strip copy that
-is currently fine. Mitigation: run `scripts/materialClaimsDryRun.mjs`
-(it exists for exactly this) against the current businesses **before**
-enabling, and show you what would be stripped. That script's own header
-says the proposed terms are not enabled until approved — same discipline.
+is currently fine.
 
-### 4.3 `src/lib/content/antiGeneric.ts` — NEW (~90 lines)
-Two enforced rules:
-- **Banned universal openers**: `Struggling with…`, `Are you tired of…`,
-  `Look no further`, `In today's fast-paced…`, `Elevate your…`,
-  `Unlock the…`. Detected on the first sentence; the piece is retried
-  once with the opener named, then flagged.
-- **At least one recorded specific**: the piece must contain a product
-  name, a price, an offer, a place, an occasion or an owner-recorded
-  detail. Zero specifics → retry once → `_genericNote`.
+**GATE (your correction, accepted):** `CLAIM_TERMS` is **not touched
+until the dry-run output is in front of you.** `scripts/materialClaimsDryRun.mjs`
+exists for exactly this and its own header says the proposed terms stay
+off until approved — so 4.2 inherits that discipline rather than
+quietly skipping it.
 
-Reuses the retry shape `retryWithStory` already uses.
+The dry run will cover **three businesses in three categories**:
+`candle_by_qaaf`, plus one food/dairy fixture (`pure ghee`, `FSSAI`,
+`A grade`) and one textile fixture (`pure silk`, `pure cotton`,
+`export quality`) — because a claim list that only generalises past
+candles on paper has not been shown to generalise.
+
+**One limitation stated up front:** I cannot read the live database. The
+`candle_by_qaaf` known-text fixture is **reconstructed from the repo's
+own test fixtures and the recorded live captions**, not pulled from
+production. That makes the result indicative, not a production
+measurement, and the report will say so in those words. If you want a
+real production run, the SQL that produces `candidates.json` is in the
+report that accompanies the script and you would need to run it.
+
+4.2 therefore moves **out of step 1** and becomes its own gated step
+after you have read the output. The rest of step 1 (4.1 provenance) does
+not depend on it.
+
+### 4.3 `src/lib/content/antiGeneric.ts` — NEW (~130 lines)
+Two enforced rules.
+
+**Rule 1 — banned universal openers, in all three registers.**
+An English-only list would have been a guard that only works on the
+copy this business writes least. Hawlai's default register is Hinglish
+(`language.ts`), so the Hinglish openers are the ones that will actually
+appear.
+
+| English | Hinglish | Hindi |
+|---|---|---|
+| Struggling with… | …ki tension? / …se pareshan? | …की समस्या? |
+| Are you tired of… | Thak gaye ho… / Bore ho gaye… | थक गए हैं… |
+| Look no further | Bas yahi chahiye tha / Aapki talash khatam | आपकी तलाश ख़त्म |
+| In today's fast-paced world | Aaj ke time mein / Aaj ke zamane mein | आज के ज़माने में |
+| Elevate your… | …ko upgrade karo / …ko next level pe | …को बेहतर बनाएं |
+| Unlock the… | …ka raaz / …ka secret | …का राज़ |
+| Imagine… | Socho zara… / Zara socho… | ज़रा सोचिए… |
+| Say goodbye to… | …ko bye bolo | …को कहिए अलविदा |
+
+**Language-aware, not language-blind:** the check runs the list for the
+piece's own `normaliseLanguage(language)` register **plus English**,
+because an English opener translated badly is still a worn opener and
+Hinglish copy mixes English in freely. It does **not** run the Hindi
+Devanagari list against a Hinglish piece — those are different scripts
+and a cross-script match can only be a false positive.
+
+Detected on the **first sentence only**. Mid-piece, "zara socho" is a
+legitimate turn of phrase; as an opener it is the model reaching for the
+same move every time. One retry with the opener named, then flagged.
+
+**Rule 2 — at least one recorded specific.** The piece must contain a
+product name, a price, an offer, a place, an occasion or an
+owner-recorded detail. Zero → retry once → the note from 4.4.
+
+Reuses the retry shape `retryWithStory` already proved, and
+`looksHinglish` / `normaliseLanguage` from `content/language.ts` rather
+than guessing the register.
+
+**Test, per your correction:** `antiGeneric.test.ts` carries a Hinglish
+case for every row of that table, an English case, a Devanagari case,
+**and** the two negatives that matter — the same phrase mid-piece must
+pass, and a Hindi opener must not fire on a Hinglish piece.
+
+---
+
+### 4.3a Does this actually cover the live incident? — traced, per your question
+
+**The path the five live caption sentences took**, measured:
+
+```
+owner's sentence in chat
+  -> masterBrainV2 tool `generate_content`            (:1017)
+  -> generateContent(..., "draft", { recent })        (:1021)   <- NO revise: true
+  -> composePost(result)                              (:4262)
+  -> card text + /api/social/post payload
+```
+
+| Phase 3 piece | Covers this path? | Why |
+|---|---|---|
+| 4.1 narrative provenance | **Yes** | It runs where `guardOrMark` already runs, inside `generateContent`, so every caller gets it — the per-surface mistake (F-16) is not repeated |
+| 4.3 anti-generic | **Yes** | Same place, inside `generateContent` |
+| 4.4 always-run `reviseForSpecificity` | **Yes, and this is the one that was missing** | Line 1021 passes no `revise: true`. The specificity editor **never ran on the live caption.** The page path got it; the chat path, which is where the incident happened, did not |
+
+**So: covered — but only because 4.4 closes F-Q1.** Without that one
+change, two of the three new protections would run on the chat path and
+the editor that already existed still would not. Worth saying plainly:
+the specificity editor was built, tested, and then not wired to the
+surface the owner actually uses.
+
+#### The second path you asked about — chat writing caption prose itself
+
+**It exists, and it is only partly covered.** If the model answers "write
+me a caption" in its own reply instead of calling the tool, nothing in
+`generateContent` runs.
+
+What guards that prose today: `checkReplyClaims`
+(`masterBrainV2.ts:4505`, Phase 1 / F-02). What it checks: unsupported
+**claims** and unverifiable superlatives, withheld by sentence and
+named. What it does **not** check: **genericness, and narrative
+provenance.** So an invented founder anecdote typed straight into the
+conversation passes today, and would still pass after 4.1 and 4.3 as
+scoped.
+
+Two honest options, and I am not going to pick for you:
+
+- **(a) Extend `checkReplyClaims` to run provenance too** — small, same
+  file, same withhold-and-name mechanism. Catches the invented anecdote
+  in chat prose. Does **not** catch genericness, and should not: a
+  conversational reply is allowed to be plain.
+- **(b) Leave it, and rely on the system-prompt rule** ("copy a customer
+  will read goes through the tool, always"). `replyClaims.ts`'s own
+  header already says why that is weak: *"That is a prompt, not code."*
+
+**My recommendation: (a), added to Phase 3 as item 4.10**, roughly 15
+lines and one test. It is the same reasoning that justified F-02 in the
+first place, and leaving a known hole open because a prompt asks nicely
+is the thing that audit found. Say yes and I fold it in; say no and I
+record it as a named open gap rather than letting it blur.
 
 ### 4.4 `src/lib/agents/contentMarketingAgent.ts` — EDIT (the big one)
 

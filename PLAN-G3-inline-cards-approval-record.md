@@ -275,17 +275,102 @@ A **claim before the send**, keyed on a client-supplied request id:
    claim is possible without a second table.
 3. A unique violation means the send is already claimed: return the
    prior outcome, send nothing.
-4. On send failure the claim is deleted so a retry can proceed. **If
-   that delete fails, the retry is refused** and the owner is told we
-   cannot confirm whether it went out — the correct fail-safe for email,
-   where a silent double is worse than an honest "check your sent mail".
-5. `send_state` keeps `email/stats` honest: `api/email/stats/route.ts:17`
-   counts rows as sends, so a claimed-but-failed row must not count.
+4. On send failure the claim is marked `failed` and **nothing is
+   deleted**. The unique index excludes failed rows, so the same request
+   id can be retried; the failed row stays on record to be diagnosed.
+   *(This replaces an earlier "delete the claim on failure" step — see
+   decision (a) below. A delete can fail; an index predicate cannot.)*
+5. `handoff_state` keeps `email/stats` honest: `api/email/stats/route.ts:17`
+   counts rows as sends, so a `claimed` or `failed` row must not count —
+   while **`null` must**, because the old code only ever wrote on
+   success. See decision (b).
 
 The content-hash window **stays**, as the belt for any caller that sends
 no key.
 
-### Step A — check the LIVE schema first (please run this)
+### Step A result (live, 2026-10-09) — and what it changed
+
+Your output: **15 columns, 3 indexes, 3 constraints, 8 rows.** No name
+collision with `idempotency_key`, `handoff_state`,
+`uq_email_sends_idempotency`. The live `via` CHECK is exactly the repo's
+(`gmail`/`resend`), so a claim written before the send can satisfy it.
+
+**Two things in that output changed my design**, both in the direction of
+less machinery:
+
+1. **8 rows.** The backfill is a plain `update`. No batching, no
+   `where id in (...)` paging, nothing to be careful about.
+2. **`delivery_status` / `delivery_error` / `delivered_at` already
+   exist** — and that is a naming hazard, which is your next question.
+
+### Who fills the three existing status columns, and why they cannot be confused
+
+| | Existing `delivery_status` | New state column |
+|---|---|---|
+| **Written by** | `resendWebhook.ts` `applyResendEvent` **only** — nothing else in the codebase writes it on this table | Hawlai's own send path, in `sendDealerEmail` |
+| **Written when** | minutes to hours *after* the send, when Resend fires a webhook | *before* the send (claim) and immediately after (outcome) |
+| **Source of truth** | **Resend**, a third party | **Hawlai** |
+| **Covers which sends** | **resend only.** It is keyed on `resend_message_id`, which is null for every Gmail send — a real platform limitation migration 088 already documents | **every** send, both `via` values |
+| **Answers** | "what did the recipient's mail server do with it?" — delivered, bounced, complained, suppressed | "did Hawlai hand this off at all?" |
+| **Can be absent on a successful send** | **yes, always, for Gmail** | no |
+
+They are orthogonal: a Gmail send that worked perfectly has
+`delivery_status = null` forever, and a resend send can be `delivered`
+while Hawlai's own handoff record says `sent`. Neither can substitute
+for the other.
+
+**So I am not calling the new column `send_state`.** Two columns named
+`send_state` and `delivery_status` on one table, meaning different
+things, with one of them null-by-design for half of all rows, is a
+future bug with a comment in front of it. The migration below uses
+**`handoff_state`** — it names Hawlai's side of the boundary, which is
+the only thing it knows about. (`delivery_status` is already an
+overloaded word in this codebase: `analyticsAgent.ts:392` and
+`campaignHistory.ts` use it for campaign snapshots on a different
+table.)
+
+### Your three decisions, resolved
+
+**(a) `'failed'` state, or delete the claim on failure — one, not both.**
+**Chosen: `'failed'`, and no delete.** The index is made partial on it:
+
+```sql
+where idempotency_key is not null and handoff_state is distinct from 'failed'
+```
+
+Why this beats deleting:
+- **A delete can fail.** My earlier plan said a failed delete would
+  leave the retry blocked and the owner told "we cannot confirm" — which
+  is safe, but it is a bad state reachable by a second database error.
+  There is no delete here, so that state does not exist.
+- **The record survives.** A failed send is the thing you most want to
+  see later. Deleting it throws away the diagnosis.
+- **The retry is unblocked anyway**, because `is distinct from 'failed'`
+  takes the row out of the unique index. Same requestId, retry proceeds.
+
+`is distinct from` rather than `<>` deliberately: `<> 'failed'` is NULL
+for a NULL state, which silently drops those rows from the index.
+
+**(b) The deploy window — rows the OLD code writes between the migration
+and the code. Counted as SENT.**
+The migration adds a column; the old `sendDealerEmail` does not set it,
+so it keeps inserting rows with `handoff_state = null`. Those are
+**successful sends**, because the old code only inserts *after* the send
+returns success (`sendDealerEmail.ts:49`, `:60`).
+
+So the rule is **`null` means sent**, and `email/stats` counts
+`handoff_state is null or handoff_state = 'sent'`.
+
+**The important consequence, said plainly: the backfill does not make
+`null` impossible.** More nulls appear after it, for as long as the old
+code is live. So the *code rule* is what makes the numbers right; the
+backfill only makes the eight historical rows explicit. Anyone who reads
+the backfill and concludes "null now means unresolved" would be wrong,
+and my earlier plan said exactly that — it is corrected here.
+
+**(c) 8 rows → a plain `update`.** No paging.
+
+### Step A — the query that produced the above (kept for the record)
 Repo migrations drift from prod, so I will not write the ALTER until I
 have seen this output:
 
@@ -308,89 +393,145 @@ select indexname, indexdef from pg_indexes where tablename = 'email_sends';
 select count(*) from email_sends;
 ```
 
-### Step B — the migration, conditional on Step A
-Next number is **208** (repo latest is 207). This is the file I would
-write; it is written to be safe to run twice:
+### Step B — the final migration, adjusted to the live schema
+
+**Next number is 208.** Repo latest is 207, and your output confirms no
+name collision. **Not yet run, and not yet in `supabase/migrations/`.**
 
 ```sql
--- supabase/migrations/208_email_send_idempotency.sql
+-- ============================================================
+-- 208_email_send_idempotency.sql
 --
 -- A real idempotency key for /api/email/send.
 --
 -- Phase 2B shipped a 5-minute duplicate-suppression window over this
--- table and said plainly what it was not: not a key, and not atomic,
--- because sendDealerEmail inserts the row AFTER the send. Two requests
--- landing in the same instant both read "no duplicate" and both send.
+-- table and said plainly what it was not: not a key, and not atomic.
+-- The reason it could not be atomic is in sendDealerEmail — the
+-- email_sends row is inserted AFTER the send returns success
+-- (sendDealerEmail.ts:49 and :60). Two requests landing in the same
+-- instant therefore both read "no duplicate" and both send, and no
+-- unique constraint on this table can prevent it, because at the moment
+-- that matters the row does not exist yet.
 --
--- This makes the row a CLAIM taken BEFORE the send, keyed on a request
+-- So the row becomes a CLAIM, taken BEFORE the send, keyed on a request
 -- id the client generates once per composed email. A retry reuses the
--- id and is refused by the unique index; a deliberate second send is a
--- new press with a new id and goes through. That is the distinction a
--- content hash cannot make.
+-- id and is refused; a deliberate second send is a new press with a new
+-- id and goes through. That is the distinction a content hash cannot
+-- make, and it is why the 5-minute window stays as a belt rather than
+-- being replaced.
+--
+-- Checked against the LIVE schema on 2026-10-09 (15 columns, 3 indexes,
+-- 3 constraints, 8 rows) rather than against this repo's migrations,
+-- which have drifted from production before.
+-- ============================================================
 
+-- The client's request id. One per composed email; a retry reuses it.
 alter table email_sends add column if not exists idempotency_key text;
 
--- Why a PARTIAL index: every row written before this migration has a
--- null key, and null keys must not collide with each other.
+-- WHY handoff_state AND NOT send_state: this table already has
+-- delivery_status, written only by resendWebhook.ts from Resend's own
+-- events, and null forever on every Gmail send because it is keyed on
+-- resend_message_id. That column answers "what did the recipient's mail
+-- server do with it". This one answers "did Hawlai hand it off at all",
+-- for every send, from Hawlai's own code. Two columns a reader could
+-- mistake for each other, one of them null-by-design for half the rows,
+-- is a future bug — so the name says whose side of the boundary it is.
+alter table email_sends add column if not exists handoff_state text;
+
+alter table email_sends drop constraint if exists email_sends_handoff_state_check;
+alter table email_sends add constraint email_sends_handoff_state_check
+  check (handoff_state is null or handoff_state in ('claimed', 'sent', 'failed'));
+
+-- THE KEY. Partial, for two separate reasons:
+--
+--   idempotency_key is not null
+--     Every row written before this migration has a null key, and so
+--     does every row the CURRENT code writes until the new code
+--     deploys. Null keys must not collide with each other.
+--
+--   handoff_state is distinct from 'failed'
+--     A failed send must not block the retry of itself. Taking the
+--     failed row out of the index unblocks the same request id without
+--     deleting anything — which is why there is no "delete the claim on
+--     failure" step anywhere in this design. A delete can fail; an
+--     index predicate cannot, and the failed row stays on record where
+--     it can be diagnosed.
+--     `is distinct from` and not `<>`: `<> 'failed'` evaluates to NULL
+--     for a null state, which would silently drop those rows from the
+--     index.
 create unique index if not exists uq_email_sends_idempotency
   on email_sends (dealership_id, idempotency_key)
-  where idempotency_key is not null;
+  where idempotency_key is not null and handoff_state is distinct from 'failed';
 
--- 'claimed' is written before the send, 'sent' after it succeeds. A row
--- stuck at 'claimed' is a send whose outcome we do not know, and
--- email/stats must not count it as delivered volume.
-alter table email_sends add column if not exists send_state text;
-alter table email_sends drop constraint if exists email_sends_send_state_check;
-alter table email_sends add constraint email_sends_send_state_check
-  check (send_state is null or send_state in ('claimed', 'sent', 'failed'));
+-- The 8 existing rows are historical sends that DID succeed — the old
+-- insert only ran on success. 8 rows, so a plain update.
+update email_sends set handoff_state = 'sent' where handoff_state is null;
 
--- Rows that predate this are historical sends that DID succeed — the
--- old insert only ran on success. Backfilled so that from here on, a
--- null send_state means nothing at all and 'claimed' means unresolved.
-update email_sends set send_state = 'sent' where send_state is null;
+-- READ THIS BEFORE TRUSTING THE BACKFILL. It does NOT make null
+-- impossible. Between this migration and the code deploy, the old
+-- sendDealerEmail keeps inserting rows with no handoff_state, and those
+-- rows are successful sends. So null means SENT, permanently, and
+-- api/email/stats counts `handoff_state is null or handoff_state =
+-- 'sent'`. Only 'claimed' and 'failed' are excluded from send volume.
+-- The backfill makes the eight historical rows explicit; the code rule
+-- is what keeps the numbers right.
 
 comment on column email_sends.idempotency_key is
-  'Client-supplied request id, one per composed email. Unique per business. A retry reuses it and is refused.';
-comment on column email_sends.send_state is
-  'claimed (before send) -> sent | failed. Pre-208 rows backfilled to sent.';
+  'Client-supplied request id, one per composed email. Unique per business while the send has not failed. A retry reuses it and is refused.';
+comment on column email_sends.handoff_state is
+  'Hawlai''s own side of the send: claimed (written before the send) -> sent | failed. NULL means sent, by rows written before the claim mechanism deployed. Not to be confused with delivery_status, which is Resend''s verdict and is null for every Gmail send.';
 ```
 
 ### Step C — the verify query
+
 ```sql
--- 1. Columns, index and constraint present?
+-- 1. Columns, index and constraint all present?
 select
   (select count(*) from information_schema.columns
-     where table_name='email_sends' and column_name='idempotency_key')   as has_key_col,
+     where table_name='email_sends' and column_name='idempotency_key')      as has_key_col,
   (select count(*) from information_schema.columns
-     where table_name='email_sends' and column_name='send_state')        as has_state_col,
+     where table_name='email_sends' and column_name='handoff_state')        as has_state_col,
   (select count(*) from pg_indexes
      where tablename='email_sends' and indexname='uq_email_sends_idempotency') as has_unique_index,
   (select count(*) from pg_constraint
      where conrelid='email_sends'::regclass
-       and conname='email_sends_send_state_check')                       as has_state_check;
+       and conname='email_sends_handoff_state_check')                       as has_state_check;
 -- expect: 1, 1, 1, 1
 
--- 2. No row left unresolved by the backfill.
-select count(*) as unresolved from email_sends where send_state is null;
--- expect: 0
+-- 2. The backfill touched all 8 and invented nothing.
+select handoff_state, count(*) from email_sends group by handoff_state;
+-- expect exactly one row: sent | 8
 
--- 3. The unique index really is partial — two null keys must coexist.
+-- 3. The index predicate is BOTH conditions, not just one. This is the
+--    assertion that matters most: a non-partial index here would make
+--    every pre-208 row collide, and a predicate missing the 'failed'
+--    clause would block the retry of a failed send forever.
 select indexdef from pg_indexes
 where tablename='email_sends' and indexname='uq_email_sends_idempotency';
--- expect the definition to end: WHERE (idempotency_key IS NOT NULL)
+-- expect the definition to end with:
+--   WHERE ((idempotency_key IS NOT NULL) AND (handoff_state IS DISTINCT FROM 'failed'::text))
 
--- 4. Nothing lost. Compare `total` against Step A query 4.
+-- 4. Nothing lost, and no key written yet (the code has not deployed).
 select count(*) as total, count(idempotency_key) as keyed from email_sends;
--- expect: total unchanged; keyed = 0 until the code ships
+-- expect: total = 8, keyed = 0
+
+-- 5. The existing columns are untouched — this migration must not have
+--    gone near Resend's side of the boundary.
+select count(*) as resend_status_rows from email_sends where delivery_status is not null;
+-- expect: whatever it was before this migration (compare against Step A)
 ```
 
-**Not run, and not written to disk.** The SQL above is not in
-`supabase/migrations/` — it exists only in this document. When you say
-go, the order is: (a) I read your Step A output, (b) I adjust the SQL to
-the **live** schema rather than the repo's, (c) I hand you the final
-file to run, (d) you run it and paste Step C, (e) only then do I write
-the code that depends on the column. In that order, because a column the
-code needs must exist before the code does.
+**Still not run.** The SQL above lives in this document only; nothing has
+been written to `supabase/migrations/`. When you say go: you run it, you
+paste Step C, and only then do I write the code that depends on
+`idempotency_key` — in that order, because a column the code needs must
+exist before the code does.
+
+**One deploy-order note, since it bites exactly once:** the migration is
+safe to run while the current code is live (it only adds nullable
+columns and a partial index that current rows cannot violate). The code
+that writes the claim must deploy *after* it. Doing it the other way
+round means every send tries to write a column that does not exist.
 
 ---
 
