@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MessageCircle, Mail, Loader2, Copy, Check, X, Send } from "lucide-react";
 import { toWhatsAppLink } from "@/lib/utils";
 import { Button, buttonClasses } from "@/components/ui";
@@ -15,6 +15,12 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  /**
+   * The id for the message currently on screen. A ref and not state
+   * deliberately: it must not cause a re-render, and it must survive
+   * every press of the same composed message.
+   */
+  const requestIdRef = useRef<string | null>(null);
 
   async function generate(ch: "whatsapp" | "email") {
     setChannel(ch);
@@ -23,6 +29,12 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
     setError(null);
     setResult(null);
     setCopied(false);
+    // A NEW MESSAGE IS A NEW SEND. Cleared here, where the old draft is
+    // thrown away, so regenerating and sending again is never refused as
+    // a duplicate of the message it replaced.
+    requestIdRef.current = null;
+    setEmailSent(false);
+    setEmailError(null);
     try {
       const res = await fetch(`/api/leads/${leadId}/generate-message`, {
         method: "POST",
@@ -44,10 +56,16 @@ export default function GenerateMessageButton({ leadId, phone, email }: { leadId
     setSendingEmail(true);
     setEmailError(null);
     try {
+      // ONE ID PER COMPOSED MESSAGE, not per press. Kept in a ref that
+      // only `generate` clears, so a double-click or a re-press after a
+      // slow response reuses it and only the first one sends; writing a
+      // new id here would have regenerated it on exactly the press it
+      // has to catch (src/lib/email/sendClaim.ts, migration 208).
+      if (!requestIdRef.current) requestIdRef.current = `lead-${crypto.randomUUID()}`;
       const res = await fetch("/api/email/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: email, subject: result.subject ?? "A message from us", body: result.message }),
+        body: JSON.stringify({ to: email, subject: result.subject ?? "A message from us", body: result.message, request_id: requestIdRef.current }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't send");

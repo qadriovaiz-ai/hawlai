@@ -222,3 +222,63 @@ describe("without a request id, nothing changes", () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+describe("the key actually reaches the endpoint", () => {
+  // A mechanism no caller feeds is inert. These are the two senders
+  // where a double-press is physically possible — a card in chat and a
+  // button on a lead — and both must mint ONE id per composed email, not
+  // one per press.
+  it("THE CHAT CARD CARRIES A REQUEST ID, minted when the card is built", async () => {
+    const { emailSendAction } = await import("@/lib/chat/publishActions");
+    const card = emailSendAction({ to: "asha@example.com", businessName: "Test Business", payload: { subject: "s", body: "b" } });
+    expect(card.endpoint).toBe("/api/email/send");
+    expect(String((card.payload as any).request_id)).toMatch(/^chat-/);
+  });
+
+  it("and two separate cards get two different ids", async () => {
+    // A deliberate second email must not be refused as a duplicate of
+    // the first.
+    const { emailSendAction } = await import("@/lib/chat/publishActions");
+    const a = emailSendAction({ to: "asha@example.com", businessName: "B", payload: {} });
+    const b = emailSendAction({ to: "asha@example.com", businessName: "B", payload: {} });
+    expect((a.payload as any).request_id).not.toBe((b.payload as any).request_id);
+  });
+
+  it("A CALLER'S OWN request_id IS NOT OVERRIDDEN BY THE DEFAULT", async () => {
+    // The spread sits AFTER request_id on purpose, so a caller that has
+    // its own id keeps it. If that order flips, every caller silently
+    // gets a fresh id per card and the mechanism stops meaning anything.
+    const { emailSendAction } = await import("@/lib/chat/publishActions");
+    const card = emailSendAction({ to: "a@b.com", businessName: "B", payload: { request_id: "mine-1" } });
+    expect((card.payload as any).request_id).toBe("mine-1");
+  });
+
+  it("the lead button sends one id per composed message, not per press", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/components/leads/GenerateMessageButton.tsx", "utf8");
+    const code = src.split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).join("\n");
+    // Reused across presses...
+    expect(code).toMatch(/if \(!requestIdRef\.current\) requestIdRef\.current =/);
+    expect(code).toMatch(/request_id: requestIdRef\.current/);
+    // ...and cleared when the draft it belongs to is thrown away.
+    expect(code).toMatch(/requestIdRef\.current = null/);
+  });
+
+  it("EVERY sendMarketingEmail CALL IN THE ROUTE PASSES IT, not just one", async () => {
+    // Counted, not pattern-matched. A `toMatch` here survived two
+    // mutations: the route has two call sites - a visual draft and plain
+    // words - and the regex was satisfied by either one, so dropping the
+    // id from one path broke nothing. The path that still worked was
+    // hiding the path that did not.
+    //
+    // tests/emailSendRequestId.test.ts runs the route for real; this is
+    // the cheap guard that no THIRD call site appears without the id.
+    const { readFileSync } = await import("fs");
+    const code = readFileSync("src/app/api/email/send/route.ts", "utf8").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    expect(code).toMatch(/request_id\.trim\(\)/);
+    const calls = (code.match(/sendMarketingEmail\(/g) ?? []).length;
+    const withId = (code.match(/sendMarketingEmail\([^;]*requestId\)/g) ?? []).length;
+    expect(calls).toBeGreaterThan(0);
+    expect(withId).toBe(calls);
+  });
+});

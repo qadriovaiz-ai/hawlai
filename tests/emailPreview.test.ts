@@ -137,7 +137,13 @@ describe("the card", () => {
       confirm: "This sends the email to asha@example.com now, from Candle by Qaaf, with your business address and an unsubscribe link in the footer. It can't be unsent.",
       endpoint: "/api/email/send",
       method: "POST",
-      payload: { to: "asha@example.com", draft: r.payload.draft },
+      // request_id added 2026-10-09: one id per composed email, minted
+      // when the CARD is built so every press of this card carries the
+      // same one and only the first sends (migration 208). Matched by
+      // shape rather than value because it is a uuid - the deep-equal
+      // still requires exactly these three keys, so a fourth field
+      // cannot appear here unnoticed.
+      payload: { to: "asha@example.com", draft: r.payload.draft, request_id: expect.stringMatching(/^chat-[0-9a-f-]{36}$/) },
       done: "✅ Sent to asha@example.com — accepted for delivery, not yet confirmed in their inbox",
     });
   });

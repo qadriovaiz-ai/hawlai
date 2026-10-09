@@ -17,6 +17,8 @@
 // and a social post is instantly visible to followers. The button asks
 // first, in words that say exactly what is about to happen.
 
+import { randomUUID } from "crypto";
+
 import { publicPostConfirm, type Destination } from "./postConfirm";
 
 export type PublishAction = {
@@ -50,7 +52,21 @@ export function emailSendAction(opts: { to: string; businessName: string; payloa
     confirm: `This sends the email to ${opts.to} now, from ${opts.businessName}, with your business address and an unsubscribe link in the footer. It can't be unsent.`,
     endpoint: "/api/email/send",
     method: "POST",
-    payload: { to: opts.to, ...opts.payload },
+    payload: {
+      to: opts.to,
+      // ONE ID PER COMPOSED EMAIL, minted HERE rather than in the
+      // browser, and this is the whole reason it works: the card is
+      // built once, so every press of THIS card - a double-click, a
+      // re-press after a slow response, a retried request - carries the
+      // same id and only the first one sends. A deliberate second email
+      // is a new card with a new id (src/lib/email/sendClaim.ts,
+      // migration 208).
+      //
+      // A browser-generated id would have been regenerated on each
+      // press, which is precisely the case it has to catch.
+      request_id: `chat-${randomUUID()}`,
+      ...opts.payload,
+    },
     done: `✅ Sent to ${opts.to} — accepted for delivery, not yet confirmed in their inbox`,
   };
 }
