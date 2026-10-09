@@ -369,6 +369,56 @@ describe("content autopilot — posts publicly with nobody reading first", () =>
     expect((postPhotoToPage.mock.calls[0] as any[])[3]).toBe("Slow evenings start with the Lavender candle. 🕯️");
   });
 
+  it("A GENERIC CAPTION IS NOT POSTED — it used to be", async () => {
+    // Until 2026-10-09 this went out. The three guards on this path
+    // covered an AI failure, a placeholder fallback and an unverifiable
+    // claim; genericness was not among them, so a caption any competitor
+    // could have published reached a real Facebook Page under the
+    // owner's name, unreviewed.
+    //
+    // No invented claim in this caption at all — which is exactly why
+    // the claims guard above has nothing to say about it.
+    const prompts = anthropic([{ text: "Transform your evenings with beautiful scents you'll love. ✨" }]);
+    const r = await runContentAutopilot(db(), "d1");
+
+    expect(postPhotoToPage).not.toHaveBeenCalled();
+    expect(r.posted).toBe(false);
+    // NO SECOND MODEL CALL: the specificity retry stays off this path,
+    // so this is a skip rather than a repair.
+    expect(prompts).toHaveLength(1);
+
+    const log = writes.find((w) => w.table === "content_autopilot_log")!.values;
+    expect(log.success).toBe(false);
+    expect(log.error).toMatch(/nothing was posted/);
+    // The reason has to be ACTIONABLE. "Generic" alone is not something
+    // an owner can do anything about.
+    expect(log.error).toMatch(/any business in your line of work/);
+    expect(log.error).toMatch(/Add the product's name/);
+    // And the cadence clock must not move — tomorrow's run should try
+    // again rather than treating this as a post.
+    expect(writes.some((w) => w.table === "dealerships" && "content_autopilot_last_posted_at" in w.values)).toBe(false);
+  });
+
+  it("a caption naming the real product IS posted", async () => {
+    // The other side of the same gate: this must not have become a path
+    // that refuses everything.
+    anthropic([{ text: "The Lavender candle is back in stock. 🕯️" }]);
+    const r = await runContentAutopilot(db(), "d1");
+    expect(r.posted).toBe(true);
+    expect((postPhotoToPage.mock.calls[0] as any[])[3]).toBe("The Lavender candle is back in stock. 🕯️");
+  });
+
+  it("A REAL PRICE ALONE DOES NOT GET IT POSTED", async () => {
+    // storeEcho's header, about the caption that started all this: the
+    // price and the duration come from the catalogue, every competitor
+    // has those too. ₹550 is this candle's real price and it is still
+    // not this business's caption.
+    anthropic([{ text: "Beautiful scents for a calmer home. ₹550." }]);
+    const r = await runContentAutopilot(db(), "d1");
+    expect(postPhotoToPage).not.toHaveBeenCalled();
+    expect(r.posted).toBe(false);
+  });
+
   it("if the business's facts can't be read at all, nothing is posted", async () => {
     anthropic([{ text: "Slow evenings." }]);
     // The autopilot's own reads work; every read the facts need throws.
@@ -409,7 +459,15 @@ describe("email automation — sent to real leads with nobody reading first", ()
 // the line in directly, as an injected/hand-edited draft would.
 describe("draft vs auto-published", () => {
   const FABRICATED = "500+ people have already tried this workshop.";
-  const CLEAN = "Candle Making Workshop — an evening of slow, warm making.";
+  // Names the LAVENDER CANDLE, which is the one product this fixture's
+  // business actually sells (CANDLE_TABLES, line ~225). It used to say
+  // "Candle Making Workshop" — a product this business does not have —
+  // and the genericness guard added on 2026-10-09 caught that: the
+  // caption carried nothing of this business at all. The fixture was
+  // internally inconsistent, written before anything checked. The test's
+  // intent is unchanged: "clean" means no unverifiable claim, and such a
+  // caption must still go out.
+  const CLEAN = "Lavender candle — an evening of slow, warm making.";
   const UNVERIFIED_PRICE = "Candle Making Workshop, just ₹1,999.";
 
   it("a draft: the fabricated count is still removed, and the owner is told", async () => {
@@ -447,7 +505,7 @@ describe("draft vs auto-published", () => {
     anthropic([{ text: CLEAN }]);
     const r = await runContentAutopilot(db(), "d1");
     expect(r.posted).toBe(true);
-    expect((postPhotoToPage.mock.calls[0] as any[])[3]).toContain("Candle Making Workshop");
+    expect((postPhotoToPage.mock.calls[0] as any[])[3]).toContain("Lavender candle");
   });
 
   it("auto-published email: an unverified price stops the send, and the lead stays unwelcomed", async () => {

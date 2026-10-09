@@ -157,6 +157,28 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     if (contentResult.claimsRemoved?.length) {
       throw new Error(`Skipped: the caption made claims Hawlai couldn't verify (${contentResult.claimsRemoved.slice(0, 2).join("; ")}) — nothing was posted`);
     }
+    // A CAPTION ANY COMPETITOR COULD HAVE PUBLISHED DOES NOT GO OUT
+    // EITHER (2026-10-09).
+    //
+    // Until today it did. The three guards above cover an AI failure, a
+    // placeholder fallback and an unverifiable claim — genericness was
+    // not among them, so `_storyNote` was set on the output and nothing
+    // read it. A caption that could have come from any business in the
+    // same line of work went to a real Facebook Page under the owner's
+    // name, unreviewed.
+    //
+    // NO SECOND MODEL CALL. The specificity retry stays off this path
+    // (the "auto-publish path stays single-shot" contract), so this is a
+    // skip, not a repair. A post a day late beats a post that says
+    // nothing — the same trade the claims guard above already makes.
+    //
+    // The reason names what would fix it, because the owner reads this
+    // on the Automation Health card and "generic" alone is not
+    // actionable. genericNote already phrases it that way.
+    const genericNote = (contentResult.output as any)?._storyNote;
+    if (typeof genericNote === "string" && genericNote.trim()) {
+      throw new Error(`Skipped: nothing was posted. ${genericNote.trim()}`);
+    }
     caption = captionForPost(contentResult.output);
     if (!caption) {
       caption = null;
