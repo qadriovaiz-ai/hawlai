@@ -83,6 +83,27 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
 
 import { executeTool } from "@/lib/agents/masterBrainV2";
 
+/**
+ * Source with comments stripped.
+ *
+ * WHY THIS EXISTS: the first version of the tests below grepped the raw
+ * file, and both failed — because the comment I had just written in
+ * taskExecutors says the words `revise: true` and "draft" while
+ * explaining that neither is passed. A source-grep test is defeated by a
+ * comment ABOUT the thing it looks for, and the failure mode is the
+ * dangerous direction: a future comment could just as easily make a
+ * missing guard look present.
+ */
+function code(path: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { readFileSync } = require("fs") as typeof import("fs");
+  return readFileSync(path, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//"))
+    .join("\n");
+}
+
 const CTX: any = { id: "d1", name: "Test Business", category: "home fragrance", toneOfVoice: "warm", city: "Lucknow" };
 
 /** A caption that already carries a real specific, so only genericness is in play. */
@@ -138,15 +159,64 @@ describe("the unattended path deliberately does NOT", () => {
     // Asserted on the source because the alternative is running the
     // whole autopilot; the call-count tests above are what prove the
     // chat path, which is the one that changed.
-    const { readFileSync } = await import("fs");
-    const src = readFileSync("src/lib/automation/contentAutopilot.ts", "utf8");
+    // Comments stripped, same reason as the `code` helper below: a
+    // comment explaining that revise is NOT passed would otherwise make
+    // this assertion fail, and the reverse is the dangerous case.
+    const src = code("src/lib/automation/contentAutopilot.ts");
     expect(src).toMatch(/generateContent\(/);
     expect(src).not.toMatch(/revise:\s*true/);
   });
 
   it("and the flag still exists, so this is a choice rather than a gap", () => {
+    expect(code("src/lib/agents/contentMarketingAgent.ts")).toMatch(/revise\?: boolean/);
+  });
+});
+
+describe("the queued-task path deliberately does NOT either", () => {
+  // Asked directly, so traced in the code before deciding rather than
+  // assumed: can this path's output reach a customer without a human?
+  // No — and NOT because of the status column.
+  const TASKS = "src/lib/tasks/taskExecutors.ts";
+
+  it("TASK EXECUTORS PASS NO revise, for the same reason as autopilot", () => {
+    expect(code(TASKS)).toMatch(/generateContent\(/);
+    expect(code(TASKS)).not.toMatch(/revise:\s*true/);
+    // The reason is written down, not left to be rediscovered — checked
+    // against the RAW file, since that is where a comment belongs.
     const { readFileSync } = require("fs") as typeof import("fs");
-    const src = readFileSync("src/lib/agents/contentMarketingAgent.ts", "utf8");
-    expect(src).toMatch(/revise\?: boolean/);
+    expect(readFileSync(TASKS, "utf8")).toMatch(/DELIBERATELY/);
+  });
+
+  it("IT PASSES NO claimsMode, so it gets the STRICTEST guard", () => {
+    // Worth pinning because this path is unattended, and "publish" mode
+    // is the one that DELETES an unverified price rather than flagging
+    // it. If someone later passes "draft" here to quieten a warning,
+    // that would loosen the unattended path specifically.
+    expect(code(TASKS)).not.toMatch(/"draft"/);
+  });
+
+  it("NOTHING UNATTENDED PUBLISHES A content_pieces ROW", () => {
+    // The actual protection, and it is structural rather than a flag.
+    // contentAutopilot inserts its own row from copy it just generated;
+    // the only publishing reader is /api/social/post, which needs a
+    // content_piece_id in a request body.
+    const autopilot = code("src/lib/automation/contentAutopilot.ts");
+    expect(autopilot).toMatch(/from\("content_pieces"\)\s*\n?\s*\.insert/);
+    expect(autopilot).not.toMatch(/from\("content_pieces"\)\s*\n?\s*\.select/);
+    expect(code("src/app/api/social/post/route.ts")).toMatch(/isPieceId\(content_piece_id\)/);
+  });
+
+  it("content_pieces.status is NOT the thing protecting this", async () => {
+    // It defaults to 'draft' (migration 028) and nothing in the codebase
+    // reads it. Claiming it as a gate would be exactly the class of
+    // mistake this audit keeps finding, so the absence is asserted
+    // rather than described.
+    const { execSync } = await import("child_process");
+    const files = execSync('git grep -l "content_pieces" -- src || true', { encoding: "utf8" })
+      .split("\n")
+      .filter(Boolean);
+    expect(files.length).toBeGreaterThan(3);
+    const gated = files.filter((f) => /content_pieces[\s\S]{0,400}\.eq\("status"/.test(code(f)));
+    expect(gated).toEqual([]);
   });
 });
