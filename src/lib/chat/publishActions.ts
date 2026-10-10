@@ -21,6 +21,24 @@ import { randomUUID } from "crypto";
 
 import { publicPostConfirm, type Destination } from "./postConfirm";
 
+// WHAT IS LEFT HERE, AND WHY (G-3, 2026-10-10).
+//
+// Three descriptors are gone: emailSendAction, imageGenerateAction and
+// websitePublishAction. Their cards now write a pending_approvals row
+// and their only button is PATCH /api/approvals/{id}, so the browser no
+// longer holds the decision. Deleted rather than left unused, because a
+// descriptor nothing calls keeps its tests passing while the real
+// confirm text drifts - which is worse than having no test at all.
+// Their wording is asserted at its real source now: the row the chat
+// tool writes.
+//
+// socialPublishAction STAYS, deliberately. Its card already does more
+// than a generic approval row - the destination is resolved before the
+// button exists, an unconnected destination gets no button at all, the
+// confirm names the Page, the payload carries expect_text and the
+// endpoint reads the post back. Converting it would have reduced
+// safety, so G-3 step 4 keeps the card and adds the record beside it.
+
 export type PublishAction = {
   target: "website" | "social_post" | "email" | "image";
   /** The button. */
@@ -37,96 +55,11 @@ export type PublishAction = {
   discard?: { endpoint: string; method: "DELETE"; payload: Record<string, unknown>; done: string };
 };
 
-/**
- * Sending a marketing email chat wrote to a lead or customer.
- *
- * Chat shows the email exactly as it will arrive and sends nothing until
- * the owner confirms. The endpoint is the same one a lead's page sends
- * from, and it runs every rule again at send time — on record, not
- * unsubscribed, business address present — so a confirm can't bypass them.
- */
-export function emailSendAction(opts: { to: string; businessName: string; payload: Record<string, unknown> }): PublishAction {
-  return {
-    target: "email",
-    label: "Send email",
-    confirm: `This sends the email to ${opts.to} now, from ${opts.businessName}, with your business address and an unsubscribe link in the footer. It can't be unsent.`,
-    endpoint: "/api/email/send",
-    method: "POST",
-    payload: {
-      to: opts.to,
-      // ONE ID PER COMPOSED EMAIL, minted HERE rather than in the
-      // browser, and this is the whole reason it works: the card is
-      // built once, so every press of THIS card - a double-click, a
-      // re-press after a slow response, a retried request - carries the
-      // same id and only the first one sends. A deliberate second email
-      // is a new card with a new id (src/lib/email/sendClaim.ts,
-      // migration 208).
-      //
-      // A browser-generated id would have been regenerated on each
-      // press, which is precisely the case it has to catch.
-      request_id: `chat-${randomUUID()}`,
-      ...opts.payload,
-    },
-    done: `✅ Sent to ${opts.to} — accepted for delivery, not yet confirmed in their inbox`,
-  };
-}
 
-/**
- * Spending money on an image, with the price said first.
- *
- * THE LIVE INCIDENT (8 Oct 2026). "MAKE POST AND WRITE A INSTAGRAM
- * CAPTION FOR LAVENDER CANDLE" ran Generate Graphic. One sentence, a
- * paid Gemini call, no mention of cost, no agreement to spend anything
- * — while Graphic Design was on hold for exactly that reason.
- *
- * The chat tool no longer generates. It quotes, and this button is what
- * spends: it calls the SAME endpoint the Graphic Design page uses, which
- * runs the plan's monthly image cap again at generation time, so the
- * quote cannot bypass it.
- */
-export function imageGenerateAction(opts: {
-  designType: string;
-  prompt: string;
-  costInr: number;
-  /** Said plainly when there is no photo of the product to build around. */
-  depictionNote?: string | null;
-}): PublishAction {
-  const price = `about ₹${opts.costInr.toFixed(2)}`;
-  return {
-    target: "image",
-    label: `Generate the image (${price})`,
-    confirm: `This makes one AI image now. It costs ${price} and counts against your plan's monthly image allowance.${
-      opts.depictionNote ? ` ${opts.depictionNote}` : ""
-    }`,
-    endpoint: "/api/graphic-design/generate",
-    method: "POST",
-    payload: { designType: opts.designType, prompt: opts.prompt },
-    done: "✅ Image generated — saved to Graphic Design",
-  };
-}
 
 /** Content types that are a post someone publishes, not a document they keep. */
 export const SOCIAL_POST_TYPES = new Set(["instagram_post", "facebook_post", "threads_post"]);
 
-/**
- * Publishing the whole site.
- *
- * There is no per-page publish in the product — `websites.published` is
- * one flag for the whole site — so the confirm says that plainly rather
- * than implying this page alone goes live.
- */
-export function websitePublishAction(): PublishAction {
-  return {
-    target: "website",
-    label: "Approve & Publish",
-    confirm:
-      "This publishes your ENTIRE live site — every page, not just this one — and anyone with the link can see it straight away. You can unpublish again from Website Builder.",
-    endpoint: "/api/website-builder/publish",
-    method: "PATCH",
-    payload: { published: true },
-    done: "✅ Published to your live site",
-  };
-}
 
 /**
  * Posting a generated caption — to a named destination.

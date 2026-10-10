@@ -15,7 +15,7 @@
 // from a live api_usage_logs read, which only Ovaiz can run.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { imageGenerateAction } from "@/lib/chat/publishActions";
+import { code } from "./helpers/source";
 import { costOfGeminiImageInr } from "@/lib/usage/pricing";
 import { isFeatureEnabled, unavailableMessage, KILL_SWITCH_LABELS } from "@/lib/featureFlags";
 
@@ -55,39 +55,52 @@ describe("the hold is a thing the code knows about", () => {
   });
 });
 
-describe("the price is on the button", () => {
+describe("the price is on the card the owner reads", () => {
+  // G-3 step 1b (2026-10-09) replaced imageGenerateAction with an
+  // approval record, so these tests moved off the descriptor. Testing
+  // a function no card calls any more would have kept passing while
+  // the real confirm text drifted - which is worse than no test.
+  //
+  // The figure and the wording are asserted at their real source now:
+  // the row the chat tool writes, in tests/graphicApprovalRecord.test.ts,
+  // and here against the pricing table itself.
   it("THE FIGURE IS THE REAL ONE, from the pricing table", () => {
     // $0.039 x 87. If the table moves, this moves with it rather than
     // showing a number somebody typed into a string once.
     expect(costOfGeminiImageInr(1)).toBeCloseTo(3.393, 3);
-    const a = imageGenerateAction({ designType: "poster", prompt: "Christmas poster", costInr: costOfGeminiImageInr(1) });
-    expect(a.label).toBe("Generate the image (about ₹3.39)");
   });
 
-  it("the confirmation says it costs money AND that it eats the monthly allowance", () => {
-    const a = imageGenerateAction({ designType: "poster", prompt: "x", costInr: 3.393 });
-    expect(a.confirm).toMatch(/makes one AI image now/);
-    expect(a.confirm).toMatch(/about ₹3\.39/);
-    expect(a.confirm).toMatch(/monthly image allowance/);
+  it("THE CONFIRM SAYS IT COSTS MONEY AND EATS THE ALLOWANCE", () => {
+    // Read from the tool that writes it, so a reworded confirm fails
+    // here rather than passing against a dead helper.
+    // Scoped to the TOOL: `const confirmText` also appears in the
+    // website card, earlier in the file, and indexOf found that one.
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    const tool = brain.slice(brain.indexOf('case "generate_graphic": {'), brain.indexOf('case "get_customer_sentiment"'));
+    const at = tool.indexOf("const confirmText =");
+    expect(at).toBeGreaterThan(-1);
+    const confirm = tool.slice(at, at + 400);
+    expect(confirm).toMatch(/makes one AI image now/);
+    expect(confirm).toMatch(/costOfGeminiImageInr\(1\)\.toFixed\(2\)/);
+    expect(confirm).toMatch(/monthly image allowance/);
   });
 
-  it("THE BUTTON CALLS THE PAGE'S OWN ENDPOINT, which runs the cap again", () => {
-    // A quote that spent money on its own, or through a chat-only path
-    // that skipped the plan cap, would just move the problem.
-    const a = imageGenerateAction({ designType: "poster", prompt: "Christmas poster", costInr: 3.393 });
-    expect(a.endpoint).toBe("/api/graphic-design/generate");
-    expect(a.method).toBe("POST");
-    expect(a.payload).toEqual({ designType: "poster", prompt: "Christmas poster" });
-    expect(a.target).toBe("image");
+  it("why the product isn't in the picture rides along in it", () => {
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    const tool = brain.slice(brain.indexOf('case "generate_graphic": {'), brain.indexOf('case "get_customer_sentiment"'));
+    const at = tool.indexOf("const confirmText =");
+    expect(tool.slice(at, at + 400)).toMatch(/depictionNote \? ` \$\{depictionNote\}`/);
   });
 
-  it("why the product isn't in the picture rides along in the confirmation", () => {
-    const a = imageGenerateAction({
-      designType: "poster",
-      prompt: "x",
-      costInr: 3.393,
-      depictionNote: "There's no photo of \"Lavender Soy Wax Candle\" on file, so I haven't drawn it.",
-    });
-    expect(a.confirm).toMatch(/haven't drawn it/);
+  it("AND THE QUOTE ITSELF SPENDS NOTHING", () => {
+    // The whole point of the 8 October fix: the tool quotes, it does not
+    // generate. Proved by execution in
+    // tests/graphicApprovalRecord.test.ts; named here because this file
+    // is where the cost story lives.
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    const tool = brain.slice(brain.indexOf('case "generate_graphic": {'), brain.indexOf('case "get_customer_sentiment"'));
+    expect(tool).not.toMatch(/generateGraphic\(/);
+    expect(tool).toMatch(/requestApproval\(/);
   });
 });
+

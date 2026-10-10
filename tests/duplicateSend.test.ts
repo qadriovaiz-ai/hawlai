@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { recentDuplicateSend, DUPLICATE_WINDOW_MINUTES } from "@/lib/email/duplicateSend";
+import { code } from "./helpers/source";
 
 type Row = Record<string, any>;
 let rows: Row[];
@@ -153,13 +154,18 @@ describe("the same email twice", () => {
 });
 
 describe("the send endpoint consults it", () => {
-  it("THE CHECK IS WIRED, and runs before the send", async () => {
-    const { readFileSync } = await import("fs");
-    const src = readFileSync("src/app/api/email/send/route.ts", "utf8");
-    const code = src.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-    expect(code).toMatch(/recentDuplicateSend\(/);
-    expect(code).toMatch(/status: 409/);
+  it("THE CHECK IS WIRED, and runs before the send", () => {
+    // Moved on 2026-10-10: the route's work was extracted to
+    // src/lib/email/sendApprovedEmail.ts so the approvals route can send
+    // without calling this app over HTTP (G-3 step 3). The check moved
+    // WITH it; this test follows it rather than being deleted.
+    const src = code("src/lib/email/sendApprovedEmail.ts");
+    expect(src).toMatch(/recentDuplicateSend\(/);
+    expect(src).toMatch(/status: 409/);
     // Before the sender, or it costs nothing to check.
-    expect(code.indexOf("recentDuplicateSend(")).toBeLessThan(code.indexOf("sendMarketingEmail("));
+    expect(src.indexOf("recentDuplicateSend(")).toBeLessThan(src.indexOf("sendMarketingEmail("));
+    // And the route must NOT have kept a copy, or the approvals path
+    // would be the only caller missing it.
+    expect(code("src/app/api/email/send/route.ts")).not.toMatch(/recentDuplicateSend/);
   });
 });

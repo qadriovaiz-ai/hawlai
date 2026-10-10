@@ -10,6 +10,7 @@
 // behaviour unchanged.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { code } from "./helpers/source";
 
 type Row = Record<string, any>;
 
@@ -228,30 +229,35 @@ describe("the key actually reaches the endpoint", () => {
   // where a double-press is physically possible — a card in chat and a
   // button on a lead — and both must mint ONE id per composed email, not
   // one per press.
-  it("THE CHAT CARD CARRIES A REQUEST ID, minted when the card is built", async () => {
-    const { emailSendAction } = await import("@/lib/chat/publishActions");
-    const card = emailSendAction({ to: "asha@example.com", businessName: "Test Business", payload: { subject: "s", body: "b" } });
-    expect(card.endpoint).toBe("/api/email/send");
-    expect(String((card.payload as any).request_id)).toMatch(/^chat-/);
+  it("THE CHAT CARD'S ID IS MINTED SERVER-SIDE, one per composed email", async () => {
+    // Moved off emailSendAction on 2026-10-10: that descriptor is gone
+    // (G-3 step 3b) and the id is written onto the approval row
+    // instead. Asserted at the source that writes it, because a test
+    // against a deleted helper would have kept passing while the real
+    // id changed shape.
+    const { code } = await import("./helpers/source");
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    const at = brain.indexOf('actionType: "send_email"');
+    expect(at).toBeGreaterThan(-1);
+    const details = brain.slice(at, at + 900);
+    // Minted here, not in the browser: a browser-generated id is
+    // regenerated on the very press it exists to catch.
+    expect(details).toMatch(/request_id: `chat-\$\{randomUUID\(\)\}`/);
+    // And stored on the row, so pressing Approve twice cannot send twice.
+    expect(details).toMatch(/recipient_kind: kind/);
   });
 
-  it("and two separate cards get two different ids", async () => {
-    // A deliberate second email must not be refused as a duplicate of
-    // the first.
-    const { emailSendAction } = await import("@/lib/chat/publishActions");
-    const a = emailSendAction({ to: "asha@example.com", businessName: "B", payload: {} });
-    const b = emailSendAction({ to: "asha@example.com", businessName: "B", payload: {} });
-    expect((a.payload as any).request_id).not.toBe((b.payload as any).request_id);
+  it("THE APPROVALS ROUTE REUSES THE ROW'S ID, it does not mint a new one", async () => {
+    // A fresh id at the press would defeat the claim it exists to take:
+    // two presses would become two different sends.
+    const { code } = await import("./helpers/source");
+    const route = code("src/app/api/approvals/[id]/route.ts");
+    const at = route.indexOf('action_type === "send_email"');
+    const branch = route.slice(at, at + 1600);
+    expect(branch).toMatch(/request_id: d\.request_id \?\? null/);
+    expect(branch).not.toMatch(/randomUUID/);
   });
 
-  it("A CALLER'S OWN request_id IS NOT OVERRIDDEN BY THE DEFAULT", async () => {
-    // The spread sits AFTER request_id on purpose, so a caller that has
-    // its own id keeps it. If that order flips, every caller silently
-    // gets a fresh id per card and the mechanism stops meaning anything.
-    const { emailSendAction } = await import("@/lib/chat/publishActions");
-    const card = emailSendAction({ to: "a@b.com", businessName: "B", payload: { request_id: "mine-1" } });
-    expect((card.payload as any).request_id).toBe("mine-1");
-  });
 
   it("the lead button sends one id per composed message, not per press", async () => {
     const { readFileSync } = await import("fs");
@@ -273,11 +279,13 @@ describe("the key actually reaches the endpoint", () => {
     //
     // tests/emailSendRequestId.test.ts runs the route for real; this is
     // the cheap guard that no THIRD call site appears without the id.
-    const { readFileSync } = await import("fs");
-    const code = readFileSync("src/app/api/email/send/route.ts", "utf8").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-    expect(code).toMatch(/request_id\.trim\(\)/);
-    const calls = (code.match(/sendMarketingEmail\(/g) ?? []).length;
-    const withId = (code.match(/sendMarketingEmail\([^;]*requestId\)/g) ?? []).length;
+    // Follows the work: extracted to src/lib/email/sendApprovedEmail.ts
+    // on 2026-10-10 (G-3 step 3), so the approvals route can send
+    // without calling this app over HTTP.
+    const src = code("src/lib/email/sendApprovedEmail.ts");
+    expect(src).toMatch(/request_id\.trim\(\)/);
+    const calls = (src.match(/sendMarketingEmail\(/g) ?? []).length;
+    const withId = (src.match(/sendMarketingEmail\([^;]*requestId\)/g) ?? []).length;
     expect(calls).toBeGreaterThan(0);
     expect(withId).toBe(calls);
   });

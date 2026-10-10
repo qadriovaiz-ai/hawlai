@@ -23,8 +23,13 @@ function db() {
       ilike: (k: string, p: string) => (filters.push((r) => String(r[k] ?? "").toLowerCase() === p.replace(/\\(.)/g, "$1").toLowerCase()), api),
       insert: (row: Row) => ((insertRow = row), inserted.push({ table, row }), api),
       upsert: () => api, update: () => api,
-      maybeSingle: async () => ({ data: insertRow ?? rows()[0] ?? null, error: null }),
-      single: async () => ({ data: insertRow ?? rows()[0] ?? null, error: null }),
+      // An inserted row comes back WITH AN ID, because chat now writes a
+      // pending_approvals row before offering the card (G-3 step 3b) and
+      // requestApproval reads `.select("id").single()`. A store that
+      // returns the row without an id makes every approval-gated tool
+      // look broken.
+      maybeSingle: async () => ({ data: insertRow ? { id: `${table}-1`, ...insertRow } : rows()[0] ?? null, error: null }),
+      single: async () => ({ data: insertRow ? { id: `${table}-1`, ...insertRow } : rows()[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: insertRow ? [insertRow] : rows(), error: null }).then(res, rej),
     };
     return api;
@@ -125,27 +130,42 @@ describe("chat proposes; it doesn't send", () => {
 });
 
 describe("the card", () => {
-  it("shows the email and a Send button that asks first, pointing at the endpoint lead pages send from", async () => {
+  it("shows the email and an APPROVAL RECORD, not a browser POST", async () => {
+    // G-3 step 3b (2026-10-10). The card used to carry
+    // {endpoint: "/api/email/send", payload} for the browser to send.
+    // The email itself was already guarded at that endpoint, so what was
+    // missing was not capability but AUTHORISATION AND RECORD: nothing
+    // server-side held the words the owner was shown, or that they had
+    // agreed to send them.
+    //
+    // The preview assertion is untouched - the owner still sees the
+    // email exactly as it will arrive.
     const r = await executeTool(db(), CTX, "send_email", VISUAL, "");
     const card = extractArtifact("send_email", VISUAL, r)!;
 
     expect(card.label).toBe("Email ready to send");
     expect(card.emailPreview).toEqual({ to: "asha@example.com", subject: "Slow evenings are back", html: r._emailPreview.html, text: r._emailPreview.text });
-    expect(card.publish).toEqual({
-      target: "email",
-      label: "Send email",
-      confirm: "This sends the email to asha@example.com now, from Candle by Qaaf, with your business address and an unsubscribe link in the footer. It can't be unsent.",
-      endpoint: "/api/email/send",
-      method: "POST",
-      // request_id added 2026-10-09: one id per composed email, minted
-      // when the CARD is built so every press of this card carries the
-      // same one and only the first sends (migration 208). Matched by
-      // shape rather than value because it is a uuid - the deep-equal
-      // still requires exactly these three keys, so a fourth field
-      // cannot appear here unnoticed.
-      payload: { to: "asha@example.com", draft: r.payload.draft, request_id: expect.stringMatching(/^chat-[0-9a-f-]{36}$/) },
-      done: "✅ Sent to asha@example.com — accepted for delivery, not yet confirmed in their inbox",
-    });
+    expect(card.publish).toBeUndefined();
+    expect(card.approval?.id).toBeTruthy();
+    expect(card.confirm).toBe(
+      "This sends the email to asha@example.com now, from Candle by Qaaf, with your business address and an unsubscribe link in the footer. It can't be unsent."
+    );
+  });
+
+  it("THE ROW CARRIES THE WORDS, THE RECIPIENT KIND AND A REQUEST ID", async () => {
+    await executeTool(db(), CTX, "send_email", VISUAL, "");
+    const row = inserted.find((i) => i.table === "pending_approvals")!.row;
+    expect(row.action_type).toBe("send_email");
+    expect(row.action_details.to).toBe("asha@example.com");
+    expect(row.action_details.confirm).toMatch(/unsubscribe link in the footer/);
+    // The approvals route routes on this: a note to a colleague must not
+    // get an unsubscribe footer and a consent check.
+    expect(row.action_details.recipient_kind).toBe("lead");
+    // One id per composed email, minted server-side so every press of
+    // this card carries the same one and only the first sends
+    // (migration 208). A browser-generated id would be regenerated on
+    // the very press it exists to catch.
+    expect(String(row.action_details.request_id)).toMatch(/^chat-[0-9a-f-]{36}$/);
   });
 
   it("the model is told it's not sent, but never given the email's HTML", async () => {
@@ -178,8 +198,13 @@ describe("pressing Send", () => {
   const send = (body: Row) => postEmailSend(new Request("https://hawlai.online/api/email/send", { method: "POST", body: JSON.stringify(body) }));
 
   it("sends the visual email the card showed, now with a real unsubscribe link", async () => {
+    // The payload comes from the TOOL's own return now, not from a
+    // card descriptor: G-3 step 3b (2026-10-10) removed the
+    // {endpoint, payload} the browser used to POST. The endpoint is
+    // still a real path - the lead pages send from it - and the send
+    // behaviour this test is about is unchanged.
     const r = await executeTool(db(), CTX, "send_email", VISUAL, "");
-    const res = await send(extractArtifact("send_email", VISUAL, r)!.publish!.payload);
+    const res = await send({ to: (r as any).to, ...(r as any).payload });
 
     expect(res.status).toBe(200);
     const [, , to, subject, text, opts] = sendDealerEmail.mock.calls[0] as any[];
@@ -200,7 +225,7 @@ describe("pressing Send", () => {
   it("someone who unsubscribed after the preview was made isn't sent it", async () => {
     const r = await executeTool(db(), CTX, "send_email", VISUAL, "");
     tables.email_suppressions = [{ dealership_id: "d1", email: "asha@example.com", reason: "unsubscribed" }];
-    const res = await send(extractArtifact("send_email", VISUAL, r)!.publish!.payload);
+    const res = await send({ to: (r as any).to, ...(r as any).payload });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("Not sent: asha@example.com has unsubscribed from this business's emails.");
     expect(sendDealerEmail).not.toHaveBeenCalled();

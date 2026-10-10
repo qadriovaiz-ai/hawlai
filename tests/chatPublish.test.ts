@@ -12,8 +12,8 @@
 // asks first.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { code } from "./helpers/source";
 import {
-  websitePublishAction,
   socialPublishAction,
   attachTurnImages,
   SOCIAL_POST_TYPES,
@@ -65,13 +65,24 @@ const IG = { platform: "instagram" as const, name: null, connected: true, why: n
 const IG_OFF = { platform: "instagram" as const, name: null, connected: false, why: "Posting to Instagram isn't connected." };
 
 describe("what the owner is asked before anything goes live", () => {
-  it("publishing the site says it publishes the WHOLE site, and points at the existing endpoint", () => {
-    const a = websitePublishAction();
-    expect(a).toMatchObject({ target: "website", endpoint: "/api/website-builder/publish", method: "PATCH", payload: { published: true } });
-    expect(a.confirm).toMatch(/ENTIRE live site/);
-    expect(a.confirm).toMatch(/every page, not just this one/);
-    expect(a.done).toBe("✅ Published to your live site");
+  it("PUBLISHING THE SITE STILL WARNS IT IS THE WHOLE SITE", () => {
+    // Moved off websitePublishAction on 2026-10-10: that descriptor is
+    // gone (G-3 step 2b) and the sentence is written by the chat tool
+    // onto the approval row instead. Asserted at the source that writes
+    // it, because a test against a deleted helper would keep passing
+    // while the real wording drifted.
+    //
+    // There is no per-page publish - websites.published is one flag for
+    // the whole site - so saying so is the whole point of the sentence.
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    const at = brain.indexOf('actionType: "publish_site"');
+    expect(at).toBeGreaterThan(-1);
+    const confirm = brain.slice(brain.lastIndexOf("const confirmText =", at), at);
+    expect(confirm).toMatch(/ENTIRE live site/);
+    expect(confirm).toMatch(/every page, not just this one/);
+    expect(confirm).toMatch(/unpublish again from Website Builder/);
   });
+
 
   it("the button says WHICH Facebook Page, and the confirm says it will be public", () => {
     const a = socialPublishAction({ text: "Slow evenings start here.", to: FB_PAGE })!;

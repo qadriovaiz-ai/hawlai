@@ -228,10 +228,51 @@ export async function PATCH(
     // action needs approval.
     if (approval?.action_type === "send_email") {
       const d = approval.action_details as any;
-      const { sendDealerEmail } = await import("@/lib/email/sendDealerEmail");
-      const sent = await sendDealerEmail(service, approval.dealership_id, d.to, d.subject, d.body);
-      if (!sent.success) {
-        return NextResponse.json({ error: sent.error ?? "The email didn't go out, so nothing was approved." }, { status: 500 });
+      // G-3 STEP 3b, AND A CORRECTION TO PHASE 2B.
+      //
+      // This branch used to call sendDealerEmail directly. That was
+      // right for the shape it was written for - a note to a colleague -
+      // and WRONG for a marketing email to a customer, because
+      // sendDealerEmail skips every rule in
+      // src/lib/email/sendApprovedEmail.ts: the recipient-on-record
+      // check, the suppression list, the business address and
+      // unsubscribe footer, the misleading-subject rule, the unsupported
+      // link check, the duplicate window and the idempotency claim.
+      //
+      // Routing the customer card through the old branch would have made
+      // the approval path LESS safe than the browser path it replaces.
+      // A NOTE TO A COLLEAGUE IS NOT A MARKETING EMAIL, and routing it
+      // through the marketing path would put an unsubscribe footer and a
+      // consent check on internal mail. Internal mail sending directly
+      // is a dated, approved decision (2026-09-14, Part 1 step 3) with
+      // two tests encoding it. Caught by
+      // tests/approvalExecution.test.ts when this branch first sent
+      // everything through sendApprovedEmail.
+      if (d.recipient_kind === "team") {
+        const { sendDealerEmail } = await import("@/lib/email/sendDealerEmail");
+        const sent = await sendDealerEmail(service, approval.dealership_id, d.to, d.subject, d.body);
+        if (!sent.success) {
+          return NextResponse.json({ error: sent.error ?? "The email didn't go out, so nothing was approved." }, { status: 500 });
+        }
+      } else {
+        const { sendApprovedEmail } = await import("@/lib/email/sendApprovedEmail");
+        const sent = await sendApprovedEmail(service, approval.dealership_id, {
+          to: d.to,
+          subject: d.subject,
+          body: d.body,
+          draft: d.draft ?? null,
+          piece_id: d.piece_id ?? null,
+          // The id the card was created with, so pressing Approve twice
+          // cannot send twice (migration 208). A fresh id here would
+          // defeat the claim it exists to take.
+          request_id: d.request_id ?? null,
+        });
+        if (!sent.ok) {
+          return NextResponse.json(
+            { error: sent.error, ...(sent.duplicate ? { duplicate: true } : {}) },
+            { status: sent.status }
+          );
+        }
       }
     }
 

@@ -48,7 +48,7 @@ import { formatBrandVoiceSection, formatBrandVoiceVisualHint, resolveBrandVoiceP
 import { getBusinessContext, type BusinessContext } from "../businessBrain";
 import { validateBrandVoiceCompliance, flattenResultText, withBrandVoiceCheck } from "./brandVoiceValidation";
 import { validateAdvertisingClaimCompliance } from "./complianceValidation";
-import { websitePublishAction, socialPublishAction, emailSendAction, imageGenerateAction, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
+import { socialPublishAction, attachTurnImages, SOCIAL_POST_TYPES, type PublishAction } from "../chat/publishActions";
 import { composePost } from "../chat/socialPost";
 import { readDestinations } from "../chat/destinations";
 import { getCampaignPerformanceState } from "./analyticsAgent";
@@ -3059,6 +3059,37 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
           payload = { subject: input.subject, body: input.body };
           previewText = `${String(input.body).trimEnd()}\n\n—\n${senderDisplayName(ctx.name)} · ${address}\nUnsubscribe: ${previewUnsubscribe}`;
         }
+        // G-3 STEP 3b. The card used to carry a POST to /api/email/send
+        // for the browser to send. The email itself was already guarded
+        // at the endpoint, so what was missing was not capability but
+        // AUTHORISATION AND RECORD: nothing server-side held the words
+        // the owner was shown, or that they had agreed to send them.
+        //
+        // The request id is minted HERE and stored on the row, so
+        // pressing Approve twice cannot send twice - a browser-generated
+        // id would be regenerated on the very press it exists to catch.
+        const emailConfirm = `This sends the email to ${toEmail} now, from ${senderDisplayName(ctx.name)}, with your business address and an unsubscribe link in the footer. It can't be unsent.`;
+        const { requestApproval } = await import("../chat/requestApproval");
+        const { randomUUID } = await import("crypto");
+        const askedEmail = await requestApproval(supabase, ctx.id, {
+          actionType: "send_email",
+          details: {
+            to: toEmail,
+            subject: input.subject,
+            ...(visual ? { draft: (payload as any).draft } : { body: input.body }),
+            // WHICH KIND OF MAIL THIS IS, because the approvals route
+            // routes on it: a note to a colleague must not get an
+            // unsubscribe footer and a consent check. This branch only
+            // ever runs for a lead or customer, and saying so on the row
+            // is cheaper than inferring it at the press.
+            recipient_kind: kind,
+            request_id: `chat-${randomUUID()}`,
+            confirm: emailConfirm,
+          },
+          requestedBy: "master_chat:send_email",
+          confirm: emailConfirm,
+        });
+        if ("error" in askedEmail) return { error: askedEmail.error };
         return {
           proposed: true,
           to: toEmail,
@@ -3067,7 +3098,9 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
           subject: input.subject,
           format: visual ? "visual" : "plain",
           payload,
-          note: `NOT SENT YET. The owner is shown a preview of this email to ${toEmail} with a Send button — it goes out only when they press it. Don't say it was sent.`,
+          approvalId: askedEmail.approvalId,
+          confirm: askedEmail.confirm,
+          note: `NOT SENT YET. The owner is shown a preview of this email to ${toEmail} with an Approve button — it goes out only when they press it. Don't say it was sent.`,
           // Card-only: stripped before this result is shown to the model.
           _emailPreview: { html: previewHtml, text: previewText },
         };
@@ -3956,7 +3989,10 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
             { label: "Subject", value: result.subject },
           ],
           emailPreview: { to: result.to, subject: result.subject, html: result._emailPreview?.html ?? null, text: result._emailPreview?.text ?? "" },
-          publish: emailSendAction({ to: result.to, businessName: result.businessName ?? "your business", payload: result.payload }),
+          // No `publish` descriptor: the button is the approvals PATCH
+          // the server authorises, not a browser fetch to the sender
+          // (G-3 step 3b).
+          ...(result.approvalId ? { approval: { id: result.approvalId }, confirm: result.confirm } : {}),
           departmentHref,
         };
       }

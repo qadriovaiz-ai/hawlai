@@ -19,14 +19,19 @@ let tables: Record<string, Row[]>;
 function db() {
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
+    let inserted: Row | null = null;
     const rows = () => (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
     const api: any = {
       select: () => api, gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api, or: () => api, neq: () => api,
       eq: (k: string, v: any) => (filters.push((r) => r[k] === undefined || r[k] === v), api),
       ilike: (k: string, p: string) => (filters.push((r) => String(r[k] ?? "").toLowerCase() === p.replace(/\\(.)/g, "$1").toLowerCase()), api),
-      insert: () => api, upsert: () => api, update: () => api,
-      maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
-      single: async () => ({ data: rows()[0] ?? null, error: null }),
+      // An inserted row comes back WITH AN ID: chat writes a
+      // pending_approvals row before offering the email card (G-3 step
+      // 3b) and requestApproval reads `.select("id").single()`. A store
+      // that returns nothing for an insert makes the tool look broken.
+      insert: (row: Row) => ((inserted = row), api), upsert: () => api, update: () => api,
+      maybeSingle: async () => ({ data: inserted ? { id: `${table}-1`, ...inserted } : rows()[0] ?? null, error: null }),
+      single: async () => ({ data: inserted ? { id: `${table}-1`, ...inserted } : rows()[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
     };
     return api;
