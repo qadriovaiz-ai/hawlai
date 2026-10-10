@@ -160,7 +160,12 @@ describe("low friction: only the offending sentence goes, the rest reads exactly
     // `removed` and `priceWarnings`, for a composition claim a draft
     // keeps and flags. Kept as a full deep-equal rather than loosened to
     // a partial match, so a FOURTH channel cannot appear here unnoticed.
-    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [], substantiation: [], linksFixed: [] });
+    // `narrative` added 2026-10-10: a FIFTH channel, for a backstory
+    // with no record behind it. It lives on this function now rather
+    // than on guardOrMark, because four paths reach the claim checks
+    // without going through guardOrMark at all - including the website
+    // widget that talks to visitors.
+    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [], substantiation: [], narrative: [], linksFixed: [] });
   });
 
   it("works on every output shape: a hook that was only a claim is dropped, and so is a calendar day left with no caption", () => {

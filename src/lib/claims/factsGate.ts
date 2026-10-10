@@ -104,27 +104,24 @@ export function guardOrMark<T extends object>(
   mode: ClaimsMode = "publish"
 ): GateResult<T> {
   if (facts) {
+    // THE STORY IS CHECKED INSIDE guardGenerated NOW, not here.
+    //
+    // It used to run as a second pass over the guarded output, on the
+    // claim that guardOrMark was "the one place all eight generators
+    // pass through". It is not: it has six callers. socialMediaAgent,
+    // seoToolkitAgent, adEngine and chatbotAgent all reach the claim
+    // checks by another route and had no provenance at all. Moved into
+    // stripUnsupported, which every one of them does go through, and
+    // removed from here so it is applied once rather than twice.
     const r = guardGenerated(output, facts, mode);
-    // AND THE STORY, not only the facts. Every check inside
-    // guardGenerated asks whether a FACT is on record; none asked
-    // whether a STORY is, so a sentence carrying no checkable fact
-    // could be wholly invented and pass all of them. Run here rather
-    // than in each generator for F-16's reason: a protection that lives
-    // in a generator leaves the next generator unguarded.
-    const n = guardNarrative(r.output, facts, mode);
-    const note = narrativeNote(n.findings, mode);
     return {
-      output: {
-        ...n.output,
-        _factsState: "FACTS_AVAILABLE" as FactsState,
-        ...(note ? { _claimsNote: joinNotes((n.output as any)._claimsNote, note) } : {}),
-      },
+      output: { ...r.output, _factsState: "FACTS_AVAILABLE" as FactsState },
       removed: r.removed,
       unverifiable: [],
       priceWarnings: r.priceWarnings,
       substantiation: r.substantiation,
       linksFixed: r.linksFixed,
-      narrative: n.findings,
+      narrative: r.narrative,
       state: "FACTS_AVAILABLE",
     };
   }

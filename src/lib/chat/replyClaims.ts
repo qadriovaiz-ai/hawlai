@@ -82,16 +82,20 @@ export function checkReplyClaims(reply: string, facts: BusinessFacts | null | un
 
   // A BACKSTORY TYPED STRAIGHT INTO THE CONVERSATION (item 4.10).
   //
-  // The generators got narrative provenance through guardOrMark, but a
-  // caption the model writes in its own reply never reaches a generator.
-  // Everything below this line checks FACTS; an invented founding story
-  // or an invented customer quote carries no fact to check, so it passed
-  // both of those branches untouched.
+  // Still checked here, and still separately: a reply with no facts at
+  // all takes the stripUnverifiable branch below, which has no
+  // CLAIM_TERMS rule and so never reaches the sentence guard where
+  // provenance now lives. An invented founding story carries no fact to
+  // check, so without this it would pass untouched.
   //
-  // "draft" mode here, like the price rule below: this is a conversation
-  // the owner is reading, and silently deleting half an explanation reads
-  // as a bug. The sentence stays and is named.
-  const story = checkNarrative(masked, facts, "draft");
+  // WITH facts it is now applied inside stripUnsupported (moved there on
+  // 2026-10-10), so this call would double it. The facts branch below
+  // therefore reads the findings off the strip rather than calling again.
+  //
+  // "draft" mode either way, like the price rule: this is a conversation
+  // the owner is reading, and silently deleting half an explanation
+  // reads as a bug. The sentence stays and is named.
+  const story = facts ? { findings: [] as ReturnType<typeof checkNarrative>["findings"] } : checkNarrative(masked, null, "draft");
   const storyNote = narrativeNote(story.findings, "draft");
 
   if (facts) {
@@ -99,12 +103,20 @@ export function checkReplyClaims(reply: string, facts: BusinessFacts | null | un
     // deleted. The owner is reading this and may have just told it the
     // price themselves.
     const found = findUnsupportedClaims(masked, facts);
-    if (found.length === 0) return { reply: text, removed: [], note: storyNote };
+    if (found.length === 0) {
+      // Nothing factual to strip, but a story may still need naming -
+      // and findUnsupportedClaims does not run the narrative check, so
+      // the strip is what finds it.
+      const onlyStory = stripUnsupported(masked, facts, "draft");
+      return { reply: text, removed: [], note: narrativeNote(onlyStory.narrative, "draft") };
+    }
     const stripped = stripUnsupported(masked, facts, "draft");
     return {
       reply: restore(stripped.text) || text,
       removed: stripped.removed,
-      note: joinNotes(replyClaimsNote(stripped.removed), storyNote),
+      // The strip's own narrative findings, so the story note is said
+      // once and comes from the same pass that produced the text.
+      note: joinNotes(replyClaimsNote(stripped.removed), narrativeNote(stripped.narrative, "draft")),
     };
   }
 

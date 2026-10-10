@@ -25,6 +25,7 @@
 
 import { describeShipping, knownText, normalise, physicalProducts, serviceItems, type BusinessFacts } from "./businessFacts";
 import { computeShippingAmount } from "@/lib/shipping";
+import { checkNarrative, narrativeNote, type NarrativeFinding } from "./narrativeProvenance";
 
 const NOUNS = "homes|customers|families|buyers|people|clients|orders|reviews|ratings|shoppers|users|households|students|patients|members|subscribers";
 // THE MODIFIER BETWEEN THE NUMBER AND THE NOUN (2026-10-09).
@@ -840,10 +841,28 @@ export function stripUnsupported(
   text: string,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { text: string; removed: string[]; priceWarnings: string[]; substantiation: string[]; linksFixed: string[] } {
+): { text: string; removed: string[]; priceWarnings: string[]; substantiation: string[]; narrative: NarrativeFinding[]; linksFixed: string[] } {
   const repair = repairBookingLinks(text, f);
   text = repair.text;
-  if (findProblems(text, f).length === 0) return { text, removed: [], priceWarnings: [], substantiation: [], linksFixed: repair.fixed };
+  // THE STORY, CHECKED WHERE THE FACTS ARE (moved here 2026-10-10).
+  //
+  // Narrative provenance first lived in factsGate.guardOrMark, on the
+  // claim that it was "the one place all eight generators pass
+  // through". THAT WAS WRONG, and the audit of it is why this moved:
+  // guardOrMark has six callers. socialMediaAgent guards a plain string
+  // and calls stripUnsupported directly; seoToolkitAgent and adEngine
+  // call guardGenerated directly; and chatbotAgent - the widget that
+  // talks to website VISITORS - calls stripUnsupported directly too.
+  // None of them had it. Exactly the per-surface mistake F-16 names,
+  // committed while fixing F-16.
+  //
+  // This is the real one place: every path that checks a fact arrives
+  // here, because this is what checks the fact.
+  const story = checkNarrative(text, f, mode);
+  text = story.text;
+  if (findProblems(text, f).length === 0) {
+    return { text, removed: [], priceWarnings: [], substantiation: [], narrative: story.findings, linksFixed: repair.fixed };
+  }
   const kept: string[] = [];
   const removed: string[] = [];
   const priceWarnings: string[] = [];
@@ -871,6 +890,7 @@ export function stripUnsupported(
     removed: Array.from(new Set(removed)),
     priceWarnings: Array.from(new Set(priceWarnings)),
     substantiation: Array.from(new Set(substantiation)),
+    narrative: story.findings,
     linksFixed: repair.fixed,
   };
 }
@@ -978,10 +998,11 @@ export function stripUnverifiable(text: string): { text: string; removed: string
  * sequence). An array item whose main text is removed entirely is
  * dropped; keys starting with "_" are metadata and left alone.
  */
-export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[]; substantiation: string[]; linksFixed: string[] } {
+export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "publish"): { output: T; removed: string[]; priceWarnings: string[]; substantiation: string[]; narrative: NarrativeFinding[]; linksFixed: string[] } {
   const removed: string[] = [];
   const priceWarnings: string[] = [];
   const substantiation: string[] = [];
+  const narrative: NarrativeFinding[] = [];
   const linksFixed: string[] = [];
   const emptied = (before: any, after: any) => typeof before === "string" && before.trim() !== "" && String(after ?? "").trim() === "";
 
@@ -991,6 +1012,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "
       removed.push(...r.removed);
       priceWarnings.push(...r.priceWarnings);
       substantiation.push(...r.substantiation);
+      narrative.push(...r.narrative);
       linksFixed.push(...r.linksFixed);
       return r.text;
     }
@@ -1016,7 +1038,7 @@ export function guardOutput<T>(output: T, f: BusinessFacts, mode: ClaimsMode = "
   };
 
   const out = walk(output);
-  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), substantiation: Array.from(new Set(substantiation)), linksFixed: Array.from(new Set(linksFixed)) };
+  return { output: out, removed: Array.from(new Set(removed)), priceWarnings: Array.from(new Set(priceWarnings)), substantiation: Array.from(new Set(substantiation)), narrative, linksFixed: Array.from(new Set(linksFixed)) };
 }
 
 /** What the owner is told — said plainly, never silently hidden. */
@@ -1058,9 +1080,9 @@ export function guardGenerated<T extends object>(
   output: T,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[]; substantiation: string[]; linksFixed: string[] } {
+): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[]; substantiation: string[]; narrative: NarrativeFinding[]; linksFixed: string[] } {
   const r = guardOutput(output, f, mode);
   const booking = f.links?.booking ?? f.products.find((p) => p.bookingUrl)?.bookingUrl ?? null;
-  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), substantiationNote(r.substantiation), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
-  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings, substantiation: r.substantiation, linksFixed: r.linksFixed };
+  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), substantiationNote(r.substantiation), narrativeNote(r.narrative, mode), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
+  return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings, substantiation: r.substantiation, narrative: r.narrative, linksFixed: r.linksFixed };
 }
