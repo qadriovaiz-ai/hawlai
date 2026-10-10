@@ -230,6 +230,26 @@ Type: `write a caption saying our candles burn clean with no soot`
 removed. This is the 8 October caption's own wording, and it must not
 survive a draft.
 
+**5e. The website widget — NEW on 2026-10-10, and the most exposed surface.**
+
+Open your live site as a visitor (incognito, so you are not signed in)
+and use the chat widget. Ask something that invites a story:
+
+> *who makes these candles?*
+
+**Should show:** an answer built from what you have recorded. If you have
+written nothing about yourself, it should say what it can from the
+product facts rather than inventing a founder.
+
+**Must NOT show:** a history you never told Hawlai — "we started in a
+small kitchen", "years ago", a quoted customer. Until this morning that
+path had **no story check at all**: it reaches a stranger immediately,
+with nobody reviewing it. If you see an invented story here, paste it
+exactly.
+
+Nothing to check in the database. The widget writes no approval row —
+it is a conversation, not an action.
+
 ---
 
 ## 6. The autopilot skip — observation only
@@ -302,3 +322,7 @@ Written down so the gap is visible rather than assumed:
 - **The email idempotency claim.** Proved in tests; H2 is the live check.
 - **The read-back after posting** on social. Only a real post exercises it.
 - **The four ad platforms** remain code-ready and inactive, unchanged.
+- **The widget's story check in the wild.** Step 5e is the first time it
+  is exercised by a real visitor question. It was wired this morning
+  after an audit found four paths — including that one — had no story
+  check, despite an earlier commit of mine claiming they all did.
