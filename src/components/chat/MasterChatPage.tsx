@@ -954,7 +954,21 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
   );
 }
 
-function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
+/**
+ * Exported for tests, which RENDER it (2026-10-10).
+ *
+ * The email card reached live with no Approve button: this function
+ * has four return paths and the emailPreview one rendered the old
+ * descriptor-driven publishStrip and never the approvalStrip, so
+ * deleting that descriptor left the card with no button at all. No
+ * source-grep could have caught it - approvalStrip IS in the file.
+ * The only question that finds it is "given THIS artifact, which
+ * return path runs, and what is in it", and that needs a render.
+ *
+ * Exactly the cardLayout incident of 3 October, which cost five
+ * rounds of diagnosis for the same reason.
+ */
+export function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [editingDraft, setEditingDraft] = useState(false);
 
@@ -1292,8 +1306,29 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           <pre className="px-3 py-2 text-[11.5px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed max-h-[360px] overflow-y-auto">{preview.text}</pre>
         )}
         {storyWarning}
-        {storyWarning}
-      {complianceWarning}
+        {complianceWarning}
+        {/*
+          THE LIVE BUG, 10 October 2026.
+
+          This branch had `publishStrip` and NOT `approvalStrip`. The
+          button came from the PublishAction descriptor, so when G-3
+          step 3 replaced that descriptor with an approval record the
+          card arrived with a correct row, a correct confirm sentence,
+          chat text saying "press Approve on the card above" — and NO
+          BUTTON. The owner could not send the email at all.
+
+          No source grep could have found it: approvalStrip is in this
+          file, three return paths down. The only question that finds it
+          is "given THIS artifact, which return path runs, and what is
+          inside it" — which is why tests/approveButtonRenders.test.ts
+          renders the component instead of reading it.
+
+          Both strips, in the same order as the full renderer below, so
+          the two paths cannot disagree about which button wins.
+
+          (`storyWarning` was also rendered twice here. One copy.)
+        */}
+        {approvalStrip}
         {publishStrip}
       </div>
     );
@@ -1309,10 +1344,25 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
         </div>
         {storyWarning}
-        {storyWarning}
-      {complianceWarning}
-          {approvalStrip}
-          {publishStrip}
+        {complianceWarning}
+        {/*
+          NO approvalStrip HERE, AND IT IS NOT AN OVERSIGHT.
+
+          isSimpleConfirmation returns false for any card carrying an
+          approval (cardLayout.ts: `if (artifact.approval) return
+          false`), so this branch can never be reached by one. The strip
+          used to sit here and was DEAD CODE - a mutation deleting it
+          broke nothing, correctly.
+          
+          Removed rather than left, because code that looks like a guard
+          and cannot run is what made both card incidents slow to
+          diagnose: every source read confirmed the button was "there".
+          Twice. The condition is pinned by a test in
+          tests/approveButtonRenders.test.ts.
+
+          (`storyWarning` was rendered twice here too. One copy.)
+        */}
+        {publishStrip}
         {artifact.departmentHref && (
           <a
             href={artifact.departmentHref}
