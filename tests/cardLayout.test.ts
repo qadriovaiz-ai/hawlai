@@ -119,6 +119,17 @@ describe("the approval buttons follow the card to whichever layout it gets", () 
   // half proves WHICH layout an approval card reaches, the structural
   // half proves that layout draws the buttons. Neither is sufficient
   // alone, which is exactly how the gap opened.
+  //
+  // SUPERSEDED IN PART on 2026-10-10. The email card reached live with
+  // no button, because a FOURTH return path - the emailPreview branch -
+  // existed and this pair did not know about it. The real check is now
+  // tests/approveButtonRenders.test.ts, which renders ArtifactCard with
+  // renderToStaticMarkup and asserts on the markup, for every path. No
+  // DOM is needed for that: renderToStaticMarkup returns a string.
+  //
+  // This file stays as the layout-ROUTING check, which is what it is
+  // good at, and its structural half is narrowed to the claim that is
+  // still true.
 
   it("RUNTIME: a card with an approval never gets the compact layout", () => {
     expect(isSimpleConfirmation({ kind: "record", summary: "x", approval: { id: "a1" } })).toBe(false);
@@ -138,8 +149,33 @@ describe("the approval buttons follow the card to whichever layout it gets", () 
     const compactBranch = page.slice(compactStart, mainStart);
     const mainBranch = page.slice(mainStart);
 
-    expect(compactBranch, "compact branch lost its approval strip").toContain("{approvalStrip}");
+    // THE COMPACT BRANCH NO LONGER HAS ONE, and that is correct.
+    // isSimpleConfirmation returns false for any card with an approval
+    // (the runtime half above), so a strip there could never render. It
+    // was dead code that looked like a guard, which is what made both
+    // card incidents slow to diagnose - every source read confirmed the
+    // button was "there". Removed on 2026-10-10.
+    expect(compactBranch, "the compact branch should not carry a strip it can never render").not.toContain("{approvalStrip}");
     expect(mainBranch, "full-field branch has no approval strip — a card can show what is being approved with no way to approve it").toContain("{approvalStrip}");
+  });
+
+  it("EVERY RETURN PATH IS COVERED BY A RENDER TEST, not by this file", () => {
+    // What this pair missed: it knew about two return paths and there
+    // were four. Counting them means a fifth cannot be added without
+    // someone noticing that the render test needs a case too.
+    //
+    // Counted by splitting on lines rather than with a regex. Two
+    // earlier attempts at this line were written through a script that
+    // turned the escape into a real newline, and the file stopped
+    // parsing - loudly, which is the harmless kind.
+    const returns = page
+      .split("\n")
+      .filter((l) => l.trimEnd().endsWith("return (") && l.startsWith("  "))
+      .length;
+    expect(
+      returns,
+      "ArtifactCard return paths changed - add a case to tests/approveButtonRenders.test.ts"
+    ).toBeGreaterThanOrEqual(4);
   });
 
   it("the strip is gated on the approval existing, so ordinary cards get no buttons", () => {

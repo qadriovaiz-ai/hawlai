@@ -74,6 +74,24 @@ const PATTERNS: Pattern[] = [
   { kind: "history", re: /\b(?:saal|mahine|saalon)\s+pehle\b/i, why: "something that happened in the past" },
   { kind: "history", re: /शुरुआत|साल\s+पहले/, why: "a founding story" },
 
+  // THE OWNER'S OWN HABIT, OFFERED AS PROOF (added 2026-10-10).
+  //
+  // An email that went to a real lead said "we light one at night too".
+  // Nobody had told Hawlai that. The patterns above cover the owner's
+  // HISTORY - started, founded, years ago - and missed the present
+  // tense entirely, which is the more persuasive form: it says the
+  // people who make this use it themselves.
+  //
+  // Tight on purpose. "We" plus anything is the commonest shape in
+  // honest copy, so these need a habit MARKER - too, as well,
+  // ourselves, always, every night - rather than matching every
+  // first-person sentence.
+  { kind: "history", re: /\b(?:we|i)\s+\w+(?:\s+\w+){0,3}\s+(?:too|as\s+well|ourselves|myself)\b/i, why: "something you do yourselves" },
+  { kind: "history", re: /\b(?:we|i)\s+(?:always|usually|often|personally)\b/i, why: "something you do yourselves" },
+  { kind: "history", re: /\b(?:we|i)\s+\w+(?:\s+\w+){0,2}\s+(?:every|each)\s+(?:night|day|morning|evening|week)\b/i, why: "something you do yourselves" },
+  { kind: "history", re: /\bin\s+(?:our|my)\s+own\s+\w+/i, why: "something about your own home or workshop" },
+  { kind: "history", re: /\b(?:hum|main)\s+(?:bhi|khud)\s+\w+/i, why: "something you do yourselves" },
+
   // Someone else's words, put in their mouth.
   {
     kind: "attributed",

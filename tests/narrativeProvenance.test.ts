@@ -304,3 +304,62 @@ describe("the parts it is built from", () => {
     expect(checkNarrative("   ", facts()).text).toBe("   ");
   });
 });
+
+describe("THE OWNER'S OWN HABIT, from the live email", () => {
+  // An email that went to a real lead on 10 October 2026 said "we light
+  // one at night too". Nobody had told Hawlai that.
+  //
+  // The patterns before this covered the owner's HISTORY - started,
+  // founded, years ago - and missed the present tense entirely, which
+  // is the more persuasive form: it says the people who make this use
+  // it themselves. A buyer acts on that.
+  it("THE LIVE SENTENCE IS CAUGHT", () => {
+    const r = checkNarrative("We light one at night too.", facts());
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0].kind).toBe("history");
+    expect(r.text).toBe("");
+  });
+
+  it("and its other forms", () => {
+    for (const line of [
+      "I use it myself every evening.",
+      "We always light one before dinner.",
+      "I light one every night.",
+      "In our own home we keep two.",
+      "Hum bhi raat ko ek jalate hain.",
+    ]) {
+      expect(checkNarrative(line, facts()).findings, line).toHaveLength(1);
+    }
+  });
+
+  it("A RECORDED HABIT PASSES — it is the owner's to state", () => {
+    const recorded = facts({
+      ownerFacts: [
+        { category: "business_story", title: "How we test", content: "Hum bhi raat ko ek jalate hain, warna pata nahi chalta." },
+      ] as any,
+    });
+    const r = checkNarrative("Hum bhi raat ko ek jalate hain.", recorded);
+    expect(r.findings).toHaveLength(0);
+  });
+
+  it("THE PATTERNS ARE TIGHT: ordinary first-person copy is untouched", () => {
+    // "We" plus anything is the commonest shape in honest copy. These
+    // need a habit MARKER - too, as well, ourselves, always, every
+    // night - or they would flag every sentence a business writes about
+    // itself.
+    for (const line of [
+      "We ship within two days.",
+      "We make every candle in small batches.",
+      "We are open on Sundays.",
+      "We deliver across Lucknow.",
+      "Order yours today.",
+    ]) {
+      expect(checkNarrative(line, facts()).findings, line).toHaveLength(0);
+    }
+  });
+
+  it("the note names it in words the owner can act on", () => {
+    const r = checkNarrative("We light one at night too.", facts());
+    expect(narrativeNote(r.findings)).toMatch(/something you do yourselves/);
+  });
+});
