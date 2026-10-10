@@ -1077,7 +1077,59 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         ? await readDestinations(supabase, ctx.id)
         : null;
       const withDest = destinations ? { ...output, _destinations: destinations } : output;
-      return withBrandVoiceCheck(savedId ? { ...withDest, _savedId: savedId } : withDest, resolvedBrandVoice);
+
+      // G-3 STEP 4: THE RECORD BESIDE THE CARD.
+      //
+      // This card is NOT replaced by a generic approval row - it already
+      // resolves the destination before the button exists, gives no
+      // button at all when the destination is not connected, names the
+      // Page in its confirm, carries expect_text and is read back after
+      // posting. A generic row does none of that.
+      //
+      // So a row is written alongside it, holding the destination, the
+      // exact text and the words the owner will read. The row is
+      // single-use, which is what makes the card's request unreplayable
+      // (src/lib/social/approvalForPost.ts).
+      //
+      // Written HERE and not in extractArtifact because that function is
+      // synchronous and cannot ask the database - the same reason
+      // destinations are resolved here.
+      let postApprovalId: string | null = null;
+      const wantedPlatform: "facebook" | "instagram" | null =
+        String(input.contentType) === "instagram_post" ? "instagram"
+        : String(input.contentType) === "facebook_post" ? "facebook"
+        : null;
+      const postTo = wantedPlatform && destinations ? (destinations as any)[wantedPlatform] : null;
+      if (postTo?.connected && !_fallback) {
+        // composePost on the SAME output the card will compose from, so
+        // the text on the row is the text on the card. On 8 October 2026
+        // two different composers produced two different strings and the
+        // owner approved one post while Facebook received another.
+        const agreedText = composePost(withDest).text;
+        if (agreedText.trim()) {
+          const { publicPostConfirm } = await import("../chat/postConfirm");
+          const postConfirm = publicPostConfirm(postTo, { hasImage: false });
+          const { requestApproval } = await import("../chat/requestApproval");
+          const askedPost = await requestApproval(supabase, ctx.id, {
+            actionType: "publish_social_post",
+            details: {
+              destination: postTo.platform,
+              destination_name: postTo.name ?? null,
+              expect_text: agreedText,
+              content_piece_id: savedId,
+              confirm: postConfirm,
+            },
+            requestedBy: "master_chat:generate_content",
+            confirm: postConfirm,
+          });
+          // A failed row leaves the caption as a draft with no publish
+          // button, which is the safe direction: the owner still has the
+          // words and can post from the Social page.
+          if (!("error" in askedPost)) postApprovalId = askedPost.approvalId;
+        }
+      }
+      const withApproval = postApprovalId ? { ...withDest, _postApprovalId: postApprovalId } : withDest;
+      return withBrandVoiceCheck(savedId ? { ...withApproval, _savedId: savedId } : withApproval, resolvedBrandVoice);
     }
     case "generate_seo": {
       // aeo_check is registered in SEO_TASKS (chat-reachable, appears in
@@ -4413,7 +4465,15 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
         const to = wanted ? result?._destinations?.[wanted] : null;
         const composed = composePost(result);
         const publish = to
-          ? socialPublishAction({ text: composed.text, to, draftId: result?._savedId ?? null })
+          ? socialPublishAction({
+              text: composed.text,
+              to,
+              draftId: result?._savedId ?? null,
+              // The row written when this card was built. It travels in
+              // the payload so the endpoint can refuse a replay, and the
+              // card keeps everything else it already had (G-3 step 4).
+              approvalId: result?._postApprovalId ?? null,
+            })
           : null;
         if (publish) artifact.publish = publish;
         // No button: say why, and name the platform that IS connected

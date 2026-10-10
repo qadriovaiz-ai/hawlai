@@ -84,6 +84,16 @@ export function socialPublishAction(opts: {
   /** Where the picture came from, so the card can say so. */
   imageSource?: "uploaded" | "site" | "ai" | null;
   draftId?: string | null;
+  /**
+   * The pending_approvals row written when this card was built (G-3
+   * step 4).
+   *
+   * This card keeps its descriptor rather than being replaced by a
+   * generic approval card, because it already does more than one. The
+   * row rides along so the endpoint can refuse a replay: it is
+   * single-use and carries the agreed text.
+   */
+  approvalId?: string | null;
 }): PublishAction | null {
   const text = (opts.text ?? "").trim();
   if (!text) return null;
@@ -117,6 +127,8 @@ export function socialPublishAction(opts: {
       content_piece_id: opts.draftId ?? null,
       // The endpoint reads the post back and compares against this.
       expect_text: text,
+      // And checks this against the row before posting at all.
+      approval_id: opts.approvalId ?? null,
     },
     done: `✅ Posted to your ${where}`,
     ...(opts.draftId

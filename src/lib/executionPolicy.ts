@@ -121,6 +121,16 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // party is told. Taking it DOWN is deliberately not an action here at
   // all: P4 says the safe direction is never gated.
   publish_site: { actionType: "publish", riskLevel: "high", description: "Make the merchant's ENTIRE site public - every page at once", requiresApproval: true },
+  // G-3 step 4. Unlike the other three, this card is NOT replaced by a
+  // generic approval card - it already resolves the destination before
+  // the button exists, gives no button when the destination is not
+  // connected, names the Page, carries expect_text and is read back
+  // after posting. The row rides ALONGSIDE it, single-use, so the
+  // card's request cannot be replayed.
+  //
+  // "high": public and fast, and only partly reversible - unpublish
+  // exists but whoever already saw it has seen it.
+  publish_social_post: { actionType: "publish", riskLevel: "high", description: "Post publicly to the merchant's Facebook Page or Instagram", requiresApproval: true },
   update_post: { actionType: "edit", riskLevel: "medium", description: "Change a post or page already live on the merchant's site", requiresApproval: true },
   // Creates a campaign, ad set and ad on Meta, all PAUSED. Spends
   // nothing by itself -- activation is a separate, separately-gated

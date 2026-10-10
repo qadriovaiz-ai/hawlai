@@ -5,6 +5,7 @@ import { postPhotoToPage, postTextToPage, getConnectedInstagramAccountId, postPh
 import { samePostText } from "@/lib/chat/socialPost";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { isPieceId, markTrackedLinks } from "@/lib/attribution/contentLink";
+import { checkPostApproval, spendPostApproval } from "@/lib/social/approvalForPost";
 import { registerPiece } from "@/lib/attribution/pieces";
 
 export async function POST(request: Request) {
@@ -19,9 +20,31 @@ export async function POST(request: Request) {
   // Three ways in, one posting path: an uploaded photo (the Social
   // page), an image already in storage (chat, which generated it a
   // moment ago and has its URL), or words alone.
-  const { photo_base64, image_url, caption, scheduled_time, post_to_instagram, content_piece_id, destination, expect_text, image_source } =
+  const { photo_base64, image_url, caption, scheduled_time, post_to_instagram, content_piece_id, destination, expect_text, image_source, approval_id } =
     await request.json();
   if (!caption || caption.trim().length < 1) return NextResponse.json({ error: "Caption is required" }, { status: 400 });
+
+  // G-3 STEP 4: THE CARD STAYS, THE RECORD IS ADDED BESIDE IT.
+  //
+  // This card was not converted to a generic approval row, because it
+  // already does more than one: the destination is resolved before the
+  // button exists, an unconnected destination gets no button at all, the
+  // confirm names the Page, and the post is read back below. Replacing
+  // that with a generic row would have reduced safety.
+  //
+  // So a chat card now carries an approval id, and the row is SINGLE-USE
+  // with the agreed text on it. That makes the card's request
+  // unreplayable and makes a replay with different words refusable.
+  //
+  // A request with NO id is the Social page's own, which has always
+  // posted directly. That path is unchanged, which is also the limit of
+  // what this buys: omitting the id is not refused.
+  // src/lib/social/approvalForPost.ts says so in full.
+  const approvalCheck = await checkPostApproval(createServiceClient(), dealershipId, approval_id, caption);
+  if (!approvalCheck.ok) {
+    return NextResponse.json({ error: approvalCheck.error }, { status: approvalCheck.status });
+  }
+  const usedApproval = approvalCheck.approvalId;
 
   // The text the card showed and the text being posted must be the same
   // text. On 8 Oct 2026 they were not: the card appended the hashtags
@@ -123,6 +146,10 @@ export async function POST(request: Request) {
           .eq("id", draftRow.id)
           .eq("dealership_id", dealershipId);
       }
+      // The row is spent only now, after Instagram has it: a row marked
+      // approved for a post that then failed would leave the owner
+      // unable to try again.
+      await spendPostApproval(createServiceClient(), usedApproval);
       return NextResponse.json({
         success: true,
         destination: "instagram",
@@ -214,6 +241,7 @@ export async function POST(request: Request) {
       verified = landedText === undefined ? "unreadable" : samePostText(fbCaption, landedText) ? "match" : "differs";
     }
 
+    await spendPostApproval(createServiceClient(), usedApproval);
     return NextResponse.json({
       success: true,
       destination: "facebook",
