@@ -175,3 +175,77 @@ describe("2. the customer-facing social tasks", () => {
     expect(r.output.tips[0].tip).toBe("Reply within an hour");
   });
 });
+
+// ---------------------------------------------------------------------
+// 3. THE FACEBOOK CAPTION — the surface both incidents happened on
+// ---------------------------------------------------------------------
+//
+// generateSocialCaption had claims and provenance. Through the door it
+// also gets the word cap (facebook_post, 150 words), the customer-first
+// structure, the anti-generic verdict and the invented-key strip.
+
+import { generateSocialCaption } from "@/lib/agents/socialMediaAgent";
+
+describe("3. the Facebook caption", () => {
+  it("THE CAP APPLIES, and an over-long caption is tightened not refused", async () => {
+    const long = [
+      "Evenings get loud in Shahjahanpur.",
+      ...Array(24).fill("The Lavender candle is soy wax and it waits on the shelf for the evening."),
+      "Lavender candle, 550. Order on the store page.",
+    ].join(" ");
+    anthropic({ caption: long });
+    const r = await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, facts(), "publish");
+    expect(r.caption.trim().split(/\s+/).length).toBeLessThanOrEqual(150);
+    expect(r.caption).toContain("Evenings get loud");
+    expect(r.caption).toContain("550");
+  });
+
+  it("THE CUSTOMER-FIRST ORDER IS IN THE PROMPT", async () => {
+    anthropic({ caption: "Evenings get loud. Lavender candle, 550." });
+    await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, facts(), "draft");
+    expect(prompts[0]).toMatch(/WHO THIS IS FOR: the reader, not the business/);
+  });
+
+  it("AN UNBACKED STORY STILL GOES — provenance by the longer route", async () => {
+    anthropic({ caption: "We started in a borrowed saucepan on a kitchen floor. Lavender candle, 550." });
+    const r = await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, facts(), "publish");
+    expect(r.caption).not.toMatch(/borrowed saucepan/);
+  });
+
+  it("AND THE OWNER IS TOLD WHY THE LINE WENT", async () => {
+    // A line removed by PROVENANCE reports on a different channel from
+    // a claim, and this path returned claimsRemoved only - so the
+    // sentence disappeared from the caption and the owner was told
+    // nothing. Found by the assertion above failing for the right
+    // reason: the story HAD gone, and claimsRemoved was empty.
+    anthropic({ caption: "We started in a borrowed saucepan on a kitchen floor. Lavender candle, 550." });
+    const r: any = await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, facts(), "publish");
+    expect(String(r.note ?? "")).toMatch(/records/i);
+  });
+
+  it("THE UNATTENDED PATH IS STILL SINGLE-SHOT", async () => {
+    // publish mode is the autopilot's, and the contract is one call.
+    anthropic({ caption: "Looking for the perfect gift? We have amazing products." });
+    await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, facts(), "publish");
+    expect(prompts.length).toBe(1);
+  });
+
+  it("and it is told not to post when the caption reads like anyone's", async () => {
+    anthropic({ caption: "Looking for the perfect gift? We have amazing products." });
+    const r: any = await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, facts(), "publish");
+    expect(r.publishable).toBe(false);
+  });
+
+  it("WITH NO RECORDS the caption is still checked and the state said", async () => {
+    anthropic({ caption: "We are India's number 1 candle brand." });
+    const r = await generateSocialCaption("the lavender candle", null, "Home fragrance", undefined, null, "publish");
+    expect(r.caption).not.toMatch(/number 1/i);
+    expect(r.unverified).toBeTruthy();
+  });
+
+  it("the owner's own words come back when the model fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, text: async () => "boom", json: async () => ({}), headers: { get: () => null } })));
+    const r = await generateSocialCaption("my own caption", null, "Home fragrance", undefined, facts(), "draft");
+    expect(r.caption).toBe("my own caption");
+  });
+});

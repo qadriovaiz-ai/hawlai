@@ -17,6 +17,8 @@ import { soundRule, normaliseLanguage } from "@/lib/content/language";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { truthBlock, unverifiedNote } from "@/lib/claims/factsGate";
+// A caption is customer-facing copy: one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 const GRAPH_VERSION = "v23.0";
 
@@ -36,6 +38,18 @@ export async function generateSocialCaption(
   aiFailure?: AiFailureNote;
   /** Set only when the business's records could not be read, so nothing here was checked against them (F-01). */
   unverified?: string;
+  /** False when the caption read like anyone's, or was the wrong shape. Unattended callers refuse to post. */
+  publishable?: false;
+  /**
+   * What the owner is told about what changed and why.
+   *
+   * ADDED 2026-10-11. This path returned `claimsRemoved` only, and a
+   * line removed by the PROVENANCE check reports on a different channel
+   * - so an unbacked story vanished from the caption and the owner was
+   * told nothing at all. Found by a test asserting claimsRemoved was
+   * non-empty when the story had in fact been taken out.
+   */
+  note?: string;
 }> {
   // The owner's settings, as rules rather than fields (lib/content/language.ts):
   // "Preferred language: english" sitting in a sentence lost to the Hinglish
@@ -50,49 +64,50 @@ export async function generateSocialCaption(
   const unchanged = { caption: prompt, claimsRemoved: [] as string[] };
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 300,
-      messages: [
-        {
-          role: "user",
-          content: `Write a short, engaging Facebook post caption for an Indian ${businessCategory} business's organic (non-ad) post.
-What the post is about: "${resolveFestiveTopic(prompt, facts?.season)}"
-${brandContext}${truthBlock(facts)}
-Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end. Return JSON only: {"caption":"the caption text"}`,
-        },
-      ],
-    }, { operation: "social_caption", logContext });
-    if (!r.ok) return { ...unchanged, aiFailure: aiFailureNote(r.failure) };
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[socialMediaAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return unchanged;
-    }
-    const parsed = parsedReply.value;
-    const caption: string = parsed.caption ?? prompt;
-    // F-01: with no facts this returned the caption unchecked and said
-    // claimsRemoved was empty — indistinguishable from a clean check.
-    // The fact-independent rules still apply: with nothing on record, a
-    // count, a ranking or a comparison is unsupported by definition.
-    if (!facts) {
-      const unchecked = stripUnverifiable(caption);
-      return {
-        caption: unchecked.text,
-        claimsRemoved: unchecked.removed,
-        priceWarnings: [],
-        unverified: unverifiedNote(unchecked.removed, unchecked.unverifiable) ?? undefined,
-      };
-    }
-    const checked = stripUnsupported(caption, facts, claimsMode);
-    return { caption: checked.text, claimsRemoved: checked.removed, priceWarnings: checked.priceWarnings };
+    // PHASE 3.5, STEP 3 (landed with step 7). A Facebook caption, which
+    // is where both live incidents happened. It had claims and
+    // provenance; through the door it also gets the customer-first
+    // structure, the word cap, the anti-generic verdict and the
+    // invented-key strip.
+    const copy = await generateCopy({
+      // facebook_post, so the 150-word cap applies and an over-long
+      // caption is tightened rather than handed back.
+      contentTypeKey: "facebook_post",
+      topic: prompt,
+      businessName: facts?.businessName ?? "this business",
+      businessCategory,
+      facts,
+      mode: claimsMode,
+      // The unattended autopilot calls this in publish mode, and that
+      // path stays single-shot.
+      revise: claimsMode === "draft",
+      language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "social_caption",
+      logContext,
+      maxTokens: 300,
+      brief: {
+        label: "Facebook post caption",
+        instructions: `Write a short, engaging Facebook post caption for an organic (non-ad) post. Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end.`,
+        brandContext,
+        shapeHint: `Return JSON only: {"caption":"the caption text"}`,
+      },
+    });
+    if (copy._aiFailure) return { ...unchanged, aiFailure: copy._aiFailure };
+    if (copy._fallback) return unchanged;
+    const caption: string = copy.output.caption ?? prompt;
+    const note = [copy.output._claimsNote, copy.output._storyNote].filter(Boolean).join(" ") || undefined;
+    return {
+      caption,
+      claimsRemoved: copy.removed,
+      priceWarnings: copy.priceWarnings,
+      ...(note ? { note } : {}),
+      // F-01: the state travels, so nothing reads as a clean check when
+      // the records could not be read.
+      ...(copy.output._factsState === "FACTS_UNAVAILABLE"
+        ? { unverified: String(copy.output._claimsNote ?? "Hawlai couldn't read your store records for this one.") }
+        : {}),
+      ...(copy.publishable === false ? { publishable: false as const } : {}),
+    };
   } catch (err: any) {
     console.error("[social-media-agent] generateSocialCaption error:", err.message);
     return unchanged;

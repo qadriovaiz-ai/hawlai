@@ -115,7 +115,6 @@ const MIGRATING: Record<string, string> = {
   // the door on 2026-10-11 and its entry is deleted; it was the agent
   // that HAD every measure, as its own copy, which is exactly why no
   // other surface did.
-  "src/lib/agents/socialMediaAgent.ts": "2026-10-11, step 3: reads and writes posts on the platform",
   // step 4 — DONE 2026-10-11. WhatsApp and the CUSTOMER-FACING social
   // tasks are through the door. socialManagementAgent still calls the
   // model directly for viral_trends, which searches the web and is
@@ -129,15 +128,13 @@ const MIGRATING: Record<string, string> = {
   // door's. paidAdsAgent still calls the model directly for its
   // owner-facing planning tasks.
   // step 6 — SEO, AEO and CRO
-  "src/lib/agents/seoToolkitAgent.ts": "2026-10-11, step 6: mostly owner-facing SEO advice, but meta_tags and gbp_optimization write text a customer reads. Its F-01 fail-open was fixed on 2026-10-11; the two copy tasks still want the door",
+  "src/lib/agents/seoToolkitAgent.ts": "2026-10-11, step 6. HAS: guardOrMark, claims and provenance, and its F-01 fail-open was fixed today. MISSING: the genericness verdict and the key strip for its two customer-facing tasks, meta_tags and gbp_optimization. The other eight tasks are owner-facing SEO advice and must not go through the door",
   // step 7 — websites and long-form shapes
-  "src/lib/agents/websiteBuilderAgent.ts": "2026-10-11, step 7: block trees, a different output shape",
-  "src/lib/agents/brandBuildingAgent.ts": "2026-10-11, step 7: taglines that become copy everywhere",
+  "src/lib/agents/websiteBuilderAgent.ts": "2026-10-11, step 7. HAS: guardBlockTree, which runs claims and provenance over every block's text, plus its own invented-contact scrub and slug check. MISSING: the genericness verdict. The door writes a JSON piece; this writes a tree of typed blocks, so a block-aware door is a design decision for the owner rather than a mechanical move",
+  "src/lib/agents/brandBuildingAgent.ts": "2026-10-11, step 7. HAS: guardDepartmentOutput, so claims and provenance run over the taglines and positioning lines. MISSING: the genericness verdict, which is the measure that matters most for a tagline - and the one case where a fixed word cap would be wrong",
   // the chat, which writes prose of its own
-  "src/lib/agents/masterBrainV2.ts": "2026-10-11, step 3: the chat's own prose; guarded by replyClaims today",
-  "src/lib/agents/chatbotAgent.ts": "2026-10-11, step 4: the website widget's replies",
+  "src/lib/agents/chatbotAgent.ts": "2026-10-11, step 4. HAS: truthBlock in the prompt, then stripUnsupported with the records and stripUnverifiable without them, so claims, links and provenance all run. MISSING: nothing mechanical. A chat turn is not a marketing piece, so the cap and the customer-first order do not apply, and whether a visitor-facing reply should also get the genericness verdict is an open question for the owner",
   // the calendar writes post drafts
-  "src/lib/strategy/calendar/write.ts": "2026-10-11, step 3: calendar post drafts, reports claims but does not strip",
 };
 
 /**
@@ -182,6 +179,17 @@ const NOT_COPY: Record<string, string> = {
   // one.
   "src/lib/agents/aeoAgent.ts": "a visibility check for the owner: a score, a breakdown and recommendations, built from a web search; writes no copy",
   "src/lib/agents/croAgentV2.ts": "conversion suggestions for the owner, already scrubbed by scrubCroOutput which runs findUnsupportedClaims",
+  // CORRECTED 2026-10-11. I listed this as "reports claims but does not
+  // strip". It does strip: findUnsupportedClaims on each idea, and an
+  // idea with an unsupported claim is DROPPED whole with a reason. The
+  // ideas are week-by-week planning for the owner, who turns a chosen
+  // one into a post through a generator that is through the door.
+  "src/lib/strategy/calendar/write.ts": "week-by-week content ideas for the owner to pick from; each idea is dropped whole if findUnsupportedClaims flags it",
+  // The chat talks to the OWNER, not to their customers, and its prose
+  // is already guarded by lib/chat/replyClaims.ts (claims, links,
+  // language and provenance). It is not a marketing piece, so the word
+  // cap and the customer-first order do not apply to it.
+  "src/lib/agents/masterBrainV2.ts": "the chat's replies, read by the owner; already guarded by replyClaims, and not a marketing piece with a shape or a cap",
   // MOVED HERE FROM MIGRATING, 2026-10-11, after reading it. I had
   // listed it as "ad copy pushed to live platforms", which was wrong:
   // proposeTargetingChange and proposeBudgetChange return an age range,

@@ -108,12 +108,28 @@ describe("1. socialMediaAgent — the plain-string caption path", () => {
   // failure path, where it returns the PROMPT as the caption - so the
   // assertion was reading "a candle post" and would have passed for
   // entirely the wrong reason.
-  it("IT GUARDS ITS CAPTION THROUGH stripUnsupported", async () => {
+  it("IT GUARDS ITS CAPTION THROUGH THE DOOR", async () => {
+    // The caption went through generateCopy on 2026-10-11 (Phase 3.5).
+    // The door runs guardOrMark, which is guardGenerated when the
+    // records are readable and the fact-independent subset when they
+    // are not - so BOTH branches this used to spell out by hand are
+    // inside it, and provenance is reached by a longer route rather
+    // than a different one.
     const { code } = await import("./helpers/source");
     const agent = code("src/lib/agents/socialMediaAgent.ts");
-    expect(agent).toMatch(/stripUnsupported\(caption, facts, claimsMode\)/);
-    // And the no-facts branch keeps its own fail-closed call.
-    expect(agent).toMatch(/stripUnverifiable\(caption\)/);
+    expect(agent).toMatch(/generateCopy\(\{/);
+    expect(agent).toMatch(/from "@\/lib\/content\/generateCopy"/);
+    // AND NO SECOND ROUTE TO THE MODEL from this file's caption path.
+    expect(agent).not.toMatch(/stripUnsupported\(caption/);
+  });
+
+  it("AND THE DOOR WITHHOLDS THE STORY ON THAT PATH, driven end to end", async () => {
+    // What the grep above cannot prove. The caption path's guard is
+    // asserted by running it, not by naming a function.
+    const { guardCopyFields } = await import("@/lib/content/generateCopy");
+    const r = guardCopyFields({ caption: `Lavender candle, 550. ${INVENTED}` }, { facts: facts(), mode: "publish" });
+    expect(String((r.output as any).caption)).not.toMatch(/borrowed saucepan/);
+    expect(r.narrative).toHaveLength(1);
   });
 
   it("and the rule it reaches does withhold the story", () => {
