@@ -76,19 +76,170 @@ a route the intake never controlled.
 | `storyEcho` — `textOfOutput`, `COMMON`, `storyVocabulary`, `ORDINARY_MATCHES_NEEDED`, `ordinaryMatchesNeeded` | `storyEcho.ts:150,46,91,130,140` | `textOfOutput` is used by `customerFirst` and `antiGeneric` and is not story-specific. `storyVocabulary` **stays but changes source** — see A.0 |
 | Rendering of existing `business_story` rows | `KnowledgeBaseView.tsx` | An owner must still be able to see and delete what they already wrote. Hiding the rows would look like data loss |
 
-### A.4 — Migrations
+### A.4 — RETRACTED. "Ignore `business_story`" would delete true facts.
 
-**None. Not even a reversible one, for step 0.**
+> **Founder, 2026-10-11.** All 14 active `business_knowledge` rows for
+> `candle_by_qaaf` are `category = 'business_story'`, and they contain
+> the product and process facts — the double-boiler melting, the
+> fragrance step, the 24-hour set, "never mixes cheap paraffin",
+> "paraffin-free — soy wax only", "hand-poured in small batches".
+>
+> **So my A.4 recommendation was wrong.** "Stop reading
+> `category = 'business_story'`" would have removed this business's
+> entire factual evidence set in one line — every honest claim about
+> materials, process and timing would have started being stripped as
+> unsupported. It would have looked like the guard getting stricter and
+> been the guard going blind.
+>
+> This is the second time in this plan I have reasoned from a category
+> name instead of its contents. The lesson is the same both times: the
+> label is not the thing.
 
-The cleanest change is code-only: stop reading `category =
-'business_story'`. The rows stay, untouched and visible, and the whole
-step reverts by restoring one block in `businessFacts.ts`.
+**The intake question set explains why this happened.**
+`businessStory.ts:35` `STORY_QUESTIONS` has ten questions, and **six of
+them ask for facts** — how it is made, what takes longest, materials
+and suppliers, the detail people notice, what you refuse to do, what
+people get wrong. Only origin and first-customers ask for a story at
+all. The category was named after the *interview*, not after what the
+answers contain.
 
-If you later want them out of the evidence set permanently, the
-smallest safe step is `update business_knowledge set is_active = false
-where category = 'business_story'` — reversible, no row deleted. **Not
-recommended now**: it is irreversible in practice if an owner then
-edits a row, and it buys nothing that ignoring the category does not.
+### A.4a — The re-classification, owner-confirmed, nothing automatic
+
+Three classes, as instructed. **No row is deleted, and no row moves
+without the owner confirming it.**
+
+| Class | What it means | Used in customer copy? |
+|---|---|---|
+| **FACT** | a product, process, material, timing or policy fact | **Yes** — as `owner_stated` evidence (section C), never shown as a story |
+| **PRIVATE** | a customer's situation, a family or personal detail | **Never.** `personalStories` protection stays exactly as it is |
+| **STORY** | origin, motive, how it felt | **No.** Kept, visible to the owner, read by no generator |
+
+**Proposed class per intake question** — by the nature of the question,
+which is the part I can know without seeing every row:
+
+| Question key | Title | Proposed | Why |
+|---|---|---|---|
+| `how_made` | How it's made, step by step | **FACT** | process and timings |
+| `slow_part` | The part that takes longest | **FACT** | process plus duration |
+| `materials` | Materials and suppliers | **FACT** | materials, origin, names |
+| `detail_noticed` | The detail people notice | **FACT** | a physical, pointable detail |
+| `refuse` | What you refuse to do | **FACT** | a policy fact — see the warning below |
+| `mistaken` | What people get wrong | **FACT** | usually a factual correction |
+| `customer_words` | What a customer actually said | **PRIVATE** | a customer's own words; `needsConsent` territory |
+| `first_customers` | The first customers | **STORY**, or PRIVATE if it names people | |
+| `origin` | How it started | **STORY** | motive, not fact |
+| `how_you_talk` | How you talk about the work | **STORY (tone only)** | an input to voice, never a claim |
+
+**Rows whose title is not one of those ten need individual review.**
+You named one — *"Something I can stand behind"* — which is **not** in
+`STORY_QUESTIONS`, so at least some of the 14 were entered by hand.
+**I have seen 5 of 14 titles. The other 9 I have not seen and will not
+guess at.** The query in A.4c produces the full list to confirm against.
+
+### A.4b — Two warnings that the row you quoted makes concrete
+
+**1. Classification must be PER SENTENCE, not per row.** You described
+*"Something I can stand behind"* as containing "paraffin-free — soy wax
+only" **and** "hand-poured in small batches" **and** an Instagram
+handle **and** "Bulk Order". That single row holds:
+
+- two usable FACTS;
+- a **contact detail** — which `scrubInventedContacts` exists to keep
+  out of copy unless it is the real one;
+- and an **offer word**, "Bulk Order", which the offer rules would read
+  as a claim about something that may not exist.
+
+Marking the whole row FACT would license all four. This is the lesson
+already written into `businessFacts.ts:~310`: *"PER PROP, NOT PER
+BLOCK… a block the owner had edited contributed ALL its text as
+evidence."* The same mistake, one level up. **The unit of
+classification is the sentence.**
+
+**2. A FACT's phrasing is not automatically publishable.** `refuse`
+answers are the clear case. The *fact* is "soy wax only, never
+paraffin". The *phrasing* you quoted — "never mixes cheap paraffin wax"
+— is a pejorative about other people's products, which the comparative
+rules correctly refuse. The classification licenses **the fact**, not
+the owner's sentence: copy may say "soy wax only", and may not reuse
+"cheap paraffin".
+
+### A.4c — The live constraint check, before any SQL
+
+Rule 4: the live constraint is checked first, and the owner runs
+everything by hand.
+
+**What the repo believes** — migration 189 (lines 16-18) replaced
+migration 118's constraint with:
+
+```
+check (category in ('hours','pricing_note','policy','faq','general','business_story'))
+```
+
+**Check the live one before trusting that:**
+
+```sql
+select conname, pg_get_constraintdef(oid) as definition
+from pg_constraint
+where conrelid = 'business_knowledge'::regclass
+  and contype = 'c';
+```
+
+**And list the rows to classify:**
+
+```sql
+select id, category, title, left(content, 120) as first_120, created_at
+from business_knowledge
+where dealership_id = (select id from dealerships where dealership_name ilike '%qaaf%')
+  and is_active = true
+order by created_at;
+```
+
+### A.4d — You may not need a migration at all
+
+Two options. **I recommend the first.**
+
+**Option 1 — no schema change.** Move confirmed FACT rows to
+`category = 'general'`, which the live constraint already allows and
+which `businessFacts.ts:732` already renders as *"What the owner says
+about the business"*. Zero migration, reversible with an update, and
+once section C lands the real meaning lives on `FactRecord.source =
+owner_stated` rather than on a category name — which is where it
+belongs, given that the category name is what misled me twice.
+
+**Option 2 — a precise category.** If you want `product_fact` to exist
+as a name, the constraint must be widened first. SQL for you to run by
+hand, **after** A.4c confirms the current definition:
+
+```sql
+-- 1. widen the constraint (additive; no existing value is removed)
+alter table business_knowledge drop constraint if exists business_knowledge_category_check;
+alter table business_knowledge add constraint business_knowledge_category_check
+  check (category in ('hours','pricing_note','policy','faq','general','business_story','product_fact'));
+```
+
+```sql
+-- 2. verify it took
+select pg_get_constraintdef(oid) as definition
+from pg_constraint
+where conrelid = 'business_knowledge'::regclass and contype = 'c';
+```
+
+**That SQL moves no rows.** The move is a separate, per-row,
+owner-confirmed update once the classification table is agreed — and
+because A.4b requires per-sentence classification, a mixed row is
+**split into two rows** rather than moved whole.
+
+### A.4e — Order, restated
+
+1. Section C ingests these rows as `owner_stated` facts, **before**
+   anything about the story category changes.
+2. The owner confirms the classification table.
+3. Only then does `business_story` stop being read — and by then the
+   facts are in the evidence set under their own class, so nothing
+   honest is lost.
+
+**Nothing in section A may ship before C.** A.0 said that for
+genericness. A.4 now says it for truthfulness, which is worse.
 
 ### A.5 — What the owner will notice
 
@@ -391,6 +542,85 @@ FactRecord {
 
 ---
 
+### C.6 — FIRST JOB: ingest the existing `business_story` rows
+
+Added after the founder's 2026-10-11 finding. **This is C's first
+deliverable, not a later one**, because section A cannot proceed until
+it exists (A.4e).
+
+The extractor reads `business_knowledge` rows **whatever their
+category**, classifies them per sentence (A.4b), and emits
+`FactRecord`s:
+
+```
+source: "owner_stated"       confidence: "observed"
+sourceRef: business_knowledge.id + sentence index
+```
+
+Three consequences worth stating plainly:
+
+1. **The category stops being load-bearing.** A fact is a fact because
+   of its `source` and its sentence, not because of the folder it sits
+   in. That is the whole reason A.4d's Option 1 (`general`, no
+   migration) is enough: once C exists, the category is a UI label.
+2. **PRIVATE sentences never become `FactRecord`s at all.** They are
+   not low-confidence facts; they are not evidence. `splitStories` and
+   `needsConsent` decide this, before classification, and keep deciding
+   it.
+3. **STORY sentences do not become `FactRecord`s either** — which is
+   how the founder's rule ("story text does not go into customer copy;
+   facts do") becomes mechanical rather than a prompt instruction. The
+   prompt stops containing story text because there is no record to put
+   there, not because a sentence asks it not to.
+
+### C.7 — Hinglish: one fact, two languages
+
+**The gap, verified.** `CLAIM_SYNONYMS` (`claimCheck.ts:222-243`) has
+16 pairs and **every member of every pair is English**. So a row
+reading *"kabhi sasta paraffin wax mix nahi karti"* licenses nothing:
+`said("no paraffin")` is false, and the true claim is stripped. The
+file already records this happening once, with "clean burning" in a
+Hinglish story (`claimCheck.ts:~250`).
+
+**Two changes, and they are different in kind:**
+
+**(a) Synonym members in Hinglish and Hindi.** Additive, and it only
+ever *licenses* — it cannot cause a strip. Example family:
+
+```
+["paraffin free", "no paraffin", "paraffin nahi", "paraffin kabhi nahi",
+ "sirf soy", "soy wax only"]
+```
+
+**Dry-run first, same as every rule class**, because widening a licence
+is how a claim slips through: "sirf soy" must not end up licensing
+"100% pure soy" if the records never said pure.
+
+**(b) `owner_stated` licensing is per FACT, not per phrase.** This is
+the better fix and it belongs in C, not in the synonym table. When the
+extractor reads *"kabhi sasta paraffin wax mix nahi karti"*, it emits:
+
+```
+key: "material.paraffin"   value: false   source: owner_stated
+```
+
+A claim is then licensed by **matching the fact**, not by matching the
+owner's words. English copy saying "paraffin-free" and Hinglish copy
+saying "paraffin nahi" both satisfy `material.paraffin = false`, and
+neither needs a synonym pair to exist.
+
+(a) is the stopgap that works this week; (b) is what makes the synonym
+table shrink instead of grow. Both are needed, in that order, and (a)
+should carry the same written expiry as the 1a regexes (D.4).
+
+**One risk, stated:** extracting `material.paraffin = false` from a
+Hinglish sentence is a *reading* of that sentence, so the record's
+confidence is `observed`, not `counted`, and the extraction itself
+should be shown to the owner once — "I read this as: soy wax only, no
+paraffin. Right?" — rather than assumed. That is the one factual
+question C.4 rule 2 already allows for, spent on confirming a reading
+rather than asking for something new.
+
 ## D) Eval harness, and the sentence-support verifier
 
 ### D.1 — Why the harness comes first
@@ -606,39 +836,70 @@ multiplexes subsystems within a group.
 3. **Three gaps found while testing item 6**, each dry-run first: cure
    time in the duration verbs; a `process` rule class; **Hinglish
    synonym pairs**, which is the one that currently removes TRUE copy.
-4. **C — the Facts extractor.** Prerequisite for A (see A.0).
-5. **A — delete the story.** After C, so genericness keeps its
-   evidence.
-6. **D.2 — the eval harness.** Needs approval: it spends money.
-7. **E — the Daily Owner Report.**
-8. **D.3 — the sentence-support verifier**, measured against D.2.
-9. **F — the planner**, then targets, then the ladder.
+4. **C.6 — ingest the existing `business_knowledge` rows as
+   `owner_stated` facts.** This is now the gate on everything in A: 14
+   of 14 rows for the live business are `business_story` and they hold
+   the real product facts (A.4).
+5. **C.7(a) — Hinglish synonym members.** Additive, licence-only, and
+   it stops stripping true copy this week.
+6. **The owner confirms the A.4a classification table.**
+7. **A — retire the story category.** Only after 4-6, so nothing
+   honest is lost.
+8. **C.7(b) — licensing by FACT rather than by phrase**, which is what
+   makes the synonym table shrink instead of grow.
+9. **D.2 — the eval harness.** Needs approval: it spends money.
+10. **E — the Daily Owner Report.**
+11. **D.3 — the sentence-support verifier**, measured against D.2.
+12. **F — the planner**, then targets, then the ladder.
 
-Meta post-insights ingestion belongs between 7 and 9; no dependency on
-the rest.
+Meta post-insights ingestion belongs between 10 and 12; no dependency
+on the rest.
 
 ## Decisions I need from you
 
-1. **`docs/Hawlai-autonomous-agency-plan.md` was not attached.** If it
-   exists, this document should be checked against it first.
-2. **Item 6: record or invented?** The two queries in B-bis.4 answer
-   it. Which way they come back decides whether three rule classes are
-   missing or only the Hinglish synonym gap is.
-3. **A before C, or C before A?** I recommend C first (A.0). Deleting
-   the story first is faster and will visibly worsen genericness for a
-   while.
-4. **Owner-stated facts: `substantiation` tier or authoritative?** C.3
-   proposes flag-don't-authorise. That is stricter than today and will
-   create friction for owners who type true things. **The Hinglish
-   finding in B-bis.4(a) argues the other way**: today the system
-   already removes true owner-recorded copy when the record is in
-   Hinglish, and tightening the tier makes that worse before the
-   synonym table is fixed. Recommend fixing Hinglish synonyms FIRST,
-   whichever tier you pick.
-7. **The missing price (item 4): a note, or a hard block?** I recommend
-   a note — a hard block would refuse honest teaser copy, and an
+1. **`docs/Hawlai-autonomous-agency-plan.md` was never attached.** If it
+   exists, this document should be checked against it before any code.
+
+2. **The other 9 row titles.** Item 6 is answered — the process
+   sentences are real, they are in the `business_story` rows, nothing
+   was invented. What is left is the A.4a classification table, and I
+   have seen 5 of 14 titles. The query is in A.4c. I will not guess the
+   other 9.
+
+3. **A.4d — `general` with no migration, or widen the constraint for
+   `product_fact`?** I recommend `general`: zero schema change,
+   reversible, and once C.6 lands the meaning lives on
+   `FactRecord.source`, not on a category name. Either way the live
+   check in A.4c runs first and you run the SQL by hand.
+
+4. **Owner-stated facts: `substantiation` tier, or authoritative?**
+   C.3 originally proposed flag-don't-authorise. **The Hinglish finding
+   argues against doing that first**: the system already strips true
+   owner-recorded copy when the record is in Hinglish, and tightening
+   the tier makes that worse. Recommend: fix C.7 first, then decide the
+   tier with the eval harness able to measure what it costs.
+
+5. **The missing price (B-bis item 4): a note, or a hard block?**
+   I recommend a note. A hard block refuses honest teaser copy, and an
    auto-inserted price in the wrong sentence is worse than none.
-5. **Eval harness spend** — budget per run, and how often.
-6. **Daily report: email only to start, WhatsApp later?** The note says
-   email first and I agree; WhatsApp adds template approval and a
-   different consent regime.
+
+6. **Eval harness spend** — budget per run, and how often. It is the
+   only item here that costs money, and D.2 cannot be built without
+   that number.
+
+7. **Daily report: email first, WhatsApp later?** Your note says email
+   first and I agree — WhatsApp adds template approval and a different
+   consent regime.
+
+**Answered and closed, recorded so they are not reopened:**
+
+- *Was "free shipping" a failure?* No. Always Free, correctly licensed
+  from `shipping_config`. My diagnosis was wrong (B).
+- *Were the process sentences invented?* No. They are in the
+  `business_story` rows (A.4).
+- *A before C, or C before A?* **C before A, and it is no longer a
+  judgement call** — 14 of 14 rows for the live business are
+  `business_story`, so retiring that category before C.6 would delete
+  the evidence set (A.4e).
+- *Website builder block-aware door, chatbot genericness* — both
+  deferred by you on 2026-10-11.
