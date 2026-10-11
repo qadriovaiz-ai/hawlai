@@ -1842,7 +1842,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         const { data: pageRows } = website
           ? await supabase.from("website_pages").select("slug, title").eq("website_id", website.id)
           : { data: null };
-        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext, pageRows ?? null);
+        // The records themselves: a published blog post goes through
+        // generateCopy now, which needs facts to check against.
+        return generateBlogPost(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, await factsFor(supabase, ctx), pageRows ?? null);
       }
       return generateSeoIdeas(input.topic, ctx.city, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
     }

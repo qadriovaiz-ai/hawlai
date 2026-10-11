@@ -162,7 +162,10 @@ describe("3 and 4. seoToolkitAgent and adEngine — the guardGenerated callers",
     // running the thing: a source grep could not tell the difference
     // between "reaches provenance" and "mentions a function".
     const { code } = await import("./helpers/source");
-    expect(code("src/lib/agents/seoToolkitAgent.ts")).toMatch(/guardGenerated\(/);
+    // seoToolkitAgent moved to guardOrMark on 2026-10-11, fixing an
+    // F-01 fail-open; guardOrMark runs guardGenerated underneath, so
+    // provenance is reached by a longer route, not a different one.
+    expect(code("src/lib/agents/seoToolkitAgent.ts")).toMatch(/guardOrMark\(/);
     expect(code("src/lib/adEngine.ts")).toMatch(/guardCopyFields\(/);
   });
 

@@ -132,7 +132,7 @@ describe("ONE implementation, not two", () => {
 
 describe("no caller re-introduces the fail-open shape", () => {
   // Every file that actually CALLS factsPrompt, computed from the repo
-  // on 2026-10-11 rather than listed from memory. 19 of them, down from
+  // on 2026-10-11 rather than listed from memory. 17 of them, down from
   // 22: the lead message, the retention message and the influencer
   // outreach went through generateCopy in Phase 3.5 step 2 and now pass
   // the RECORDS instead of a prompt string. That is the direction this
@@ -148,10 +148,8 @@ describe("no caller re-introduces the fail-open shape", () => {
     "src/app/api/creative/copy-variations/route.ts",
     "src/app/api/creative/product-description/route.ts",
     "src/app/api/creative/video-script/route.ts",
-    "src/app/api/seo/blog-post/route.ts",
     "src/app/api/seo/keywords/route.ts",
     "src/app/api/seo/toolkit/route.ts",
-    "src/app/api/seo-pages/route.ts",
     "src/app/api/strategy/deep/route.ts",
     "src/app/api/strategy/route.ts",
     "src/app/api/video-marketing/generate/route.ts",
@@ -165,8 +163,8 @@ describe("no caller re-introduces the fail-open shape", () => {
     "src/lib/agents/websiteBuilderAgent.ts",
   ];
 
-  it("ALL 19 ARE COVERED — the count is asserted so a new one is noticed", () => {
-    expect(CALLERS.length).toBe(19);
+  it("ALL 17 ARE COVERED — the count is asserted so a new one is noticed", () => {
+    expect(CALLERS.length).toBe(17);
   });
 
   it("NOBODY GUARDS THE CALL WITH A TERNARY ON FACTS", () => {
@@ -206,6 +204,12 @@ function anthropic(answer: any) {
 
 import { generateBlogPost } from "@/lib/agents/seoAgent";
 
+// NOTE, 2026-10-11. When this file was written generateBlogPost took a
+// pre-built prompt string and had NO check on its output - the prompt
+// was its only protection, which is why it was chosen here. In Phase
+// 3.5 step 6 it went through the door and now takes the RECORDS, so
+// these three drive it that way. What is being tested is unchanged:
+// with no records readable, the truth rules still reach the model.
 describe("a path with no output guard still gets the rules when the records fail", () => {
   beforeEach(() => {
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -214,20 +218,20 @@ describe("a path with no output guard still gets the rules when the records fail
 
   it("THE BLOG PROMPT CARRIES THE TRUTH RULES WITH NULL FACTS", async () => {
     anthropic({ title: "Lavender at home", content: "Soy wax, 40 hour burn.", metaDescription: "x", headingOutline: [] });
-    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, factsPrompt(null));
+    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, null);
     expect(prompts.length).toBeGreaterThan(0);
     for (const re of SAMPLE_RULES) expect(prompts[0], String(re)).toMatch(re);
   });
 
   it("AND IT IS TOLD THE RECORDS COULD NOT BE READ", async () => {
     anthropic({ title: "t", content: "c", metaDescription: "m", headingOutline: [] });
-    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, factsPrompt(null));
+    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, null);
     expect(prompts[0]).toMatch(/could not be read/i);
   });
 
   it("with facts, the records reach the prompt as before", async () => {
     anthropic({ title: "t", content: "c", metaDescription: "m", headingOutline: [] });
-    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, factsPrompt(facts()));
+    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts());
     expect(prompts[0]).toContain("Lavender candle");
     for (const re of SAMPLE_RULES) expect(prompts[0], String(re)).toMatch(re);
   });

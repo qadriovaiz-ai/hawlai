@@ -159,10 +159,18 @@ describe("the tool and the toolkit are wired for it", () => {
   });
 
   it("runs the guard in the SEO toolkit generator too, in draft mode", () => {
+    // guardOrMark since 2026-10-11, not guardGenerated. The old call
+    // was `facts ? guardGenerated(...) : { output: generated }` - the
+    // F-01 fail-open shape - so a failed records read returned this
+    // output unchecked and unmarked. guardOrMark runs the full guard
+    // when the records are readable and the fact-independent subset
+    // when they are not.
     const agent = readFileSync("src/lib/agents/seoToolkitAgent.ts", "utf8");
-    expect(agent).toMatch(/guardGenerated\(generated, facts, "draft"\)/);
+    expect(agent).toMatch(/guardOrMark\(generated, facts, "draft"\)/);
     // And the owner's words are restored AFTER the guard, never stripped.
-    expect(agent.indexOf("guardGenerated(generated")).toBeLessThan(agent.indexOf("keepOwnerWords(taskKey, guarded.output"));
+    expect(agent.indexOf("guardOrMark(generated")).toBeLessThan(agent.indexOf("keepOwnerWords(taskKey, guarded.output"));
+    // THE FAIL-OPEN MUST NOT COME BACK, asserted directly.
+    expect(agent).not.toMatch(/facts \? guardGenerated/);
   });
 });
 

@@ -23,7 +23,7 @@ import { getModel } from "../models";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { formatQueriesForPrompt } from "@/lib/seo/searchQueries";
 import { flattenResultText } from "./brandVoiceValidation";
-import { guardGenerated } from "@/lib/claims/claimCheck";
+import { guardOrMark } from "@/lib/claims/factsGate";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import type { QueryRow } from "@/lib/seo/searchConsole";
 import { parseModelJson } from "@/lib/ai/modelJson";
@@ -150,7 +150,16 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the requirem
     // would contradict the verbatim rule this task already keeps — his
     // sentence is his to make, and the card warns instead.
     const generated = parsedReply.value;
-    const guarded = facts ? guardGenerated(generated, facts, "draft") : { output: generated, removed: [] as string[] };
+    // F-01, STILL LIVE HERE UNTIL 2026-10-11. `facts ? guard() : skip`
+    // is the exact shape the audit named: a failed records read returned
+    // this output with nothing checked and nothing marking it. Found
+    // during the Phase 3.5 step 6 survey, and the THIRD copy of this
+    // shape in the repo after factsPrompt and adEngine.
+    //
+    // guardOrMark runs the full guard when the records are readable and
+    // the fact-independent subset when they are not, and says which
+    // happened either way.
+    const guarded = guardOrMark(generated, facts, "draft");
     const output = keepOwnerWords(taskKey, guarded.output, exactText);
     return { output, ...(guarded.removed.length ? { claimsRemoved: guarded.removed } : {}) };
   } catch (err: any) {

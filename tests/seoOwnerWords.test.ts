@@ -76,7 +76,18 @@ describe("the owner's own words in an SEO task", () => {
   it("changes nothing when the owner gave no wording of their own", async () => {
     claudeReturns({ metaTitle: "A title", metaDescription: "A description" });
     const { output } = await generateSeoTask("meta_tags", "Candle by Qaaf", "Shahjahanpur", "candles");
-    expect(output).toEqual({ metaTitle: "A title", metaDescription: "A description" });
+    // THE CONTENT KEYS, not the whole object. On 2026-10-11 this
+    // generator's F-01 fail-open was fixed - it was `facts ? guard() :
+    // skip`, so a failed records read returned the output unchecked and
+    // unmarked - and guardOrMark adds `_factsState` saying which state
+    // the check ran in. That marker is the point of the fix, and it is
+    // "_" prefixed so no screen shows it.
+    //
+    // The assertion still says what it always said: the words the model
+    // wrote come back untouched when the owner supplied none of their
+    // own.
+    const words = Object.fromEntries(Object.entries(output).filter(([k]) => !k.startsWith("_")));
+    expect(words).toEqual({ metaTitle: "A title", metaDescription: "A description" });
   });
 
   it("asks the model for the exact line too, and forbids inventing a limit", async () => {

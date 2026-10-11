@@ -379,7 +379,7 @@ anything (1 fail).
 | 3 — **the content path (Facebook / Instagram)** | **done** (socialMediaAgent and the calendar still listed) |
 | 4 — **WhatsApp, customer-facing social tasks** | **done** |
 | 5 — **paid ads, retargeting, ad engine** | **done** |
-| 6 — SEO, AEO, CRO | next |
+| 6 — **blog posts and SEO pages** | **done** (toolkit: F-01 fixed, two copy tasks pending; AEO and CRO reclassified) |
 | 7 — website builder, website copy, creative, video, brand | |
 
 The backlog is no longer kept in this table alone. `MIGRATING` in

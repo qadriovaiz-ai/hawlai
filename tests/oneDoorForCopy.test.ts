@@ -129,11 +129,7 @@ const MIGRATING: Record<string, string> = {
   // door's. paidAdsAgent still calls the model directly for its
   // owner-facing planning tasks.
   // step 6 — SEO, AEO and CRO
-  "src/lib/agents/seoAgent.ts": "2026-10-11, step 6: blog posts and page titles, NO output guard today",
-  "src/lib/agents/seoPageAgent.ts": "2026-10-11, step 6: published landing pages, NO output guard today",
-  "src/lib/agents/seoToolkitAgent.ts": "2026-10-11, step 6",
-  "src/lib/agents/aeoAgent.ts": "2026-10-11, step 6: published answers, NO output guard today",
-  "src/lib/agents/croAgentV2.ts": "2026-10-11, step 6: copy suggestions the owner pastes onto the site",
+  "src/lib/agents/seoToolkitAgent.ts": "2026-10-11, step 6: mostly owner-facing SEO advice, but meta_tags and gbp_optimization write text a customer reads. Its F-01 fail-open was fixed on 2026-10-11; the two copy tasks still want the door",
   // step 7 — websites and long-form shapes
   "src/lib/agents/websiteAgent.ts": "2026-10-11, step 7: live site copy, NO output guard today",
   "src/lib/agents/websiteBuilderAgent.ts": "2026-10-11, step 7: block trees, a different output shape",
@@ -175,6 +171,20 @@ const NOT_COPY: Record<string, string> = {
   "src/lib/strategy/positioning/collect.ts": "collects public pages; writes no copy",
   "src/app/api/events/dispatch/route.ts": "dispatches events; the copy it sends was written elsewhere",
   "src/app/api/research-agent/generate/route.ts": "research for the owner",
+  // BOTH MOVED HERE FROM MIGRATING, 2026-10-11, after reading them.
+  //
+  // aeoAgent: I had listed it as "published answers". It is not - it
+  // runs a web search and returns a visibility SCORE, a breakdown,
+  // which competitors were mentioned, and recommendations. A check, for
+  // the owner.
+  //
+  // croAgentV2: I had listed it as unguarded. It is not - scrubCroOutput
+  // calls findUnsupportedClaims, so it already gets every claim rule
+  // including the comparative, performance and benefit classes enabled
+  // on 2026-10-11, and it drops a whole suggestion rather than half of
+  // one.
+  "src/lib/agents/aeoAgent.ts": "a visibility check for the owner: a score, a breakdown and recommendations, built from a web search; writes no copy",
+  "src/lib/agents/croAgentV2.ts": "conversion suggestions for the owner, already scrubbed by scrubCroOutput which runs findUnsupportedClaims",
   // MOVED HERE FROM MIGRATING, 2026-10-11, after reading it. I had
   // listed it as "ad copy pushed to live platforms", which was wrong:
   // proposeTargetingChange and proposeBudgetChange return an age range,

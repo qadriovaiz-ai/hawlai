@@ -32,6 +32,9 @@ import { isLegalPage } from "@/lib/seo/pageKinds";
 import { blocksText, blocksHaveImage } from "@/lib/claims/businessFacts";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+// A published blog post is customer-facing copy: one door.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 export interface BlogPost {
   title: string;
@@ -42,6 +45,10 @@ export interface BlogPost {
   // subheadings bolted on after the fact.
   headingOutline: { level: "H2" | "H3"; heading: string }[];
   targetIntent: "informational" | "transactional" | "navigational";
+  /** Claims the guard took out. Nothing produced these before Phase 3.5 — this path had no guard. */
+  claimsRemoved?: string[];
+  /** What the owner is told about what changed and why. */
+  _claimsNote?: string;
   // Only ever populated from existingPages below — never invented. This
   // app already shipped a fix (see websiteBuilderAgent.ts) for
   // hallucinated internal links breaking generated sites; a blog-linking
@@ -54,7 +61,14 @@ export async function generateBlogPost(
   city?: string | null,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string,
+  /**
+   * The business's own records.
+   *
+   * WAS A PRE-BUILT PROMPT STRING (`groundingContext`), which is why
+   * this path had no check on its output at all: a string can be put in
+   * a prompt but it cannot be checked against.
+   */
+  facts?: BusinessFacts | null,
   existingPages?: { slug: string; title: string }[] | null
 ): Promise<BlogPost> {
   const fallback: BlogPost = {
@@ -72,44 +86,46 @@ export async function generateBlogPost(
     : "\nNo real website page list is available — return an empty internalLinkSuggestions array rather than guessing plausible-sounding page names.";
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
+    // PHASE 3.5, STEP 6. A published blog post, and until today it had
+    // NO check on its output at all: the facts went into the prompt and
+    // nothing looked at what came back.
+    //
+    // No word cap: a blog post has no platform limit, and absent from
+    // WORD_CAPS is not a cap of zero.
+    const copy = await generateCopy({
+      topic,
+      businessName: facts?.businessName ?? "this business",
+      businessCategory,
+      facts,
+      // The owner reads the post before publishing it.
+      mode: "draft",
+      revise: true,
+      language: facts?.brand?.language ?? null,
+      operation: "seo_blog_post",
+      logContext,
       // Was 1200 — too tight once metaDescription/headingOutline/
       // targetIntent/internalLinkSuggestions ride alongside the full
-      // 400-600 word body in one JSON payload; matches the same
-      // truncation failure mode found and fixed in
-      // websiteBuilderAgent.ts's page generation earlier this session.
-      max_tokens: 2800,
-      messages: [
-        {
-          role: "user",
-          content: `Write a helpful, SEO-friendly blog post for an Indian ${businessCategory} business.
-Topic: "${topic}"${city ? `, location: ${city}` : ""}${groundingContext ?? ""}${linkingContext}
+      // 400-600 word body in one JSON payload.
+      maxTokens: 2800,
+      brief: {
+        label: "blog post",
+        instructions: `Topic: "${topic}"${city ? `, location: ${city}` : ""}
 
 Plan before you write:
 1. Decide the primary search intent this post targets — informational (explaining/comparing), transactional (ready to act, e.g. "book X near me"), or navigational (looking for this specific business) — and let that decision shape the angle and the closing line.
 2. Plan a real heading hierarchy (2-4 H2s, with an H3 only where a section genuinely needs a sub-point) that maps to how someone would actually scan this topic, not arbitrary section breaks.
 3. Only if real pages were listed above: suggest 1-3 internal links using their ACTUAL slugs, each with a natural anchor text and a one-line reason it belongs at that point in the post. If no real pages were listed, return an empty array — never invent a slug.
 
-400-600 words, informative and genuinely useful (not just sales-y), plain language, a few short paragraphs under each heading. Return JSON only:
-{"title":"SEO-friendly title, under 70 chars","metaDescription":"under 160 chars, click-worthy and keyword-aware","targetIntent":"informational|transactional|navigational","headingOutline":[{"level":"H2|H3","heading":"..."}],"content":"the full article body, plain text with \\n\\n between paragraphs and each heading from headingOutline appearing on its own line exactly where it belongs","internalLinkSuggestions":[{"anchorText":"...","linksToSlug":"one of the real slugs listed above","why":"..."}]}`,
-        },
-      ],
-    }, { operation: "seo_blog_post", logContext });
-    if (!r.ok) return withAiFailure(fallback, r.failure);
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[seoAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
-    }
-    const parsed = parsedReply.value;
+400-600 words, informative and genuinely useful (not just sales-y), plain language, a few short paragraphs under each heading.`,
+        brandContext: `Write a helpful, SEO-friendly blog post for an Indian ${businessCategory} business.`,
+        grounding: linkingContext,
+        shapeHint: `Return JSON only:
+{"title":"SEO-friendly title, under 70 chars","metaDescription":"under 160 chars, click-worthy and keyword-aware","targetIntent":"informational|transactional|navigational","headingOutline":[{"level":"H2|H3","heading":"..."}],"content":"the full article body, plain text with \n\n between paragraphs and each heading from headingOutline appearing on its own line exactly where it belongs","internalLinkSuggestions":[{"anchorText":"...","linksToSlug":"one of the real slugs listed above","why":"..."}]}`,
+      },
+    });
+    if (copy._aiFailure) return withAiFailure(fallback, { kind: copy._aiFailure.kind } as any);
+    if (copy._fallback) return fallback;
+    const parsed = copy.output;
     const validSlugs = new Set(pages.map((p) => p.slug));
     return {
       title: parsed.title ?? fallback.title,
@@ -123,7 +139,11 @@ Plan before you write:
       internalLinkSuggestions: Array.isArray(parsed.internalLinkSuggestions)
         ? parsed.internalLinkSuggestions.filter((l: any) => l?.linksToSlug && validSlugs.has(l.linksToSlug))
         : fallback.internalLinkSuggestions,
-    };
+      // What the guard did travels with the post. Nothing produced
+      // these before: this path had no guard.
+      ...(copy.removed.length ? { claimsRemoved: copy.removed } : {}),
+      ...(copy.output._claimsNote ? { _claimsNote: copy.output._claimsNote } : {}),
+    } as BlogPost;
   } catch (err: any) {
     console.error("[seo-agent] generateBlogPost error:", err.message);
     return fallback;
