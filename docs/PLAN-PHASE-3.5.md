@@ -376,8 +376,8 @@ anything (1 fail).
 | — the comparative, performance and benefit rules live | **done** `2de8fc2` |
 | 1 — **the door, and email through it** | **done** |
 | 2 — **the messages that reach a person** | **done** |
-| 3 — Facebook / Instagram | next |
-| 4 — WhatsApp, social management | |
+| 3 — **the content path (Facebook / Instagram)** | **done** (socialMediaAgent and the calendar still listed) |
+| 4 — WhatsApp, social management | next |
 | 5 — paid ads, retargeting, ad engine | |
 | 6 — SEO, AEO, CRO | |
 | 7 — website builder, website copy, creative, video, brand | |
@@ -389,12 +389,12 @@ listed file starts importing the door until its entry is deleted. So
 the list can only shrink, and the phase can be finished rather than
 declared mostly done.
 
-### A gap this step does not close, named rather than left
+### The gap named at step 1 is closed
 
-`contentAutopilot` reads `_storyNote` to decide whether to post, which
-means it skips a run for any shape note at all — including "this is a
-bit long", which tightening can fix without a model call. The door
-fixes that for surfaces behind it (`publishable`, and tightening is no
-longer gated behind `revise`), but the autopilot still goes through
-`contentMarketingAgent`, which is step 3. Until then its behaviour is
-unchanged.
+`contentAutopilot` read `_storyNote` and treated any note as a reason to
+skip the run — including "that came out a bit long", which tightening
+fixes with no model call. It now asks `publishable`, and tightening is
+no longer gated behind `revise`, so an over-long caption is shortened
+and posted instead of refused. An execution test in
+`tests/claimsGuard.test.ts` posts a 200-word caption and asserts it
+goes out at 150 or under with the opening and the price line intact.

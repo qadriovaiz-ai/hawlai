@@ -86,8 +86,10 @@ const MIGRATING: Record<string, string> = {
   // retentionAgent (the customer message) and influencerAgent (the
   // outreach) are through the door and their entries are deleted, which
   // is what this list is for.
-  // step 3 — Facebook / Instagram
-  "src/lib/agents/contentMarketingAgent.ts": "2026-10-11, step 3: has every measure already, but as its own copy of them",
+  // step 3 — Facebook / Instagram. contentMarketingAgent went through
+  // the door on 2026-10-11 and its entry is deleted; it was the agent
+  // that HAD every measure, as its own copy, which is exactly why no
+  // other surface did.
   "src/lib/agents/socialMediaAgent.ts": "2026-10-11, step 3: reads and writes posts on the platform",
   // step 4 — WhatsApp and social management
   "src/lib/agents/whatsappMarketingAgent.ts": "2026-10-11, step 4",

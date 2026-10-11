@@ -141,6 +141,8 @@ ${TIRED_MOVES.map((m) => `  - ${m}`).join("\n")}
 
 import { CONTENT_TYPES, type ContentTypeMeta } from "@/lib/departments/content";
 import { parseModelJson } from "@/lib/ai/modelJson";
+// Every piece of copy on this surface goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 // Re-exported so every existing server import keeps working; the data
 // itself lives in lib/departments so client pickers can read it without
@@ -181,7 +183,7 @@ export async function generateContent(
      */
     keepLinks?: boolean;
   } = {}
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; revised?: boolean ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; revised?: boolean; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
   if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
 
@@ -198,177 +200,63 @@ export async function generateContent(
   const sound = soundRule(language, brandProfile?.tone_of_voice ?? facts?.brand?.tone);
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 2000,
-      messages: [
-        {
-          role: "user",
-          content: `You are a senior content marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}${truthBlock(facts)}
-Topic/product/context: "${resolveFestiveTopic(topic, facts?.season) || "general brand content, use good judgement for this business type"}"
+    // PHASE 3.5, STEP 3. This agent had every measure in the codebase -
+    // and had them as its OWN copy, which is exactly why no other
+    // surface did. The pipeline now lives in generateCopy; what stays
+    // here is the part that is genuinely about content: the link rule,
+    // the bio rule, and the content-type table.
+    const copy = await generateCopy({
+      contentTypeKey,
+      topic,
+      businessName: dealershipName,
+      businessCategory,
+      facts,
+      mode: claimsMode,
+      revise: Boolean(opts.revise),
+      // The ruthless copy-edit this path has paid for since
+      // 2026-10-09. Still opt-in, so no other surface's cost changes.
+      specificityPass: true,
+      recent: opts.recent,
+      language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "content_generation",
+      logContext,
+      brief: {
+        label: meta.label,
+        labelPrefix: "Content type",
+        instructions: meta.instructions,
+        brandContext: `You are a senior content marketer.
+${brandContext}
+${sound}`,
+        grounding: groundingContext ?? undefined,
+        shapeHint: `Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this content type (e.g. use "slides" array for carousels, "days" array for a content calendar, "hooks" array for hook generation, "ctas" array for CTA generation, otherwise a "text" field or clearly-named fields matching the requirements above). Be specific to this business and topic — never generic filler.`,
+      },
+    });
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+    if (copy._fallback) return fallback;
 
-${sound}
-
-Content type: ${meta.label}
-Output requirements: ${meta.instructions}
-${craftSection(topic, opts.recent ?? [], Boolean(facts?.ownerFacts?.some((k) => k.category === STORY_CATEGORY)), askedForStory(topic))}${wordCapLine(contentTypeKey)}
-
-Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this content type (e.g. use "slides" array for carousels, "days" array for a content calendar, "hooks" array for hook generation, "ctas" array for CTA generation, otherwise a "text" field or clearly-named fields matching the requirements above). Be specific to this business and topic — never generic filler.`,
-        },
-      ],
-    }, { operation: "content_generation", logContext });
-    if (!r.ok) return { output: { text: aiFailureMessage(r.failure.kind) }, _fallback: true, _aiFailure: aiFailureNote(r.failure) };
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[contentMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      // F-22: the fallback used to go back as a plain `_fallback` whose
-      // output was a sentence, and the chat then had to notice it was
-      // not copy. The parser's own account travels with it now, so the
-      // chat can say what actually happened instead of guessing
-      // (the system prompt's `_cause` / `_detail` rule).
-      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
-    }
-    let parsed = parsedReply.value;
-    let revised = false;
-    if (opts.revise) {
-      const second = await reviseForSpecificity(parsed, meta.label, facts, logContext, language);
-      if (second) {
-        parsed = second;
-        revised = true;
-      }
-    }
-
-    // THE INVERSION (2026-10-09, P1 in docs/PRINCIPLES.md).
-    //
-    // This block used to ask "did the piece use the owner's STORY?" and
-    // retry toward the founder's backstory when it had not. The retry
-    // machinery was right; the thing it retried TOWARD was wrong. A
-    // caption about a Diwali offer has no business carrying a
-    // batch-ruining anecdote, and forcing it produced sentences no buyer
-    // asked for.
-    //
-    // It now asks "could any business in this line of work have
-    // published this?" — a worn opener, or no recorded specific at all
-    // (lib/content/antiGeneric.ts). The CONTROL FLOW IS DELIBERATELY
-    // UNCHANGED: one retry, keep the retry's answer even when it still
-    // fails, tell the owner either way, and never retry a business with
-    // nothing to retry toward. That shape is what six integration tests
-    // pin, and keeping it is what lets them keep testing something real.
-    let generic = false;
-    // THE VERDICT IS FREE, THE REPAIR IS NOT.
-    //
-    // isGeneric is pure code, so it runs everywhere: even the
-    // unattended path tells the owner, on the Content Marketing page,
-    // that a caption read like anyone's.
-    //
-    // The RETRY is a model call, and it is gated behind the same
-    // `revise` flag as reviseForSpecificity because of an existing test
-    // named "without the flag there is no second call - the auto-publish
-    // path stays single-shot", asserting calls === 1. That is a written
-    // contract and it outranks my own judgement about whether the call
-    // is worth it. It also closes a pre-existing hole: the story retry
-    // this replaces was NOT gated, so it broke that same contract
-    // whenever a business had recorded a story - the test only passed
-    // because its fixture had none.
-    const verdict = isGeneric(parsed, facts, language);
-    if (verdict.generic) {
-      const retried = opts.revise
-        ? await retryForSpecificity(parsed, meta.label, meta.instructions, verdict, facts, logContext, language)
-        : null;
-      if (retried && !isGeneric(retried, facts, language).generic) parsed = retried;
-      else {
-        if (retried) parsed = retried;
-        generic = true;
-      }
-    }
-    // IS THIS PIECE ABOUT THE READER? (added 2026-10-11)
-    //
-    // The third measure, and the live failure that forced it: a 224-word
-    // founder story passed both of the others. Provenance passes a story
-    // the owner HAS written down; isGeneric passes anything carrying a
-    // recorded specific, and a story is one. Neither asks what P1
-    // actually says, which is who the piece is for.
-    //
-    // Same one-retry shape as everything else here, and gated behind
-    // `revise` for the same reason: the unattended path stays
-    // single-shot.
-    let shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
-    let droppedSentences = 0;
-    if (shapeProblem && opts.revise) {
-      const reshaped = await retryForShape(parsed, meta.label, meta.instructions, shapeProblem, logContext, language);
-      if (reshaped) {
-        parsed = reshaped;
-        // Re-measured, not assumed: a retry that is still wrong must
-        // still be reported.
-        shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
-      }
-      // STILL OVER THE CAP? TIGHTEN IT, do not hand it back.
-      //
-      // On 11 October 2026 a 189-word post reached a card with a cap of
-      // 150. The retry had run and come back long, and the code kept it
-      // with a note saying "I've left it as it is so you can see it".
-      // That is work handed back to the owner, on the one surface where
-      // they are about to press Publish.
-      //
-      // Whole sentences only, opening and close kept - the close is
-      // where the next step is.
-      if (shapeProblem?.kind === "too_long") {
-        const tightened = tightenOutput(parsed, contentTypeKey);
-        if (tightened.dropped) {
-          parsed = tightened.output;
-          droppedSentences = tightened.dropped;
-          shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
-        }
-      }
-    }
-
-    // `_storyNote` keeps its name on purpose: GeneratedOutputPanel and
-    // the chat card both read that key, and renaming it would silently
-    // stop the owner seeing any of this. What CHANGED is the words.
-    //
-    // The shape note wins when both apply: "this is all about you" is
-    // more useful than "this could be anyone's", and saying both at once
-    // reads as noise.
-    if (shapeProblem) parsed = { ...parsed, _storyNote: customerFirstNote(shapeProblem, droppedSentences) };
-    else if (droppedSentences) {
-      // Tightened rather than handed back - and said, because a piece
-      // that quietly lost sentences is worse than one that says it did.
-      parsed = {
-        ...parsed,
-        _storyNote: `That came out longer than this post should be, so I cut ${droppedSentences === 1 ? "a sentence" : `${droppedSentences} sentences`} from the middle and kept the opening and the close. Ask me to put anything back.`,
-      };
-    } else if (generic) parsed = { ...parsed, _storyNote: genericNote(verdict) };
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
-    // F-01: this used to be `if (!facts) return parsed` — the guard
-    // skipped and the output indistinguishable from a checked draft.
-    // guardOrMark runs the full guard when the records are readable and
-    // the fact-independent subset when they are not, and marks which
-    // happened either way (src/lib/claims/factsGate.ts).
-    const guarded = guardOrMark(parsed, facts, claimsMode);
     // Enforced, not requested: a real booking link in the facts is exactly
     // what put a dead URL into an Instagram caption.
-    const linked = applyLinkRule(linkRuleFor, guarded.output);
+    const linked = applyLinkRule(linkRuleFor, copy.output);
     // AND THE OTHER DIRECTION. A Facebook post that says "Link in bio."
     // sends the reader nowhere: there is no bio, and the link would have
     // worked. Replaced with the business's own store address when it has
     // one, removed when it does not, never invented.
-    // With no facts there is no store address to swap a bio line for, so
-    // the rule drops the dead sentence rather than inventing a URL.
     const bio = applyBioRule(linkRuleFor, linked.output, facts?.links?.store ?? null);
     const output: any = bio.output;
     const linkNote = linkRuleNote(linked.replaced);
     if (linkNote) output._claimsNote = [output._claimsNote, linkNote].filter(Boolean).join(" ");
     const bioNote = bioRuleNote(bio.fixed, bio.dropped);
     if (bioNote) output._claimsNote = [output._claimsNote, bioNote].filter(Boolean).join(" ");
-    return { output, claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings, substantiation: guarded.substantiation, ...(revised ? { revised } : {}) };
+    return {
+      output,
+      claimsRemoved: copy.removed,
+      priceWarnings: copy.priceWarnings,
+      substantiation: copy.substantiation,
+      publishable: copy.publishable,
+      ...(copy.revised ? { revised: true } : {}),
+    };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;

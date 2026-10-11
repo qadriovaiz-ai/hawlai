@@ -378,6 +378,37 @@ describe("content autopilot — posts publicly with nobody reading first", () =>
     expect((postPhotoToPage.mock.calls[0] as any[])[3]).toBe("Slow evenings start with the Lavender candle. 🕯️");
   });
 
+  it("A CAPTION THAT IS MERELY LONG IS TIGHTENED AND POSTED — it used to be skipped", async () => {
+    // THE REGRESSION I INTRODUCED AND THEN CLOSED (2026-10-11).
+    //
+    // This path decided whether to post by reading `_storyNote`, and
+    // treated ANY note as a reason to skip. That was right while
+    // genericness was the only thing that set it. When the shape
+    // measures started setting it too, "that came out a bit long"
+    // became a reason to post nothing - even though tightening fixes it
+    // with no model call at all.
+    //
+    // It now asks generateCopy (`publishable`) instead of inferring,
+    // and tightening is no longer gated behind `revise`, so the
+    // unattended path can shorten a post instead of only refusing it.
+    const long = [
+      "Slow evenings start here.",
+      ...Array(24).fill("The Lavender candle is soy wax and it sits on the shelf until the evening comes round again."),
+      "Lavender candle, 550. Order on the store page.",
+    ].join(" ");
+    const prompts = anthropic([{ text: long }]);
+    const r = await runContentAutopilot(db(), "d1");
+
+    expect(r.posted).toBe(true);
+    // ONE call: no retry on this path, the tightening is pure code.
+    expect(prompts).toHaveLength(1);
+    const caption = (postPhotoToPage.mock.calls[0] as any[])[3] as string;
+    expect(caption.trim().split(/\s+/).length).toBeLessThanOrEqual(150);
+    // The opening and the line with the price both survive the cut.
+    expect(caption).toContain("Slow evenings start here");
+    expect(caption).toContain("550");
+  });
+
   it("A GENERIC CAPTION IS NOT POSTED — it used to be", async () => {
     // Until 2026-10-09 this went out. The three guards on this path
     // covered an AI failure, a placeholder fallback and an unverifiable

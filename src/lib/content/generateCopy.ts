@@ -61,10 +61,10 @@ import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from 
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 import { type ClaimsMode } from "@/lib/claims/claimCheck";
-import { type BusinessFacts, type FactsAudience } from "@/lib/claims/businessFacts";
+import { type BusinessFacts, type FactsAudience, formatFactsForCopy, COPY_TRUTH_RULES } from "@/lib/claims/businessFacts";
 import { type NarrativeFinding } from "@/lib/claims/narrativeProvenance";
 import { isContentKey } from "@/lib/content/contentKeys";
-import { isGeneric, genericNote } from "@/lib/content/antiGeneric";
+import { isGeneric, genericNote, retryBrief } from "@/lib/content/antiGeneric";
 import {
   customerFirstProblem,
   customerFirstNote,
@@ -98,6 +98,16 @@ export type CopyBrief = {
   grounding?: string;
   /** What the JSON should look like, when the surface needs a fixed shape. */
   shapeHint?: string;
+  /**
+   * What the label line is called: "Task" by default, "Content type" on
+   * the content path.
+   *
+   * Not decoration. tests/preferredLanguage.test.ts asserts the
+   * owner's language instruction appears ABOVE "Content type: Instagram
+   * Post", which is how it checks the setting is an instruction rather
+   * than something buried in the facts.
+   */
+  labelPrefix?: string;
 };
 
 export type CopyRequest = {
@@ -123,12 +133,42 @@ export type CopyRequest = {
    * owner typed unless the surface explicitly overrides.
    */
   storyAllowed?: boolean;
+  /**
+   * The last few pieces written for this business, so this one does not
+   * repeat them.
+   *
+   * A first-class field rather than something each surface writes into
+   * its own brief: repetition is not a content-marketing problem, it is
+   * every surface's problem, and the one surface that handled it was
+   * the only one that could.
+   */
+  recent?: string[];
+  /**
+   * Run the ruthless copy-edit against the records before the verdict.
+   *
+   * An extra model call, so it is opt-in and gated behind `revise` as
+   * well. It asks of every line: could a competitor publish this exact
+   * line about themselves? If yes it is filler. Today only the content
+   * path pays for it, which is how it arrived; it should become the
+   * default once the cost is measured.
+   */
+  specificityPass?: boolean;
   language?: string | null;
   audience?: FactsAudience;
   operation: string;
   logContext?: LogContext;
   maxTokens?: number;
 };
+
+/** What has gone out lately, so this piece does not repeat it. */
+function recentBlock(recent?: string[]): string {
+  const lines = (recent ?? []).map((s) => String(s ?? "").trim()).filter(Boolean).slice(0, 5);
+  if (!lines.length) return "";
+  return [
+    `\n\nALREADY PUBLISHED RECENTLY — do not repeat these openings, angles or phrasings:`,
+    ...lines.map((s) => `- ${s.slice(0, 200)}`),
+  ].join("\n");
+}
 
 export type CopyResult = {
   /** The checked, shaped output. Carries _claimsNote / _storyNote for the owner's screens. */
@@ -143,6 +183,8 @@ export type CopyResult = {
   droppedSentences: number;
   /** True when the piece read like anyone's. */
   generic: boolean;
+  /** True when the ruthless copy-edit ran and its answer was used. */
+  revised?: boolean;
   /**
    * Safe to put in front of a customer with nobody reading it first.
    *
@@ -183,7 +225,11 @@ function shapeLines(storyAllowed: boolean): string {
   }
   return [
     `\n- WHO THIS IS FOR: the reader, not the business. Order: the customer's situation, then what the product does about it, then the price or offer if it needs one, then one clear next step.`,
-    `- The owner's own story is information, not the subject. AT MOST ONE short sentence of it, and only if it earns its place as proof.`,
+    // "did NOT ask for their story" is asserted by
+    // tests/customerFirstPost.test.ts. It is the sentence that replaced
+    // "that detail is the whole point of the piece", and dropping it
+    // while moving this code would have quietly undone the inversion.
+    `- The owner did NOT ask for their story. The owner's own story is information, not the subject. AT MOST ONE short sentence of it, and only if it earns its place as proof.`,
   ].join("\n");
 }
 
@@ -197,10 +243,10 @@ ${req.brief.channelRules ?? ""}
 
 Topic/context: "${topic}"
 
-Task: ${req.brief.label}
+${req.brief.labelPrefix ?? "Task"}: ${req.brief.label}
 Requirements: ${req.brief.instructions}
 
-HOW THIS MUST BE SHAPED:${shapeLines(storyAllowed)}${capLine(req.contentTypeKey)}
+HOW THIS MUST BE SHAPED:${shapeLines(storyAllowed)}${capLine(req.contentTypeKey)}${recentBlock(req.recent)}
 - ${languageRule(language)}
 
 ${req.brief.shapeHint ?? "Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above exactly."}
@@ -276,6 +322,27 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   // 4. The keys the model invented never travel further than this.
   let parsed: any = onlyContentKeys(parsedReply.value);
 
+  // 4b. THE RUTHLESS EDIT, when the surface asked for it.
+  //
+  // Not the same thing as the anti-generic retry below. This one runs
+  // on EVERY draft, good or bad, and asks of each line whether a
+  // competitor could publish it about themselves. The retry below only
+  // runs when the verdict says the piece failed.
+  let revised = false;
+  if (req.specificityPass && req.revise && req.facts) {
+    const edited = await editDraft(
+      req,
+      parsed,
+      ruthlessEditBrief(req.brief.label, req.facts),
+      "content_revision",
+      language
+    );
+    if (edited) {
+      parsed = onlyContentKeys(edited);
+      revised = true;
+    }
+  }
+
   // 5. ANTI-GENERIC. The verdict is pure code so it runs everywhere; the
   // repair is a model call and is gated behind `revise`, which is the
   // written contract the unattended path depends on.
@@ -347,9 +414,34 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     narrative: guarded.narrative,
     droppedSentences,
     generic,
+    revised,
     publishable: !blockedReason,
     blockedReason,
   };
+}
+
+/**
+ * The ruthless copy-edit, word for word as the content path has asked
+ * for it since 2026-10-09.
+ *
+ * Kept verbatim on purpose: it is a prompt that has been tuned against
+ * real output, and rewording it to read better here would be changing
+ * behaviour while claiming to move code.
+ */
+function ruthlessEditBrief(contentLabel: string, facts: BusinessFacts): string {
+  return `You are a ruthless copy editor. Below is a draft ${contentLabel} for a real business, and the verified facts about that business.
+
+THE TEST, line by line: could a competitor in the same line of work publish this exact line about themselves? If yes it is filler — cut it, or replace it with something only THIS business can say, taken from the facts.
+
+Rules:
+- Replace only with specifics that are IN the facts: a step, a material, a place, a length of time, something a customer said, the owner's own words. Never invent a detail, number, review, offer or claim — inventing one is worse than leaving the line out.
+- Keep the same JSON shape and roughly the same length. No preamble.
+- Cut stacked adjectives, rented enthusiasm and marketing throat-clearing. Plain and specific beats warm and vague.
+- A line already specific to this business stays exactly as it is.
+
+${formatFactsForCopy(facts)}
+
+${COPY_TRUTH_RULES}`;
 }
 
 /**
@@ -363,21 +455,33 @@ async function retryForSpecificity(
   verdict: ReturnType<typeof isGeneric>,
   language: CopyLanguage
 ): Promise<any | null> {
-  const missing = (verdict as any).missing ?? null;
-  const opener = (verdict as any).opener ?? null;
+  // THE PROMPT IS THE CONTENT PATH'S, WORD FOR WORD.
+  //
+  // My first version of this was a readable paraphrase, and three
+  // existing tests caught it: the retry must name the recorded specific
+  // (retryBrief), must say "the same length" so a rewrite does not
+  // become an expansion, and must say NOT to reach for the owner's
+  // personal history - which is the 2026-10-09 inversion, stated in the
+  // retry rather than only in the first prompt.
+  //
+  // Nothing to retry TOWARD is not a failure to report: it is a
+  // business that has recorded nothing yet, and a second model call
+  // would produce the same words.
+  const brief = retryBrief(verdict as any, req.facts ?? null);
+  if (!brief.trim()) return null;
   return editDraft(
     req,
     draft,
+    `This draft ${req.brief.label} could have been published by any business in the same line of work. Fix that, without inventing anything.
+
+${brief}`,
+    "content_specificity_retry",
+    language,
     [
-      `This draft ${req.brief.label} could have been published by any business in this trade. Fix that without inventing anything.`,
-      opener ? `- The opening "${opener}" is worn out. Start somewhere else.` : "",
-      missing ? `- It carries nothing only this business could say. Use this, which is on record: ${missing}` : "",
-      `- Add no claim, number, offer or testimonial that is not already in the draft or in the facts.`,
+      `- Keep the same JSON shape and the same length. This is a rewrite, not an expansion — if the detail needs room, cut a generic line to make it.`,
+      `- Compress the detail into a phrase where the piece is short. A whole sentence about it is only for a piece that has room.`,
+      `- Write about the customer and the product. Do NOT reach for the owner's personal history unless this piece is actually about it.`,
     ]
-      .filter(Boolean)
-      .join("\n"),
-    "copy_specificity_retry",
-    language
   );
 }
 
@@ -403,7 +507,9 @@ async function editDraft(
   draft: any,
   whatIsWrong: string,
   operation: string,
-  language: CopyLanguage
+  language: CopyLanguage,
+  /** Extra rule lines this particular repair needs, kept in its own caller. */
+  extraRules: string[] = []
 ): Promise<any | null> {
   try {
     const r = await callClaude(
@@ -418,6 +524,7 @@ async function editDraft(
 Rewrite the draft:
 - Keep the same JSON shape and the same keys.
 - ${languageRule(language)}
+${extraRules.join("\n")}
 - Never add a claim, a number, an offer or a testimonial that is not already in the draft.
 - Keep the format's requirements: ${req.brief.instructions}
 

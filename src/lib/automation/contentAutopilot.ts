@@ -178,9 +178,21 @@ export async function runContentAutopilot(supabase: any, dealershipId: string) {
     // The reason names what would fix it, because the owner reads this
     // on the Automation Health card and "generic" alone is not
     // actionable. genericNote already phrases it that way.
-    const genericNote = (contentResult.output as any)?._storyNote;
-    if (typeof genericNote === "string" && genericNote.trim()) {
-      throw new Error(`Skipped: nothing was posted. ${genericNote.trim()}`);
+    // IT ASKS NOW, RATHER THAN INFERRING (2026-10-11).
+    //
+    // This read `_storyNote` and treated ANY note as a reason to skip,
+    // which was right when genericness was the only thing that set it
+    // and wrong as soon as the shape measures did too: "that came out a
+    // bit long" became a reason to post nothing, when tightening fixes
+    // it with no model call at all.
+    //
+    // generateCopy decides and says so in `publishable`, and the
+    // reason still names what would fix it - the owner reads this on
+    // the Automation Health card and "generic" alone is not actionable.
+    const publishable = (contentResult as any).publishable;
+    const whyNot = (contentResult.output as any)?._storyNote;
+    if (publishable === false) {
+      throw new Error(`Skipped: nothing was posted. ${typeof whyNot === "string" && whyNot.trim() ? whyNot.trim() : "The caption read like any business in your line of work could have published it."}`);
     }
     caption = captionForPost(contentResult.output);
     if (!caption) {
