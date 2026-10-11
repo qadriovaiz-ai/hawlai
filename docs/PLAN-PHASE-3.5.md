@@ -372,10 +372,29 @@ anything (1 fail).
 
 | step | state |
 |---|---|
-| 0 — `factsPrompt` fail-open, + price/link protection | **done** |
-| 1 — email | next |
-| 2 — the four that send to a person | |
+| 0 — `factsPrompt` fail-open, + price/link protection | **done** `7659ede` |
+| — the comparative, performance and benefit rules live | **done** `2de8fc2` |
+| 1 — **the door, and email through it** | **done** |
+| 2 — the four that send to a person | next |
 | 3 — Facebook / Instagram | |
-| 4–7 | |
+| 4 — WhatsApp, social management | |
+| 5 — paid ads, retargeting, ad engine | |
+| 6 — SEO, AEO, CRO | |
+| 7 — website builder, website copy, creative, video, brand | |
 
-Each row is updated as it lands, with its commit and its exit codes.
+The backlog is no longer kept in this table alone. `MIGRATING` in
+[tests/oneDoorForCopy.test.ts](../tests/oneDoorForCopy.test.ts) holds
+24 entries, each with a date and a step, and the suite FAILS when a
+listed file starts importing the door until its entry is deleted. So
+the list can only shrink, and the phase can be finished rather than
+declared mostly done.
+
+### A gap this step does not close, named rather than left
+
+`contentAutopilot` reads `_storyNote` to decide whether to post, which
+means it skips a run for any shape note at all — including "this is a
+bit long", which tightening can fix without a model call. The door
+fixes that for surfaces behind it (`publishable`, and tightening is no
+longer gated behind `revise`), but the autopilot still goes through
+`contentMarketingAgent`, which is step 3. Until then its behaviour is
+unchanged.

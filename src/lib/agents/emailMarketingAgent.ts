@@ -34,9 +34,9 @@ interface BrandProfile {
   tone_of_voice?: string | null;
 }
 
-import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
-import { parseModelJson } from "@/lib/ai/modelJson";
-import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+import { aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
+// Every piece of copy on this surface goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 export async function generateEmailContent(
   taskKey: string,
@@ -50,7 +50,7 @@ export async function generateEmailContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's sent: unverified prices are flagged, not removed. Automation never passes it. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; email?: ComposedEmail ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; publishable?: boolean; email?: ComposedEmail ; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -63,55 +63,54 @@ export async function generateEmailContent(
   ].join("\n");
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 2000,
-      messages: [{
-        role: "user",
-        content: `You are an email marketer writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}${truthBlock(facts)}
-${EMAIL_RULES}
+    // PHASE 3.5, STEP 1 (2026-10-11). Email is the first surface through
+    // generateCopy, and what it gains by going through the door is
+    // everything that used to exist only on the Content Marketing path:
+    // the customer-first structure, the anti-generic verdict and its
+    // retry, the specificity edit, the invented-key strip, and the
+    // comparative, performance and benefit rules that now live inside
+    // the claims layer. It already had claims and provenance.
+    //
+    // WHAT THE DOOR DOES NOT TAKE OVER: the subject-line fix and the
+    // visual email. Both are email's own and stay here.
+    const copy = await generateCopy({
+      topic,
+      businessName: dealershipName,
+      businessCategory,
+      facts,
+      mode: claimsMode,
+      // An email has no platform word cap. Absent from the table is not
+      // a cap of zero - see WORD_CAPS.
+      revise: claimsMode === "draft",
+      language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "email_generation",
+      logContext,
+      brief: {
+        label: `${meta.label} (email)`,
+        instructions: meta.instructions,
+        channelRules: EMAIL_RULES,
+        brandContext: `You are an email marketer.\n${brandContext}`,
+        grounding: groundingContext ?? undefined,
+      },
+    });
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+    if (copy._fallback) return fallback;
 
-Topic/context: "${resolveFestiveTopic(topic, facts?.season) || "general, use good judgement for this business type"}"
-
-Task: ${meta.label}
-Requirements: ${meta.instructions}
-
-Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above exactly. Write real, specific email copy — never generic filler like "check out our amazing products".`,
-      }],
-    }, { operation: "email_generation", logContext });
-    if (!r.ok) return { output: { text: aiFailureMessage(r.failure.kind) }, _fallback: true, _aiFailure: aiFailureNote(r.failure) };
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[emailMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      // F-22: the fallback used to go back as a plain `_fallback` whose
-      // output was a sentence, and the chat then had to notice it was
-      // not copy. The parser's own account travels with it now, so the
-      // chat can say what actually happened instead of guessing
-      // (the system prompt's `_cause` / `_detail` rule).
-      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
-    }
-    const parsed = parsedReply.value;
+    const parsed = copy.output;
     // A subject that misleads about what's inside is fixed in code, not
     // left to the prompt — and counts as a removed claim, so automation
     // (which sends only untouched emails) regenerates instead of sending.
+    //
+    // Runs AFTER the door because the door is what produced the subject,
+    // and fixSubjects edits in place.
     const subjectProblems = fixSubjects(parsed, dealershipName);
     const subjectNote = subjectProblems.length ? `Hawlai changed the subject line so it doesn't mislead: ${subjectProblems.join(" ")}` : null;
-    // F-01: with no facts this used to return the draft unguarded and
-    // unmarked. guardOrMark runs the fact-independent subset instead and
-    // says which state it was in (src/lib/claims/factsGate.ts).
-    const guarded = guardOrMark(parsed, facts, claimsMode);
-    const removed = [...guarded.removed, ...subjectProblems];
-    const output: any = guarded.output;
-    const note = [claimsNote(guarded.removed), priceWarningNote(guarded.priceWarnings), subjectNote].filter(Boolean).join(" ");
-    if (note) output._claimsNote = note;
+    const removed = [...copy.removed, ...subjectProblems];
+    const output: any = parsed;
+    // The claims note is already composed inside the guard, in priority
+    // order. Only the subject fix is email's to add.
+    if (subjectNote) output._claimsNote = [output._claimsNote, subjectNote].filter(Boolean).join(" ");
     // The finished visual email, built from the checked words and the
     // real links, photo and brand. Returned beside the output, never
     // inside it — the output is saved and shown as the editable draft.
@@ -119,7 +118,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON to match the field na
     // links, photo and brand, and there is nothing to build from. The
     // words still come back, marked unverified by the gate above.
     const email = facts && VISUAL_EMAIL_TASKS.has(taskKey) ? composeMarketingEmail(output, facts) : undefined;
-    return { output, claimsRemoved: removed, priceWarnings: guarded.priceWarnings, email };
+    return { output, claimsRemoved: removed, priceWarnings: copy.priceWarnings, substantiation: copy.substantiation, publishable: copy.publishable, email };
   } catch (err: any) {
     console.error("[email-marketing-agent] error:", err.message);
     return fallback;
