@@ -103,38 +103,34 @@ people get wrong. Only origin and first-customers ask for a story at
 all. The category was named after the *interview*, not after what the
 answers contain.
 
-### A.4a — The re-classification, owner-confirmed, nothing automatic
+### A.4a — The classification, CONFIRMED by the founder 2026-10-11
 
-Three classes, as instructed. **No row is deleted, and no row moves
-without the owner confirming it.**
+All 14 titles supplied. Per-sentence review still applies (A.4b).
 
-| Class | What it means | Used in customer copy? |
-|---|---|---|
-| **FACT** | a product, process, material, timing or policy fact | **Yes** — as `owner_stated` evidence (section C), never shown as a story |
-| **PRIVATE** | a customer's situation, a family or personal detail | **Never.** `personalStories` protection stays exactly as it is |
-| **STORY** | origin, motive, how it felt | **No.** Kept, visible to the owner, read by no generator |
-
-**Proposed class per intake question** — by the nature of the question,
-which is the part I can know without seeing every row:
-
-| Question key | Title | Proposed | Why |
+| # | Title | Class | Notes |
 |---|---|---|---|
-| `how_made` | How it's made, step by step | **FACT** | process and timings |
-| `slow_part` | The part that takes longest | **FACT** | process plus duration |
-| `materials` | Materials and suppliers | **FACT** | materials, origin, names |
-| `detail_noticed` | The detail people notice | **FACT** | a physical, pointable detail |
-| `refuse` | What you refuse to do | **FACT** | a policy fact — see the warning below |
-| `mistaken` | What people get wrong | **FACT** | usually a factual correction |
-| `customer_words` | What a customer actually said | **PRIVATE** | a customer's own words; `needsConsent` territory |
-| `first_customers` | The first customers | **STORY**, or PRIVATE if it names people | |
-| `origin` | How it started | **STORY** | motive, not fact |
-| `how_you_talk` | How you talk about the work | **STORY (tone only)** | an input to voice, never a claim |
+| 1 | How it's made, step by step | **FACT** | process + timings (double-boiler melting) |
+| 2 | The part that takes longest | **FACT** | the fragrance step |
+| 3 | The detail people notice | **FACT** | the smooth top |
+| 4 | What you refuse to do | **FACT** | fact = soy wax only / no paraffin. **The phrasing is pejorative** and must not be reused — see A.4b.2 |
+| 5 | What people get wrong | **FACT** | a factual correction |
+| 6–9 | Something I can stand behind ×4 | **FACT, mixed** | paraffin-free soy only; hand-poured small batches; **an Instagram handle = a contact detail**; **"Bulk Order" = an offer word, not a claim** |
+| 10 | Materials and suppliers | **MIXED — STORY sentence + FACT sentences** | opens with a personal motive in Hinglish: *"Lavender isliye choose ki kyunki kaam ke baad khud stressed rehti thi…"*. **That sentence can seed a "stress relief" health claim.** Exclude the motive sentence; keep any real material/supplier facts in the rest of the row |
+| 11 | How it started | **STORY** | exclude |
+| 12 | The first customers | **STORY** | exclude |
+| 13 | How you talk about the work | **STORY** | tone input only, never a claim |
+| 14 | What a customer actually said | **PRIVATE** | the husband's accident. `personalStories` protection stays. **Never used, at any confidence, in any copy** |
 
-**Rows whose title is not one of those ten need individual review.**
-You named one — *"Something I can stand behind"* — which is **not** in
-`STORY_QUESTIONS`, so at least some of the 14 were entered by hand.
-**I have seen 5 of 14 titles. The other 9 I have not seen and will not
-guess at.** The query in A.4c produces the full list to confirm against.
+**Row 10 is why 1c cannot be title-based alone.** A single row holds a
+motive sentence that is a health-claim seed and material facts that are
+legitimate evidence. Excluding the row loses the materials; keeping it
+feeds the model a reason to write "stress relief". **The unit is the
+sentence**, in 1c as well as in the eventual re-classification.
+
+**Rows 6–9 are why FACT is not a licence for the whole row.** An
+Instagram handle is a contact detail (`scrubInventedContacts` exists to
+keep the wrong one out of copy) and "Bulk Order" reads as an offer. Two
+facts, one contact detail and one offer word, in rows marked FACT.
 
 ### A.4b — Two warnings that the row you quoted makes concrete
 
@@ -860,16 +856,46 @@ multiplexes subsystems within a group.
    Always Free allowance test.
 
 3. **1c — item 3, the founder-story line, WITHOUT deleting the block.**
-   The intake titles are deterministic (`STORY_QUESTIONS`), so the
-   prompt can exclude the three STORY questions — `origin`,
-   `first_customers`, `how_you_talk` — by title, and keep the rest as
-   facts. This implements the founder's rule now, moves no rows, and
-   does not blind the model.
-   **Stated limit:** rows whose title I have not seen (9 of 14,
-   including hand-entered ones) keep being treated as facts until the
-   A.4a table is confirmed. So a story line from an unknown-title row
-   may survive 1c. That is the honest trade against blinding the model.
-   The prompt wording at `:719` also stops inviting narrative.
+   Two filters, because row 10 ("Materials and suppliers") holds a
+   motive sentence AND material facts:
+
+   **(a) By title.** Exclude whole rows titled *How it started*, *The
+   first customers*, *How you talk about the work* — classified STORY
+   by the founder.
+
+   **(b) By sentence, inside the rows that are kept.** Drop sentences
+   where the owner is the subject: the motive, the feeling, the reason
+   they chose something. Row 10's opener —
+   *"Lavender isliye choose ki kyunki kaam ke baad khud stressed rehti
+   thi…"* — is the case that matters, because it is a **health-claim
+   seed**: a model that reads it will reach for "stress relief", which
+   the benefit rules then have to strip downstream. Better not to show
+   it at all.
+
+   **The detector already exists:** `ownerVoice.OWNER_VOICE` and
+   `customerFirst.storySentences` were built in Phase 3 to find exactly
+   these sentences in OUTPUT. 1c points them at the INPUT instead.
+
+   **Known gap, needs its own dry run:** `OWNER_VOICE`'s Hinglish
+   patterns want `main|hum|maine|humne` followed by a marker, and row
+   10's sentence has neither — it is first-person by VERB ENDING
+   (*"choose ki"*, *"rehti thi"*, *"karti hoon"*), which the list does
+   not cover. So (b) will miss it until those endings are added.
+
+   **The risk profile here is gentler than a strip rule, and that
+   changes the trade.** 1c filters the PROMPT, not the output. A false
+   positive means the model is not shown a fact (lost specificity,
+   recoverable, visible as a genericness note). A false negative means
+   story text reaches copy — the thing being fixed. So (b) should be
+   **deliberately over-inclusive**, which is the opposite of how a
+   strip rule is tuned.
+
+   **Stated limit:** PRIVATE row 14 is already protected by
+   `splitStories`/`needsConsent` and is untouched by 1c. Rows 6–9 pass
+   as FACT, so the Instagram handle and "Bulk Order" still reach the
+   prompt until C.6 classifies per sentence — the existing contact
+   scrub and offer rules are what stop them reaching copy, and they
+   already do.
 
 4. **The three gaps from item 6 — dry run FIRST, enable on your word:**
    cure time in the duration verbs; a `process` rule class; **Hinglish
@@ -900,11 +926,11 @@ on the rest.
 1. **`docs/Hawlai-autonomous-agency-plan.md` was never attached.** If it
    exists, this document should be checked against it before any code.
 
-2. **The other 9 row titles.** Item 6 is answered — the process
-   sentences are real, they are in the `business_story` rows, nothing
-   was invented. What is left is the A.4a classification table, and I
-   have seen 5 of 14 titles. The query is in A.4c. I will not guess the
-   other 9.
+2. **ANSWERED — all 14 titles supplied and classified (A.4a).** One
+   finding came out of it that I would not have predicted: row 10,
+   "Materials and suppliers", opens with a personal motive that is a
+   **health-claim seed** ("…khud stressed rehti thi"). That is why 1c
+   is per-sentence and not per-title.
 
 3. **A.4d — `general` with no migration, or widen the constraint for
    `product_fact`?** I recommend `general`: zero schema change,
