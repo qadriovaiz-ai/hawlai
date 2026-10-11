@@ -42,11 +42,18 @@ export interface GeneratedMessage {
   message: string;
   /** Set when the AI call failed and `message` is the generic template. */
   aiFailure?: AiFailureNote;
+  /** Claims the guard took out of this message. Nothing produced these before Phase 3.5. */
+  claimsRemoved?: string[];
+  /** False when the message read like a template, or was the wrong shape, and a human should look. */
+  publishable?: boolean;
 }
 
-import { getModel } from "../models";
-import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
-import { parseModelJson } from "@/lib/ai/modelJson";
+import { type AiFailureNote } from "@/lib/ai/claude";
+// PHASE 3.5, STEP 2. This message is SENT TO A PERSON and had no check
+// on its output at all: the facts went into the prompt and nothing
+// looked at what came back. Now it goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 export async function generateFollowUpMessage(
   lead: LeadInfo,
@@ -59,8 +66,16 @@ export async function generateFollowUpMessage(
   // flat fields. Was already built and wired into live calls; this is
   // the first async/messaging generator to use it too.
   pastInsights?: string[],
-  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
-  grounding?: string
+  /**
+   * The business's own records.
+   *
+   * WAS A PRE-BUILT PROMPT STRING (`grounding`), which is why this path
+   * had no guard: a string can be put in a prompt but it cannot be
+   * checked against. The door needs the records themselves.
+   */
+  facts?: BusinessFacts | null,
+  /** false on the autopilot drafting path: no retries, single shot. */
+  revise: boolean = true
 ): Promise<GeneratedMessage> {
   const brandContext = brandProfile
     ? `Brand tone to match: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Key points to weave in if relevant: ${(brandProfile.messaging_pillars ?? []).join("; ") || "none"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -84,40 +99,45 @@ export async function generateFollowUpMessage(
         };
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 400,
-      messages: [
-        {
-          role: "user",
-          content: `You are writing a follow-up ${channel} message for an Indian ${businessCategory} business's sales team to send to a lead.
+    const copy = await generateCopy({
+      topic: `follow up with ${lead.name}${interest ? ` about ${interest}` : ""}`,
+      businessName: facts?.businessName ?? "this business",
+      businessCategory,
+      facts,
+      // The sales team reads this draft before sending it, so an
+      // unverified price is flagged rather than deleted.
+      mode: "draft",
+      revise,
+      language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "follow_up_message",
+      logContext,
+      brief: {
+        label: `follow-up ${channel} message to a lead`,
+        instructions: `${channelInstructions}
+The goal: get them to book an appointment/demo/visit or reply.`,
+        brandContext: `You are writing for an Indian ${businessCategory} business's sales team to send to ONE named lead.
+${brandContext}`,
+        grounding: `
 ${leadContext}
-${brandContext}
-${channelInstructions}
-The goal: get them to book an appointment/demo/visit or reply. No markdown, no explanation, JSON only.
-${grounding ?? ""}`,
-        },
-      ],
-    }, { operation: "follow_up_message", logContext });
+`,
+        shapeHint:
+          channel === "whatsapp"
+            ? `Return JSON only: {"message":"the whatsapp text"}`
+            : `Return JSON only: {"subject":"email subject line","message":"the full email body"}`,
+      },
+    });
     // The template still goes back — callers that send it decide — but
     // marked, so no one mistakes it for a message written for this lead.
-    if (!r.ok) return { ...fallback, aiFailure: aiFailureNote(r.failure) };
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[contentAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
-    }
-    const parsed = parsedReply.value;
+    if (copy._aiFailure) return { ...fallback, aiFailure: copy._aiFailure };
+    if (copy._fallback) return fallback;
     return {
-      subject: parsed.subject,
-      message: parsed.message ?? fallback.message,
+      subject: copy.output.subject,
+      message: copy.output.message ?? fallback.message,
+      // What the guard did travels with the message, so a caller that
+      // sends it unattended can refuse. Nothing read these before
+      // because nothing produced them.
+      claimsRemoved: copy.removed.length ? copy.removed : undefined,
+      publishable: copy.publishable,
     };
   } catch (err: any) {
     console.error("[content-agent] generateFollowUpMessage error:", err.message);

@@ -375,8 +375,8 @@ anything (1 fail).
 | 0 — `factsPrompt` fail-open, + price/link protection | **done** `7659ede` |
 | — the comparative, performance and benefit rules live | **done** `2de8fc2` |
 | 1 — **the door, and email through it** | **done** |
-| 2 — the four that send to a person | next |
-| 3 — Facebook / Instagram | |
+| 2 — **the messages that reach a person** | **done** |
+| 3 — Facebook / Instagram | next |
 | 4 — WhatsApp, social management | |
 | 5 — paid ads, retargeting, ad engine | |
 | 6 — SEO, AEO, CRO | |
@@ -384,7 +384,7 @@ anything (1 fail).
 
 The backlog is no longer kept in this table alone. `MIGRATING` in
 [tests/oneDoorForCopy.test.ts](../tests/oneDoorForCopy.test.ts) holds
-24 entries, each with a date and a step, and the suite FAILS when a
+20 entries (24 at step 1), each with a date and a step, and the suite FAILS when a
 listed file starts importing the door until its entry is deleted. So
 the list can only shrink, and the phase can be finished rather than
 declared mostly done.

@@ -82,11 +82,10 @@ function throughTheDoor(file: string): boolean {
  * written.
  */
 const MIGRATING: Record<string, string> = {
-  // step 2 — the four that reach a person and have no claims check
-  "src/lib/agents/contentAgent.ts": "2026-10-11, step 2: the lead message, sent to a lead",
-  "src/lib/agents/influencerAgent.ts": "2026-10-11, step 2: outreach sent to a person",
-  "src/lib/agents/retentionAgent.ts": "2026-10-11, step 2: a message sent to a customer",
-  "src/lib/agents/campaignEditAgent.ts": "2026-10-11, step 2: ad copy pushed to live platforms",
+  // step 2 — DONE 2026-10-11. contentAgent (the lead message),
+  // retentionAgent (the customer message) and influencerAgent (the
+  // outreach) are through the door and their entries are deleted, which
+  // is what this list is for.
   // step 3 — Facebook / Instagram
   "src/lib/agents/contentMarketingAgent.ts": "2026-10-11, step 3: has every measure already, but as its own copy of them",
   "src/lib/agents/socialMediaAgent.ts": "2026-10-11, step 3: reads and writes posts on the platform",
@@ -144,6 +143,12 @@ const NOT_COPY: Record<string, string> = {
   "src/lib/strategy/positioning/collect.ts": "collects public pages; writes no copy",
   "src/app/api/events/dispatch/route.ts": "dispatches events; the copy it sends was written elsewhere",
   "src/app/api/research-agent/generate/route.ts": "research for the owner",
+  // MOVED HERE FROM MIGRATING, 2026-10-11, after reading it. I had
+  // listed it as "ad copy pushed to live platforms", which was wrong:
+  // proposeTargetingChange and proposeBudgetChange return an age range,
+  // a gender list, a daily budget and an owner-facing summary. It reads
+  // an existing campaign's headline and never writes one.
+  "src/lib/agents/campaignEditAgent.ts": "changes targeting and budget numbers; writes no copy, only an owner-facing summary",
 };
 
 describe("every model caller is accounted for", () => {

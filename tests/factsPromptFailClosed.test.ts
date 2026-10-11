@@ -132,7 +132,12 @@ describe("ONE implementation, not two", () => {
 
 describe("no caller re-introduces the fail-open shape", () => {
   // Every file that actually CALLS factsPrompt, computed from the repo
-  // on 2026-10-11 rather than listed from memory. 22 of them.
+  // on 2026-10-11 rather than listed from memory. 19 of them, down from
+  // 22: the lead message, the retention message and the influencer
+  // outreach went through generateCopy in Phase 3.5 step 2 and now pass
+  // the RECORDS instead of a prompt string. That is the direction this
+  // list should move - a path that hands over a pre-built string cannot
+  // have its output checked.
   //
   // NOT in this list: src/app/api/brand-kit/build/route.ts, which
   // IMPORTS factsPrompt and never calls it - the brand agent calls it
@@ -143,9 +148,6 @@ describe("no caller re-introduces the fail-open shape", () => {
     "src/app/api/creative/copy-variations/route.ts",
     "src/app/api/creative/product-description/route.ts",
     "src/app/api/creative/video-script/route.ts",
-    "src/app/api/influencer/route.ts",
-    "src/app/api/leads/[id]/generate-message/route.ts",
-    "src/app/api/retention/generate-message/route.ts",
     "src/app/api/seo/blog-post/route.ts",
     "src/app/api/seo/keywords/route.ts",
     "src/app/api/seo/toolkit/route.ts",
@@ -163,8 +165,8 @@ describe("no caller re-introduces the fail-open shape", () => {
     "src/lib/agents/websiteBuilderAgent.ts",
   ];
 
-  it("ALL 22 ARE COVERED — the count is asserted so a new one is noticed", () => {
-    expect(CALLERS.length).toBe(22);
+  it("ALL 19 ARE COVERED — the count is asserted so a new one is noticed", () => {
+    expect(CALLERS.length).toBe(19);
   });
 
   it("NOBODY GUARDS THE CALL WITH A TERNARY ON FACTS", () => {

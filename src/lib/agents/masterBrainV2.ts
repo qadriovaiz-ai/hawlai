@@ -1771,7 +1771,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       return output;
     }
     case "generate_influencer_outreach": {
-      const output = await generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, groundingContext);
+      // The records themselves, not a prompt string: the outreach
+      // message is sent to a person and the plan now goes through
+      // generateCopy, which needs facts to check against.
+      const facts = await factsFor(supabase, ctx);
+      const output = await generateInfluencerPlan(input.productOrService, ctx.city, { tone_of_voice: ctx.toneOfVoice }, ctx.category, { supabase, dealershipId: ctx.id }, facts);
       await saveGenerated(supabase, ctx.id, "influencer_outreach_plans", { product: input.productOrService, output });
       return withBrandVoiceCheck(output, resolvedBrandVoice);
     }

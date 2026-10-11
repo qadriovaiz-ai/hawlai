@@ -8,9 +8,11 @@
 // rather than pretending to auto-find real influencer accounts.
 // ------------------------------------------------------------------
 
-import { getModel } from "../models";
-import { callClaude, withAiFailure } from "@/lib/ai/claude";
-import { parseModelJson } from "@/lib/ai/modelJson";
+import { withAiFailure } from "@/lib/ai/claude";
+// PHASE 3.5, STEP 2. outreachMessage, emailSubject and emailBody are
+// SENT TO A PERSON and had no check on their output at all.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 export interface InfluencerOutreachPlan {
   searchTerms: string[];
@@ -26,7 +28,8 @@ export async function generateInfluencerPlan(
   brandProfile: any,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
+  /** The business's own records. Was a pre-built prompt string, which is why this path had no guard. */
+  facts?: BusinessFacts | null
 ): Promise<InfluencerOutreachPlan> {
   const fallback: InfluencerOutreachPlan = {
     searchTerms: [`${businessCategory} ${city ?? "India"}`, `${businessCategory} reels`],
@@ -37,33 +40,29 @@ export async function generateInfluencerPlan(
   };
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 700,
-      messages: [
-        {
-          role: "user",
-          content: `An Indian ${businessCategory} business wants to find local micro-influencers to promote: "${productOrService}"${city ? ` in ${city}` : ""}.${groundingContext ?? ""}
-
-Return JSON only:
+    const copy = await generateCopy({
+      topic: `influencer outreach for ${productOrService}`,
+      businessName: facts?.businessName ?? "this business",
+      businessCategory,
+      facts,
+      // The owner reads and edits these before sending any of them.
+      mode: "draft",
+      revise: true,
+      language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "influencer_plan",
+      logContext,
+      maxTokens: 700,
+      brief: {
+        label: "influencer outreach plan",
+        instructions: `Find local micro-influencers to promote: "${productOrService}"${city ? ` in ${city}` : ""}.`,
+        brandContext: `An Indian ${businessCategory} business wants to work with local micro-influencers.`,
+        shapeHint: `Return JSON only:
 {"searchTerms":["4-5 specific search phrases/hashtags to actually type into Instagram/YouTube search to find relevant local micro-influencers — be specific, not generic"],"outreachMessage":"a warm, specific DM template to send an influencer, in Hinglish, under 500 characters, with a placeholder like [Name] for personalization","emailSubject":"a short, specific email subject line for the same outreach, under 60 characters","emailBody":"a more formal outreach EMAIL version (not DM) — 4-6 sentences, English, with a [Name] placeholder, suitable for an influencer who prefers email contact — introduce the business, the collab idea, and a clear next step","collabIdeas":["3 concrete collaboration structure ideas appropriate for a small local business budget, e.g. barter/gifting vs paid, ranked cheapest first"]}`,
-        },
-      ],
-    }, { operation: "influencer_plan", logContext });
-    if (!r.ok) return withAiFailure(fallback, r.failure);
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[influencerAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
-    }
-    const parsed = parsedReply.value;
+      },
+    });
+    if (copy._aiFailure) return withAiFailure(fallback, { kind: copy._aiFailure.kind } as any);
+    if (copy._fallback) return fallback;
+    const parsed = copy.output;
     return {
       searchTerms: Array.isArray(parsed.searchTerms) ? parsed.searchTerms : fallback.searchTerms,
       outreachMessage: parsed.outreachMessage ?? fallback.outreachMessage,

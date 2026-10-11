@@ -59,13 +59,37 @@ async function draftStuckLeadFollowUps(supabase: any, dealershipId: string, ai: 
     .eq("dealership_id", dealershipId)
     .maybeSingle();
 
+  // PHASE 3.5, STEP 2. This path drafted WhatsApp messages for leads
+  // with NO facts at all - the manual route passed them and this one
+  // passed `undefined` - so the draft was written from nothing
+  // checkable and nothing checked it afterwards. Gathered ONCE, not per
+  // lead: the records are the same for every lead in the loop.
+  const { data: dealershipRow } = await supabase
+    .from("dealerships")
+    .select("business_category")
+    .eq("id", dealershipId)
+    .maybeSingle();
+  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+
   let drafted = 0;
   for (const lead of needsDraft) {
     try {
       // P3 — real cross-interaction memory (getLeadMemory, P1 4a),
       // same addition as the manual generate-message route.
       const pastInsights = await getLeadMemory(supabase, dealershipId, lead.id);
-      const message = await generateFollowUpMessage(lead, brandProfile, "whatsapp", undefined, undefined, pastInsights);
+      // revise: false. This is the unattended drafting loop and it runs
+      // over every lead at once, so it stays single-shot like every
+      // other unattended path.
+      const message = await generateFollowUpMessage(
+        lead,
+        brandProfile,
+        "whatsapp",
+        dealershipRow?.business_category ?? undefined,
+        { supabase, dealershipId },
+        pastInsights,
+        facts,
+        false
+      );
       // A generic template isn't a draft for this lead — leave the slot
       // empty so the next run writes a real one. If the AI is down for
       // everyone, the rest of the leads would fail the same way.

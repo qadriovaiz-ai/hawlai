@@ -21,10 +21,11 @@ interface BrandProfile {
   preferred_language?: string | null;
 }
 
-import { getModel } from "../models";
 import { leadInterest } from "../leads/leadProfile";
-import { callClaude } from "@/lib/ai/claude";
-import { parseModelJson } from "@/lib/ai/modelJson";
+// PHASE 3.5, STEP 2. Sent to an existing customer, and had no check on
+// its output at all.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 export async function generateRetentionMessage(
   customer: CustomerInfo,
@@ -35,8 +36,14 @@ export async function generateRetentionMessage(
   // P3 — real cross-interaction memory (getLeadMemory, P1 4a), same
   // addition as contentAgent.ts's generateFollowUpMessage.
   pastInsights?: string[],
-  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
-  grounding?: string
+  /**
+   * The business's own records.
+   *
+   * WAS A PRE-BUILT PROMPT STRING, which is why this path had no guard:
+   * a string can be put in a prompt but it cannot be checked against.
+   */
+  facts?: BusinessFacts | null,
+  revise: boolean = true
 ): Promise<string> {
   const brandContext = brandProfile
     ? `Brand tone: ${brandProfile.tone_of_voice ?? "friendly and professional"}. Preferred language: ${brandProfile.preferred_language ?? "hinglish"}.`
@@ -52,36 +59,37 @@ export async function generateRetentionMessage(
   const fallback = `Hi ${customer.name}, hope all is well${bought ? ` with your ${bought}` : ""}! Just checking in — let us know if there's anything we can help with.`;
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 300,
-      messages: [
-        {
-          role: "user",
-          content: `Write a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already bought from or signed up with this business), not a new lead.
-Customer: ${customer.name}${bought ? `, bought/has: ${bought}` : ""}.
-Goal: ${angleInstructions[angle]}
-${brandContext}${pastInsights && pastInsights.length > 0 ? `\nWhat's happened with this customer before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):\n${pastInsights.map((i) => `- ${i}`).join("\n")}` : ""}
-2-4 sentences, casual, max 1 emoji. Return JSON only: {"message":"the text"}
-${grounding ?? ""}`,
-        },
-      ],
-    }, { operation: "retention_message", logContext });
-    if (!r.ok) return fallback;
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[retentionAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
-    }
-    const parsed = parsedReply.value;
-    return parsed.message ?? fallback;
+    const copy = await generateCopy({
+      topic: `${angle.replace(/_/g, " ")} message for ${customer.name}`,
+      businessName: facts?.businessName ?? "this business",
+      businessCategory,
+      facts,
+      // The owner reads this before it goes out.
+      mode: "draft",
+      revise,
+      language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "retention_message",
+      logContext,
+      brief: {
+        label: `${angle.replace(/_/g, " ")} message to an existing customer`,
+        instructions: `Goal: ${angleInstructions[angle]}
+2-4 sentences, casual, max 1 emoji.`,
+        brandContext: `You are writing a short WhatsApp-style message for an Indian ${businessCategory} business to send an EXISTING CUSTOMER (already bought from or signed up with this business), not a new lead.
+${brandContext}`,
+        grounding: `
+Customer: ${customer.name}${bought ? `, bought/has: ${bought}` : ""}.${
+          pastInsights && pastInsights.length > 0
+            ? `
+What's happened with this customer before, from past interactions (reference this naturally if relevant, don't repeat something they already said no to):
+${pastInsights.map((i) => `- ${i}`).join("\n")}`
+            : ""
+        }
+`,
+        shapeHint: `Return JSON only: {"message":"the text"}`,
+      },
+    });
+    if (copy._fallback) return fallback;
+    return copy.output.message ?? fallback;
   } catch (err: any) {
     console.error("[retention-agent] generateRetentionMessage error:", err.message);
     return fallback;

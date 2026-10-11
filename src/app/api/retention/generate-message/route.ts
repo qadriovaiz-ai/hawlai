@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateRetentionMessage } from "@/lib/agents/retentionAgent";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
-import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -34,6 +34,6 @@ export async function POST(request: Request) {
 
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "business", { supabase, dealershipId }, pastInsights, factsPrompt(facts));
+  const message = await generateRetentionMessage(lead, brandProfile, angle, dealership?.business_category ?? "business", { supabase, dealershipId }, pastInsights, facts);
   return NextResponse.json({ message });
 }
