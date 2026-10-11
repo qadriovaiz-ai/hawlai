@@ -32,9 +32,9 @@ import { formatFactsForCopy, COPY_TRUTH_RULES, type BusinessFacts } from "@/lib/
 import { guardGenerated, type ClaimsMode } from "@/lib/claims/claimCheck";
 import { WHATSAPP_RULES, addWhatsappOptOut } from "@/lib/expertise/channelRules";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
-import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
-import { parseModelJson } from "@/lib/ai/modelJson";
-import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+import { aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
+// Every piece of copy on this surface goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 export async function generateWhatsappContent(
   taskKey: string,
@@ -48,7 +48,7 @@ export async function generateWhatsappContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's used: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[] ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
 
@@ -64,55 +64,53 @@ export async function generateWhatsappContent(
   ].join("\n");
 
   try {
-    const r = await callClaude({
+    // PHASE 3.5, STEP 4. WhatsApp had claims and provenance; through the
+    // door it also gets the customer-first structure, the anti-generic
+    // verdict, the invented-key strip and the new claim classes. The
+    // opt-out line and the Haiku routing stay here - both are WhatsApp's
+    // own.
+    const copy = await generateCopy({
+      topic,
+      businessName: dealershipName,
+      businessCategory,
+      facts,
+      mode: claimsMode,
+      revise: claimsMode === "draft",
+      language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "whatsapp_generation",
+      logContext,
       // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
-      // recovery) is a lower-complexity linguistic task than most
-      // of what this app uses Sonnet for. Routed through the AI
-      // Task Router by taskKey (Usage/Pricing spec Section 10) —
-      // every WHATSAPP_TASKS key maps to "simple", so this is the
-      // same Haiku choice as before, now named rather than hardcoded.
+      // recovery) is a lower-complexity linguistic task than most of
+      // what this app uses Sonnet for. Routed through the AI Task
+      // Router by taskKey (Usage/Pricing spec Section 10).
       model: modelForTask(taskKey),
-      max_tokens: 1600,
-      messages: [{
-        role: "user",
-        content: `You are writing WhatsApp messages for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}${truthBlock(facts)}
-${WHATSAPP_RULES}
-
-Topic/context: "${resolveFestiveTopic(topic, facts?.season) || "general, use good judgement for this business type"}"
-
-Task: ${meta.label}
-Requirements: ${meta.instructions}
-
-Return JSON only, no markdown, no preamble. WhatsApp messages should read like a real person texting, not a formal email — short sentences, no corporate language. Match the field names implied above exactly.`,
-      }],
-    }, { operation: "whatsapp_generation", logContext });
-    if (!r.ok) return withAiFailure(fallback, r.failure);
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[whatsappMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      // F-22: the fallback used to go back as a plain `_fallback` whose
-      // output was a sentence, and the chat then had to notice it was
-      // not copy. The parser's own account travels with it now, so the
-      // chat can say what actually happened instead of guessing
-      // (the system prompt's `_cause` / `_detail` rule).
-      return { ...fallback, _cause: parsedReply.cause, _detail: parsedReply.detail, _malformed: true };
-    }
-    const parsed = parsedReply.value;
-    // The opt-out line goes on after the claims check, so it can never
-    // be stripped as a "claim", and on in code so it's never forgotten.
-    // Sentences making claims the facts don't support are removed, and
-    // the owner is told (output._claimsNote) — never silently kept.
-    // F-01: missing facts used to skip this entirely.
-    const guarded = guardOrMark(parsed, facts, claimsMode);
-    return { output: addWhatsappOptOut(taskKey, guarded.output), claimsRemoved: guarded.removed, priceWarnings: guarded.priceWarnings };
+      maxTokens: 1600,
+      brief: {
+        label: meta.label,
+        instructions: meta.instructions,
+        channelRules: WHATSAPP_RULES,
+        brandContext: `You are writing WhatsApp messages.
+${brandContext}`,
+        grounding: groundingContext ?? undefined,
+        shapeHint: `Return JSON only, no markdown, no preamble. WhatsApp messages should read like a real person texting, not a formal email — short sentences, no corporate language. Match the field names implied above exactly.`,
+      },
+    });
+    // copy.output, NOT the generic fallback: the door already put
+    // the SPECIFIC failure message in it, and
+    // tests/aiFailureRest.test.ts asserts the owner reads that
+    // rather than "something went wrong".
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+    if (copy._fallback) return fallback;
+    // The opt-out line goes on AFTER the claims check, so it can never
+    // be stripped as a "claim", and on in code so it is never forgotten.
+    return {
+      output: addWhatsappOptOut(taskKey, copy.output),
+      claimsRemoved: copy.removed,
+      priceWarnings: copy.priceWarnings,
+      substantiation: copy.substantiation,
+      publishable: copy.publishable,
+    };
   } catch (err: any) {
     console.error("[whatsapp-marketing-agent] error:", err.message);
     return fallback;

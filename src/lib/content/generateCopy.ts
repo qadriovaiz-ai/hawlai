@@ -158,6 +158,15 @@ export type CopyRequest = {
   operation: string;
   logContext?: LogContext;
   maxTokens?: number;
+  /**
+   * The model, when the surface routes its own.
+   *
+   * WhatsApp sends short messages through the AI Task Router
+   * (modelForTask), which picks Haiku for every WHATSAPP_TASKS key.
+   * Hardcoding "standard" in the door would have quietly tripled the
+   * cost of every broadcast.
+   */
+  model?: string;
 };
 
 /** What has gone out lately, so this piece does not repeat it. */
@@ -295,7 +304,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   try {
     r = await callClaude(
       {
-        model: getModel("standard"),
+        model: req.model ?? getModel("standard"),
         max_tokens: req.maxTokens ?? 2000,
         messages: [{ role: "user", content: copyPrompt(req, storyAllowed) }],
       },
@@ -514,7 +523,7 @@ async function editDraft(
   try {
     const r = await callClaude(
       {
-        model: getModel("standard"),
+        model: req.model ?? getModel("standard"),
         max_tokens: req.maxTokens ?? 2000,
         messages: [
           {

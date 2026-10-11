@@ -91,9 +91,11 @@ const MIGRATING: Record<string, string> = {
   // that HAD every measure, as its own copy, which is exactly why no
   // other surface did.
   "src/lib/agents/socialMediaAgent.ts": "2026-10-11, step 3: reads and writes posts on the platform",
-  // step 4 — WhatsApp and social management
-  "src/lib/agents/whatsappMarketingAgent.ts": "2026-10-11, step 4",
-  "src/lib/agents/socialManagementAgent.ts": "2026-10-11, step 4",
+  // step 4 — DONE 2026-10-11. WhatsApp and the CUSTOMER-FACING social
+  // tasks are through the door. socialManagementAgent still calls the
+  // model directly for viral_trends, which searches the web and is
+  // research for the owner, and for the owner-facing tasks whose
+  // guidance the copy guard would strip ("post three times a week").
   // step 5 — ads
   "src/lib/agents/paidAdsAgent.ts": "2026-10-11, step 5",
   "src/lib/agents/retargetingAgent.ts": "2026-10-11, step 5",

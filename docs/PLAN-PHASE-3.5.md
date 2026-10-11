@@ -377,8 +377,8 @@ anything (1 fail).
 | 1 — **the door, and email through it** | **done** |
 | 2 — **the messages that reach a person** | **done** |
 | 3 — **the content path (Facebook / Instagram)** | **done** (socialMediaAgent and the calendar still listed) |
-| 4 — WhatsApp, social management | next |
-| 5 — paid ads, retargeting, ad engine | |
+| 4 — **WhatsApp, customer-facing social tasks** | **done** |
+| 5 — paid ads, retargeting, ad engine | next |
 | 6 — SEO, AEO, CRO | |
 | 7 — website builder, website copy, creative, video, brand | |
 

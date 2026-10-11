@@ -19,6 +19,8 @@ import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 import { guardGenerated } from "@/lib/claims/claimCheck";
 import { splitStories } from "@/lib/claims/personalStories";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
+// Customer-facing social copy goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 // Re-exported so every existing server import keeps working; the data
 // itself lives in lib/departments so client pickers can read it without
@@ -256,7 +258,7 @@ export async function generateSocialTask(
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). Customer-facing tasks are written from them and checked against them. */
   facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[] ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const meta = SOCIAL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -275,6 +277,53 @@ export async function generateSocialTask(
   const isTrends = taskKey === "viral_trends";
 
   try {
+    // PHASE 3.5, STEP 4. The CUSTOMER-FACING tasks go through the door;
+    // the owner-facing ones (a posting schedule, hashtag research, a
+    // community playbook) do not, for the reason recorded above
+    // CUSTOMER_COPY_TASKS - running the copy guard over "post three
+    // times a week" would strip legitimate guidance.
+    //
+    // viral_trends additionally searches the web, which the door does
+    // not do, and is research for the owner rather than words a
+    // customer reads. It stays on its own call below.
+    if (CUSTOMER_COPY_TASKS.has(taskKey)) {
+      const copy = await generateCopy({
+        topic: inputText || meta.label,
+        businessName: dealershipName,
+        businessCategory,
+        facts,
+        // The owner picks from these suggestions before anything is sent.
+        mode: "draft",
+        revise: true,
+        language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
+        operation: "social_task",
+        logContext,
+        maxTokens: 1600,
+        recent: recentPostsContext ? [recentPostsContext] : undefined,
+        brief: {
+          label: meta.label,
+          instructions: meta.instructions,
+          brandContext: `You are a social media manager.
+${brandContext}`,
+          grounding: [
+            groundingContext ?? "",
+            meta.needsInput ? `
+Incoming message to respond to: "${inputText || "(no message provided — write generic examples)"}"` : "",
+          ].join(""),
+          shapeHint: `Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above. Be specific to this business — never generic filler.`,
+        },
+      });
+      // copy.output, NOT the generic fallback: the door already put
+      // the SPECIFIC failure message in it ("AI features are
+      // temporarily unavailable..."), and tests/aiFailureRest.test.ts
+      // asserts the owner reads that rather than "something went
+      // wrong". Discarding it cost me two red tests.
+      if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+      if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+      if (copy._fallback) return fallback;
+      return { output: copy.output, claimsRemoved: copy.removed, publishable: copy.publishable };
+    }
+
     const body: any = {
       model: getModel("standard"),
       max_tokens: isTrends ? 3000 : 1600,
