@@ -22,6 +22,9 @@ export interface LandingPageCopy {
 import { getModel } from "../models";
 import { callClaude, withAiFailure } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+// The live site's own words: one door.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 export async function generateLandingPageCopy(
   dealershipName: string,
@@ -29,8 +32,8 @@ export async function generateLandingPageCopy(
   brandProfile?: BrandProfile | null,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
-  grounding?: string
+  /** The business's own records. Was a pre-built prompt string, which is why this path had no guard. */
+  facts?: BusinessFacts | null
 ): Promise<LandingPageCopy> {
   // A FALLBACK IS BUILT FROM THE BUSINESS'S OWN NAME, OR IT IS NOTHING.
   //
@@ -57,37 +60,40 @@ export async function generateLandingPageCopy(
     : "No brand profile set — default to a warm, professional tone in Hinglish.";
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 400,
-      messages: [
-        {
-          role: "user",
-          content: `Write landing page copy for an Indian ${businessCategory} business called "${dealershipName}"${city ? ` in ${city}` : ""}.
-${brandContext}
-Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 chars, builds trust","offer_text":"under 80 chars, a clear call-to-action that fits what this business actually sells — booking, ordering, visiting or enquiring, whichever applies. Never an offer, discount or 'free' anything unless the verified facts list it."}
-${grounding ?? ""}`,
-        },
-      ],
-    }, { operation: "landing_page_copy", logContext });
-    if (!r.ok) return withAiFailure(fallback, r.failure);
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[websiteAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
-    }
-    const parsed = parsedReply.value;
+    // PHASE 3.5, STEP 7. THIS IS THE LIVE SITE. Until today it had no
+    // check on its output: the prompt said "never an offer, discount or
+    // 'free' anything unless the verified facts list it" and nothing
+    // enforced it.
+    const copy = await generateCopy({
+      topic: `landing page copy for ${dealershipName}`,
+      businessName: dealershipName,
+      businessCategory,
+      facts,
+      // The owner reviews the page before publishing it.
+      mode: "draft",
+      revise: true,
+      language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "landing_page_copy",
+      logContext,
+      maxTokens: 400,
+      brief: {
+        label: "landing page copy",
+        instructions: `Write landing page copy for this business${city ? ` in ${city}` : ""}.`,
+        brandContext: brandContext,
+        shapeHint: `Return JSON only: {"headline":"under 60 chars, punchy","subheadline":"under 120 chars, builds trust","offer_text":"under 80 chars, a clear call-to-action that fits what this business actually sells — booking, ordering, visiting or enquiring, whichever applies. Never an offer, discount or 'free' anything unless the verified facts list it."}`,
+      },
+    });
+    if (copy._aiFailure) return withAiFailure(fallback, { kind: copy._aiFailure.kind } as any);
+    if (copy._fallback) return fallback;
+    const parsed = copy.output;
     return {
       headline: String(parsed.headline ?? "").trim() || fallback.headline,
-      subheadline: String(parsed.subheadline ?? "").trim() || fallback.subheadline,
-      offer_text: String(parsed.offer_text ?? "").trim() || fallback.offer_text,
+      // A field the guard emptied comes back EMPTY, not invented: the
+      // caller tells the owner to write it. An empty field the owner
+      // fills is recoverable; a confident wrong sentence on their live
+      // page is not.
+      subheadline: String(parsed.subheadline ?? "").trim(),
+      offer_text: String(parsed.offer_text ?? "").trim(),
     };
   } catch (err: any) {
     console.error("[website-agent] generateLandingPageCopy error:", err.message);

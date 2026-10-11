@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateCopyVariations } from "@/lib/agents/creativeAgent";
-import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const variations = await generateCopyVariations(topic.trim(), brandProfile, 3, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  const variations = await generateCopyVariations(topic.trim(), brandProfile, 3, dealership?.business_category ?? "business", { supabase, dealershipId }, facts);
   // The old fallback here was one hand-written variation reading
   // "Limited Stock! Hurry, offer ends soon. Book your test drive today."
   // — an invented stock claim, an invented offer and the wrong

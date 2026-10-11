@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateProductDescription } from "@/lib/agents/creativeAgent";
-import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -28,6 +28,6 @@ export async function POST(request: Request) {
   ]);
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const listing = await generateProductDescription(productName.trim(), details ?? "", brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  const listing = await generateProductDescription(productName.trim(), details ?? "", brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts);
   return NextResponse.json(listing);
 }

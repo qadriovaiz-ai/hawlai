@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateVideoTask } from "@/lib/agents/videoMarketingAgent";
-import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { aiFailureResponse } from "@/lib/ai/aiFailureResponse";
 
 async function getDealership(supabase: any, userId: string) {
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     topic ?? "",
     brandProfile,
     { supabase, dealershipId }
-  , factsPrompt(facts));
+  , facts);
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   if (_aiFailure) return aiFailureResponse(_aiFailure);
 

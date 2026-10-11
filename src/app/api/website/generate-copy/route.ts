@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateLandingPageCopy } from "@/lib/agents/websiteAgent";
-import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
 
 export async function POST() {
@@ -38,7 +38,7 @@ export async function POST() {
       { status: 503 }
     );
   }
-  const copy = await generateLandingPageCopy(name, dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  const copy = await generateLandingPageCopy(name, dealership?.city ?? null, brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts);
   // The AI failed: say why, save nothing (lib/ai/aiFailureResponse.ts).
   const aiFailed = aiFailedResponse(copy);
   if (aiFailed) return aiFailed;

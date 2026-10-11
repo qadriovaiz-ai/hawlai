@@ -31,9 +31,13 @@ describe("1. a key the model invented never reaches the reader", () => {
   });
 
   it("and so is every shape like it", () => {
+    // "facts_used" WAS on this list and is not any more. The rule was
+    // corrected on 2026-10-11 to allow lowercase snake_case, because
+    // rejecting every underscore was silently deleting a video
+    // script's total_duration_seconds and scene_number. Section 6
+    // below states that trade-off and the gap it leaves.
     for (const key of [
       "Concrete_details_used",
-      "facts_used",
       "Notes_for_owner",
       "Angle",
       "ANGLE",
@@ -420,5 +424,60 @@ describe("5. the offer survives the cut", () => {
     ]) {
       expect(carriesTheOffer(s), s).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------
+// 6. SNAKE_CASE IS REAL CONTENT — the rule I got wrong
+// ---------------------------------------------------------------------
+//
+// The first version of isContentKey rejected every underscore, on the
+// claim that no real content key in this codebase has one. That was
+// true of the surfaces I had read and false of the ones I had not: a
+// video script returns total_duration_seconds, scene_number,
+// voiceover_or_caption and duration_seconds, and the rule silently
+// deleted them. The script's own timings came back as zero, and a test
+// in Phase 3.5 step 7 is what found it.
+//
+// THE LIVE LEAK'S DISCRIMINATOR WAS THE CAPITAL, not the underscore:
+// "Concrete_details_used". A model labelling its own bookkeeping
+// capitalises it, the way a person labelling a column would.
+
+describe("6. lowercase snake_case is content; a capitalised label is not", () => {
+  it("THE VIDEO SCRIPT'S OWN FIELDS SURVIVE", () => {
+    for (const key of ["total_duration_seconds", "scene_number", "voiceover_or_caption", "duration_seconds", "meta_description"]) {
+      expect(isContentKey(key), key).toBe(true);
+    }
+  });
+
+  it("AND THE LIVE LEAK IS STILL REFUSED", () => {
+    for (const key of ["Concrete_details_used", "Facts_used", "Notes_for_owner", "Angle", "ANGLE", "Word_count"]) {
+      expect(isContentKey(key), key).toBe(false);
+    }
+  });
+
+  it("a capital anywhere beside an underscore is refused", () => {
+    for (const key of ["concrete_Details_used", "details_Used"]) {
+      expect(isContentKey(key), key).toBe(false);
+    }
+  });
+
+  it("spaces and dashes are still refused", () => {
+    for (const key of ["details used", "specifics-used", "_private", "__x"]) {
+      expect(isContentKey(key), key).toBe(false);
+    }
+  });
+
+  it("a trailing or doubled underscore is not a content key", () => {
+    for (const key of ["body_", "body__text", "_body"]) {
+      expect(isContentKey(key), key).toBe(false);
+    }
+  });
+
+  it("THE RESIDUAL GAP IS STATED, not discovered later", () => {
+    // An invented key in all-lowercase snake_case passes. The
+    // alternative was deleting real content, which is worse, and
+    // nothing else in the stack can tell these two apart by shape.
+    expect(isContentKey("facts_used")).toBe(true);
   });
 });

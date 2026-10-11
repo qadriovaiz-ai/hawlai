@@ -1,0 +1,13 @@
+// A FIXTURE, not real code. Read by tests/oneDoorForCopy.test.ts.
+//
+// It exists because the hazard it represents was real: creativeAgent
+// exported generateCopyVariations, which CONTAINS the string
+// "generateCopy", so a substring check would have read that file as
+// migrated while it had no guard at all.
+//
+// creativeAgent went through the door in Phase 3.5 step 7, so it can no
+// longer demonstrate the hazard. This file can, permanently.
+
+export async function generateCopyVariations(topic: string) {
+  return [{ headline: topic, body: "no guard anywhere in this file" }];
+}

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateVideoScript } from "@/lib/agents/creativeAgent";
-import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   // Written from what the business can actually back up (src/lib/claims).
   const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
-  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, factsPrompt(facts));
+  const script = await generateVideoScript(topic.trim(), brandProfile, dealership?.business_category ?? "business", { supabase, dealershipId }, facts);
   // No scenes means nothing was written. Said plainly rather than
   // returned as an empty script the page renders as a blank storyboard.
   if (!script.scenes.length) {

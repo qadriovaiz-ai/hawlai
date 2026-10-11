@@ -1675,7 +1675,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       );
     }
     case "generate_video_task": {
-      const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, groundingContext);
+      // The records themselves: video captions go through the door now.
+      const { output, _fallback } = await generateVideoTask(input.taskType, ctx.name, ctx.category, input.topic ?? "", { tone_of_voice: ctx.toneOfVoice }, { supabase, dealershipId: ctx.id }, await factsFor(supabase, ctx));
       // F-22: a reply that could not be read is an error, not a draft.
       const malformed = malformedToolError({ output, _fallback } as any);
       if (malformed) return malformed;

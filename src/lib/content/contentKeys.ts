@@ -27,14 +27,36 @@ const NOT_CONTENT = new Set(["note", "hashtags"]);
 /**
  * A key whose value is words a reader should see.
  *
- * Every real content key in this codebase is a single lowercase word or
- * lowerCamelCase - text, body, headline, intro, ctaLabel, bullets,
- * caption, slides. None contains an underscore, none starts with a
- * capital, and none has a space. So that is the rule, and anything else
- * is treated as a label the model invented.
+ * THE RULE: it must start with a lowercase letter, and it may be
+ * lowerCamelCase or lowercase snake_case. Anything starting with a
+ * capital, anything mixing capitals with underscores, and anything with
+ * a space or a dash is treated as a label the model invented.
+ *
+ * WHY SNAKE_CASE IS ALLOWED, corrected 2026-10-11. The first version of
+ * this rule rejected every underscore, on the claim that "no real
+ * content key in this codebase contains one". That was true of the
+ * surfaces I had read and false of the ones I had not: a video script
+ * returns total_duration_seconds, scene_number, voiceover_or_caption
+ * and duration_seconds, and the rule silently deleted them - the
+ * script's own timings came back as zero. Found by a test in Phase 3.5
+ * step 7, not by reasoning.
+ *
+ * WHAT THE LIVE LEAK ACTUALLY LOOKED LIKE: "Concrete_details_used", and
+ * the discriminator was the CAPITAL, not the underscore. A model
+ * labelling its own bookkeeping capitalises it, the way a person
+ * labelling a column would.
+ *
+ * THE RESIDUAL GAP, stated rather than discovered later: an invented
+ * key in all-lowercase snake_case - "facts_used" - passes this rule.
+ * The alternative was deleting real content, which is worse, and
+ * nothing else in the stack can tell those two apart by shape.
  */
 export function isContentKey(key: string): boolean {
   if (key.startsWith("_") || NOT_CONTENT.has(key)) return false;
+  // lowerCamelCase, or lowercase snake_case. No leading capital, no
+  // capital anywhere beside an underscore, no spaces, no dashes.
+  if (/[^A-Za-z0-9_]/.test(key)) return false;
+  if (key.includes("_")) return /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(key);
   return /^[a-z][a-zA-Z0-9]*$/.test(key);
 }
 

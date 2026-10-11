@@ -132,7 +132,7 @@ describe("ONE implementation, not two", () => {
 
 describe("no caller re-introduces the fail-open shape", () => {
   // Every file that actually CALLS factsPrompt, computed from the repo
-  // on 2026-10-11 rather than listed from memory. 17 of them, down from
+  // on 2026-10-11 rather than listed from memory. 12 of them, down from
   // 22: the lead message, the retention message and the influencer
   // outreach went through generateCopy in Phase 3.5 step 2 and now pass
   // the RECORDS instead of a prompt string. That is the direction this
@@ -145,15 +145,10 @@ describe("no caller re-introduces the fail-open shape", () => {
   // and left alone rather than tidied inside a guard commit.
   const CALLERS = [
     "src/app/api/ads/google/keywords/route.ts",
-    "src/app/api/creative/copy-variations/route.ts",
-    "src/app/api/creative/product-description/route.ts",
-    "src/app/api/creative/video-script/route.ts",
     "src/app/api/seo/keywords/route.ts",
     "src/app/api/seo/toolkit/route.ts",
     "src/app/api/strategy/deep/route.ts",
     "src/app/api/strategy/route.ts",
-    "src/app/api/video-marketing/generate/route.ts",
-    "src/app/api/website/generate-copy/route.ts",
     "src/app/api/website-builder/generate/route.ts",
     "src/app/api/website-builder/plan/route.ts",
     "src/lib/adEngine.ts",
@@ -163,8 +158,8 @@ describe("no caller re-introduces the fail-open shape", () => {
     "src/lib/agents/websiteBuilderAgent.ts",
   ];
 
-  it("ALL 17 ARE COVERED — the count is asserted so a new one is noticed", () => {
-    expect(CALLERS.length).toBe(17);
+  it("ALL 12 ARE COVERED — the count is asserted so a new one is noticed", () => {
+    expect(CALLERS.length).toBe(12);
   });
 
   it("NOBODY GUARDS THE CALL WITH A TERNARY ON FACTS", () => {

@@ -131,10 +131,7 @@ const MIGRATING: Record<string, string> = {
   // step 6 — SEO, AEO and CRO
   "src/lib/agents/seoToolkitAgent.ts": "2026-10-11, step 6: mostly owner-facing SEO advice, but meta_tags and gbp_optimization write text a customer reads. Its F-01 fail-open was fixed on 2026-10-11; the two copy tasks still want the door",
   // step 7 — websites and long-form shapes
-  "src/lib/agents/websiteAgent.ts": "2026-10-11, step 7: live site copy, NO output guard today",
   "src/lib/agents/websiteBuilderAgent.ts": "2026-10-11, step 7: block trees, a different output shape",
-  "src/lib/agents/creativeAgent.ts": "2026-10-11, step 7: product descriptions and video scripts, NO output guard today",
-  "src/lib/agents/videoMarketingAgent.ts": "2026-10-11, step 7: captions and scripts, NO output guard today",
   "src/lib/agents/brandBuildingAgent.ts": "2026-10-11, step 7: taglines that become copy everywhere",
   // the chat, which writes prose of its own
   "src/lib/agents/masterBrainV2.ts": "2026-10-11, step 3: the chat's own prose; guarded by replyClaims today",
@@ -267,10 +264,24 @@ describe("email is through the door", () => {
   });
 
   it("A SUBSTRING IS NOT A MIGRATION", () => {
-    // creativeAgent exports generateCopyVariations. If the check were a
-    // substring match it would read as migrated while having no guard.
+    // THE HAZARD, which was real: creativeAgent exported
+    // generateCopyVariations, and a substring match would have read it
+    // as migrated while it had no guard at all.
+    //
+    // creativeAgent went through the door in step 7, so it can no
+    // longer demonstrate this. tests/fixtures/substringNotAMigration.txt
+    // can, permanently: it contains the substring and imports nothing.
+    const fixture = code("tests/fixtures/substringNotAMigration.txt");
+    expect(fixture).toMatch(/generateCopyVariations/);
+    expect(fixture).toContain("generateCopy");
+    expect(throughTheDoor("tests/fixtures/substringNotAMigration.txt")).toBe(false);
+  });
+
+  it("AND THE IMPORT IS WHAT DECIDES — creativeAgent has both now", () => {
+    // The positive control for the same rule: the same substring, plus
+    // the import, plus a real call.
     expect(code("src/lib/agents/creativeAgent.ts")).toMatch(/generateCopyVariations/);
-    expect(throughTheDoor("src/lib/agents/creativeAgent.ts")).toBe(false);
+    expect(throughTheDoor("src/lib/agents/creativeAgent.ts")).toBe(true);
   });
 });
 

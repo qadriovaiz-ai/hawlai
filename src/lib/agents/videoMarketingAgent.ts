@@ -19,6 +19,9 @@ export type { VideoTaskMeta };
 import { getModel } from "../models";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+// Captions and subtitle lines are customer-facing copy: one door.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 interface BrandProfile {
   tone_of_voice?: string | null;
@@ -31,8 +34,9 @@ export async function generateVideoTask(
   topic: string,
   brandProfile?: BrandProfile | null,
   logContext?: { supabase: any; dealershipId: string },
-  groundingContext?: string
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote }> {
+  /** The business's own records. Was a pre-built prompt string, which is why this path had no guard. */
+  facts?: BusinessFacts | null
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; publishable?: boolean }> {
   const meta = VIDEO_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -44,35 +48,31 @@ export async function generateVideoTask(
   const brandContext = brandProfile?.tone_of_voice ? `Brand tone: ${brandProfile.tone_of_voice}.` : "No brand voice set yet — keep it natural and specific to the business type.";
 
   try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 1800,
-      messages: [{
-        role: "user",
-        content: `You are a short-form video strategist writing for an Indian ${businessCategory} business called "${dealershipName}".
-${brandContext}${groundingContext ?? ""}
-Topic/context: "${topic || "general brand content, use good judgement for this business type"}"
-
-Task: ${meta.label}
-Requirements: ${meta.instructions}
-
-Return JSON only, no markdown. Shape the JSON sensibly (e.g. "ideas" array, "captions" array, "lines" array for subtitles with {time, text}, "shots" array for editing/b-roll with relevant fields, "concepts" array for animation). Be specific to this business — never generic filler.`,
-      }],
-    }, { operation: "video_marketing", logContext });
-    if (!r.ok) return withAiFailure(fallback, r.failure);
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[videoMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return fallback;
-    }
-    return { output: parsedReply.value };
+    // PHASE 3.5, STEP 7. Captions, hooks and subtitle lines are read by
+    // customers, and this path had no check on its output at all.
+    const copy = await generateCopy({
+      topic,
+      businessName: dealershipName,
+      businessCategory,
+      facts,
+      // The owner reviews these before using them.
+      mode: "draft",
+      revise: true,
+      language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "video_marketing",
+      logContext,
+      maxTokens: 1800,
+      brief: {
+        label: meta.label,
+        instructions: meta.instructions,
+        brandContext: `You are a short-form video strategist.
+${brandContext}`,
+        shapeHint: `Return JSON only, no markdown. Shape the JSON sensibly (e.g. "ideas" array, "captions" array, "lines" array for subtitles with {time, text}, "shots" array for editing/b-roll with relevant fields, "concepts" array for animation). Be specific to this business — never generic filler.`,
+      },
+    });
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    if (copy._fallback) return fallback;
+    return { output: copy.output, claimsRemoved: copy.removed, publishable: copy.publishable };
   } catch (err: any) {
     console.error("[video-marketing-agent] error:", err.message);
     return fallback;

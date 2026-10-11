@@ -52,41 +52,66 @@ function brandContextFor(brandProfile?: BrandProfile | null): string {
 import { getModel } from "../models";
 import { callClaude } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
+// All three generators here write customer-facing copy: one door.
+import { generateCopy } from "@/lib/content/generateCopy";
+import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
-async function askClaudeJson(prompt: string, maxTokens: number, operation: string, logContext?: { supabase: any; dealershipId: string }): Promise<any | null> {
-  try {
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    }, { operation, logContext });
-    if (!r.ok) return null;
-    const text = r.text;
-    // Tolerant read (src/lib/ai/modelJson.ts). The pattern this replaces
-    // ran a greedy /\{[\s\S]*\}/ from the first "{" in the reply to the
-    // last "}", then JSON.parse inside a catch that returns the fallback
-    // below — so a spliced, cut-off or malformed reply discarded a call
-    // that had already been paid for, behind a message naming nothing.
-    // Now the complete items survive and an unreadable reply says why.
-    const parsedReply = parseModelJson(text);
-    if (!parsedReply.ok) {
-      console.error(`[creativeAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
-      return null;
-    }
-    return parsedReply.value;
-  } catch (err: any) {
-    console.error("[creative-agent] askClaudeJson error:", err.message);
-    return null;
+/**
+ * PHASE 3.5, STEP 7. All three generators in this file write
+ * customer-facing copy - a product listing, ad variations, a Reel
+ * script - and none of them had any check on its output. Each took its
+ * facts as a pre-built prompt string, which is why: a string can be put
+ * in a prompt but it cannot be checked against.
+ *
+ * This replaces askClaudeJson for all three. The prompts are unchanged;
+ * they are just handed to the door as a brief instead of being sent
+ * straight to the model.
+ */
+async function askThroughDoor(
+  opts: {
+    topic: string;
+    label: string;
+    instructions: string;
+    shapeHint: string;
+    businessCategory: string;
+    brandProfile?: BrandProfile | null;
+    facts?: BusinessFacts | null;
+    maxTokens: number;
+    operation: string;
+    logContext?: { supabase: any; dealershipId: string };
   }
+): Promise<any | null> {
+  const copy = await generateCopy({
+    topic: opts.topic,
+    businessName: opts.facts?.businessName ?? "this business",
+    businessCategory: opts.businessCategory,
+    facts: opts.facts,
+    // The owner reviews all three of these before using them.
+    mode: "draft",
+    revise: true,
+    language: (opts.brandProfile as any)?.preferred_language ?? opts.facts?.brand?.language ?? null,
+    operation: opts.operation,
+    logContext: opts.logContext,
+    maxTokens: opts.maxTokens,
+    brief: {
+      label: opts.label,
+      instructions: opts.instructions,
+      brandContext: brandContextFor(opts.brandProfile),
+      shapeHint: opts.shapeHint,
+    },
+  });
+  if (copy._fallback) return null;
+  return copy.output;
 }
+
 
 export async function generateVideoScript(
   topic: string,
   brandProfile?: BrandProfile | null,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
-  grounding?: string
+  /** The business's own records. Was a pre-built prompt string, which is why this path had no guard. */
+  facts?: BusinessFacts | null
 ): Promise<VideoScript> {
   // NO SCRIPT RATHER THAN THE WRONG BUSINESS'S SCRIPT.
   //
@@ -106,18 +131,22 @@ export async function generateVideoScript(
     fallbackReason: "Hawlai couldn't write the script just now, so nothing was invented. Ask again and it will try afresh.",
   };
 
-  const parsed = await askClaudeJson(
-    `You are a short-form video scriptwriter for an Indian ${businessCategory} business's Instagram Reels / YouTube Shorts.
+  const parsed = await askThroughDoor({
+    topic,
+    label: "short-form video script",
+    instructions: `You are a short-form video scriptwriter for Instagram Reels / YouTube Shorts.
 Topic: "${topic}"
-${brandContextFor(brandProfile)}
 
-Write a 15-30 second video script, 3-6 scenes. Return JSON only:
-{"title":"short title for the video","total_duration_seconds":number,"scenes":[{"scene_number":1,"visual":"what the camera shows, one short sentence","voiceover_or_caption":"what's said or shown as on-screen text, one short sentence","duration_seconds":number}]}
-${grounding ?? ""}`,
-    600,
-    "video_script",
-    logContext
-  );
+Write a 15-30 second video script, 3-6 scenes.`,
+    shapeHint: `Return JSON only:
+{"title":"short title for the video","total_duration_seconds":number,"scenes":[{"scene_number":1,"visual":"what the camera shows, one short sentence","voiceover_or_caption":"what's said or shown as on-screen text, one short sentence","duration_seconds":number}]}`,
+    businessCategory,
+    brandProfile,
+    facts,
+    maxTokens: 600,
+    operation: "video_script",
+    logContext,
+  });
 
   if (!parsed || !Array.isArray(parsed.scenes)) return fallback;
   return {
@@ -133,8 +162,8 @@ export async function generateCopyVariations(
   count: number = 3,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
-  grounding?: string
+  /** The business's own records. Was a pre-built prompt string, which is why this path had no guard. */
+  facts?: BusinessFacts | null
 ): Promise<CopyVariation[]> {
   // THE WORST FALLBACK IN THE FILE, and it shipped as ad copy.
   //
@@ -148,18 +177,22 @@ export async function generateCopyVariations(
   // could be written rather than handing the owner a variation to run.
   const fallback: CopyVariation[] = [];
 
-  const parsed = await askClaudeJson(
-    `You are an ad copywriter for an Indian ${businessCategory} business, A/B testing different angles for the same offer.
+  const parsed = await askThroughDoor({
+    topic,
+    label: "A/B ad copy variations",
+    instructions: `You are an ad copywriter A/B testing different angles for the same offer.
 Topic: "${topic}"
-${brandContextFor(brandProfile)}
 
-Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian customers — be genuinely critical and vary the scores based on real strength, not uniformly high. Return JSON only:
-{"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}
-${grounding ?? ""}`,
-    700,
-    "copy_variations",
-    logContext
-  );
+Write ${count} DISTINCT ad copy variations, each taking a different angle (e.g. urgency, trust/credibility, price/value, lifestyle/aspiration — pick whichever ${count} fit best). For each, also give an honest 0-100 confidence score for how well it will convert with Indian customers — be genuinely critical and vary the scores based on real strength, not uniformly high.`,
+    shapeHint: `Return JSON only:
+{"variations":[{"angle":"short label for the angle used","headline":"under 40 chars, in Hinglish","body":"under 125 chars, in Hinglish","score":number}]}`,
+    businessCategory,
+    brandProfile,
+    facts,
+    maxTokens: 700,
+    operation: "copy_variations",
+    logContext,
+  });
 
   if (!parsed || !Array.isArray(parsed.variations)) return fallback;
   return parsed.variations;
@@ -183,26 +216,29 @@ export async function generateProductDescription(
   brandProfile?: BrandProfile | null,
   businessCategory: string = "business",
   logContext?: { supabase: any; dealershipId: string },
-  /** VERIFIED FACTS + truth rules for this business (src/lib/claims). */
-  grounding?: string
+  /** The business's own records. Was a pre-built prompt string, which is why this path had no guard. */
+  facts?: BusinessFacts | null
 ): Promise<ProductDescription> {
   const fallback: ProductDescription = {
     title: itemName,
     description: `Discover the ${itemName} — available now. Contact us for full details and pricing.`,
     highlights: [],
   };
-  const parsed = await askClaudeJson(
-    `Write a product/service listing description for an Indian ${businessCategory} business.
+  const parsed = await askThroughDoor({
+    topic: itemName,
+    label: "product listing description",
+    instructions: `Write a product/service listing description.
 Item: "${itemName}"
-Details provided: "${details}"
-${brandContextFor(brandProfile)}
-Return JSON only:
-{"title":"short listing title","description":"2-3 sentence description, honest and specific to what was given, not generic","highlights":["4-5 short bullet-point features, based on the details given"]}
-${grounding ?? ""}`,
-    500,
-    "product_description",
-    logContext
-  );
+Details provided: "${details}"`,
+    shapeHint: `Return JSON only:
+{"title":"short listing title","description":"2-3 sentence description, honest and specific to what was given, not generic","highlights":["4-5 short bullet-point features, based on the details given"]}`,
+    businessCategory,
+    brandProfile,
+    facts,
+    maxTokens: 500,
+    operation: "product_description",
+    logContext,
+  });
   if (!parsed) return fallback;
   return {
     title: parsed.title ?? fallback.title,
