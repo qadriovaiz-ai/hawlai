@@ -152,10 +152,34 @@ describe("3 and 4. seoToolkitAgent and adEngine — the guardGenerated callers",
     expect(String((r.output as any)._claimsNote)).toMatch(/customer/);
   });
 
-  it("both still call it, so neither can drift back out", async () => {
+  it("both still reach it, so neither can drift back out", async () => {
+    // seoToolkitAgent calls guardGenerated directly. adEngine went
+    // through the Phase 3.5 door on 2026-10-11 and now calls
+    // guardCopyFields, which runs guardOrMark -> guardGenerated, so it
+    // reaches provenance by a longer route rather than a different one.
+    //
+    // The grep is kept for seoToolkit and REPLACED for adEngine by
+    // running the thing: a source grep could not tell the difference
+    // between "reaches provenance" and "mentions a function".
     const { code } = await import("./helpers/source");
     expect(code("src/lib/agents/seoToolkitAgent.ts")).toMatch(/guardGenerated\(/);
-    expect(code("src/lib/adEngine.ts")).toMatch(/guardGenerated\(/);
+    expect(code("src/lib/adEngine.ts")).toMatch(/guardCopyFields\(/);
+  });
+
+  it("AND adEngine'S OWN PATH STRIPS AN UNBACKED STORY, driven end to end", async () => {
+    const { guardCopyFields } = await import("@/lib/content/generateCopy");
+    const r = guardCopyFields({ headline: "Lavender candle", body: INVENTED }, { facts: facts(), mode: "publish" });
+    expect(r.narrative).toHaveLength(1);
+    expect(String((r.output as any).body)).not.toMatch(/borrowed saucepan/);
+  });
+
+  it("and it does NOT fail open when the records cannot be read", async () => {
+    // adEngine had `if (!facts) return plan` until 2026-10-11, which
+    // returned an ad plan with no check at all and nothing marking it.
+    const { guardCopyFields } = await import("@/lib/content/generateCopy");
+    const r = guardCopyFields({ headline: "Lavender candle", body: INVENTED }, { facts: null, mode: "publish" });
+    expect(String((r.output as any).body)).not.toMatch(/borrowed saucepan/);
+    expect((r.output as any)._factsState).toBe("FACTS_UNAVAILABLE");
   });
 });
 

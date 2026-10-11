@@ -74,6 +74,31 @@ function throughTheDoor(file: string): boolean {
 }
 
 /**
+ * Surfaces that use the CHECKS half of the door without its generation.
+ *
+ * guardCopyFields runs the same checks in the same order with no model
+ * call. It exists for one real case: a surface whose model call is a
+ * structured extraction rather than prose generation, so the door
+ * cannot write it.
+ *
+ * THIS LIST IS COUNTED AND EXPLAINED so it cannot become a quiet escape
+ * hatch. A surface that calls the model to write prose belongs in the
+ * door, not here, and the count is asserted below — adding an entry
+ * fails the suite until the number is changed on purpose.
+ */
+const CHECKS_ONLY: Record<string, string> = {
+  "src/lib/adEngine.ts":
+    "its one model call extracts headline, body, budget, city and an image scene together, with its own self-critique retry loop; the door cannot write that shape",
+};
+
+/** Uses the checks half, and is on the list that says why. */
+function checksOnly(file: string): boolean {
+  if (!(file in CHECKS_ONLY)) return false;
+  const src = code(file);
+  return /\bguardCopyFields\b\s*\(/.test(src) && /from\s+"@\/lib\/content\/generateCopy"/.test(src);
+}
+
+/**
  * Customer-facing copy not yet through the door.
  *
  * Every entry has the date it was listed and the migration step from
@@ -96,10 +121,13 @@ const MIGRATING: Record<string, string> = {
   // model directly for viral_trends, which searches the web and is
   // research for the owner, and for the owner-facing tasks whose
   // guidance the copy guard would strip ("post three times a week").
-  // step 5 — ads
-  "src/lib/agents/paidAdsAgent.ts": "2026-10-11, step 5",
-  "src/lib/agents/retargetingAgent.ts": "2026-10-11, step 5",
-  "src/lib/adEngine.ts": "2026-10-11, step 5",
+  // step 5 — DONE 2026-10-11. paidAdsAgent (its customer-facing
+  // ad_copy task), retargetingAgent and adEngine. adEngine uses
+  // guardCopyFields rather than the whole door: its model call is a
+  // structured extraction with its own self-critique retry, so the door
+  // cannot write it, but the order of the checks afterwards is the
+  // door's. paidAdsAgent still calls the model directly for its
+  // owner-facing planning tasks.
   // step 6 — SEO, AEO and CRO
   "src/lib/agents/seoAgent.ts": "2026-10-11, step 6: blog posts and page titles, NO output guard today",
   "src/lib/agents/seoPageAgent.ts": "2026-10-11, step 6: published landing pages, NO output guard today",
@@ -167,7 +195,9 @@ describe("every model caller is accounted for", () => {
   });
 
   it("NO FILE CALLS THE MODEL WITHOUT BEING THROUGH THE DOOR OR ON A LIST", () => {
-    const stranded = MODEL_CALLERS.filter((f) => !throughTheDoor(f) && !(f in MIGRATING) && !(f in NOT_COPY));
+    const stranded = MODEL_CALLERS.filter(
+      (f) => !throughTheDoor(f) && !checksOnly(f) && !(f in MIGRATING) && !(f in NOT_COPY)
+    );
     expect(stranded).toEqual([]);
   });
 
@@ -178,10 +208,22 @@ describe("every model caller is accounted for", () => {
     expect(done).toEqual([]);
   });
 
+  it("THE CHECKS-ONLY LIST IS ONE ENTRY LONG — it is not an escape hatch", () => {
+    // Growing this list is a decision, not a convenience. Changing the
+    // number is the moment to ask whether the surface could use the
+    // whole door instead.
+    expect(Object.keys(CHECKS_ONLY)).toEqual(["src/lib/adEngine.ts"]);
+    for (const [f, why] of Object.entries(CHECKS_ONLY)) {
+      expect(why.length, f).toBeGreaterThan(40);
+      // And it must actually use it, not merely be listed.
+      expect(checksOnly(f), f).toBe(true);
+    }
+  });
+
   it("every listed file still exists", () => {
     // A rename would otherwise leave a stale exemption behind that
     // silently covers nothing.
-    for (const f of [...Object.keys(MIGRATING), ...Object.keys(NOT_COPY)]) {
+    for (const f of [...Object.keys(MIGRATING), ...Object.keys(NOT_COPY), ...Object.keys(CHECKS_ONLY)]) {
       expect(() => code(f), f).not.toThrow();
     }
   });

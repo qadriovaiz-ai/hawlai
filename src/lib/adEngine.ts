@@ -60,14 +60,40 @@ async function callAdPlanOnce(promptContent: string, logContext?: { supabase: an
  */
 export async function generateAdPlan(prompt: string, brandProfile?: any, businessCategory: string = "small business", logContext?: { supabase: any; dealershipId: string }, businessCity?: string | null, facts?: BusinessFacts | null) {
   const plan: any = await draftAdPlan(prompt, brandProfile, businessCategory, logContext, businessCity, facts);
-  if (!facts) return plan;
-  const checked = guardGenerated({ headline: plan.headline, body: plan.body }, facts, "draft") as any;
-  const name = facts.businessName;
+
+  // PHASE 3.5, STEP 5. Two things changed here.
+  //
+  // 1. F-01, STILL LIVE IN THIS FILE until 2026-10-11: `if (!facts)
+  //    return plan` returned an ad plan with NO check at all when a
+  //    records read failed, and nothing marked it. That is the exact
+  //    shape the audit named, three days after it was fixed elsewhere.
+  //    guardCopyFields runs guardOrMark, which checks what it can and
+  //    says which state it was in either way.
+  //
+  // 2. The copy now goes through the door's checks rather than
+  //    guardGenerated alone, so an ad headline gets the genericness
+  //    verdict and the shape measure like every other surface.
+  //
+  // WHY THE CHECKS AND NOT THE WHOLE DOOR: this agent's model call is a
+  // structured extraction - headline, body, budget, city and an image
+  // scene, with its own self-critique retry - so the door cannot write
+  // it. The order of the checks afterwards is what the door owns.
+  const checked = guardCopyFields({ headline: plan.headline, body: plan.body }, {
+    facts,
+    // Every path saves a DRAFT the owner reviews before launch.
+    mode: "draft",
+    topic: prompt,
+    language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
+  });
+  const name = facts?.businessName ?? "this business";
   return {
     ...plan,
     headline: String(checked.output.headline ?? "").trim() || name.slice(0, 40),
     body: String(checked.output.body ?? "").trim() || `Message ${name} to know more.`,
     ...(checked.output._claimsNote ? { _claimsNote: checked.output._claimsNote } : {}),
+    ...(checked.output._storyNote ? { _storyNote: checked.output._storyNote } : {}),
+    ...(checked.output._factsState ? { _factsState: checked.output._factsState } : {}),
+    publishable: checked.publishable,
   };
 }
 
@@ -239,6 +265,8 @@ export function buildTextOverlaySvg(width: number, height: number, headline: str
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { soundRule, normaliseLanguage } from "@/lib/content/language";
+// The door's checks, applied to copy this agent extracts itself.
+import { guardCopyFields } from "@/lib/content/generateCopy";
 
 const META_RETRYABLE_ERROR_CODES = new Set([1, 2, 4, 17, 613]);
 

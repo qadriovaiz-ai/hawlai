@@ -378,8 +378,8 @@ anything (1 fail).
 | 2 — **the messages that reach a person** | **done** |
 | 3 — **the content path (Facebook / Instagram)** | **done** (socialMediaAgent and the calendar still listed) |
 | 4 — **WhatsApp, customer-facing social tasks** | **done** |
-| 5 — paid ads, retargeting, ad engine | next |
-| 6 — SEO, AEO, CRO | |
+| 5 — **paid ads, retargeting, ad engine** | **done** |
+| 6 — SEO, AEO, CRO | next |
 | 7 — website builder, website copy, creative, video, brand | |
 
 The backlog is no longer kept in this table alone. `MIGRATING` in

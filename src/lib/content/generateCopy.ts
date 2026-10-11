@@ -454,6 +454,84 @@ ${COPY_TRUTH_RULES}`;
 }
 
 /**
+ * THE CHECKS, WITHOUT THE GENERATION.
+ *
+ * Some surfaces do not generate prose with a single call that the door
+ * can own. adEngine's model call is a structured extraction - headline,
+ * body, budget, city and an image scene, with its own self-critique
+ * retry loop - so the door cannot write it. What the door CAN own is
+ * the order of the checks afterwards, which is the part that kept
+ * drifting between surfaces.
+ *
+ * NO MODEL CALLS HERE. No retries, no tightening prompt - the caller
+ * already has its draft. Everything else runs in the same order:
+ * invented keys, the genericness verdict, the shape measure, then
+ * claims and provenance.
+ *
+ * This is deliberately NOT a general escape hatch. A surface that calls
+ * the model to write prose uses generateCopy; this is for one that
+ * does not, and tests/oneDoorForCopy.test.ts counts its users.
+ */
+export function guardCopyFields<T extends object>(
+  draft: T,
+  opts: {
+    facts: BusinessFacts | null | undefined;
+    mode: ClaimsMode;
+    topic?: string;
+    contentTypeKey?: string;
+    language?: string | null;
+  }
+): {
+  output: any;
+  removed: string[];
+  substantiation: string[];
+  priceWarnings: string[];
+  narrative: NarrativeFinding[];
+  generic: boolean;
+  droppedSentences: number;
+  publishable: boolean;
+  blockedReason: string | null;
+} {
+  const language = normaliseLanguage(opts.language ?? opts.facts?.brand?.language ?? null);
+  let parsed: any = onlyContentKeys(draft);
+
+  const verdict = isGeneric(parsed, opts.facts ?? null, language);
+  const generic = verdict.generic;
+
+  let shapeProblem = customerFirstProblem(parsed, opts.contentTypeKey ?? "", opts.topic ?? "");
+  let droppedSentences = 0;
+  if (shapeProblem?.kind === "too_long") {
+    const tightened = tightenOutput(parsed, opts.contentTypeKey ?? "");
+    if (tightened.dropped) {
+      parsed = tightened.output;
+      droppedSentences = tightened.dropped;
+      shapeProblem = customerFirstProblem(parsed, opts.contentTypeKey ?? "", opts.topic ?? "");
+    }
+  }
+
+  // F-01: guardOrMark, never `facts ? guard() : skip`. A failed records
+  // read is a state, not a way through.
+  const guarded = guardOrMark(parsed, opts.facts ?? null, opts.mode);
+  const output: any = guarded.output;
+
+  if (shapeProblem) output._storyNote = customerFirstNote(shapeProblem, droppedSentences);
+  else if (generic) output._storyNote = genericNote(verdict);
+
+  const blockedReason = generic ? genericNote(verdict) : shapeProblem ? customerFirstNote(shapeProblem, droppedSentences) : null;
+  return {
+    output,
+    removed: guarded.removed,
+    substantiation: guarded.substantiation,
+    priceWarnings: guarded.priceWarnings,
+    narrative: guarded.narrative,
+    generic,
+    droppedSentences,
+    publishable: !blockedReason,
+    blockedReason,
+  };
+}
+
+/**
  * The retry for a piece any business in this line of work could have
  * published. An EDIT at the same length, not a fresh generation: a
  * regeneration drifts off the topic the owner asked for.

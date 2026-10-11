@@ -24,6 +24,8 @@ import { guardGenerated } from "../claims/claimCheck";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+// Customer-facing ad copy goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 // Tasks whose output is copy a customer will read. Only these are
 // claims-checked; the rest are advice to the owner, where a sentence about
@@ -45,7 +47,7 @@ export async function generateAdPlan(
   groundingContext?: string,
   /** Verified business facts (src/lib/claims). Ad copy is written from them and checked against them. */
   facts?: BusinessFacts | null
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[] ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean }> {
   const platform = AD_PLATFORMS.find((p) => p.key === platformKey);
   const task = AD_TASKS.find((t) => t.key === taskKey);
   if (!platform || !task) return { output: { text: "Unknown platform or task." }, _fallback: true };
@@ -56,6 +58,45 @@ export async function generateAdPlan(
   };
 
   try {
+    // PHASE 3.5, STEP 5. The CUSTOMER-FACING task (ad_copy) goes through
+    // the door. The planning tasks - budget advice, platform setup
+    // steps, targeting suggestions - do not, for the reason recorded
+    // below CUSTOMER_COPY_TASKS: they are advice to the owner and the
+    // copy guard would strip legitimate guidance.
+    if (CUSTOMER_COPY_TASKS.has(taskKey)) {
+      const copy = await generateCopy({
+        topic: task.label,
+        businessName: dealershipName,
+        businessCategory,
+        facts,
+        // The owner reviews ad copy before it is used, so an
+        // unverified price is flagged rather than deleted.
+        mode: "draft",
+        revise: true,
+        language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+        operation: "paid_ads_plan",
+        logContext,
+        maxTokens: 1800,
+        brief: {
+          label: task.label,
+          instructions: task.instructions(platform.label),
+          brandContext: `You are a paid advertising strategist planning for ${platform.label}. This platform isn't connected to any ad account yet — this is planning content the dealer will use manually or hand to whoever sets up the account.${brandProfile?.tone_of_voice ? `
+Brand tone: ${brandProfile.tone_of_voice}.` : ""}`,
+          grounding: [
+            groundingContext ?? "",
+            performanceContext ? `
+Real performance from campaigns already run (use this to ground budget/targeting advice in what's actually working, not generic guesses):
+${performanceContext}` : "",
+          ].join(""),
+          shapeHint: `Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above exactly. Be accurate to how ${platform.label} actually works (real format names, real limits) — never invent platform features that don't exist, and never invent fake performance statistics.`,
+        },
+      });
+      if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+      if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+      if (copy._fallback) return fallback;
+      return { output: copy.output, claimsRemoved: copy.removed, publishable: copy.publishable };
+    }
+
     const r = await callClaude({
       model: getModel("standard"),
       max_tokens: 1800,

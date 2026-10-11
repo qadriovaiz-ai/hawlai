@@ -15,6 +15,8 @@ import { guardGenerated } from "../claims/claimCheck";
 import { businessDisplayName } from "../business/displayName";
 import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+// Retargeting ad copy goes through the one door.
+import { generateCopy } from "@/lib/content/generateCopy";
 
 // THE BUG (2026-09-18): the abandoned-cart prompt told the model to
 // "assume a small discount or free shipping might be offered — mention it
@@ -84,44 +86,60 @@ export async function generateRetargetingCopy(
   const fallback = FALLBACKS[segmentType] ?? FALLBACKS.cold_lead;
 
   try {
+    // PHASE 3.5, STEP 5. Retargeting ad copy is read by a customer who
+    // has already been to the site, and it had claims and provenance
+    // but none of the shape or genericness measures. Through the door it
+    // gets all of them.
+    //
+    // The honest per-segment fallback lines STAY HERE: a field emptied
+    // by the guard falls back to one of them rather than going out
+    // blank, and nothing in them promises an offer.
     const promptBuilder = SEGMENT_PROMPTS[segmentType] ?? SEGMENT_PROMPTS.cold_lead;
-    const r = await callClaude({
-      model: getModel("standard"),
-      max_tokens: 600,
-      messages: [
-        {
-          role: "user",
-          content: `${promptBuilder(segmentContext)}${groundingContext ?? ""}
-
-Business: ${name} (${category})${truthBlock(facts)}
-
-Respond ONLY with JSON, no markdown fences:
+    const copyResult = await generateCopy({
+      topic: `${segmentType.replace(/_/g, " ")} retargeting ad`,
+      businessName: name,
+      businessCategory: category,
+      facts,
+      // The owner reviews this before launching it.
+      mode: "draft",
+      revise: true,
+      language: facts?.brand?.language ?? null,
+      operation: "retargeting_copy",
+      logContext,
+      maxTokens: 600,
+      brief: {
+        label: `${segmentType.replace(/_/g, " ")} retargeting ad`,
+        instructions: promptBuilder(segmentContext),
+        brandContext: `You are writing a retargeting ad for ${name} (${category}).`,
+        grounding: groundingContext ?? undefined,
+        shapeHint: `Respond ONLY with JSON, no markdown fences:
 {"headline": "...", "primaryText": "...", "cta": "...", "variant2Headline": "...", "variant2PrimaryText": "..."}`,
-        },
-      ],
-    }, { operation: "retargeting_copy", logContext });
-    // The honest per-segment lines, marked — so no one launches them believing the AI wrote them.
-    if (!r.ok) return { ...fallback, _aiFailure: aiFailureNote(r.failure) };
-    const cleaned = r.text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-
-    const copy: RetargetingCopy = {
+      },
+    });
+    if (copyResult._aiFailure) return { ...fallback, _aiFailure: copyResult._aiFailure };
+    if (copyResult._fallback) return fallback;
+    const parsed = copyResult.output;
+    const out: RetargetingCopy = {
       headline: parsed.headline ?? fallback.headline,
       primaryText: parsed.primaryText ?? fallback.primaryText,
       cta: parsed.cta ?? fallback.cta,
       variant2Headline: parsed.variant2Headline ?? fallback.variant2Headline,
       variant2PrimaryText: parsed.variant2PrimaryText ?? fallback.variant2PrimaryText,
     };
-    // The owner reviews this before using it: invented claims are removed,
-    // an unverified price is kept and flagged. A field emptied by the check
-    // falls back to the honest line rather than going out blank.
-    // F-01: missing facts used to return the copy unchecked and unmarked.
-    const guarded = guardOrMark(copy, facts, "draft");
-    const out = guarded.output as RetargetingCopy;
+    // A field the guard emptied falls back to the honest line rather
+    // than launching blank.
     for (const k of ["headline", "primaryText", "cta", "variant2Headline", "variant2PrimaryText"] as const) {
       if (!String(out[k] ?? "").trim()) out[k] = fallback[k];
     }
-    return out;
+    // THE NOTES TRAVEL WITH THE COPY. Rebuilding the object field by
+    // field dropped _claimsNote, and two existing tests said so: the
+    // owner would have seen copy with a line quietly missing and no
+    // word about why.
+    const notes: any = {};
+    if (parsed._claimsNote) notes._claimsNote = parsed._claimsNote;
+    if (parsed._storyNote) notes._storyNote = parsed._storyNote;
+    if (parsed._factsState) notes._factsState = parsed._factsState;
+    return { ...out, ...notes };
   } catch {
     return fallback;
   }
