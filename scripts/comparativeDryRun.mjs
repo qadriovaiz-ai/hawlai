@@ -59,9 +59,16 @@ export const PROPOSED = [
     why: "a claim about what other products do not do",
   },
   {
-    name: "spelled-out duration",
-    // "burning off in twenty minutes", "lasts three hours".
-    re: /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty|fifty|sixty|ninety|a|an)\s+(?:minutes?|hours?|days?|weeks?)\b/gi,
+    name: "duration attached to a performance verb",
+    // NARROWED AFTER THIS SCRIPT WAS WRONG. The first version flagged
+    // ANY spelled-out duration, and when the rule went live
+    // tests/preferredLanguage.test.ts caught it on "Ninety minutes, one
+    // candle that's yours" - a candle-making WORKSHOP. A workshop's
+    // length is the central fact of a service, not a performance
+    // claim, and service businesses state durations constantly. Every
+    // fixture here was a product burn time, so the whole category was
+    // missing from the dry run.
+    re: /\b(?:lasts?|lasting|burns?|burning|stays?|staying|holds?|holding|lingers?|lingering|keeps?|keeping|fades?|fading)(?:\s+(?:off|on|out))?\s+(?:for\s+|in\s+|within\s+|up\s+to\s+)?(?:one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty|fifty|sixty|ninety|\d+)\s+(?:minutes?|hours?|days?|weeks?)\b/gi,
     why: "a length of time nothing on record measures",
   },
   {
@@ -113,6 +120,10 @@ const BUSINESSES = [
       { id: "honest: the recorded cure", text: "Har candle 24 ghante set hoti hai." },
       { id: "honest: plain copy", text: "Lavender candle, 550. Ships across Shahjahanpur." },
       { id: "honest: about the reader", text: "Evenings get loud. Light one at eight and the room slows down." },
+      // THE CATEGORY THIS SCRIPT ORIGINALLY MISSED: a service's own
+      // duration. Caught by tests/preferredLanguage.test.ts, not here.
+      { id: "honest: a workshop's length", text: "Melt, choose your scent, pour. Ninety minutes, one candle that's yours." },
+      { id: "honest: a session length", text: "Each session runs for two hours." },
     ],
   },
   {

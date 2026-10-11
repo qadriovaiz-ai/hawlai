@@ -429,6 +429,129 @@ const HEALTH =
 const RESULTS =
   /\b\d+(?:\.\d+)?\s*(?:%|x|times)\s+(?:more|faster|better|higher|increase|growth|results|roi|returns|profits?|sales|leads|customers)\b|\b(?:double|triple)\s+your\b|\bguaranteed\s+(?:selection|placement|results?|returns?|admission)\b|\b100\s*%\s+(?:placement|selection)\b/gi;
 
+// ---------------------------------------------------------------------
+// COMPARISONS AND PERFORMANCE — enabled 2026-10-11, after the dry run in
+// scripts/comparativeDryRun.mjs (9 of 9 problem lines, 0 false
+// positives on 7 honest lines across 3 businesses).
+//
+// THE THREE SENTENCES THAT SURVIVED the 11 October Facebook post, and
+// why each existing rule let them through:
+//
+//   "...separates a candle made with real fragrance oil from one made
+//    with cheap synthetic alternatives"
+//     NAMED_COMPARISON knows "different from", "compared to",
+//     "versus". It does not know "separates X from Y". And
+//     RIVAL_DISPARAGEMENT only fires on a NEGATED pejorative
+//     ("without the synthetic hit") - here the pejorative is
+//     ATTRIBUTED to the rival, which is the same claim with the
+//     negation removed.
+//
+//   "...rather than burning off in twenty minutes"
+//     every duration rule in this file reads digits. "twenty" is a
+//     word.
+//
+//   "the scent lasts"
+//     there was no performance-duration rule at all. Nothing asked how
+//     long anything lasts.
+
+/** "separates X from Y", "sets it apart from". */
+const SEPARATES_FROM =
+  /\b(?:separates|sets\s+\w+\s+apart\s+from|the\s+difference\s+between)\b[^.!?]{0,80}\bfrom\b|\bsets\s+(?:it|this|ours?|them)\s+apart\b/gi;
+
+/**
+ * A pejorative ATTRIBUTED to the rival rather than negated about
+ * oneself. The mirror of RIVAL_DISPARAGEMENT, and it bypasses `said`
+ * for the same recorded reason: nothing a business writes about itself
+ * can establish a claim about somebody else's product.
+ */
+const ATTRIBUTED_PEJORATIVE =
+  /\b(?:cheap|cheaper|synthetic|artificial|mass[-\s]produced|factory[-\s]made|ordinary|generic|inferior)\s+(?:[\w-]+\s+){0,2}(?:alternatives?|ones|options|versions|brands?|products?|stuff)\b/gi;
+
+/**
+ * "unlike most candles", "unlike the other ones".
+ *
+ * Product nouns only after most/other/the, NEVER bare. The existing
+ * COMPARATIVE rule kept `unlike` narrow on purpose - "unlike anything
+ * you've smelled" is flourish, not a claim about somebody else's wax -
+ * and that reasoning still holds.
+ */
+const UNLIKE_PRODUCTS = /\bunlike\s+(?:most|other|the)\s+(?:[\w-]+\s+)?[\w-]+s\b/gi;
+
+/** "most candles don't", "other brands can't". */
+const OTHERS_DONT =
+  /\b(?:most|other)\s+[\w-]+s\s+(?:don'?t|do\s+not|can'?t|cannot|won'?t|fail|never)\b/gi;
+
+/**
+ * A duration attached to a PERFORMANCE VERB: "burning off in twenty
+ * minutes", "lasts three hours".
+ *
+ * THE FIRST VERSION OF THIS RULE FLAGGED ANY SPELLED-OUT DURATION, and
+ * tests/preferredLanguage.test.ts caught it on the sentence "Ninety
+ * minutes, one candle that's yours" - a candle-making WORKSHOP. A
+ * workshop's length is not a performance claim, it is the central fact
+ * of the service, and service businesses state durations constantly:
+ * "45 minute session", "two hour class". My dry-run fixtures were all
+ * product burn times, so the whole category was missing from them.
+ *
+ * So the duration only counts when something is claimed to LAST that
+ * long. The live sentence is caught because of "burning off in", not
+ * because of "twenty minutes".
+ *
+ * RESPECTS `said`, unlike the comparison rules: this is a claim about
+ * the owner's own product, and a duration they have recorded is theirs
+ * to repeat - "40 hour burn", "24 ghante".
+ */
+const SPELLED_DURATION =
+  /\b(?:lasts?|lasting|burns?|burning|stays?|staying|holds?|holding|lingers?|lingering|keeps?|keeping|fades?|fading)(?:\s+(?:off|on|out))?\s+(?:for\s+|in\s+|within\s+|up\s+to\s+)?(?:one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty|fifty|sixty|ninety|\d+)\s+(?:minutes?|hours?|days?|weeks?)\b/gi;
+
+/** "the scent lasts", "burns all evening". */
+const PERFORMANCE_DURATION =
+  /\b(?:the\s+)?(?:scent|fragrance|smell|aroma|burn|colour|color|shine|finish)\s+(?:lasts?|holds?|stays?|lingers?|keeps?)\b|\b(?:lasts?|burns?)\s+(?:for\s+)?(?:all|the\s+whole)\b/gi;
+
+// ---------------------------------------------------------------------
+// HEALTH AND BENEFIT — enabled 2026-10-11, after the dry run in
+// scripts/benefitClaimsDryRun.mjs (10 of 10 problem lines, 0 missed,
+// 0 false positives across 3 businesses).
+//
+// WHY A NEW CLASS AND NOT A WIDENING OF HEALTH. HEALTH above is strict
+// but needs a medical VERB ("cures", "heals", "treats") or a named
+// condition. So "Relieves stress" is caught and all of these were not:
+//
+//   "Sleep better"          "Wake up refreshed"
+//   "Helps you relax"       "Good for the skin"
+//
+// These are SOFT benefit claims: an effect on the reader's body, mood
+// or sleep, asserted without any of the words the medical rule looks
+// for. Under the ASCI code an effect on the body needs substantiation
+// whether or not it names a disease.
+//
+// TIER: substantiation - kept in a draft with a note saying how to make
+// it sayable, stripped on publish. A benefit the owner HAS recorded is
+// theirs to say. Decided by the owner on 2026-10-11.
+
+const SLEEP_EFFECT =
+  /\b(?:sleep|rest|doze|drift\s+off|nod\s+off)\s+(?:better|deeper|easier|faster|soundly|well)\b|\b(?:better|deeper|sounder)\s+sleep\b|\bwake\s+up\s+(?:refreshed|rested|renewed|clearer)\b|\bachchhi\s+neend\b|\bneend\s+(?:achchhi|gehri)\b/gi;
+
+const MOOD_EFFECT =
+  /\b(?:helps?|lets?|makes?)\s+(?:you|him|her|them)\s+(?:relax|unwind|calm\s+down|sleep|feel\s+\w+)\b|\b(?:instantly|instant)\s+(?:calm|calming|relaxing|soothing)\b|\b(?:lifts?|improves?|boosts?)\s+(?:your\s+)?(?:mood|spirits|focus|concentration|energy)\b|\breduces?\s+(?:stress|tension|fatigue)\b|\bmood\s+(?:lifter|booster)\b/gi;
+
+const BODY_EFFECT =
+  /\b(?:good|great|better)\s+for\s+(?:your\s+|the\s+)?(?:skin|hair|gut|digestion|health|immunity|joints|bones|heart|eyes)\b|\b(?:improves?|aids?|supports?|helps?\s+with)\s+(?:your\s+|the\s+)?(?:digestion|immunity|metabolism|skin|hair\s*growth|circulation|sleep)\b|\b(?:detox(?:es|ifies)?|purifies|cleanses)\s+(?:your\s+|the\s+)?(?:body|blood|system|skin)\b/gi;
+
+const THERAPEUTIC =
+  /\b(?:therapeutic|healing|medicinal|restorative|rejuvenating|detoxifying)\b|\baroma\s*therapy\b|\bstress\s*[-\s]?(?:buster|relief|free)\b/gi;
+
+/**
+ * Safe for a baby, in pregnancy, for sensitive skin.
+ *
+ * TIER: claim, STRICT IN BOTH MODES, decided by the owner on
+ * 2026-10-11. It is the one claim in this class that can hurt somebody,
+ * and a draft is one click from a customer - the 8 October shape. So a
+ * draft loses it too, where the other four are kept with a note.
+ */
+const VULNERABLE_GROUP =
+  /\b(?:safe|suitable|gentle)\s+(?:enough\s+)?for\s+(?:babies|baby|infants?|newborns?|toddlers?|kids|children|pregnan\w+|asthmatics?|sensitive\s+skin)\b|\bnon[-\s]?toxic\b|\bhypo[-\s]?allergenic\b|\ballergy[-\s]free\b/gi;
+
 const CROWD_MIN: Record<string, number> = { hundreds: 200, thousands: 2000, lakhs: 200000, millions: 2000000 };
 
 function amount(raw: string, unit?: string): number {
@@ -756,6 +879,43 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
   each(HEALTH, (m) => `"${m[0]}" — a health or efficacy claim that needs real evidence`);
   each(RESULTS, (m) => `"${m[0]}" — a promised result that can't be verified`);
 
+  // COMPARISONS — all four bypass `said`, for the reason recorded above
+  // the `always` helper: nothing a business writes about itself can
+  // establish a claim about somebody else's product.
+  always(SEPARATES_FROM, (m) => `"${m[0].trim()}" — a comparison with another product that nothing on record supports`);
+  always(ATTRIBUTED_PEJORATIVE, (m) => `"${m[0].trim()}" — this says someone else's product is cheap or synthetic, which is a claim about them, not about yours`);
+  always(UNLIKE_PRODUCTS, (m) => `"${m[0].trim()}" — a comparison with products nothing on record describes`);
+  always(OTHERS_DONT, (m) => `"${m[0].trim()}" — a claim about what other products do not do`);
+
+  // DURATIONS — these DO respect `said`: they are claims about the
+  // owner's own product, and a duration they have recorded is theirs to
+  // repeat ("40 hour burn", "24 ghante").
+  each(SPELLED_DURATION, (m) => `"${m[0].trim()}" — a length of time nothing on record measures`);
+  each(PERFORMANCE_DURATION, (m) => `"${m[0].trim()}" — a performance claim nothing on record measures`);
+
+  // BENEFITS — tier `substantiation`: kept in a draft with a note
+  // saying how to make it sayable, stripped on publish.
+  const benefit = (re: RegExp, what: string) => {
+    for (const m of text.matchAll(re)) {
+      if (said(m[0])) continue;
+      reasons.substantiation(
+        `"${m[0].trim()}" — ${what}. If customers tell you this, write it once in Business Knowledge as something they say, and Hawlai can use it.`
+      );
+    }
+  };
+  benefit(SLEEP_EFFECT, "an effect on sleep that nothing on record backs");
+  benefit(MOOD_EFFECT, "an effect on mood or focus that nothing on record backs");
+  benefit(BODY_EFFECT, "an effect on the body that nothing on record backs");
+  benefit(THERAPEUTIC, "a therapeutic framing that needs evidence behind it");
+
+  // THE ONE EXCEPTION, decided by the owner on 2026-10-11: a safety
+  // claim about a vulnerable group is tier `claim`, so a draft loses it
+  // too. It is the only claim in this class that can hurt somebody.
+  each(
+    VULNERABLE_GROUP,
+    (m) => `"${m[0].trim()}" — a safety claim about babies, children, pregnancy or sensitive skin needs a test behind it, and nothing on record has one`
+  );
+
   return problems;
 }
 
@@ -939,6 +1099,17 @@ const FACT_INDEPENDENT: { re: RegExp; why: (m: RegExpMatchArray) => string }[] =
   { re: PRODUCT_COMPARATIVE, why: (m) => `"${m[0]}" — a comparison with competitors that nothing supports` },
   { re: NAMED_COMPARISON, why: (m) => `"${m[0].trim()}" — a comparison with another product that nothing supports` },
   { re: RIVAL_DISPARAGEMENT, why: (m) => `"${m[0].trim()}" — this says other products have that fault, which is a claim about them` },
+  { re: SEPARATES_FROM, why: (m) => `"${m[0].trim()}" — a comparison with another product that nothing supports` },
+  { re: ATTRIBUTED_PEJORATIVE, why: (m) => `"${m[0].trim()}" — this says someone else's product is cheap or synthetic, which is a claim about them` },
+  { re: UNLIKE_PRODUCTS, why: (m) => `"${m[0].trim()}" — a comparison with products nothing describes` },
+  { re: OTHERS_DONT, why: (m) => `"${m[0].trim()}" — a claim about what other products do not do` },
+  // A SAFETY CLAIM IS FACT-INDEPENDENT TOO, and this is the one place
+  // the benefit class appears in this list. The other four are
+  // `substantiation` - kept with a note - and this layer has no
+  // substantiation tier, because with no records there is nothing to
+  // tell the owner to write down. But "safe for babies" with no records
+  // is MORE dangerous, not less.
+  { re: VULNERABLE_GROUP, why: (m) => `"${m[0].trim()}" — a safety claim about babies, children, pregnancy or sensitive skin, and nothing could be read to support it` },
 ];
 
 /** Money and offer claims that need the store's numbers to judge. Reported, never stripped. */
