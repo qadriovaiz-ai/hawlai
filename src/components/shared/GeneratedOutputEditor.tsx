@@ -17,6 +17,14 @@ function isPlainObject(v: any): v is Record<string, any> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+// isContentKey, not a "_" prefix test: on 11 October 2026 a published
+// caption contained the words "Concrete_details_used", a key the MODEL
+// invented because the prompt asks for "CONCRETE, specific" detail. It
+// is not "_" prefixed, so every denylist passed it - and humanizeKey
+// below turned it into a tidy field label, "Concrete details used",
+// which is what made it look like part of the output.
+import { isContentKey } from "@/lib/content/contentKeys";
+
 function humanizeKey(key: string): string {
   return key.replace(/_/g, " ");
 }
@@ -57,7 +65,7 @@ export function OutputRenderer({ output }: { output: any }) {
   return (
     <div className="space-y-3 text-sm text-slate-700">
       {/* "_" keys are metadata (a saved id, the claims note) — not content. */}
-      {Object.entries(output).filter(([key]) => !key.startsWith("_")).map(([key, val]) => (
+      {Object.entries(output).filter(([key]) => isContentKey(key)).map(([key, val]) => (
         <div key={key}>
           {key !== "text" && <p className="text-xs font-semibold text-slate-400 capitalize mb-1">{humanizeKey(key)}</p>}
           <FieldValue value={val} />
@@ -176,7 +184,7 @@ export function EditableOutput({ output, onChange }: { output: any; onChange: (n
 
   return (
     <div className="space-y-2.5">
-      {Object.entries(output).filter(([key]) => !key.startsWith("_")).map(([key, val]) => (
+      {Object.entries(output).filter(([key]) => isContentKey(key)).map(([key, val]) => (
         <div key={key}>
           {key !== "text" && <p className="text-xs font-semibold text-slate-400 capitalize mb-1">{humanizeKey(key)}</p>}
           <EditableFieldValue value={val} onChange={(v) => setPath([key], v)} />

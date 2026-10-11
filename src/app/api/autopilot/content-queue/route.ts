@@ -7,6 +7,7 @@ import { recentCopy } from "@/lib/content/recentCopy";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { claimsNote } from "@/lib/claims/claimCheck";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
+import { firstContentString } from "@/lib/content/contentKeys";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -75,7 +76,13 @@ export async function POST(request: Request) {
   ]);
 
   if (contentResult._fallback) return NextResponse.json({ error: "Content generation didn't work right now — try again shortly." }, { status: 500 });
-  const caption = contentResult.output.text ?? (Object.values(contentResult.output)[0] as string) ?? "";
+  // firstContentString, not Object.values(...)[0]. This is the
+  // UNATTENDED path - the caption goes to Facebook and Instagram
+  // without anyone reading it - and the old fallback returned the first
+  // value of ANY key, which on 11 October 2026 would have published the
+  // value of a key the model invented for its own bookkeeping
+  // ("Concrete_details_used"), or a _claimsNote.
+  const caption = contentResult.output.text ?? firstContentString(contentResult.output);
   if (!caption) {
     return contentResult.claimsRemoved?.length
       ? NextResponse.json({ error: "Every line of that caption relied on claims Hawlai couldn't verify — try a different topic." }, { status: 422 })

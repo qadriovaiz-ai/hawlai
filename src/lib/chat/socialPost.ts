@@ -17,8 +17,12 @@
 /** Heading-ish fields, in the order the card prefers them. */
 const HEADING_KEYS = ["headline", "title", "subject", "heroHeadline", "hook"];
 
-/** Keys that are machinery, not words a reader sees. */
-const NOT_CONTENT = new Set(["note", "hashtags"]);
+// The allowlist lives in src/lib/content/contentKeys.ts, because the
+// unattended autopilot queue and two client components make the same
+// decision and had each made it differently. Re-exported so existing
+// importers do not change.
+import { isContentKey } from "@/lib/content/contentKeys";
+export { isContentKey };
 
 export type ComposedPost = {
   /** The exact text that will be published, hashtags included. */
@@ -50,7 +54,7 @@ export function composePost(raw: unknown): ComposedPost {
   for (const [key, value] of Object.entries(row)) {
     if (key === headingField) continue;
     // Keys the agents use for their own notes are not content.
-    if (key.startsWith("_") || NOT_CONTENT.has(key)) continue;
+    if (!isContentKey(key)) continue;
     if (typeof value === "string" && value.trim()) parts.push(value.trim());
   }
 

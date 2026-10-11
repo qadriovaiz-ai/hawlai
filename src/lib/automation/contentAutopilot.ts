@@ -8,6 +8,7 @@ import { recentCopy } from "@/lib/content/recentCopy";
 import { aiFailureLabel } from "@/lib/ai/claude";
 import { markTrackedLinks } from "@/lib/attribution/contentLink";
 import { registerPiece } from "@/lib/attribution/pieces";
+import { firstContentString } from "@/lib/content/contentKeys";
 
 /**
  * The words to post, from whatever shape the model returned.
@@ -43,8 +44,10 @@ function captionTextOnly(result: any): string {
     const value = result[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
-  const firstString = Object.entries(result).find(([k, v]) => !k.startsWith("_") && typeof v === "string" && (v as string).trim());
-  return firstString ? (firstString[1] as string).trim() : "";
+  // isContentKey, not a "_" prefix test. A key the model invented -
+  // "Concrete_details_used", 11 October 2026 - passes a "_" test and
+  // its value would become the posted caption on the unattended path.
+  return firstContentString(result);
 }
 
 export function captionForPost(output: any): string {

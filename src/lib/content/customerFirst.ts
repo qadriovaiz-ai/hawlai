@@ -147,7 +147,10 @@ export function customerFirstProblem(
  */
 export function customerFirstNote(problem: CustomerFirstProblem): string {
   if (problem.kind === "too_long") {
-    return `That came out at ${problem.words} words and this post works best under ${problem.cap}. I've left it as it is so you can see it — tell me to tighten it and I will.`;
+    // Said only when tightening could NOT fix it - a single sentence
+    // over the cap, which cannot be cut without cutting inside it.
+    // Everything else is tightened rather than handed back.
+    return `That came out at ${problem.words} words and this post works best under ${problem.cap}. It is one long sentence, so I have not cut it — tell me how to shorten it and I will.`;
   }
   return `Most of that is your own story rather than the product and the reader. I've left it as it is, but a post like this usually lands better leading with what the customer wants. Ask me for "our story" when you want a piece that IS the story.`;
 }
@@ -163,4 +166,80 @@ export function customerFirstBrief(problem: CustomerFirstProblem): string {
     ...problem.sentences.slice(0, 3).map((s) => `    "${s}"`),
     `- Invent nothing. Use only the facts already given.`,
   ].join("\n");
+}
+
+/**
+ * The field the prose actually lives in.
+ *
+ * Trimming has to happen on ONE field, not on the joined blob
+ * textOfOutput produces: hashtags, a heading and a note are separate
+ * keys, and cutting across them would mangle the shape the card reads.
+ */
+function proseKey(output: any): string | null {
+  if (!output || typeof output !== "object") return null;
+  for (const k of ["text", "body", "caption", "content"]) {
+    if (typeof output[k] === "string" && output[k].trim()) return k;
+  }
+  let best: string | null = null;
+  for (const [k, v] of Object.entries(output)) {
+    if (k.startsWith("_") || typeof v !== "string") continue;
+    if (!best || (v as string).length > String(output[best]).length) best = k;
+  }
+  return best;
+}
+
+export type Tightened = { text: string; dropped: number };
+
+/**
+ * Cut whole sentences until the piece fits, keeping the opening and the
+ * close.
+ *
+ * WHY THIS EXISTS (11 October 2026). A 189-word Facebook post went out
+ * on a card with a cap of 150. The retry HAD run - three model calls -
+ * and come back still long, and then the code kept it and apologised:
+ * "I've left it as it is so you can see it." That was my choice and it
+ * was the wrong one. Showing an owner a post that does not fit, with a
+ * note suggesting they ask again, is work handed back.
+ *
+ * NEVER MID-SENTENCE. A truncated sentence reads as a bug and can
+ * change what the copy says. Whole sentences only.
+ *
+ * THE LAST SENTENCE IS KEPT, because that is where the next step is -
+ * the price, the link, the "order on the store page". Dropping from the
+ * middle loses description, which is what should go first.
+ */
+export function tightenToCap(text: string, cap: number): Tightened {
+  const original = String(text ?? "");
+  if (wordCount(original) <= cap) return { text: original, dropped: 0 };
+
+  const sentences = pieces(original).filter((s) => s.trim());
+  // One sentence over the cap cannot be trimmed without cutting inside
+  // it, so it is left alone and the note says so. Rare, and better than
+  // a half sentence.
+  if (sentences.length < 3) return { text: original, dropped: 0 };
+
+  const first = sentences[0];
+  const last = sentences[sentences.length - 1];
+  const middle = sentences.slice(1, -1);
+
+  const kept: string[] = [];
+  let words = wordCount(first) + wordCount(last);
+  for (const s of middle) {
+    const n = wordCount(s);
+    if (words + n > cap) continue;
+    kept.push(s);
+    words += n;
+  }
+  const out = [first, ...kept, last].join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: out, dropped: middle.length - kept.length };
+}
+
+/** Tighten the prose field in place, leaving every other key alone. */
+export function tightenOutput(output: any, contentType: string): { output: any; dropped: number } {
+  const cap = WORD_CAPS[contentType];
+  const key = proseKey(output);
+  if (!cap || !key) return { output, dropped: 0 };
+  const r = tightenToCap(output[key], cap);
+  if (!r.dropped) return { output, dropped: 0 };
+  return { output: { ...output, [key]: r.text }, dropped: r.dropped };
 }

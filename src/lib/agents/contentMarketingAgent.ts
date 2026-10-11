@@ -29,6 +29,7 @@ import {
   customerFirstProblem,
   customerFirstNote,
   customerFirstBrief,
+  tightenOutput,
   WORD_CAPS,
 } from "@/lib/content/customerFirst";
 import { soundRule, languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
@@ -300,6 +301,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     // `revise` for the same reason: the unattended path stays
     // single-shot.
     let shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
+    let droppedSentences = 0;
     if (shapeProblem && opts.revise) {
       const reshaped = await retryForShape(parsed, meta.label, meta.instructions, shapeProblem, logContext, language);
       if (reshaped) {
@@ -307,6 +309,24 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
         // Re-measured, not assumed: a retry that is still wrong must
         // still be reported.
         shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
+      }
+      // STILL OVER THE CAP? TIGHTEN IT, do not hand it back.
+      //
+      // On 11 October 2026 a 189-word post reached a card with a cap of
+      // 150. The retry had run and come back long, and the code kept it
+      // with a note saying "I've left it as it is so you can see it".
+      // That is work handed back to the owner, on the one surface where
+      // they are about to press Publish.
+      //
+      // Whole sentences only, opening and close kept - the close is
+      // where the next step is.
+      if (shapeProblem?.kind === "too_long") {
+        const tightened = tightenOutput(parsed, contentTypeKey);
+        if (tightened.dropped) {
+          parsed = tightened.output;
+          droppedSentences = tightened.dropped;
+          shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
+        }
       }
     }
 
@@ -318,7 +338,14 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     // more useful than "this could be anyone's", and saying both at once
     // reads as noise.
     if (shapeProblem) parsed = { ...parsed, _storyNote: customerFirstNote(shapeProblem) };
-    else if (generic) parsed = { ...parsed, _storyNote: genericNote(verdict) };
+    else if (droppedSentences) {
+      // Tightened rather than handed back - and said, because a piece
+      // that quietly lost sentences is worse than one that says it did.
+      parsed = {
+        ...parsed,
+        _storyNote: `That came out longer than this post should be, so I cut ${droppedSentences === 1 ? "a sentence" : `${droppedSentences} sentences`} from the middle and kept the opening and the close. Ask me to put anything back.`,
+      };
+    } else if (generic) parsed = { ...parsed, _storyNote: genericNote(verdict) };
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
     // F-01: this used to be `if (!facts) return parsed` — the guard
     // skipped and the output indistinguishable from a checked draft.

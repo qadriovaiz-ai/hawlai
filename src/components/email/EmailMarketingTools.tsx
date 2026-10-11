@@ -8,6 +8,7 @@ import { Badge, Button, Card, Input } from "@/components/ui";
 import { useGeneratedOutput } from "@/lib/hooks/useGeneratedOutput";
 import { GeneratedHistoryPanel } from "@/components/shared/GeneratedHistoryPanel";
 import { GenerationError } from "@/components/shared/GeneratedOutputPanel";
+import { isContentKey } from "@/lib/content/contentKeys";
 
 export default function EmailMarketingTools() {
   const [selectedTask, setSelectedTask] = useState(EMAIL_TASKS[0].key);
@@ -161,7 +162,10 @@ function EmailOutputRenderer({ output }: { output: any }) {
       {output.subject && <p className="font-semibold text-slate-800">Subject: {output.subject}</p>}
       {output.previewText && <p className="text-xs text-slate-400">Preview: {output.previewText}</p>}
       {output.body && <p className="whitespace-pre-wrap">{output.body}</p>}
-      {!output.subject && !output.body && Object.entries(output).map(([key, val]: [string, any]) => (
+      {/* isContentKey: this fallback rendered EVERY key, so _claimsNote,
+          _factsState and _storyNote appeared as paragraphs of the email
+          whenever the shape had no subject or body. */}
+      {!output.subject && !output.body && Object.entries(output).filter(([key]) => isContentKey(key)).map(([key, val]: [string, any]) => (
         <p key={key} className="whitespace-pre-wrap">{typeof val === "string" ? val : JSON.stringify(val)}</p>
       ))}
     </div>
