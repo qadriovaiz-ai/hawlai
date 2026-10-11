@@ -49,7 +49,7 @@ extracted facts, then delete.
 
 | # | What | Where | Note |
 |---|---|---|---|
-| 1 | **The story block in the generation prompt** | `src/lib/claims/businessFacts.ts:712-725` | **The single highest-value deletion.** It injects the story in full, untruncated, into every public-copy generator under the words *"use these specifics; they are what makes this business different"*. This instruction is the direct cause of the 11 October founder-story post |
+| 1 | **The story block in the generation prompt** — **NOT YET: see the order of work, step 1c.** `businessFacts.ts:732` filters `business_story` out of the facts branch, so this block is the ONLY path those rows have into the prompt. Deleting it before C.6 blinds the model to the real product facts | `src/lib/claims/businessFacts.ts:712-725` | **The single highest-value deletion.** It injects the story in full, untruncated, into every public-copy generator under the words *"use these specifics; they are what makes this business different"*. This instruction is the direct cause of the 11 October founder-story post |
 | 2 | Chat intake tools | `masterBrainV2.ts:734` (`business_story`), `:739` (`save_business_story`), handler `:3346-3371` | Removing the tool definitions stops the chat from ever starting an intake |
 | 3 | Question set and progress helpers | `businessStory.ts:35` `STORY_QUESTIONS`, `:98` `storyQuestion`, `:105` `storyProgress`, `:137` `storyStatus`, `:151` `sameAnswer`, `:157` `cleanStoryAnswer` | Dead once (2) goes |
 | 4 | Story facts for retargeting | `src/lib/retargeting/messages.ts:47` | Returns story rows for retargeting copy |
@@ -826,30 +826,70 @@ multiplexes subsystems within a group.
 
 ## Order of work, and why
 
-1. **1a — the six live failures** (B-bis): pejorative product nouns +
-   `after` duration; the capability-claim class (**P0**); the price
-   omission note; hashtag dedupe at the compose layer; the bare
-   performance verb. Plus the story-block deletion, which is item 3.
-2. **The shipping latent bug** (B.2): drop `!said()` so checkout
-   decides, with the Flat Rate refusal test and the Always Free
-   allowance test.
-3. **Three gaps found while testing item 6**, each dry-run first: cure
-   time in the duration verbs; a `process` rule class; **Hinglish
-   synonym pairs**, which is the one that currently removes TRUE copy.
-4. **C.6 — ingest the existing `business_knowledge` rows as
-   `owner_stated` facts.** This is now the gate on everything in A: 14
-   of 14 rows for the live business are `business_story` and they hold
-   the real product facts (A.4).
-5. **C.7(a) — Hinglish synonym members.** Additive, licence-only, and
-   it stops stripping true copy this week.
-6. **The owner confirms the A.4a classification table.**
-7. **A — retire the story category.** Only after 4-6, so nothing
-   honest is lost.
-8. **C.7(b) — licensing by FACT rather than by phrase**, which is what
-   makes the synonym table shrink instead of grow.
+> **Live constraint verified, founder pasted 2026-10-11:**
+> `CHECK ((category = ANY (ARRAY['hours','pricing_note','policy','faq','general','business_story'])))`
+> — identical to migration 189, **no drift**. Option 1 is confirmed:
+> moving FACT rows to `general` needs no schema change. Nothing moves
+> until the per-sentence table is confirmed.
+
+> ### A THIRD instance of the same mistake, caught before it shipped
+>
+> Step 1 below used to read "plus the story-block deletion, which is
+> item 3". **That would have repeated A.4 exactly.**
+> `businessFacts.ts:732` filters `category !== STORY_CATEGORY` out of
+> the facts branch, so the block at `:712-725` is the **only** path
+> those 14 rows have into the prompt. Deleting it today removes the
+> double-boiler step, the fragrance step, the 24-hour set and
+> "paraffin-free — soy wax only" from everything the model can see.
+>
+> Item 3 is therefore **not** a deletion. See step 1c.
+
+1. **1a — the live failures that are pure guard work.** Each its own
+   commit, with a dry run where it widens a strip rule:
+   - **1a-i** pejorative product nouns, and `after`/`within`/`by` in
+     the duration prepositions (item 1)
+   - **1a-ii** the capability-claim class, product and Hawlai (item 2,
+     **P0**)
+   - **1a-iii** the bare performance verb — "makes it last" (item 6)
+   - **1a-iv** hashtag dedupe at the compose layer, and stop asking for
+     them inline (item 5)
+   - **1a-v** the price-omission note (item 4)
+
+2. **1b — the shipping latent bug** (B.2): drop `!said()` so
+   `shipping_config` decides, with the Flat Rate refusal test and the
+   Always Free allowance test.
+
+3. **1c — item 3, the founder-story line, WITHOUT deleting the block.**
+   The intake titles are deterministic (`STORY_QUESTIONS`), so the
+   prompt can exclude the three STORY questions — `origin`,
+   `first_customers`, `how_you_talk` — by title, and keep the rest as
+   facts. This implements the founder's rule now, moves no rows, and
+   does not blind the model.
+   **Stated limit:** rows whose title I have not seen (9 of 14,
+   including hand-entered ones) keep being treated as facts until the
+   A.4a table is confirmed. So a story line from an unknown-title row
+   may survive 1c. That is the honest trade against blinding the model.
+   The prompt wording at `:719` also stops inviting narrative.
+
+4. **The three gaps from item 6 — dry run FIRST, enable on your word:**
+   cure time in the duration verbs; a `process` rule class; **Hinglish
+   synonym members**, which is the one currently removing TRUE copy.
+
+5. **C.6 — ingest `business_knowledge` rows as `owner_stated` facts.**
+   The gate on everything in A.
+
+6. **The owner confirms the A.4a per-sentence table.**
+
+7. **A — retire the story category.** Only after 5 and 6.
+
+8. **C.7(b) — licensing by FACT rather than by phrase.**
+
 9. **D.2 — the eval harness.** Needs approval: it spends money.
+
 10. **E — the Daily Owner Report.**
+
 11. **D.3 — the sentence-support verifier**, measured against D.2.
+
 12. **F — the planner**, then targets, then the ladder.
 
 Meta post-insights ingestion belongs between 10 and 12; no dependency
