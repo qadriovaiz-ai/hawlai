@@ -101,102 +101,224 @@ edits a row, and it buys nothing that ignoring the category does not.
 
 ---
 
-## B) Step 1b — why "free shipping" passed
+## B) Step 1b — CORRECTED, and the latent bug that remains
 
-**Status: CONFIRMED by reading code. The surface did not matter.**
+> **Correction, founder, 2026-10-11 23:07.** `candle_by_qaaf` shipping
+> is set to **Always Free** in Website Builder → Shipping. The owner
+> chose it. So "free shipping" in the welcome email and the Facebook
+> post was **TRUE and correctly licensed**, and it is removed from the
+> list of live failures. My earlier "licensed by site text" diagnosis
+> was **wrong for this case**: the site pages (home, about, contact,
+> privacy-policy, terms, shop) and Business Knowledge and the product
+> descriptions contain no shipping text at all. The licence came from
+> `shipping_config`.
+>
+> **What my earlier section got right:** nothing. The rule fired, the
+> check ran, and it correctly concluded the claim was true. I reasoned
+> from a plausible mechanism instead of checking the store setting, and
+> I should have asked for the shipping mode before writing a diagnosis.
 
-The rule works. I extracted the live regex and executed it:
-`FREE_SHIPPING` matches "Free shipping on every order." and "Order
-today and get free shipping." The check is at
-`src/lib/claims/claimCheck.ts:771`:
+### B.1 — Why it passed, correctly
 
-```ts
-const freeShipping = text.match(FREE_SHIPPING);
-if (freeShipping && !said(freeShipping[0])) { … }
-```
-
-Three candidate explanations, and two are ruled out:
-
-- **Not draft-mode leniency.** It pushes through `reasons.push(...)`,
-  which is tier `claim` — strict in both draft and publish.
-- **Not a surface bypass.** Both named paths (Master Chat → Generate
-  Email, and the content-marketing Facebook post) now run through
-  `generateCopy` → `guardOrMark` → `stripUnsupported`.
-- **It was licensed by `said()`.** This is the answer.
-
-### B.1 — The licence source, exactly
-
-`said(phrase)` is `knownText(f).includes(normalise(phrase))`, and
-`knownText` (`businessFacts.ts`) concatenates the live site's headings,
-paragraphs, buttons and meta descriptions, product names and
-descriptions, offer labels, owner facts, pillars and the brand
-description into **one undifferentiated proof blob**. "Free shipping"
-anywhere in any of those licenses it everywhere.
-
-### B.2 — And yes: Hawlai's own site text can license a claim (F-2)
-
-`src/lib/claims/businessFacts.ts:445-450`:
+`claimCheck.ts:779-786` asks checkout, not the text:
 
 ```ts
-const reviewed = Boolean(dealership?.claims_reviewed_at);
-pages = rows.map((p) => ({
-  …
-  ...blocksText(reviewed ? ownerWritten(p.sections) : p.sections),
+const charged = !s || computeShippingAmount(
+  { shipping_mode: s.mode, shipping_rate: s.rate, shipping_free_threshold: s.freeThreshold },
+  cheapest
+) > 0;
+if (charged && !namesThreshold) reasons.push(…);
 ```
 
-**Hawlai-generated page text is excluded from the evidence set only
-once `dealerships.claims_reviewed_at` is set.** Until then, `p.sections`
-goes in whole — including every line `websiteBuilderAgent` wrote. The
-comment immediately above it says so plainly: *"an invented line became
-the proof that approved the same line everywhere else."*
+`src/lib/shipping.ts:16` — `if (mode === "free") return 0`. So
+`charged` is false, nothing is pushed, and the sentence stands. **This
+is the design working**: the same function checkout uses decides what
+copy may say. Verified by reading both files.
 
-`claims_reviewed_at` is written in exactly one place:
-`POST /api/seo/claims-review` (`route.ts:97`), i.e. only when the owner
-finishes the claims-review list. Column added in migration 207.
+### B.2 — The latent bug, which is real and separate
 
-**So the most likely chain, end to end:**
+`claimCheck.ts:771`:
 
-1. The website builder wrote "free shipping" onto a page (it had no
-   output guard until Phase 3.5 step 7, and the builder is still one of
-   the four surfaces outside the door).
-2. `claims_reviewed_at` is null for this business, so that page text is
-   evidence.
-3. `said("free shipping")` is true.
-4. Every surface — email, caption, anything — may now state it.
+```ts
+if (freeShipping && !said(freeShipping[0])) {
+```
 
-**Two queries settle it.** Read-only, for you to run:
+**`!said(...)` short-circuits the whole checkout-truth block.** Any
+occurrence of "free shipping" in `knownText` — a line on the About
+page, a product description, an owner-entered fact — skips every check
+below it, including the Flat Rate refusal.
+
+So a **Flat Rate** store whose About page says "free shipping" may then
+advertise free shipping on every surface, and checkout will still
+charge the customer at the till. That is the worst shape of this bug:
+the copy and the checkout disagree, and the customer finds out last.
+
+**Status: CONFIRMED by reading the code. NOT VERIFIED whether any
+tenant is in this state** — it needs a query across stores with
+`shipping_mode = 'flat'` whose page text mentions free shipping.
+
+**The fix, stated as a rule:** shipping truth is decided by
+`shipping_config` alone, and **no text may override it**. Drop the
+`!said()` guard for this one rule, so the block always runs. This is
+the same reasoning the file already applies to comparisons
+(`claimCheck.ts:~728-746`, the `always` helper): *nothing a business
+says about itself can establish what a third party does* — here,
+*nothing a business writes can establish what its own checkout
+charges.*
+
+Removing `!said()` does **not** break the Always Free case: the inner
+`charged` test already returns false for `mode === "free"`, which is
+exactly why `candle_by_qaaf` passes today.
+
+**The two execution tests, as instructed:**
+
+1. **Flat Rate store + "free shipping" in the site text → REFUSED.**
+   Facts with `shipping: { mode: "flat", rate: 60 }` and a site page
+   paragraph containing "free shipping"; assert the sentence is removed
+   and the reason names the real shipping.
+2. **Always Free store → ALLOWED.** Facts with
+   `shipping: { mode: "free" }`; assert "Free shipping on every order."
+   survives untouched, with `removed` empty.
+   *This second test is the one that stops the fix over-correcting, and
+   it is the live case.*
+
+Plus a mutation check: restore `!said(...)` and test 1 must fail.
+
+### B.3 — What survives from the earlier section
+
+Both of these stand on their own merits and are **not** affected by the
+correction:
+
+- **Generated site text must not be evidence.**
+  `businessFacts.ts:445-450` excludes Hawlai-written page text only
+  once `dealerships.claims_reviewed_at` is set, and the comment above
+  it records the incident where *"an invented line became the proof
+  that approved the same line everywhere else."* Still true, still
+  worth fixing — it just was not what happened here.
+- **Remove the story block from the prompt**
+  (`businessFacts.ts:712-725`). Unchanged, and section A's highest-value
+  deletion.
+
+## B-bis) The six real live failures — 1a scope
+
+Each tested against the live rules by extracting the regex and running
+it. **Every one of the six is currently MISSED.**
+
+| # | The line | Why it passes | Fix |
+|---|---|---|---|
+| 1 | "a cheap candle fades after two days" | `ATTRIBUTED_PEJORATIVE` needs the noun in `alternatives\|ones\|options\|versions\|brands\|products\|stuff` — **a product noun is not in it**. And `SPELLED_DURATION` accepts `for\|in\|within\|up to` — **not `after`** | Add product nouns after the pejorative; add `after` (and `within`/`by`) to the duration prepositions |
+| 2 | "goes out automatically" | **No rule of this kind exists anywhere.** A claim about what the PRODUCT does automatically, and the same shape as a claim about what HAWLAI does automatically | New rule class — see B-bis.1. **P0** |
+| 3 | a founder-story line in the welcome email | Provenance licenses it because the story IS on record. Section A removes the source | Section A, deletion 1 (`businessFacts.ts:712-725`) |
+| 4 | ₹999 missing from the email body | Not a claims failure — an **omission**. Nothing requires the price to appear | New check: when the records have a price and the piece is a selling piece, the price must appear. See B-bis.2 |
+| 5 | duplicate hashtags on publish confirmation | **Two sources, no dedupe.** `socialMediaAgent.ts:90` invites inline hashtags ("can include 2-3 relevant hashtags at the end"); `socialPost.ts:61-63` then appends `row.hashtags` as a block. `content.ts:19-23` does the same for every social type | Dedupe at the compose layer, and stop asking for them inline. See B-bis.3 |
+| 6 | "that is what makes it last" | `PERFORMANCE_DURATION` needs a noun (`scent\|fragrance\|burn\|colour…`) before the verb. **"makes it last" has no noun** | Widen to the bare performance verb when the subject is the product |
+
+### B-bis.1 — The capability-claim class (item 2)
+
+Two kinds of sentence, one rule class, because they fail the same way:
+
+- **The product acts by itself** — "goes out automatically", "turns
+  itself off", "self-extinguishing", "relights".
+- **Hawlai acts by itself** — "I've scheduled that", "this posts
+  automatically", "I'm monitoring it", "it will send tomorrow".
+
+The second kind needs the action's **real state** to check against, and
+that state exists: `pending_approvals` rows and
+`executionPolicy.ACTION_POLICIES`. The rule is: a completed-action verb
+may not appear unless a row says the action actually completed.
+
+Tier: **`claim`, strict in both modes.** A false statement about what
+something will do on its own has no safe draft form.
+
+### B-bis.2 — The missing price (item 4)
+
+This is the first **omission** check in the codebase; everything so far
+removes. Shape:
+
+- If the records have a price for the product the piece is about, and
+  the piece is a selling piece (email, caption, ad — not a blog post or
+  an SEO page), the price must appear.
+- It is **not** auto-inserted. The owner is told: "this one doesn't
+  mention the ₹999 — want it in?" An auto-inserted price in the wrong
+  sentence is worse than a missing one.
+- Reuses `moneyAmounts()` (`claimCheck.ts`) to detect what is already
+  there, so a piece naming the price in words is not nagged.
+
+**NOT VERIFIED:** whether the owner wants this as a note or a hard
+block. My recommendation is a note; a hard block would refuse honest
+teaser copy.
+
+### B-bis.3 — The hashtags (item 5)
+
+Three changes, smallest first:
+
+1. **Dedupe in `composePost`** — case-insensitively, preserving order,
+   across both the inline text and `row.hashtags`.
+2. **Stop asking for hashtags inline.** `socialMediaAgent.ts:90` and
+   `content.ts:19-23` both ask the model to put hashtags "at the end"
+   while the shape also has a `hashtags` field. One source only: the
+   field.
+3. **Execution test** on the publish payload, not the card — the 8
+   October incident was precisely a card and a payload disagreeing
+   (`socialPost.ts:1-14` records it).
+
+### B-bis.4 — Item 6's real question: record or invented?
+
+The founder asks where these came from. **I cannot see the database, so
+I cannot answer it — but I can say exactly what each one needs, and
+give you the query.** Three separate cases, and they are not alike:
+
+**(a) "no paraffin" — a CLAIM_TERM, and there is a Hinglish trap.**
+`claimCheck.ts:98` lists `"no paraffin"` and `"paraffin free"`, so it
+IS checked. `CLAIM_SYNONYMS:222` pairs those two — **but every synonym
+pair in that list is English.** A record saying *"Paraffin wax kabhi
+nahi — sirf soy wax"* licenses **"soy wax"** (the substring is there)
+and does **not** license "no paraffin". So:
+- if the record has the English phrase → correctly licensed, true;
+- if the record is Hinglish only → **the claim is TRUE and was
+  wrongly stripped**, which is the expensive direction, and the file
+  already records this exact bug happening with "clean burning" in a
+  Hinglish story (`claimCheck.ts:~250`).
+**This is a finding in its own right: the synonym table has no Hindi or
+Hinglish equivalences, in a product whose owners write Hinglish.**
+
+**(b) "24 hours set" — unchecked either way.** Not a CLAIM_TERM, and
+`SPELLED_DURATION` requires a performance verb (`lasts|burns|stays|
+holds|lingers|keeps|fades`). I tested "Every candle sets for 24 hours."
+and "…cures for 24 hours." — **both MISSED.** So this sentence passes
+whether it is true or invented. Cure time needs adding to the duration
+verbs.
+
+**(c) The process sentences — no rule class exists at all.** I tested
+"Each wick is centred by hand." and "The fragrance is added at exactly
+65 degrees." — **both MISSED.** `EXACTNESS` catches "exactly centred"
+but not "exactly 65 degrees" (its noun list is about alignment, not
+measurements). A process claim — a step, a temperature, a timing — is
+exactly the kind of specific detail the prompt asks for and nothing
+verifies. **Recommend a `process` rule class, dry-run first.**
+
+**The queries that answer it, read-only:**
 
 ```sql
-select claims_reviewed_at from dealerships where dealership_name ilike '%qaaf%';
+-- every owner-recorded fact, so you can see what is actually on record
+select category, title, content
+from business_knowledge
+where dealership_id = (select id from dealerships where dealership_name ilike '%qaaf%')
+  and is_active = true
+order by category;
 ```
 
 ```sql
-select p.slug, p.sections::text ilike '%free shipping%' as mentions_free_shipping
-from website_pages p
-join websites w on w.id = p.website_id
-join dealerships d on d.id = w.dealership_id
-where d.dealership_name ilike '%qaaf%';
+-- and the product descriptions, the other licence source
+select name, description
+from products
+where dealership_id = (select id from dealerships where dealership_name ilike '%qaaf%');
 ```
 
-If `claims_reviewed_at` is null **and** any page mentions it, the
-diagnosis is confirmed with no ambiguity left.
-
-### B.3 — What follows
-
-A regex cannot fix this; the rule already fired. The fix is the
-evidence model: **a fact must carry where it came from, and
-machine-written text must never be proof.** That is section C, and B is
-the strongest argument for doing C before anything else.
-
-Interim mitigation, one line, available immediately: invert the default
-at `businessFacts.ts:445` so generated text is excluded **unless**
-review is complete. The existing comment explains why it was written the
-other way round — before review, excluding text the owner has never been
-shown would silently strip copy they cannot put back. **That reasoning
-applies to the SITE, not to the EVIDENCE SET.** Keeping the page text on
-the page while refusing to treat it as proof satisfies both.
-
----
+If "wick", "centre/center", "65", "degrees", "24 hour" or "paraffin"
+appear in neither, those sentences were **invented** and three rule
+classes are missing. If they do appear, the sentences are true and the
+only issue is (a)'s Hinglish gap.
 
 ## C) The Facts extractor
 
@@ -474,38 +596,48 @@ multiplexes subsystems within a group.
 
 ## Order of work, and why
 
-1. **1a — the four live failures.** Two regex widenings, hashtag dedupe
-   at the compose layer, capability-claim rule. A day. Stopgap by
-   written agreement (D.4).
-2. **B.2 interim — stop treating Hawlai-written site text as proof.**
-   One line, and it is the live cause of "free shipping".
-3. **C — the Facts extractor.** Prerequisite for A (see A.0) and the
-   real fix for B.
-4. **A — delete the story.** After C, so genericness keeps its
+1. **1a — the six live failures** (B-bis): pejorative product nouns +
+   `after` duration; the capability-claim class (**P0**); the price
+   omission note; hashtag dedupe at the compose layer; the bare
+   performance verb. Plus the story-block deletion, which is item 3.
+2. **The shipping latent bug** (B.2): drop `!said()` so checkout
+   decides, with the Flat Rate refusal test and the Always Free
+   allowance test.
+3. **Three gaps found while testing item 6**, each dry-run first: cure
+   time in the duration verbs; a `process` rule class; **Hinglish
+   synonym pairs**, which is the one that currently removes TRUE copy.
+4. **C — the Facts extractor.** Prerequisite for A (see A.0).
+5. **A — delete the story.** After C, so genericness keeps its
    evidence.
-5. **D.2 — the eval harness.** Needs approval: it spends money.
-6. **E — the Daily Owner Report.** The smallest thing that makes this
-   feel like an agency.
-7. **D.3 — the sentence-support verifier**, measured against D.2.
-8. **F — the planner**, then targets, then the ladder.
+6. **D.2 — the eval harness.** Needs approval: it spends money.
+7. **E — the Daily Owner Report.**
+8. **D.3 — the sentence-support verifier**, measured against D.2.
+9. **F — the planner**, then targets, then the ladder.
 
-Meta post-insights ingestion (so the loop can learn which captions
-worked) belongs between 6 and 8; it has no dependency on the rest.
-
----
+Meta post-insights ingestion belongs between 7 and 9; no dependency on
+the rest.
 
 ## Decisions I need from you
 
 1. **`docs/Hawlai-autonomous-agency-plan.md` was not attached.** If it
    exists, this document should be checked against it first.
-2. **Which screen produced "free shipping"** — or just run B.2's two
-   queries, which answer it definitively.
+2. **Item 6: record or invented?** The two queries in B-bis.4 answer
+   it. Which way they come back decides whether three rule classes are
+   missing or only the Hinglish synonym gap is.
 3. **A before C, or C before A?** I recommend C first (A.0). Deleting
    the story first is faster and will visibly worsen genericness for a
    while.
 4. **Owner-stated facts: `substantiation` tier or authoritative?** C.3
    proposes flag-don't-authorise. That is stricter than today and will
-   create friction for owners who type true things.
+   create friction for owners who type true things. **The Hinglish
+   finding in B-bis.4(a) argues the other way**: today the system
+   already removes true owner-recorded copy when the record is in
+   Hinglish, and tightening the tier makes that worse before the
+   synonym table is fixed. Recommend fixing Hinglish synonyms FIRST,
+   whichever tier you pick.
+7. **The missing price (item 4): a note, or a hard block?** I recommend
+   a note — a hard block would refuse honest teaser copy, and an
+   auto-inserted price in the wrong sentence is worse than none.
 5. **Eval harness spend** — budget per run, and how often.
 6. **Daily report: email only to start, WhatsApp later?** The note says
    email first and I agree; WhatsApp adds template approval and a
