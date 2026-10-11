@@ -172,7 +172,7 @@ export function guardOrMark<T extends object>(
   const walked = narrativeChecked.output;
   const uniqueRemoved = Array.from(new Set(removed));
   const uniqueUnverifiable = Array.from(new Set(unverifiable));
-  const note = [unverifiedNote(uniqueRemoved, uniqueUnverifiable), narrativeNote(narrativeChecked.findings, mode)]
+  const note = [unverifiedNote(uniqueRemoved, uniqueUnverifiable), narrativeNote(narrativeChecked.findings, "strict")]
     .filter(Boolean)
     .join(" ") || null;
 

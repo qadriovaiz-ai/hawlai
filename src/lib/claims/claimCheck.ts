@@ -858,7 +858,10 @@ export function stripUnsupported(
   //
   // This is the real one place: every path that checks a fact arrives
   // here, because this is what checks the fact.
-  const story = checkNarrative(text, f, mode);
+  // STRICT, which is the default: this function guards generated copy,
+  // and generated copy ends up on a card with a button. Only the chat's
+  // own prose asks for leniency, and it asks explicitly.
+  const story = checkNarrative(text, f, mode, "strict");
   text = story.text;
   if (findProblems(text, f).length === 0) {
     return { text, removed: [], priceWarnings: [], substantiation: [], narrative: story.findings, linksFixed: repair.fixed };
@@ -1083,6 +1086,7 @@ export function guardGenerated<T extends object>(
 ): { output: T & { _claimsNote?: string }; removed: string[]; priceWarnings: string[]; substantiation: string[]; narrative: NarrativeFinding[]; linksFixed: string[] } {
   const r = guardOutput(output, f, mode);
   const booking = f.links?.booking ?? f.products.find((p) => p.bookingUrl)?.bookingUrl ?? null;
-  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), substantiationNote(r.substantiation), narrativeNote(r.narrative, mode), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
+  const note = [claimsNote(r.removed), priceWarningNote(r.priceWarnings), substantiationNote(r.substantiation), // "strict": this path removed the line, so the note must say so.
+    narrativeNote(r.narrative, "strict"), linkFixedNote(r.linksFixed, booking)].filter(Boolean).join(" ");
   return { output: (note ? { ...r.output, _claimsNote: note } : r.output) as T & { _claimsNote?: string }, removed: r.removed, priceWarnings: r.priceWarnings, substantiation: r.substantiation, narrative: r.narrative, linksFixed: r.linksFixed };
 }

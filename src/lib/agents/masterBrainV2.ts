@@ -4866,9 +4866,24 @@ A junior marketer takes a request literally and produces the thing asked for. A 
         }
       }
       if (artifact) artifacts.push(artifact);
-      // _emailPreview is the rendered email for the card — kilobytes of
-      // HTML the model neither needs nor should have cut off mid-string.
-      toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result, (k, v) => (k === "_emailPreview" ? undefined : v)).slice(0, 4000) });
+      // NOTHING PREFIXED WITH "_" GOES TO THE MODEL (2026-10-11).
+      //
+      // Only _emailPreview was stripped, for size: "kilobytes of HTML
+      // the model neither needs nor should have cut off mid-string".
+      // Everything else went across, and that included
+      // _factsState: "FACTS_AVAILABLE", _savedId and _postApprovalId -
+      // internal state flags and raw UUIDs, sitting in the model's
+      // context with nothing telling it they are not for the reader. A
+      // model that has a string will sometimes say it.
+      //
+      // The convention already means internal: composePost skips these
+      // keys, and the card reads them directly. The model's channel is
+      // `note`, which is where anything it must say belongs.
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content: JSON.stringify(result, (k, v) => (k.startsWith("_") ? undefined : v)).slice(0, 4000),
+      });
     }
     messages.push({ role: "user", content: toolResults });
   }

@@ -325,8 +325,19 @@ describe("C — one angle, real specifics, and no repeating itself", () => {
     expect(s).toMatch(/A question is one option, not the default/);
   });
 
-  it("with a story on record it says to use it; without one it says not to pad the gap", () => {
-    expect(craftSection("workshop", [], true)).toMatch(/owner's own story is in the facts above: use it/);
+  it("A RECORDED STORY IS INFORMATION, NOT THE SUBJECT — unless it was asked for", () => {
+    // CHANGED 2026-10-11. This used to assert the prompt said "the
+    // owner's own story is in the facts above: use it. That detail is
+    // the whole point of the piece." That sentence produced a 224-word
+    // founder story on a live Facebook post, which is what P1 forbids.
+    //
+    // The intent of the test survives inverted: with a story on record
+    // the prompt still says what to do with it. What changed is the
+    // answer - at most one sentence, as proof, not as the subject.
+    expect(craftSection("workshop", [], true)).toMatch(/information, not the subject/);
+    expect(craftSection("workshop", [], true)).not.toMatch(/whole point of the piece/);
+    // And when the owner DID ask, the piece is the story.
+    expect(craftSection("our story", [], true, true)).toMatch(/this piece is the story/);
     expect(craftSection("workshop", [], false)).toMatch(/specifics are thin — write only what the facts support/);
   });
 
@@ -579,7 +590,10 @@ describe("tune 1 — per-type instructions set length and platform, not the shap
 describe("tune 2 — the story is material, not text to paste", () => {
   it("the prompt allows one short phrase of the owner's words and asks for fresh sentences", () => {
     const s = craftSection("workshop", [], true);
-    expect(s).toMatch(/owner's story as MATERIAL, not text to paste/);
+    // "owner's story" became "any owner detail" when the story stopped
+    // being the subject. The rule it encodes - take the fact, write your
+    // own sentences - is unchanged.
+    expect(s).toMatch(/owner detail as MATERIAL, not text to paste/);
     expect(s).toMatch(/At most ONE short phrase/);
     expect(s).toMatch(/share the fact, never the sentences/);
   });

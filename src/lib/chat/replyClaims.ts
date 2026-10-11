@@ -95,8 +95,8 @@ export function checkReplyClaims(reply: string, facts: BusinessFacts | null | un
   // "draft" mode either way, like the price rule: this is a conversation
   // the owner is reading, and silently deleting half an explanation
   // reads as a bug. The sentence stays and is named.
-  const story = facts ? { findings: [] as ReturnType<typeof checkNarrative>["findings"] } : checkNarrative(masked, null, "draft");
-  const storyNote = narrativeNote(story.findings, "draft");
+  const story = facts ? { findings: [] as ReturnType<typeof checkNarrative>["findings"] } : checkNarrative(masked, null, "draft", "conversational");
+  const storyNote = narrativeNote(story.findings, "conversational");
 
   if (facts) {
     // "draft" mode: an unverified PRICE in conversation is flagged, not
@@ -108,7 +108,7 @@ export function checkReplyClaims(reply: string, facts: BusinessFacts | null | un
       // and findUnsupportedClaims does not run the narrative check, so
       // the strip is what finds it.
       const onlyStory = stripUnsupported(masked, facts, "draft");
-      return { reply: text, removed: [], note: narrativeNote(onlyStory.narrative, "draft") };
+      return { reply: text, removed: [], note: narrativeNote(onlyStory.narrative, "conversational") };
     }
     const stripped = stripUnsupported(masked, facts, "draft");
     return {
@@ -116,7 +116,7 @@ export function checkReplyClaims(reply: string, facts: BusinessFacts | null | un
       removed: stripped.removed,
       // The strip's own narrative findings, so the story note is said
       // once and comes from the same pass that produced the text.
-      note: joinNotes(replyClaimsNote(stripped.removed), narrativeNote(stripped.narrative, "draft")),
+      note: joinNotes(replyClaimsNote(stripped.removed), narrativeNote(stripped.narrative, "conversational")),
     };
   }
 

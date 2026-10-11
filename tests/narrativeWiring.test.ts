@@ -80,12 +80,22 @@ describe("guardOrMark runs it, so every generator gets it", () => {
     expect((r.output as any).text).toBe("");
   });
 
-  it("a draft keeps the sentence and names it; a publish loses it", () => {
+  it("A DRAFT LOSES IT TOO NOW, and that is the 11 October change", () => {
+    // This used to assert that a draft KEPT the sentence, on the
+    // reasoning that a draft is the owner's to read and fix. That holds
+    // for a reply. It does not hold for generated copy, which lands on
+    // a card with a Publish button - a sentence nothing backs, sitting
+    // one press from a customer, which is the 8 October shape exactly.
+    //
+    // Leniency is now scoped to text nobody can press a button on, and
+    // generated copy is not that. Both modes remove; the owner is told
+    // either way.
     const draft = guardOrMark({ text: INVENTED }, facts(), "draft");
     const publish = guardOrMark({ text: INVENTED }, facts(), "publish");
-    expect((draft.output as any).text).toBe(INVENTED);
+    expect((draft.output as any).text).toBe("");
     expect((publish.output as any).text).toBe("");
     expect(draft.narrative).toHaveLength(1);
+    expect(String((draft.output as any)._claimsNote)).toMatch(/I took out/);
   });
 
   it("the note joins the claims note rather than replacing it", () => {
@@ -134,7 +144,7 @@ describe("the chat's own prose (4.10)", () => {
   // to check.
   it("AN INVENTED STORY IN A CHAT REPLY IS NAMED", () => {
     const r = checkReplyClaims(`Here's a caption. ${INVENTED}`, facts());
-    expect(r.note).toMatch(/nothing in your records says it/);
+    expect(r.note).toMatch(/nothing in your records backs/);
   });
 
   it("but it is NOT deleted — this is a conversation", () => {
@@ -142,7 +152,11 @@ describe("the chat's own prose (4.10)", () => {
     // keeps the words and says what cannot be backed up.
     const r = checkReplyClaims(`Here's a caption. ${INVENTED}`, facts());
     expect(r.reply).toContain("borrowed saucepan");
-    expect(r.note).toMatch(/can't back up/);
+    // The note's wording was rebuilt on 11 October: it used to read
+    // "I've left in but can't back up something you do yourselves",
+    // which is not a sentence - the verb phrase had no object.
+    expect(r.note).toMatch(/One line here mentions/);
+    expect(r.note).not.toMatch(/left in but can't back up/);
   });
 
   it("an invented customer quote in a reply is named too", () => {
@@ -152,7 +166,7 @@ describe("the chat's own prose (4.10)", () => {
 
   it("IT STILL RUNS WHEN THE FACTS COULD NOT BE READ", () => {
     const r = checkReplyClaims(INVENTED, null);
-    expect(r.note).toMatch(/nothing in your records says it/);
+    expect(r.note).toMatch(/nothing in your records backs/);
   });
 
   it("ordinary advice is left completely alone", () => {
@@ -173,7 +187,7 @@ describe("the chat's own prose (4.10)", () => {
     // was dropped on the floor.
     const r = checkReplyClaims(`Rated 4.9 by 200 customers. ${INVENTED}`, facts());
     expect(r.note).toMatch(/left out of that reply/);
-    expect(r.note).toMatch(/nothing in your records says it/);
+    expect(r.note).toMatch(/nothing in your records backs/);
   });
 
   it("an empty reply is not narrative", () => {

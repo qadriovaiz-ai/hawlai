@@ -208,8 +208,8 @@ describe("with no facts at all it fails CLOSED", () => {
   });
 });
 
-describe("draft mode keeps the sentence and names it", () => {
-  it("A DRAFT IS FOR THE OWNER TO FIX, SO NOTHING IS SILENTLY DELETED", () => {
+describe("leniency is for a conversation, not for a draft", () => {
+  it("A CONVERSATION KEEPS THE SENTENCE, because there is no button on it", () => {
     // Byte-identical, whitespace included. A mutation check found that
     // asserting a trimmed single sentence proved nothing: draft mode
     // keeps every piece, so re-joining them produced the same string and
@@ -217,18 +217,21 @@ describe("draft mode keeps the sentence and names it", () => {
     // to prove the original is returned untouched is to hand it text
     // that re-joining WOULD change.
     const text = "\n  We started this in a tiny kitchen.  \n\n\n  Lavender jar, 200g.  \n";
-    const r = checkNarrative(text, facts(), "draft");
+    // "conversational" explicitly: "draft" alone no longer keeps it.
+    const r = checkNarrative(text, facts(), "draft", "conversational");
     expect(r.text).toBe(text);
     expect(r.findings).toHaveLength(1);
   });
 
   it("publish mode and draft mode differ, and the note says which happened", () => {
     const text = "We started this in a tiny kitchen.";
-    const draft = checkNarrative(text, facts(), "draft");
+    const conversational = checkNarrative(text, facts(), "draft", "conversational");
     const publish = checkNarrative(text, facts(), "publish");
-    expect(draft.text).not.toBe(publish.text);
-    expect(narrativeNote(draft.findings, "draft")).toMatch(/can't back up/);
-    expect(narrativeNote(publish.findings, "publish")).toMatch(/took out/);
+    expect(conversational.text).not.toBe(publish.text);
+    // And a DRAFT with the default strictness now matches publish.
+    expect(checkNarrative(text, facts(), "draft").text).toBe(publish.text);
+    expect(narrativeNote(conversational.findings, "conversational")).toMatch(/One line here mentions/);
+    expect(narrativeNote(publish.findings)).toMatch(/I took out/);
   });
 });
 
@@ -360,6 +363,6 @@ describe("THE OWNER'S OWN HABIT, from the live email", () => {
 
   it("the note names it in words the owner can act on", () => {
     const r = checkNarrative("We light one at night too.", facts());
-    expect(narrativeNote(r.findings)).toMatch(/something you do yourselves/);
+    expect(narrativeNote(r.findings)).toMatch(/something about you or your business/);
   });
 });

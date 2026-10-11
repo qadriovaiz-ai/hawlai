@@ -39,6 +39,11 @@ import { pieces } from "./claimCheck";
 import { COMMON } from "@/lib/content/storyEcho";
 import type { BusinessFacts } from "./businessFacts";
 import type { ClaimsMode } from "./claimCheck";
+// THE SAME SHAPES customerFirst measures. They were two separate lists
+// until 11 October 2026, and the lists disagreed: three of the four
+// first-person sentences in a 224-word founder story were invisible
+// here and caught there. ownerVoice.ts holds the reasoning.
+import { OWNER_VOICE } from "@/lib/content/ownerVoice";
 
 /** What kind of unrecorded narrative a sentence is carrying. */
 export type NarrativeKind = "history" | "attributed" | "comparative";
@@ -54,6 +59,10 @@ type Pattern = { kind: NarrativeKind; re: RegExp; why: string };
 // Hinglish (src/lib/content/language.ts). A pattern list in English only
 // would be a guard that works on the copy this product writes least.
 const PATTERNS: Pattern[] = [
+  // Every owner-voice shape counts as a history claim here. Written
+  // first so a sentence this list knows is attributed to the right kind
+  // before the narrower patterns below see it.
+  ...OWNER_VOICE.map((re) => ({ kind: "history" as const, re, why: "something about you or your business" })),
   // The founder's own history.
   {
     kind: "history",
@@ -209,10 +218,31 @@ export type NarrativeResult = {
  * stripUnverifiable (F-01). That is the fail-CLOSED direction and it is
  * the one a transient database error has to take.
  */
+/**
+ * Whether an unbacked story may SURVIVE in a draft.
+ *
+ * "strict" removes it in both modes, and is the default.
+ * "conversational" keeps it and names it, which is right for the chat's
+ * own prose and wrong for anything else.
+ *
+ * WHY THE DEFAULT FLIPPED (11 October 2026). Draft mode used to keep
+ * these, on the reasoning that a draft is the owner's to read and fix.
+ * That holds for a REPLY. It does not hold for generated copy on a card
+ * with a Publish button, which is the 8 October shape exactly: a
+ * sentence nothing backs, sitting one press from a customer. The
+ * instruction was "either remove it, or block Publish until the warning
+ * is resolved", and removing it is the smaller, surer change.
+ *
+ * So leniency is scoped to text nobody can press a button on, and
+ * asking for it is explicit rather than inherited from `mode`.
+ */
+export type NarrativeStrictness = "strict" | "conversational";
+
 export function checkNarrative(
   text: string,
   facts: BusinessFacts | null | undefined,
-  mode: ClaimsMode = "publish"
+  mode: ClaimsMode = "publish",
+  strictness: NarrativeStrictness = "strict"
 ): NarrativeResult {
   const original = String(text ?? "");
   if (!original.trim()) return { text: original, findings: [] };
@@ -228,14 +258,13 @@ export function checkNarrative(
       continue;
     }
     findings.push({ kind: hit.kind, why: hit.why, sentence: piece.trim() });
-    // A draft is for the owner to read and fix, so the sentence stays
-    // and is named. Anything going to a customer loses it.
-    if (mode === "draft") kept.push(piece);
+    // Kept only in a conversation, where there is no button to press.
+    if (strictness === "conversational") kept.push(piece);
   }
 
   if (!findings.length) return { text: original, findings: [] };
   const cleaned = kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: mode === "draft" ? original : cleaned, findings };
+  return { text: strictness === "conversational" ? original : cleaned, findings };
 }
 
 /**
@@ -244,12 +273,27 @@ export function checkNarrative(
  * "I took a sentence out" with no way forward reads as a bug. The note
  * says which kind of sentence and what recording it would license.
  */
-export function narrativeNote(findings: NarrativeFinding[], mode: ClaimsMode = "publish"): string | null {
+export function narrativeNote(
+  findings: NarrativeFinding[],
+  // STRICTNESS, NOT MODE, and the type says so on purpose. The first
+  // version accepted either and treated "draft" as lenient wording -
+  // so guardGenerated, which passes its ClaimsMode, told the owner a
+  // line had been "left in" while the line had in fact been removed. A
+  // note that disagrees with what happened is worse than no note.
+  strictness: NarrativeStrictness = "strict"
+): string | null {
   if (!findings.length) return null;
   const whys = Array.from(new Set(findings.map((f) => f.why)));
   const list = whys.length === 1 ? whys[0] : `${whys.slice(0, -1).join(", ")} and ${whys[whys.length - 1]}`;
-  const verb = mode === "draft" ? "I've left in but can't back up" : "I took out";
-  return `${verb} ${list} — nothing in your records says it. Write it down once in Business Knowledge and I can use it everywhere.`;
+  const n = findings.length;
+  // THE SENTENCE USED TO BE BROKEN. It read "I've left in but can't
+  // back up something you do yourselves - nothing in your records says
+  // it", which is not a sentence: the verb phrase had no object.
+  // Reported from the live run on 11 October 2026.
+  if (strictness === "conversational") {
+    return `${n === 1 ? "One line here mentions" : `${n} lines here mention`} ${list}, and nothing in your records backs ${n === 1 ? "it" : "them"}. Write it down once in Business Knowledge and I can use it everywhere.`;
+  }
+  return `I took out ${n === 1 ? "a line about" : `${n} lines about`} ${list} - nothing in your records says ${n === 1 ? "it" : "them"}. Write it down once in Business Knowledge and I can use it everywhere.`;
 }
 
 /**

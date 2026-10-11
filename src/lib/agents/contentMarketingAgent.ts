@@ -24,6 +24,13 @@ import { STORY_CATEGORY } from "@/lib/business/businessStory";
 // tested code to express a change of mind is how a codebase loses what
 // it later wants.
 import { isGeneric, genericNote, retryBrief, type GenericVerdict } from "@/lib/content/antiGeneric";
+import {
+  askedForStory,
+  customerFirstProblem,
+  customerFirstNote,
+  customerFirstBrief,
+  WORD_CAPS,
+} from "@/lib/content/customerFirst";
 import { soundRule, languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
 import { applyLinkRule, linkRuleNote, applyBioRule, bioRuleNote } from "@/lib/content/platformRules";
 
@@ -73,6 +80,22 @@ const TIRED_MOVES = [
   "Not just a X — it's a Y",
 ];
 
+/**
+ * The word cap, said as a number the model cannot read past.
+ *
+ * facebook_post's own instructions already said "80-150 words,
+ * community-toned" and the live post on 11 October 2026 was 224. A range
+ * inside a sentence of prose is a suggestion; a line of its own, with
+ * the number twice, is an instruction - and overWordCap checks it
+ * afterwards either way.
+ */
+function wordCapLine(contentType: string): string {
+  const cap = WORD_CAPS[contentType];
+  if (!cap) return "";
+  return `
+- LENGTH: at most ${cap} words. Not ${cap + 1}. If it does not fit, cut description, never a fact.`;
+}
+
 function angleFor(topic: string, recent: string[]): string {
   // Rotated, not random: successive pieces on the same topic get
   // different angles instead of the model's default favourite.
@@ -82,17 +105,27 @@ function angleFor(topic: string, recent: string[]): string {
 }
 
 /** The part of the prompt that asks for one committed angle and real specifics. */
-export function craftSection(topic: string, recent: string[], hasStory: boolean): string {
+export function craftSection(topic: string, recent: string[], hasStory: boolean, storyRequested = false): string {
   return `
-## How to write this (this matters more than the format)
+## What this piece is about (read this before the format)
+- WRITE IT FOR THE READER, not about the business. In this order:
+  1. the customer's situation or what they want
+  2. what the product does about it, from the verified facts
+  3. the price or offer, if this piece needs one
+  4. one clear next step
+- ${
+    storyRequested
+      ? "The owner ASKED for their story, so this piece is the story. Use the recorded story facts above as the subject, and still end with one clear next step."
+      : "The owner did NOT ask for their story. Their recorded story is information, not the subject: use AT MOST ONE short sentence of it, and only where it is real proof of something the reader cares about. A post that is mostly the owner talking about themselves is the wrong piece — it will be sent back."
+  }
 - Pick ONE angle and commit to it for the whole piece. Choose from these three, or a better one the facts suggest:
 ${angleFor(topic, recent)}
 - Use at least one CONCRETE, specific detail from the verified facts — a step, a material, a place, a length of time, something a customer said. ${
     hasStory
-      ? "The owner's own story is in the facts above: use it. That detail is the whole point of the piece."
-      : "The owner hasn't written their story down yet, so specifics are thin — write only what the facts support, stay plain, and don't pad with adjectives to fill the gap."
+      ? ""
+      : "The owner hasn't written much down yet, so specifics are thin — write only what the facts support, stay plain, and don't pad with adjectives to fill the gap."
   }
-- Use the owner's story as MATERIAL, not text to paste: take the fact, then write your own sentences about it for this reader. At most ONE short phrase (a few words) in the owner's exact words, where their phrasing is the point. Two pieces about the same fact should share the fact, never the sentences.
+- Use any owner detail as MATERIAL, not text to paste: take the fact, then write your own sentences about it for this reader. At most ONE short phrase (a few words) in the owner's exact words, where their phrasing is the point. Two pieces about the same fact should share the fact, never the sentences.
 - SHORT DOES NOT MEAN GENERIC. However short the piece — "punchy", "one line", a Reel hook — the specific detail stays; everything else gets cut first. Compress it into a phrase instead of spending a sentence on it. A class whose teacher still marks every paper by hand: "har copy khud check hoti hai, isi liye batch chhota hai" says the real thing in a few extra words. "Quality education for your child" says nothing a competitor couldn't.
 - Write it as one person telling another something true. No stacked adjectives, no rented enthusiasm.
 - These openings and phrasings are worn out — never use them or anything close to them:
@@ -178,7 +211,7 @@ ${sound}
 
 Content type: ${meta.label}
 Output requirements: ${meta.instructions}
-${craftSection(topic, opts.recent ?? [], Boolean(facts?.ownerFacts?.some((k) => k.category === STORY_CATEGORY)))}
+${craftSection(topic, opts.recent ?? [], Boolean(facts?.ownerFacts?.some((k) => k.category === STORY_CATEGORY)), askedForStory(topic))}${wordCapLine(contentTypeKey)}
 
 Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this content type (e.g. use "slides" array for carousels, "days" array for a content calendar, "hooks" array for hook generation, "ctas" array for CTA generation, otherwise a "text" field or clearly-named fields matching the requirements above). Be specific to this business and topic — never generic filler.`,
         },
@@ -255,10 +288,37 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
         generic = true;
       }
     }
+    // IS THIS PIECE ABOUT THE READER? (added 2026-10-11)
+    //
+    // The third measure, and the live failure that forced it: a 224-word
+    // founder story passed both of the others. Provenance passes a story
+    // the owner HAS written down; isGeneric passes anything carrying a
+    // recorded specific, and a story is one. Neither asks what P1
+    // actually says, which is who the piece is for.
+    //
+    // Same one-retry shape as everything else here, and gated behind
+    // `revise` for the same reason: the unattended path stays
+    // single-shot.
+    let shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
+    if (shapeProblem && opts.revise) {
+      const reshaped = await retryForShape(parsed, meta.label, meta.instructions, shapeProblem, logContext, language);
+      if (reshaped) {
+        parsed = reshaped;
+        // Re-measured, not assumed: a retry that is still wrong must
+        // still be reported.
+        shapeProblem = customerFirstProblem(parsed, contentTypeKey, topic);
+      }
+    }
+
     // `_storyNote` keeps its name on purpose: GeneratedOutputPanel and
     // the chat card both read that key, and renaming it would silently
     // stop the owner seeing any of this. What CHANGED is the words.
-    if (generic) parsed = { ...parsed, _storyNote: genericNote(verdict) };
+    //
+    // The shape note wins when both apply: "this is all about you" is
+    // more useful than "this could be anyone's", and saying both at once
+    // reads as noise.
+    if (shapeProblem) parsed = { ...parsed, _storyNote: customerFirstNote(shapeProblem) };
+    else if (generic) parsed = { ...parsed, _storyNote: genericNote(verdict) };
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
     // F-01: this used to be `if (!facts) return parsed` — the guard
     // skipped and the output indistinguishable from a checked draft.
@@ -285,6 +345,60 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
     return fallback;
+  }
+}
+
+/**
+ * The retry for a piece written about the business instead of the reader.
+ *
+ * Same mechanism as retryForSpecificity below, down to the shape check
+ * and the tolerant JSON read: an EDIT at the same length, not a fresh
+ * generation, because a regeneration drifts off the topic the owner
+ * asked for.
+ */
+export async function retryForShape(
+  draft: any,
+  contentLabel: string,
+  formatInstructions: string,
+  problem: NonNullable<ReturnType<typeof customerFirstProblem>>,
+  logContext?: { supabase: any; dealershipId: string },
+  language: CopyLanguage = "hinglish"
+): Promise<any | null> {
+  try {
+    const r = await callClaude({
+      model: getModel("standard"),
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `This draft ${contentLabel} is the wrong shape for its reader. Fix the shape without inventing anything.
+
+${customerFirstBrief(problem)}
+
+Rewrite the draft:
+- Keep the same JSON shape.
+- ${languageRule(language)}
+- The customer's situation first, then what the product does about it, then the price or offer if it needs one, then one clear next step.
+- Never add a claim, a number, an offer or a testimonial that is not already in the draft.
+- Keep the format's requirements: ${formatInstructions}
+
+Draft JSON:
+${JSON.stringify(draft).slice(0, 6000)}
+
+Return the edited JSON only — same shape, no markdown, no commentary.`,
+      }],
+    }, { operation: "content_shape_retry", logContext });
+    if (!r.ok) return null;
+    const parsedReply = parseModelJson(r.text);
+    if (!parsedReply.ok) {
+      console.error(`[contentMarketingAgent] ${parsedReply.cause}: ${parsedReply.detail}`);
+      return null;
+    }
+    const retried = parsedReply.value;
+    const sameShape = Object.keys(draft ?? {}).every((k) => k.startsWith("_") || k in retried);
+    return sameShape ? retried : null;
+  } catch (err: any) {
+    console.error("[content-marketing-agent] shape retry failed:", err.message);
+    return null;
   }
 }
 
