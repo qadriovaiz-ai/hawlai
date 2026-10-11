@@ -26,8 +26,8 @@
 // statement about Hawlai: we could not read it.
 
 import {
-  COPY_TRUTH_RULES,
-  formatFactsForCopy,
+  factsPrompt,
+  FACTS_UNAVAILABLE_BRIEF,
   type BusinessFacts,
   type FactsAudience,
 } from "./businessFacts";
@@ -58,8 +58,12 @@ export function truthBlock(
   facts: BusinessFacts | null | undefined,
   audience: FactsAudience = "owner"
 ): string {
-  if (facts) return `\n\n${formatFactsForCopy(facts, audience)}\n\n${COPY_TRUTH_RULES}\n`;
-  return `\n\n${FACTS_UNAVAILABLE_BRIEF}\n\n${COPY_TRUTH_RULES}\n`;
+  // ONE implementation, in businessFacts.ts. This was a second copy of
+  // the same four lines, and factsPrompt — the OTHER copy, which 18
+  // files call — still had the F-01 fail-open shape three days after
+  // this one was fixed. Two copies of a guard means the one nobody is
+  // looking at decides what the model is told.
+  return factsPrompt(facts, audience);
 }
 
 /**
@@ -70,10 +74,9 @@ export function truthBlock(
  * that follows from it is to write about the product without asserting
  * anything countable.
  */
-export const FACTS_UNAVAILABLE_BRIEF = `VERIFIED FACTS: NONE AVAILABLE RIGHT NOW. This business's own records (products, prices, offers, shipping, order counts) could not be read for this request. That does NOT mean the business has none — it means nothing here can be checked.
-- Write about the product, the craft and the feeling in your own words. Those need no record.
-- State NO number, price, offer, discount, shipping term, count, rating, years-in-business or ranking — not even a plausible one. There is nothing to check it against.
-- Do not say or imply that anything has been verified, confirmed or checked.`;
+// Re-exported: it moved to businessFacts.ts so both prompt builders
+// could share one copy. Importers here keep working.
+export { FACTS_UNAVAILABLE_BRIEF };
 
 export type GateResult<T> = {
   output: T & { _claimsNote?: string; _factsState?: FactsState; _unverified?: string[] };

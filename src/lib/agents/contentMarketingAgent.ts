@@ -337,7 +337,7 @@ Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this con
     // The shape note wins when both apply: "this is all about you" is
     // more useful than "this could be anyone's", and saying both at once
     // reads as noise.
-    if (shapeProblem) parsed = { ...parsed, _storyNote: customerFirstNote(shapeProblem) };
+    if (shapeProblem) parsed = { ...parsed, _storyNote: customerFirstNote(shapeProblem, droppedSentences) };
     else if (droppedSentences) {
       // Tightened rather than handed back - and said, because a piece
       // that quietly lost sentences is worse than one that says it did.

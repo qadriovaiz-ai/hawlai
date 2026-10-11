@@ -323,3 +323,102 @@ describe("4. every path that turns an output into text", () => {
     expect(social).not.toMatch(/\^\[a-z\]\[a-zA-Z0-9\]\*\$/);
   });
 });
+
+// ---------------------------------------------------------------------
+// 5. THE PRICE AND THE LINK ARE NEVER CUT
+// ---------------------------------------------------------------------
+//
+// Ovaiz, 11 October 2026: "Post chhoti karte waqt price aur link wali
+// line kabhi mat kaato."
+//
+// Tightening kept the opening and the close and dropped from the
+// middle, which is right for description and wrong for the two things
+// the post exists to carry. A post trimmed to fit that no longer says
+// what it costs or where to buy it has been made worse, not shorter.
+//
+// So they are kept EVEN WHEN KEEPING THEM LEAVES THE PIECE OVER THE
+// CAP, and the owner is told that is what happened.
+
+import { carriesTheOffer, customerFirstNote } from "@/lib/content/customerFirst";
+
+describe("5. the offer survives the cut", () => {
+  const FILLER = "The lavender candle sits quietly on the shelf and waits for the evening to come round again.";
+
+  it("A PRICE IN THE MIDDLE IS KEPT while description around it goes", () => {
+    const text = [
+      "Evenings get loud.",
+      ...Array(12).fill(FILLER),
+      "Lavender candle, 550, and we ship for 60.",
+      ...Array(12).fill(FILLER),
+      "Thanks for reading.",
+    ].join(" ");
+    const r = tightenToCap(text, 150);
+    expect(r.dropped).toBeGreaterThan(0);
+    expect(r.text).toContain("Lavender candle, 550");
+    expect(r.keptForFacts).toBe(1);
+  });
+
+  it("A LINK IN THE MIDDLE IS KEPT", () => {
+    const text = [
+      "Evenings get loud.",
+      ...Array(20).fill(FILLER),
+      "Order at candlebyqaaf.in today.",
+      ...Array(8).fill(FILLER),
+      "See you soon.",
+    ].join(" ");
+    const r = tightenToCap(text, 150);
+    expect(r.text).toContain("candlebyqaaf.in");
+  });
+
+  it("IT IS KEPT EVEN WHEN THAT LEAVES THE PIECE OVER THE CAP", () => {
+    // Three price lines, each long. Fitting would mean losing one.
+    const priced = (n: number) => `Our ${n} wick lavender candle is priced at 55${n} rupees and ships anywhere in Shahjahanpur for sixty rupees on every single order.`;
+    const text = ["Evenings get loud.", priced(1), priced(2), priced(3), priced(4), "Thanks for reading."].join(" ");
+    const r = tightenToCap(text, 40);
+    expect(wordCount(r.text)).toBeGreaterThan(40);
+    for (const n of [1, 2, 3, 4]) expect(r.text, `price ${n}`).toContain(`55${n} rupees`);
+  });
+
+  it("AND THE OWNER IS TOLD WHY IT IS STILL LONG — not that it is one long sentence", () => {
+    const note = customerFirstNote({ kind: "too_long", words: 180, cap: 150 }, 4);
+    expect(note).toMatch(/cut 4 sentences/);
+    expect(note).toMatch(/price or the link/);
+    expect(note).not.toMatch(/one long sentence/);
+  });
+
+  it("the one-long-sentence note is still said when nothing was cut", () => {
+    const note = customerFirstNote({ kind: "too_long", words: 180, cap: 150 }, 0);
+    expect(note).toMatch(/one long sentence/);
+  });
+
+  it("WHAT COUNTS AS THE OFFER", () => {
+    for (const s of [
+      "Lavender candle, 550.",
+      "₹550 only.",
+      "Rs 550 with free shipping.",
+      "20% off this week.",
+      "Order at candlebyqaaf.in.",
+      "Visit https://candlebyqaaf.in/lavender",
+      "Link in bio.",
+      "Order on the store page.",
+      "It costs 550.",
+    ]) {
+      expect(carriesTheOffer(s), s).toBe(true);
+    }
+  });
+
+  it("AND WHAT DOES NOT — a specification is not a price", () => {
+    // "40 hour burn" and "24 ghante" are the numbers this business
+    // actually records. Treating them as the offer would make every
+    // description line uncuttable and tightening would stop working.
+    for (const s of [
+      "Soy wax, 40 hour burn.",
+      "Har candle 24 ghante set hoti hai.",
+      "It takes 2 days to cure.",
+      "Evenings get loud in Shahjahanpur.",
+      "The room slows down.",
+    ]) {
+      expect(carriesTheOffer(s), s).toBe(false);
+    }
+  });
+});

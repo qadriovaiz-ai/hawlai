@@ -1,7 +1,32 @@
 # Phase 3.5 — `generateCopy()`: one door
 
-**Status:** plan only. Nothing in this document is built. Verified
-against the repo on 2026-10-11 by reading the files, not from memory.
+**Status:** APPROVED 2026-10-11 with amendments, recorded in section 0.
+Verified against the repo on 2026-10-11 by reading the files, not from
+memory. Build in progress; each step says when it landed.
+
+---
+
+## 0. The owner's amendments (2026-10-11)
+
+1. **Health / benefit tier decided.** `substantiation` for all five
+   rules — a note in a draft, stripped on publish — **except** the
+   vulnerable-group rule ("safe for babies", "non-toxic",
+   "hypoallergenic"), which is **`claim`: strict in both modes.** The
+   argument in section 4 was accepted.
+2. **Order changed.** `commit 0` is the `factsPrompt` fail-open fix on
+   its own. Then email. Then **the four that send to a person and have
+   no claims check today** — lead message, influencer, retention, ad
+   edits — moved up from last to second. Then Facebook / Instagram
+   (whatever is left after the work already done), then the rest.
+3. **Autopilot is not a migration step.** It reaches `generateContent`
+   and is already guarded; its claims check and its generic-skip must
+   be **preserved** through `generateCopy`'s `publishable` field, and it
+   is not counted as a separate surface.
+4. **The `carriesTheOffer` mutation checks are re-run before the first
+   commit**, not carried as a promise.
+5. **Every migration commit reports two things**: what now gets
+   stripped on that surface — so a new strip does not read as a
+   regression — and that surface's execution test.
 
 ---
 
@@ -212,17 +237,24 @@ silently stop the owner seeing any of this.
 
 ## 3. Migration order, and the invariant
 
-**Email first**, as you asked.
+Amended per section 0.2.
 
 | # | Surface | Why this order |
 |---|---|---|
+| 0 | **`factsPrompt` fail-open** | **done.** Not a surface: it is the prompt-side protection all 22 of its callers depend on, and 11 of them have no output guard at all, so the prompt is their only protection |
 | 1 | **Email** | has claims already, so the delta is the new measures; and the send is gated by an approval, so a mistake is caught by a person |
-| 2 | Facebook / Instagram | where both live incidents happened |
-| 3 | WhatsApp, social management | same shape as 2, already have claims |
-| 4 | Paid ads, retargeting, ad engine, ad edits | money, but short copy |
-| 5 | SEO (blog, pages, toolkit, AEO) | long-form, needs its own cap decision |
-| 6 | Website builder, website copy, CRO | block trees, a different output shape |
-| 7 | **The four that send to a person**: lead message, influencer, retention, autopilot | last, because each needs its own execution test against a real send path, and these are the four with no claims check at all today |
+| 2 | **The four that send to a person**: lead message, influencer outreach, retention message, ad-copy edits | moved up from last. Each reaches a human being and has **no claims check at all** today. Being hardest to test is a reason for care, not for waiting |
+| 3 | Facebook / Instagram | where both live incidents happened; partly done already (customer-first, cap, anti-generic, tighten) |
+| 4 | WhatsApp, social management | same shape as 3, already have claims |
+| 5 | Paid ads, retargeting, ad engine | money, but short copy |
+| 6 | SEO (blog, pages, toolkit, AEO), CRO | long-form; needs its own cap decision |
+| 7 | Website builder, website copy | block trees, a different output shape |
+
+**Not a step: Autopilot.** It calls `generateContent` and is guarded
+today. What it must not lose is its claims check and its refusal to
+post on a generic verdict; after the migration it reads
+`publishable` instead of deciding for itself. Pinned by the execution
+test that already exists for the generic-skip.
 
 Each step: an **execution test** that drives the real path end to end
 (not a source grep), plus mutation checks, plus `tsc` / `vitest` /
@@ -292,22 +324,22 @@ The first draft of the body rule missed "Good for **the** skin" for
 want of one word. That is what the dry run is for, and it is why these
 go in front of you before they go live.
 
-**Tier: `substantiation`** — kept in a draft with a note saying how to
-make it sayable, stripped on publish. A benefit the owner has actually
-recorded is theirs to say.
+**DECIDED (2026-10-11).** Four rules at `substantiation` — kept in a
+draft with a note saying how to make it sayable, stripped on publish,
+because a benefit the owner has actually recorded is theirs to say.
 
-**One exception I want to argue for: the vulnerable-group rule as
-`claim`, strict in both modes.** "Safe for babies", "non-toxic",
-"hypoallergenic" on an untested product is the one claim in this set
-that can hurt somebody, and a draft is one click from a customer. Your
-call; I will not enable either tier without your word.
+**The vulnerable-group rule at `claim`: strict in both modes.** "Safe
+for babies", "non-toxic", "hypoallergenic" on an untested product is
+the one claim in this set that can hurt somebody, and a draft is one
+click from a customer. The argument was put and accepted, so a draft
+loses it too.
 
 ---
 
-## 5. Already built, not yet committed
+## 5. The price-and-link protection — landed with commit 0
 
-The price-and-link protection you asked for is written and green, and it
-will land with the first commit of this phase rather than on its own:
+Written, green, and its mutation checks re-run as required by
+amendment 4 (four mutations, all failing):
 
 - `carriesTheOffer()` — a sentence holding a price, a percentage off, a
   URL, a domain, "link in bio" or "order on …" is **never cut**, even
@@ -317,8 +349,10 @@ will land with the first commit of this phase rather than on its own:
 - when the offer keeps it over the cap, the note says so rather than
   claiming "it is one long sentence"
 
-9 new tests. Mutation checks were interrupted and will be re-run before
-the commit.
+9 new tests. Mutation checks: the offer pass removed (2 fail), the
+offer pass made to respect the cap (1 fail), a bare digit treated as a
+price so nothing is cuttable (1 fail), the note made to forget it cut
+anything (1 fail).
 
 ---
 
@@ -334,13 +368,14 @@ the commit.
 
 ---
 
-## 7. What I need from you
+## 7. Progress
 
-1. **Go / no-go on this plan.**
-2. **The health/benefit tier**: `substantiation` for all five, or
-   `claim` for the vulnerable-group rule as I have argued.
-3. Confirmation that **email first** is still right given that step 7
-   (the four that send to a person) is the set with no claims check at
-   all today — I have put them last because they need the most careful
-   tests, but they are also the ones currently least protected. Say the
-   word and I will move them to step 2.
+| step | state |
+|---|---|
+| 0 — `factsPrompt` fail-open, + price/link protection | **done** |
+| 1 — email | next |
+| 2 — the four that send to a person | |
+| 3 — Facebook / Instagram | |
+| 4–7 | |
+
+Each row is updated as it lands, with its commit and its exit codes.

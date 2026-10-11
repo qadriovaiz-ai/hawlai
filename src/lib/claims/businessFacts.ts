@@ -767,9 +767,48 @@ export const COPY_TRUTH_RULES = `TRUTH RULES — a small business owner may publ
 - NEVER invent an email address, phone number, WhatsApp number, social handle or street address. A plausible-looking address on a domain the business doesn't own swallows every enquiry sent to it, silently. If a contact detail isn't in the facts, leave it out and say the owner should add it.
 ${SEASON_TRUTH_RULE}`;
 
-/** The facts block plus the rules — what a generation prompt appends. */
-export function factsPrompt(f: BusinessFacts | null | undefined): string {
-  return f ? `\n\n${formatFactsForCopy(f)}\n\n${COPY_TRUTH_RULES}\n` : "";
+/**
+ * Said to the model when the records are unreadable.
+ *
+ * Not "there are no products" — that would be a claim about the
+ * business. "Nothing could be read" is the truth, and the instruction
+ * that follows from it is to write about the product without asserting
+ * anything countable.
+ *
+ * Lives here rather than in factsGate because factsGate imports this
+ * file, so the dependency can only run one way, and both of the two
+ * prompt builders need it. ONE copy, for the reason ownerVoice.ts and
+ * contentKeys.ts are each one copy.
+ */
+export const FACTS_UNAVAILABLE_BRIEF = `VERIFIED FACTS: NONE AVAILABLE RIGHT NOW. This business's own records (products, prices, offers, shipping, order counts) could not be read for this request. That does NOT mean the business has none — it means nothing here can be checked.
+- Write about the product, the craft and the feeling in your own words. Those need no record.
+- State NO number, price, offer, discount, shipping term, count, rating, years-in-business or ranking — not even a plausible one. There is nothing to check it against.
+- Do not say or imply that anything has been verified, confirmed or checked.`;
+
+/**
+ * The facts block plus the rules — what a generation prompt appends.
+ *
+ * THE RULES ARE ALWAYS PRESENT. This function used to read:
+ *
+ *     return f ? `...${COPY_TRUTH_RULES}` : "";
+ *
+ * which is F-01 exactly: when a records read failed, the verified facts
+ * left the prompt (correct — there were none) and the TRUTH RULES left
+ * it too (wrong — they are a static string that depends on nothing). So
+ * the one moment the model knew least about the business was the moment
+ * it was told least about what it must not say.
+ *
+ * F-01 was fixed in factsGate's truthBlock on 8 October 2026 and this
+ * copy was missed, which is why 18 call sites kept the old behaviour
+ * for three days. Whether it ever fired in production is UNVERIFIED:
+ * nothing logs a null facts read.
+ */
+export function factsPrompt(
+  f: BusinessFacts | null | undefined,
+  audience: FactsAudience = "owner"
+): string {
+  if (f) return `\n\n${formatFactsForCopy(f, audience)}\n\n${COPY_TRUTH_RULES}\n`;
+  return `\n\n${FACTS_UNAVAILABLE_BRIEF}\n\n${COPY_TRUTH_RULES}\n`;
 }
 
 export function normalise(s: string): string {

@@ -145,11 +145,16 @@ export function customerFirstProblem(
  * sentence. This one says what the piece is, what it should have been,
  * and how to get the other thing on purpose.
  */
-export function customerFirstNote(problem: CustomerFirstProblem): string {
+export function customerFirstNote(problem: CustomerFirstProblem, cut = 0): string {
   if (problem.kind === "too_long") {
-    // Said only when tightening could NOT fix it - a single sentence
-    // over the cap, which cannot be cut without cutting inside it.
-    // Everything else is tightened rather than handed back.
+    // TWO DIFFERENT REASONS A PIECE IS STILL LONG, and saying the wrong
+    // one is worse than saying nothing. Before `cut` existed this note
+    // claimed "it is one long sentence" even when sentences HAD been
+    // cut and the price line was what kept it over - which reads as the
+    // tightening having failed rather than having made a choice.
+    if (cut > 0) {
+      return `That came out at ${problem.words} words against ${problem.cap} for this post. I cut ${cut === 1 ? "a sentence" : `${cut} sentences`} of description and it is still over, because I will not cut the line with the price or the link. Tell me which part to lose instead.`;
+    }
     return `That came out at ${problem.words} words and this post works best under ${problem.cap}. It is one long sentence, so I have not cut it — tell me how to shorten it and I will.`;
   }
   return `Most of that is your own story rather than the product and the reader. I've left it as it is, but a post like this usually lands better leading with what the customer wants. Ask me for "our story" when you want a piece that IS the story.`;
@@ -188,7 +193,45 @@ function proseKey(output: any): string | null {
   return best;
 }
 
-export type Tightened = { text: string; dropped: number };
+/**
+ * A sentence that must survive the cut: it carries the price or the link.
+ *
+ * WHY (11 October 2026, Ovaiz). Tightening kept the opening and the
+ * close and dropped from the middle, which is right for description and
+ * wrong for the two things the post exists to carry. A post trimmed to
+ * fit that no longer says what it costs or where to buy it has been
+ * made worse, not shorter.
+ *
+ * So these are kept EVEN WHEN KEEPING THEM LEAVES THE PIECE OVER THE
+ * CAP. A post 10 words long that still has the price beats one that
+ * fits and does not. When that happens the owner is told, rather than
+ * the piece quietly exceeding the limit.
+ *
+ * A bare three-digit number counts, because that is how prices are
+ * written in this copy - "Lavender candle, 550." A two-digit one does
+ * not, because "40 hour burn" and "24 ghante" are specifications.
+ */
+const CARRIES_THE_OFFER = [
+  // Price, with or without a symbol.
+  /(?:₹|\brs\.?\s?|\binr\s?)\s?\d/i,
+  /\b\d[\d,]{2,}\b/,
+  /\b\d{1,3}\s*%\s*off\b/i,
+  /\b(?:rupees|rupaye|priced|costs?)\b/i,
+  // The link, in every form it reaches a caption.
+  /https?:\/\//i,
+  /\bwww\./i,
+  /\b[a-z0-9][a-z0-9-]*\.(?:com|in|co\.in|net|org|shop|store|online|io|app)\b/i,
+  /\blink\s+in\s+(?:bio|the\s+bio)\b/i,
+  // "Order on the store page" is the next step even with no URL in it.
+  /\b(?:order|buy|shop|book)\s+(?:it\s+)?(?:on|at|from|here)\b/i,
+];
+
+export function carriesTheOffer(sentence: string): boolean {
+  const s = String(sentence ?? "");
+  return CARRIES_THE_OFFER.some((re) => re.test(s));
+}
+
+export type Tightened = { text: string; dropped: number; keptForFacts: number };
 
 /**
  * Cut whole sentences until the piece fits, keeping the opening and the
@@ -210,36 +253,53 @@ export type Tightened = { text: string; dropped: number };
  */
 export function tightenToCap(text: string, cap: number): Tightened {
   const original = String(text ?? "");
-  if (wordCount(original) <= cap) return { text: original, dropped: 0 };
+  if (wordCount(original) <= cap) return { text: original, dropped: 0, keptForFacts: 0 };
 
   const sentences = pieces(original).filter((s) => s.trim());
   // One sentence over the cap cannot be trimmed without cutting inside
   // it, so it is left alone and the note says so. Rare, and better than
   // a half sentence.
-  if (sentences.length < 3) return { text: original, dropped: 0 };
+  if (sentences.length < 3) return { text: original, dropped: 0, keptForFacts: 0 };
 
-  const first = sentences[0];
-  const last = sentences[sentences.length - 1];
-  const middle = sentences.slice(1, -1);
+  const lastIndex = sentences.length - 1;
+  const keep = new Set<number>([0, lastIndex]);
+  let words = wordCount(sentences[0]) + wordCount(sentences[lastIndex]);
 
-  const kept: string[] = [];
-  let words = wordCount(first) + wordCount(last);
-  for (const s of middle) {
-    const n = wordCount(s);
+  // PASS ONE: the price and the link, whatever it costs in words.
+  let keptForFacts = 0;
+  for (let i = 1; i < lastIndex; i += 1) {
+    if (!carriesTheOffer(sentences[i])) continue;
+    keep.add(i);
+    words += wordCount(sentences[i]);
+    keptForFacts += 1;
+  }
+  // PASS TWO: description, in the order it was written, while it fits.
+  for (let i = 1; i < lastIndex; i += 1) {
+    if (keep.has(i)) continue;
+    const n = wordCount(sentences[i]);
     if (words + n > cap) continue;
-    kept.push(s);
+    keep.add(i);
     words += n;
   }
-  const out = [first, ...kept, last].join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: out, dropped: middle.length - kept.length };
+
+  const out = sentences
+    .filter((_, i) => keep.has(i))
+    .join("")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { text: out, dropped: sentences.length - keep.size, keptForFacts };
 }
 
 /** Tighten the prose field in place, leaving every other key alone. */
-export function tightenOutput(output: any, contentType: string): { output: any; dropped: number } {
+export function tightenOutput(
+  output: any,
+  contentType: string
+): { output: any; dropped: number; keptForFacts: number } {
   const cap = WORD_CAPS[contentType];
   const key = proseKey(output);
-  if (!cap || !key) return { output, dropped: 0 };
+  if (!cap || !key) return { output, dropped: 0, keptForFacts: 0 };
   const r = tightenToCap(output[key], cap);
-  if (!r.dropped) return { output, dropped: 0 };
-  return { output: { ...output, [key]: r.text }, dropped: r.dropped };
+  if (!r.dropped) return { output, dropped: 0, keptForFacts: 0 };
+  return { output: { ...output, [key]: r.text }, dropped: r.dropped, keptForFacts: r.keptForFacts };
 }
