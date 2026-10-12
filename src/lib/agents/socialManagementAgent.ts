@@ -55,6 +55,42 @@ export type AutoReplyResult =
       escalate: string;
     };
 
+/**
+ * A reply that says yes or no and nothing else.
+ *
+ * Used for ONE decision: when the guard removed a claim, did it remove
+ * the answer? If what survives is a bare affirmation, the words left
+ * mean whatever the question asked — so a customer who asked "do you
+ * ship free?" reads "Yes!" as yes.
+ *
+ * Deliberately narrow. A survivor carrying any substance of its own —
+ * a product, a price, a fact — is not bare and is still sent, which is
+ * what tests/autoReplyGuard.test.ts:169 requires.
+ */
+function isBareAffirmation(reply: string): boolean {
+  // Strip punctuation and emoji so "Yes! 🕯️" is still bare.
+  const words = String(reply ?? "")
+    .toLowerCase()
+    .replace(/[\p{Extended_Pictographic}‍️]/gu, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return true;
+  // More than a few words is substance, whatever those words are.
+  if (words.length > 5) return false;
+  const FILLER = new Set([
+    // English yes/no and the usual intensifiers.
+    "yes", "yeah", "yep", "no", "nope", "sure", "absolutely", "definitely",
+    "certainly", "of", "course", "we", "do", "did", "does", "is", "are", "it",
+    "that", "this", "right", "correct", "indeed", "always", "still", "too", "also",
+    // Hinglish and Hindi.
+    "haan", "han", "ji", "bilkul", "zaroor", "hai", "hain", "tha", "thi",
+    "nahi", "na", "theek", "sahi", "ha",
+    "हाँ", "हां", "जी", "बिलकुल", "नहीं", "है",
+  ]);
+  return words.every((w) => FILLER.has(w));
+}
+
 export async function generateAutoReply(
   channel: "dm" | "comment",
   incomingText: string,
@@ -205,13 +241,47 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
     // customer with a question mark over it.
     const checked = guardGenerated({ reply: spoken }, facts, "publish");
     const safeReply = String((checked.output as any).reply ?? "").trim();
-    if (!safeReply) {
-      // The guard emptied it. An auto-reply with its only sentence
-      // removed is not a reply.
+
+    // A REPLY THAT IS ONLY AN AFFIRMATION AFTER A STRIP IS NOT SENT
+    // (2026-10-12).
+    //
+    // THE BUG, found by driving the path rather than reading it. A
+    // customer asked "do you ship free?" on a store whose shipping is
+    // 60 flat. The model answered:
+    //
+    //     "Yes! Free shipping on every order."
+    //
+    // The guard correctly removed the second sentence — and SENT THE
+    // FIRST. The customer received "Yes!" as the answer to "do you ship
+    // free?", which is the opposite of the truth, unattended, under the
+    // owner's name.
+    //
+    // MY FIRST FIX WAS TOO BLUNT and an existing test refused it. I
+    // withheld the reply whenever ANYTHING was removed, which broke the
+    // dated decision at tests/autoReplyGuard.test.ts:169: asked
+    // "available hai?", the model said "Haan, Lavender candle available
+    // hai. Free shipping bhi hai!", and the honest half — which answers the
+    // question that was actually asked — is sent. That test is right.
+    // The rule costs a mixed sentence, not the answer.
+    //
+    // So the narrow difference: when what SURVIVES is nothing but a
+    // yes-or-no, the removed part was the answer, and a bare "Yes!"
+    // means whatever the question asked. When the survivor carries
+    // substance of its own, it still goes.
+    //
+    // THIS IS A DENYLIST SHAPE and I know it. The real fix is the
+    // fact-bound verifier, where the question and the citation are
+    // explicit and "does the surviving text still answer this?" is
+    // answerable instead of guessed (PLAN-FACT-BOUND-GENERATION §6).
+    // Until then this is the narrowest thing that stops a false yes.
+    if (!safeReply || (checked.removed.length && isBareAffirmation(safeReply))) {
+      const why = checked.removed.length ? ` (${checked.removed[0]})` : "";
       return {
         reply: null,
         withheld: checked.removed,
-        escalate: `Hawlai had an answer but it claimed something your records don't back, so nothing was sent${checked.removed.length ? ` (${checked.removed[0]})` : ""}. Reply yourself.`,
+        escalate: !safeReply
+          ? `Hawlai had an answer but it claimed something your records don't back, so nothing was sent${why}. Reply yourself.`
+          : `Hawlai had an answer but the part your records don't back${why} WAS the answer — what was left is just "${safeReply}", which would read as a yes to the wrong thing. Nothing was sent. Reply yourself.`,
       };
     }
     if (checked.removed.length) {

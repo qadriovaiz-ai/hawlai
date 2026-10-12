@@ -46,6 +46,10 @@ export interface GeneratedMessage {
   claimsRemoved?: string[];
   /** False when the message read like a template, or was the wrong shape, and a human should look. */
   publishable?: boolean;
+  /** What the guard did and what it could not check, in the owner's words. */
+  note?: string;
+  /** True when the business's records could not be read, so nothing here was checked against them. */
+  factsUnavailable?: true;
 }
 
 import { type AiFailureNote } from "@/lib/ai/claude";
@@ -130,9 +134,25 @@ ${leadContext}
     // marked, so no one mistakes it for a message written for this lead.
     if (copy._aiFailure) return { ...fallback, aiFailure: copy._aiFailure };
     if (copy._fallback) return fallback;
+    // WHAT COULD NOT BE CHECKED TRAVELS TOO (2026-10-12).
+    //
+    // Found by driving this path with no readable records. A shipping
+    // promise is in NEEDS_THE_STORE, so with the facts unreadable it is
+    // KEPT and reported as unverifiable rather than deleted — which is
+    // the right call, because deleting a possibly-correct one is worse
+    // (claimCheck.ts:1150-1157).
+    //
+    // But this function returned only `message` and `claimsRemoved`, so
+    // the owner received a message saying "free shipping" with NOTHING
+    // saying it had not been checked. The design said "present them as
+    // unverified"; this path presented nothing. The same note the
+    // caption path carries is now carried here.
+    const note = [copy.output._claimsNote, copy.output._storyNote].filter(Boolean).join(" ") || undefined;
     return {
       subject: copy.output.subject,
       message: copy.output.message ?? fallback.message,
+      ...(note ? { note } : {}),
+      ...(copy.output._factsState === "FACTS_UNAVAILABLE" ? { factsUnavailable: true as const } : {}),
       // What the guard did travels with the message, so a caller that
       // sends it unattended can refuse. Nothing read these before
       // because nothing produced them.
