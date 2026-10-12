@@ -17,6 +17,19 @@
 /** Heading-ish fields, in the order the card prefers them. */
 const HEADING_KEYS = ["headline", "title", "subject", "heroHeadline", "hook"];
 
+/**
+ * A hashtag written inside the caption prose.
+ *
+ * Deliberately narrow: a "#" followed by letters, digits or an
+ * underscore. It must NOT match a "#" in ordinary text ("#1 priority",
+ * "flat #3"), so a digit-only tail is excluded — `#1` is a rank, not a
+ * tag. Devanagari is included, because a Hinglish caption tags in both
+ * scripts, and `\b` is not used anywhere near it: JS word boundaries
+ * are defined over [A-Za-z0-9_] and do not work on Devanagari, which
+ * has cost this codebase four separate incidents.
+ */
+const TAG_IN_TEXT = /#(?![0-9]+(?:\s|$))[\wऀ-ॿ]+/gu;
+
 // The allowlist lives in src/lib/content/contentKeys.ts, because the
 // unattended autopilot queue and two client components make the same
 // decision and had each made it differently. Re-exported so existing
@@ -58,12 +71,42 @@ export function composePost(raw: unknown): ComposedPost {
     if (typeof value === "string" && value.trim()) parts.push(value.trim());
   }
 
-  const hashtags = Array.isArray(row.hashtags)
-    ? row.hashtags.filter((h: unknown) => typeof h === "string" && h.trim()).map((h: string) => (h.trim().startsWith("#") ? h.trim() : `#${h.trim()}`))
-    : [];
+  // TWO SOURCES, ONE LIST (2026-10-11).
+  //
+  // The live post went out with its hashtags twice. Nothing was broken
+  // and nobody edited anything: the prompt asks for "2-3 relevant
+  // hashtags at the end" of the caption text, and the shape ALSO has a
+  // `hashtags` field, so a model that does both produces both — once
+  // inside the prose, once appended here.
+  //
+  // So the tags already in the body are found and counted as the same
+  // list, case-insensitively, and the block appended below carries only
+  // what the body does not already say. Order is the model's.
+  const body = parts.join("\n\n");
+  const inBody = new Set(Array.from(body.matchAll(TAG_IN_TEXT)).map((m) => m[0].toLowerCase()));
+
+  const seen = new Set<string>(inBody);
+  const hashtags: string[] = [];
+  for (const raw of Array.isArray(row.hashtags) ? row.hashtags : []) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    const tag = raw.trim().startsWith("#") ? raw.trim() : `#${raw.trim()}`;
+    const key = tag.toLowerCase();
+    // A duplicate WITHIN the field is dropped too: the same model that
+    // repeats a tag across the two sources repeats it inside one.
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hashtags.push(tag);
+  }
   if (hashtags.length) parts.push(hashtags.join(" "));
 
-  return { text: parts.join("\n\n"), hashtags, heading };
+  // What the card shows IS what gets published, so the returned list is
+  // every tag the reader will see — the ones already in the body plus
+  // the ones appended — not just the appended block.
+  const shown = [
+    ...Array.from(body.matchAll(TAG_IN_TEXT)).map((m) => m[0]),
+    ...hashtags,
+  ];
+  return { text: parts.join("\n\n"), hashtags: shown, heading };
 }
 
 /**

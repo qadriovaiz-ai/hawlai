@@ -87,7 +87,7 @@ export async function generateSocialCaption(
       maxTokens: 300,
       brief: {
         label: "Facebook post caption",
-        instructions: `Write a short, engaging Facebook post caption for an organic (non-ad) post. Keep it under 280 characters, conversational, 1-2 emojis max, can include 2-3 relevant hashtags at the end.`,
+        instructions: `Write a short, engaging Facebook post caption for an organic (non-ad) post. Keep it under 280 characters, conversational, 1-2 emojis max. 2-3 relevant hashtags, in the "hashtags" field ONLY - never inside the caption text, or they publish twice.`,
         brandContext,
         shapeHint: `Return JSON only: {"caption":"the caption text"}`,
       },
