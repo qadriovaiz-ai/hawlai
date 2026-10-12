@@ -769,7 +769,28 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
   // alone. A free-above-₹X store may say it only alongside its real
   // threshold ("free shipping above ₹999").
   const freeShipping = text.match(FREE_SHIPPING);
-  if (freeShipping && !said(freeShipping[0])) {
+  // NO `!said(...)` HERE, and that is the whole fix (2026-10-11).
+  //
+  // It used to read `if (freeShipping && !said(freeShipping[0]))`, so
+  // any occurrence of "free shipping" in knownText — a line on the
+  // About page, a product description, an owner-entered fact — skipped
+  // this entire block, including the flat-rate refusal below.
+  //
+  // A FLAT RATE store whose own text said "free shipping" could then
+  // advertise free shipping on every surface while checkout charged at
+  // the till. Copy and checkout disagreeing, with the customer finding
+  // out last.
+  //
+  // Shipping truth is decided by the store's shipping settings alone,
+  // through the same function checkout uses, and no text may override
+  // it. Same reasoning the `always` helper above applies to
+  // comparisons: nothing a business writes about itself can establish
+  // what a third party does — here, what its own checkout charges.
+  //
+  // This does NOT make an honest store quieter: the `charged` test
+  // below returns false for mode "free", which is why candle_by_qaaf's
+  // "Always Free" setting correctly licensed its welcome email.
+  if (freeShipping) {
     const s = f.shipping;
     // Shipping is charged on physical products only; a business that
     // sells only services has nothing to ship at all.
