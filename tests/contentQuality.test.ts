@@ -146,15 +146,48 @@ describe("B — the owner's story, in full, in their own words", () => {
     { category: "Policies", title: "Returns", content: "y".repeat(400) },
   ];
 
-  it("story answers print in full; other knowledge notes stay capped", () => {
-    const block = formatFactsForCopy(facts({ ownerFacts: story }));
-    expect(block).toContain("The owner's own story");
+  // THE RULE CHANGED ON 2026-10-11, by founder decision: the owner's
+  // STORY does not go into customer copy, and the facts recorded
+  // alongside it do. So this test's old premise - "story answers print
+  // in full" - is obsolete by decision, not by accident.
+  //
+  // What it was really protecting is kept and now asserted on a FACT
+  // row: a recorded row is printed UNCAPPED, where other knowledge
+  // notes are cut to 200 characters. That was the point of the test and
+  // it still holds. The new rule is asserted beside it, so the pair is
+  // stronger than the original.
+  const recordedFact = [
+    { category: STORY_CATEGORY, title: "How it's made, step by step", content: "Double-boiler melt, then the fragrance at the right temperature. " + "x".repeat(400) },
+    { category: "Policies", title: "Returns", content: "y".repeat(400) },
+  ];
+
+  it("a recorded FACT row prints in full; other knowledge notes stay capped", () => {
+    const block = formatFactsForCopy(facts({ ownerFacts: recordedFact }));
     expect(block).toContain("x".repeat(400));
     expect(block).not.toContain("y".repeat(220));
     expect(block).toContain("What the owner says about the business:");
+    // Introduced as fact, and told not to retell it as a story.
+    expect(block).toMatch(/state these as facts/i);
+    expect(block).toMatch(/do NOT retell them as a story/i);
   });
 
-  it("nothing about a story appears for a business that hasn't written one", () => {
+  it("AN ORIGIN ROW DOES NOT PRINT AT ALL — the founder's rule", () => {
+    // "How it started" is classified STORY. Its text must not reach any
+    // generation prompt, however long or specific it is.
+    const block = formatFactsForCopy(facts({ ownerFacts: story }));
+    expect(block).not.toContain("my mother's shop");
+    expect(block).not.toContain("x".repeat(400));
+  });
+
+  it("AND THE ABSENCE IS NAMED, so the model does not invent its own", () => {
+    // Same reasoning as withheldNote: a model that cannot see a story
+    // will sometimes write one to fill the gap.
+    const block = formatFactsForCopy(facts({ ownerFacts: story }));
+    expect(block).toMatch(/deliberately NOT shown here/i);
+  });
+
+  it("the old story heading is gone from the prompt entirely", () => {
+    expect(formatFactsForCopy(facts({ ownerFacts: recordedFact }))).not.toContain("The owner's own story");
     expect(formatFactsForCopy(facts())).not.toContain("The owner's own story");
   });
 

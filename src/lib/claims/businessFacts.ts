@@ -27,6 +27,9 @@ import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
 import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalogItem";
 import { splitStories, withheldNote } from "./personalStories";
+// Which recorded rows a prompt may use: the founder's rule that story
+// text stays out of customer copy, applied to the INPUT.
+import { rowsForPrompt } from "@/lib/content/storyRows";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 import { TEXT_PROPS, machineWroteProp } from "@/lib/pages/provenance";
 import { countsAsLead } from "@/lib/analytics/orderLinkage";
@@ -720,9 +723,37 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
   // hers to publish, and an AEO recommendation had already pointed at it
   // as "genuine content" (src/lib/claims/personalStories.ts).
   const { usable: usableStory, withheld: withheldStory } = splitStories(story);
-  if (usableStory.length) {
-    lines.push("The owner's own story — use these specifics; they are what makes this business different:");
-    for (const k of usableStory) lines.push(`- ${k.title}: ${k.content}`);
+  // THE STORY COMES OUT; THE FACTS STAY (2026-10-11, founder's rule).
+  //
+  // This block used to read "The owner's own story — use these
+  // specifics; they are what makes this business different", and the
+  // model did as it was told: a 224-word founder story, then a
+  // founder-story line in a welcome email.
+  //
+  // It is NOT deleted, because for the live business all 14 recorded
+  // rows are filed under this category and nine of them hold the
+  // product facts — the double-boiler step, the fragrance timing, the
+  // 24-hour set, "paraffin-free, soy wax only". `otherFacts` below
+  // filters this category out, so this is their only way in.
+  //
+  // So the STORY rows are held back by title, the owner's reason-and-
+  // feeling sentences are dropped from the rows that stay, and what is
+  // left is introduced as fact rather than as narrative
+  // (src/lib/content/storyRows.ts).
+  const recorded = rowsForPrompt(usableStory);
+  if (recorded.rows.length) {
+    lines.push(
+      "What the owner has recorded about the product and how it is made — state these as facts where they fit. Do NOT retell them as a story, and do not write about the owner:"
+    );
+    for (const k of recorded.rows) lines.push(`- ${k.title}: ${k.content}`);
+  }
+  // Said rather than silently dropped, the same reasoning withheldNote
+  // applies below: a model that cannot see something will sometimes
+  // invent its own version to fill the gap.
+  if (recorded.storyRowsHeld || recorded.motiveSentencesHeld) {
+    lines.push(
+      `The owner has also recorded their own story and reasons for starting. That is deliberately NOT shown here and must not appear in this copy — write about the product and the reader.`
+    );
   }
   // Named rather than silently dropped: a model that cannot see a story
   // will sometimes invent one to fill the same gap, and an invented
