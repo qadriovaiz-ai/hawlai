@@ -1,0 +1,54 @@
+
+EVAL — BASELINE OF THE CURRENT SYSTEM
+================================================================
+cases                 30  (3 tenants: products, services, food)
+model                 claude-sonnet-4-6
+assumed per case      3 calls, 2600 in + 420 out tokens each (pessimistic)
+
+ESTIMATE FOR THIS RUN  Rs 110.40
+already spent          Rs 0.00  (0 previous run(s))
+budget                 Rs 500.00
+remaining              Rs 500.00
+================================================================
+14 sentence(s), 0 removed
+8 sentence(s), 1 removed
+13 sentence(s), 1 removed
+5 sentence(s), 1 removed
+18 sentence(s), 0 removed
+10 sentence(s), 0 removed
+3 sentence(s), 0 removed
+16 sentence(s), 0 removed
+5 sentence(s), 0 removed
+12 sentence(s), 1 removed
+19 sentence(s), 0 removed
+9 sentence(s), 0 removed
+11 sentence(s), 0 removed
+9 sentence(s), 0 removed
+18 sentence(s), 0 removed
+4 sentence(s), 0 removed
+14 sentence(s), 0 removed
+5 sentence(s), 0 removed
+13 sentence(s), 0 removed
+14 sentence(s), 0 removed
+17 sentence(s), 0 removed
+11 sentence(s), 0 removed
+9 sentence(s), 0 removed
+16 sentence(s), 0 removed
+5 sentence(s), 0 removed
+12 sentence(s), 0 removed
+17 sentence(s), 0 removed
+4 sentence(s), 0 removed
+10 sentence(s), 1 removed
+8 sentence(s), 0 removed
+
+================================================================
+sentences produced     329  (105 factual, 224 not)
+cases that failed      0
+calls made             43
+tokens                 62277 in, 10775 out
+ACTUAL COST THIS RUN   Rs 27.86   (estimated Rs 110.40)
+RUNNING TOTAL          Rs 27.86 of Rs 500.00
+
+grading sheets         scripts\eval\results\baseline-2026-10-13T05-11-56-100Z-grade-ovaiz.md
+                       scripts\eval\results\baseline-2026-10-13T05-11-56-100Z-grade-reviewer.md
+================================================================

@@ -1,0 +1,254 @@
+// THE EVAL HARNESS.
+//
+// PLAN-FACT-BOUND-GENERATION §8. Its job is to make one number
+// answerable: is the new verifier better than what we have? That means
+// the CURRENT system has to be measured first, on the same cases, by
+// the same graders — a baseline, before anything is built to beat.
+//
+// WHAT THIS FILE DOES AND DOES NOT DO.
+//
+//   does      drive the real surfaces, tally the real cost, split the
+//             output into sentences, and write a sheet a human grades
+//   does not  decide whether a sentence is true. That is the graders'
+//             job and it cannot be automated — if it could, the
+//             verifier would already exist.
+//
+// MONEY. Every paid call is counted from the API's own usage numbers
+// through costOfClaudeResponseInr, the same function the product bills
+// with. The estimate is printed BEFORE a run; the actual and the
+// running total after. A run whose estimate would cross the ceiling
+// does not start.
+
+import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
+import { CLAUDE_MODELS } from "@/lib/models";
+import { pieces } from "@/lib/claims/claimCheck";
+import { extractFromKnowledge } from "@/lib/facts/extract";
+import { classifySentence } from "@/lib/facts/sentenceKind";
+import type { EvalCase } from "./cases";
+
+/** The ceiling the founder set, in rupees, across all paid runs. */
+export const BUDGET_INR = 500;
+
+/**
+ * What one case is expected to cost, before it runs.
+ *
+ * Deliberately PESSIMISTIC: three calls, a fat prompt and a long
+ * answer. An estimate that comes in under the actual is worse than
+ * useless — it is the number a budget was approved against.
+ */
+export const ESTIMATE = {
+  callsPerCase: 3,
+  inputTokensPerCall: 2600,
+  outputTokensPerCall: 420,
+};
+
+export function estimateInr(caseCount: number, model: string = CLAUDE_MODELS.standard): number {
+  const perCall = costOfClaudeResponseInr(
+    { input_tokens: ESTIMATE.inputTokensPerCall, output_tokens: ESTIMATE.outputTokensPerCall },
+    model
+  );
+  return Math.round(perCall * ESTIMATE.callsPerCase * caseCount * 100) / 100;
+}
+
+/** A running tally of what a run actually spent, read off the API's own usage. */
+export class Spend {
+  calls = 0;
+  inputTokens = 0;
+  outputTokens = 0;
+  inr = 0;
+
+  record(usage: any, model: string): void {
+    this.calls += 1;
+    this.inputTokens += Number(usage?.input_tokens ?? 0);
+    this.outputTokens += Number(usage?.output_tokens ?? 0);
+    this.inr += costOfClaudeResponseInr(usage, model);
+  }
+
+  get rounded(): number {
+    return Math.round(this.inr * 100) / 100;
+  }
+}
+
+/**
+ * Wraps global fetch so every Anthropic response is counted, and the
+ * call still goes through untouched.
+ *
+ * A PASS-THROUGH, not an interceptor: it must never change what the
+ * product sends or receives, or the baseline measures the harness
+ * instead of the product. The response body is read from a clone so
+ * the caller's own `json()` still works.
+ */
+export function meterFetch(spend: Spend, model: string = CLAUDE_MODELS.standard): () => void {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init?: any) => {
+    const res = await original(url, init);
+    try {
+      if (String(url).includes("anthropic.com")) {
+        const copy = res.clone();
+        const body: any = await copy.json();
+        if (body?.usage) spend.record(body.usage, body?.model ?? model);
+      }
+    } catch {
+      // A metering failure must never fail the call being metered. The
+      // run reports fewer calls than it made, which the call count in
+      // the summary makes visible.
+    }
+    return res;
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
+export type GradedSentence = {
+  caseId: string;
+  fixture: string;
+  trade: string;
+  scenario: string;
+  surface: string;
+  field: string;
+  sentence: string;
+  /** What the classifier thinks: only `factual` needs evidence. */
+  kind: string;
+  /** The records that exist for this tenant, as the grader's reference. */
+  availableFacts: string[];
+  /** What the guard already removed, so a grader is not asked about it. */
+  removedByGuard: string[];
+  watch: string;
+};
+
+/**
+ * Split one case's output into the rows a grader scores.
+ *
+ * ONE ROW PER SENTENCE, with the tenant's records beside it — the
+ * founder's instruction: "har sentence record ke saath dikhao". A
+ * grader who has to go looking for the facts will guess instead.
+ */
+export function toGradedRows(
+  c: EvalCase,
+  output: Record<string, unknown>,
+  removedByGuard: string[]
+): GradedSentence[] {
+  // DEDUPED, AND READABLE, because a grader reads this list for every
+  // case and noise in it costs accuracy. Two rows stating the same fact
+  // in two languages produce two records with one key — correct in the
+  // data, repetition on the page — and a `statement.*` key is an
+  // internal handle, not something to show a person.
+  const facts = c.fixture.facts
+    ? Array.from(
+        new Set(
+          extractFromKnowledge(c.fixture.key, c.fixture.rows).records.map((r) =>
+            r.key.startsWith("statement.")
+              ? `the owner wrote: "${String(r.value)}"`
+              : r.unit
+                ? `${r.key} = ${r.value} ${r.unit}`
+                : `${r.key} = ${r.value}`
+          )
+        )
+      )
+    : [];
+  // The catalogue is evidence too, and the grader needs it in front of
+  // them to judge a price.
+  const catalogue = (c.fixture.facts?.products ?? []).map(
+    (p: any) => `catalogue: ${p.name} = ${p.price}${p.description ? ` (${p.description})` : ""}`
+  );
+  const shipping = c.fixture.facts?.shipping
+    ? [`shipping: ${c.fixture.facts.shipping.mode}${c.fixture.facts.shipping.rate != null ? ` ${c.fixture.facts.shipping.rate}` : ""}`]
+    : c.fixture.facts
+      ? ["shipping: nothing is shipped"]
+      : [];
+  const available = [...catalogue, ...shipping, ...facts];
+
+  const rows: GradedSentence[] = [];
+  for (const [field, value] of Object.entries(output ?? {})) {
+    if (field.startsWith("_")) continue;
+    for (const text of flatten(value)) {
+      for (const s of pieces(text).map((x) => x.trim()).filter(Boolean)) {
+        rows.push({
+          caseId: c.id,
+          fixture: c.fixture.label,
+          trade: c.fixture.trade,
+          scenario: c.scenario,
+          surface: c.surface,
+          field,
+          sentence: s,
+          kind: classifySentence(s),
+          availableFacts: available,
+          removedByGuard,
+          watch: c.watch,
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+/** Every string inside a generated output, however it is nested. */
+function flatten(value: unknown): string[] {
+  if (typeof value === "string") return value.trim() ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(flatten);
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([k]) => !k.startsWith("_"))
+      .flatMap(([, v]) => flatten(v));
+  }
+  return [];
+}
+
+/**
+ * The sheet two graders fill in, independently.
+ *
+ * EVERY ROW IS SCOREABLE, and that is a correction to this file. The
+ * first version pre-filled a dash against every row the classifier did
+ * not call `factual` — 224 of 329 in the baseline run — on the word of a
+ * classifier that reads romanised Hindi as sentiment. Both of the real
+ * failures that run produced were inside the skipped set. A grader can
+ * still answer "not a claim"; what they can no longer have is that
+ * answer filled in for them by a guess.
+ *
+ * TWO FILES, IDENTICAL, so neither scorer sees the other's answer —
+ * the founder asked for a second blind scorer, and a shared file is not
+ * blind. Agreement between them is the number that says whether the
+ * labelling itself is reliable; without it, a single grader's bad day
+ * looks like a model regression.
+ */
+export function gradingSheet(rows: GradedSentence[], grader: string): string {
+  const out: string[] = [
+    `# Grading sheet — ${grader}`,
+    "",
+    "Score **every** sentence.",
+    "",
+    "- **T** — true, and the records support it",
+    "- **F** — false, or the records do not support it",
+    "- **U** — cannot tell from the records (this is a real answer, not a cop-out)",
+    "- **—** — not a claim at all: a feeling, a greeting, a question, a call to action",
+    "",
+    "**Do not trust the `kind` column.** It is this codebase's own classifier",
+    "guessing, and it is English-biased. In the baseline run of 13 October 2026",
+    "it called \"yeh slower aur cleaner jalte hain regular paraffin wax ke",
+    "mukable\" a *feeling*. That is a comparison with a competitor's product —",
+    "the worst sentence in the whole run — and the first version of this sheet",
+    "told you to leave it blank. Read the sentence, not the label.",
+    "",
+    "Do not look at the other grader's sheet until yours is finished.",
+    "",
+  ];
+  let lastCase = "";
+  for (const r of rows) {
+    if (r.caseId !== lastCase) {
+      lastCase = r.caseId;
+      out.push("", `---`, "", `## ${r.caseId} — ${r.fixture} (${r.trade}) · ${r.surface} · ${r.scenario}`, "");
+      out.push(`**Watch for:** ${r.watch}`, "");
+      out.push("**The records this business actually has:**", "");
+      for (const f of r.availableFacts) out.push(`- ${f}`);
+      if (!r.availableFacts.length) out.push("- _none — the records could not be read_");
+      if (r.removedByGuard.length) {
+        out.push("", "**Already removed by the guard (not yours to score):**", "");
+        for (const x of r.removedByGuard) out.push(`- ${x}`);
+      }
+      out.push("", "| verdict | kind | field | sentence |", "|---|---|---|---|");
+    }
+    out.push(`|   | ${r.kind} | ${r.field} | ${r.sentence.replace(/\|/g, "\\|")} |`);
+  }
+  return out.join("\n");
+}
