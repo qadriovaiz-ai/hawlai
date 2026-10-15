@@ -108,6 +108,22 @@ const MATERIAL_SHAPES: { re: RegExp; value: boolean; group: number }[] = [
   { re: /\b(?:no|without|free\s+from)\s+(?:added\s+|any\s+)?([a-z][a-z-]{2,20})\b/i, value: false, group: 1 },
   // "X-free", "X free"
   { re: /\b([a-z][a-z-]{2,20})[-\s]free\b/i, value: false, group: 1 },
+  // THE MATERIAL IS NOT ALWAYS THE WORD NEXT TO "NAHI".
+  //
+  // Found by the reviewer in the baseline grading, 13 October 2026. The
+  // salon's recorded row says "Ammonia wale products use nahi karte",
+  // and the shape below captured "use" — so the extractor minted
+  // `material.use = false`, a fact about a substance called "use", and
+  // the salon's one real composition fact was lost. The generated
+  // "ammonia-free" line then read as unverifiable and was graded F,
+  // although the owner HAD written it down.
+  //
+  // In Hinglish the material routinely sits further left, attached to
+  // the thing it qualifies: "X wale products use nahi karte", "X wali
+  // cheez istemaal nahi karte". So this shape is tried first and reads
+  // the qualifier; the adjacent-word shape below keeps the cases it
+  // already handled ("paraffin wax mix nahi", "Ammonia nahi").
+  { re: /\b([a-z][a-z-]{2,20})\s+wal[aei]\b[^.!?।]{0,40}?\bnahi\b/i, value: false, group: 1 },
   // Hinglish negation: "paraffin nahi", "paraffin kabhi nahi"
   { re: /\b([a-z][a-z-]{2,20})(?:\s+wax)?\s+(?:kabhi\s+)?(?:nahi|mix\s+nahi)\b/i, value: false, group: 1 },
   // Devanagari negation. No \b: it does not work on this script.
@@ -135,6 +151,20 @@ const NOT_A_MATERIAL = new Set([
   "cost", "charge", "charges", "fee", "fees", "price", "shipping", "delivery", "return", "returns",
   "problem", "problems", "issue", "issues", "doubt", "tension", "worry", "compromise",
   "nahi", "kabhi", "bhi", "koi", "kuch", "sab", "mera", "meri", "hum", "main",
+  // VERBS — the 13 October 2026 bug described above. "use nahi karte"
+  // put `material.use = false` on the record. A verb beside a negation
+  // is the commonest shape in Hinglish, so they are listed here as well
+  // as handled by the new pattern: a future shape that happens to
+  // capture a verb then produces NO reading rather than a wrong one,
+  // which is the direction this list should fail in.
+  "use", "uses", "used", "using", "istemaal", "istimaal", "lagana", "milana", "banana",
+  "karte", "karti", "karta", "karna", "karo", "kiya", "karenge", "karti-hoon",
+  "lagate", "lagati", "milate", "milati", "dete", "deti", "rakhte", "rakhti",
+  "banate", "banati", "hota", "hoti", "hote", "hai", "hain", "tha", "thi",
+  // And the generic nouns a qualifier attaches to, so "X wale products"
+  // cannot make "products" the material.
+  "products", "product", "cheez", "cheezein", "saman", "stuff", "items", "item", "things", "thing",
+  "chemical", "chemicals",
 ]);
 
 function materialKey(word: string): string | null {

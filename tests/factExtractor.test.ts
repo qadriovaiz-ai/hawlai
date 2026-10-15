@@ -511,3 +511,57 @@ describe("9. the misconception in a 'what people get wrong' row", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------
+// 10. THE NEGATED MATERIAL IS THE MATERIAL, NOT THE VERB NEXT TO "NAHI"
+//
+// Found by the reviewer in the baseline grading of 13 October 2026. The
+// salon's recorded row says "Ammonia wale products use nahi karte", and
+// the extractor minted `material.use = false`: the Hinglish negation
+// shape captured the word immediately before "nahi", which here is a
+// verb. So the salon's one real composition fact was recorded as
+// nonsense, and "ammonia-free" in the generated email came out
+// unverifiable — reviewer-graded F — when the owner had in fact written
+// it down.
+//
+// In Hinglish the material is routinely separated from the negation by
+// the thing it qualifies: "X wale products use nahi karte", "X wali
+// cheez istemaal nahi karte". The word beside "nahi" is the verb.
+// ---------------------------------------------------------------------
+describe("10. a negated material, separated from its negation", () => {
+  const keys = (s: string) => readingsFor(s).map((r) => `${r.key}=${r.value}`);
+
+  it("'Ammonia wale products use nahi karte' MEANS material.ammonia = false", () => {
+    const r = readingsFor("Ammonia wale products use nahi karte.");
+    expect(r.find((x) => x.key === "material.ammonia")?.value).toBe(false);
+  });
+
+  it("AND IT DOES NOT MINT A VERB AS A MATERIAL", () => {
+    // The actual bug. A reading of material.use is worse than no
+    // reading: it is a fact about a substance called "use".
+    expect(keys("Ammonia wale products use nahi karte.")).not.toContain("material.use=false");
+    expect(keys("Sulphate wale shampoo istemaal nahi karte.")).not.toContain("material.istemaal=false");
+    expect(keys("Sulphate wale shampoo istemaal nahi karte.")).toContain("material.sulphate=false");
+  });
+
+  it("the shapes that already worked still work — this is not a swap", () => {
+    expect(keys("Kabhi sasta paraffin wax mix nahi karti.")).toContain("material.paraffin=false");
+    expect(keys("Ammonia nahi use karte.")).toContain("material.ammonia=false");
+    expect(keys("Paraffin-free, soy wax only.")).toContain("material.paraffin=false");
+    expect(keys("Paraffin-free, soy wax only.")).toContain("material.soy=true");
+  });
+
+  it("'wale' alone is not a negation — an affirmative keeps its meaning", () => {
+    // "We use ammonia-based products" is not a claim that they do not.
+    const r = keys("Ammonia wale products use karte hain.");
+    expect(r).not.toContain("material.ammonia=false");
+  });
+
+  it("A HINGLISH VERB IS NEVER A MATERIAL, whatever shape it arrives in", () => {
+    // Asserted on the stopword list itself, so a new shape that happens
+    // to capture a verb cannot reintroduce the bug quietly.
+    for (const verb of ["use", "istemaal", "karte", "karti", "karta", "lagate", "milate", "dete", "rakhte", "banate"]) {
+      expect(keys(`${verb} nahi karte.`), verb).toEqual([]);
+    }
+  });
+});
