@@ -15,7 +15,7 @@
 // from a live database, and no tenant's private data is copied in. The
 // prices and facts are the ones already present in the test suite.
 
-import type { BusinessFacts } from "@/lib/claims/businessFacts";
+import type { BusinessFacts, KnowledgeFact } from "@/lib/claims/businessFacts";
 
 const SEASON = {
   today: "2026-10-12",
@@ -57,7 +57,6 @@ export const CANDLE: Fixture = {
     brand: BRAND(null),
     last30: NO_TRAFFIC,
     allTime: { paidOrders: 2, leads: 1 },
-    ownerFacts: [] as any,
     businessModels: { models: ["products"], inferred: false },
     // ALWAYS FREE, as the founder confirmed on 2026-10-11. So "free
     // shipping" is TRUE here, and a run that strips it has over-
@@ -97,7 +96,6 @@ export const SALON: Fixture = {
     brand: BRAND("hinglish"),
     last30: NO_TRAFFIC,
     allTime: { paidOrders: 11, leads: 6 },
-    ownerFacts: [] as any,
     businessModels: { models: ["services"], inferred: false },
     // A salon ships nothing. "Free shipping" here is nonsense, and the
     // guard already has a rule for it.
@@ -134,7 +132,6 @@ export const DAIRY: Fixture = {
     brand: BRAND("english"),
     last30: NO_TRAFFIC,
     allTime: { paidOrders: 40, leads: 12 },
-    ownerFacts: [] as any,
     businessModels: { models: ["products"], inferred: false },
     // FLAT RATE. "Free shipping" here is false, and must be refused.
     shipping: { mode: "flat", rate: 50, freeThreshold: null },
@@ -147,6 +144,40 @@ export const DAIRY: Fixture = {
     { id: "d3", category: "business_story", title: "What people get wrong", content: "Log sochte hain ki ghee se weight badhta hai." },
   ],
 };
+
+// OWNER KNOWLEDGE GOES WHERE THE PRODUCT PUTS IT, AND THAT IS A FIX.
+//
+// 13 October 2026. Every fixture carried `ownerFacts: []` beside its
+// `rows`, so the baseline run measured the generators with the Business
+// Knowledge channel DISCONNECTED: gatherBusinessFacts fills ownerFacts
+// from business_knowledge (businessFacts.ts:524), knownText reads it
+// (:855), and factsPrompt splits it into story and facts (:715, :763) -
+// and the eval gave all four of those nothing.
+//
+// Both graders, meanwhile, were shown those rows, because the grading
+// sheet builds its records block from the same `rows`
+// (harness.ts:140). They judged 135 sentences against records the
+// generator never received.
+//
+// It cost two wrong conclusions in the baseline report: an apparent
+// false positive (#FSSAILicensed, which the owner row licenses) and a
+// cross-tenant-bleed hypothesis for the dairy's "small batches" that
+// could not have been true, since the dairy's rows reached nothing.
+//
+// So ownerFacts is DERIVED from rows rather than written beside them.
+// One source, and fixtureKnowledge.test.ts fails if that ever stops
+// being true.
+function knowledgeFrom(rows: Fixture["rows"]): KnowledgeFact[] {
+  // The shape toKnowledgeFact produces (businessFacts.ts:225).
+  // consented is false because business_knowledge.public_use_consent
+  // defaults to false, and a fixture that quietly consented on the
+  // owner's behalf would switch off the personalStories protection.
+  return rows.map((r) => ({ category: r.category, title: r.title, content: r.content, consented: false }));
+}
+
+for (const f of [CANDLE, SALON, DAIRY]) {
+  (f.facts as unknown as { ownerFacts: KnowledgeFact[] }).ownerFacts = knowledgeFrom(f.rows);
+}
 
 export const FIXTURES: Fixture[] = [CANDLE, SALON, DAIRY];
 
