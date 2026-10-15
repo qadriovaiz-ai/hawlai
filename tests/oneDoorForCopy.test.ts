@@ -145,6 +145,16 @@ const MIGRATING: Record<string, string> = {
  * a future unguarded generator would hide behind.
  */
 const NOT_COPY: Record<string, string> = {
+  // C2 step 4a, added 2026-10-16. THE OPPOSITE OF A GENERATOR: it is
+  // given finished copy and reports the claims that copy makes, in
+  // English canonical form, so the entailment step can check them
+  // against records. It writes nothing a customer ever reads, and it is
+  // deliberately given NO records, so there is nothing for the copy
+  // guard to check it against. Putting it through the door would run
+  // the claim layer over a LIST OF CLAIMS and strip them — the guard
+  // would delete the verifier's findings.
+  "src/lib/facts/extractClaims.ts":
+    "reads finished copy and lists the claims it makes, for the verifier; writes no customer-facing words and is given no records",
   "src/lib/agents/businessIntelligenceAgent.ts": "owner-facing analysis of the business's own numbers",
   "src/lib/agents/callScoringAgent.ts": "scores a recorded call for the owner; writes no copy",
   "src/lib/agents/competitorIntelAgent.ts": "research notes about other businesses, for the owner",
