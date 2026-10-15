@@ -72,6 +72,21 @@ const PRICE = new RegExp(
   "gi"
 );
 
+// "FROM ₹X" — a claim about the cheapest thing, in both languages.
+// Not global: one match is enough, and the first is the one a reader
+// takes as the floor.
+const FROM_PRICE = new RegExp(
+  `(?:₹|\\brs\\.?|\\binr)\\s?(\\d[\\d,]*(?:\\.\\d{1,2})?)(?![\\d,])\\s*(?:se\\s+shuru|se\\s+start|onwards|se\\s+upar\\s+nahi|\\+)` +
+    `|\\b(?:from|starting\\s+(?:at|from)|starts?\\s+(?:at|from)|price[sd]?\\s+start\\s+(?:at|from))\\s*(?:₹|\\brs\\.?|\\binr)\\s?(\\d[\\d,]*(?:\\.\\d{1,2})?)(?![\\d,])`,
+  "i"
+);
+
+// "every one of them", in the words this product's owners actually use.
+// `sab`, not `sabse` — "sabse accha" is a superlative, which belongs to
+// a different rule entirely.
+const DISTRIBUTIVE =
+  /\b(?:both|all|every|each|any\s+of\s+(?:them|these)|dono|donon|sabhi|saari|sare|saare|sab|har\s+(?:ek|candle|product|item)?)\b/i;
+
 // Product-attribute claims a business must be able to substantiate.
 //
 // The second group — materials, ingredients and how a thing was made —
@@ -823,6 +838,38 @@ function findProblems(text: string, f: BusinessFacts): Problem[] {
       kind: "price",
       reason: `"${m[0].trim()}" — no product, service, offer or shipping amount on record is ₹${v.toLocaleString("en-IN")}, and the site and Business Knowledge don't mention it`,
     });
+  }
+  // A DISTRIBUTIVE "FROM ₹X" IS A CLAIM ABOUT EVERY PRODUCT.
+  //
+  // Reviewer-graded F in the baseline of 13 October 2026, candle-03:
+  // "Dono ₹850 se shuru hoti hain" — the Lavender is ₹999 and the Rose
+  // is ₹850, so it is false of the Lavender. It passed every check
+  // above, and the reason matters: the rule just above asks whether the
+  // amount is real ANYWHERE on record, and ₹850 is real — of the other
+  // product. A price can be real and still be the wrong price.
+  //
+  // "Both / all / every / dono / sabhi … from ₹X" asserts X of EACH
+  // product, so it is true only when they all cost X. That is
+  // arithmetic against the catalogue, so `said` does NOT license it:
+  // nothing a business writes about itself can make two different
+  // prices one price.
+  //
+  // NOT flagged: a non-distributive "from ₹999" when something cheaper
+  // exists. That is a true statement about one product and the sentence
+  // may well name it — and the false-positive rate is the number this
+  // work exists to protect.
+  const fromPrice = text.match(FROM_PRICE);
+  if (fromPrice && DISTRIBUTIVE.test(text)) {
+    const floor = amount(fromPrice[1] ?? fromPrice[2] ?? "");
+    const prices = f.products.filter((p) => p.active !== false).map((p) => Number(p.price)).filter((n) => Number.isFinite(n) && n > 0);
+    if (Number.isFinite(floor) && prices.length > 1 && prices.some((p) => Math.abs(p - floor) >= 0.005)) {
+      const low = Math.min(...prices);
+      const high = Math.max(...prices);
+      problems.push({
+        kind: "price",
+        reason: `"${fromPrice[0].trim()}" — this says EVERY one of them starts at ₹${floor.toLocaleString("en-IN")}, and they don't: the catalogue runs from ₹${low.toLocaleString("en-IN")} to ₹${high.toLocaleString("en-IN")}`,
+      });
+    }
   }
   if (/first[\s-]order/i.test(text) && /(off|discount|free)/i.test(text) && f.offers.length === 0) {
     reasons.push("a first-order offer — the store has no active discount codes");
