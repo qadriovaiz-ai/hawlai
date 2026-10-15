@@ -8,7 +8,7 @@
 // than coerced into the wrong rule.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { numberSentences, needsNoRecord, CLAIM_TYPES, UNLICENSABLE_TYPES, type ExtractedClaim } from "@/lib/facts/extractClaims";
+import { numberSentences, needsNoRecord, CLAIM_TYPES, UNLICENSABLE_TYPES, NEEDS_RECIPIENT_RECORD, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import { isUnlicensable } from "@/lib/facts/factRecord";
 import { code } from "./helpers/source";
 
@@ -209,8 +209,51 @@ describe("4. what needs no record at all", () => {
   });
 
   it("every claim type is accounted for, so a new one cannot slip in untyped", () => {
-    expect(CLAIM_TYPES).toHaveLength(13);
+    // 13 -> 14 on 2026-10-16, on purpose: customer_state was added
+    // after the recall gate missed "Aapka lavender candle aa raha hai".
+    // Changing this number is the decision the test exists to force.
+    expect(CLAIM_TYPES).toHaveLength(14);
     for (const t of UNLICENSABLE_TYPES) expect(CLAIM_TYPES).toContain(t);
+    for (const t of NEEDS_RECIPIENT_RECORD) expect(CLAIM_TYPES).toContain(t);
+  });
+
+  it("CUSTOMER_STATE IS NOT UNLICENSABLE — the difference is real", () => {
+    // A benefit claim can never be supported by anything. "Your order
+    // is on its way" becomes supportable the day a send carries the
+    // recipient's own order row. Collapsing the two would mean either
+    // refusing a true order confirmation forever, or treating "sleep
+    // better" as merely missing a record.
+    expect(UNLICENSABLE_TYPES).not.toContain("customer_state");
+    expect(NEEDS_RECIPIENT_RECORD).toEqual(["customer_state"]);
+  });
+
+  it("A CUSTOMER_STATE CLAIM IS NOT BACKED BY A BUSINESS-WIDE COUNT", () => {
+    // getContext carries business.paid_orders, not this reader's order.
+    // Two paid orders on record does not establish that the person
+    // reading this has one of them — which is the whole reason
+    // candle-08's subject line was graded F.
+    const claim: ExtractedClaim = {
+      sentenceIndex: 0,
+      canonical: "the reader's candle is on its way",
+      claimType: "customer_state",
+      subject: "customer",
+      polarity: "assert",
+    };
+    // It is enumerated, so it reaches the verifier rather than passing
+    // unseen. Whether a record backs it is step 4b's job, and there is
+    // no per-recipient record in the context today.
+    expect(CLAIM_TYPES).toContain(claim.claimType);
+    expect(needsNoRecord(claim)).toBe(false);
+    expect(NEEDS_RECIPIENT_RECORD).toContain(claim.claimType);
+  });
+
+  it("the prompt tells the reader not to skip a sentence its neighbour already says", () => {
+    // salon-10's "baaki hum sambhal lete hain" was skipped while five
+    // plainer siblings about automatic rebooking were caught. Each
+    // sentence may be sent or posted on its own.
+    const src = code("src/lib/facts/extractClaims.ts");
+    expect(src).toMatch(/VAGUE PROMISE IS STILL THE PROMISE/);
+    expect(src).toMatch(/Never skip a sentence because another sentence nearby says the same thing/);
   });
 });
 

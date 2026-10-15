@@ -39,6 +39,19 @@ export type ClaimType =
   | "availability"
   | "count"
   | "credential"
+  /**
+   * A claim about the READER's own situation: that they have placed an
+   * order, that it is on its way, that a booking exists, that they are
+   * a member, that something is reserved for them.
+   *
+   * Added 2026-10-16 after the recall gate missed
+   * "Aapka lavender candle aa raha hai" — "your lavender candle is on
+   * its way" — in a case where no records could be read at all. It
+   * asserts that an order exists, and it was phrased as a greeting, so
+   * none of the other twelve types fitted and the extractor reported no
+   * claim. A claim nobody enumerates is a claim nobody judges.
+   */
+  | "customer_state"
   // Decided by a licence on the cited record.
   | "material"
   | "process"
@@ -64,11 +77,29 @@ export type ExtractedClaim = {
 
 export const CLAIM_TYPES: ClaimType[] = [
   "price", "offer", "shipping", "duration", "availability", "count", "credential",
-  "material", "process", "capability", "comparison", "benefit", "safety",
+  "customer_state", "material", "process", "capability", "comparison", "benefit", "safety",
 ];
 
 /** Claim types a record can never license, whatever is on file. */
 export const UNLICENSABLE_TYPES: ClaimType[] = ["capability", "comparison", "benefit", "safety"];
+
+/**
+ * Claims that can only be backed by a record about THIS RECIPIENT — a
+ * real order row, a real booking — and not by anything about the
+ * business in general.
+ *
+ * `business.paid_orders = 2` does not establish that the person reading
+ * this has one of them. getContext carries no per-recipient records
+ * today, so in practice nothing in the context can support a
+ * customer_state claim and the verifier must refuse it. That is the
+ * founder's rule of 2026-10-16: backed by a real order or lead row, or
+ * it is false.
+ *
+ * Kept separate from UNLICENSABLE_TYPES because the difference is real:
+ * a benefit claim can never be supported by anything, while this one
+ * becomes supportable the day a send carries the recipient's own row.
+ */
+export const NEEDS_RECIPIENT_RECORD: ClaimType[] = ["customer_state"];
 
 const TOOL = {
   name: "report_claims",
@@ -127,6 +158,8 @@ RULES
 7. A claim about what the business or its software WILL DO for the customer on its own — remember, remind, rebook, repeat, deliver or follow up automatically — is claimType "capability", even when it is phrased as reassurance rather than as a promise.
 8. Copy figures exactly as written. Never convert, round or compute. A figure written in words, in Devanagari digits or beside a unit in another language is still that figure.
 9. A hedge is still a claim. Casting doubt on a widely held belief, or inviting the reader to reconsider one, asserts the opposite of that belief — type it by what is being implied, with polarity "hedge".
+10. A sentence about the READER's own situation — that they have ordered something, that it is on its way, that they have a booking, that something is reserved or being prepared for them — is claimType "customer_state", subject "customer". Report it even when it is phrased as a greeting, a welcome or a reassurance, because it asserts that a real order or booking exists.
+11. A VAGUE PROMISE IS STILL THE PROMISE. "Just come once, we'll take care of the rest", "leave it to us", "baaki hum sambhal lete hain" name nothing and commit to everything: report them as the capability claim they stand for. Never skip a sentence because another sentence nearby says the same thing more plainly — each sentence may be sent, posted or read on its own, and a sentence you pass over is a sentence nobody checks.
 10. You have no records. Never say whether a claim is supported.`;
 
 /** Numbered, so a claim can point back at the sentence it came from. */
