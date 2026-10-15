@@ -11,7 +11,13 @@
       "label": "recall-gate-2026-10-15T18-44-58-990Z",
       "inr": 12.15,
       "calls": 30
+    },
+    {
+      "at": "2026-10-15T18:54:23.488Z",
+      "label": "recall-gate-2026-10-15T18-54-23-482Z",
+      "inr": 12.75,
+      "calls": 30
     }
   ],
-  "totalInr": 40.01
+  "totalInr": 52.76
 }
