@@ -20,12 +20,12 @@
 // generated pictures to it.
 
 import { formatBrandVoiceSection, type BrandVoiceProfile } from "@/lib/agents/brandVoice";
-import { STORY_CATEGORY } from "@/lib/business/businessStory";
 import { businessDisplayName } from "@/lib/business/displayName";
 import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
 import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalogItem";
+import { isFactCategory } from "@/lib/business/businessStory";
 import { splitStories, withheldNote } from "./personalStories";
 // Which recorded rows a prompt may use: the founder's rule that story
 // text stays out of customer copy, applied to the INPUT.
@@ -712,7 +712,47 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
   // The owner's own story, in full — the specifics that make copy about
   // THIS business impossible to write about any other one. Never truncated
   // to 200 characters the way the other notes are: the detail IS the point.
-  const story = f.ownerFacts.filter((k) => k.category === STORY_CATEGORY);
+  // EVERY RECORDED ROW, WHATEVER CATEGORY IT SITS IN (2026-10-15).
+  //
+  // This used to be `filter(k => k.category === STORY_CATEGORY)`, with a
+  // second `!==` branch below it, and the category therefore decided
+  // which protections a row received. Three of them only existed on one
+  // side:
+  //
+  //   splitStories      the personalStories consent check
+  //   isStoryRow        the owner's story, held back by title
+  //   factSentences     the owner's reason-and-feeling sentences, dropped
+  //
+  // The other branch had none of those, and cut content at
+  // `slice(0, 200)` — mid-sentence, so "40 hours burn hota hai" could
+  // reach the model as a number with no unit.
+  //
+  // The founder is about to move nine rows out of `business_story` and
+  // into `general` (docs/PLAN-CORE-ARCHITECTURE.md §4.1, migration 209).
+  // Under the old split that single UPDATE would have:
+  //   - put the "Materials and suppliers" motive sentence back into
+  //     every prompt, undoing the fix of 2026-10-11;
+  //   - truncated nine fact rows to 200 characters;
+  //   - and if the private row had ever been moved by mistake, removed
+  //     its consent protection entirely.
+  //
+  // A row's PROTECTION must not depend on which bucket it happens to
+  // sit in. So every row now goes through splitStories, isStoryRow and
+  // factSentences, and the SQL becomes safe to run in either order.
+  // chatbotAgent, socialManagementAgent and masterBrainV2 already pass
+  // their whole knowledge list to splitStories; this was the one place
+  // that did not.
+  //
+  // CATEGORY STILL DECIDES PRESENTATION, and deliberately so.
+  // tests/contentQuality.test.ts:164 pins the decision that a recorded
+  // FACT row prints uncapped while other knowledge notes are cut to 200
+  // characters, and it is right: a returns policy is a note, not a
+  // product fact, and it should not be able to crowd out the burn time.
+  // So the split below is fact rows vs notes — which the founder's
+  // migration 209 moves rows INTO rather than out of — and not
+  // story-vs-everything-else.
+  const factRows = f.ownerFacts.filter((k) => isFactCategory(k.category));
+  const otherNotes = f.ownerFacts.filter((k) => !isFactCategory(k.category));
   // A CUSTOMER'S PRIVATE SITUATION IS NOT MARKETING MATERIAL.
   //
   // This block goes into the prompt IN FULL, never truncated, under
@@ -722,7 +762,14 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
   // hospital. The owner wrote it down because it moved her; it is not
   // hers to publish, and an AEO recommendation had already pointed at it
   // as "genuine content" (src/lib/claims/personalStories.ts).
-  const { usable: usableStory, withheld: withheldStory } = splitStories(story);
+  // EVERY ROW, not just the fact rows. A customer's private situation
+  // is protected wherever the owner happened to file it, and before
+  // 2026-10-15 a row outside `business_story` got no consent check at
+  // all.
+  const { usable: usableAll, withheld: withheldStory } = splitStories(f.ownerFacts);
+  const consented = new Set(usableAll);
+  const usableStory = factRows.filter((k) => consented.has(k));
+  const usableNotes = otherNotes.filter((k) => consented.has(k));
   // THE STORY COMES OUT; THE FACTS STAY (2026-10-11, founder's rule).
   //
   // This block used to read "The owner's own story — use these
@@ -740,7 +787,14 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
   // feeling sentences are dropped from the rows that stay, and what is
   // left is introduced as fact rather than as narrative
   // (src/lib/content/storyRows.ts).
-  const recorded = rowsForPrompt(usableStory);
+  // 2,600 characters, which is comparable to what the two branches
+  // spent before being merged: the old `otherFacts` cap was 12 rows at
+  // 200 characters, plus an unbounded story block.
+  const recorded = rowsForPrompt(usableStory, { maxChars: 2600 });
+  // Computed here, printed further down with the other notes: the
+  // held-back counts below report on BOTH passes, so both have to have
+  // run before anything is said about what was held.
+  const notes = rowsForPrompt(usableNotes, { maxChars: 2600 });
   if (recorded.rows.length) {
     lines.push(
       "What the owner has recorded about the product and how it is made — state these as facts where they fit. Do NOT retell them as a story, and do not write about the owner:"
@@ -750,20 +804,35 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
   // Said rather than silently dropped, the same reasoning withheldNote
   // applies below: a model that cannot see something will sometimes
   // invent its own version to fill the gap.
-  if (recorded.storyRowsHeld || recorded.motiveSentencesHeld) {
+  if (recorded.storyRowsHeld + notes.storyRowsHeld || recorded.motiveSentencesHeld + notes.motiveSentencesHeld) {
     lines.push(
       `The owner has also recorded their own story and reasons for starting. That is deliberately NOT shown here and must not appear in this copy — write about the product and the reader.`
     );
+  }
+  // Said rather than silently dropped, for the same reason as every
+  // other held-back note here: a model that cannot see something will
+  // sometimes invent its own version to fill the gap.
+  const heldForSpace = recorded.rowsHeldForSpace + notes.rowsHeldForSpace;
+  if (heldForSpace) {
+    lines.push(`${heldForSpace} more recorded note(s) did not fit here. Do not guess what they say.`);
   }
   // Named rather than silently dropped: a model that cannot see a story
   // will sometimes invent one to fill the same gap, and an invented
   // customer anecdote is a fabricated testimonial.
   const withheldText = withheldNote(withheldStory);
   if (withheldText) lines.push(withheldText);
-  const otherFacts = f.ownerFacts.filter((k) => k.category !== STORY_CATEGORY);
-  if (otherFacts.length) {
+  // THE OTHER NOTES — hours, pricing notes, policies, FAQs.
+  //
+  // Still capped at 200 characters and still under their own heading,
+  // which tests/contentQuality.test.ts:164 pins and which is right: a
+  // returns policy is a note, not a product fact. What CHANGED on
+  // 2026-10-15 is that these rows now go through the same three
+  // protections as the fact rows — consent (`usableNotes` above), the
+  // story hold-back and the motive filter (`rowsForPrompt`) — where
+  // before they had none of them.
+  if (notes.rows.length) {
     lines.push("What the owner says about the business:");
-    for (const k of otherFacts.slice(0, 12)) lines.push(`- ${k.title}: ${k.content.slice(0, 200)}`);
+    for (const k of notes.rows.slice(0, 12)) lines.push(`- ${k.title}: ${k.content.slice(0, 200)}`);
   }
   if (f.brand.description) lines.push(`How the owner describes the business: ${f.brand.description.slice(0, 300)}`);
   if (f.brand.pillars.length) lines.push(`Brand messaging pillars (the owner's own words): ${f.brand.pillars.join("; ")}`);

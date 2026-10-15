@@ -32,6 +32,34 @@ export type StoryQuestion = {
  */
 export const STORY_CATEGORY = "business_story";
 
+/**
+ * The business_knowledge categories that hold PRODUCT FACTS rather than
+ * notes about running the business.
+ *
+ * Added 2026-10-15 for migration 209. The founder is moving nine rows
+ * out of `business_story` and into `general`, because all fourteen of
+ * the live business's rows were filed under the story category and nine
+ * of them hold the facts — the double-boiler step, the fragrance
+ * timing, "paraffin-free, soy wax only". Those nine must keep printing
+ * uncapped after the move, so `general` counts as a fact category and
+ * not as a note.
+ *
+ * `hours`, `pricing_note`, `policy` and `faq` are notes: true, useful,
+ * and not what a product claim is built from. They stay capped at 200
+ * characters so a returns policy cannot crowd out the burn time, which
+ * tests/contentQuality.test.ts:164 pins.
+ *
+ * The live CHECK constraint, confirmed by the founder on 2026-10-12:
+ *   category = ANY (ARRAY['hours','pricing_note','policy','faq','general','business_story'])
+ * so the move needs no schema change.
+ */
+export const FACT_CATEGORIES = new Set([STORY_CATEGORY, "general"]);
+
+/** True when a recorded row holds product facts rather than a note. */
+export function isFactCategory(category: string | null | undefined): boolean {
+  return FACT_CATEGORIES.has(String(category ?? "").trim().toLowerCase());
+}
+
 export const STORY_QUESTIONS: StoryQuestion[] = [
   {
     key: "origin",

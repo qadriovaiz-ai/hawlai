@@ -163,14 +163,31 @@ export type PromptRow = { category?: string | null; title?: string | null; conte
  * invent one to fill the same gap — the reasoning `withheldNote`
  * already applies to a customer's private story.
  */
-export function rowsForPrompt(rows: PromptRow[] | null | undefined): {
+export function rowsForPrompt(
+  rows: PromptRow[] | null | undefined,
+  opts: { maxChars?: number } = {}
+): {
   rows: { title: string; content: string }[];
   storyRowsHeld: number;
   motiveSentencesHeld: number;
+  rowsHeldForSpace: number;
 } {
   const out: { title: string; content: string }[] = [];
   let storyRowsHeld = 0;
   let motiveSentencesHeld = 0;
+  let rowsHeldForSpace = 0;
+  // A BUDGET IN CHARACTERS, NOT A TRUNCATION.
+  //
+  // Added 2026-10-15, when this function took over the rows that used
+  // to be cut at `content.slice(0, 200)`. That cut landed mid-sentence
+  // and mid-word, which is how a fact becomes a different fact: "40
+  // hours burn hota hai" cut in the wrong place is a number with no
+  // unit. So a row is emitted WHOLE or not at all, and the ones that do
+  // not fit are counted rather than silently dropped — the caller says
+  // how many, because a model that cannot see something will sometimes
+  // invent its own version to fill the gap.
+  const budget = opts.maxChars ?? Number.POSITIVE_INFINITY;
+  let spent = 0;
 
   for (const row of rows ?? []) {
     if (isStoryRow(row?.title)) {
@@ -180,7 +197,16 @@ export function rowsForPrompt(rows: PromptRow[] | null | undefined): {
     const { kept, dropped } = factSentences(row?.content);
     motiveSentencesHeld += dropped.length;
     if (!kept.length) continue;
-    out.push({ title: String(row?.title ?? "").trim(), content: kept.join(" ") });
+    const title = String(row?.title ?? "").trim();
+    const content = kept.join(" ");
+    // `out.length` so the FIRST row always prints: a single row longer
+    // than the whole budget must not produce an empty fact block.
+    if (spent + title.length + content.length > budget && out.length) {
+      rowsHeldForSpace += 1;
+      continue;
+    }
+    spent += title.length + content.length;
+    out.push({ title, content });
   }
-  return { rows: out, storyRowsHeld, motiveSentencesHeld };
+  return { rows: out, storyRowsHeld, motiveSentencesHeld, rowsHeldForSpace };
 }
