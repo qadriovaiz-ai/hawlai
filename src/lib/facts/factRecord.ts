@@ -19,6 +19,7 @@
 /** Where a fact came from. Hawlai-generated page text is not on this list, on purpose. */
 export type FactSource =
   | "catalogue"            // the products table
+  | "offers"               // the discount codes checkout honours
   | "shipping_config"      // the store's shipping settings, via computeShippingAmount
   | "measured"             // page_events, orders, leads
   | "owner_stated"         // a business_knowledge row
@@ -79,6 +80,13 @@ export type FactRecord = {
  */
 const LICENCES: Record<FactSource, FactLicence[]> = {
   catalogue: ["value", "existence"],
+  // ADDED 2026-10-15 with getContext. A discount code is a row
+  // checkout honours, so its percentage is as countable as a price —
+  // and the baseline's dairy-04 case is exactly why it needs to be a
+  // record rather than prose: the owner asked for "our 20% diwali
+  // discount" when the real code gives 10%. A conflict can only be
+  // reported against a value that exists.
+  offers: ["value", "existence"],
   shipping_config: ["policy", "value"],
   measured: ["value"],
   owner_stated: ["existence", "policy", "process"],
