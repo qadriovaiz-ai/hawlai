@@ -43,14 +43,27 @@ export type VerifyResult = {
 
 /** "hours" and "hour" are one unit; "ghante" should never arrive, but it is harmless if it does. */
 function sameUnit(a: string | undefined, b: string | null | undefined): boolean {
-  const norm = (u: string) =>
-    String(u ?? "")
-      .toLowerCase()
-      .replace(/s$/, "")
-      .replace(/^(?:ghante|ghanta|घंटे|घंटा)$/, "hour")
-      .replace(/^(?:minute|min|mins)$/, "minute")
-      .replace(/^(?:rupee|rs|inr|₹)$/, "inr")
-      .trim();
+  // "currency" IS A UNIT A MODEL ACTUALLY RETURNS. The S1 exit run
+  // refused a correct ₹3,500 twice, because the extractor called the
+  // unit "currency" and the record calls it "inr". Any name for money
+  // is money.
+  // AN EXACT TABLE, MAPPED BEFORE THE PLURAL IS STRIPPED. The first
+  // version stripped a trailing "s" first, which turned "rs" into "r"
+  // and refused a correct price — the same class of fault as the bug
+  // this fix exists for, found by its own test.
+  const SYNONYMS: Record<string, string> = {
+    inr: "inr", rs: "inr", "rs.": "inr", rupee: "inr", rupees: "inr", "₹": "inr",
+    currency: "inr", money: "inr", price: "inr", paisa: "inr", paise: "inr",
+    hour: "hour", hours: "hour", hr: "hour", hrs: "hour",
+    ghante: "hour", ghanta: "hour", "घंटे": "hour", "घंटा": "hour",
+    minute: "minute", minutes: "minute", min: "minute", mins: "minute", mint: "minute",
+    day: "day", days: "day", din: "day",
+    percent: "percent", percents: "percent", pc: "percent", "%": "percent",
+  };
+  const norm = (u: string) => {
+    const raw = String(u ?? "").toLowerCase().trim();
+    return SYNONYMS[raw] ?? raw.replace(/s$/, "");
+  };
   const x = norm(a ?? "");
   const y = norm(b ?? "");
   // An absent unit on either side is not a mismatch: "999" and "₹999"
@@ -60,6 +73,10 @@ function sameUnit(a: string | undefined, b: string | null | undefined): boolean 
 }
 
 function sameNumber(a: number, b: unknown): boolean {
+  // A BOOLEAN IS NOT A NUMBER, however willing JavaScript is to make it
+  // one. Number(false) is 0, so without this a claim stating 0 — "₹0",
+  // "free" — would match any record whose value is false.
+  if (typeof b === "boolean") return false;
   const y = Number(b);
   return Number.isFinite(y) && Math.abs(a - y) < 0.005;
 }
@@ -99,11 +116,37 @@ RULES
 5. Rephrasing in another language is still the same claim: judge the meaning, not the wording.
 6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.`;
 
-/** The approved facts, as the judge reads them. Plain lines, no ids. */
+/**
+ * The approved facts, as the judge reads them. Plain lines, no ids.
+ *
+ * A FALSE VALUE IS RENDERED IN WORDS, AND THAT IS NOT COSMETIC.
+ *
+ * The S1 exit run of 2026-10-16 refused "the treatment is ammonia-free"
+ * ON THE GROUND THAT THE RECORD SAID THE OPPOSITE. The record was
+ * `material.ammonia = false` — the salon does not use ammonia, which is
+ * exactly what the copy said. This function printed the value whenever
+ * it was not null, undefined or "", and `false` is none of those, so the
+ * judge was shown:
+ *
+ *     - no ammonia-based products (false)
+ *
+ * and read the parenthetical as marking the claim false. A missing
+ * licence refuses a sentence; an inverted fact refuses a TRUE one and
+ * tells the owner their own record contradicts them.
+ *
+ * So a boolean never appears as a bare value. `false` says the thing is
+ * NOT used or present; `true` says it is.
+ */
 export function approvedForJudge(approved: SelectedClaim[]): string {
-  return approved
-    .map((c) => `- ${c.intent || c.claimType}${c.value !== null && c.value !== undefined && c.value !== "" ? ` (${c.value}${c.unit ? ` ${c.unit}` : ""})` : ""}`)
-    .join("\n");
+  return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}`).join("\n");
+}
+
+function valueForJudge(c: SelectedClaim): string {
+  if (c.value === null || c.value === undefined || c.value === "") return "";
+  // The two spellings a model can arrive at for the same boolean.
+  if (c.value === false || c.value === "false") return " — recorded as NOT used and NOT present in this business's work";
+  if (c.value === true || c.value === "true") return " — recorded as true of this business";
+  return ` (${c.value}${c.unit ? ` ${c.unit}` : ""})`;
 }
 
 /**

@@ -233,3 +233,42 @@ describe("4. what comes out", () => {
     expect(text).not.toMatch(/f1|c1|c2/);
   });
 });
+
+// ---------------------------------------------------------------------
+// 5. "currency" IS A UNIT A MODEL ACTUALLY RETURNS.
+//
+// The S1 exit run refused a correct ₹3,500 twice: the extractor called
+// the unit "currency", the record calls it "inr", and sameUnit treated
+// them as different claims. Any name for money is money; a name for
+// TIME is not.
+// ---------------------------------------------------------------------
+describe("5. the units a model actually sends", () => {
+  const price = [approvedClaim({ claimType: "price", intent: "the treatment costs ₹3500", value: 3500, unit: "inr" })];
+
+  it("EVERY NAME FOR MONEY IS MONEY", async () => {
+    forbidCalls();
+    for (const unit of ["inr", "INR", "rupees", "rupee", "rs", "₹", "currency", "money"]) {
+      const r = await verifyClaims([extracted({ claimType: "price", canonical: "it costs 3500", value: { number: 3500, unit } })], price);
+      expect(r.verdicts[0].verdict, unit).toBe("entailed");
+    }
+  });
+
+  it("AND A UNIT OF TIME IS STILL NOT MONEY", async () => {
+    forbidCalls();
+    // The loosening must not go so far that 3500 minutes passes as
+    // ₹3,500.
+    const r = await verifyClaims([extracted({ claimType: "duration", canonical: "it takes 3500 minutes", value: { number: 3500, unit: "minutes" } })], price);
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+
+  it("A BOOLEAN RECORD CANNOT BACK A FIGURE OF ZERO", async () => {
+    forbidCalls();
+    // Number(false) is 0. Without the guard, "shipping is ₹0" would be
+    // entailed by "we do not use ammonia".
+    const r = await verifyClaims(
+      [extracted({ claimType: "shipping", canonical: "shipping is free", value: { number: 0, unit: "inr" } })],
+      [approvedClaim({ claimType: "material", intent: "no ammonia is used", value: false, unit: null })]
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+});

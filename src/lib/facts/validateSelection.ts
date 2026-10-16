@@ -24,10 +24,26 @@ import type { SelectedClaim } from "@/lib/facts/selectClaims";
  * this map is consulted.
  */
 export const LICENCE_FOR_CLAIM: Partial<Record<ClaimType, FactLicence>> = {
+  // A PRICE AND AN OFFER MUST COME FROM THE ROW CHECKOUT READS, and a
+  // count from our own arithmetic. Those three keep `value`, which only
+  // the catalogue, the offers table, the shipping config and measured
+  // rows grant.
   price: "value",
   offer: "value",
-  duration: "value",
   count: "value",
+  // A DURATION DOES NOT, and the S1 exit run of 2026-10-16 is why. The
+  // candle's 40-hour burn time lives in an owner_stated row — the owner
+  // is the ONLY possible source for it, there being no checkout column
+  // for how long a candle burns — so requiring `value` refused a fact
+  // the reviewer graded true four times in the baseline. The salon's
+  // durations survived only because they happen to sit in the
+  // catalogue's duration_minutes column.
+  //
+  // The figure is still checked against the record below, so loosening
+  // the LICENCE does not loosen the number: `existence` says this
+  // record can establish the thing at all, and arithmetic says whether
+  // the figure is the right one.
+  duration: "existence",
   // A shipping claim is about what the store DOES, which shipping_config
   // grants as policy — and the rate, which it grants as value. Policy is
   // the weaker requirement, and the figure is checked separately below.
@@ -63,10 +79,52 @@ export type Validated = {
 
 /** Same number to the paisa. "₹549" and "₹549.00" are one figure. */
 function sameFigure(a: unknown, b: unknown): boolean {
+  // A BOOLEAN IS NOT A NUMBER. Number(false) is 0, so without this a
+  // claim of 0 — "₹0", "free" — matches any record whose value is
+  // false. Booleans compare as booleans, which is how a claim that
+  // correctly copies `false` still matches.
+  if (typeof a === "boolean" || typeof b === "boolean") {
+    return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  }
   const x = Number(a);
   const y = Number(b);
   if (Number.isFinite(x) && Number.isFinite(y)) return Math.abs(x - y) < 0.005;
   return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+}
+
+/**
+ * The figure appears, whole, inside a record's own words.
+ *
+ * TWO FALSE REFUSALS IN THE S1 EXIT RUN came from a figure that is real
+ * and recorded but not the record's `value`:
+ *
+ *   statement.fssai_licence… = "FSSAI licence 11223344556677."
+ *     the licence number is IN the sentence, and the value IS the
+ *     sentence, so a number beside it could never match
+ *
+ *   product.desi_ghee_500ml.name = "Desi ghee 500ml"
+ *     the size exists only inside the product's name
+ *
+ * Still arithmetic, not judgement: the digits must appear as a whole
+ * number, so 50 does not match "500ml" and 500 does not match "1500".
+ * Digit boundaries rather than word boundaries, because "500ml" has no
+ * word break after the number.
+ */
+function figureInText(record: FactRecord, value: unknown): boolean {
+  if (typeof value === "boolean") return false;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return false;
+  const haystacks = [typeof record.value === "string" ? record.value : "", record.recordedText ?? ""];
+  // The digits as written, and with any grouping commas removed, so
+  // "11,22,33,44,55,66,77" and "11223344556677" are one number.
+  const digits = String(n);
+  // The boundary excludes a digit on either side, and a decimal point
+  // only when a digit follows it — so "11223344556677." at the end of a
+  // sentence matches, while 1122 inside 11223344556677 does not. The
+  // first version excluded any "." and therefore failed on every
+  // number that ends a sentence, which is most of them.
+  const pattern = new RegExp(`(?<![0-9])(?<!\\.[0-9]{0,20})${digits}(?![0-9])(?!\\.[0-9])`);
+  return haystacks.some((h) => pattern.test(String(h).replace(/,/g, "")));
 }
 
 /**
@@ -166,7 +224,7 @@ export function validateSelection(selection: { claims: SelectedClaim[] }, record
     // that no cited record carries is the candle-03 failure in another
     // form: Rs 850 was a real price, of the other product.
     if (claim.value !== null && claim.value !== undefined && claim.value !== "") {
-      const match = cited.find((r) => sameFigure(r.value, claim.value));
+      const match = cited.find((r) => sameFigure(r.value, claim.value)) ?? cited.find((r) => figureInText(r, claim.value));
       if (!match) {
         rejected.push({
           claim,

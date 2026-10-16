@@ -35,8 +35,20 @@ export type SelectedClaim = {
   factIds: string[];
   /** Why this claim belongs in this piece — shown to the owner, never to the customer. */
   intent: string;
-  /** Copied from the cited record when the claim carries a figure. */
-  value?: number | string | null;
+  /**
+   * Copied from the cited record when the claim carries a figure.
+   *
+   * BOOLEAN IS A REAL FACT VALUE, not a stray. material.paraffin is
+   * `false` and that is the fact: this business does not use it. The
+   * first version of this type allowed only number and string, so a
+   * boolean was stringified to "false" on the way in — and on
+   * 2026-10-16 the judge was shown "no ammonia-based products (false)"
+   * and read the parenthetical as marking the claim untrue. It then
+   * refused a TRUE sentence on the ground that the record contradicted
+   * it. A type that cannot say what a fact is will be made to lie about
+   * it somewhere else.
+   */
+  value?: number | string | boolean | null;
   unit?: string | null;
 };
 
@@ -208,7 +220,17 @@ function normalise(c: any, index: number): SelectedClaim | null {
     claimType,
     factIds,
     intent,
-    value: c?.value === undefined || c?.value === null ? null : typeof c.value === "number" ? c.value : String(c.value),
+    value:
+      c?.value === undefined || c?.value === null
+        ? null
+        : typeof c.value === "number" || typeof c.value === "boolean"
+          ? c.value
+          : // "true"/"false" as a string is the same fact, and arrives
+            // either way depending on the model. Normalised here so one
+            // shape reaches the checks.
+            /^(?:true|false)$/i.test(String(c.value).trim())
+            ? String(c.value).trim().toLowerCase() === "true"
+            : String(c.value),
     unit: c?.unit ? String(c.unit).trim() : null,
   };
 }

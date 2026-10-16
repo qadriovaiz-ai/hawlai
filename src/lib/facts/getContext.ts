@@ -117,6 +117,26 @@ function catalogueRecords(dealershipId: string, products: CatalogProduct[], obse
     const key = productKey(p.name);
     if (!key) continue;
     const ref = `products:${p.id ?? key}`;
+    // THE NAME IS A RECORD, because facts hide inside it. The S1 exit
+    // run refused "a 500 ml jar" — true, and checked against the price
+    // figures, because 500ml exists nowhere except in the product name
+    // "Desi ghee 500ml". A size, a weight, a count in a pack: the owner
+    // typed them into the name and nothing else holds them.
+    const name = String(p.name ?? "").trim();
+    if (name) {
+      out.push({
+        id: factId(dealershipId, `${ref}#name`, name),
+        dealershipId,
+        key: `product.${key}.name`,
+        value: name,
+        source: "catalogue",
+        sourceRef: ref,
+        confidence: "counted",
+        licenses: licensesFor("catalogue"),
+        recordedText: name,
+        observedAt,
+      });
+    }
     const price = Number(p.price);
     if (Number.isFinite(price) && price > 0) {
       out.push({

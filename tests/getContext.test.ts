@@ -177,6 +177,21 @@ describe("2. the records", () => {
     expect(isUnlicensable("safety")).toBe(true);
   });
 
+  it("THE PRODUCT NAME IS A RECORD, because facts hide inside it", async () => {
+    // The S1 exit run refused "a 500 ml jar" — true — because 500ml
+    // exists nowhere except in the name "Desi ghee 500ml". A size, a
+    // weight, a pack count: the owner typed them into the name and
+    // nothing else holds them.
+    const dairy = { ...CANDLE_FACTS, products: [product("Desi ghee 500ml", 850)] };
+    const ctx = await context(dairy, "welcome email");
+    const name = ctx.records.find((r) => r.key === "product.desi_ghee_500ml.name");
+    expect(name?.value).toBe("Desi ghee 500ml");
+    expect(name?.source).toBe("catalogue");
+    // It must grant `value`, or a figure cited from it cannot be
+    // checked against it.
+    expect(name?.licenses).toContain("value");
+  });
+
   it("holds no link records, deliberately", async () => {
     // A URL is not a claim. The generators take links from `facts` and
     // repairBookingLinks already owns them; a second home for them

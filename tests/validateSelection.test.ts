@@ -252,3 +252,99 @@ describe("7. the good case still passes", () => {
     expect(v.rejected).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------
+// 8. THE FOUR FALSE REFUSALS THE S1 EXIT RUN OF 2026-10-16 PRODUCED.
+//
+// Every one of these is a claim that is TRUE, RECORDED and CITED
+// CORRECTLY, and the validator refused it. They are the third metric —
+// true claims wrongly removed — which the founder set at 0 precisely
+// because this is the expensive error.
+// ---------------------------------------------------------------------
+describe("8. true claims that were being refused", () => {
+  const ownerDuration = record({
+    id: "f_burn",
+    key: "product.burn_hours",
+    value: 40,
+    unit: "hours",
+    source: "owner_stated",
+    licenses: licensesFor("owner_stated"),
+    recordedText: "Log sochte hain ki 10 ghante jalti hai. 40 hours burn hota hai.",
+  });
+
+  it("A DURATION THE OWNER RECORDED CAN BE STATED — there is no checkout column for it", () => {
+    // Graded true four times in the baseline, and refused by the exit
+    // run because `duration` demanded a `value` licence that only the
+    // catalogue, offers, shipping and measured rows grant. The owner is
+    // the only possible source for how long a candle burns.
+    const v = validate([claim({ claimType: "duration", factIds: ["f_burn"], value: 40, unit: "hours" })], [ownerDuration]);
+    expect(v.rejected).toEqual([]);
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("AND THE FIGURE IS STILL CHECKED — loosening the licence did not loosen the number", () => {
+    const v = validate([claim({ claimType: "duration", factIds: ["f_burn"], value: 60, unit: "hours" })], [ownerDuration]);
+    expect(v.rejected[0].rule).toBe("figure_mismatch");
+  });
+
+  it("a PRICE still needs the row checkout reads", () => {
+    // The rule that stays. owner_stated grants no `value`, so a price
+    // typed in prose is still refused — that distinction is the reason
+    // the licence table exists.
+    const v = validate([claim({ claimType: "price", factIds: ["f_owner"], value: 999 })]);
+    expect(v.rejected[0].rule).toBe("no_licence_on_record");
+  });
+
+  const statement = record({
+    id: "f_fssai",
+    key: "statement.fssai_licence",
+    value: "FSSAI licence 11223344556677.",
+    unit: null,
+    source: "owner_stated",
+    licenses: licensesFor("owner_stated"),
+    recordedText: "FSSAI licence 11223344556677.",
+  });
+
+  it("A FIGURE INSIDE A PROSE RECORD IS FOUND — the FSSAI licence number", () => {
+    // The record's VALUE is the sentence, so a number beside it could
+    // never match. Refused twice in the exit run.
+    const v = validate([claim({ claimType: "credential", factIds: ["f_fssai"], value: 11223344556677, unit: null })], [statement]);
+    expect(v.rejected).toEqual([]);
+  });
+
+  it("the grouping commas a model adds do not change the number", () => {
+    const grouped = record({ ...statement, id: "f_g", value: "FSSAI licence 11,22,33,44,55,66,77." });
+    const v = validate([claim({ claimType: "credential", factIds: ["f_g"], value: 11223344556677, unit: null })], [grouped]);
+    expect(v.rejected).toEqual([]);
+  });
+
+  it("A DIFFERENT NUMBER IN THE SAME SENTENCE IS NOT A MATCH", () => {
+    // Still arithmetic, not a search for digits: the licence number is
+    // not 1122, and a sentence containing a number does not license
+    // every number.
+    const v = validate([claim({ claimType: "credential", factIds: ["f_fssai"], value: 1122, unit: null })], [statement]);
+    expect(v.rejected[0].rule).toBe("figure_mismatch");
+  });
+
+  const named = record({
+    id: "f_name",
+    key: "product.desi_ghee_500ml.name",
+    value: "Desi ghee 500ml",
+    unit: null,
+    recordedText: "Desi ghee 500ml",
+  });
+
+  it("A SIZE THAT EXISTS ONLY IN THE PRODUCT NAME IS A FACT", () => {
+    // "A 500 ml jar" was checked against the price figures, because
+    // 500ml lives nowhere else.
+    const v = validate([claim({ claimType: "count", factIds: ["f_name"], value: 500, unit: "ml" })], [named]);
+    expect(v.rejected).toEqual([]);
+  });
+
+  it("and a number that is part of a longer one is not a match", () => {
+    // 50 must not match "500ml", which is why the boundaries are digit
+    // boundaries and not word boundaries.
+    const v = validate([claim({ claimType: "count", factIds: ["f_name"], value: 50, unit: "ml" })], [named]);
+    expect(v.rejected[0].rule).toBe("figure_mismatch");
+  });
+});
