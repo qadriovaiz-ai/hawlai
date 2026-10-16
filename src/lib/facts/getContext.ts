@@ -285,7 +285,20 @@ function measuredRecords(dealershipId: string, f: BusinessFacts, observedAt: str
  * a transient read error.
  */
 export async function getContext(supabase: any, dealershipId: string, task: Task): Promise<Context> {
-  const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+  return contextFromFacts(dealershipId, await gatherBusinessFactsSafely(supabase, dealershipId), task);
+}
+
+/**
+ * The same context, from facts already in hand.
+ *
+ * THE DOOR ALREADY HAS THE FACTS. Every generator is handed a
+ * BusinessFacts by its surface, so a door that called getContext would
+ * read the whole fact set a second time on every piece of copy — twice
+ * the queries for the same answer, and two answers that can disagree if
+ * a row changes in between. So the read and the shaping are separate
+ * functions, and the door uses this one.
+ */
+export function contextFromFacts(dealershipId: string, facts: BusinessFacts | null | undefined, task: Task): Context {
   const observedAt = new Date().toISOString();
 
   if (!facts) {

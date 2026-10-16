@@ -84,6 +84,12 @@ export async function generateEmailContent(
       revise: claimsMode === "draft",
       language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
       operation: "email_generation",
+      // S1: email is the first surface on the fact-bound pipeline, and
+      // the only one. It does nothing unless FACT_BOUND_COPY=1 is also
+      // set - see factBoundEnabled. Email was chosen because it is the
+      // surface with the worst graded baseline: 20 of the 33 false
+      // sentences, out of 70 claim sentences.
+      factBound: true,
       logContext,
       brief: {
         label: `${meta.label} (email)`,

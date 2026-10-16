@@ -60,6 +60,12 @@ import { getModel } from "@/lib/models";
 import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
+import { contextFromFacts } from "@/lib/facts/getContext";
+import { selectClaims, type SelectedClaim, type Selection } from "@/lib/facts/selectClaims";
+import { validateSelection, validationNote, type Validated } from "@/lib/facts/validateSelection";
+import { extractClaims } from "@/lib/facts/extractClaims";
+import { verifyClaims, verifyNote } from "@/lib/facts/verifyClaims";
+import { copySentences, withoutSentences } from "@/lib/content/copySentences";
 import { type ClaimsMode } from "@/lib/claims/claimCheck";
 import { type BusinessFacts, type FactsAudience, formatFactsForCopy, COPY_TRUTH_RULES } from "@/lib/claims/businessFacts";
 import { type NarrativeFinding } from "@/lib/claims/narrativeProvenance";
@@ -167,6 +173,15 @@ export type CopyRequest = {
    * cost of every broadcast.
    */
   model?: string;
+  /**
+   * Run the FACT-BOUND pipeline instead of one prompt-and-guard pass.
+   *
+   * Two conditions, both required: the surface opts in here, and
+   * FACT_BOUND_COPY=1 is set. Email only, by the founder's decision of
+   * 2026-10-15 — S1 of docs/PLAN-CORE-ARCHITECTURE.md. A surface with no
+   * graded baseline does not get this because a flag is on somewhere.
+   */
+  factBound?: boolean;
 };
 
 /** What has gone out lately, so this piece does not repeat it. */
@@ -281,6 +296,61 @@ export function onlyContentKeys(output: any): any {
  * here. tests/oneDoorForCopy.test.ts fails when a new generator writes
  * copy without it.
  */
+/**
+ * Is this piece going through the fact-bound pipeline?
+ *
+ * BOTH CONDITIONS, deliberately. An env var alone would switch it on
+ * for fifteen surfaces at once, and exactly one of them has a
+ * human-graded baseline to be compared against.
+ */
+export function factBoundEnabled(req: CopyRequest): boolean {
+  return process.env.FACT_BOUND_COPY === "1" && req.factBound === true && Boolean(req.facts);
+}
+
+/**
+ * The WRITE prompt: the approved claims, and nothing else factual.
+ *
+ * IT DOES NOT CARRY THE RECORDS. The writer is not choosing any more —
+ * that happened in step 1 and was checked in code in step 2 — so showing
+ * it the whole fact set again would reopen the exact door this pipeline
+ * closes. What it may state is a numbered list, and the rules say so in
+ * those words.
+ */
+export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unknowns: string[]): string {
+  const figure = (c: SelectedClaim) =>
+    c.value === null || c.value === undefined || c.value === "" ? "" : ` — state the figure exactly as: ${c.value}${c.unit && c.unit !== "inr" ? ` ${c.unit}` : ""}`;
+  const claims = approved.length
+    ? approved.map((c, i) => `[${i + 1}] ${c.intent || c.claimType}${figure(c)}`).join("\n")
+    : "(none)";
+  const language = normaliseLanguage(req.language ?? req.facts?.brand?.language ?? null);
+  const parts = [
+    req.brief.brandContext ?? "",
+    `\nYou are writing a ${req.brief.label}.`,
+    req.brief.instructions ? `\n${req.brief.instructions}` : "",
+    req.brief.channelRules ? `\n${req.brief.channelRules}` : "",
+    recentBlock(req.recent),
+    `\n\nTHE ONLY FACTS YOU MAY STATE — every factual sentence must be one of these:\n${claims}`,
+    // A PIECE WITH NOTHING APPROVED IS A SHORT PIECE, NOT AN INVENTED
+    // ONE. The founder's rule of 2026-10-15: when the records are thin
+    // the copy gets shorter and the owner gets a question. candle-08 and
+    // salon-09 in the baseline are what happens otherwise — a 40-minute
+    // dryer and an order that does not exist.
+    approved.length
+      ? ""
+      : `\n\nNO FACT WAS APPROVED FOR THIS PIECE. Write only a greeting, one line about what the reader may be looking for, and one invitation to ask. State nothing about the product, the price, the materials, the process or the business. Do not fill the gap.`,
+    `\n\nRULES`,
+    `\n- State nothing factual that is not in the list above: not a number, not a material, not a process, not a comparison, not a benefit, not a promise about anything happening automatically.`,
+    `\n- Greetings, feelings, questions and one call to action are yours to write freely. Those are not facts.`,
+    `\n- Say nothing about the reader's own order, booking or account. You do not know who is reading this.`,
+    `\n- Figures appear exactly as given above. Do not convert them, round them or spell them out in words.`,
+    unknowns.length ? `\n- NOT on record, and must not appear in any form: ${unknowns.join("; ")}.` : "",
+    `\n- ${languageRule(language)}`,
+    capLine(req.contentTypeKey),
+    `\n\n${req.brief.shapeHint ?? "Return JSON only, no markdown, no preamble. Shape the JSON to match the field names implied above exactly."}`,
+  ];
+  return parts.filter(Boolean).join("");
+}
+
 export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   const language = normaliseLanguage(req.language ?? req.facts?.brand?.language ?? null);
   // The owner's words decide, not the surface's judgement.
@@ -300,13 +370,47 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     ...extra,
   });
 
+  // ------------------------------------------------------------------
+  // THE FACT-BOUND PIPELINE — steps 1 and 2, before a word is written.
+  //
+  // docs/PLAN-CORE-ARCHITECTURE.md §2.1. Select chooses which records
+  // the piece will state; Validate checks every citation, licence and
+  // figure in code. The writer then sees only what survived.
+  //
+  // IT FAILS CLOSED. If Select cannot be reached, this returns the
+  // ordinary AI-failure result rather than falling back to the old
+  // prompt — a silent fallback would mean the flag was on, the pipeline
+  // was off, and nothing said so.
+  // ------------------------------------------------------------------
+  const factBound = factBoundEnabled(req);
+  let validated: Validated | null = null;
+  let selection: Selection | null = null;
+  if (factBound) {
+    const ctx = contextFromFacts(req.logContext?.dealershipId ?? "unknown", req.facts, { kind: "email", topic: req.topic });
+    const selected = await selectClaims(ctx, { logContext: req.logContext ?? null });
+    if (!selected.ok) {
+      console.error(`[generateCopy] ${req.operation} selection failed: ${selected.reason}`);
+      return fail({
+        output: { text: aiFailureMessage("overloaded") },
+        blockedReason: `The facts for this business could not be checked just now (${selected.reason}) — nothing was written.`,
+      });
+    }
+    selection = selected.selection;
+    validated = validateSelection(selection, ctx.records, ctx.dealershipId);
+  }
+
   let r;
   try {
     r = await callClaude(
       {
         model: req.model ?? getModel("standard"),
         max_tokens: req.maxTokens ?? 2000,
-        messages: [{ role: "user", content: copyPrompt(req, storyAllowed) }],
+        messages: [
+          {
+            role: "user",
+            content: validated ? factBoundPrompt(req, validated.approved, [...(selection?.unknowns ?? [])]) : copyPrompt(req, storyAllowed),
+          },
+        ],
       },
       { operation: req.operation, logContext: req.logContext }
     );
@@ -330,6 +434,42 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
 
   // 4. The keys the model invented never travel further than this.
   let parsed: any = onlyContentKeys(parsedReply.value);
+
+  // ------------------------------------------------------------------
+  // THE FACT-BOUND PIPELINE — steps 4a and 4b, on the finished words.
+  //
+  // The writer's own citations are NOT consulted here. Step 4a re-reads
+  // the copy with no records in front of it and lists what it actually
+  // claims, so a model that was handed three approved facts and wrote a
+  // fourth claim is caught. Citation is necessary and not sufficient.
+  //
+  // A sentence carrying an unsupported claim is removed. The ordinary
+  // claim layer still runs afterwards as a second net, by the founder's
+  // decision of 2026-10-11.
+  // ------------------------------------------------------------------
+  let factBoundNote: string | null = null;
+  let factBoundDegraded = false;
+  if (factBound && validated) {
+    const sentences = copySentences(parsed);
+    const extracted = await extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null });
+    if (!extracted.ok) {
+      // UNVERIFIED IS NOT VERIFIED. The copy stands, and it is marked
+      // and made unpublishable rather than quietly treated as checked.
+      factBoundDegraded = true;
+      factBoundNote = "This could not be checked against your records just now, so it is marked unverified.";
+    } else {
+      const verified = await verifyClaims(extracted.claims, validated.approved, { logContext: req.logContext ?? null });
+      factBoundDegraded = verified.degraded;
+      if (verified.unsupportedSentences.length) {
+        parsed = withoutSentences(parsed, sentences, verified.unsupportedSentences);
+      }
+      factBoundNote = verifyNote(verified);
+    }
+  }
+  if (factBound && validated) {
+    const selectionNote = validationNote(validated, selection?.conflicts ?? [], selection?.unknowns ?? []);
+    factBoundNote = [selectionNote, factBoundNote].filter(Boolean).join("\n") || null;
+  }
 
   // 4b. THE RUTHLESS EDIT, when the surface asked for it.
   //
@@ -407,13 +547,34 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     } from the middle and kept the opening, the close and anything with the price or the link in it. Ask me to put anything back.`;
   else if (generic) output._storyNote = genericNote(verdict);
 
+  // THE FACT-BOUND NOTE rides alongside the claims note rather than
+  // replacing it. They answer different questions: _claimsNote says
+  // what the old guard removed, this says what was never selected, what
+  // conflicts with the records, and what the verifier took back out.
+  if (factBoundNote) output._factsNote = factBoundNote;
+
   // A piece that reads like anyone's, or is the wrong shape for its
   // reader, is not something to publish while nobody is watching.
-  const blockedReason = generic
-    ? genericNote(verdict)
-    : shapeProblem
-      ? customerFirstNote(shapeProblem, droppedSentences)
-      : null;
+  //
+  // AND NEITHER IS AN UNVERIFIED ONE. When the extractor or the judge
+  // could not be reached, the copy is kept and marked — but it is not
+  // publishable, because "nobody checked" must never travel as
+  // "checked". That is F-01's lesson at the far end of the pipeline.
+  // DEGRADATION COMES FIRST, ahead of genericness and shape, and the
+  // order is a judgement rather than an accident. Those two are quality
+  // verdicts — this piece reads like anyone's, this piece is the wrong
+  // shape — and an owner can argue with them. "Nobody could check this
+  // against your records" is a different kind of statement, and it is
+  // the one that decides whether the words are safe to send. A test
+  // caught this: the degraded branch was unreachable because a short
+  // draft tripped the genericness verdict first.
+  const blockedReason = factBoundDegraded
+    ? "Part of this could not be checked against your records just now, so it is marked unverified and nothing was published."
+    : generic
+      ? genericNote(verdict)
+      : shapeProblem
+        ? customerFirstNote(shapeProblem, droppedSentences)
+        : null;
 
   return {
     output,
