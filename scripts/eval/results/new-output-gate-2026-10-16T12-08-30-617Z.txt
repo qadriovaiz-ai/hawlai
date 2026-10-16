@@ -1,0 +1,94 @@
+
+FIX 4 — THE GATE ON THE NEW PIPELINE'S OUTPUT
+====================================================================
+cases                 9
+sentences             123   (from the saved S1 run — no new copy is generated)
+known missed          13   (the reviewer's list)
+model                 claude-haiku-4-5-20251001
+ESTIMATE THIS RUN     Rs 5.45   (per-run cap Rs 30.00)
+already spent         Rs 161.61 of Rs 500.00
+====================================================================
+4 claim(s)
+9 claim(s)
+9 claim(s)
+4 claim(s)
+13 claim(s)
+9 claim(s)
+11 claim(s)
+15 claim(s)
+10 claim(s)
+
+====================================================================
+calls made            9
+ACTUAL COST THIS RUN  Rs 4.65   (estimated Rs 5.45)
+RUNNING TOTAL         Rs 166.26 of Rs 500.00
+
+OF THE 13 THE REVIEWER FOUND:
+  refused outright    9   (an unlicensable claim — removed with no judge call)
+  enumerated          4   (a licensable claim — the judge decides)
+  STILL MISSED        0
+====================================================================
+
+[candle-05] A1 — REFUSED OUTRIGHT
+   Yahan har cheez thodi slowly, thodi carefully banti hai — aur wahi fark dikhta hai.
+     -> capability/own_business: The business makes everything here slowly and carefully.
+     -> benefit/own_product: The slow and careful approach makes a difference in the product.
+
+[candle-05] A1 — REFUSED OUTRIGHT
+   Fragrance sirf 65 celsius pe dala jata hai — kyunki quality mein koi shortcuts nahi
+     -> process/own_product: Fragrance is added to candles only at 65 degrees Celsius.
+     -> capability/own_business: The business takes no shortcuts on quality.
+
+[candle-05] A1 — REFUSED OUTRIGHT
+   Yahan har cheez thodi carefully banti hai — aur wahi fark dikhta hai.
+     -> capability/own_business: The business makes everything here carefully.
+     -> benefit/own_product: The careful approach makes a difference in the product.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.
+     -> benefit/own_product: The candle creates 20 minutes during which the home feels quieter and softer.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Har pour haath se kiya gaya hai — machine nahi, care hai
+     -> process/own_product: Each candle is poured by hand, not by machine.
+     -> capability/own_business: The candle is made with care.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Scent itna subtle hai ki room mein ghuste hi feel hota hai, overwhelm nahi
+     -> benefit/own_product: The scent is subtle enough that it is felt upon entering the room without overwhelming.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.
+     -> benefit/own_product: The candle creates 20 minutes during which the home feels quieter and softer.
+
+[candle-08] B — enumerated — goes to the judge
+   Ek kaam karo pehli baar jalaane se pehle: candle ko 2 ghante tak burn karne do, taaki wax pool poori surface t
+     -> process/own_product: The candle should be burned for 2 hours on first use to create a full wax pool across the surface.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Isse scent bhi achhi tarah aata hai, aur candle zyada der chalti hai.
+     -> benefit/own_product: Burning the candle for 2 hours on first use results in better scent release.
+     -> benefit/own_product: Burning the candle for 2 hours on first use makes the candle last longer.
+
+[salon-05] A1 — REFUSED OUTRIGHT
+   Keratin treatment sirf ₹3500 mein — budget-friendly, results real
+     -> price/own_product: Keratin treatment costs ₹3500.
+     -> benefit/own_product: Keratin treatment is budget-friendly.
+     -> capability/own_product: Keratin treatment produces real results.
+
+[dairy-04] A2 — enumerated — goes to the judge
+   We make pure, hand-churned clarified butter the traditional way — and we're delighted to have you with us.
+     -> material/own_product: The own product is pure.
+     -> process/own_product: The own product is hand-churned.
+     -> process/own_product: The own product is clarified butter made the traditional way.
+
+[dairy-04] A2 — enumerated — goes to the judge
+   We make pure, hand-churned clarified butter the traditional way — and we are delighted to have you with us.
+     -> material/own_product: The own product is pure.
+     -> process/own_product: The own product is hand-churned.
+     -> process/own_product: The own product is clarified butter made the traditional way.
+
+[dairy-07] A2 — enumerated — goes to the judge
+   Pure desi ghee, made in Indore, ready for your kitchen.
+     -> material/own_product: The desi ghee is pure.
+     -> process/own_product: The desi ghee is made in Indore.
