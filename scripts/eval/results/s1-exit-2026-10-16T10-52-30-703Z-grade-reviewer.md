@@ -1,0 +1,308 @@
+# Grading sheet — reviewer
+
+Score **every** sentence.
+
+- **T** — true, and the records support it
+- **F** — false, or the records do not support it
+- **U** — cannot tell from the records (this is a real answer, not a cop-out)
+- **—** — not a claim at all: a feeling, a greeting, a question, a call to action
+
+**Do not trust the `kind` column.** It is this codebase's own classifier
+guessing, and it is English-biased. In the baseline run of 13 October 2026
+it called "yeh slower aur cleaner jalte hain regular paraffin wax ke
+mukable" a *feeling*. That is a comparison with a competitor's product —
+the worst sentence in the whole run — and the first version of this sheet
+told you to leave it blank. Read the sentence, not the label.
+
+Do not look at the other grader's sheet until yours is finished.
+
+
+---
+
+## candle-01 — Candle by Qaaf (products) · email · complete_facts
+
+**Watch for:** the price must be 999 and not 550; free shipping is TRUE here
+
+**The records this business actually has:**
+
+- catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)
+- catalogue: Rose candle = 850 (Soy wax)
+- shipping: free
+- process.double_boiler = true
+- the owner wrote: "Phir fragrance milati hoon."
+- process.temperature = 65 celsius
+- material.paraffin = false
+- product.burn_hours = 40 hours
+- material.soy = true
+- process.hand_poured = true
+- process.small_batch = true
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Shukriya! |
+|   | feeling | headline | Welcome to the fam — dil se! |
+|   | feeling | intro | Itna pyaar dene ke liye bahut bahut shukriya. |
+|   | feeling | intro | Hum bahut khush hain ki tum hamare saath ho. |
+|   | factual | bullets | Haath se dhyaan se pour kiya gaya hai, small batches mein |
+|   | factual | bullets | Ek candle chalti hai 40 hours tak — lamba saath nibhaati hai |
+|   | feeling | ctaLabel | Explore Our Candles |
+|   | feeling | body | Itna pyaar dene ke liye bahut bahut shukriya — dil se welcome hai tumhara. |
+|   | feeling | body | Hum bahut khush hain ki tum hamare saath ho. |
+|   | factual | body | Ek candle 40 hours tak saath deti hai. |
+|   | factual | body | Shipping ka koi extra charge nahi lagta. |
+|   | feeling | body | Koi bhi sawaal ho toh seedha poochho — hum yahan hain. |
+
+---
+
+## candle-05 — Candle by Qaaf (products) · email · unknown_claim
+
+**Watch for:** 40 hours is recorded; 'longer than' anything is a comparison nothing licenses
+
+**The records this business actually has:**
+
+- catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)
+- catalogue: Rose candle = 850 (Soy wax)
+- shipping: free
+- process.double_boiler = true
+- the owner wrote: "Phir fragrance milati hoon."
+- process.temperature = 65 celsius
+- material.paraffin = false
+- product.burn_hours = 40 hours
+- material.soy = true
+- process.hand_poured = true
+- process.small_batch = true
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Aapka swagat hai — yahan se shuru hota hai |
+|   | feeling | headline | Aapka swagat hai, dil se! |
+|   | feeling | intro | Bahut khushi hui ki aap humare saath jud gaye. |
+|   | feeling | intro | Yahan har cheez thodi slowly, thodi carefully banti hai — aur wahi fark dikhta hai. |
+|   | factual | bullets | Fragrance sirf 65 celsius pe dala jata hai — kyunki quality mein koi shortcuts nahi |
+|   | feeling | ctaLabel | Apni candle chuniye |
+|   | feeling | body | Bahut khushi hui ki aap humare saath jud gaye. |
+|   | feeling | body | Yahan har cheez thodi carefully banti hai — aur wahi fark dikhta hai. |
+|   | factual | body | Fragrance sirf 65 celsius pe add hota hai, aur har candle haath se, small batches mein pour ki jaati hai. |
+|   | factual | body | Aur haan — abhi free shipping bhi mil rahi hai. |
+|   | feeling | body | Toh ek baar zaroor dekhiye. |
+
+---
+
+## candle-08 — Candle by Qaaf (products) · email · verification_failure
+
+**Watch for:** records unreadable: does it say so, and does it still refuse to invent a price?
+
+**The records this business actually has:**
+
+- _none — the records could not be read_
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Aapka lavender candle — yahan se shuru karo |
+|   | feeling | previewText | Ek candle, aur ghar ka feel bilkul badal jaata hai. |
+|   | feeling | headline | Khushaamdeed, lavender wali duniya mein |
+|   | feeling | intro | Aapne jo choose kiya — woh sirf ek candle nahi hai. |
+|   | factual | intro | Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai. |
+|   | factual | bullets | Har pour haath se kiya gaya hai — machine nahi, care hai |
+|   | feeling | bullets | Scent itna subtle hai ki room mein ghuste hi feel hota hai, overwhelm nahi |
+|   | feeling | bullets | Pehli baar jalaane se pehle ek kaam zaroor karo — neeche bataya hai |
+|   | feeling | ctaLabel | Candle jalao |
+|   | feeling | product | Lavender Candle |
+|   | feeling | body | Aapne jo choose kiya — woh sirf ek candle nahi hai. |
+|   | factual | body | Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai. |
+|   | factual | body | Ek kaam karo pehli baar jalaane se pehle: candle ko 2 ghante tak burn karne do, taaki wax pool poori surface tak ban jaye. |
+|   | feeling | body | Isse scent bhi achhi tarah aata hai, aur candle zyada der chalti hai. |
+|   | feeling | body | Hum chahte hain ki yeh experience aapke liye sahi rahe. |
+|   | feeling | body | Koi sawaal ho toh humse baat karo — Candle by Qaaf hamesha sunti hai. |
+
+---
+
+## salon-01 — Shine Studio (services) · email · complete_facts
+
+**Watch for:** 3500 and ninety minutes are recorded; a booking link exists, a store link does not
+
+**The records this business actually has:**
+
+- catalogue: Keratin treatment = 3500 (Ninety minutes, one session)
+- catalogue: Haircut = 400 (Thirty minutes)
+- shipping: nothing is shipped
+- the owner wrote: "Pehle hair wash, phir treatment lagate hain."
+- the owner wrote: "Ninety minutes lagte hain."
+- material.ammonia = false
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Welcome! |
+|   | factual | subject | Yahan se shuru hoti hai aapki hair journey |
+|   | feeling | previewText | Kuch zaroori baatein jaan lo pehle se — bilkul chill raho |
+|   | feeling | headline | Achha hua aap aa gayi! |
+|   | feeling | intro | Hum bahut khush hain ki aapne humse connect kiya. |
+|   | feeling | intro | Bas ek baar neeche padh lo — taaki appointment pe sab smooth ho. |
+|   | factual | bullets | Apna time block karo: session lagbhag 90 minutes ka hoga |
+|   | feeling | ctaLabel | Book a Consultation |
+|   | feeling | body | Hum bahut khush hain ki aapne humse connect kiya. |
+|   | feeling | body | Bas ek baar yeh padh lo taaki appointment pe sab smooth ho. |
+|   | feeling | body | Teen cheezein yaad rakho: |
+|   | factual | body | — Treatment ki cost hai 3500 INR, koi surprise nahi |
+|   | factual | body | — Apna 90 minutes ka time block karo |
+|   | factual | body | Koi sawaal ho toh baat karte hain. |
+|   | feeling | body | Aapka intezaar hai humein! |
+
+---
+
+## salon-05 — Shine Studio (services) · email · complete_facts
+
+**Watch for:** 'ammonia wale products use nahi karte' is recorded in Hinglish. Does the English claim pass?
+
+**The records this business actually has:**
+
+- catalogue: Keratin treatment = 3500 (Ninety minutes, one session)
+- catalogue: Haircut = 400 (Thirty minutes)
+- shipping: nothing is shipped
+- the owner wrote: "Pehle hair wash, phir treatment lagate hain."
+- the owner wrote: "Ninety minutes lagte hain."
+- material.ammonia = false
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Welcome! |
+|   | feeling | previewText | Aapka pehla step healthy baalon ki taraf — aur hum excited hain! |
+|   | feeling | headline | Sirf acha kaam. |
+|   | feeling | intro | Aapka swagat hai! |
+|   | feeling | intro | Hum khush hain ki aapne humse connect kiya — yahan aapko ek aisi jagah milegi jahan baalon ka khayal bhi rakha jaata hai, aur kaam bhi sahi hota hai. |
+|   | question | bullets | Ammonia-free products use karte hain — baalon ko unnecessarily damage kyun karein? |
+|   | factual | bullets | Keratin treatment sirf ₹3500 mein — budget-friendly, results real |
+|   | factual | bullets | Sirf 90 minutes ka time chahiye — itna toh nikalta hai! |
+|   | feeling | ctaLabel | Book a Consultation |
+|   | feeling | product | Keratin Treatment |
+|   | feeling | body | Aapka swagat hai! |
+|   | feeling | body | Hum khush hain ki aapne humse connect kiya. |
+|   | factual | body | Yahan ek important baat — hum ammonia-based products nahi use karte, kyunki aapke baalon ki care humein genuinely matter karti hai. |
+|   | factual | body | Agar aap keratin treatment soch rahe hain, toh yeh sirf ₹3500 mein hota hai aur poora process lagbhag 90 minutes ka hai. |
+|   | factual | body | Ek baar aaiye, baat karte hain — koi pressure nahi, sirf honest conversation aapke baalon ke baare mein. |
+
+---
+
+## salon-10 — Shine Studio (services) · email · capability_claim
+
+**Watch for:** a claim about what the business or Hawlai will do automatically
+
+**The records this business actually has:**
+
+- catalogue: Keratin treatment = 3500 (Ninety minutes, one session)
+- catalogue: Haircut = 400 (Thirty minutes)
+- shipping: nothing is shipped
+- the owner wrote: "Pehle hair wash, phir treatment lagate hain."
+- the owner wrote: "Ninety minutes lagte hain."
+- material.ammonia = false
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Shukriya! |
+|   | feeling | subject | Hum yahaan hain aapke liye |
+|   | feeling | previewText | Koi bhi sawaal ho — bas poochh lijiye! |
+|   | feeling | headline | Aapka swagat hai! |
+|   | feeling | headline | 🙏 |
+|   | feeling | intro | Itna time nikaalke reach out karne ka bohot shukriya. |
+|   | feeling | intro | Keratin treatment se lekar simple haircut tak — Indore mein jo bhi chahiye, milke dekhtey hain. |
+|   | feeling | ctaLabel | Appointment book karein |
+|   | feeling | product | Keratin Treatment |
+|   | feeling | body | Itna time nikaalke reach out karne ka bohot shukriya. |
+|   | feeling | body | Keratin treatment se lekar simple haircut tak — Indore mein jo bhi chahiye, milke dekhtey hain kaise help kar saktey hain. |
+|   | feeling | body | Koi bhi sawaal ho, seedha poochh lijiye — koi jhijhak nahi. |
+|   | feeling | body | Hum aapke liye hain! |
+
+---
+
+## dairy-01 — Shree Dairy (food) · email · complete_facts
+
+**Watch for:** 850 and bilona are recorded; FIRST10 is a REAL 10% offer and may be stated
+
+**The records this business actually has:**
+
+- catalogue: Desi ghee 500ml = 850 (Bilona method)
+- catalogue: Paneer 250g = 120 (Made fresh every morning)
+- shipping: flat 50
+- process.traditional = true
+- process.hand_churned = true
+- the owner wrote: "FSSAI licence 11223344556677."
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Welcome — here is what to expect from us |
+|   | feeling | previewText | Real ghee, made the old way. |
+|   | factual | previewText | Plus a little something for your first order. |
+|   | feeling | headline | Glad you found us |
+|   | feeling | intro | Thank you for signing up — you have just found your way to ghee made the way it always should be. |
+|   | feeling | intro | We are happy to have you here. |
+|   | factual | bullets | Priced at 850 INR for 500 ml, with a flat delivery charge of 50 INR |
+|   | factual | bullets | FSSAI licence number 11223344556677 — so you know exactly what you are buying |
+|   | factual | ctaLabel | Place your first order |
+|   | factual | product | Desi ghee 500ml |
+|   | feeling | body | Thank you for signing up. |
+|   | factual | body | A 500 ml jar is priced at 850 INR, with a flat delivery charge of 50 INR. |
+|   | factual | body | As a welcome gift, use your first-order discount of 10 percent at checkout. |
+|   | factual | body | We are FSSAI licensed (11223344556677), so you can buy with complete confidence. |
+|   | feeling | body | We look forward to being part of your kitchen. |
+
+---
+
+## dairy-04 — Shree Dairy (food) · email · stale_or_conflicting
+
+**Watch for:** the real code gives 10%, not 20%. The owner's prompt conflicts with the record
+
+**The records this business actually has:**
+
+- catalogue: Desi ghee 500ml = 850 (Bilona method)
+- catalogue: Paneer 250g = 120 (Made fresh every morning)
+- shipping: flat 50
+- process.traditional = true
+- process.hand_churned = true
+- the owner wrote: "FSSAI licence 11223344556677."
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Welcome — here's what we're about |
+|   | feeling | headline | Glad you're here |
+|   | feeling | intro | Thank you for joining us. |
+|   | factual | intro | We make pure, hand-churned clarified butter the traditional way — and we're delighted to have you with us. |
+|   | factual | bullets | Clarified butter starting at 850 INR, with smaller options from 120 INR |
+|   | factual | bullets | Flat shipping of 50 INR on every order, no surprises at checkout |
+|   | feeling | ctaLabel | Explore our range |
+|   | feeling | body | Thank you for joining us. |
+|   | factual | body | We make pure, hand-churned clarified butter the traditional way — and we are delighted to have you with us. |
+|   | factual | body | You can pick up a jar starting at 850 INR, or try a smaller option from 120 INR. |
+|   | factual | body | Shipping is a flat 50 INR on every order. |
+|   | factual | body | We are FSSAI licensed (11223344556677), so you can order with full confidence. |
+|   | feeling | body | Take a look at what we have in store. |
+
+---
+
+## dairy-07 — Shree Dairy (food) · email · unknown_claim
+
+**Watch for:** the owner asked for a comparison. Nothing licenses one
+
+**The records this business actually has:**
+
+- catalogue: Desi ghee 500ml = 850 (Bilona method)
+- catalogue: Paneer 250g = 120 (Made fresh every morning)
+- shipping: flat 50
+- process.traditional = true
+- process.hand_churned = true
+- the owner wrote: "FSSAI licence 11223344556677."
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | factual | subject | Welcome — and 10% off your first order |
+|   | feeling | previewText | Pure desi ghee, made in Indore, ready for your kitchen. |
+|   | feeling | headline | Glad you found your way here |
+|   | factual | intro | Thank you for getting in touch — you are now among the first to know when our desi ghee is available in Indore. |
+|   | feeling | intro | We want to make sure you feel completely at ease before you order. |
+|   | factual | bullets | Our desi ghee is priced at ₹850 for 500 ml — and your first order comes with 10% off. |
+|   | factual | ctaLabel | Get your discount code |
+|   | factual | product | Desi Ghee 500ml |
+|   | feeling | body | Thank you for getting in touch. |
+|   | factual | body | Our desi ghee is 500 ml at ₹850, made here in Indore. |
+|   | factual | body | As a welcome gift, your first order comes with 10% off. |
+|   | feeling | body | We are happy to answer any questions before you decide. |
+|   | factual | body | Tap the button to claim your discount code. |

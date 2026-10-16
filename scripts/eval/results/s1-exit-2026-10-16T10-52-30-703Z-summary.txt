@@ -1,0 +1,93 @@
+
+S1 EXIT TEST — the fact-bound pipeline on email
+==================================================================
+cases                 9  (candle-01, candle-05, candle-08, salon-01, salon-05, salon-10, dairy-01, dairy-04, dairy-07)
+baseline, email only  70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 22.93   (per-run cap Rs 30.00)
+already spent         Rs 137.04 of Rs 500.00
+==================================================================
+12 sentence(s), facts note present
+11 sentence(s), facts note present
+16 sentence(s)
+15 sentence(s), facts note present
+15 sentence(s), facts note present
+13 sentence(s), facts note present
+15 sentence(s), facts note present
+13 sentence(s), facts note present
+13 sentence(s), facts note present
+
+==================================================================
+sentences produced    123   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 9
+calls made            34   (4 per email: select, write, extract, judge)
+cases retried         1   (spacing 12000ms between cases)
+tokens                55263 in, 17895 out
+ACTUAL COST THIS RUN  Rs 24.57   (estimated Rs 22.93)
+COST PER EMAIL        Rs 2.73   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 161.61 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-01]
+     Not on record: The scent profile or fragrance notes of the lavender candle (e.g., 'fresh floral', 'earthy', 'sweet') — record what specific fragrance description the owner would use.
+     Not on record: The candle's weight or size (e.g., grams or ml) — record the net weight or volume of the product.
+     Not on record: Any return or exchange policy — record whether returns or exchanges are accepted and under what conditions.
+     Removed "The customer's candle journey has started." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "Handcrafted goodness is being delivered to the customer." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The candles are made from pure soy wax." — Fact says 'soy wax only' but not 'pure' soy wax—purity is more specific than the fact..
+     Removed "The candles are made from pure soy wax." — Fact says 'soy wax only' but not 'pure' soy wax—purity is more specific than the fact..
+  [candle-05]
+     Not on record: What is the burn time of a typical or competing candle of the same size, so a comparison claim can be made? Record as: 'A standard [size] candle of comparable type burns for [X] hours.'
+     Not on record: Which specific candle product(s) does the 40-hour burn time apply to — Lavender, Rose, or both? Record as: 'The 40-hour burn time applies to [product name(s)].'
+     Not on record: What is the wax weight or candle size (e.g. grams or oz) that achieves the 40-hour burn? Record as: 'The [X]g / [X]oz candle burns for 40 hours.'
+     Removed "The candles are cleaner than ordinary candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The candles burn longer than ordinary candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The candles are consistent from batch to batch." — nothing on record can support a capability claim.
+     Removed "The candles produce less smoke than ordinary candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The candles have fragrance that lasts 40 hours." — The fact states 40 hours burn time, not that fragrance lasts 40 hours. These are different claims..
+  [salon-01]
+     Left out: Name the service being welcomed — anchors the email to the right treatment. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Left out: Set expectations: a hair wash happens before the treatment is applied — useful prep info for the welcome email. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Appointment booking / confirmation details: the email needs a way for the client to confirm, reschedule or contact the salon — no record covers a booking link, phone number, address or contact method.
+     Not on record: Aftercare instructions: a welcome email typically tells the client what to do (or avoid) after the treatment — no record covers post-treatment care guidance.
+     Not on record: Stylist or staff name: personalising the email with who will perform the treatment is common practice — no record names the assigned stylist.
+     Removed "This treatment is safe" — nothing on record can support a safety claim.
+     Removed "This treatment is completely safe" — nothing on record can support a safety claim.
+     Removed "There are no hidden charges for this treatment" — Fact states the confirmed price is given to avoid surprises, but does not state there are no hidden charges..
+  [salon-05]
+     Left out: Name the flagship ammonia-free service so readers know what is on offer. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Left out: Briefly describe the treatment process (hair wash first, then treatment) to build trust and transparency. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Which specific product range or brand is used for the ammonia-free treatments? The owner should record the product name(s) so copy can be more specific.
+     Not on record: Are there other ammonia-free services beyond the keratin treatment (e.g., colour, smoothening)? The owner should record a list of all ammonia-free services offered.
+     Removed "This product contains no ammonia." — Fact is about the business's practice, not about a specific product's composition..
+     Removed "This product contains no ammonia." — Fact is about the business's practice, not about a specific product's composition..
+  [salon-10]
+     Not on record: Automatic monthly rebooking policy: Record whether the business has a confirmed, active system that automatically rebooks clients every month — e.g. 'We automatically rebook every client on a fixed monthly schedule without requiring them to contact us.'
+  [dairy-01]
+     Not on record: The welcome email has no brand name or business name on record — the owner should record: 'Business name is [Name].'
+     Not on record: There is no tagline or brand story on record — the owner should record: 'Our brand story / founding reason is [one sentence].'
+     Not on record: There is no record of what the ghee is made from (e.g. A2 cow milk, buffalo milk) — the owner should record: 'Desi ghee 500ml is made from [source milk].'
+     Not on record: There is no record of shelf life or storage instructions for the product — the owner should record: 'Desi ghee 500ml shelf life is [X months], store [condition].'
+     Not on record: There is no record of the offer code string for FIRST10 — the owner should record: 'The coupon code to apply for the 10% first-order discount is [CODE].'
+     Removed "The ghee is made slowly and carefully." — No fact states the process is slow or careful; hand-churned and Bilona method do not necessarily entail slowness or carefulness..
+     Removed "The ghee is made slowly and carefully." — No fact states the process is slow or careful; hand-churned and Bilona method do not necessarily entail slowness or carefulness..
+  [dairy-04]
+     You asked for 20% Diwali discount. Your records say The only recorded offer is FIRST10 — 10% off. No 20% Diwali offer exists in the records. — change the record, or I write it without that.
+     Left out: The business wants to promote a 20% Diwali discount — but no record supports a 20% offer; only a 10% offer (FIRST10) exists in the records. — no record was cited for this, so there is nothing to check it against.
+     Not on record: The Diwali discount percentage and its promo code or conditions (e.g., minimum order, validity dates) need to be recorded before the email can state them.
+     Removed "The business delivers hand-churned goodness to the customer's door." — nothing on record can support a capability claim.
+     Removed "The bilona method is slow and careful." — Approved facts describe the bilona method but do not state that it is slow and careful..
+     Removed "The bilona process is slow and careful, just as it has always been done." — Approved facts describe the bilona process but do not state that it is slow and careful, nor that it has always been done this way..
+  [dairy-07]
+     Not on record: What animal's milk is used (e.g. desi cow, buffalo) and is it A2? — Record the breed/milk type so the email can state it as a fact.
+     Not on record: Where is the ghee made / sourced from? — Record the village, farm or region so the email can ground the story in a real place.
+     Not on record: What is the shelf life or batch size of the product? — Record the figure so the email can set accurate expectations.
+     Removed "Ghee has been prepared using the traditional churning method in Indian homes for generations." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The ghee that arrives in the customer's kitchen is genuinely artisan ghee." — nothing on record can support a capability claim.
+     Removed "The ghee is not made by industrial machines." — Absence of mention of industrial machines does not entail they are not used; Rule 2 applies..
+     Removed "Every batch of ghee is handcrafted." — Approved facts describe the process but do not specify 'every batch' is handcrafted; more specific than the fact..
+     Removed "The ghee is not factory-produced." — Absence of mention of factory production does not entail it is not factory-produced; Rule 2 applies..
+
+GRADE THIS: scripts\eval\results\s1-exit-2026-10-16T10-52-30-703Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
