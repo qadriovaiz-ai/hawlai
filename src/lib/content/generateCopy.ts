@@ -314,7 +314,19 @@ export function onlyContentKeys(output: any): any {
  * human-graded baseline to be compared against.
  */
 export function factBoundEnabled(req: CopyRequest): boolean {
-  return process.env.FACT_BOUND_COPY === "1" && req.factBound === true && Boolean(req.facts);
+  // NO `Boolean(req.facts)` HERE, AND ITS ABSENCE IS THE POINT.
+  //
+  // It used to be the third condition, and it sent the
+  // records-unreadable case down the OLD path — so candle-08, the eval
+  // case built to catch invented specifics, never entered the pipeline.
+  // It produced a 20-minute figure twice, a two-hour first-burn
+  // instruction, hand-pouring and a scent description: six of the
+  // thirteen unsupported claims the reviewer found on 16 October 2026.
+  //
+  // Backwards. A business whose records cannot be read is precisely when
+  // this pipeline matters most: with nothing to cite, the Write step
+  // gets zero approved claims and the instruction not to fill the gap.
+  return process.env.FACT_BOUND_COPY === "1" && req.factBound === true;
 }
 
 /**
@@ -351,6 +363,12 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
     `\n\nRULES`,
     `\n- State nothing factual that is not in the list above: not a number, not a material, not a process, not a comparison, not a benefit, not a promise about anything happening automatically.`,
     `\n- Greetings, feelings, questions and one call to action are yours to write freely. Those are not facts.`,
+    // THE TWO SHAPES THAT GOT THROUGH ON 16 OCTOBER 2026, named because
+    // the model plainly does not read them as factual claims. Insurance
+    // rather than the fix: the verifier is what has to hold, since a
+    // later prompt change would re-open anything only said here.
+    `\n- DO NOT ADD A JUDGEMENT TO A FACT. Having stated something from the list, stop. No "— and that's the difference", no "because we take no shortcuts", no "results are real", no "you can taste it". A flourish attached to a true fact is a claim of its own, and nothing above supports it.`,
+    `\n- DO NOT STRENGTHEN A FACT WITH A WORD. Not pure, genuine, authentic, finest, premium, real, proper, perfect, 100%, asli or shudh — unless that exact word is in the list above. The list says what the thing IS; adding one of these says something more.`,
     `\n- Say nothing about the reader's own order, booking or account. You do not know who is reading this.`,
     `\n- Figures appear exactly as given above. Do not convert them, round them or spell them out in words.`,
     unknowns.length ? `\n- NOT on record, and must not appear in any form: ${unknowns.join("; ")}.` : "",
@@ -399,6 +417,20 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   if (factBound) {
     const ctx = contextFromFacts(req.logContext?.dealershipId ?? "unknown", req.facts, { kind: "email", topic: req.topic });
     factRecords = ctx.records;
+    // NOTHING TO SELECT FROM IS NOT A FAILURE TO SELECT.
+    //
+    // With no records there is nothing for a model to choose between, so
+    // Select is skipped — no call, no cost — and the Write step runs
+    // with zero approved claims and the instruction not to fill the gap.
+    // That is the founder's rule for thin records: the piece gets
+    // shorter and the owner gets a question.
+    //
+    // Distinguishing this from an unreachable model matters: one writes
+    // a short, honest email, the other must write nothing at all.
+    if (!ctx.records.length) {
+      selection = { claims: [], conflicts: [], unknowns: ctx.unknowns };
+      validated = { approved: [], rejected: [], questions: [] };
+    } else {
     const selected = await selectClaims(ctx, { logContext: req.logContext ?? null });
     if (!selected.ok) {
       console.error(`[generateCopy] ${req.operation} selection failed: ${selected.reason}`);
@@ -408,8 +440,9 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
         incomplete: true,
       });
     }
-    selection = selected.selection;
-    validated = validateSelection(selection, ctx.records, ctx.dealershipId);
+      selection = selected.selection;
+      validated = validateSelection(selection, ctx.records, ctx.dealershipId);
+    }
   }
 
   let r;

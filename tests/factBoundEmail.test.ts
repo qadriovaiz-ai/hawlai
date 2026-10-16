@@ -116,10 +116,23 @@ describe("1. the flag", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("needs both conditions and real records", () => {
+  it("needs both conditions — AND RUNS WITH NO RECORDS AT ALL", () => {
+    // CORRECTED 2026-10-16. This test used to assert
+    //
+    //     expect(factBoundEnabled(request({ facts: null }))).toBe(false)
+    //
+    // which encoded the defect the reviewer then found: the
+    // records-unreadable case went down the OLD path, so candle-08 — the
+    // eval case built to catch invented specifics — never entered the
+    // pipeline and produced six of the thirteen unsupported claims.
+    //
+    // Changed on the founder's instruction, and recorded rather than
+    // quietly flipped: this is not a test weakened to let a change
+    // through, it is a test that asserted a bug. A business whose
+    // records cannot be read is when the pipeline matters most.
     expect(factBoundEnabled(request())).toBe(true);
+    expect(factBoundEnabled(request({ facts: null }))).toBe(true);
     expect(factBoundEnabled(request({ factBound: false }))).toBe(false);
-    expect(factBoundEnabled(request({ facts: null }))).toBe(false);
     delete process.env.FACT_BOUND_COPY;
     expect(factBoundEnabled(request())).toBe(false);
   });
