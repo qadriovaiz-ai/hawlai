@@ -159,7 +159,7 @@ describe("the S1 exit test", () => {
     const spend = new Spend();
     const restore = meterFetch(spend);
     const rows: GradedSentence[] = [];
-    const perCase: { id: string; sentences: number; removed: number; note: string | null; publishable: boolean; error?: string }[] = [];
+    const perCase: { id: string; sentences: number; removed: number; note: string | null; incomplete: boolean; error?: string }[] = [];
 
     try {
       const { runCase } = await import("./surfaces");
@@ -170,10 +170,20 @@ describe("the S1 exit test", () => {
           const graded = toGradedRows(c, r.output, r.removed);
           rows.push(...graded);
           const note = r.output?._factsNote ?? null;
-          perCase.push({ id: c.id, sentences: graded.length, removed: r.removed.length, note, publishable: r.output?._publishable !== false });
-          say(`${graded.length} sentence(s)${note ? `, facts note present` : ""}`);
+          // A CASE THAT FAILED CLOSED IS NOT A CASE THAT RAN.
+          //
+          // The run of 2026-10-16 reported "cases that failed 0" and a
+          // cost of Rs 9.46 while FIVE of nine cases had produced
+          // nothing but the AI-failure message: their select call was
+          // refused by the provider, the pipeline failed closed exactly
+          // as designed, and no exception was thrown. The cheap number
+          // looked like good news. An incomplete run must not be able
+          // to read as a clean one.
+          const incomplete = Boolean(r.incomplete);
+          perCase.push({ id: c.id, sentences: graded.length, removed: r.removed.length, note, incomplete });
+          say(`${graded.length} sentence(s)${note ? ", facts note present" : ""}${incomplete ? "   *** NOTHING WAS WRITTEN - the model could not be reached ***" : ""}`);
         } catch (err: any) {
-          perCase.push({ id: c.id, sentences: 0, removed: 0, note: null, publishable: false, error: err?.message ?? String(err) });
+          perCase.push({ id: c.id, sentences: 0, removed: 0, note: null, incomplete: true, error: err?.message ?? String(err) });
           say(`FAILED — ${err?.message ?? err}`);
         }
       }
@@ -193,7 +203,9 @@ describe("the S1 exit test", () => {
     say("");
     say("=".repeat(66));
     say(`sentences produced    ${rows.length}   (baseline email run produced 136 in total)`);
-    say(`cases that failed     ${perCase.filter((p) => p.error).length}`);
+    const incomplete = perCase.filter((p) => p.incomplete || p.error);
+    say(`cases that threw      ${perCase.filter((p) => p.error).length}`);
+    say(`CASES THAT WROTE NOTHING  ${incomplete.length} of ${EMAIL_CASES.length}${incomplete.length ? `   <<< ${incomplete.map((p) => p.id).join(", ")}` : ""}`);
     say(`calls made            ${spend.calls}   (4 per email: select, write, extract, judge)`);
     say(`tokens                ${spend.inputTokens} in, ${spend.outputTokens} out`);
     say(`ACTUAL COST THIS RUN  Rs ${rounded.toFixed(2)}   (estimated Rs ${estimate.toFixed(2)})`);
@@ -208,6 +220,14 @@ describe("the S1 exit test", () => {
       for (const line of String(p.note).split("\n")) say(`     ${line}`);
     }
     say("");
+    if (incomplete.length) {
+      say("");
+      say("=".repeat(66));
+      say(`THIS RUN IS INCOMPLETE. ${incomplete.length} of ${EMAIL_CASES.length} cases never reached the model, so the`);
+      say("sheet below covers only the rest and NO verdict about the pipeline can");
+      say("be drawn from it. The low cost is the symptom, not the result.");
+      say("=".repeat(66));
+    }
     say(`GRADE THIS: ${join(OUT, `${label}-grade-reviewer.md`)}`);
     say("The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.");
 

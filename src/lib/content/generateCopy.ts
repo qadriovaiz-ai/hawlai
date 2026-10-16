@@ -226,6 +226,15 @@ export type CopyResult = {
   _cause?: string;
   _detail?: string;
   _malformed?: boolean;
+  /**
+   * NOTHING WAS WRITTEN: the model could not be reached at all.
+   *
+   * Distinct from a draft that came out badly. An eval reported five of
+   * nine cases as fine, with a cheap total, while their select call had
+   * been refused by the provider — the pipeline failed closed as
+   * designed and threw nothing, so the run read as complete.
+   */
+  incomplete?: boolean;
 };
 
 /** The cap, stated as a number the model can obey. */
@@ -393,6 +402,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       return fail({
         output: { text: aiFailureMessage("overloaded") },
         blockedReason: `The facts for this business could not be checked just now (${selected.reason}) — nothing was written.`,
+        incomplete: true,
       });
     }
     selection = selected.selection;
@@ -423,6 +433,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       output: { text: aiFailureMessage(r.failure.kind) },
       _aiFailure: aiFailureNote(r.failure),
       blockedReason: `${aiFailureMessage(r.failure.kind)} — nothing was published.`,
+      incomplete: true,
     });
   }
 

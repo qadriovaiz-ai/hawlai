@@ -1,0 +1,64 @@
+
+S1 EXIT TEST — the fact-bound pipeline on email
+==================================================================
+cases                 9  (candle-01, candle-05, candle-08, salon-01, salon-05, salon-10, dairy-01, dairy-04, dairy-07)
+baseline, email only  70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 22.93   (per-run cap Rs 30.00)
+already spent         Rs 103.73 of Rs 500.00
+==================================================================
+10 sentence(s), facts note present
+10 sentence(s), facts note present
+16 sentence(s)
+16 sentence(s), facts note present
+2 sentence(s)
+2 sentence(s)
+2 sentence(s)
+2 sentence(s)
+2 sentence(s)
+
+==================================================================
+sentences produced    62   (baseline email run produced 136 in total)
+cases that failed     0
+calls made            11   (4 per email: select, write, extract, judge)
+tokens                17735 in, 7039 out
+ACTUAL COST THIS RUN  Rs 9.46   (estimated Rs 22.93)
+COST PER EMAIL        Rs 1.05   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 113.19 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-01]
+     Not on record: The scent profile or fragrance notes of the lavender candle (e.g., 'top note: fresh lavender, base note: musk') — record what the fragrance smells like so copy can describe it.
+     Not on record: The candle's weight or volume (e.g., '200 g' or '200 ml jar') — record the size so the customer knows what to expect in the box.
+     Not on record: Estimated dispatch or delivery timeframe (e.g., 'ships within 2 business days') — record the fulfilment lead time so the welcome email can set expectations.
+     Removed "The customer's candle journey has started." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The business's candles are an experience made with care." — nothing on record can support a capability claim.
+     Removed "The business's candles provide a clean burn." — nothing on record can support a benefit claim.
+     Removed "A candle provides long and good light." — nothing on record can support a benefit claim.
+     Removed "The business's candles are an experience made with care." — nothing on record can support a capability claim.
+     Removed "The business is available to answer customer questions." — nothing on record can support a capability claim.
+     Removed "Each candle receives individual attention." — Approved fact does not state that each candle receives individual attention; hand-poured in small batches does not necessarily entail individual attention to each candle..
+  [candle-05]
+     Left out: Core reason for the email — the candle burns for 40 hours, which is the central claim. — nothing on record can support a benefit claim, and nothing you could write down would change that — this needs real evidence of its own.
+     Not on record: What wax brand or grade is used? Record the specific soy wax type (e.g. 'Golden Brands 464 soy wax') so copy can be more specific about why it burns longer than alternatives.
+     Not on record: Is the 40-hour burn time measured for both the Lavender and Rose candle, or only one? Record which SKU(s) the burn-hour figure applies to.
+     Removed "The candles illuminate the home." — nothing on record can support a capability claim.
+     Removed "The candles fill the home with fragrance." — nothing on record can support a capability claim.
+     Removed "The candles burn cleanly." — nothing on record can support a benefit claim.
+     Removed "The candles last longer than ordinary candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Each candle is special." — nothing on record can support a benefit claim.
+     Removed "The candles burn cleanly." — nothing on record can support a benefit claim.
+     Removed "The candles last longer than ordinary candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The candles are made of pure soy wax." — Soy wax (no paraffin) does not state it is pure—other materials may be present..
+     Removed "Care is taken at every step of the process." — Facts describe specific steps but do not state care is taken at every step..
+     Removed "The business uses only soy wax." — Soy wax (no paraffin) does not state only soy wax is used—other materials may be present..
+  [salon-01]
+     Left out: Name the service being welcomed — anchors the email to the right treatment. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Left out: Briefly describe the process step (hair wash first, then treatment) so the client knows what to expect on the day. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Aftercare instructions for the client to follow post-treatment (e.g., how many days before washing hair, products to avoid) — owner should record these as a numbered list.
+     Not on record: Business name / salon name to personalise the email sign-off — owner should record the trading name.
+     Not on record: Booking or contact details (phone number, address, booking link) to include in the email CTA — owner should record these.
+     This could not be checked against your records just now, so it is marked unverified.
+
+GRADE THIS: scripts\eval\results\s1-exit-2026-10-16T06-30-59-786Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

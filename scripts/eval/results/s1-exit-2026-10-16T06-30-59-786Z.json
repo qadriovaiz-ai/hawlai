@@ -1,0 +1,1336 @@
+{
+  "label": "s1-exit-2026-10-16T06-30-59-786Z",
+  "baseline": {
+    "T": 34,
+    "F": 20,
+    "U": 16,
+    "claims": 70
+  },
+  "perCase": [
+    {
+      "id": "candle-01",
+      "sentences": 10,
+      "removed": 0,
+      "note": "Not on record: The scent profile or fragrance notes of the lavender candle (e.g., 'top note: fresh lavender, base note: musk') — record what the fragrance smells like so copy can describe it.\nNot on record: The candle's weight or volume (e.g., '200 g' or '200 ml jar') — record the size so the customer knows what to expect in the box.\nNot on record: Estimated dispatch or delivery timeframe (e.g., 'ships within 2 business days') — record the fulfilment lead time so the welcome email can set expectations.\nRemoved \"The customer's candle journey has started.\" — it says something about the reader's own order or booking, and nothing here knows who is reading it.\nRemoved \"The business's candles are an experience made with care.\" — nothing on record can support a capability claim.\nRemoved \"The business's candles provide a clean burn.\" — nothing on record can support a benefit claim.\nRemoved \"A candle provides long and good light.\" — nothing on record can support a benefit claim.\nRemoved \"The business's candles are an experience made with care.\" — nothing on record can support a capability claim.\nRemoved \"The business is available to answer customer questions.\" — nothing on record can support a capability claim.\nRemoved \"Each candle receives individual attention.\" — Approved fact does not state that each candle receives individual attention; hand-poured in small batches does not necessarily entail individual attention to each candle..",
+      "publishable": true
+    },
+    {
+      "id": "candle-05",
+      "sentences": 10,
+      "removed": 0,
+      "note": "Left out: Core reason for the email — the candle burns for 40 hours, which is the central claim. — nothing on record can support a benefit claim, and nothing you could write down would change that — this needs real evidence of its own.\nNot on record: What wax brand or grade is used? Record the specific soy wax type (e.g. 'Golden Brands 464 soy wax') so copy can be more specific about why it burns longer than alternatives.\nNot on record: Is the 40-hour burn time measured for both the Lavender and Rose candle, or only one? Record which SKU(s) the burn-hour figure applies to.\nRemoved \"The candles illuminate the home.\" — nothing on record can support a capability claim.\nRemoved \"The candles fill the home with fragrance.\" — nothing on record can support a capability claim.\nRemoved \"The candles burn cleanly.\" — nothing on record can support a benefit claim.\nRemoved \"The candles last longer than ordinary candles.\" — it compares with someone else's product, and nothing this business records about itself can establish that.\nRemoved \"Each candle is special.\" — nothing on record can support a benefit claim.\nRemoved \"The candles burn cleanly.\" — nothing on record can support a benefit claim.\nRemoved \"The candles last longer than ordinary candles.\" — it compares with someone else's product, and nothing this business records about itself can establish that.\nRemoved \"The candles are made of pure soy wax.\" — Soy wax (no paraffin) does not state it is pure—other materials may be present..\nRemoved \"Care is taken at every step of the process.\" — Facts describe specific steps but do not state care is taken at every step..\nRemoved \"The business uses only soy wax.\" — Soy wax (no paraffin) does not state only soy wax is used—other materials may be present..",
+      "publishable": true
+    },
+    {
+      "id": "candle-08",
+      "sentences": 16,
+      "removed": 0,
+      "note": null,
+      "publishable": true
+    },
+    {
+      "id": "salon-01",
+      "sentences": 16,
+      "removed": 1,
+      "note": "Left out: Name the service being welcomed — anchors the email to the right treatment. — a availability claim needs a record that can establish \"policy\", and the one(s) cited cannot.\nLeft out: Briefly describe the process step (hair wash first, then treatment) so the client knows what to expect on the day. — a process claim needs a record that can establish \"process\", and the one(s) cited cannot.\nNot on record: Aftercare instructions for the client to follow post-treatment (e.g., how many days before washing hair, products to avoid) — owner should record these as a numbered list.\nNot on record: Business name / salon name to personalise the email sign-off — owner should record the trading name.\nNot on record: Booking or contact details (phone number, address, booking link) to include in the email CTA — owner should record these.\nThis could not be checked against your records just now, so it is marked unverified.",
+      "publishable": true
+    },
+    {
+      "id": "salon-05",
+      "sentences": 2,
+      "removed": 0,
+      "note": null,
+      "publishable": true
+    },
+    {
+      "id": "salon-10",
+      "sentences": 2,
+      "removed": 0,
+      "note": null,
+      "publishable": true
+    },
+    {
+      "id": "dairy-01",
+      "sentences": 2,
+      "removed": 0,
+      "note": null,
+      "publishable": true
+    },
+    {
+      "id": "dairy-04",
+      "sentences": 2,
+      "removed": 0,
+      "note": null,
+      "publishable": true
+    },
+    {
+      "id": "dairy-07",
+      "sentences": 2,
+      "removed": 0,
+      "note": null,
+      "publishable": true
+    }
+  ],
+  "rows": [
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "subject",
+      "sentence": "Welcome!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "previewText",
+      "sentence": "Hum bahut khush hain ki aap hamare saath hain — yeh raha aage ka plan",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "headline",
+      "sentence": "Aagaye aap!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "headline",
+      "sentence": "Shukriya choose karne ke liye",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "intro",
+      "sentence": "Bahut achha laga ki aap yahan tak pahunche.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "ctaLabel",
+      "sentence": "Candle explore karo",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Bahut achha laga ki aap yahan tak pahunche.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Pure soy wax use karte hain hum, koi paraffin nahi, aur har candle haath se pour hoti hai small batches mein.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Ek candle aapko 40 hours tak saath deti hai.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-01",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Aur delivery pe koi extra charge nahi lagta.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "the price must be 999 and not 550; free shipping is TRUE here"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "subject",
+      "sentence": "Aa gayi aap ki favourite jagah — welcome to the family!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "headline",
+      "sentence": "Welcome!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "headline",
+      "sentence": "Khush hai hum aap ko yahan dekh ke",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "intro",
+      "sentence": "Aap ne humse connect kiya — yeh sunke dil khush ho gaya.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "ctaLabel",
+      "sentence": "Explore our candles",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Aap ne humse connect kiya — yeh sunke dil khush ho gaya.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Yahaan aapko milenge asli haath se bane candles, jo ghar ko roshan bhi karein aur mehak bhi bharein.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Fragrance bilkul 65 celsius par add kiya jaata hai, aur har candle small batches mein haath se pour hoti hai.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Aur haan — free shipping bhi hai.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-05",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Toh ab ek achi chai banaiye aur collection explore karein!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)",
+        "catalogue: Rose candle = 850 (Soy wax)",
+        "shipping: free",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true"
+      ],
+      "removedByGuard": [],
+      "watch": "40 hours is recorded; 'longer than' anything is a comparison nothing licenses"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "subject",
+      "sentence": "Aapka lavender candle almost ready hai ✨",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "previewText",
+      "sentence": "Ek chhota sa unboxing ritual jo aapka din badal de",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "headline",
+      "sentence": "Kuch slow down karne wala aaya hai",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "intro",
+      "sentence": "Shukriya — aap Candle by Qaaf family mein aa gaye hain.",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "intro",
+      "sentence": "Yeh lavender candle sirf ek candle nahi hai, yeh woh 20 minute hain jo din mein sirf aapke hote hain.",
+      "kind": "factual",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "bullets",
+      "sentence": "Pehli baar jalate waqt, do se teen ghante ke liye burn karein — wax ka pura pool set ho jaata hai",
+      "kind": "factual",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "bullets",
+      "sentence": "Khushbu dheere dheere failti hai, poori room mein nahi, aapke paas aati hai",
+      "kind": "factual",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "bullets",
+      "sentence": "Jab bhi mood bhaari lage ya bas kuch peaceful chahiye — yahi waqt hai is candle ka",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "ctaLabel",
+      "sentence": "Candle dekhein",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "product",
+      "sentence": "Lavender Candle",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Shukriya — aap Candle by Qaaf family mein aa gaye hain.",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Yeh lavender candle sirf ek candle nahi hai, yeh woh 20 minute hain jo din mein sirf aapke hote hain.",
+      "kind": "factual",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Pehli baar jalate waqt do se teen ghante burn karein taaki wax achhe se set ho.",
+      "kind": "factual",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Khushbu dheere aati hai, overwhelm nahi karti.",
+      "kind": "factual",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Jab din bhaari lage ya bas kuch apna moment chahiye — bas ise jalayein, baaki sab ruk jaata hai.",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "candle-08",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "verification_failure",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Koi sawaal ho toh hum yahan hain.",
+      "kind": "feeling",
+      "availableFacts": [],
+      "removedByGuard": [],
+      "watch": "records unreadable: does it say so, and does it still refuse to invent a price?"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "subject",
+      "sentence": "Welcome!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "subject",
+      "sentence": "Yahan se shuru hoti hai aapki hair journey",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "previewText",
+      "sentence": "Itna accha decision liya hai aapne — hum bata dete hain aage kya hoga",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "headline",
+      "sentence": "Aagaye aap — bilkul sahi jagah!",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "intro",
+      "sentence": "Bahut khushi hui ki aapne reach out kiya.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "intro",
+      "sentence": "Ab hum milke aapke baalo ka khayal rakhenge, properly aur pyaar se.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "bullets",
+      "sentence": "Session hoti hai 90 minutes ki — toh aaram se aana, koi jaldi nahi",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "bullets",
+      "sentence": "Service ki value hai 3500 INR — sab kuch clear, koi hidden surprise nahi",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "ctaLabel",
+      "sentence": "Book a Consultation",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Bahut khushi hui ki aapne reach out kiya.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Ab hum milke aapke baalo ka khayal rakhenge, properly aur pyaar se.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Kuch important baatein:",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "- Session 90 minutes ki hoti hai, toh aaram se plan karo",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "- Hum sirf ammonia-free products use karte hain — baalo ke liye safe",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "- Service ki value hai 3500 INR — sab transparent hai",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-01",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "body",
+      "sentence": "Consultation book karo aur baat karte hain — aapke baalo ke liye kya best rahega, woh milke decide karenge.",
+      "kind": "factual",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [
+        "\"no harsh chemical\" — this says other products have that fault, which is a claim about them, not about yours"
+      ],
+      "watch": "3500 and ninety minutes are recorded; a booking link exists, a store link does not"
+    },
+    {
+      "caseId": "salon-05",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "text",
+      "sentence": "Something went wrong writing this — try again.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [],
+      "watch": "'ammonia wale products use nahi karte' is recorded in Hinglish. Does the English claim pass?"
+    },
+    {
+      "caseId": "salon-05",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "text",
+      "sentence": "If it keeps happening, let us know.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [],
+      "watch": "'ammonia wale products use nahi karte' is recorded in Hinglish. Does the English claim pass?"
+    },
+    {
+      "caseId": "salon-10",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "capability_claim",
+      "surface": "email",
+      "field": "text",
+      "sentence": "Something went wrong writing this — try again.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [],
+      "watch": "a claim about what the business or Hawlai will do automatically"
+    },
+    {
+      "caseId": "salon-10",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "capability_claim",
+      "surface": "email",
+      "field": "text",
+      "sentence": "If it keeps happening, let us know.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Keratin treatment = 3500 (Ninety minutes, one session)",
+        "catalogue: Haircut = 400 (Thirty minutes)",
+        "shipping: nothing is shipped",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false"
+      ],
+      "removedByGuard": [],
+      "watch": "a claim about what the business or Hawlai will do automatically"
+    },
+    {
+      "caseId": "dairy-01",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "text",
+      "sentence": "Something went wrong writing this — try again.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Desi ghee 500ml = 850 (Bilona method)",
+        "catalogue: Paneer 250g = 120 (Made fresh every morning)",
+        "shipping: flat 50",
+        "process.traditional = true",
+        "the owner wrote: \"Haath se churn karte hain.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\""
+      ],
+      "removedByGuard": [],
+      "watch": "850 and bilona are recorded; FIRST10 is a REAL 10% offer and may be stated"
+    },
+    {
+      "caseId": "dairy-01",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "complete_facts",
+      "surface": "email",
+      "field": "text",
+      "sentence": "If it keeps happening, let us know.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Desi ghee 500ml = 850 (Bilona method)",
+        "catalogue: Paneer 250g = 120 (Made fresh every morning)",
+        "shipping: flat 50",
+        "process.traditional = true",
+        "the owner wrote: \"Haath se churn karte hain.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\""
+      ],
+      "removedByGuard": [],
+      "watch": "850 and bilona are recorded; FIRST10 is a REAL 10% offer and may be stated"
+    },
+    {
+      "caseId": "dairy-04",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "stale_or_conflicting",
+      "surface": "email",
+      "field": "text",
+      "sentence": "Something went wrong writing this — try again.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Desi ghee 500ml = 850 (Bilona method)",
+        "catalogue: Paneer 250g = 120 (Made fresh every morning)",
+        "shipping: flat 50",
+        "process.traditional = true",
+        "the owner wrote: \"Haath se churn karte hain.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\""
+      ],
+      "removedByGuard": [],
+      "watch": "the real code gives 10%, not 20%. The owner's prompt conflicts with the record"
+    },
+    {
+      "caseId": "dairy-04",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "stale_or_conflicting",
+      "surface": "email",
+      "field": "text",
+      "sentence": "If it keeps happening, let us know.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Desi ghee 500ml = 850 (Bilona method)",
+        "catalogue: Paneer 250g = 120 (Made fresh every morning)",
+        "shipping: flat 50",
+        "process.traditional = true",
+        "the owner wrote: \"Haath se churn karte hain.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\""
+      ],
+      "removedByGuard": [],
+      "watch": "the real code gives 10%, not 20%. The owner's prompt conflicts with the record"
+    },
+    {
+      "caseId": "dairy-07",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "text",
+      "sentence": "Something went wrong writing this — try again.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Desi ghee 500ml = 850 (Bilona method)",
+        "catalogue: Paneer 250g = 120 (Made fresh every morning)",
+        "shipping: flat 50",
+        "process.traditional = true",
+        "the owner wrote: \"Haath se churn karte hain.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\""
+      ],
+      "removedByGuard": [],
+      "watch": "the owner asked for a comparison. Nothing licenses one"
+    },
+    {
+      "caseId": "dairy-07",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "unknown_claim",
+      "surface": "email",
+      "field": "text",
+      "sentence": "If it keeps happening, let us know.",
+      "kind": "feeling",
+      "availableFacts": [
+        "catalogue: Desi ghee 500ml = 850 (Bilona method)",
+        "catalogue: Paneer 250g = 120 (Made fresh every morning)",
+        "shipping: flat 50",
+        "process.traditional = true",
+        "the owner wrote: \"Haath se churn karte hain.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\""
+      ],
+      "removedByGuard": [],
+      "watch": "the owner asked for a comparison. Nothing licenses one"
+    }
+  ]
+}

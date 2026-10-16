@@ -13,7 +13,7 @@
 // approved, not warned about.
 
 import { describe, it, expect } from "vitest";
-import { validateSelection, validationNote, LICENCE_FOR_CLAIM } from "@/lib/facts/validateSelection";
+import { validateSelection, validationNote, LICENCE_FOR_CLAIM, typeFromKey } from "@/lib/facts/validateSelection";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, CLAIM_TYPES, type ClaimType } from "@/lib/facts/extractClaims";
 import { licensesFor, type FactRecord } from "@/lib/facts/factRecord";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
@@ -346,5 +346,115 @@ describe("8. true claims that were being refused", () => {
     // boundaries and not word boundaries.
     const v = validate([claim({ claimType: "count", factIds: ["f_name"], value: 50, unit: "ml" })], [named]);
     expect(v.rejected[0].rule).toBe("figure_mismatch");
+  });
+});
+
+// ---------------------------------------------------------------------
+// 9. A MISLABELLED FIGURE, RE-TYPED FROM THE RECORD IT CITES.
+//
+// The second clean-run fault of 2026-10-16. The candle's 40-hour burn
+// time was selected as claimType "benefit" — intent "the candle burns
+// for 40 hours, which is the central claim" — and refused, because
+// benefit is unlicensable. Fixing `duration` in the licence table did
+// nothing for a claim the model did not call a duration.
+//
+// The licence table is only ever as strong as the type the model picks,
+// so the record's KEY is consulted. That is a fact about the record,
+// not a judgement, which is why code may use it.
+// ---------------------------------------------------------------------
+describe("9. a figure mislabelled by the model", () => {
+  const burn = record({
+    id: "f_burn",
+    key: "product.burn_hours",
+    value: 40,
+    unit: "hours",
+    source: "owner_stated",
+    licenses: licensesFor("owner_stated"),
+    recordedText: "40 hours burn hota hai.",
+  });
+
+  it("A DURATION CALLED A BENEFIT IS STILL A DURATION, when it carries the record's figure", () => {
+    const v = validate([claim({ claimType: "benefit", factIds: ["f_burn"], value: 40, unit: "hours", intent: "the candle burns for 40 hours" })], [burn]);
+    expect(v.rejected).toEqual([]);
+    expect(v.approved[0].claimType).toBe("duration");
+  });
+
+  it("A BENEFIT CLAIM WITH NO FIGURE IS NOT RESCUED — the hole this must not open", () => {
+    // "It helps you sleep", citing a real record, labelled benefit. If
+    // re-typing did not require a matching figure, any benefit claim
+    // could cite any record and be re-typed into something licensable.
+    const v = validate([claim({ claimType: "benefit", factIds: ["f_owner"], value: null, unit: null, intent: "it helps you sleep" })]);
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_exists");
+  });
+
+  it("AND A FIGURE THAT DOES NOT MATCH THE RECORD IS NOT RESCUED EITHER", () => {
+    const v = validate([claim({ claimType: "benefit", factIds: ["f_burn"], value: 60, unit: "hours", intent: "it burns for 60 hours" })], [burn]);
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_exists");
+  });
+
+  it("a comparison is never rescued, whatever it cites", () => {
+    // Nothing a business records about itself can establish a claim
+    // about someone else's product, so no key could make it licensable.
+    const v = validate([claim({ claimType: "comparison", factIds: ["f_burn"], value: 40, unit: "hours", intent: "it burns longer than other candles" })], [burn]);
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_exists");
+  });
+
+  it("IT NEVER GOES THE OTHER WAY — a licensable label is left alone", () => {
+    // A model that under-claims is not the failure being fixed, and
+    // re-typing downwards would mean code deciding a claim is a benefit
+    // when the model said it was a price.
+    const v = validate([claim({ claimType: "price", factIds: ["f_price"], value: 999 })]);
+    expect(v.approved[0].claimType).toBe("price");
+  });
+
+  it("the key tells the type for every record kind getContext mints", () => {
+    expect(typeFromKey("product.lavender_candle.price")).toBe("price");
+    expect(typeFromKey("product.keratin_treatment.duration_minutes")).toBe("duration");
+    expect(typeFromKey("product.burn_hours")).toBe("duration");
+    expect(typeFromKey("offer.first10.percent")).toBe("offer");
+    expect(typeFromKey("shipping.mode")).toBe("shipping");
+    expect(typeFromKey("business.paid_orders")).toBe("count");
+    expect(typeFromKey("material.paraffin")).toBe("material");
+    expect(typeFromKey("process.double_boiler")).toBe("process");
+    // A prose statement has no type, so nothing is re-typed from it.
+    expect(typeFromKey("statement.fssai_licence")).toBeNull();
+    expect(typeFromKey("product.desi_ghee_500ml.name")).toBeNull();
+  });
+});
+
+describe("9b. the null-figure hole the mutations found", () => {
+  it("A BENEFIT CLAIM WITH NO FIGURE CANNOT BE RESCUED BY A null-VALUED RECORD", () => {
+    // Found by a surviving mutation, and it is the nastiest shape here.
+    // Dropping the "claim carries a figure" condition looked harmless
+    // against a record holding a real value — sameFigure(false, null)
+    // does not match — but a KNOWN-UNKNOWN record holds null, and
+    // Number(null) is 0 on both sides, so sameFigure(null, null)
+    // matches. A benefit claim citing "nothing is shipped" would then
+    // be re-typed to `shipping` and approved, with no figure left for
+    // the arithmetic to catch.
+    const nothingShipped = record({
+      id: "f_noship",
+      key: "shipping.mode",
+      value: null,
+      unit: null,
+      source: "shipping_config",
+      licenses: licensesFor("shipping_config"),
+      recordedText: "nothing is shipped",
+    });
+    const v = validate(
+      [claim({ claimType: "benefit", factIds: ["f_noship"], value: null, unit: null, intent: "it helps you relax" })],
+      [nothingShipped]
+    );
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_exists");
+  });
+
+  it("and a safety claim cannot either", () => {
+    const nothingShipped = record({ id: "f_noship", key: "shipping.mode", value: null, unit: null, source: "shipping_config", licenses: licensesFor("shipping_config") });
+    const v = validate([claim({ claimType: "safety", factIds: ["f_noship"], value: null, unit: null, intent: "safe for children" })], [nothingShipped]);
+    expect(v.approved).toEqual([]);
   });
 });

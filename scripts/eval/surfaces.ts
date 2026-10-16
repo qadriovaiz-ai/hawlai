@@ -20,6 +20,8 @@ export type CaseResult = {
   removed: string[];
   /** What the owner would be told, if anything. */
   note: string | null;
+  /** True when the model could not be reached, so nothing was written. */
+  incomplete?: boolean;
 };
 
 export async function runCase(c: EvalCase): Promise<CaseResult> {
@@ -31,17 +33,17 @@ export async function runCase(c: EvalCase): Promise<CaseResult> {
     case "email": {
       const { generateEmailContent } = await import("@/lib/agents/emailMarketingAgent");
       const r: any = await generateEmailContent("welcome_email", name, category, c.topic, null, undefined, undefined, facts, "draft");
-      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null };
+      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true };
     }
     case "facebook_post": {
       const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
       const r: any = await generateContent("facebook_post", name, category, c.topic, null, undefined, undefined, facts, "draft", { revise: true });
-      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null };
+      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true };
     }
     case "whatsapp": {
       const { generateWhatsappContent } = await import("@/lib/agents/whatsappMarketingAgent");
       const r: any = await generateWhatsappContent("broadcast", name, category, c.topic, null, undefined, undefined, facts, "draft");
-      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null };
+      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true };
     }
     case "lead_message": {
       const { generateFollowUpMessage } = await import("@/lib/agents/contentAgent");

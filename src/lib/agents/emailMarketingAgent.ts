@@ -50,7 +50,7 @@ export async function generateEmailContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's sent: unverified prices are flagged, not removed. Automation never passes it. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; publishable?: boolean; email?: ComposedEmail ; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; publishable?: boolean; email?: ComposedEmail ; _cause?: string; _detail?: string; _malformed?: boolean; _incomplete?: boolean }> {
   const meta = EMAIL_TASKS.find((t) => t.key === taskKey);
   if (!meta) return { output: { text: "Unknown task type." }, _fallback: true };
 
@@ -99,8 +99,12 @@ export async function generateEmailContent(
         grounding: groundingContext ?? undefined,
       },
     });
-    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    // _incomplete travels out, so a caller can tell "nothing was
+    // written" from "something was written badly". An eval read five
+    // unreachable-model cases as fine because nothing threw.
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure, _incomplete: copy.incomplete === true };
     if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+    if (copy.incomplete) return { output: copy.output, _fallback: true, _incomplete: true };
     if (copy._fallback) return fallback;
 
     const parsed = copy.output;

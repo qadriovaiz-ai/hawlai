@@ -57,6 +57,53 @@ export const LICENCE_FOR_CLAIM: Partial<Record<ClaimType, FactLicence>> = {
   customer_state: "value",
 };
 
+/**
+ * What a record's KEY says the claim about it is.
+ *
+ * THE S1 EXIT RUN OF 2026-10-16 LOST A TRUE CLAIM TO A LABEL. The
+ * candle's 40-hour burn time was selected with
+ * `claimType: "benefit"` — intent "the candle burns for 40 hours, which
+ * is the central claim" — and refused, because benefit is unlicensable.
+ * The licence table is only ever as strong as the type the model picks,
+ * and fixing `duration` in the table did nothing for a claim the model
+ * did not call a duration.
+ *
+ * So a record's key is consulted. It is a fact ABOUT the record rather
+ * than a judgement, which is why code may use it.
+ */
+const TYPE_FROM_KEY: { re: RegExp; claimType: ClaimType }[] = [
+  { re: /\.price$/, claimType: "price" },
+  { re: /\.duration_minutes$|_hours$|_minutes$|_days$/, claimType: "duration" },
+  { re: /^offer\./, claimType: "offer" },
+  { re: /^shipping\./, claimType: "shipping" },
+  { re: /^business\.(?:paid_orders|leads)$/, claimType: "count" },
+  { re: /^material\./, claimType: "material" },
+  { re: /^process\./, claimType: "process" },
+];
+
+export function typeFromKey(key: string): ClaimType | null {
+  return TYPE_FROM_KEY.find((t) => t.re.test(key))?.claimType ?? null;
+}
+
+/**
+ * The labels a figure may be rescued FROM. `comparison` is absent, and
+ * its own test is why.
+ *
+ * A mislabelled benefit, safety or capability claim is a claim about
+ * THIS business's own thing, wrongly named — so the record it cites can
+ * say what it is really about. A comparison is a claim about SOMEONE
+ * ELSE'S product, and no record of this business can establish one, so
+ * the cited record cannot be evidence of what the claim is about.
+ *
+ * The first version allowed all four, and the test "a comparison is
+ * never rescued" went red: "it burns longer than other candles",
+ * carrying 40 and citing the burn-hours record, was re-typed to
+ * `duration` and approved. That is the comparative claim this whole
+ * initiative started with, let through by a repair meant for a
+ * different fault.
+ */
+const RETYPABLE: ClaimType[] = ["benefit", "safety", "capability"];
+
 export type Rejection = {
   claim: SelectedClaim;
   /** Said plainly: this reaches the owner, not a log. */
@@ -140,7 +187,22 @@ export function validateSelection(selection: { claims: SelectedClaim[] }, record
   const rejected: Rejection[] = [];
   const questions: OwnerQuestion[] = [];
 
-  for (const claim of selection.claims) {
+  for (const original of selection.claims) {
+    // 0. A MISLABELLED FIGURE IS RE-TYPED FROM THE RECORD IT CITES, and
+    // the condition is deliberately narrow: the claim must carry a
+    // FIGURE that MATCHES the cited record's own value.
+    //
+    // That is what separates the two cases. "The candle burns for 40
+    // hours" labelled `benefit` carries 40 and cites a record whose
+    // value is 40 — it is plainly a claim about that figure, whatever
+    // the model called it. "It helps you sleep" labelled `benefit` and
+    // citing material.soy carries no figure at all, so nothing here
+    // touches it and it stays refused.
+    //
+    // Without the figure condition this would be a hole big enough to
+    // drive a benefit claim through: cite any real record, call it
+    // anything, get re-typed into something licensable.
+    const claim = retypeFromRecord(original, records);
     // 1. NO SOURCE CAN EVER LICENSE THIS. Not a missing record — an
     // impossible one. "Sleep better" and "safe for babies" are refused
     // by the absence of a licence rather than by a pattern, which is
@@ -247,6 +309,28 @@ export function validateSelection(selection: { claims: SelectedClaim[] }, record
   }
 
   return { approved, rejected, questions: dedupe(questions) };
+}
+
+/**
+ * The claim, with its type taken from the record when the model's label
+ * cannot be right.
+ *
+ * ONLY EVER FROM AN UNLICENSABLE LABEL TO A LICENSABLE ONE, and only
+ * when the figure matches. It never goes the other way: a claim the
+ * model called a price is not re-typed into a benefit, because a model
+ * that under-claims is not the failure being fixed.
+ */
+function retypeFromRecord(claim: SelectedClaim, records: FactRecord[]): SelectedClaim {
+  if (!RETYPABLE.includes(claim.claimType)) return claim;
+  if (claim.value === null || claim.value === undefined || claim.value === "") return claim;
+  for (const id of claim.factIds) {
+    const record = records.find((r) => r.id === id);
+    if (!record || !sameFigure(record.value, claim.value)) continue;
+    const fromKey = typeFromKey(record.key);
+    if (!fromKey || UNLICENSABLE_TYPES.includes(fromKey)) continue;
+    return { ...claim, claimType: fromKey };
+  }
+  return claim;
 }
 
 function dedupe(questions: OwnerQuestion[]): OwnerQuestion[] {
