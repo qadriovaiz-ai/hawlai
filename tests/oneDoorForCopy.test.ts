@@ -162,6 +162,13 @@ const NOT_COPY: Record<string, string> = {
   // that produces words is not on this list.
   "src/lib/facts/selectClaims.ts":
     "chooses which records a piece will state and cites them by id; returns claims, conflicts and unknowns, never prose",
+  // C2 step 4b, added 2026-10-16. Given finished copy's claims and the
+  // approved facts, it returns a verdict per claim. No figure ever
+  // reaches it as a question - prices, offers, shipping, durations and
+  // counts are decided by arithmetic, and only questions of MEANING are
+  // asked of the model.
+  "src/lib/facts/verifyClaims.ts":
+    "decides whether each claim the copy makes is supported; returns verdicts, writes no words, and judges no figures",
   "src/lib/agents/businessIntelligenceAgent.ts": "owner-facing analysis of the business's own numbers",
   "src/lib/agents/callScoringAgent.ts": "scores a recorded call for the owner; writes no copy",
   "src/lib/agents/competitorIntelAgent.ts": "research notes about other businesses, for the owner",
