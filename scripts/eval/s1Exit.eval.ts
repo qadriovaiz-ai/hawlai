@@ -156,6 +156,12 @@ describe("the S1 exit test", () => {
     const previous = process.env.FACT_BOUND_COPY;
     process.env.FACT_BOUND_COPY = "1";
 
+    // Declared out here because the summary below reports them.
+    const SPACING_MS = Number(process.env.EVAL_SPACING_MS ?? 12_000);
+    const RETRY_PAUSE_MS = Number(process.env.EVAL_RETRY_PAUSE_MS ?? 45_000);
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    let retries = 0;
+
     const spend = new Spend();
     const restore = meterFetch(spend);
     const rows: GradedSentence[] = [];
@@ -163,10 +169,25 @@ describe("the S1 exit test", () => {
 
     try {
       const { runCase } = await import("./surfaces");
-      for (const c of EMAIL_CASES) {
+      // SPACED, AND RETRIED ONCE. Five of nine cases were dropped by
+      // the provider in the run of 2026-10-16: four calls per email,
+      // nine emails, back to back. The pipeline failed closed on each,
+      // which is correct, and left the run worthless.
+      //
+      // A gap between cases and one retry after a longer pause is a
+      // MEASUREMENT fix, not a product one — nothing here changes what
+      // the door does when a call is refused.
+      for (const [index, c] of EMAIL_CASES.entries()) {
+        if (index > 0) await pause(SPACING_MS);
         process.stdout.write(`  ${c.id} … `);
         try {
-          const r: any = await runCase(c);
+          let r: any = await runCase(c);
+          if (r.incomplete) {
+            process.stdout.write(`refused, waiting ${Math.round(RETRY_PAUSE_MS / 1000)}s and retrying … `);
+            await pause(RETRY_PAUSE_MS);
+            r = await runCase(c);
+            retries += 1;
+          }
           const graded = toGradedRows(c, r.output, r.removed);
           rows.push(...graded);
           const note = r.output?._factsNote ?? null;
@@ -207,6 +228,7 @@ describe("the S1 exit test", () => {
     say(`cases that threw      ${perCase.filter((p) => p.error).length}`);
     say(`CASES THAT WROTE NOTHING  ${incomplete.length} of ${EMAIL_CASES.length}${incomplete.length ? `   <<< ${incomplete.map((p) => p.id).join(", ")}` : ""}`);
     say(`calls made            ${spend.calls}   (4 per email: select, write, extract, judge)`);
+    say(`cases retried         ${retries}   (spacing ${SPACING_MS}ms between cases)`);
     say(`tokens                ${spend.inputTokens} in, ${spend.outputTokens} out`);
     say(`ACTUAL COST THIS RUN  Rs ${rounded.toFixed(2)}   (estimated Rs ${estimate.toFixed(2)})`);
     say(`COST PER EMAIL        Rs ${(rounded / Math.max(1, EMAIL_CASES.length)).toFixed(2)}   (baseline was Rs 0.93)`);
