@@ -195,3 +195,52 @@ describe("a false value, through the validator", () => {
     expect(v.approved).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------
+// THE JUDGE READS THE RECORD'S OWN WORDS, NOT A MODEL'S PARAPHRASE.
+//
+// The second false refusal in the S1 exit run of 2026-10-16: the
+// dairy's row says "Haath se churn karte hain" and the copy said "made
+// using the traditional hand-churned method". The judge refused it —
+// "Approved fact mentions 'traditional Bilona method' but does not
+// specify 'hand-churned'" — and it was right about what it was SHOWN.
+// What it was shown was approvedForJudge printing the Select model's
+// `intent`, a paraphrase.
+//
+// A pipeline whose whole claim is that records are the evidence was
+// testing that claim against a summary written by a model.
+// ---------------------------------------------------------------------
+describe("the words the judge is shown", () => {
+  const churn: FactRecord = {
+    ...AMMONIA_FALSE,
+    id: "f_churn",
+    key: "process.hand_churned",
+    value: true,
+    recordedText: "Haath se churn karte hain.",
+  };
+
+  it("CARRIES THE RECORD'S OWN SENTENCE, in whatever language the owner wrote it", () => {
+    const text = approvedForJudge([claim({ claimType: "process", factIds: ["f_churn"], value: true, intent: "traditional method" })], [churn]);
+    expect(text).toMatch(/Haath se churn karte hain/);
+  });
+
+  it("and the model's paraphrase stays beside it, not instead of it", () => {
+    const text = approvedForJudge([claim({ claimType: "process", factIds: ["f_churn"], value: true, intent: "traditional method" })], [churn]);
+    expect(text).toMatch(/traditional method/);
+    expect(text).toMatch(/recorded as:/);
+  });
+
+  it("A CITATION WITH NO MATCHING RECORD ADDS NOTHING RATHER THAN A BLANK QUOTE", () => {
+    const text = approvedForJudge([claim({ factIds: ["f_missing"] })], [churn]);
+    expect(text).not.toMatch(/recorded as:/);
+  });
+
+  it("the same sentence cited twice is quoted once", () => {
+    const text = approvedForJudge([claim({ claimType: "process", factIds: ["f_churn", "f_churn"], value: true })], [churn]);
+    expect(text.match(/Haath se churn/g)).toHaveLength(1);
+  });
+
+  it("works with no records passed at all — older callers do not break", () => {
+    expect(approvedForJudge([claim()])).toMatch(/we do not use ammonia-based products/);
+  });
+});

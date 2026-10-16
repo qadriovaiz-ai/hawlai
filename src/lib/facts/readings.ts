@@ -177,6 +177,12 @@ function materialKey(word: string): string | null {
 const PROCESSES: { re: RegExp; key: string }[] = [
   { re: /(?:hand[-\s]?poured|haath\s+se\s+(?:dali|bhari)|हाथ\s*से)/i, key: "process.hand_poured" },
   { re: /(?:hand[-\s]?made|handcrafted|handloom)/i, key: "process.handmade" },
+  // Added 2026-10-16. The dairy records "Haath se churn karte hain" and
+  // the S1 exit run refused "made using the traditional hand-churned
+  // method" — true, recorded, and kept only as prose, which licenses
+  // nothing but its own existence. A typed reading gives it the same
+  // standing as every other recorded process.
+  { re: /(?:hand[-\s]?churn(?:ed|ing)?|haath\s+se\s+churn|हाथ\s*से\s*मथ)/i, key: "process.hand_churned" },
   { re: /(?:small\s+batch(?:es)?|chhote\s+batch)/i, key: "process.small_batch" },
   { re: /(?:double\s+boiler|डबल\s*बॉयलर)/i, key: "process.double_boiler" },
   { re: /(?:cold[-\s]?pressed|bilona|stone[-\s]?ground)/i, key: "process.traditional" },

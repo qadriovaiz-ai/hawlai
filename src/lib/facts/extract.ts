@@ -157,6 +157,22 @@ export function extractFromKnowledge(dealershipId: string, rows: KnowledgeRow[] 
           sourceRef,
           // Quoted, not interpreted — so this one is `observed`.
           confidence: "observed",
+          // EXISTENCE ONLY, and it stays that way.
+          //
+          // The S1 exit run of 2026-10-16 lost a true sentence here:
+          // the dairy's row "Haath se churn karte hain" was kept only
+          // as prose, so a `process` claim resting on it was refused at
+          // selection, Select reached for a coarser record, and the
+          // judge then refused "hand-churned" for not being in it.
+          //
+          // My first fix widened this line to licensesFor("owner_stated").
+          // tests/factExtractor.test.ts pins ["existence"] and it is
+          // RIGHT to: an unparsed sentence is quoted, not understood,
+          // and a claim should not rest on words nothing has read. The
+          // answer was to make the fact TYPED instead — readings.ts now
+          // reads "haath se churn" as process.hand_churned, which gets
+          // the full owner_stated licences like every other typed
+          // reading. No test was changed.
           licenses: ["existence"],
           recordedText: text,
           observedAt,

@@ -19,6 +19,7 @@ import { callClaude } from "@/lib/ai/claude";
 import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
+import type { FactRecord } from "@/lib/facts/factRecord";
 
 /** Claim types whose verdict is arithmetic, never judgement. */
 export const NUMERIC_TYPES = new Set(["price", "offer", "shipping", "duration", "count"]);
@@ -137,8 +138,37 @@ RULES
  * So a boolean never appears as a bare value. `false` says the thing is
  * NOT used or present; `true` says it is.
  */
-export function approvedForJudge(approved: SelectedClaim[]): string {
-  return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}`).join("\n");
+export function approvedForJudge(approved: SelectedClaim[], records: FactRecord[] = []): string {
+  return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}`).join("\n");
+}
+
+/**
+ * The cited records' OWN WORDS, beside the claim.
+ *
+ * THE S1 EXIT RUN REMOVED A TRUE SENTENCE BECAUSE OF THIS. The dairy's
+ * row says "Haath se churn karte hain" — hand-churned. The copy said
+ * "made using the traditional hand-churned method", and the judge
+ * refused it: "Approved fact mentions 'traditional Bilona method' but
+ * does not specify 'hand-churned'".
+ *
+ * The judge was right about what it was shown, and what it was shown
+ * was the SELECT MODEL'S `intent` — a paraphrase. This pipeline's whole
+ * claim is that records are the evidence, and the one place that claim
+ * is tested was reading a summary written by a model.
+ *
+ * So the record's recordedText travels with the claim. In whatever
+ * language the owner wrote it: the judge is told to read meaning, not
+ * wording, and an owner's Hinglish sentence is the most direct evidence
+ * there is.
+ */
+function citedWords(claim: SelectedClaim, records: FactRecord[]): string {
+  if (!records.length) return "";
+  const words = claim.factIds
+    .map((id) => records.find((r) => r.id === id)?.recordedText)
+    .map((t) => String(t ?? "").trim())
+    .filter(Boolean);
+  if (!words.length) return "";
+  return `\n    recorded as: ${Array.from(new Set(words)).map((w) => `"${w}"`).join("; ")}`;
 }
 
 function valueForJudge(c: SelectedClaim): string {
@@ -160,7 +190,7 @@ function valueForJudge(c: SelectedClaim): string {
 export async function verifyClaims(
   extracted: ExtractedClaim[],
   approved: SelectedClaim[],
-  opts: { logContext?: { supabase: any; dealershipId: string } | null; model?: string } = {}
+  opts: { logContext?: { supabase: any; dealershipId: string } | null; model?: string; records?: FactRecord[] } = {}
 ): Promise<VerifyResult> {
   const verdicts: Verdict[] = [];
   const forJudge: ExtractedClaim[] = [];
@@ -242,7 +272,7 @@ export async function verifyClaims(
       system: JUDGE_SYSTEM,
       tools: [JUDGE_TOOL],
       tool_choice: { type: "tool", name: JUDGE_TOOL.name },
-      messages: [{ role: "user", content: `Approved facts:\n${approvedForJudge(approved)}\n\nClaims to decide:\n${numbered}` }],
+      messages: [{ role: "user", content: `Approved facts:\n${approvedForJudge(approved, opts.records ?? [])}\n\nClaims to decide:\n${numbered}` }],
     },
     { operation: "claim_entailment", logContext: opts.logContext ?? null, attempts: 2, timeoutMs: 60_000 }
   );

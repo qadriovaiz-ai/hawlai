@@ -61,6 +61,7 @@ import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from 
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
 import { contextFromFacts } from "@/lib/facts/getContext";
+import type { FactRecord } from "@/lib/facts/factRecord";
 import { selectClaims, type SelectedClaim, type Selection } from "@/lib/facts/selectClaims";
 import { validateSelection, validationNote, type Validated } from "@/lib/facts/validateSelection";
 import { extractClaims } from "@/lib/facts/extractClaims";
@@ -392,10 +393,12 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   // was off, and nothing said so.
   // ------------------------------------------------------------------
   const factBound = factBoundEnabled(req);
+  let factRecords: FactRecord[] = [];
   let validated: Validated | null = null;
   let selection: Selection | null = null;
   if (factBound) {
     const ctx = contextFromFacts(req.logContext?.dealershipId ?? "unknown", req.facts, { kind: "email", topic: req.topic });
+    factRecords = ctx.records;
     const selected = await selectClaims(ctx, { logContext: req.logContext ?? null });
     if (!selected.ok) {
       console.error(`[generateCopy] ${req.operation} selection failed: ${selected.reason}`);
@@ -469,7 +472,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       factBoundDegraded = true;
       factBoundNote = "This could not be checked against your records just now, so it is marked unverified.";
     } else {
-      const verified = await verifyClaims(extracted.claims, validated.approved, { logContext: req.logContext ?? null });
+      const verified = await verifyClaims(extracted.claims, validated.approved, { logContext: req.logContext ?? null, records: factRecords });
       factBoundDegraded = verified.degraded;
       if (verified.unsupportedSentences.length) {
         parsed = withoutSentences(parsed, sentences, verified.unsupportedSentences);

@@ -565,3 +565,48 @@ describe("10. a negated material, separated from its negation", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------
+// 11. A RECORDED PROCESS, TYPED RATHER THAN QUOTED.
+//
+// The S1 exit run of 2026-10-16 refused "the ghee is made using the
+// traditional hand-churned method" — true, and recorded as "Haath se
+// churn karte hain". It was kept only as a statement.* record, which
+// licenses nothing but its own existence, so a process claim resting on
+// it was refused at selection; Select reached for a coarser record and
+// the judge then refused "hand-churned" for not being in it.
+//
+// My first fix widened statement.* to the full owner_stated licences,
+// which tests/factExtractor.test.ts section 5 pins against — rightly:
+// an unparsed sentence is quoted, not understood. So the fact is typed
+// instead.
+// ---------------------------------------------------------------------
+describe("11. hand-churning is a recorded process", () => {
+  it("READS THE OWNER'S HINGLISH AS A TYPED PROCESS", () => {
+    const r = readingsFor("Haath se churn karte hain.");
+    expect(r.map((x) => x.key)).toContain("process.hand_churned");
+    expect(r.find((x) => x.key === "process.hand_churned")?.value).toBe(true);
+  });
+
+  it("and the English forms too", () => {
+    for (const s of ["Hand-churned, the old way.", "We hand churn the curd.", "Hand churning takes longer."]) {
+      expect(readingsFor(s).map((x) => x.key), s).toContain("process.hand_churned");
+    }
+  });
+
+  it("A TYPED PROCESS RECORD CARRIES THE PROCESS LICENCE, which prose does not", () => {
+    const x = extractFromKnowledge(TENANT, [
+      { id: "d1", category: "general", title: "How it's made, step by step", content: "Bilona method se banate hain. Haath se churn karte hain." },
+    ]);
+    const typed = x.records.find((r) => r.key === "process.hand_churned");
+    expect(typed?.licenses).toContain("process");
+    // The statement record beside it is still existence-only. Both
+    // exist, and that is the point: one is understood, one is quoted.
+    const quoted = x.records.find((r) => r.key.startsWith("statement."));
+    if (quoted) expect(quoted.licenses).toEqual(["existence"]);
+  });
+
+  it("does not fire on churn used as anything else", () => {
+    expect(readingsFor("Customer churn is a problem for us.").map((x) => x.key)).not.toContain("process.hand_churned");
+  });
+});

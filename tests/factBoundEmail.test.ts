@@ -201,6 +201,31 @@ describe("3. the claim the founder named — customer_state", () => {
   });
 });
 
+describe("3b. the judge is shown the records, not a paraphrase", () => {
+  it("THE RECORD'S OWN SENTENCE REACHES THE JUDGE'S PROMPT", () => {
+    // A mutation found this gap: the door could stop passing the
+    // records to verifyClaims and nothing failed. The S1 exit run
+    // removed a true "hand-churned" sentence exactly because the judge
+    // saw the Select model's paraphrase instead of the owner's row.
+    return (async () => {
+      const sent = script(
+        await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "soy wax only" }]),
+        prose(JSON.stringify({ subject: "Hi", body: "The candles are soy wax." })),
+        tool("report_claims", {
+          claims: [{ sentenceIndex: 1, canonical: "the candles are made of soy wax", claimType: "material", subject: "own_product", polarity: "assert" }],
+        }),
+        tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says so" }] }),
+      );
+      await generateCopy(request());
+      expect(sent).toHaveLength(4);
+      const judgePrompt = JSON.stringify(sent[3]);
+      // The owner's own words, in their own language.
+      expect(judgePrompt).toMatch(/Kabhi sasta paraffin wax mix nahi karti/);
+      expect(judgePrompt).toMatch(/recorded as:/);
+    })();
+  });
+});
+
 describe("4. it fails closed", () => {
   it("A SELECT FAILURE DOES NOT FALL BACK TO THE OLD PROMPT", async () => {
     // A silent fallback would mean the flag was on, the pipeline was

@@ -279,3 +279,24 @@ function r_claims(r: Awaited<ReturnType<typeof run>>): ExtractedClaim[] {
   if (!r.ok) throw new Error(`extract failed: ${r.reason}`);
   return r.claims;
 }
+
+describe("5. what is a safety claim and what is a material claim", () => {
+  it("THE PROMPT SEPARATES 'WHAT IS IN IT' FROM 'IT IS SAFE'", () => {
+    // The S1 exit run removed "the keratin treatment does not use
+    // ammonia-based products" TWICE, as a safety claim. The record is
+    // material.ammonia = false — the exact fact. A safety claim can
+    // never be supported; a material claim can, so the label decided
+    // whether a true sentence survived.
+    //
+    // Pinned on the rule itself, because the typing happens in the
+    // model and the only thing code holds is the instruction.
+    const src = code("src/lib/facts/extractClaims.ts");
+    expect(src).toMatch(/A STATEMENT ABOUT WHAT IS OR IS NOT IN SOMETHING IS "material", NOT "safety"/);
+    // The three shapes the owner's records actually take.
+    expect(src).toMatch(/do not use <substance>/);
+    expect(src).toMatch(/<substance>-free/);
+    expect(src).toMatch(/made without <substance>/);
+    // And the line that keeps genuine safety claims where they belong.
+    expect(src).toMatch(/Only a claim that the thing IS SAFE, or safe FOR SOMEONE, is "safety"/);
+  });
+});
