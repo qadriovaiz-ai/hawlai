@@ -155,6 +155,13 @@ const NOT_COPY: Record<string, string> = {
   // would delete the verifier's findings.
   "src/lib/facts/extractClaims.ts":
     "reads finished copy and lists the claims it makes, for the verifier; writes no customer-facing words and is given no records",
+  // C2 step 1, added 2026-10-16. Chooses WHICH records the copy will
+  // state and cites them by id. It returns a list of claims, conflicts
+  // and unknowns — no prose, nothing a customer reads. The writing
+  // happens inside generateCopy itself, which IS the door, so the step
+  // that produces words is not on this list.
+  "src/lib/facts/selectClaims.ts":
+    "chooses which records a piece will state and cites them by id; returns claims, conflicts and unknowns, never prose",
   "src/lib/agents/businessIntelligenceAgent.ts": "owner-facing analysis of the business's own numbers",
   "src/lib/agents/callScoringAgent.ts": "scores a recorded call for the owner; writes no copy",
   "src/lib/agents/competitorIntelAgent.ts": "research notes about other businesses, for the owner",
