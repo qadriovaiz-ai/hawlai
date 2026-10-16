@@ -128,7 +128,8 @@ RULES
 5. Select FEWER claims rather than weaker ones. A short piece built on three solid records is the goal; padding it with a fourth that nothing supports is the failure this whole step exists to prevent.
 6. Choose nothing about a competitor, nothing about what the product will do to the reader's body, mood or health, nothing about safety, and nothing about what the business will do automatically for them. No record can support those, so selecting one only wastes the attempt.
 7. A record whose value is null means WE LOOKED AND THERE IS NO ANSWER. That is not permission to assume the opposite; it is a thing to leave out, or to raise as an unknown.
-8. Say nothing about the reader's own orders, bookings or account status. You have no record of who is reading this.`;
+8. Say nothing about the reader's own orders, bookings or account status. You have no record of who is reading this.
+9. SCOPE: A CLAIM ABOUT ONE NAMED PRODUCT OR SERVICE NEEDS A RECORD ABOUT THAT PRODUCT OR SERVICE. A record whose key begins with "product." is about that one item. Records about materials, processes, policies and the business's own statements are about HOW THE BUSINESS WORKS, and they do not support a claim about one item's composition or performance — however true they are. If the request wants a claim about one item and only a business-level record exists, that is an UNKNOWN: ask the owner to record it against the item. Do not stretch the general fact to cover the particular one.`;
 
 /** The records, in the shape the model cites from. Only what it needs to choose. */
 export function recordsForPrompt(records: FactRecord[]): string {

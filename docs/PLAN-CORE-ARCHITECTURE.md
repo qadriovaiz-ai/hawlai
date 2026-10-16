@@ -780,6 +780,72 @@ open questions are answered somewhere else is a plan nobody can read.
 | 5 | **ONE HUMAN GRADER.** Ovaiz is not grading; the reviewer's sheet is the grading of record. So there is no inter-grader agreement number, and there will not be one. That is a real limit on every claim made from this data: a single grader's reading of 135 sentences is the baseline, and nothing independently confirms it. Where a verdict is arguable, it is the reviewer's verdict |
 | 6 | **Budget:** the extractor gate and the S1 exit re-run are approved. The full 30-case re-run (~Rs 66) needs its own go. Gate actually spent Rs 51.51 across four runs |
 
+## 4b. The scope rule, and S1's verdict (16 October 2026)
+
+**S1 PASSES.** Email is on the fact-bound pipeline behind
+`FACT_BOUND_COPY=1`, and the exit test's three numbers are met.
+
+### The rule
+
+> A claim about ONE named product or service must be cited to a record
+> about THAT product or service. A business-level general statement does
+> not support it — **however true the general statement is.**
+
+The founder set this on 16 October 2026, reversing his own earlier
+reading, and the reversal is worth recording because I had it wrong too.
+The S1 exit run removed *"This product contains no ammonia"* twice. The
+only record was `material.ammonia = false`, from the owner's row
+*"Ammonia wale products use nahi karte"*. I reported those two removals
+as true claims wrongly removed, which would have failed S1.
+
+He corrected it: the judge was right. A business that says it does not
+use ammonia-based products may still use one product for the keratin and
+another for a colour service; nothing on record says which. The practice
+is recorded; the item's composition is not.
+
+It runs in both directions: a fact about one item does not support a
+claim about all of them either.
+
+### Where it is enforced
+
+| Moment | Where |
+|---|---|
+| Select must not pick such a claim | `selectClaims.ts` rule 9 — and it must report an unknown instead, asking the owner to record it against the item |
+| The judge must not entail it | `verifyClaims.ts` rubric rule 7 |
+| The grader must not mark it T | the grading sheet's header: *general business fact → specific product claim* is **U or F, never T** |
+
+All three are pinned by `tests/scopeRule.test.ts`, because the rule
+lives in prompts and a prompt rule deletes silently.
+
+### What it cost, and what paid for it
+
+Applied with nothing but business-level rows, this rule would also have
+refused *"the lavender candle is soy wax"* — true, recorded, and
+graded T four times in the baseline. So the catalogue's `description`
+column is now a record: `product.<key>.description`, holding "Soy wax,
+40 hour burn" against the Lavender candle. That is exactly the
+product-level evidence the rule asks for, and it was sitting unused in a
+column the whole time.
+
+### The three numbers
+
+| Metric | Baseline (email) | Run 3 |
+|---|---|---|
+| Unsupported claims reaching publish | 20 of 70 | **0** — every claim the verifier could not trace was removed |
+| Unsupported claims in a draft with no mark | 20 of 70 | **0** — every removal is named in `_factsNote` |
+| True claims wrongly removed | 0 of 34 | **0** |
+
+Cost: **Rs 2.73 per email** against a baseline of Rs 0.93 — 2.9x, and
+within the 2.4x the plan estimated once the retry is counted. Four model
+calls an email: select, write, extract, judge.
+
+**What this does NOT say.** Numbers 1 and 2 are the pipeline's own
+account of itself: every claim it judged unsupported was removed and
+named. Whether an unsupported claim SURVIVED all four steps is the
+reviewer's to grade, on the sheet in `scripts/eval/results/`. The
+pipeline cannot be the witness for its own defence, and that limit
+belongs here next to the numbers.
+
 ## 5. What is needed from Ovaiz before S1
 
 1. **C1's spine:** `gatherBusinessFacts` as the single reader, with

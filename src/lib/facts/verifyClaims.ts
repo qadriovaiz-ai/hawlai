@@ -115,7 +115,8 @@ RULES
 3. A fact about the thing itself does not support a claim about its EFFECT on a person, or about anyone else's product. If you see such a claim, it is not entailed.
 4. A fact that something is not known does not support a claim either way.
 5. Rephrasing in another language is still the same claim: judge the meaning, not the wording.
-6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.`;
+6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.
+7. SCOPE. A claim about ONE named product or service must be supported by a fact about THAT product or service. A general fact about how the business works does not support it, however true that general fact is. "We never use <substance>" is a fact about the business's practice; "this product contains no <substance>" is a claim about one item's composition, and only a fact about that item supports it. The same holds for every direction: a fact about one item does not support a claim about all of them, and a fact about the business does not support a claim about one of them.`;
 
 /**
  * The approved facts, as the judge reads them. Plain lines, no ids.

@@ -137,6 +137,36 @@ function catalogueRecords(dealershipId: string, products: CatalogProduct[], obse
         observedAt,
       });
     }
+    // THE DESCRIPTION IS PRODUCT-SCOPED EVIDENCE, and the scope rule of
+    // 2026-10-16 is why it has to be a record.
+    //
+    // The founder's rule: a claim about one named product needs a record
+    // about THAT product, never a business-level statement, however true
+    // the statement is. "We do not use ammonia-based products" does not
+    // establish "this treatment contains no ammonia" — only a record
+    // about the treatment does.
+    //
+    // Applied with nothing but business-level rows, that rule would also
+    // refuse "the lavender candle is soy wax", which is true and
+    // recorded. The catalogue's own description — "Soy wax, 40 hour
+    // burn", written against the Lavender candle — is exactly the
+    // product-level evidence the rule asks for, and it was sitting
+    // unused in a column.
+    const description = String(p.description ?? "").trim();
+    if (description) {
+      out.push({
+        id: factId(dealershipId, `${ref}#description`, description),
+        dealershipId,
+        key: `product.${key}.description`,
+        value: description,
+        source: "catalogue",
+        sourceRef: ref,
+        confidence: "observed",
+        licenses: licensesFor("catalogue"),
+        recordedText: `${name || key}: ${description}`,
+        observedAt,
+      });
+    }
     const price = Number(p.price);
     if (Number.isFinite(price) && price > 0) {
       out.push({
