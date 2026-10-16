@@ -1,0 +1,52 @@
+
+HINGLISH RECALL GATE — C2 step 4a
+================================================================
+cases                 30
+sentences             329  (33 graded F by the reviewer)
+model                 claude-haiku-4-5-20251001
+ESTIMATE THIS RUN     Rs 15.14   (per-run cap Rs 30.00)
+already spent         Rs 52.76 of Rs 500.00
+================================================================
+13 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+11 claim(s), 0 F-sentence(s) missed
+3 claim(s), 0 F-sentence(s) missed
+10 claim(s), 1 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+3 claim(s), 0 F-sentence(s) missed
+19 claim(s), 0 F-sentence(s) missed
+1 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+10 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+6 claim(s), 0 F-sentence(s) missed
+2 claim(s), 0 F-sentence(s) missed
+6 claim(s), 0 F-sentence(s) missed
+13 claim(s), 0 F-sentence(s) missed
+17 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+15 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+9 claim(s), 0 F-sentence(s) missed
+13 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+6 claim(s), 1 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+
+================================================================
+F SENTENCES NOTICED   31 of 33   (93.9%)
+T sentences noticed   70 of 72   (a claim noticed here is judged, not refused)
+calls made            30
+ACTUAL COST THIS RUN  Rs 13.12   (estimated Rs 15.14)
+RUNNING TOTAL         Rs 65.88 of Rs 500.00
+VERDICT               FAIL — the gate is every F sentence noticed
+================================================================
+
+MISSED — a claim nobody enumerates is a claim nobody judges:
+  [candle-05] Hamare candles soy wax se bante hain — yeh slower aur cleaner jalte hain regular paraffin wax ke mukable.
+  [dairy-09] There is a long-standing assumption that ghee leads to weight gain — but that idea deserves a closer look.

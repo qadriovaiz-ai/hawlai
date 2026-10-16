@@ -170,6 +170,29 @@ describe("the Hinglish recall gate", () => {
         list.push(`${claim.claimType}/${claim.subject}${claim.polarity === "hedge" ? "/hedge" : ""}: ${claim.canonical}`);
         byIndex.set(claim.sentenceIndex, list);
       }
+      // A CLAIM REPORTED ONCE COVERS EVERY SENTENCE THAT MAKES IT.
+      //
+      // Found in gate run 3, as a miss that was not one. candle-05
+      // carries "Hamare candles soy wax se bante hain — yeh slower aur
+      // cleaner jalte hain regular paraffin wax ke mukable" TWICE, once
+      // in bullets and once in the body, differing only by a full stop.
+      // The model enumerated the claim once and attributed it to one
+      // index, which is correct behaviour; this harness counted per
+      // index and read the twin as unnoticed. The comparison WAS caught.
+      //
+      // Measuring recall per index while the extractor reports per
+      // claim is the bug, and it is in the measurement, not the model.
+      const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const claimsForText = new Map<string, string[]>();
+      c.rows.forEach((row, i) => {
+        const claims = byIndex.get(i);
+        if (claims?.length) claimsForText.set(normalise(row.sentence), claims);
+      });
+      c.rows.forEach((row, i) => {
+        if (byIndex.get(i)?.length) return;
+        const twin = claimsForText.get(normalise(row.sentence));
+        if (twin) byIndex.set(i, twin);
+      });
       let missedHere = 0;
       c.rows.forEach((row, i) => {
         const claims = byIndex.get(i) ?? [];

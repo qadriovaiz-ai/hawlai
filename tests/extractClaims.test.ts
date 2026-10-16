@@ -78,6 +78,24 @@ describe("1. the call", () => {
     expect(sent).not.toMatch(/factId|sourceRef|catalogue:|FactRecord/);
   });
 
+  it("ENUMERATES AT TEMPERATURE 0 — a stochastic reader cannot be gated", async () => {
+    // Gate run 3: one hedged claim was enumerated in two runs and
+    // missed in the third, same sentence, same prompt. The default
+    // temperature of 1.0 was sampling. Variation in a step that lists
+    // what a sentence claims is not flair — it is a claim checked on
+    // Monday and shipped on Tuesday.
+    let body: any = null;
+    globalThis.fetch = (async (_url: any, init: any) => {
+      body = JSON.parse(init.body);
+      return new Response(JSON.stringify({ content: [{ type: "tool_use", name: "report_claims", input: { claims: [] } }], usage: {} }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    await run(["The candle is ₹999."]);
+    expect(body.temperature).toBe(0);
+  });
+
   it("uses the cheap model by default, and takes an override so the gate can price the alternative", () => {
     const src = code("src/lib/facts/extractClaims.ts");
     expect(src).toContain("CLAUDE_MODELS.fast");

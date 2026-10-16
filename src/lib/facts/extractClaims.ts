@@ -193,6 +193,19 @@ export async function extractClaims(
       // and the model is an argument so the gate can price the
       // alternative.
       model: opts.model ?? CLAUDE_MODELS.fast,
+      // TEMPERATURE 0, AND LEAVING IT UNSET WAS A REAL BUG.
+      //
+      // Found in gate run 3 of 2026-10-16. "There is a long-standing
+      // assumption that ghee leads to weight gain — but that idea
+      // deserves a closer look" was enumerated as a hedged claim in two
+      // runs and missed in the third — same sentence, same prompt, three
+      // draws, two hits. The default temperature of 1.0 was sampling.
+      //
+      // This step ENUMERATES; it does not compose. Variation here is not
+      // flair, it is a claim that gets checked on Monday and shipped on
+      // Tuesday, and no gate can certify a stochastic reader on one
+      // draw.
+      temperature: 0,
       max_tokens: 2000,
       system: SYSTEM,
       tools: [TOOL],
