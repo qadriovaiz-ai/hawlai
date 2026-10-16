@@ -1,0 +1,99 @@
+
+S1 EXIT TEST — the fact-bound pipeline on email
+==================================================================
+cases                 9  (candle-01, candle-05, candle-08, salon-01, salon-05, salon-10, dairy-01, dairy-04, dairy-07)
+baseline, email only  70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 22.93   (per-run cap Rs 30.00)
+already spent         Rs 79.37 of Rs 500.00
+==================================================================
+13 sentence(s), facts note present
+15 sentence(s), facts note present
+17 sentence(s)
+13 sentence(s), facts note present
+7 sentence(s), facts note present
+12 sentence(s), facts note present
+15 sentence(s), facts note present
+13 sentence(s), facts note present
+12 sentence(s), facts note present
+
+==================================================================
+sentences produced    117   (baseline email run produced 136 in total)
+cases that failed     0
+calls made            36   (4 per email: select, write, extract, judge)
+tokens                53880 in, 17033 out
+ACTUAL COST THIS RUN  Rs 24.36   (estimated Rs 22.93)
+COST PER EMAIL        Rs 2.71   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 103.73 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-01]
+     Left out: Communicate the 40-hour burn time as a concrete value-for-money signal. — a duration claim needs a record that can establish "value", and the one(s) cited cannot.
+     Not on record: The lavender fragrance name or source (e.g. essential oil vs. fragrance oil, origin) is not on record — the owner could record: 'The lavender fragrance used is [name/type], sourced from [supplier/origin].'
+     Not on record: No candle size or weight is on record — the owner could record: 'The lavender candle weighs [X] grams / is [Y] cl.'
+     Not on record: No welcome-offer or discount for new subscribers is on record — the owner could record: 'New subscribers receive [X]% off / a flat ₹[X] discount on their first order.'
+     Removed "The candles are made from pure soy wax." — Fact says 'soy wax only' but not 'pure soy wax'—purity is more specific than the fact..
+     Removed "The candles are shipped directly to the customer's door." — Free shipping is mentioned, but not that candles are shipped directly to the customer's door..
+     Removed "The Lavender Candle is made from pure soy wax." — Fact says 'soy wax only' but not 'pure soy wax'—purity is more specific than the fact..
+     Removed "The Lavender Candle is shipped directly to the customer's home." — Free shipping is mentioned, but not that the Lavender Candle is shipped directly to the customer's home..
+  [candle-05]
+     Left out: The core reason-to-believe for the email: our candles burn for 40 hours, which is the central claim the email is built around. — a duration claim needs a record that can establish "value", and the one(s) cited cannot.
+     Not on record: No record covers how our 40-hour burn time compares to a specific competitor or industry average. Owner to record: 'The average burn time of comparable candles on the market is ___ hours.'
+     Not on record: No record covers the specific wax grade or supplier used. Owner to record: 'We use ___ grade soy wax sourced from ___.' This would strengthen the material story.
+     Removed "Soy wax candles produce a cleaner burn than paraffin candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Soy wax candles have a slower glow than paraffin candles." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The entire candle-making process is done by hand in small batches." — Approved fact states 'Hand-poured in small batches' but does not state the entire process is done by hand — only the pouring is explicitly hand-done. Other steps (melting, fragrance addition) are described separately and not stated to be hand-done..
+  [salon-01]
+     Left out: Walk the customer through what happens during the appointment — hair wash first, then treatment. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Aftercare instructions for the keratin treatment (e.g., how many days to avoid washing hair, products to use or avoid) — record what the owner advises customers to do after the treatment.
+     Not on record: Business name or stylist name to personalise the welcome email greeting — record the trading name used with customers.
+     Removed "The customer's keratin treatment booking has been completed." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The treatment is gentle with the customer's hair." — nothing on record can support a benefit claim.
+     Removed "The treatment does not contain harsh chemicals." — nothing on record can support a safety claim.
+     Removed "There are no hidden charges for the treatment." — The fact states the price (3500 inr) but does not address whether there are hidden charges..
+     Removed "The treatment is ammonia-free." — The approved fact states that the reassurance about no ammonia-based products is FALSE, so the treatment is not ammonia-free..
+     Removed "The treatment is ammonia-free." — The approved fact states that the reassurance about no ammonia-based products is FALSE, so the treatment is not ammonia-free..
+  [salon-05]
+     Left out: Describes the treatment process (hair wash first, then treatment) to build trust and transparency. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Which specific products or product brands are ammonia-free? Record f_482e3d54 confirms ammonia is not used but names no specific products — the owner could record: 'We use [Brand/Product Name], which is ammonia-free.'
+     Not on record: Is there a booking or contact method (phone number, link, address) the email should direct readers to? No record covers this.
+     Removed "This salon has something special for the customer." — nothing on record can support a benefit claim.
+     Removed "This salon does not use ammonia." — nothing on record can support a safety claim.
+     Removed "This salon delivers results." — nothing on record can support a capability claim.
+     Removed "The customer has arrived at this salon." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The customer enquired at this salon among many other salons." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "This salon does not use ammonia-based products." — nothing on record can support a safety claim.
+     Removed "Taking care of the customer's hair is this salon's priority." — nothing on record can support a capability claim.
+     Removed "The price of this salon's treatment is 3500." — it states 3500 currency, and the figures on record are 3500 inr, 90 minutes.
+     Removed "This salon does not use ammonia-based products." — nothing on record can support a safety claim.
+     Removed "Taking care of the customer's hair is this salon's priority." — nothing on record can support a capability claim.
+     Removed "The price of this salon's keratin treatment is 3500." — it states 3500 currency, and the figures on record are 3500 inr, 90 minutes.
+     Removed "This salon has no hidden charges." — The fact states a concrete price (3500 inr) but does not address whether there are hidden charges or additional fees..
+  [salon-10]
+     Not on record: Automatic monthly rebooking policy: Record whether the business has a confirmed, active system that automatically rebooks clients every month — e.g. 'We automatically rebook every client on a fixed monthly cycle without requiring them to call or message.'
+  [dairy-01]
+     Left out: Build trust with new subscribers by citing the FSSAI licence number. — it states 11223344556677, and the record(s) it cites say FSSAI licence 11223344556677..
+     Not on record: The records show 40 paid orders and 12 leads but no customer review quotes or testimonials to cite in a welcome email — the owner could record: one or more verbatim customer review sentences with the reviewer's first name.
+     Not on record: No record covers where the milk comes from (e.g. breed of cow, farm location) — the owner could record: the source of the milk used to make the ghee, stated as a fact (e.g. 'Milk sourced from Gir cows at our farm in [location]').
+     Not on record: No record covers the product's shelf life or storage instructions — the owner could record: the shelf life of the 500ml ghee in months/days and recommended storage conditions.
+     Removed "A first jar of Bilona ghee is waiting for the customer." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "A 500 ml jar of Bilona ghee is priced at ₹850." — it states 500 ml, and the figures on record are 850 inr, 10 percent, 50 inr.
+  [dairy-04]
+     You asked for 20% Diwali discount. Your records say The only discount on record is FIRST10 — 10% off. There is no record of a 20% Diwali offer. — change the record, or I write it without that.
+     Left out: The business wants to promote a 20% Diwali discount — but no record supports this figure. — no record was cited for this, so there is nothing to check it against.
+     Left out: FSSAI licence number builds trust in a food product email. — it states 11223344556677, and the record(s) it cites say FSSAI licence 11223344556677..
+     Not on record: The Diwali discount percentage and its promo code or conditions (e.g., minimum order, validity dates) — record the exact figure, code, start date and end date so the email can state them accurately.
+     Removed "The business delivers hand-churned goodness to the customer's door." — nothing on record can support a capability claim.
+     Removed "The business takes traditional, hand-churned dairy very seriously." — nothing on record can support a capability claim.
+  [dairy-07]
+     Left out: Supports the hand-churned angle, making the process feel artisanal and personal vs factory-made supermarket ghee. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: What specific quality or sourcing difference makes this ghee better than supermarket ghee (e.g., breed of cow, A2 milk, grass-fed, farm source)? Record as a factual statement such as: 'Ghee is made from A2 milk sourced from [breed/farm].'
+     Not on record: What is the quantity or origin of the milk used — e.g., 'Milk is sourced from desi cows in [region/village]'? This would strengthen the comparison claim against supermarket ghee.
+     Not on record: Does the business have any customer reviews or testimonials on record that could be cited? Record as: '[Customer name/handle] said: "[exact quote]"'.
+     Removed "The ghee is made using the traditional churning method, not the shortcut most supermarket brands use." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The ghee is made using the traditional churning way, not the shortcut most supermarket brands use." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The ghee is FSSAI certified." — Approved facts mention 'food-safety credibility' and 'trust signal' but do not state FSSAI certification of the ghee itself..
+     Removed "The business is FSSAI certified." — Approved facts mention 'food-safety credibility' and 'trust signal' but do not state FSSAI certification of the business..
+
+GRADE THIS: scripts\eval\results\s1-exit-2026-10-16T06-08-48-347Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
