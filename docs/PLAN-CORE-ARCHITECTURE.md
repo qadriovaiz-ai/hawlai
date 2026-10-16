@@ -782,8 +782,19 @@ open questions are answered somewhere else is a plan nobody can read.
 
 ## 4b. The scope rule, and S1's verdict (16 October 2026)
 
-**S1 PASSES.** Email is on the fact-bound pipeline behind
-`FACT_BOUND_COPY=1`, and the exit test's three numbers are met.
+> **RETRACTED THE SAME DAY. S1 DOES NOT PASS.** The reviewer graded all
+> 123 sentences and found **13 unsupported claims sitting in drafts with
+> no mark**. The table further down this section reported that number as
+> 0, and it was mine to get right: I printed the pipeline's own account
+> of itself as a result, having written two paragraphs below it saying
+> that a pipeline cannot be the witness for its own defence. Saying the
+> limit out loud is not the same as respecting it.
+>
+> The scope rule in this section stands — the founder's correction was
+> right and it is in force. The VERDICT does not. See §4c.
+
+Email is on the fact-bound pipeline behind `FACT_BOUND_COPY=1`, which
+remains blank.
 
 ### The rule
 
@@ -829,11 +840,16 @@ column the whole time.
 
 ### The three numbers
 
-| Metric | Baseline (email) | Run 3 |
-|---|---|---|
-| Unsupported claims reaching publish | 20 of 70 | **0** — every claim the verifier could not trace was removed |
-| Unsupported claims in a draft with no mark | 20 of 70 | **0** — every removal is named in `_factsNote` |
-| True claims wrongly removed | 0 of 34 | **0** |
+| Metric | Baseline (email) | Run 3, as I reported it | Run 3, graded |
+|---|---|---|---|
+| Unsupported claims reaching publish | 20 of 70 | 0 | not yet separated from the row below |
+| Unsupported claims in a draft with no mark | 20 of 70 | 0 | **13** |
+| True claims wrongly removed | 0 of 34 | 0 | **0** — confirmed by the reviewer |
+
+The middle column was the pipeline reporting on itself: every claim the
+verifier could not trace WAS removed and named, which is true and is not
+the metric. The metric is whether an unsupported claim survived all four
+steps, and 13 did.
 
 Cost: **Rs 2.73 per email** against a baseline of Rs 0.93 — 2.9x, and
 within the 2.4x the plan estimated once the retry is counted. Four model
@@ -845,6 +861,86 @@ named. Whether an unsupported claim SURVIVED all four steps is the
 reviewer's to grade, on the sheet in `scripts/eval/results/`. The
 pipeline cannot be the witness for its own defence, and that limit
 belongs here next to the numbers.
+
+## 4c. Why S1 failed, and the fix plan (16 October 2026)
+
+No paid run until the founder approves this section.
+
+### The root cause is one sentence, and it was already written down
+
+The recall gate measured the extractor against **the 135 sentences of
+the 13 October baseline** — copy written by the OLD prompt. The new
+pipeline's own output has never been through the gate. §6 of this
+document says it:
+
+> *"Whether that holds on copy the baseline never produced is unknown."*
+
+It was flagged, and then not acted on. Select → Write produces a
+different *shape* of sentence from the old free-text prompt, and the
+gate's recall on that shape is unmeasured. Two failure classes follow.
+
+### Class A — a vague benefit riding on a true fact
+
+The extractor enumerates the factual claim in the sentence and misses
+the second clause. Every one of these has a TRUE, recorded fact in it,
+which is exactly why the vague half travels:
+
+| Case | Sentence | True part | Rode along |
+|---|---|---|---|
+| candle-05 | "Fragrance sirf 65 celsius pe dala jata hai — kyunki quality mein koi shortcuts nahi" | 65 celsius is recorded | "koi shortcuts nahi" |
+| salon-05 | "Keratin treatment sirf Rs 3500 mein — budget-friendly, results real" | Rs 3500 is in the catalogue | "budget-friendly, results real" |
+| candle-05 | "Yahan har cheez thodi slowly, thodi carefully banti hai — aur wahi fark dikhta hai" | the process steps are recorded | "wahi fark dikhta hai" |
+| dairy-07 | "Pure desi ghee, made in Indore, ready for your kitchen" | the ghee and the city | "Pure" |
+
+The joins are a dash, `kyunki`, `aur`, `isliye`. The baseline's
+sentences rarely had this shape, because the old prompt wrote longer
+free prose; the new Write step produces tight sentences built around an
+approved fact, with the flourish bolted on.
+
+### Class B — the records-unreadable case never entered the pipeline at all
+
+candle-08 produced invented specifics: a **20-minute** figure twice, a
+**2-hour** first-burn instruction, "har pour haath se kiya gaya hai",
+a scent description, and "candle zyada der chalti hai". It is the case
+built to catch exactly this.
+
+The cause is one condition I wrote:
+
+```ts
+return process.env.FACT_BOUND_COPY === "1" && req.factBound === true && Boolean(req.facts);
+```
+
+`Boolean(req.facts)` sends the no-records case down the OLD path. It is
+backwards: a business whose records cannot be read is precisely when the
+pipeline matters most. Its `note=NO` in the run log and its single model
+call were the evidence, sitting in the output the whole time, and I read
+the case as having passed.
+
+### The fix, in four parts
+
+| # | Fix | Why this one |
+|---|---|---|
+| 1 | **Drop `Boolean(req.facts)`.** With no records, Select is skipped (there is nothing to select from) and the Write step runs with ZERO approved claims — the "NO FACT WAS APPROVED FOR THIS PIECE … Do not fill the gap" branch that already exists. Extract and verify still run, so anything factual that slips in is removed | Class B, and it reuses what is built rather than adding a path |
+| 2 | **The extractor becomes clause-aware.** A sentence joined by a dash, `kyunki`, `aur`, `isliye`, `matlab` or a comma may carry two claims, and a vague quality clause riding on a true fact is its own claim — *the true half does not vouch for it* | Class A, at the only place that can hold forever: the verifier must catch whatever any future prompt produces |
+| 3 | **The Write step is told not to write them.** It already says "state nothing factual that is not in the list"; the model plainly does not read "results real" as a factual claim, so the shape is named | Cheap insurance. Not the real fix — a prompt change downstream would re-open it, which is why 2 exists |
+| 4 | **The gate runs on the NEW pipeline's output.** A second gate over the 123 sentences of the S1 run, with the reviewer's 13 as the known-missed set, so recall on new text becomes a number instead of an assumption | The root cause. Without this, fixes 2 and 3 are untested against the thing that broke |
+
+### Order, and what it costs
+
+1. Fixes 1-3 with tests and mutation checks. **Free.**
+2. Fix 4's gate on the saved 123 sentences. **~Rs 15**, no new copy generated.
+3. Only if the gate shows acceptable recall: a fourth S1 exit run. **~Rs 25.**
+
+Nothing paid runs before the founder approves. Running total so far
+**Rs 161.61 of Rs 500**; all three steps together would reach about
+**Rs 202**.
+
+### What I need from the founder
+
+The **13 sentences, with their case ids**. They are the known-missed set
+fix 4 measures against, and I will not guess them from the output — the
+four in Class A above are my own reading of the run, not his grading,
+and the two lists may differ.
 
 ## 5. What is needed from Ovaiz before S1
 
