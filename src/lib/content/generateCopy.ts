@@ -79,7 +79,7 @@ import {
   askedForStory,
   WORD_CAPS,
 } from "@/lib/content/customerFirst";
-import { languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
+import { languageFor, languageRule, normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
 import { resolveFestiveTopic } from "@/lib/expertise/seasonalCalendar";
 
 export type LogContext = { supabase: any; dealershipId: string };
@@ -259,7 +259,7 @@ function shapeLines(storyAllowed: boolean): string {
 
 /** Everything the model is told, assembled in one place. */
 export function copyPrompt(req: CopyRequest, storyAllowed: boolean): string {
-  const language = normaliseLanguage(req.language ?? req.facts?.brand?.language ?? null);
+  const language = languageFor(req.topic, req.language ?? req.facts?.brand?.language ?? null);
   const topic = resolveFestiveTopic(req.topic, req.facts?.season) || "general, use good judgement for this business type";
   return `You are writing for an Indian ${req.businessCategory} business called "${req.businessName}".
 ${req.brief.brandContext ?? ""}${req.brief.grounding ?? ""}${truthBlock(req.facts, req.audience ?? "owner")}
@@ -322,7 +322,7 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
   const claims = approved.length
     ? approved.map((c, i) => `[${i + 1}] ${c.intent || c.claimType}${figure(c)}`).join("\n")
     : "(none)";
-  const language = normaliseLanguage(req.language ?? req.facts?.brand?.language ?? null);
+  const language = languageFor(req.topic, req.language ?? req.facts?.brand?.language ?? null);
   const parts = [
     req.brief.brandContext ?? "",
     `\nYou are writing a ${req.brief.label}.`,
@@ -352,7 +352,7 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
 }
 
 export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
-  const language = normaliseLanguage(req.language ?? req.facts?.brand?.language ?? null);
+  const language = languageFor(req.topic, req.language ?? req.facts?.brand?.language ?? null);
   // The owner's words decide, not the surface's judgement.
   const storyAllowed = req.storyAllowed ?? askedForStory(req.topic);
 

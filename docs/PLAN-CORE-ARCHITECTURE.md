@@ -766,6 +766,20 @@ not a bug, and C2's Write step needs the answer as an input.
 
 ---
 
+## 4a. Decisions taken (16 October 2026)
+
+All six items from §5 are settled. Recorded here because a plan whose
+open questions are answered somewhere else is a plan nobody can read.
+
+| # | Decision |
+|---|---|
+| 1 | **C1's spine is `gatherBusinessFacts`.** `getContext` is a thin task-slicing wrapper over it, and `contextFromFacts` does the shaping so the door never reads the facts twice. A test asserts getContext reads no table of its own |
+| 2 | **The metric is three numbers**, as in §4.5: unsupported claims reaching publish = 0; unsupported claims in a draft with no mark = 0 (marked, not necessarily deleted); true claims wrongly removed on publish = 0. S2 cannot be passed by making drafts stricter |
+| 3 | **The nine FACT rows move to `general`**, once the founder has confirmed the slug with a read query. It is no longer a blocker: after S1-2 a row's protection does not depend on its category, so the SQL is safe to run in either order and changes nothing functionally — it only makes the label honest |
+| 4 | **The owner's ask for one piece beats the setting**, for language. salon-08: brand Hinglish, the owner typed "in english", the output was Hinglish. `languageAskedFor` reads an explicit instruction only — "post about our english classes" is a subject, not an instruction |
+| 5 | **ONE HUMAN GRADER.** Ovaiz is not grading; the reviewer's sheet is the grading of record. So there is no inter-grader agreement number, and there will not be one. That is a real limit on every claim made from this data: a single grader's reading of 135 sentences is the baseline, and nothing independently confirms it. Where a verdict is arguable, it is the reviewer's verdict |
+| 6 | **Budget:** the extractor gate and the S1 exit re-run are approved. The full 30-case re-run (~Rs 66) needs its own go. Gate actually spent Rs 51.51 across four runs |
+
 ## 5. What is needed from Ovaiz before S1
 
 1. **C1's spine:** `gatherBusinessFacts` as the single reader, with

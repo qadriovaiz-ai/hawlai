@@ -23,6 +23,44 @@ export function normaliseLanguage(value: unknown): CopyLanguage {
   return "hinglish";
 }
 
+/**
+ * The language the owner asked for IN THIS PIECE, or null.
+ *
+ * Founder's decision, 2026-10-16: the ask for one piece beats the
+ * setting. salon-08 in the 13 October baseline is the case — the brand
+ * language is Hinglish, the owner typed "broadcast in english about the
+ * haircut price", and the output came back in Hinglish. The reviewer
+ * refused to grade it and said it needed a decision rather than a fix.
+ *
+ * NARROW ON PURPOSE. It matches only an explicit instruction about the
+ * language of the writing — "in English", "English mein likho" — and not
+ * a mention of a language as a subject ("post about our English
+ * classes", "we translate to Hindi"), which would hijack the piece. The
+ * word must follow a preposition that makes it an instruction.
+ */
+export function languageAskedFor(topic: string | null | undefined): CopyLanguage | null {
+  const t = String(topic ?? "").toLowerCase();
+  if (!t.trim()) return null;
+  // "in english", "english me", "english mein", "english language me"
+  const ask = /\b(?:in|into)\s+(english|hindi|hinglish)\b|\b(english|hindi|hinglish)(?:\s+language)?\s+(?:me|mein|m)\b/i.exec(t);
+  if (!ask) return null;
+  const named = (ask[1] ?? ask[2] ?? "").toLowerCase();
+  // Devanagari is a script, not a third language here: "hindi mein"
+  // means the hindi rule, which already says Devanagari.
+  if (named === "english") return "english";
+  if (named === "hindi") return "hindi";
+  if (named === "hinglish") return "hinglish";
+  return null;
+}
+
+/**
+ * The language this piece is written in: the per-piece ask, then the
+ * setting, then the product's default.
+ */
+export function languageFor(topic: string | null | undefined, setting: unknown): CopyLanguage {
+  return languageAskedFor(topic) ?? normaliseLanguage(setting);
+}
+
 const RULES: Record<CopyLanguage, string> = {
   english: `Write EVERY word of this piece in English. The owner's notes, story answers and quotes below are mostly in Hinglish — that is their record of what happened, NOT the language of this piece. Take the detail and say it in English; never carry their Hinglish phrasing across, and never leave a Hindi word in Roman script (say it in English, not a Hindi word in Roman script). Indian English is right — plain, warm, not American.`,
   hindi: `Write EVERY word of this piece in Hindi, in Devanagari script. The owner's notes below may be in Roman-script Hinglish; take the detail and write it in Hindi. Keep the English words Indian customers actually use in Hindi speech (online, delivery, workshop) rather than forcing rare translations.`,
