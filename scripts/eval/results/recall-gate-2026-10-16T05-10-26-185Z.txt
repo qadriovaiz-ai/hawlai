@@ -1,0 +1,48 @@
+
+HINGLISH RECALL GATE — C2 step 4a
+================================================================
+cases                 30
+sentences             329  (33 graded F by the reviewer)
+model                 claude-haiku-4-5-20251001
+ESTIMATE THIS RUN     Rs 15.14   (per-run cap Rs 30.00)
+already spent         Rs 65.88 of Rs 500.00
+================================================================
+16 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+10 claim(s), 0 F-sentence(s) missed
+3 claim(s), 0 F-sentence(s) missed
+10 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+3 claim(s), 0 F-sentence(s) missed
+18 claim(s), 0 F-sentence(s) missed
+1 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+11 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+8 claim(s), 0 F-sentence(s) missed
+2 claim(s), 0 F-sentence(s) missed
+6 claim(s), 0 F-sentence(s) missed
+14 claim(s), 0 F-sentence(s) missed
+18 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+8 claim(s), 0 F-sentence(s) missed
+18 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+8 claim(s), 0 F-sentence(s) missed
+13 claim(s), 0 F-sentence(s) missed
+4 claim(s), 0 F-sentence(s) missed
+7 claim(s), 0 F-sentence(s) missed
+5 claim(s), 0 F-sentence(s) missed
+
+================================================================
+F SENTENCES NOTICED   33 of 33   (100.0%)
+T sentences noticed   70 of 72   (a claim noticed here is judged, not refused)
+calls made            30
+ACTUAL COST THIS RUN  Rs 13.49   (estimated Rs 15.14)
+RUNNING TOTAL         Rs 79.37 of Rs 500.00
+VERDICT               PASS — the gate is every F sentence noticed
+================================================================

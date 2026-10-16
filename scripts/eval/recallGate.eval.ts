@@ -149,6 +149,7 @@ describe("the Hinglish recall gate", () => {
     let spent = 0;
     let calls = 0;
     const failures: { caseId: string; sentence: string }[] = [];
+    const trueMissed: { caseId: string; sentence: string }[] = [];
     const noticed: { caseId: string; sentence: string; claims: string[] }[] = [];
     let tNoticed = 0;
     let tTotal = 0;
@@ -199,6 +200,12 @@ describe("the Hinglish recall gate", () => {
         if (row.verdict === "T") {
           tTotal += 1;
           if (claims.length) tNoticed += 1;
+          // Recorded from run 5 on. A true claim that is not enumerated
+          // is not REFUSED, only unconfirmed — a precision cost, not a
+          // safety one — but the summary could not name which two they
+          // were, and a number nobody can look into is a number nobody
+          // can act on.
+          else trueMissed.push({ caseId: c.id, sentence: row.sentence });
         }
         if (row.verdict !== "F") return;
         if (claims.length) noticed.push({ caseId: c.id, sentence: row.sentence, claims });
@@ -231,7 +238,7 @@ describe("the Hinglish recall gate", () => {
 
     if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    writeFileSync(join(OUT, `recall-gate-${stamp}.json`), JSON.stringify({ recall, failures, noticed, calls, inr: rounded }, null, 2), "utf8");
+    writeFileSync(join(OUT, `recall-gate-${stamp}.json`), JSON.stringify({ recall, failures, trueMissed, noticed, calls, inr: rounded }, null, 2), "utf8");
     writeFileSync(join(OUT, `recall-gate-${stamp}.txt`), LINES.join("\n"), "utf8");
     ledger.runs.push({ at: new Date().toISOString(), label: `recall-gate-${stamp}`, inr: rounded, calls });
     ledger.totalInr = Math.round((spentSoFar + rounded) * 100) / 100;
