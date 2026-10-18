@@ -1,0 +1,107 @@
+
+FIX 4 — THE GATE ON THE NEW PIPELINE'S OUTPUT
+====================================================================
+cases                 9   (+ 5 batches of the thirteen, sent as themselves)
+sentences             125   (from the saved S1 run — no new copy is generated)
+known missed          13   (the reviewer's list)
+model                 claude-haiku-4-5-20251001
+ESTIMATE THIS RUN     Rs 8.48   (per-run cap Rs 30.00)
+already spent         Rs 194.64 of Rs 500.00
+====================================================================
+6 claim(s)
+7 claim(s)
+3 claim(s)
+6 claim(s)
+4 claim(s)
+5 claim(s)
+11 claim(s)
+0 claim(s)
+6 claim(s)
+6 claim(s)
+10 claim(s)
+8 claim(s)
+10 claim(s)
+6 claim(s)
+
+====================================================================
+calls made            14
+ACTUAL COST THIS RUN  Rs 6.20   (estimated Rs 8.48)
+RUNNING TOTAL         Rs 200.84 of Rs 500.00
+
+OF THE 13 THE REVIEWER FOUND:
+  refused outright    8   (an unlicensable claim — removed with no judge call)
+  enumerated          5   (a licensable claim — the judge decides)
+  STILL MISSED        0
+====================================================================
+
+THE TWO PATTERNS, ON THE SAME CALLS:
+  claims carrying aboutProduct   28 of 86
+  sentences with a causal join   0
+  of those, the LINK named       0
+====================================================================
+
+[candle-05] A1 — REFUSED OUTRIGHT
+   Yahan har cheez thodi slowly, thodi carefully banti hai — aur wahi fark dikhta hai.
+     -> process/own_business: Things are made slowly and carefully at this business.
+     -> benefit/own_business: The slow and careful process makes a difference in the product.
+
+[candle-05] A1 — REFUSED OUTRIGHT
+   Fragrance sirf 65 celsius pe dala jata hai — kyunki quality mein koi shortcuts nahi
+     -> process/own_product: Fragrance is added at 65 degrees Celsius.
+     -> capability/own_business: No shortcuts are taken on quality.
+
+[candle-05] A1 — REFUSED OUTRIGHT
+   Yahan har cheez thodi carefully banti hai — aur wahi fark dikhta hai.
+     -> process/own_business: Things are made carefully at this business.
+     -> benefit/own_business: The careful process makes a difference in the product.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.
+     -> benefit/own_product: Those 20 minutes are when the home feels somewhat quieter and somewhat softer.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Har pour haath se kiya gaya hai — machine nahi, care hai
+     -> process/own_product: Each pour is done by hand, not by machine.
+     -> capability/own_business: The product involves care rather than machine production.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Scent itna subtle hai ki room mein ghuste hi feel hota hai, overwhelm nahi
+     -> benefit/own_product: The scent is so subtle that you feel it upon entering the room, without being overwhelmed.
+
+[candle-08] B — REFUSED OUTRIGHT
+   Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.
+     -> benefit/own_product: Those 20 minutes are when the home feels somewhat quieter and somewhat softer.
+
+[candle-08] B — enumerated — goes to the judge
+   Ek kaam karo pehli baar jalaane se pehle: candle ko 2 ghante tak burn karne do, taaki wax pool poori surface t
+     -> process/own_product: Before lighting the candle for the first time, you should let it burn for 2 hours so that the wax pool forms across the entire surface.
+
+[candle-08] B — enumerated — goes to the judge
+   Isse scent bhi achhi tarah aata hai, aur candle zyada der chalti hai.
+     -> process/own_product: The scent comes through well as a result of the wax pool forming across the entire surface.
+     -> duration/own_product: The candle lasts longer as a result of the wax pool forming across the entire surface.
+
+[salon-05] A1 — REFUSED OUTRIGHT
+   Keratin treatment sirf ₹3500 mein — budget-friendly, results real
+     -> price/own_product: Keratin treatment costs ₹3500
+     -> benefit/own_product: Keratin treatment is budget-friendly
+     -> capability/own_product: Keratin treatment produces real results
+
+[dairy-04] A2 — enumerated — goes to the judge
+   We make pure, hand-churned clarified butter the traditional way — and we're delighted to have you with us.
+     -> material/own_product: The clarified butter is pure.
+     -> process/own_product: The clarified butter is hand-churned.
+     -> process/own_product: The clarified butter is made the traditional way.
+
+[dairy-04] A2 — enumerated — goes to the judge
+   We make pure, hand-churned clarified butter the traditional way — and we are delighted to have you with us.
+     -> material/own_product: The clarified butter is pure.
+     -> process/own_product: The clarified butter is hand-churned.
+     -> process/own_product: The clarified butter is made the traditional way.
+
+[dairy-07] A2 — enumerated — goes to the judge
+   Pure desi ghee, made in Indore, ready for your kitchen.
+     -> material/own_product: The ghee is pure.
+     -> material/own_product: The ghee is desi ghee.
+     -> process/own_product: The ghee is made in Indore.
+     -> availability/own_product: The ghee is ready for the customer's kitchen.

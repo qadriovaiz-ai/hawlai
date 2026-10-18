@@ -1,0 +1,88 @@
+
+FIX 4 — THE GATE ON THE NEW PIPELINE'S OUTPUT
+====================================================================
+cases                 9
+sentences             125   (from the saved S1 run — no new copy is generated)
+known missed          13   (the reviewer's list)
+model                 claude-haiku-4-5-20251001
+ESTIMATE THIS RUN     Rs 5.45   (per-run cap Rs 30.00)
+already spent         Rs 190.44 of Rs 500.00
+====================================================================
+5 claim(s)
+11 claim(s)
+0 claim(s)
+6 claim(s)
+6 claim(s)
+6 claim(s)
+8 claim(s)
+10 claim(s)
+6 claim(s)
+
+====================================================================
+calls made            9
+ACTUAL COST THIS RUN  Rs 4.20   (estimated Rs 5.45)
+RUNNING TOTAL         Rs 194.64 of Rs 500.00
+
+OF THE 13 THE REVIEWER FOUND:
+  refused outright    0   (an unlicensable claim — removed with no judge call)
+  enumerated          0   (a licensable claim — the judge decides)
+  STILL MISSED        13
+====================================================================
+
+THE TWO PATTERNS, ON THE SAME CALLS:
+  claims carrying aboutProduct   28 of 78
+  sentences with a causal join   0
+  of those, the LINK named       0
+====================================================================
+
+[candle-05] A1 — MISSED
+   Yahan har cheez thodi slowly, thodi carefully banti hai — aur wahi fark dikhta hai.
+   (no claims at all)
+
+[candle-05] A1 — MISSED
+   Fragrance sirf 65 celsius pe dala jata hai — kyunki quality mein koi shortcuts nahi
+   (no claims at all)
+
+[candle-05] A1 — MISSED
+   Yahan har cheez thodi carefully banti hai — aur wahi fark dikhta hai.
+   (no claims at all)
+
+[candle-08] B — MISSED
+   Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.
+   (no claims at all)
+
+[candle-08] B — MISSED
+   Har pour haath se kiya gaya hai — machine nahi, care hai
+   (no claims at all)
+
+[candle-08] B — MISSED
+   Scent itna subtle hai ki room mein ghuste hi feel hota hai, overwhelm nahi
+   (no claims at all)
+
+[candle-08] B — MISSED
+   Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.
+   (no claims at all)
+
+[candle-08] B — MISSED
+   Ek kaam karo pehli baar jalaane se pehle: candle ko 2 ghante tak burn karne do, taaki wax pool poori surface t
+   (no claims at all)
+
+[candle-08] B — MISSED
+   Isse scent bhi achhi tarah aata hai, aur candle zyada der chalti hai.
+   (no claims at all)
+
+[salon-05] A1 — MISSED
+   Keratin treatment sirf ₹3500 mein — budget-friendly, results real
+   (no claims at all)
+
+[dairy-04] A2 — MISSED
+   We make pure, hand-churned clarified butter the traditional way — and we're delighted to have you with us.
+   (no claims at all)
+
+[dairy-04] A2 — MISSED
+   We make pure, hand-churned clarified butter the traditional way — and we are delighted to have you with us.
+   (no claims at all)
+
+[dairy-07] A2 — MISSED
+   Pure desi ghee, made in Indore, ready for your kitchen.
+   (no claims at all)

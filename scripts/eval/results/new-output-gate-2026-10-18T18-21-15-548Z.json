@@ -1,0 +1,142 @@
+{
+  "verdicts": [
+    {
+      "caseId": "candle-05",
+      "text": "Yahan har cheez thodi slowly, thodi carefully banti hai — aur wahi fark dikhta hai.",
+      "klass": "A1",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "process/own_business: Things are made slowly and carefully at this business.",
+        "benefit/own_business: The slow and careful process makes a difference in the product."
+      ]
+    },
+    {
+      "caseId": "candle-05",
+      "text": "Fragrance sirf 65 celsius pe dala jata hai — kyunki quality mein koi shortcuts nahi",
+      "klass": "A1",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "process/own_product: Fragrance is added at 65 degrees Celsius.",
+        "capability/own_business: No shortcuts are taken on quality."
+      ]
+    },
+    {
+      "caseId": "candle-05",
+      "text": "Yahan har cheez thodi carefully banti hai — aur wahi fark dikhta hai.",
+      "klass": "A1",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "process/own_business: Things are made carefully at this business.",
+        "benefit/own_business: The careful process makes a difference in the product."
+      ]
+    },
+    {
+      "caseId": "candle-08",
+      "text": "Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.",
+      "klass": "B",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "benefit/own_product: Those 20 minutes are when the home feels somewhat quieter and somewhat softer."
+      ]
+    },
+    {
+      "caseId": "candle-08",
+      "text": "Har pour haath se kiya gaya hai — machine nahi, care hai",
+      "klass": "B",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "process/own_product: Each pour is done by hand, not by machine.",
+        "capability/own_business: The product involves care rather than machine production."
+      ]
+    },
+    {
+      "caseId": "candle-08",
+      "text": "Scent itna subtle hai ki room mein ghuste hi feel hota hai, overwhelm nahi",
+      "klass": "B",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "benefit/own_product: The scent is so subtle that you feel it upon entering the room, without being overwhelmed."
+      ]
+    },
+    {
+      "caseId": "candle-08",
+      "text": "Woh woh 20 minute hain jab ghar thoda quieter, thoda softer lagta hai.",
+      "klass": "B",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "benefit/own_product: Those 20 minutes are when the home feels somewhat quieter and somewhat softer."
+      ]
+    },
+    {
+      "caseId": "candle-08",
+      "text": "Ek kaam karo pehli baar jalaane se pehle: candle ko 2 ghante tak burn karne do, taaki wax pool poori surface tak ban jaye.",
+      "klass": "B",
+      "outcome": "enumerated — goes to the judge",
+      "claims": [
+        "process/own_product: Before lighting the candle for the first time, you should let it burn for 2 hours so that the wax pool forms across the entire surface."
+      ]
+    },
+    {
+      "caseId": "candle-08",
+      "text": "Isse scent bhi achhi tarah aata hai, aur candle zyada der chalti hai.",
+      "klass": "B",
+      "outcome": "enumerated — goes to the judge",
+      "claims": [
+        "process/own_product: The scent comes through well as a result of the wax pool forming across the entire surface.",
+        "duration/own_product: The candle lasts longer as a result of the wax pool forming across the entire surface."
+      ]
+    },
+    {
+      "caseId": "salon-05",
+      "text": "Keratin treatment sirf ₹3500 mein — budget-friendly, results real",
+      "klass": "A1",
+      "outcome": "REFUSED OUTRIGHT",
+      "claims": [
+        "price/own_product: Keratin treatment costs ₹3500",
+        "benefit/own_product: Keratin treatment is budget-friendly",
+        "capability/own_product: Keratin treatment produces real results"
+      ]
+    },
+    {
+      "caseId": "dairy-04",
+      "text": "We make pure, hand-churned clarified butter the traditional way — and we're delighted to have you with us.",
+      "klass": "A2",
+      "outcome": "enumerated — goes to the judge",
+      "claims": [
+        "material/own_product: The clarified butter is pure.",
+        "process/own_product: The clarified butter is hand-churned.",
+        "process/own_product: The clarified butter is made the traditional way."
+      ]
+    },
+    {
+      "caseId": "dairy-04",
+      "text": "We make pure, hand-churned clarified butter the traditional way — and we are delighted to have you with us.",
+      "klass": "A2",
+      "outcome": "enumerated — goes to the judge",
+      "claims": [
+        "material/own_product: The clarified butter is pure.",
+        "process/own_product: The clarified butter is hand-churned.",
+        "process/own_product: The clarified butter is made the traditional way."
+      ]
+    },
+    {
+      "caseId": "dairy-07",
+      "text": "Pure desi ghee, made in Indore, ready for your kitchen.",
+      "klass": "A2",
+      "outcome": "enumerated — goes to the judge",
+      "claims": [
+        "material/own_product: The ghee is pure.",
+        "material/own_product: The ghee is desi ghee.",
+        "process/own_product: The ghee is made in Indore.",
+        "availability/own_product: The ghee is ready for the customer's kitchen."
+      ]
+    }
+  ],
+  "causalSentences": [],
+  "aboutProduct": {
+    "withProduct": 28,
+    "claimsTotal": 86
+  },
+  "calls": 14,
+  "inr": 6.2
+}

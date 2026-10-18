@@ -55,6 +55,28 @@ const PER_RUN_CAP_INR = 30;
 /** Types the verifier refuses with no judge call. */
 const REFUSED_OUTRIGHT = new Set(["benefit", "capability", "safety", "comparison", "customer_state"]);
 
+/**
+ * The thirteen, grouped by case, sent to the extractor AS THEMSELVES.
+ *
+ * The first version of this gate looked the thirteen up by text in the
+ * newest exit run's output — and the newest run is a DIFFERENT run, whose
+ * sentences are different, so all thirteen read as "still missed". A
+ * measurement artefact of my own making, and the same shape of error as
+ * measuring the old baseline and claiming the new pipeline.
+ *
+ * Sent directly, they are a stable regression check on the SHAPES,
+ * independent of whatever any run happened to write.
+ */
+function missedAsBatches(): { caseId: string; sentences: string[] }[] {
+  const byCase = new Map<string, string[]>();
+  for (const m of MISSED_BY_GATE) {
+    const list = byCase.get(m.caseId) ?? [];
+    if (!list.includes(m.text)) list.push(m.text);
+    byCase.set(m.caseId, list);
+  }
+  return [...byCase.entries()].map(([caseId, sentences]) => ({ caseId, sentences }));
+}
+
 /** The newest S1 exit run's sentences, in order, grouped by case. */
 function s1Sentences(): { caseId: string; sentences: string[] }[] {
   const file = readdirSync(OUT)
@@ -103,14 +125,14 @@ describe("the gate, on the new pipeline's output", () => {
     const cases = s1Sentences();
     const total = cases.reduce((n, c) => n + c.sentences.length, 0);
     const per = costOfClaudeResponseInr({ input_tokens: 1300, output_tokens: 900 }, CLAUDE_MODELS.fast);
-    const estimate = Math.round(per * cases.length * 1.2 * 100) / 100;
+    const estimate = Math.round(per * (cases.length + missedAsBatches().length) * 1.2 * 100) / 100;
     const ledger = readLedger();
     const spentSoFar = Math.round(ledger.totalInr * 100) / 100;
 
     say("");
     say("FIX 4 — THE GATE ON THE NEW PIPELINE'S OUTPUT");
     say("=".repeat(68));
-    say(`cases                 ${cases.length}`);
+    say(`cases                 ${cases.length}   (+ ${missedAsBatches().length} batches of the thirteen, sent as themselves)`);
     say(`sentences             ${total}   (from the saved S1 run — no new copy is generated)`);
     say(`known missed          ${MISSED_BY_GATE.length}   (the reviewer's list)`);
     say(`model                 ${CLAUDE_MODELS.fast}`);
@@ -142,9 +164,10 @@ describe("the gate, on the new pipeline's output", () => {
     let spent = 0;
     let calls = 0;
     // Every claim the extractor produced, per sentence text.
-    const claimsFor = new Map<string, { type: string; subject: string; canonical: string }[]>();
+    const claimsFor = new Map<string, { type: string; subject: string; canonical: string; aboutProduct?: string | null }[]>();
 
-    for (const [i, c] of cases.entries()) {
+    const batches = [...missedAsBatches(), ...cases];
+    for (const [i, c] of batches.entries()) {
       if (i > 0) await pause(8_000);
       process.stdout.write(`  ${c.caseId} … `);
       const r = await extractClaims(c.sentences);
@@ -159,13 +182,59 @@ describe("the gate, on the new pipeline's output", () => {
         if (text === undefined) continue;
         const key = `${c.caseId}::${norm(text)}`;
         const list = claimsFor.get(key) ?? [];
-        list.push({ type: claim.claimType, subject: claim.subject, canonical: claim.canonical });
+        list.push({ type: claim.claimType, subject: claim.subject, canonical: claim.canonical, aboutProduct: claim.aboutProduct ?? null });
         claimsFor.set(key, list);
       }
       say(`${r.claims.length} claim(s)`);
     }
 
     const rounded = Math.round(spent * 100) / 100;
+
+    // ------------------------------------------------------------------
+    // THE NEW PATTERNS, MEASURED ON THE SAME CALLS.
+    //
+    // Added 18 October. Without this the gate would report "13 of 13"
+    // and say NOTHING about the two patterns just fixed — which is the
+    // mistake this whole sequence keeps producing: measuring the old
+    // thing and claiming the new.
+    //
+    // Two questions, both answerable from the claims already returned:
+    //
+    //   1. IS `aboutProduct` POPULATED AT ALL? If the extractor never
+    //      fills it, `sameThing()` in the verifier always passes and the
+    //      Rose-candle-gets-the-Lavender's-price hole is still open. The
+    //      code-level scope check would be dead without a symptom.
+    //   2. DO CAUSAL SENTENCES YIELD A CLAIM FOR THE LINK? A sentence
+    //      joining two facts with "so" / "isliye" / "kyunki" should
+    //      produce a claim naming the connection, not only the two facts.
+    // ------------------------------------------------------------------
+    const CAUSAL = /(?:so that|so the|which is why|that is how|that's how|because|isliye|kyunki|iska matlab|usse|jisse)/i;
+    const LINKY = /(?:cause|causes|because|result|results|lead|leads|so that|means|makes|produce|produces|ensur|why)/i;
+
+    let claimsTotal = 0;
+    let withProduct = 0;
+    const causalSentences: { caseId: string; text: string; claims: string[]; linkNamed: boolean }[] = [];
+
+    for (const c of cases) {
+      for (const text of c.sentences) {
+        const found = claimsFor.get(`${c.caseId}::${norm(text)}`) ?? [];
+        // The thirteen are sent under the same case ids, so a sentence
+        // that appears in both would be counted twice. They do not
+        // overlap in practice — different runs — and this keeps it true
+        // if they ever do.
+        if (MISSED_BY_GATE.some((m) => m.caseId === c.caseId && norm(m.text) === norm(text))) continue;
+        claimsTotal += found.length;
+        withProduct += found.filter((f) => f.aboutProduct).length;
+        if (!CAUSAL.test(text)) continue;
+        causalSentences.push({
+          caseId: c.caseId,
+          text,
+          claims: found.map((f) => `${f.type}/${f.subject}${f.aboutProduct ? ` [${f.aboutProduct}]` : ""}: ${f.canonical}`),
+          linkNamed: found.some((f) => LINKY.test(f.canonical)),
+        });
+      }
+    }
+
     const verdicts: { caseId: string; text: string; klass: string; outcome: string; claims: string[] }[] = [];
 
     for (const m of MISSED_BY_GATE) {
@@ -195,6 +264,19 @@ describe("the gate, on the new pipeline's output", () => {
     say(`  STILL MISSED        ${missed.length}`);
     say("=".repeat(68));
 
+    say("");
+    say("THE TWO PATTERNS, ON THE SAME CALLS:");
+    say(`  claims carrying aboutProduct   ${withProduct} of ${claimsTotal}`);
+    say(`  sentences with a causal join   ${causalSentences.length}`);
+    say(`  of those, the LINK named       ${causalSentences.filter((c) => c.linkNamed).length}`);
+    say("=".repeat(68));
+    for (const c of causalSentences) {
+      say("");
+      say(`[${c.caseId}] causal join — link ${c.linkNamed ? "NAMED" : "NOT NAMED"}`);
+      say(`   ${c.text.slice(0, 110)}`);
+      for (const x of c.claims) say(`     -> ${x}`);
+    }
+
     for (const v of verdicts) {
       say("");
       say(`[${v.caseId}] ${v.klass} — ${v.outcome}`);
@@ -205,7 +287,11 @@ describe("the gate, on the new pipeline's output", () => {
 
     if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    writeFileSync(join(OUT, `new-output-gate-${stamp}.json`), JSON.stringify({ verdicts, calls, inr: rounded }, null, 2), "utf8");
+    writeFileSync(
+      join(OUT, `new-output-gate-${stamp}.json`),
+      JSON.stringify({ verdicts, causalSentences, aboutProduct: { withProduct, claimsTotal }, calls, inr: rounded }, null, 2),
+      "utf8"
+    );
     writeFileSync(join(OUT, `new-output-gate-${stamp}.txt`), LINES.join("\n"), "utf8");
     ledger.runs.push({ at: new Date().toISOString(), label: `new-output-gate-${stamp}`, inr: rounded, calls });
     ledger.totalInr = Math.round((spentSoFar + rounded) * 100) / 100;
