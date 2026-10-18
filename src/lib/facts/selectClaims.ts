@@ -36,6 +36,16 @@ export type SelectedClaim = {
   /** Why this claim belongs in this piece — shown to the owner, never to the customer. */
   intent: string;
   /**
+   * The product or service this claim is about, or null for the
+   * business generally.
+   *
+   * A FIELD RATHER THAN A PROMPT LINE, because the scope rule has to be
+   * checkable in code. It was prose in three prompts and nowhere in
+   * code, so it held wherever a model applied it and failed wherever one
+   * did not — see src/lib/facts/scope.ts.
+   */
+  aboutProduct?: string | null;
+  /**
    * Copied from the cited record when the claim carries a figure.
    *
    * BOOLEAN IS A REAL FACT VALUE, not a stray. material.paraffin is
@@ -87,6 +97,11 @@ const TOOL = {
               description: "Ids of the records that support this claim, copied exactly from the list given to you.",
             },
             intent: { type: "string", description: "One short line on why this claim belongs in this piece. For the owner." },
+            aboutProduct: {
+              type: "string",
+              description:
+                "The exact name of the ONE product or service this claim is about, copied from the records. Omit it when the claim is about the business generally rather than about one item.",
+            },
             value: { description: "The figure, copied EXACTLY from the cited record. Omit when the claim carries no figure." },
             unit: { type: "string", description: "The unit, copied from the cited record." },
           },
@@ -221,6 +236,7 @@ function normalise(c: any, index: number): SelectedClaim | null {
     claimType,
     factIds,
     intent,
+    aboutProduct: c?.aboutProduct ? String(c.aboutProduct).trim() : null,
     value:
       c?.value === undefined || c?.value === null
         ? null

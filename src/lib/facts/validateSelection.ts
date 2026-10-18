@@ -13,6 +13,7 @@
 
 import { resolveFactId, type FactLicence, type FactRecord } from "@/lib/facts/factRecord";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ClaimType } from "@/lib/facts/extractClaims";
+import { describeScope, recordSupportsScope, resolveProduct, scopeOfKey } from "@/lib/facts/scope";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 
 /**
@@ -109,7 +110,16 @@ export type Rejection = {
   /** Said plainly: this reaches the owner, not a log. */
   reason: string;
   /** Which rule refused it, so a report can group them. */
-  rule: "no_licence_exists" | "needs_recipient_record" | "unknown_fact" | "wrong_tenant" | "no_licence_on_record" | "figure_mismatch" | "no_citation";
+  rule:
+    | "no_licence_exists"
+    | "needs_recipient_record"
+    | "unknown_fact"
+    | "wrong_tenant"
+    | "no_licence_on_record"
+    | "figure_mismatch"
+    | "no_citation"
+    /** A claim about one product, cited to a record about something else. */
+    | "wrong_scope";
 };
 
 export type OwnerQuestion = {
@@ -182,7 +192,17 @@ function figureInText(record: FactRecord, value: unknown): boolean {
  * citations, so a model that cites a real record for a benefit claim
  * gains nothing by it.
  */
-export function validateSelection(selection: { claims: SelectedClaim[] }, records: FactRecord[], dealershipId: string): Validated {
+export function validateSelection(
+  selection: { claims: SelectedClaim[] },
+  records: FactRecord[],
+  dealershipId: string,
+  /**
+   * The business's catalogue, so a product NAME can be checked against
+   * what it actually sells. Defaults to the product records already in
+   * `records`, which is what every caller has.
+   */
+  catalogue: { name?: string | null }[] = productsFromRecords(records)
+): Validated {
   const approved: SelectedClaim[] = [];
   const rejected: Rejection[] = [];
   const questions: OwnerQuestion[] = [];
@@ -261,6 +281,41 @@ export function validateSelection(selection: { claims: SelectedClaim[] }, record
     }
     if (bad) {
       rejected.push(bad);
+      continue;
+    }
+
+    // 4b. SCOPE, IN CODE. The founder's rule of 2026-10-16 lived in
+    // three prompts and nowhere here, so it held wherever a model
+    // applied it and failed wherever one did not — which is the pattern
+    // he named on 18 October rather than the three sentences it
+    // produced.
+    //
+    // A claim about ONE named item needs that item's own record. A
+    // store-level policy (shipping, offers) counts, because a policy IS
+    // about every product; without that carve-out "free shipping on the
+    // lavender candle" could never be said, and it is true.
+    const named = resolveProduct(claim.aboutProduct, catalogue);
+    if (named.kind === "unknown") {
+      // A product the catalogue does not sell. Resolving it to null
+      // would quietly turn this into a business-level claim that any
+      // record could support.
+      rejected.push({
+        claim,
+        rule: "wrong_scope",
+        reason: `it is about "${named.named}", which is not a product or service on record`,
+      });
+      continue;
+    }
+    if (named.kind === "known" && !cited.some((r) => recordSupportsScope(r.key, named.slug))) {
+      rejected.push({
+        claim,
+        rule: "wrong_scope",
+        reason: `it is about one product, and the record(s) cited are ${cited.map((r) => describeScope(r.key)).join("; ")}`,
+      });
+      questions.push({
+        text: `To say this about one product, record it against that product: ${claim.intent || claim.claimType}`,
+        wouldLicense: claim.claimType,
+      });
       continue;
     }
 
@@ -350,4 +405,25 @@ export function validationNote(v: Validated, conflicts: { askedFor: string; reco
   for (const r of v.rejected) lines.push(`Left out: ${r.claim.intent || r.claim.claimType} — ${r.reason}.`);
   for (const u of unknowns) lines.push(`Not on record: ${u}`);
   return lines.length ? lines.join("\n") : null;
+}
+
+/**
+ * The catalogue, read back out of the records.
+ *
+ * Callers already hold the records and should not have to pass the
+ * products twice. A `product.<slug>.name` record carries the name;
+ * everything else contributes its slug, so a product with no name
+ * record is still recognised.
+ */
+function productsFromRecords(records: FactRecord[]): { name: string }[] {
+  const names = new Map<string, string>();
+  for (const r of records) {
+    const scope = scopeOfKey(r.key);
+    if (scope.kind !== "product") continue;
+    const existing = names.get(scope.product);
+    // The name record's value is the real name; a slug is the fallback.
+    if (r.key.endsWith(".name") && typeof r.value === "string") names.set(scope.product, r.value);
+    else if (!existing) names.set(scope.product, scope.product.replace(/_/g, " "));
+  }
+  return [...names.values()].map((name) => ({ name }));
 }

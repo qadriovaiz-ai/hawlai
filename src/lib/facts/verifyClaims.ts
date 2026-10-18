@@ -20,6 +20,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
+import { describeScope, productSlug } from "@/lib/facts/scope";
 
 /** Claim types whose verdict is arithmetic, never judgement. */
 export const NUMERIC_TYPES = new Set(["price", "offer", "shipping", "duration", "count"]);
@@ -116,7 +117,8 @@ RULES
 4. A fact that something is not known does not support a claim either way.
 5. Rephrasing in another language is still the same claim: judge the meaning, not the wording.
 6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.
-7. SCOPE. A claim about ONE named product or service must be supported by a fact about THAT product or service. A general fact about how the business works does not support it, however true that general fact is. "We never use <substance>" is a fact about the business's practice; "this product contains no <substance>" is a claim about one item's composition, and only a fact about that item supports it. The same holds for every direction: a fact about one item does not support a claim about all of them, and a fact about the business does not support a claim about one of them.`;
+7. TWO FACTS DO NOT ENTAIL A LINK BETWEEN THEM. If the approved facts state A and state B, a claim that A causes B, explains B, proves B or results in B is NOT entailed — the connection is a separate assertion and no fact here makes it. This holds however plausible the mechanism sounds.
+8. SCOPE. A claim about ONE named product or service must be supported by a fact about THAT product or service. A general fact about how the business works does not support it, however true that general fact is. "We never use <substance>" is a fact about the business's practice; "this product contains no <substance>" is a claim about one item's composition, and only a fact about that item supports it. The same holds for every direction: a fact about one item does not support a claim about all of them, and a fact about the business does not support a claim about one of them.`;
 
 /**
  * The approved facts, as the judge reads them. Plain lines, no ids.
@@ -140,7 +142,7 @@ RULES
  * NOT used or present; `true` says it is.
  */
 export function approvedForJudge(approved: SelectedClaim[], records: FactRecord[] = []): string {
-  return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}`).join("\n");
+  return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}${scopeLine(c, records)}`).join("\n");
 }
 
 /**
@@ -162,6 +164,20 @@ export function approvedForJudge(approved: SelectedClaim[], records: FactRecord[
  * wording, and an owner's Hinglish sentence is the most direct evidence
  * there is.
  */
+function scopeLine(claim: SelectedClaim, records: FactRecord[]): string {
+  // THE JUDGE IS TOLD EACH FACT'S SCOPE, rather than left to infer it
+  // from a key it never sees. Rule 7 of its rubric asks it to separate a
+  // store-wide policy from one product's own fact, and it cannot do
+  // that on a paraphrase alone.
+  if (!records.length) return "";
+  const scopes = claim.factIds
+    .map((id) => records.find((r) => r.id === id))
+    .filter((r): r is FactRecord => Boolean(r))
+    .map((r) => describeScope(r.key));
+  if (!scopes.length) return "";
+  return `\n    scope: ${Array.from(new Set(scopes)).join("; ")}`;
+}
+
 function citedWords(claim: SelectedClaim, records: FactRecord[]): string {
   if (!records.length) return "";
   const words = claim.factIds
@@ -228,18 +244,37 @@ export async function verifyClaims(
     // one an approved claim carries — and every approved claim's figure
     // was already matched to a record in step 2.
     if (claim.value && NUMERIC_TYPES.has(claim.claimType)) {
-      const match = approved.find((a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit));
+      // THE FIGURE MUST BELONG TO THE THING THE SENTENCE IS ABOUT.
+      //
+      // The hole this closes, found 18 October: the match ignored which
+      // product a figure belonged to, so "the Rose candle costs Rs 999"
+      // was entailed by the LAVENDER's Rs 999. A wrong price on the
+      // wrong product — the same class of failure as candle-03's "both
+      // start from Rs 850", and it would have passed every check.
+      //
+      // A claim naming no product matches any approved figure, as
+      // before: "shipping is Rs 50" is about the store.
+      const sameThing = (a: SelectedClaim) =>
+        !claim.aboutProduct || !a.aboutProduct || productSlug(claim.aboutProduct) === productSlug(a.aboutProduct);
+      const match = approved.find(
+        (a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit) && sameThing(a)
+      );
       if (match) {
         verdicts.push({ claim, verdict: "entailed", rule: "figure_matches", reason: `the records give ${match.value}${match.unit ? ` ${match.unit}` : ""}` });
       } else {
         const had = approved
           .filter((a) => a.value !== null && a.value !== undefined && a.value !== "")
           .map((a) => `${a.value}${a.unit ? ` ${a.unit}` : ""}`);
+        const wrongThing =
+          claim.aboutProduct &&
+          approved.some((a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit));
         verdicts.push({
           claim,
           verdict: "unsupported",
           rule: "figure_not_approved",
-          reason: had.length
+          reason: wrongThing
+            ? `it states ${claim.value.number}${claim.value.unit ? ` ${claim.value.unit}` : ""} for ${claim.aboutProduct}, and that figure belongs to something else`
+            : had.length
             ? `it states ${claim.value.number}${claim.value.unit ? ` ${claim.value.unit}` : ""}, and the figures on record are ${had.join(", ")}`
             : `it states ${claim.value.number}${claim.value.unit ? ` ${claim.value.unit}` : ""}, and no figure was approved for this piece`,
         });

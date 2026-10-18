@@ -73,6 +73,16 @@ export type ExtractedClaim = {
   value?: { number: number; unit: string } | null;
   /** Set whenever subject is "competitor" — what the comparison is against. */
   comparedWith?: string | null;
+  /**
+   * The product or service the sentence is about, or null for the
+   * business generally. Read from the SENTENCE, with no records in
+   * front of it.
+   *
+   * Without this the figure check matched a number against any approved
+   * claim at all, so the Rose candle could be given the Lavender's
+   * price — a scope hole in the arithmetic path, found on 18 October.
+   */
+  aboutProduct?: string | null;
 };
 
 export const CLAIM_TYPES: ClaimType[] = [
@@ -137,6 +147,11 @@ const TOOL = {
               type: "string",
               description: "What the claim compares against, when it compares with anything outside this business.",
             },
+            aboutProduct: {
+              type: "string",
+              description:
+                "The name of the ONE product or service this sentence is about, as the sentence names it. Omit it when the sentence is about the business generally.",
+            },
           },
           required: ["sentenceIndex", "canonical", "claimType", "subject", "polarity"],
         },
@@ -162,8 +177,9 @@ RULES
 10. A sentence about the READER's own situation — that they have ordered something, that it is on its way, that they have a booking, that something is reserved or being prepared for them — is claimType "customer_state", subject "customer". Report it even when it is phrased as a greeting, a welcome or a reassurance, because it asserts that a real order or booking exists.
 11. ONE SENTENCE OFTEN CARRIES TWO CLAIMS, AND THE SECOND IS THE ONE THAT GETS MISSED. When a sentence states a real detail and then adds a judgement about it — joined by a dash, a comma, "and", "because", "so", "aur", "kyunki", "isliye", "matlab" — the judgement is ITS OWN CLAIM. Report both. "It is made at <temperature>, because no shortcuts are taken on quality" is two claims: the temperature, and that no shortcuts are taken. The true half does NOT vouch for the other half, and a sentence that opens with a fact is where an unsupported claim is most likely to be hiding.
 12. A MODIFIER CAN BE A WHOLE CLAIM WITH NO CLAUSE OF ITS OWN. Words like pure, genuine, authentic, finest, premium, real, proper, true, complete, perfect, 100%, asli, shudh, ekdum — attached to a thing the records do name — assert something the records may not. "Pure <product>" is two claims: that it is that product, and that it is pure. Report the modifier separately, every time, even when it is a single word inside a longer phrase.
-13. A VAGUE PROMISE IS STILL THE PROMISE. "Just come once, we'll take care of the rest", "leave it to us", "baaki hum sambhal lete hain" name nothing and commit to everything: report them as the capability claim they stand for. Never skip a sentence because another sentence nearby says the same thing more plainly — each sentence may be sent, posted or read on its own, and a sentence you pass over is a sentence nobody checks.
-14. You have no records. Never say whether a claim is supported.`;
+13. A LINK BETWEEN TWO FACTS IS A THIRD CLAIM. When a sentence says one thing causes, explains, proves or results in another — "so", "which is why", "that is how", "because of this", "isliye", "iska matlab", "usse" — report the LINK as its own claim, on top of the two facts. "It is made at <temperature>, so the scent lasts longer" is three claims: the temperature, the scent lasting longer, and that the first produces the second. Two true facts side by side do not make the connection between them true.
+14. A VAGUE PROMISE IS STILL THE PROMISE. "Just come once, we'll take care of the rest", "leave it to us", "baaki hum sambhal lete hain" name nothing and commit to everything: report them as the capability claim they stand for. Never skip a sentence because another sentence nearby says the same thing more plainly — each sentence may be sent, posted or read on its own, and a sentence you pass over is a sentence nobody checks.
+15. You have no records. Never say whether a claim is supported.`;
 
 /** Numbered, so a claim can point back at the sentence it came from. */
 export function numberSentences(sentences: string[]): string {
@@ -262,6 +278,7 @@ function normalise(c: any): ExtractedClaim | null {
     polarity,
     value,
     comparedWith: c?.comparedWith ? String(c.comparedWith).trim() : null,
+    aboutProduct: c?.aboutProduct ? String(c.aboutProduct).trim() : null,
   };
 }
 

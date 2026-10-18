@@ -369,6 +369,15 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
     // later prompt change would re-open anything only said here.
     `\n- DO NOT ADD A JUDGEMENT TO A FACT. Having stated something from the list, stop. No "— and that's the difference", no "because we take no shortcuts", no "results are real", no "you can taste it". A flourish attached to a true fact is a claim of its own, and nothing above supports it.`,
     `\n- DO NOT STRENGTHEN A FACT WITH A WORD. Not pure, genuine, authentic, finest, premium, real, proper, perfect, 100%, asli or shudh — unless that exact word is in the list above. The list says what the thing IS; adding one of these says something more.`,
+    // THE PATTERN THE FOUNDER NAMED ON 18 OCTOBER, and the one the other
+    // two rules do NOT cover: both halves are on the list, so a model
+    // joining them believes it is obeying. The LINK is the new claim,
+    // and nobody made it.
+    `\n- DO NOT JOIN TWO FACTS INTO A THIRD. Each item on the list stands on its own. You may not say that one causes, explains, proves or results in another — no "so", "which is why", "that is how", "isliye", "kyunki", "iska matlab". Two true facts side by side do not make the link between them true, and the link is not on the list.`,
+    // SCOPE, in the writer's own terms. A fact selected about one
+    // product may not be spread across the range, and a store-wide
+    // policy may be said of any product because it IS about all of them.
+    `\n- A FACT ABOUT ONE PRODUCT STAYS WITH THAT PRODUCT. Do not say of the whole range what the list says of one item, and do not attach one item's number to another. Shipping and discount codes are store-wide and may be said of anything.`,
     `\n- Say nothing about the reader's own order, booking or account. You do not know who is reading this.`,
     `\n- Figures appear exactly as given above. Do not convert them, round them or spell them out in words.`,
     unknowns.length ? `\n- NOT on record, and must not appear in any form: ${unknowns.join("; ")}.` : "",
