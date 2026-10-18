@@ -26,7 +26,10 @@ import type { BusinessFacts } from "@/lib/claims/businessFacts";
 describe("the scope rule is written where it is enforced", () => {
   it("SELECT IS TOLD NOT TO PICK A BUSINESS-LEVEL RECORD FOR A PRODUCT CLAIM", () => {
     const src = code("src/lib/facts/selectClaims.ts");
-    expect(src).toMatch(/A CLAIM ABOUT ONE NAMED PRODUCT OR SERVICE NEEDS A RECORD ABOUT THAT PRODUCT OR SERVICE/);
+    // "SPECIFICALLY NAMED" since 19 October: the rule was refusing
+    // collective references like "the candles", which are the range and
+    // which a business-level record is the right evidence for.
+    expect(src).toMatch(/A CLAIM ABOUT ONE SPECIFICALLY NAMED PRODUCT OR SERVICE NEEDS A RECORD ABOUT THAT PRODUCT OR SERVICE/);
     // And told what to do instead, or it will stretch the general fact.
     expect(src).toMatch(/that is an UNKNOWN: ask the owner to record it against the item/);
     expect(src).toMatch(/Do not stretch the general fact to cover the particular one/);
@@ -34,7 +37,7 @@ describe("the scope rule is written where it is enforced", () => {
 
   it("THE JUDGE IS TOLD THE SAME, IN BOTH DIRECTIONS", () => {
     const src = code("src/lib/facts/verifyClaims.ts");
-    expect(src).toMatch(/SCOPE\. A claim about ONE named product or service must be supported by a fact about THAT product or service/);
+    expect(src).toMatch(/SCOPE\. A claim about ONE SPECIFICALLY NAMED product or service must be supported by a fact about THAT product or service/);
     expect(src).toMatch(/however true that general fact is/);
     // The reverse too: one item's fact does not cover all of them.
     expect(src).toMatch(/a fact about one item does not support a claim about all of them/);

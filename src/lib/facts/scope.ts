@@ -109,13 +109,89 @@ export function resolveProduct(
 ): { kind: "none" } | { kind: "known"; slug: string } | { kind: "unknown"; named: string } {
   const named = String(aboutProduct ?? "").trim();
   if (!named) return { kind: "none" };
-  const wanted = productSlug(named);
-  for (const p of catalogue) {
-    const slug = productSlug(p?.name);
-    if (!slug) continue;
-    if (slug === wanted) return { kind: "known", slug };
-  }
+  // A NAME THAT IS ONLY DETERMINERS NAMES NOTHING. "the one", "ours" —
+  // it is the range, not an item, and refusing it as an unknown product
+  // would be refusing the business's own general claim.
+  if (!contentWords(named).length) return { kind: "none" };
+
+  const slugs = catalogue.map((p) => productSlug(p?.name)).filter(Boolean);
+  const hits = slugs.filter((slug) => sameProductName(named, slug));
+
+  // A COLLECTIVE REFERENCE IS THE RANGE, NOT AN ITEM.
+  //
+  // Founder's decision, 19 October 2026, after my scope fix refused
+  // eight true recorded claims: "the candles do not contain paraffin",
+  // "the candle is hand-poured", "the candles contain only soy wax" —
+  // all exactly what material.paraffin and process.hand_poured record.
+  //
+  // DERIVED FROM THE CATALOGUE RATHER THAN FROM A WORD LIST, because a
+  // list of collective nouns would be one trade's vocabulary shipped to
+  // every business — the thing multiTenantVocabulary exists to stop. If
+  // a reference matches MORE THAN ONE product, it cannot be naming one
+  // of them, so it is the range and a business-level record is the right
+  // evidence for it.
+  if (hits.length > 1) return { kind: "none" };
+
+  // AND WITH ONE PRODUCT THERE IS NOTHING TO BE AMBIGUOUS ABOUT. The
+  // rule exists because a business sells several things and a
+  // business-level record cannot say which; a single-product catalogue
+  // has no such gap, so scope never blocks there.
+  if (hits.length === 1 && slugs.length === 1) return { kind: "none" };
+
+  if (hits.length === 1) return { kind: "known", slug: hits[0] };
   return { kind: "unknown", named };
+}
+
+/**
+ * Do these two names refer to the same catalogue item?
+ *
+ * TOLERANT ON PURPOSE, and a clear bug without it. The exit run of 18
+ * October refused "a 500 ml jar of ghee is priced at Rs 850" — a true
+ * price — because the sentence says "ghee" and the catalogue says
+ * "Desi ghee 500ml", and the comparison demanded slug equality.
+ *
+ * One name matches the other when its words are all present in the
+ * other's. A trailing "s" is dropped per word so "candles" reaches
+ * "candle"; nothing else is stemmed, because guessing at morphology in
+ * a mix of English and romanised Hindi would match more than it should.
+ */
+export function sameProductName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = contentWords(a);
+  const right = contentWords(b);
+  if (!left.length || !right.length) return false;
+  const covers = (small: string[], big: string[]) => small.every((w) => big.includes(w));
+  return covers(left, right) || covers(right, left);
+}
+
+/**
+ * Determiners and quantifiers, in both languages.
+ *
+ * NOT A PRODUCT VOCABULARY, which is why a list is safe here: these are
+ * function words, the same in every trade. "the candles" failed to match
+ * "Lavender candle" without this, because "the" counted as a word the
+ * other name had to contain — and "the candles" is exactly the
+ * collective reference the rule has to recognise.
+ */
+const DETERMINERS = new Set([
+  "the", "a", "an", "this", "that", "these", "those", "our", "your", "their", "my", "its",
+  "each", "every", "all", "both", "any", "some", "one", "of", "jar", "pack", "box",
+  // Pronouns, because a reference can be made entirely of them: "each
+  // of them", "all of it". A surviving mutation found "them" missing.
+  "them", "they", "it", "us", "we", "you", "ones",
+  "ek", "yeh", "woh", "hamari", "hamara", "hamare", "aapka", "aapki", "sab", "sabhi", "har",
+]);
+
+/** A name's words, with determiners dropped and a trailing "s" trimmed. */
+export function contentWords(s: string | null | undefined): string[] {
+  // "500 ml" and "500ml" are one word. Done HERE and not in
+  // productSlug, which mints the record keys: gluing there would
+  // silently rename `product.desi_ghee_500_ml` and break every citation
+  // already written against it.
+  const glued = String(s ?? "").replace(/(\d)\s+([a-zA-Z])/g, "$1$2");
+  return productSlug(glued)
+    .split("_")
+    .map((w) => w.replace(/s$/, ""))
+    .filter((w) => w.length > 1 && !DETERMINERS.has(w));
 }
 
 /** How a record's scope reads to a human, for the judge and the owner. */

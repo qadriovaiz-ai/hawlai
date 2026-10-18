@@ -100,7 +100,7 @@ const TOOL = {
             aboutProduct: {
               type: "string",
               description:
-                "The exact name of the ONE product or service this claim is about, copied from the records. Omit it when the claim is about the business generally rather than about one item.",
+                "The exact name of the ONE product or service this claim is about, copied from the records — ONLY when the claim is about that particular item. OMIT it when the claim is about the range as a whole or about the business generally. A claim about what the business makes in general is not a claim about one item.",
             },
             value: { description: "The figure, copied EXACTLY from the cited record. Omit when the claim carries no figure." },
             unit: { type: "string", description: "The unit, copied from the cited record." },
@@ -144,7 +144,7 @@ RULES
 6. Choose nothing about a competitor, nothing about what the product will do to the reader's body, mood or health, nothing about safety, and nothing about what the business will do automatically for them. No record can support those, so selecting one only wastes the attempt.
 7. A record whose value is null means WE LOOKED AND THERE IS NO ANSWER. That is not permission to assume the opposite; it is a thing to leave out, or to raise as an unknown.
 8. Say nothing about the reader's own orders, bookings or account status. You have no record of who is reading this.
-9. SCOPE: A CLAIM ABOUT ONE NAMED PRODUCT OR SERVICE NEEDS A RECORD ABOUT THAT PRODUCT OR SERVICE. A record whose key begins with "product." is about that one item. Records about materials, processes, policies and the business's own statements are about HOW THE BUSINESS WORKS, and they do not support a claim about one item's composition or performance — however true they are. If the request wants a claim about one item and only a business-level record exists, that is an UNKNOWN: ask the owner to record it against the item. Do not stretch the general fact to cover the particular one.`;
+9. SCOPE: A CLAIM ABOUT ONE SPECIFICALLY NAMED PRODUCT OR SERVICE NEEDS A RECORD ABOUT THAT PRODUCT OR SERVICE. A claim about the range as a whole, or about how the business works, is NOT such a claim — a business-level record is the right evidence for it, and you should select it. A record whose key begins with "product." is about that one item. Records about materials, processes, policies and the business's own statements are about HOW THE BUSINESS WORKS, and they do not support a claim about one item's composition or performance — however true they are. If the request wants a claim about one item and only a business-level record exists, that is an UNKNOWN: ask the owner to record it against the item. Do not stretch the general fact to cover the particular one.`;
 
 /** The records, in the shape the model cites from. Only what it needs to choose. */
 export function recordsForPrompt(records: FactRecord[]): string {

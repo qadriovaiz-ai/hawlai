@@ -20,7 +20,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
-import { describeScope, productSlug } from "@/lib/facts/scope";
+import { describeScope, sameProductName } from "@/lib/facts/scope";
 
 /** Claim types whose verdict is arithmetic, never judgement. */
 export const NUMERIC_TYPES = new Set(["price", "offer", "shipping", "duration", "count"]);
@@ -118,7 +118,8 @@ RULES
 5. Rephrasing in another language is still the same claim: judge the meaning, not the wording.
 6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.
 7. TWO FACTS DO NOT ENTAIL A LINK BETWEEN THEM. If the approved facts state A and state B, a claim that A causes B, explains B, proves B or results in B is NOT entailed — the connection is a separate assertion and no fact here makes it. This holds however plausible the mechanism sounds.
-8. SCOPE. A claim about ONE named product or service must be supported by a fact about THAT product or service. A general fact about how the business works does not support it, however true that general fact is. "We never use <substance>" is a fact about the business's practice; "this product contains no <substance>" is a claim about one item's composition, and only a fact about that item supports it. The same holds for every direction: a fact about one item does not support a claim about all of them, and a fact about the business does not support a claim about one of them.`;
+8. SCOPE. A claim about ONE SPECIFICALLY NAMED product or service must be supported by a fact about THAT product or service. A general fact about how the business works does not support it, however true that general fact is. "We never use <substance>" is a fact about the business's practice; "this product contains no <substance>" is a claim about one item's composition, and only a fact about that item supports it. The same holds for every direction: a fact about one item does not support a claim about all of them, and a fact about the business does not support a claim about one of them.
+8a. BUT A COLLECTIVE OR GENERIC REFERENCE IS THE RANGE, NOT ONE ITEM, and a fact about the business is the RIGHT evidence for it. "the <product>", "the <products>", "our <products>", "each <product>" — said without naming which one — means what the business makes generally. A fact recorded about the business's materials or process supports such a claim fully; do not call that a scope mismatch. Scope applies only when the sentence names a PARTICULAR item that the business sells alongside others.`;
 
 /**
  * The approved facts, as the judge reads them. Plain lines, no ids.
@@ -254,8 +255,12 @@ export async function verifyClaims(
       //
       // A claim naming no product matches any approved figure, as
       // before: "shipping is Rs 50" is about the store.
+      // TOLERANT, not exact. Slug equality refused a true price on 18
+      // October: the sentence said "ghee", the catalogue said "Desi ghee
+      // 500ml". sameProductName asks whether one name's words are all
+      // present in the other's.
       const sameThing = (a: SelectedClaim) =>
-        !claim.aboutProduct || !a.aboutProduct || productSlug(claim.aboutProduct) === productSlug(a.aboutProduct);
+        !claim.aboutProduct || !a.aboutProduct || sameProductName(claim.aboutProduct, a.aboutProduct);
       const match = approved.find(
         (a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit) && sameThing(a)
       );

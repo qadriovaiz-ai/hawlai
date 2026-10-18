@@ -20,7 +20,7 @@
 
 import { describe, it, expect } from "vitest";
 import { code } from "./helpers/source";
-import { scopeOfKey, recordSupportsScope, resolveProduct, productSlug, describeScope } from "@/lib/facts/scope";
+import { scopeOfKey, recordSupportsScope, resolveProduct, productSlug, describeScope, sameProductName } from "@/lib/facts/scope";
 import { validateSelection } from "@/lib/facts/validateSelection";
 import { verifyClaims } from "@/lib/facts/verifyClaims";
 import { licensesFor, type FactRecord } from "@/lib/facts/factRecord";
@@ -230,7 +230,7 @@ describe("P1 — reason-connecting, stated at every step that can stop it", () =
 
   it("the write step also carries the scope rule, which it did not before", () => {
     const src = code("src/lib/content/generateCopy.ts");
-    expect(src).toMatch(/A FACT ABOUT ONE PRODUCT STAYS WITH THAT PRODUCT/);
+    expect(src).toMatch(/A FACT ABOUT ONE NAMED PRODUCT STAYS WITH THAT PRODUCT/);
     expect(src).toMatch(/Shipping and discount codes are store-wide/);
   });
 
@@ -247,11 +247,114 @@ describe("P1 — reason-connecting, stated at every step that can stop it", () =
     // Scope: named in select and write, enforced in code in validate and
     // verify.
     expect(files.select).toMatch(/SCOPE/);
-    expect(files.write).toMatch(/ONE PRODUCT STAYS WITH THAT PRODUCT/);
+    expect(files.write).toMatch(/ONE NAMED PRODUCT STAYS WITH THAT PRODUCT/);
     expect(files.validate).toMatch(/recordSupportsScope/);
-    expect(files.verify).toMatch(/productSlug/);
+    // sameProductName since 19 October: the exact-slug compare it
+    // replaced refused a true price ("ghee" vs "Desi ghee 500ml").
+    expect(files.verify).toMatch(/sameProductName/);
     // Causal: named wherever a model acts.
     expect(files.write).toMatch(/DO NOT JOIN TWO FACTS/);
     expect(files.verify).toMatch(/DO NOT ENTAIL A LINK/);
+  });
+});
+
+// ---------------------------------------------------------------------
+// A COLLECTIVE REFERENCE IS THE RANGE (founder, 19 October 2026).
+//
+// My scope fix of 18 October refused EIGHT true, recorded claims as
+// scope mismatches — "the candles do not contain paraffin", "the candle
+// is hand-poured", "the candles contain only soy wax" — all exactly
+// what material.paraffin and process.hand_poured record. The rule is
+// about ONE SPECIFICALLY NAMED item, where a business sells several and
+// the record cannot say which. "The candles" is the range.
+//
+// DERIVED FROM THE CATALOGUE, not from a list of collective nouns: such
+// a list would be one trade's vocabulary shipped to every business,
+// which is what multiTenantVocabulary exists to stop. A reference
+// matching more than one product cannot be naming one of them.
+// ---------------------------------------------------------------------
+describe("a collective reference is the range, not an item", () => {
+  const TWO = [{ name: "Lavender candle" }, { name: "Rose candle" }];
+  const ONE = [{ name: "Lavender candle" }];
+  const DAIRY = [{ name: "Desi ghee 500ml" }, { name: "Paneer 250g" }];
+
+  it("A REFERENCE MATCHING MORE THAN ONE PRODUCT IS COLLECTIVE", () => {
+    expect(resolveProduct("candle", TWO)).toEqual({ kind: "none" });
+    expect(resolveProduct("candles", TWO)).toEqual({ kind: "none" });
+    expect(resolveProduct("the candles", TWO)).toEqual({ kind: "none" });
+  });
+
+  it("A SPECIFICALLY NAMED PRODUCT STILL NEEDS ITS OWN EVIDENCE", () => {
+    expect(resolveProduct("Lavender candle", TWO)).toEqual({ kind: "known", slug: "lavender_candle" });
+    expect(resolveProduct("Rose candle", TWO)).toEqual({ kind: "known", slug: "rose_candle" });
+  });
+
+  it("WITH ONE PRODUCT, SCOPE NEVER BLOCKS — there is nothing to be ambiguous about", () => {
+    // The rule exists because a business sells several things and a
+    // business-level record cannot say which. A single-product
+    // catalogue has no such gap.
+    expect(resolveProduct("Lavender candle", ONE)).toEqual({ kind: "none" });
+  });
+
+  it("A NAME THAT IS ONLY DETERMINERS NAMES NOTHING — it is the range", () => {
+    // Found by a surviving mutation. "the one", "ours": refusing these
+    // as an unknown product would refuse the business's own general
+    // claim, which is the opposite of what the rule is for.
+    expect(resolveProduct("the one", TWO)).toEqual({ kind: "none" });
+    expect(resolveProduct("ours", TWO)).toEqual({ kind: "none" });
+    expect(resolveProduct("each of them", TWO)).toEqual({ kind: "none" });
+  });
+
+  it("a product the catalogue does not sell is still refused", () => {
+    expect(resolveProduct("Jasmine candle", TWO)).toEqual({ kind: "unknown", named: "Jasmine candle" });
+  });
+
+  it("TOLERANT MATCHING: \"ghee\" IS \"Desi ghee 500ml\"", () => {
+    // The clear bug: a true price was refused because the sentence said
+    // "ghee" and the catalogue said "Desi ghee 500ml".
+    expect(resolveProduct("ghee", DAIRY)).toEqual({ kind: "known", slug: "desi_ghee_500ml" });
+    expect(sameProductName("ghee", "Desi ghee 500ml")).toBe(true);
+    expect(sameProductName("500 ml jar of ghee", "Desi ghee 500ml")).toBe(true);
+  });
+
+  it("and it does not match two different things", () => {
+    expect(sameProductName("paneer", "Desi ghee 500ml")).toBe(false);
+    expect(sameProductName("Lavender candle", "Rose candle")).toBe(false);
+  });
+
+  it("a trailing s is dropped per word, and nothing else is stemmed", () => {
+    expect(sameProductName("candles", "Lavender candle")).toBe(true);
+    // No aggressive stemming: guessing at morphology across English and
+    // romanised Hindi would match more than it should.
+    expect(sameProductName("candy", "Lavender candle")).toBe(false);
+  });
+
+  it("THE VALIDATOR APPROVES A COLLECTIVE CLAIM ON A BUSINESS RECORD", () => {
+    // The eight false refusals, in one assertion.
+    const v = validateSelection(
+      { claims: [claim({ claimType: "material", factIds: ["f_ammonia"], aboutProduct: "the candles", value: false, unit: null })] },
+      RECORDS,
+      TENANT,
+      [{ name: "Lavender candle" }, { name: "Rose candle" }]
+    );
+    expect(v.rejected).toEqual([]);
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("and still refuses a business record for a SPECIFICALLY named one", () => {
+    const v = validateSelection(
+      { claims: [claim({ claimType: "material", factIds: ["f_ammonia"], aboutProduct: "Lavender candle", value: false, unit: null })] },
+      RECORDS,
+      TENANT,
+      [{ name: "Lavender candle" }, { name: "Rose candle" }]
+    );
+    expect(v.rejected[0].rule).toBe("wrong_scope");
+  });
+
+  it("every step states the distinction, not just the code", () => {
+    expect(code("src/lib/facts/selectClaims.ts")).toMatch(/ONE SPECIFICALLY NAMED PRODUCT/);
+    expect(code("src/lib/facts/verifyClaims.ts")).toMatch(/A COLLECTIVE OR GENERIC REFERENCE IS THE RANGE/);
+    expect(code("src/lib/facts/extractClaims.ts")).toMatch(/A collective reference is the range, not an item/);
+    expect(code("src/lib/content/generateCopy.ts")).toMatch(/A FACT ABOUT ONE NAMED PRODUCT STAYS WITH THAT PRODUCT/);
   });
 });

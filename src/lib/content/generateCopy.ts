@@ -377,7 +377,7 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
     // SCOPE, in the writer's own terms. A fact selected about one
     // product may not be spread across the range, and a store-wide
     // policy may be said of any product because it IS about all of them.
-    `\n- A FACT ABOUT ONE PRODUCT STAYS WITH THAT PRODUCT. Do not say of the whole range what the list says of one item, and do not attach one item's number to another. Shipping and discount codes are store-wide and may be said of anything.`,
+    `\n- A FACT ABOUT ONE NAMED PRODUCT STAYS WITH THAT PRODUCT. Do not say of the whole range what the list says of one item, and do not attach one item's number to another. A fact the list gives about the business generally MAY be said of what the business makes as a whole. Shipping and discount codes are store-wide and may be said of anything.`,
     `\n- Say nothing about the reader's own order, booking or account. You do not know who is reading this.`,
     `\n- Figures appear exactly as given above. Do not convert them, round them or spell them out in words.`,
     unknowns.length ? `\n- NOT on record, and must not appear in any form: ${unknowns.join("; ")}.` : "",

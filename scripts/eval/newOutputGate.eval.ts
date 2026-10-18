@@ -208,8 +208,19 @@ describe("the gate, on the new pipeline's output", () => {
     //      joining two facts with "so" / "isliye" / "kyunki" should
     //      produce a claim naming the connection, not only the two facts.
     // ------------------------------------------------------------------
-    const CAUSAL = /(?:so that|so the|which is why|that is how|that's how|because|isliye|kyunki|iska matlab|usse|jisse)/i;
-    const LINKY = /(?:cause|causes|because|result|results|lead|leads|so that|means|makes|produce|produces|ensur|why)/i;
+    // WRITTEN WITH A BUILT BACKSLASH, and the repo's own guard is why.
+    //
+    // The first version of these two lines had its word boundaries
+    // eaten by a Python heredoc and shipped BACKSPACE (0x08) instead -
+    // so the regex searched for a control character, found none, and the
+    // gate reported "0 sentences with a causal join". I read that as
+    // evidence that run 4's output contained none. It was evidence of
+    // nothing.
+    //
+    // CLAUDE.md records four incidents of this trap. This is the sixth
+    // in two days and the only one that produced a NUMBER I believed.
+    const CAUSAL = /\b(?:so that|so the|which is why|that is how|that's how|because|isliye|kyunki|iska matlab|usse|jisse)\b/i;
+    const LINKY = /\b(?:cause|causes|because|result|results|lead|leads|so that|means|makes|produce|produces|ensur|why)\b/i;
 
     let claimsTotal = 0;
     let withProduct = 0;

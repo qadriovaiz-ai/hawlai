@@ -150,7 +150,7 @@ const TOOL = {
             aboutProduct: {
               type: "string",
               description:
-                "The name of the ONE product or service this sentence is about, as the sentence names it. Omit it when the sentence is about the business generally.",
+                "The name of the ONE product or service this sentence is about, ONLY when the sentence names a particular item. OMIT it for a collective or generic reference — \"the product\", \"the products\", \"our range\", \"each one\" — and omit it when the sentence is about the business generally. A collective reference is the range, not an item.",
             },
           },
           required: ["sentenceIndex", "canonical", "claimType", "subject", "polarity"],
