@@ -90,6 +90,7 @@ export async function generateEmailContent(
       // surface with the worst graded baseline: 20 of the 33 false
       // sentences, out of 70 claim sentences.
       factBound: true,
+      task: "email",
       logContext,
       brief: {
         label: `${meta.label} (email)`,

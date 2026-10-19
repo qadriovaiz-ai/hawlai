@@ -38,12 +38,32 @@ function say(...parts: unknown[]): void {
 }
 
 const GO = process.env.EVAL_GO === "1";
+/**
+ * The whole pipeline against canned replies, for nothing.
+ *
+ * This is the step that caught `server-only` breaking all 30 baseline
+ * cases before a rupee was spent, and the founder asked for it before
+ * every paid S2 run. A stub cannot tell us whether the copy is true —
+ * it tells us the four calls happen, in order, and that the output
+ * survives the plumbing.
+ */
+const STUB = process.env.EVAL_STUB === "1";
 const OUT = join("scripts", "eval", "results");
 const LEDGER = join("scripts", "eval", "spend.json");
 const PER_RUN_CAP_INR = 30;
 
-/** The email cases, in the baseline's own order. */
-const EMAIL_CASES = CASES.filter((c) => c.surface === "email");
+/**
+ * The cases for the surface under test.
+ *
+ * EMAIL BY DEFAULT, so every S1 invocation still means what it meant.
+ * S2 reuses this runner whole rather than forking it: a second copy
+ * would drift, and the incompleteness reporting, the spacing, the retry
+ * and the ledger are the parts that took the longest to get right.
+ *
+ *   EVAL_SURFACE=whatsapp  npx vitest run --config vitest.eval.config.mts scripts/eval/s1Exit.eval.ts
+ */
+const SURFACE = process.env.EVAL_SURFACE ?? "email";
+const EMAIL_CASES = CASES.filter((c) => c.surface === SURFACE);
 
 /**
  * The baseline, email only, from the reviewer's filled sheet.
@@ -107,6 +127,51 @@ function estimateInr(caseCount: number): number {
   return Math.round(per * caseCount * 1.2 * 100) / 100;
 }
 
+/**
+ * Canned replies for the four calls, in order.
+ *
+ * It answers by TOOL NAME rather than by call count, because the order
+ * is what is being tested: if the door ever called them out of order, a
+ * count-based stub would hide it and this will not.
+ */
+function stubPipeline(): () => void {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init?: any) => {
+    if (!String(url).includes("anthropic.com")) return original(url, init);
+    const body = JSON.parse(init.body);
+    const tool = body?.tools?.[0]?.name;
+    const reply = (content: unknown) =>
+      new Response(JSON.stringify({ content, usage: { input_tokens: 0, output_tokens: 0 }, model: body.model }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+
+    if (tool === "select_claims") {
+      // Cite nothing, so Validate approves nothing and the writer gets
+      // the "do not fill the gap" branch. That exercises the path a
+      // thin-record business actually takes.
+      return reply([{ type: "tool_use", name: tool, input: { claims: [], conflicts: [], unknowns: ["a stub run selects nothing"] } }]);
+    }
+    if (tool === "report_claims") return reply([{ type: "tool_use", name: tool, input: { claims: [] } }]);
+    if (tool === "report_verdicts") return reply([{ type: "tool_use", name: tool, input: { verdicts: [] } }]);
+    // The write step: prose, in the shape each surface expects.
+    return reply([
+      {
+        type: "text",
+        text: JSON.stringify({
+          subject: "A stub subject",
+          message: "Hum yahan hain. Koi sawaal ho toh poochh lo.",
+          text: "Hum yahan hain. Koi sawaal ho toh poochh lo.",
+          body: "Hum yahan hain. Koi sawaal ho toh poochh lo.",
+        }),
+      },
+    ]);
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
 describe("the S1 exit test", () => {
   it("re-runs the email cases through the fact-bound pipeline", async () => {
     const base = baselineEmail();
@@ -115,14 +180,22 @@ describe("the S1 exit test", () => {
     const spentSoFar = Math.round(ledger.totalInr * 100) / 100;
 
     say("");
-    say("S1 EXIT TEST — the fact-bound pipeline on email");
+    say(`EXIT TEST — the fact-bound pipeline on ${SURFACE}`);
     say("=".repeat(66));
     say(`cases                 ${EMAIL_CASES.length}  (${EMAIL_CASES.map((c) => c.id).join(", ")})`);
-    say(`baseline, email only  ${base.claims} claim sentences: ${base.T} T, ${base.F} F, ${base.U} U`);
+    say(`baseline (email)      ${base.claims} claim sentences: ${base.T} T, ${base.F} F, ${base.U} U`);
     say(`ESTIMATE THIS RUN     Rs ${estimate.toFixed(2)}   (per-run cap Rs ${PER_RUN_CAP_INR.toFixed(2)})`);
     say(`already spent         Rs ${spentSoFar.toFixed(2)} of Rs ${BUDGET_INR.toFixed(2)}`);
     say("=".repeat(66));
 
+    // THE BASELINE IS EMAIL'S. For another surface there is a graded
+    // baseline in the 13 October run too, but these three assertions
+    // are email's numbers, so they only hold for email — checked rather
+    // than silently compared against the wrong thing.
+    if (SURFACE !== "email") {
+      say(`NOTE: the baseline figures above are EMAIL's. This run is ${SURFACE}.`);
+      say(`Its own 13 October baseline: see the graded sheet, surface ${SURFACE}.`);
+    }
     // The baseline must have parsed, or every comparison below is a
     // claim about nothing.
     //
@@ -131,21 +204,26 @@ describe("the S1 exit test", () => {
     // EvalCase type that lists the four surfaces. The baseline's 70
     // email claim sentences are unaffected: that number comes from the
     // graded sheet, not from this count.
-    expect(EMAIL_CASES.length).toBe(9);
-    expect(base.claims).toBe(70);
-    expect(base.F).toBe(20);
-    expect(base.T).toBe(34);
+    expect(EMAIL_CASES.length).toBeGreaterThan(0);
+    if (SURFACE === "email") {
+      expect(EMAIL_CASES.length).toBe(9);
+      expect(base.claims).toBe(70);
+      expect(base.F).toBe(20);
+      expect(base.T).toBe(34);
+    }
 
     if (estimate > PER_RUN_CAP_INR || estimate + spentSoFar > BUDGET_INR) {
       say("STOPPING: over a ceiling. Nothing was called.");
       return;
     }
-    if (!GO) {
+    if (!GO && !STUB) {
       say("");
-      say("Estimate only — nothing called, nothing spent. Set EVAL_GO=1 to run it.");
+      say("Estimate only — nothing called, nothing spent.");
+      say("  EVAL_STUB=1  the whole pipeline against canned replies, free");
+      say("  EVAL_GO=1    the paid run");
       return;
     }
-    if (!loadKey()) {
+    if (!STUB && !loadKey()) {
       say("STOPPING: ANTHROPIC_API_KEY has no value in .env.local.");
       return;
     }
@@ -163,7 +241,7 @@ describe("the S1 exit test", () => {
     let retries = 0;
 
     const spend = new Spend();
-    const restore = meterFetch(spend);
+    const restore = STUB ? stubPipeline() : meterFetch(spend);
     const rows: GradedSentence[] = [];
     const perCase: { id: string; sentences: number; removed: number; note: string | null; incomplete: boolean; error?: string }[] = [];
 
@@ -216,11 +294,11 @@ describe("the S1 exit test", () => {
 
     if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const label = `s1-exit-${stamp}`;
+    const label = `${SURFACE === "email" ? "s1-exit" : `s2-${SURFACE}`}-${stamp}`;
     writeFileSync(join(OUT, `${label}.json`), JSON.stringify({ label, baseline: base, perCase, rows }, null, 2), "utf8");
     writeFileSync(join(OUT, `${label}-grade-reviewer.md`), gradingSheet(rows, "reviewer"), "utf8");
 
-    const rounded = spend.rounded;
+    const rounded = STUB ? 0 : spend.rounded;
     say("");
     say("=".repeat(66));
     say(`sentences produced    ${rows.length}   (baseline email run produced 136 in total)`);
@@ -254,10 +332,15 @@ describe("the S1 exit test", () => {
     say("The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.");
 
     writeFileSync(join(OUT, `${label}-summary.txt`), LINES.join("\n"), "utf8");
-    ledger.runs.push({ at: new Date().toISOString(), label, inr: rounded, calls: spend.calls });
-    ledger.totalInr = Math.round((spentSoFar + rounded) * 100) / 100;
-    writeFileSync(LEDGER, JSON.stringify(ledger, null, 2), "utf8");
+    // A STUB SPENDS NOTHING AND IS NOT A RUN, so it never touches the
+    // ledger — a zero row there would make the run count a lie.
+    if (!STUB) ledger.runs.push({ at: new Date().toISOString(), label, inr: rounded, calls: spend.calls });
+    if (!STUB) {
+      ledger.totalInr = Math.round((spentSoFar + rounded) * 100) / 100;
+      writeFileSync(LEDGER, JSON.stringify(ledger, null, 2), "utf8");
+    }
 
-    expect(spend.calls).toBeGreaterThan(0);
+    if (STUB) say("STUB RUN — canned replies, nothing called, nothing spent.");
+    else expect(spend.calls).toBeGreaterThan(0);
   }, 30 * 60 * 1000);
 });

@@ -60,7 +60,7 @@ import { getModel } from "@/lib/models";
 import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
-import { contextFromFacts } from "@/lib/facts/getContext";
+import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import type { FactRecord } from "@/lib/facts/factRecord";
 import { selectClaims, type SelectedClaim, type Selection } from "@/lib/facts/selectClaims";
 import { validateSelection, validationNote, type Validated } from "@/lib/facts/validateSelection";
@@ -184,6 +184,16 @@ export type CopyRequest = {
    * graded baseline does not get this because a flag is on somewhere.
    */
   factBound?: boolean;
+  /**
+   * Which surface this is, for the context's slice.
+   *
+   * THE DOOR HARDCODED "email" until 2026-10-19, which was harmless
+   * while email was the only surface on the pipeline and wrong the
+   * moment a second one arrived: getContext slices by task, so WhatsApp
+   * would have been given an email's slice and nothing would have said
+   * so.
+   */
+  task?: TaskKind;
 };
 
 /** What has gone out lately, so this piece does not repeat it. */
@@ -425,7 +435,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   let validated: Validated | null = null;
   let selection: Selection | null = null;
   if (factBound) {
-    const ctx = contextFromFacts(req.logContext?.dealershipId ?? "unknown", req.facts, { kind: "email", topic: req.topic });
+    const ctx = contextFromFacts(req.logContext?.dealershipId ?? "unknown", req.facts, { kind: req.task ?? "other", topic: req.topic });
     factRecords = ctx.records;
     // NOTHING TO SELECT FROM IS NOT A FAILURE TO SELECT.
     //
@@ -544,6 +554,12 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       // theirs, not the model's.
       req.topic,
       req.brief.label,
+      // The channel's own required furniture. WhatsApp's opt-out line is
+      // appended AFTER the door (channelRules.addWhatsappOptOut), so it
+      // never reaches these checks — but if a model writes it itself,
+      // "Reply STOP to stop these messages" must not read as an
+      // introduced name.
+      req.brief.channelRules ?? "",
     ];
     const introduced = introducedWords(sentences.map((s) => s.text), allowedVocabulary);
     let introducedNoteText: string | null = null;

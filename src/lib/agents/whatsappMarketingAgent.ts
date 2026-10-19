@@ -78,6 +78,12 @@ export async function generateWhatsappContent(
       revise: claimsMode === "draft",
       language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
       operation: "whatsapp_generation",
+      // S2a: the second surface on the fact-bound pipeline. Does nothing
+      // unless FACT_BOUND_COPY=1 is also set. The opt-out line is added
+      // AFTER the door (addWhatsappOptOut below), so no check can drop
+      // it; whatsappOptOut.test.ts pins that.
+      factBound: true,
+      task: "whatsapp",
       logContext,
       // Haiku — short WhatsApp copy (broadcasts, follow-ups, cart
       // recovery) is a lower-complexity linguistic task than most of
