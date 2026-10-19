@@ -524,8 +524,19 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // nobody made. It catches the fourth boosting adjective and the next
     // invented city without anybody adding a word.
     // ------------------------------------------------------------------
+    // THE VOCABULARY COMES FROM RECORDS, NEVER FROM MODEL-WRITTEN TEXT.
+    //
+    // It used to include each approved claim's `intent` — the SELECT
+    // model's own prose — and "Pure desi ghee, made in Indore" survived
+    // run 9 because of it: Select wrote "pure" into an intent, which put
+    // the word in the allowed set, which let the writer say it. A check
+    // measured against text a model wrote is not a check; it is the
+    // model marking its own work.
+    //
+    // `value`, `unit` and `aboutProduct` stay, because each was matched
+    // against a record in step 2 before it got here.
     const allowedVocabulary = [
-      ...validated.approved.map((c) => `${c.intent} ${c.value ?? ""} ${c.unit ?? ""} ${c.aboutProduct ?? ""}`),
+      ...validated.approved.map((c) => `${c.value ?? ""} ${c.unit ?? ""} ${c.aboutProduct ?? ""}`),
       ...factRecords.map((r) => `${r.key.replace(/[._]/g, " ")} ${r.recordedText} ${r.value ?? ""}`),
       req.businessName,
       req.businessCategory,

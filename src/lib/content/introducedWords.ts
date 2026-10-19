@@ -98,7 +98,16 @@ function tokens(text: string): string[] {
  * class carries Hinglish words of its own.
  */
 function capitalisedWords(sentence: string): string[] {
-  const words = String(sentence ?? "").split(/[^\p{L}\p{N}%'’-]+/u).filter(Boolean);
+  // A LIST MARKER IS NOT THE FIRST WORD.
+  //
+  // Run 9 removed two bullets — "- Har candle hand-poured hai" and
+  // "- Ek candle jal sakti hai 40 hours tak" — reporting "har" and "ek"
+  // as invented names. The hyphen took the sentence-initial slot, so the
+  // real first word was checked, and in Hinglish the first word of a
+  // line is routinely a capitalised determiner. The marker is
+  // punctuation, not a word.
+  const line = String(sentence ?? "").replace(/^\s*(?:[-*•–—]+|\d+[.)])\s*/, "");
+  const words = line.split(/[^\p{L}\p{N}%'’-]+/u).filter(Boolean);
   const capitalised = words.slice(1).filter((w) => /^\p{Lu}\p{Ll}+/u.test(w));
 
   // CAPITALISATION ONLY MEANS "NAME" IN PROSE.

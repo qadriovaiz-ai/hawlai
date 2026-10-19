@@ -207,3 +207,47 @@ describe("a button label is not prose", () => {
     expect(introducedWords([long], ALLOWED_SALON).map((f) => f.word)).toContain("indore");
   });
 });
+
+describe("the two faults run 9 found", () => {
+  const ALLOWED = ["Lavender candle = 999", "material.soy", "Candle by Qaaf", "welcome email"];
+
+  it("A LIST MARKER IS NOT THE FIRST WORD", () => {
+    // Run 9 removed two bullets, reporting "har" and "ek" as invented
+    // names: the hyphen took the sentence-initial slot, so the real
+    // first word was checked — and in Hinglish the first word of a line
+    // is routinely a capitalised determiner.
+    expect(introducedWords(["- Har candle hand-poured hai, small batches mein"], ALLOWED)).toEqual([]);
+    expect(introducedWords(["- Ek candle jal sakti hai 40 hours tak"], ALLOWED)).toEqual([]);
+    for (const marker of ["*", "•", "1.", "2)", "—"]) {
+      expect(introducedWords([`${marker} Har candle hand-poured hai`], ALLOWED), marker).toEqual([]);
+    }
+  });
+
+  it("AND A NAME LATER IN A BULLET IS STILL CAUGHT", () => {
+    // Stripping the marker must not excuse the rest of the line.
+    expect(introducedWords(["- Har candle banti hai Indore mein"], ALLOWED).map((f) => f.word)).toEqual(["indore"]);
+  });
+
+  it("THE ALLOWED VOCABULARY HOLDS NO MODEL-WRITTEN PROSE", () => {
+    // "Pure desi ghee, made in Indore" survived run 9 because the
+    // Select model had written "pure" into a claim's intent, which put
+    // the word in the allowed set. A check measured against text a
+    // model wrote is the model marking its own work.
+    const src = code("src/lib/content/generateCopy.ts");
+    const vocab = src.slice(src.indexOf("const allowedVocabulary"), src.indexOf("const introduced ="));
+    expect(vocab).not.toMatch(/c\.intent/);
+    // What stays: figures and the product name, each matched to a
+    // record in step 2, plus the records themselves and the owner's
+    // own words.
+    expect(vocab).toMatch(/c\.value/);
+    expect(vocab).toMatch(/factRecords/);
+    expect(vocab).toMatch(/req\.topic/);
+  });
+
+  it("so a booster in an intent no longer authorises itself", () => {
+    // The same situation, at the unit level: the intent is not passed,
+    // so "pure" is not in the vocabulary and the sentence is caught.
+    const recordsOnly = ["process.traditional the ghee is made by the bilona method", "Shree Dairy"];
+    expect(introducedWords(["Pure desi ghee, made here."], recordsOnly).map((f) => f.word)).toContain("pure");
+  });
+});
