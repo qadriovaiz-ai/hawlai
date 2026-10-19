@@ -20,7 +20,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
-import { describeScope, sameProductName } from "@/lib/facts/scope";
+import { describeCoverage, sameProductName } from "@/lib/facts/scope";
 
 /** Claim types whose verdict is arithmetic, never judgement. */
 export const NUMERIC_TYPES = new Set(["price", "offer", "shipping", "duration", "count"]);
@@ -118,8 +118,8 @@ RULES
 5. Rephrasing in another language is still the same claim: judge the meaning, not the wording.
 6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.
 7. TWO FACTS DO NOT ENTAIL A LINK BETWEEN THEM. If the approved facts state A and state B, a claim that A causes B, explains B, proves B or results in B is NOT entailed — the connection is a separate assertion and no fact here makes it. This holds however plausible the mechanism sounds.
-8. SCOPE. A claim about ONE SPECIFICALLY NAMED product or service must be supported by a fact about THAT product or service. A general fact about how the business works does not support it, however true that general fact is. "We never use <substance>" is a fact about the business's practice; "this product contains no <substance>" is a claim about one item's composition, and only a fact about that item supports it. The same holds for every direction: a fact about one item does not support a claim about all of them, and a fact about the business does not support a claim about one of them.
-8a. BUT A COLLECTIVE OR GENERIC REFERENCE IS THE RANGE, NOT ONE ITEM, and a fact about the business is the RIGHT evidence for it. "the <product>", "the <products>", "our <products>", "each <product>" — said without naming which one — means what the business makes generally. A fact recorded about the business's materials or process supports such a claim fully; do not call that a scope mismatch. Scope applies only when the sentence names a PARTICULAR item that the business sells alongside others.`;
+8. SCOPE IS NOT YOURS TO DECIDE. Which facts may be used for which claim has already been settled in code before you see it, so every fact below is CLEARED for the claim it sits with. Never answer "not entailed" on the ground that a fact is about the business in general rather than about one named product — that objection is not available to you. Judge only whether the fact, applied to this claim, states it.
+9. You are deciding MEANING. Is the claim what the fact says, or more than the fact says? That is the whole question.`;
 
 /**
  * The approved facts, as the judge reads them. Plain lines, no ids.
@@ -174,9 +174,9 @@ function scopeLine(claim: SelectedClaim, records: FactRecord[]): string {
   const scopes = claim.factIds
     .map((id) => records.find((r) => r.id === id))
     .filter((r): r is FactRecord => Boolean(r))
-    .map((r) => describeScope(r.key));
+    .map((r) => describeCoverage(r.key));
   if (!scopes.length) return "";
-  return `\n    scope: ${Array.from(new Set(scopes)).join("; ")}`;
+  return `\n    this fact covers: ${Array.from(new Set(scopes)).join("; ")}`;
 }
 
 function citedWords(claim: SelectedClaim, records: FactRecord[]): string {

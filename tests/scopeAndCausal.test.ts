@@ -185,7 +185,7 @@ describe("P2 — the verifier's arithmetic knows which product a figure belongs 
     expect(r.verdicts[0].verdict).toBe("entailed");
   });
 
-  it("THE JUDGE IS TOLD EACH FACT'S SCOPE", async () => {
+  it("THE JUDGE IS TOLD WHAT EACH FACT COVERS — not what it excludes", async () => {
     let body: any = null;
     globalThis.fetch = (async (_u: any, init: any) => {
       body = JSON.parse(init.body);
@@ -194,8 +194,15 @@ describe("P2 — the verifier's arithmetic knows which product a figure belongs 
       });
     }) as typeof fetch;
     await verifyClaims([extracted({ claimType: "material", value: null, canonical: "it is pure" })], approved, { records: RECORDS });
-    expect(JSON.stringify(body)).toMatch(/scope:/);
-    expect(JSON.stringify(body)).toMatch(/about one product only/);
+    // CHANGED 19 October, on the founder's instruction (C). The judge
+    // used to be shown "about the business generally, NOT about any one
+    // product" — wording that told it to refuse, and it did: "the
+    // candles do not contain paraffin" was removed three runs running.
+    // Scope is settled in code before the judge sees the claim, so what
+    // it needs is COVERAGE.
+    expect(JSON.stringify(body)).toMatch(/this fact covers:/);
+    expect(JSON.stringify(body)).toMatch(/recorded against/);
+    expect(JSON.stringify(body)).not.toMatch(/NOT about any one product/);
   });
 
   it("describeScope says it in words a person can read", () => {
@@ -353,7 +360,10 @@ describe("a collective reference is the range, not an item", () => {
 
   it("every step states the distinction, not just the code", () => {
     expect(code("src/lib/facts/selectClaims.ts")).toMatch(/ONE SPECIFICALLY NAMED PRODUCT/);
-    expect(code("src/lib/facts/verifyClaims.ts")).toMatch(/A COLLECTIVE OR GENERIC REFERENCE IS THE RANGE/);
+    // The judge no longer carries the collective/specific distinction
+    // at all, which is the point of C: it carries the instruction NOT
+    // to decide scope. The distinction lives in code.
+    expect(code("src/lib/facts/verifyClaims.ts")).toMatch(/SCOPE IS NOT YOURS TO DECIDE/);
     expect(code("src/lib/facts/extractClaims.ts")).toMatch(/A collective reference is the range, not an item/);
     expect(code("src/lib/content/generateCopy.ts")).toMatch(/A FACT ABOUT ONE NAMED PRODUCT STAYS WITH THAT PRODUCT/);
   });

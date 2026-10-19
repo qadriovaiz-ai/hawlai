@@ -17,7 +17,7 @@
 // not entail it, and the human grader must not mark it T.
 
 import { describe, it, expect } from "vitest";
-import { code } from "./helpers/source";
+import { code, sourceWithComments } from "./helpers/source";
 import { contextFromFacts } from "@/lib/facts/getContext";
 import { gradingSheet, type GradedSentence } from "../scripts/eval/harness";
 import { seasonFor } from "@/lib/expertise/seasonalCalendar";
@@ -35,12 +35,35 @@ describe("the scope rule is written where it is enforced", () => {
     expect(src).toMatch(/Do not stretch the general fact to cover the particular one/);
   });
 
-  it("THE JUDGE IS TOLD THE SAME, IN BOTH DIRECTIONS", () => {
+  it("THE JUDGE IS TOLD NOT TO DECIDE SCOPE AT ALL", () => {
+    // REVERSED 19 October, on the founder's instruction (C), and
+    // recorded rather than quietly swapped. This test used to require
+    // the judge to carry the scope rule in its rubric. It did carry it,
+    // and refused "the candles do not contain paraffin" — a true,
+    // recorded claim — in three consecutive runs, because a rubric is a
+    // request and only code is a guarantee. Scope is now settled by
+    // resolveProduct and validateSelection before the judge sees the
+    // claim, and the judge is told the objection is not available to it.
     const src = code("src/lib/facts/verifyClaims.ts");
-    expect(src).toMatch(/SCOPE\. A claim about ONE SPECIFICALLY NAMED product or service must be supported by a fact about THAT product or service/);
-    expect(src).toMatch(/however true that general fact is/);
-    // The reverse too: one item's fact does not cover all of them.
-    expect(src).toMatch(/a fact about one item does not support a claim about all of them/);
+    expect(src).toMatch(/SCOPE IS NOT YOURS TO DECIDE/);
+    expect(src).toMatch(/that objection is not available to you/);
+    expect(src).toMatch(/every fact below is CLEARED for the claim it sits with/);
+  });
+
+  it("and the code that now owns the decision is the code the validator reads", () => {
+    expect(code("src/lib/facts/validateSelection.ts")).toMatch(/recordSupportsScope/);
+    // sourceWithComments, because the thing asserted IS the recorded
+    // reason — code() strips it. CLAUDE.md rule 8.
+    expect(sourceWithComments("src/lib/facts/scope.ts")).toMatch(/A COLLECTIVE REFERENCE IS THE RANGE, NOT AN ITEM/);
+    // And the behaviour itself, which no comment can fake: a reference
+    // matching more than one product resolves to the range.
+    expect(code("src/lib/facts/scope.ts")).toMatch(/if \(hits\.length > 1\) return \{ kind: "none" \}/);
+  });
+
+  it("the old rubric wording is gone, so it cannot drift back", () => {
+    const src = code("src/lib/facts/verifyClaims.ts");
+    expect(src).not.toMatch(/A claim about ONE SPECIFICALLY NAMED product or service must be supported/);
+    expect(src).not.toMatch(/however true that general fact is/);
   });
 
   it("THE GRADER IS TOLD THAT THIS PATTERN IS U OR F, NEVER T", () => {

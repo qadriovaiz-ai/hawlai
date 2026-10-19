@@ -194,10 +194,36 @@ export function contentWords(s: string | null | undefined): string[] {
     .filter((w) => w.length > 1 && !DETERMINERS.has(w));
 }
 
-/** How a record's scope reads to a human, for the judge and the owner. */
+/**
+ * How a record's scope reads to the OWNER, in a refusal.
+ *
+ * Phrased as a limit, because that is what it is when the validator is
+ * explaining why a claim about one named item was not allowed.
+ */
 export function describeScope(key: string): string {
   const scope = scopeOfKey(key);
   if (scope.kind === "policy") return "a store-wide policy — it applies to every product";
   if (scope.kind === "product") return `about one product only: ${scope.product.replace(/_/g, " ")}`;
   return "about the business generally, NOT about any one product";
+}
+
+/**
+ * How a record's scope reads to the JUDGE — as COVERAGE, not as a limit.
+ *
+ * THE WORDS I GAVE THE JUDGE WERE TELLING IT TO REFUSE. It was shown
+ * "about the business generally, NOT about any one product" beside a
+ * claim the validator had already approved, and did the obvious thing:
+ * refused "the candles do not contain paraffin" three runs in a row for
+ * naming "the candles".
+ *
+ * Scope is decided in code before the judge ever sees the claim
+ * (resolveProduct, validateSelection). By the time a fact reaches here
+ * it is CLEARED for this claim, so what the judge needs to know is what
+ * the fact covers — not what it excludes.
+ */
+export function describeCoverage(key: string): string {
+  const scope = scopeOfKey(key);
+  if (scope.kind === "policy") return "a store-wide policy, so it covers every product";
+  if (scope.kind === "product") return `recorded against ${scope.product.replace(/_/g, " ")}`;
+  return "recorded about the business, so it covers what the business makes in general";
 }

@@ -300,3 +300,39 @@ describe("5. what is a safety claim and what is a material claim", () => {
     expect(src).toMatch(/Only a claim that the thing IS SAFE, or safe FOR SOMEONE, is "safety"/);
   });
 });
+
+describe("6. courtesy is not a capability claim", () => {
+  // Run 6 removed SIXTEEN capability claims, and most were courtesy:
+  // "the business is available to answer customer questions", "the
+  // business wants to help customers", "everything the customer needs
+  // is here". The baseline graded "Koi bhi sawaal ho toh zaroor
+  // poochein. Hum yahan hain." as NOT A CLAIM. The extractor had begun
+  // reading an invitation as an operational undertaking, the licence
+  // table refused it, and every email lost its human half.
+  //
+  // Founder's scope, 19 October: a capability claim is one where the
+  // business will do something BY ITSELF, operationally — rebook,
+  // remind, deliver. Being available, willing or glad is not that.
+  const src = () => code("src/lib/facts/extractClaims.ts");
+
+  it("THE RULE IS THERE, WITH THE DISTINCTION STATED", () => {
+    expect(src()).toMatch(/ORDINARY COURTESY IS NOT A CAPABILITY CLAIM/);
+    expect(src()).toMatch(/being available, willing, glad or ready is not an operational undertaking/i);
+  });
+
+  it("AND THE PHRASES, IN BOTH LANGUAGES", () => {
+    // Named because the model plainly did not recognise them as
+    // non-claims on its own.
+    for (const phrase of ["Ask us anything", "we are here", "hum yahan hain", "poochh lo", "shuru karein"]) {
+      expect(src(), phrase).toContain(phrase);
+    }
+  });
+
+  it("it says what a capability claim IS, so the rule does not swing too far", () => {
+    // Deleting the capability type would be the other failure: salon-10
+    // invented automatic monthly rebooking, which is exactly the shape
+    // this type exists for.
+    expect(src()).toMatch(/will DO something by itself, as a matter of how it operates/);
+    expect(src()).toMatch(/without the customer asking each time/);
+  });
+});
