@@ -14,6 +14,15 @@ mukable" a *feeling*. That is a comparison with a competitor's product —
 the worst sentence in the whole run — and the first version of this sheet
 told you to leave it blank. Read the sentence, not the label.
 
+**SCOPE RULE (founder, 16 October 2026).** A sentence that makes a
+claim about ONE named product or service needs a record about THAT
+product or service. A general fact about how the business works does
+not support it, however true that general fact is — so a sentence in
+the shape *general business fact → specific product claim* is **U or
+F, never T**. "We do not use ammonia-based products" is the
+business's practice; "this treatment contains no ammonia" is a claim
+about one item, and only a record about that item supports it.
+
 Do not look at the other grader's sheet until yours is finished.
 
 

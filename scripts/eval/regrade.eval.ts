@@ -22,6 +22,11 @@ function runs(): string[] {
   if (!existsSync(OUT)) return [];
   return readdirSync(OUT)
     .filter((f) => f.endsWith(".json") && f !== "spend.json")
+    // A GATE RESULT IS NOT A RUN. new-output-gate-*.json holds verdicts
+    // and no sentences, so asserting on its `rows` threw a TypeError
+    // and took the whole regrade down with it — found on 19 October
+    // when the records box needed rebuilding and could not be.
+    .filter((f) => !f.startsWith("new-output-gate") && !f.startsWith("recall-gate"))
     .sort();
 }
 

@@ -22,7 +22,7 @@
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
 import { pieces } from "@/lib/claims/claimCheck";
-import { extractFromKnowledge } from "@/lib/facts/extract";
+import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import { classifySentence } from "@/lib/facts/sentenceKind";
 import type { EvalCase } from "./cases";
 
@@ -100,6 +100,14 @@ export function meterFetch(spend: Spend, model: string = CLAUDE_MODELS.standard)
   };
 }
 
+/** Each eval surface, as the context's task kind. */
+const TASK_KIND: Record<string, TaskKind> = {
+  email: "email",
+  facebook_post: "social_post",
+  whatsapp: "whatsapp",
+  lead_message: "lead_message",
+};
+
 export type GradedSentence = {
   caseId: string;
   fixture: string;
@@ -129,35 +137,50 @@ export function toGradedRows(
   output: Record<string, unknown>,
   removedByGuard: string[]
 ): GradedSentence[] {
-  // DEDUPED, AND READABLE, because a grader reads this list for every
-  // case and noise in it costs accuracy. Two rows stating the same fact
-  // in two languages produce two records with one key — correct in the
-  // data, repetition on the page — and a `statement.*` key is an
-  // internal handle, not something to show a person.
-  const facts = c.fixture.facts
+  // THE RECORDS BOX IS BUILT FROM THE SAME FUNCTION THE DOOR USES.
+  //
+  // It used to assemble its own list — the owner's rows, the catalogue,
+  // the shipping line — and so showed the grader a DIFFERENT record set
+  // from the one the pipeline actually had. The founder caught it on 19
+  // October: `business.city` had been a record for two runs, "Indore"
+  // appeared six times in the output, and the sheet had no city field
+  // at all, so he could not verify the claim and said so. Offers and
+  // counts were missing too.
+  //
+  // That is the same fault as the fixture's `ownerFacts: []` in S1-1,
+  // running the other way: then the graders saw records the pipeline
+  // lacked, now the pipeline had records the graders could not see.
+  // Either way the sheet is not evidence about the pipeline.
+  //
+  // contextFromFacts is the door's own reader, so there is one source
+  // and a grader can check any claim against what was really there.
+  const task = { kind: TASK_KIND[c.surface] ?? ("other" as const), topic: c.topic };
+  const ctx = c.fixture.facts ? contextFromFacts(c.fixture.key, c.fixture.facts, task) : null;
+  const records = ctx
     ? Array.from(
         new Set(
-          extractFromKnowledge(c.fixture.key, c.fixture.rows).records.map((r) =>
-            r.key.startsWith("statement.")
-              ? `the owner wrote: "${String(r.value)}"`
-              : r.unit
-                ? `${r.key} = ${r.value} ${r.unit}`
-                : `${r.key} = ${r.value}`
-          )
+          ctx.records.map((r) => {
+            // A `statement.*` key is an internal handle, not something
+            // to show a person.
+            if (r.key.startsWith("statement.")) return `the owner wrote: "${String(r.value)}"`;
+            const value = r.value === null ? "NO ANSWER ON RECORD" : String(r.value);
+            return `${r.key} = ${value}${r.unit ? ` ${r.unit}` : ""}`;
+          })
         )
       )
     : [];
-  // The catalogue is evidence too, and the grader needs it in front of
-  // them to judge a price.
-  const catalogue = (c.fixture.facts?.products ?? []).map(
-    (p: any) => `catalogue: ${p.name} = ${p.price}${p.description ? ` (${p.description})` : ""}`
-  );
-  const shipping = c.fixture.facts?.shipping
-    ? [`shipping: ${c.fixture.facts.shipping.mode}${c.fixture.facts.shipping.rate != null ? ` ${c.fixture.facts.shipping.rate}` : ""}`]
-    : c.fixture.facts
-      ? ["shipping: nothing is shipped"]
+  // WHAT THE SLICE LEFT OUT, named. getContext narrows to the product
+  // the topic mentions, so a grader judging a price needs to know which
+  // other products existed and were withheld — otherwise a wrong-price
+  // claim looks unjudgeable.
+  const withheld =
+    ctx && ctx.slice.narrowedByTopic
+      ? (c.fixture.facts?.products ?? [])
+          .map((p: any) => String(p?.name ?? ""))
+          .filter((name) => name && !ctx.slice.products.includes(name))
+          .map((name) => `(not given to the writer for this piece: ${name})`)
       : [];
-  const available = [...catalogue, ...shipping, ...facts];
+  const available = [...records, ...withheld];
 
   const rows: GradedSentence[] = [];
   for (const [field, value] of Object.entries(output ?? {})) {
