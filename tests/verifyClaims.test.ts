@@ -6,7 +6,7 @@
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { verifyClaims, verifyNote, approvedForJudge, NUMERIC_TYPES } from "@/lib/facts/verifyClaims";
-import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ExtractedClaim, type ClaimType } from "@/lib/facts/extractClaims";
+import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type ExtractedClaim, type ClaimType } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 
 const ORIGINAL = globalThis.fetch;
@@ -268,6 +268,73 @@ describe("5. the units a model actually sends", () => {
     const r = await verifyClaims(
       [extracted({ claimType: "shipping", canonical: "shipping is free", value: { number: 0, unit: "inr" } })],
       [approvedClaim({ claimType: "material", intent: "no ammonia is used", value: false, unit: null })]
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+});
+
+describe("a figure stated without a unit", () => {
+  // The third S2a WhatsApp run removed two true, recorded figures:
+  //
+  //   Removed "Shipping costs 50."  — it states 50 <UNKNOWN>, and the
+  //     figures on record are 120 inr, 10 percent, 50 inr
+  //
+  // 50 inr was right there in the approved list. The only thing that
+  // refused it was the unit: the extractor's schema REQUIRED a unit, so
+  // for a sentence that states none the model produced "<UNKNOWN>", and
+  // sameUnit read that as a unit contradicting "inr".
+  //
+  // A field that cannot say "there is none" makes the model invent one.
+  // Exactly the shape of the boolean that had to be stringified to
+  // "false" and was then read as marking its own claim untrue.
+
+  it("THE UNIT FIELD IS OPTIONAL, so nothing has to be invented for it", async () => {
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/facts/extractClaims.ts");
+    expect(src).toMatch(/required: \["number"\]/);
+    expect(src).not.toMatch(/required: \["number", "unit"\]/);
+    expect(src).toMatch(/OMIT this entirely when the text states no unit/);
+  });
+
+  it("EVERY WAY OF SAYING \"ABSENT\" ARRIVES AS ABSENT", () => {
+    for (const u of ["<UNKNOWN>", "UNKNOWN", "unspecified", "none", "n/a", "-", "", "  ", "null"]) {
+      expect(placeholderFree(u)).toBe("");
+    }
+  });
+
+  it("but a real unit is untouched, including the ones that look odd", () => {
+    expect(placeholderFree("₹")).toBe("₹");
+    expect(placeholderFree(" inr ")).toBe("inr");
+    expect(placeholderFree("percent")).toBe("percent");
+    expect(placeholderFree("currency")).toBe("currency");
+    expect(placeholderFree("minutes")).toBe("minutes");
+  });
+
+  it("THE SENTENCE THAT WAS REMOVED IS NOW ENTAILED", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "shipping", value: { number: 50, unit: "<UNKNOWN>" }, canonical: "shipping costs 50" })],
+      [approvedClaim({ claimType: "shipping", value: 50, unit: "inr" })]
+    );
+    expect(r.verdicts[0].verdict).toBe("entailed");
+    expect(r.verdicts[0].rule).toBe("figure_matches");
+    expect(r.unsupportedSentences).toEqual([]);
+  });
+
+  it("AND A WRONG NUMBER WITHOUT A UNIT IS STILL REFUSED", async () => {
+    // The direction that must not loosen. Dropping the unit buys no
+    // leniency on the figure itself.
+    const r = await verifyClaims(
+      [extracted({ claimType: "shipping", value: { number: 90, unit: "<UNKNOWN>" }, canonical: "shipping costs 90" })],
+      [approvedClaim({ claimType: "shipping", value: 50, unit: "inr" })]
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+    expect(r.verdicts[0].rule).toBe("figure_not_approved");
+  });
+
+  it("and a stated unit that genuinely disagrees is still refused", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "shipping", value: { number: 50, unit: "percent" }, canonical: "shipping is 50 percent" })],
+      [approvedClaim({ claimType: "shipping", value: 50, unit: "inr" })]
     );
     expect(r.verdicts[0].verdict).toBe("unsupported");
   });

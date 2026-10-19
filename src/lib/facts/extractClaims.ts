@@ -140,8 +140,22 @@ const TOOL = {
             value: {
               type: "object",
               description: "Only when the claim carries a figure. Copy the figure from the text; never compute one.",
-              properties: { number: { type: "number" }, unit: { type: "string" } },
-              required: ["number", "unit"],
+              properties: {
+                number: { type: "number" },
+                // OPTIONAL, AND THE S2a WHATSAPP RUN OF 2026-10-19 IS
+                // WHY. It was required. "Shipping costs 50." states no
+                // unit, so the model had to put something in the field
+                // and returned "<UNKNOWN>" — which then read as a unit
+                // that contradicts the record's "inr", and a true,
+                // recorded 50 was removed from the message.
+                //
+                // Same shape as the boolean that had to be stringified
+                // to "false" and was then read as marking the claim
+                // untrue: a field that cannot say "there is none" makes
+                // the model invent one.
+                unit: { type: "string", description: "The unit as the text states it. OMIT this entirely when the text states no unit. Never put a placeholder here." },
+              },
+              required: ["number"],
             },
             comparedWith: {
               type: "string",
@@ -259,6 +273,23 @@ export async function extractClaims(
  * would be judged by the wrong rule, and a dropped claim at least shows
  * up as a gap in the recall measurement.
  */
+/**
+ * A unit, or the empty string when there is none.
+ *
+ * DEFENSIVE AND DELIBERATE. The schema now lets the model omit the
+ * unit, and the prompt tells it to — but a placeholder is what a model
+ * reaches for when a field looks obligatory, and an unrecognised unit
+ * string is read downstream as a unit that CONTRADICTS the record.
+ * sameUnit already treats an absent unit as no mismatch; this makes
+ * every way of saying "absent" arrive as absent.
+ */
+export function placeholderFree(unit: unknown): string {
+  const raw = String(unit ?? "").trim();
+  const bare = raw.replace(/^[<([{]+|[>)\]}]+$/g, "").trim().toLowerCase();
+  const PLACEHOLDERS = new Set(["unknown", "unspecified", "none", "null", "n/a", "na", "nil", "no unit", "undefined", "-", "—", "?"]);
+  return PLACEHOLDERS.has(bare) ? "" : raw;
+}
+
 function normalise(c: any): ExtractedClaim | null {
   const canonical = String(c?.canonical ?? "").trim();
   if (!canonical) return null;
@@ -270,7 +301,7 @@ function normalise(c: any): ExtractedClaim | null {
   const index = Number(c?.sentenceIndex);
   const value =
     c?.value && Number.isFinite(Number(c.value.number))
-      ? { number: Number(c.value.number), unit: String(c.value.unit ?? "").trim() }
+      ? { number: Number(c.value.number), unit: placeholderFree(c.value.unit) }
       : null;
   return {
     sentenceIndex: Number.isInteger(index) && index >= 0 ? index : 0,

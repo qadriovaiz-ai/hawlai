@@ -17,7 +17,7 @@
 
 import { callClaude } from "@/lib/ai/claude";
 import { CLAUDE_MODELS } from "@/lib/models";
-import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ExtractedClaim } from "@/lib/facts/extractClaims";
+import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
 import { describeCoverage, sameProductName } from "@/lib/facts/scope";
@@ -62,8 +62,11 @@ function sameUnit(a: string | undefined, b: string | null | undefined): boolean 
     day: "day", days: "day", din: "day",
     percent: "percent", percents: "percent", pc: "percent", "%": "percent",
   };
+  // placeholderFree FIRST, so "<UNKNOWN>" arrives as absent rather than
+  // as a unit that contradicts every real one. One definition, shared
+  // with the extractor that produces these.
   const norm = (u: string) => {
-    const raw = String(u ?? "").toLowerCase().trim();
+    const raw = placeholderFree(u).toLowerCase().trim();
     return SYNONYMS[raw] ?? raw.replace(/s$/, "");
   };
   const x = norm(a ?? "");

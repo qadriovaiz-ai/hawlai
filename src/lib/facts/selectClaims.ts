@@ -17,6 +17,15 @@
 // 10%. That comes back as a conflict naming both numbers, so the owner
 // is told rather than obeyed or silently corrected.
 //
+// AND IT MUST STILL SELECT WHAT IS TRUE. The S2a WhatsApp run of
+// 2026-10-19 showed what happens otherwise: dairy-10 asked for "free
+// home delivery", the conflict was reported exactly right — shipping is
+// flat Rs 50 — and no shipping figure was selected at all, because rule
+// 3 read as "stay out of it". The writer then wrote the true sentence
+// "Delivery costs Rs 50" on its own initiative, and step 4 removed it
+// for having no approved claim behind it. A recorded fact was deleted
+// from the message by the rule meant to protect the owner's records.
+//
 // NUMBERS ARE NEVER WRITTEN HERE. A claim carrying a figure must carry
 // the figure FROM the cited record; step 2 checks it against that record
 // and rejects a mismatch. The model's job is to point, not to compute.
@@ -138,7 +147,7 @@ You are given the records a business actually has, each with an id. Every factua
 RULES
 1. Cite by id, exactly as given. A claim with no citable record is not a claim you may select — put it in unknowns instead.
 2. NEVER write a figure of your own. If a claim carries a number, copy it from the cited record, with the record's unit. Do not convert, round, add, average or infer.
-3. If the request asks for something the records CONTRADICT, report it in conflicts with both sides named. Do not select it, and do not quietly substitute the correct number — the owner decides what to do about their own records.
+3. If the request asks for something the records CONTRADICT, report it in conflicts with both sides named, and do not select the thing they asked for. BUT DO SELECT WHAT THE RECORD ACTUALLY SAYS about that topic, so the copy can state the truth instead of saying nothing. The fault to avoid is a QUIET substitution — a number swapped without telling anyone. Reporting the conflict and selecting the real figure together is not quiet: the owner is told, and the reader is told something true. Selecting neither leaves a recorded fact unsayable, and the writer will then state it anyway with nothing behind it.
 4. If the request asks for something no record covers, put it in unknowns. One clear thing the owner could write down, phrased as a fact to record rather than a question about their business.
 5. Select FEWER claims rather than weaker ones. A short piece built on three solid records is the goal; padding it with a fourth that nothing supports is the failure this whole step exists to prevent.
 6. Choose nothing about a competitor, nothing about what the product will do to the reader's body, mood or health, nothing about safety, and nothing about what the business will do automatically for them. No record can support those, so selecting one only wastes the attempt.

@@ -1,0 +1,52 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 418.14 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+4 sentence(s), facts note present
+7 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s)
+5 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    32   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            24   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                44858 in, 4940 out
+ACTUAL COST THIS RUN  Rs 10.85   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.81   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 428.99 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Left out: Name the product so the reader knows what this message is about. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Not on record: Is free shipping available specifically for the Lavender Candle, or does it apply to all orders? Please record the scope of the free-shipping policy (e.g. 'free shipping on all orders' or 'free shipping on orders above ₹X').
+     Not on record: What lavender fragrance is used in the Lavender Candle — is it an essential oil, a fragrance oil, or a specific named scent? Please record this against the product so it can be stated in copy.
+     Removed "The hand-poured candles are available now." — No approved fact states when the candles are available or in stock..
+  [candle-09]
+     You asked for Safe for kids. Your records say No record exists that tests or certifies these candles as safe for children. Rule 6 also prohibits selecting safety claims. — change the record, or I write it without that.
+     Not on record: 100% natural: No record certifies the candles as '100% natural' end-to-end (fragrance oils, wicks, dyes, etc.). Owner should record: 'All ingredients — wax, fragrance, wick — are 100% natural / free from synthetic additives.' against the product(s) if true.
+     Not on record: Kid-safe / child-safe claim: No record supports this. Owner should record any relevant certification or test result (e.g., 'Candles are certified non-toxic and child-safe by [body]') before this claim is made in copy.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Shipping mode is NO ANSWER ON RECORD — the business is a salon in Indore; nothing is shipped. Free shipping cannot apply. — change the record, or I write it without that.
+  [dairy-05]
+     Not on record: What is the weight or pack size available beyond 250g, if any? Record against each product variant so it can be mentioned.
+     Not on record: Is the FIRST10 offer specific to paneer, or sitewide? Record the scope of the offer so copy can be accurate.
+     Not on record: What is the order/delivery area — is it Indore-only or does it ship wider? Record the delivery geography so the broadcast can target correctly.
+     Removed "Shipping costs 50." — it states 50 <UNKNOWN>, and the figures on record are 120 inr, 10 percent, 50 inr.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping is flat at ₹50 — not free. — change the record, or I write it without that.
+     Removed "Delivery costs ₹50." — it states 50 ₹, and no figure was approved for this piece.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-19T18-10-41-221Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

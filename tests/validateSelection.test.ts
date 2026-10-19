@@ -458,3 +458,53 @@ describe("9b. the null-figure hole the mutations found", () => {
     expect(v.approved).toEqual([]);
   });
 });
+
+describe("a conflict must not silence the truth as well", () => {
+  // The third S2a WhatsApp run, dairy-10. The owner asked for "free
+  // home delivery"; shipping is flat ₹50. Select reported the conflict
+  // exactly right — and selected no shipping figure at all, because
+  // rule 3 read as "stay out of it entirely". The writer then stated
+  // the true ₹50 on its own initiative and step 4 removed it:
+  //
+  //   Removed "Delivery costs ₹50." — it states 50 ₹, and no figure
+  //     was approved for this piece
+  //
+  // A recorded fact deleted from the message by the rule meant to
+  // protect the owner's records. The fault in a silent substitution is
+  // the SILENCE, not the substitution.
+
+  it("THE RULE NOW ASKS FOR BOTH: the conflict reported AND the real figure selected", async () => {
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/facts/selectClaims.ts");
+    expect(src).toMatch(/BUT DO SELECT WHAT THE RECORD ACTUALLY SAYS about that topic/);
+    expect(src).toMatch(/The fault to avoid is a QUIET substitution/);
+    // And the old wording, which told it to do neither, is gone.
+    expect(src).not.toMatch(/Do not select it, and do not quietly substitute the correct number/);
+  });
+
+  it("the incident is recorded where the rule lives", async () => {
+    const { sourceWithComments } = await import("./helpers/source");
+    const src = sourceWithComments("src/lib/facts/selectClaims.ts");
+    expect(src).toMatch(/AND IT MUST STILL SELECT WHAT IS TRUE/);
+  });
+
+  it("and the real figure, once selected, passes step 2", () => {
+    // What the fixed rule produces must actually survive validation —
+    // otherwise the prompt change just moves the deletion one step.
+    const shipRate = record({
+      id: "f_rate",
+      key: "shipping.rate",
+      value: 50,
+      unit: "inr",
+      source: "shipping_config",
+      licenses: licensesFor("shipping_config"),
+      recordedText: "shipping is flat ₹50",
+    });
+    const v = validate(
+      [claim({ claimType: "shipping", factIds: ["f_rate"], value: 50, unit: "inr", intent: "delivery costs ₹50" })],
+      [shipRate]
+    );
+    expect(v.rejected).toEqual([]);
+    expect(v.approved).toHaveLength(1);
+  });
+});
