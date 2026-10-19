@@ -1,0 +1,81 @@
+
+S1 EXIT TEST — the fact-bound pipeline on email
+==================================================================
+cases                 9  (candle-01, candle-05, candle-08, salon-01, salon-05, salon-10, dairy-01, dairy-04, dairy-07)
+baseline, email only  70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 22.93   (per-run cap Rs 30.00)
+already spent         Rs 342.24 of Rs 500.00
+==================================================================
+20 sentence(s), facts note present
+18 sentence(s), facts note present
+11 sentence(s), facts note present
+17 sentence(s), facts note present
+18 sentence(s), facts note present
+11 sentence(s), facts note present
+18 sentence(s), facts note present
+15 sentence(s), facts note present
+12 sentence(s), facts note present
+
+==================================================================
+sentences produced    140   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 9
+calls made            34   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 12000ms between cases)
+tokens                70952 in, 17901 out
+ACTUAL COST THIS RUN  Rs 27.05   (estimated Rs 22.93)
+COST PER EMAIL        Rs 3.01   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 369.29 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-01]
+     Not on record: The welcome email has no record of a specific welcome offer or discount for new subscribers — owner should record: 'Welcome discount for new customers = [value or none]'.
+     Not on record: No record covers the scent profile or mood description of the lavender fragrance used — owner should record: 'Lavender candle fragrance note description = [e.g. fresh, floral, calming — as a product attribute, not a health claim]'.
+     Not on record: No record covers the candle's vessel or size (e.g. jar type, weight, or volume) — owner should record: 'Lavender candle container/size = [description]'.
+  [candle-05]
+     Not on record: The Rose candle's catalogue description (f_57265414) lists only 'Soy wax' with no burn-hour figure. If the Rose candle also burns for 40 hours, the owner should record: 'product.rose_candle.burn_hours = 40 hours' so that claim can be made specifically about that product.
+     Not on record: No record explains WHY soy wax burns longer than paraffin in the owner's own words. If the owner wants to include that explanation, they should record a statement such as: 'Soy wax burns cooler and slower than paraffin, which is why our candles last longer.'
+     Removed "Khush Aamdeed — aap sahi jagah aaye!" — it names "aamdeed", which is nowhere in your records.
+  [candle-08]
+     Not on record: everything — the business's records could not be read just now
+  [salon-01]
+     Left out: Walk the reader through what happens in the session — hair wash first, then treatment — so they feel prepared. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: What results or visible outcome does the keratin treatment deliver? (e.g. frizz reduction, smoothness, shine — record this against product.keratin_treatment so it can be stated in copy.)
+     Not on record: How long do the results last after one session? Record this as product.keratin_treatment.result_duration so it can be cited.
+     Not on record: Is there any aftercare the client should follow post-treatment? Record this as product.keratin_treatment.aftercare so it can be included in a welcome email.
+     Removed "The customer has a keratin appointment coming up." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+  [salon-05]
+     Left out: Describes the treatment process — hair is washed first, then the treatment is applied — adds credibility and transparency. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Which specific products or product brands are ammonia-free? The owner should record the product names or lines used so the email can name them specifically.
+     Not on record: Are there other services (beyond the keratin treatment) that also use ammonia-free products? The owner should record which services this policy applies to.
+     Not on record: Is there a booking link, phone number, or call-to-action URL the email should direct readers to? The owner should record the preferred contact or booking method.
+     Removed "There are no hidden charges" — No approved fact addresses hidden charges. The price fact states only the amount (₹3500), not whether charges are hidden or transparent..
+  [salon-10]
+     Not on record: Whether the business automatically rebooks clients every month: the owner should record this as a confirmed policy, e.g. 'We automatically rebook every client on a monthly recurring schedule and notify them by email.'
+  [dairy-01]
+     Not on record: Does the 10% FIRST10 offer apply specifically to Desi Ghee 500ml, or to all products? Owner should record: 'offer.first10.applies_to = [product list or all]'.
+     Not on record: What is the origin or breed of cow whose milk is used? Owner should record: 'product.desi_ghee_500ml.milk_source = [e.g. Gir cow, A2 milk, etc.]'.
+     Not on record: Is the ghee made from cow milk, buffalo milk, or both? Owner should record: 'product.desi_ghee_500ml.milk_type = [cow / buffalo / mixed]'.
+     Not on record: Is there a shelf life or best-before period for the product? Owner should record: 'product.desi_ghee_500ml.shelf_life = [duration and unit]'.
+     Removed "Desi Ghee is made using the traditional hand-churned, slow-cook method called the Bilona process." — Approved facts state the Bilona method and hand-churned process separately, but neither fact describes the Bilona method as a 'slow-cook' method. The slow-cook element is not stated..
+     Removed "Desi Ghee is made using the traditional Bilona method, a hand-churned, slow-cook process." — Approved facts state the Bilona method and hand-churned process separately, but neither fact describes the Bilona method as a 'slow-cook' process. The slow-cook element is not stated..
+  [dairy-04]
+     You asked for 20% Diwali discount. Your records say The only recorded offer is FIRST10 — 10% off. There is no record of a 20% discount or any Diwali-specific offer. — change the record, or I write it without that.
+     Left out: The email is meant to promote a 20% Diwali discount — but the only recorded offer is 10% (FIRST10). Flagging as conflict; cannot select a 20% claim. — it is about "FIRST10", which is not a product or service on record.
+     Left out: Freshness cue for the paneer strengthens the email's quality story. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: A Diwali offer exists with a specific discount percentage (e.g. 20%) and a promo code or redemption method, valid from [start date] to [end date] — please record this against offer.diwali so it can be cited in the email.
+     Removed "Shipping is a flat 50 INR, wherever you are in India." — it names "india", which is nowhere in your records.
+     Removed "A smaller option of ghee is available at 120 INR." — it states 120 INR for ghee, and that figure belongs to something else.
+     Removed "A smaller option of ghee is available at 120 INR." — it states 120 INR for ghee, and that figure belongs to something else.
+  [dairy-07]
+     Left out: Establishes food-safety credibility and legitimacy without making a health claim. — it states FSSAI licence 11223344556677, and the record(s) it cites say FSSAI licence 11223344556677..
+     Not on record: What specific quality or sourcing difference does the milk used in Desi ghee 500ml have compared to mass-produced ghee (e.g., A2 cow milk, grass-fed, breed name)? Please record this against product.desi_ghee_500ml so it can be cited.
+     Not on record: Does the Desi ghee 500ml have a distinct aroma, colour or texture that the owner has observed and can state on record against the product?
+     Not on record: Is the FIRST10 discount code limited to new customers only, or open to all? Please record the eligibility rule against offer.first10 so it can be stated accurately.
+     Removed "Supermarket ghee is made using a different process than the Bilona method." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Hand-churning is a craft detail that no mass-produced brand can match." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The Bilona method is different from how supermarket ghee is made." — it compares with someone else's product, and nothing this business records about itself can establish that.
+
+GRADE THIS: scripts\eval\results\s1-exit-2026-10-19T09-13-01-169Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

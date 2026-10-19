@@ -126,7 +126,36 @@ function capitalisedWords(sentence: string): string[] {
   const titleCased = content.filter((w) => /^\p{Lu}/u.test(w)).length;
   if (content.length <= 6 && titleCased > content.length / 2) return [];
 
-  return capitalised.map((w) => w.toLowerCase());
+  // ONLY A WORD IN A PLACE POSITION, and this is a narrowing with a
+  // cost that is worth naming.
+  //
+  // Run 10 removed "Khush Aamdeed — aap sahi jagah aaye!" because
+  // "Aamdeed" is a capitalised Hinglish word in the middle of a
+  // greeting. Capitalisation alone cannot tell "Aamdeed" from "Indore":
+  // both are capitalised words this check has never seen.
+  //
+  // What CAN tell them apart is position. The fault this check exists
+  // for is location invention — "right here in Indore", "Indore mein",
+  // "wherever you are in India" — and an invented place arrives after a
+  // preposition of place in English or before a postposition in
+  // Hinglish. A greeting's capitalised word does neither.
+  //
+  // WHAT THIS GIVES UP: an invented brand or person's name that is not
+  // in a place position — "our wax comes from Golden Brands" is still
+  // caught because of "from", but "Golden Brands wax, hand-poured" no
+  // longer is. That was never an observed failure, and the claim
+  // extractor sees it as a material claim with nothing to cite. A
+  // narrower check that holds beats a wider one that deletes greetings.
+  const lower = words.map((w) => w.toLowerCase());
+  const BEFORE = new Set(["in", "from", "at", "near", "across", "throughout", "around", "over", "to"]);
+  const AFTER = new Set(["mein", "me", "se", "tak", "wale", "wali", "ka", "ki"]);
+  const inPlacePosition = (word: string): boolean => {
+    const i = lower.indexOf(word.toLowerCase());
+    if (i < 0) return false;
+    return (i > 0 && BEFORE.has(lower[i - 1])) || (i + 1 < lower.length && AFTER.has(lower[i + 1]));
+  };
+
+  return capitalised.filter(inPlacePosition).map((w) => w.toLowerCase());
 }
 
 /**

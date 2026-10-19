@@ -97,9 +97,34 @@ describe("a name the writer introduced", () => {
     expect(introducedWords(["We make it right here in Indore."], ALLOWED)).toEqual([]);
   });
 
-  it("catches any name, not only a place", () => {
-    const found = introducedWords(["Our wax comes from Golden Brands."], ALLOWED);
-    expect(found.map((f) => f.word)).toEqual(expect.arrayContaining(["golden", "brands"]));
+  it("catches an invented name IN A PLACE POSITION, and says what it gives up", () => {
+    // NARROWED 19 October, and the cost is worth naming. Run 10 removed
+    // "Khush Aamdeed — aap sahi jagah aaye!" because "Aamdeed" is a
+    // capitalised Hinglish word mid-greeting, and capitalisation alone
+    // cannot tell "Aamdeed" from "Indore".
+    //
+    // Position can. The fault this check exists for is LOCATION
+    // invention, and an invented place follows a preposition in English
+    // or precedes a postposition in Hinglish.
+    expect(introducedWords(["Our wax comes from Golden Brands."], ALLOWED).map((f) => f.word)).toContain("golden");
+
+    // WHAT IT NO LONGER CATCHES: a name in no place position. Never an
+    // observed failure, and the claim extractor still sees it as a
+    // material claim with nothing to cite.
+    expect(introducedWords(["Golden Brands wax, hand-poured."], ALLOWED)).toEqual([]);
+  });
+
+  it("A GREETING IS NOT A PLACE", () => {
+    // The sentence run 10 removed, in full.
+    expect(introducedWords(["Khush Aamdeed — aap sahi jagah aaye!"], ALLOWED)).toEqual([]);
+    expect(introducedWords(["Shukriya Ji, aap aaye."], ALLOWED)).toEqual([]);
+  });
+
+  it("AND A PLACE IS, in either language's grammar", () => {
+    const noCity = ["Lavender candle = 999", "Candle by Qaaf"];
+    expect(introducedWords(["We make it right here in Indore."], noCity).map((f) => f.word)).toEqual(["indore"]);
+    expect(introducedWords(["Yeh Indore mein banti hai."], noCity).map((f) => f.word)).toEqual(["indore"]);
+    expect(introducedWords(["Flat 50, wherever you are in India."], noCity).map((f) => f.word)).toEqual(["india"]);
   });
 
   it("A SENTENCE'S FIRST WORD IS NOT A NAME", () => {
