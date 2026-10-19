@@ -1,0 +1,53 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 428.99 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+2 sentence(s)
+4 sentence(s), facts note present
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    27   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            24   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                44239 in, 5521 out
+ACTUAL COST THIS RUN  Rs 11.40   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.90   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 440.39 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship currently / is it in stock? Please record the availability status against the product so the broadcast can say whether it is available now.
+     Not on record: Is there a limited-time offer, discount, or call-to-action link for this broadcast? Please record any promotion details so the copy can include them.
+     Removed "The candles burn for 40 hours." — it states 40 hours for hand-poured soy wax candles, and that figure belongs to something else.
+     Removed "The hand-poured soy wax candles are available." — No approved fact states availability. Facts describe product features and pricing, not whether items are in stock..
+  [candle-09]
+     You asked for 100% natural. Your records say Soy wax only, paraffin-free — the records confirm the wax is soy-based and paraffin-free, but no record certifies the candles as '100% natural' overall (fragrance ingredients, wicks, dyes etc. are not recorded). — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record exists that supports a child-safety claim. This is also a safety/health claim, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Child-safety status: record whether the candles have been assessed or certified as safe for use around children (e.g. non-toxic fragrance oils, lead-free wicks, relevant certification body and certificate number).
+     Not on record: Overall '100% natural' certification: record whether all components — fragrance oils, wicks, dyes/colourants — are certified natural, and name the certifying body or standard if one exists.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-salon service, not a shipped product. — change the record, or I write it without that.
+  [dairy-05]
+     Not on record: How many grams of fat or protein does the Paneer 250g contain? Record this against the product if you want a nutrition claim.
+     Not on record: Is the FIRST10 offer specifically valid on the Paneer 250g, or is it a site-wide code? Record the scope against the offer so the copy can state it accurately.
+     Not on record: Does the business deliver to all of Indore, or only certain areas? Record the delivery zone so the broadcast can tell readers whether they are covered.
+     Removed "The paneer is 250g." — it states 250 g, and the figures on record are Made fresh every morning, 120 inr, 10 percent, 50 inr, 11223344556677.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Whether home delivery is available — and if so, what the minimum order value or delivery radius is: please record this as a fact against the shipping policy (e.g. 'shipping.home_delivery = true, minimum order ₹X, within Y km of Indore').
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-19T18-19-45-536Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

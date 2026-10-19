@@ -20,7 +20,8 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
-import { describeCoverage, sameProductName } from "@/lib/facts/scope";
+import { describeCoverage, sameProductName, scopeOfKey } from "@/lib/facts/scope";
+import { figureInText } from "@/lib/facts/validateSelection";
 
 /** Claim types whose verdict is arithmetic, never judgement. */
 export const NUMERIC_TYPES = new Set(["price", "offer", "shipping", "duration", "count"]);
@@ -267,8 +268,55 @@ export async function verifyClaims(
       const match = approved.find(
         (a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit) && sameThing(a)
       );
-      if (match) {
-        verdicts.push({ claim, verdict: "entailed", rule: "figure_matches", reason: `the records give ${match.value}${match.unit ? ` ${match.unit}` : ""}` });
+      // THE RECORDS ARE THE AUTHORITY ON A FIGURE, NOT THE CLAIM LIST,
+      // and the fourth S2a WhatsApp run of 2026-10-19 is why this
+      // second look exists. Two true figures were removed:
+      //
+      //   "The paneer is 250g."         250 is in the product's own NAME,
+      //                                 "Paneer 250g" — it is not the
+      //                                 value of any approved claim
+      //   "The candles burn for 40 hours."
+      //                                 40 is in a business-level record,
+      //                                 product.burn_hours = 40 hours, so
+      //                                 it is true of the range; the
+      //                                 approved claim had been attached
+      //                                 to one candle, and the writer
+      //                                 widened it correctly
+      //
+      // Step 2 has always checked a figure against the record's own
+      // words (figureInText) as well as its value. Step 4 checked only
+      // the approved values, so a figure written into a record's TEXT
+      // was unverifiable here however true it was. The same function now
+      // runs at both ends.
+      //
+      // THE FOUNDER'S RULE IS "ONLY WHAT IS IN THE RECORD MAY BE
+      // WRITTEN" — not "only what Select happened to pick". A figure
+      // present verbatim in a record whose scope covers this claim is
+      // in the record.
+      //
+      // SCOPE STILL DECIDES, so this is not a way round the scope rule:
+      // a business-level or policy record covers the range, while a
+      // product record covers only its own product. "The Rose candle
+      // costs Rs 999" still finds nothing, because the 999 lives in the
+      // Lavender's record.
+      const inRecords =
+        match
+          ? null
+          : (opts.records ?? []).find((r) => {
+              if (!figureInText(r, claim.value!.number)) return false;
+              const scope = scopeOfKey(r.key);
+              if (scope.kind !== "product") return true;
+              return !claim.aboutProduct || sameProductName(claim.aboutProduct, scope.product);
+            });
+      if (match || inRecords) {
+        verdicts.push({
+          claim,
+          verdict: "entailed",
+          rule: "figure_matches",
+          reason: match
+            ? `the records give ${match.value}${match.unit ? ` ${match.unit}` : ""}`
+            : `it is in your records, written as "${inRecords!.recordedText}"`,
+        });
       } else {
         const had = approved
           .filter((a) => a.value !== null && a.value !== undefined && a.value !== "")

@@ -167,7 +167,7 @@ function sameFigure(a: unknown, b: unknown): boolean {
  * Digit boundaries rather than word boundaries, because "500ml" has no
  * word break after the number.
  */
-function figureInText(record: FactRecord, value: unknown): boolean {
+export function figureInText(record: FactRecord, value: unknown): boolean {
   if (typeof value === "boolean") return false;
   const n = Number(value);
   if (!Number.isFinite(n)) return false;

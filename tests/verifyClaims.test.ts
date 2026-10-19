@@ -8,6 +8,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { verifyClaims, verifyNote, approvedForJudge, NUMERIC_TYPES } from "@/lib/facts/verifyClaims";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type ExtractedClaim, type ClaimType } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
+import type { FactRecord } from "@/lib/facts/factRecord";
 
 const ORIGINAL = globalThis.fetch;
 afterEach(() => {
@@ -335,6 +336,93 @@ describe("a figure stated without a unit", () => {
     const r = await verifyClaims(
       [extracted({ claimType: "shipping", value: { number: 50, unit: "percent" }, canonical: "shipping is 50 percent" })],
       [approvedClaim({ claimType: "shipping", value: 50, unit: "inr" })]
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+});
+
+describe("a figure written into a record's words, not its value", () => {
+  // The fourth S2a WhatsApp run removed two more true figures:
+  //
+  //   Removed "The paneer is 250g." — it states 250 g, and the figures
+  //     on record are Made fresh every morning, 120 inr, 10 percent,
+  //     50 inr, 11223344556677
+  //   Removed "The candles burn for 40 hours." — it states 40 hours for
+  //     hand-poured soy wax candles, and that figure belongs to
+  //     something else
+  //
+  // 250 is in the product's own NAME, "Paneer 250g". 40 is in a
+  // business-level record, product.burn_hours = 40 hours, which is true
+  // of the whole range — the approved claim had been attached to one
+  // candle and the writer widened it correctly.
+  //
+  // Step 2 has always checked a figure against the record's own WORDS
+  // as well as its value. Step 4 checked only the approved values. The
+  // founder's rule is "only what is in the record may be written", not
+  // "only what Select happened to pick".
+
+  const rec = (over: Partial<FactRecord>): FactRecord => ({
+    id: "f_x",
+    dealershipId: "biz_1",
+    key: "product.paneer_250g.name",
+    value: "Paneer 250g",
+    unit: null,
+    source: "catalogue",
+    sourceRef: "products:p1",
+    confidence: "observed",
+    licenses: ["value", "existence"],
+    recordedText: "Paneer 250g",
+    observedAt: "2026-10-19T00:00:00.000Z",
+    ...over,
+  });
+
+  it("A FIGURE IN THE PRODUCT'S OWN NAME IS IN THE RECORDS", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "count", canonical: "the paneer is 250g", value: { number: 250, unit: "g" }, aboutProduct: "paneer" })],
+      [approvedClaim({ claimType: "price", value: 120, unit: "inr", aboutProduct: "Paneer 250g" })],
+      { records: [rec({}), rec({ id: "f_p", key: "product.paneer_250g.price", value: 120, unit: "inr", recordedText: "Paneer 250g — ₹120" })] }
+    );
+    expect(r.verdicts[0].verdict).toBe("entailed");
+    expect(r.verdicts[0].reason).toContain("Paneer 250g");
+    expect(r.unsupportedSentences).toEqual([]);
+  });
+
+  it("A BUSINESS-LEVEL RECORD COVERS A CLAIM ABOUT THE RANGE", async () => {
+    // product.burn_hours has only two segments, so scopeOfKey reads it
+    // as business-level — the owner's statement about her candles, not
+    // about one of them.
+    const r = await verifyClaims(
+      [extracted({ claimType: "duration", canonical: "the candles burn for 40 hours", value: { number: 40, unit: "hours" }, aboutProduct: "hand-poured soy wax candles" })],
+      [approvedClaim({ claimType: "duration", value: 40, unit: "hour", aboutProduct: "Lavender candle" })],
+      { records: [rec({ id: "f_burn", key: "product.burn_hours", value: 40, unit: "hours", recordedText: "candles burn for 40 hours" })] }
+    );
+    expect(r.verdicts[0].verdict).toBe("entailed");
+  });
+
+  it("BUT A PRODUCT RECORD STILL COVERS ONLY ITS OWN PRODUCT", async () => {
+    // The 18 October hole stays shut. The 999 is the Lavender's.
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "the rose candle costs ₹999", value: { number: 999, unit: "inr" }, aboutProduct: "Rose candle" })],
+      [approvedClaim({ value: 999, unit: "inr", aboutProduct: "Lavender candle" })],
+      { records: [rec({ id: "f_lav", key: "product.lavender_candle.price", value: 999, unit: "inr", recordedText: "Lavender candle — ₹999" })] }
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+    expect(r.verdicts[0].rule).toBe("figure_not_approved");
+  });
+
+  it("AND A FIGURE IN NO RECORD AT ALL IS STILL REFUSED", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "it costs ₹1499", value: { number: 1499, unit: "inr" } })],
+      [approvedClaim({ value: 999, unit: "inr" })],
+      { records: [rec({ id: "f_lav", key: "product.lavender_candle.price", value: 999, unit: "inr", recordedText: "Lavender candle — ₹999" })] }
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+
+  it("and with no records passed it behaves exactly as before", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "it costs ₹1499", value: { number: 1499, unit: "inr" } })],
+      [approvedClaim({ value: 999, unit: "inr" })]
     );
     expect(r.verdicts[0].verdict).toBe("unsupported");
   });
