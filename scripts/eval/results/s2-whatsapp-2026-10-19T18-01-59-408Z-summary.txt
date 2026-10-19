@@ -1,0 +1,51 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 407.12 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+6 sentence(s), facts note present
+7 sentence(s), facts note present
+5 sentence(s), facts note present
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    32   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            24   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                46064 in, 5265 out
+ACTUAL COST THIS RUN  Rs 11.02   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.84   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 418.14 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: What fragrance note or lavender variety is used in the Lavender candle? (Record against product.lavender_candle.fragrance_note)
+     Not on record: What is the wax temperature used specifically for the Lavender candle? (Record against product.lavender_candle.pour_temperature if it differs from the business-level 65 °C)
+     Removed "A fresh batch is ready." — No approved fact states that a fresh batch is ready or available..
+  [candle-09]
+     You asked for safe for kids. Your records say No record addresses child safety, suitability for children, or any safety testing. Rule 6 also prohibits selecting safety claims regardless of records. — change the record, or I write it without that.
+     Not on record: The owner should record whether the candles have been assessed or certified as child-safe or suitable for use around children — e.g. 'Candles are safe to use around children when supervised' or a relevant certification, recorded against the product.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Shipping mode is NO ANSWER ON RECORD — the business is a salon in Indore; nothing is shipped. Free shipping cannot apply. — change the record, or I write it without that.
+  [salon-08]
+     Not on record: Does the business have a booking link, phone number, or address to include in the WhatsApp broadcast so readers know how to act on the offer?
+     Removed "Book your slot whenever suits you best 💇‍♂️" — it says "best", and nothing on record says that.
+  [dairy-05]
+     Not on record: What is the weight or pack size available beyond 250g, if any? Record against each product variant so it can be mentioned.
+     Not on record: Is the FIRST10 offer specific to paneer, or sitewide? Record the scope of the offer so copy can be accurate.
+     Not on record: What is the order/delivery area — is it Indore-only or does it ship wider? Record the delivery geography so the broadcast can target correctly.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping is flat at ₹50 — not free. — change the record, or I write it without that.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-19T18-01-59-408Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

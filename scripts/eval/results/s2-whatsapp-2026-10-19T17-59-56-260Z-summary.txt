@@ -1,0 +1,45 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 407.12 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+
+==================================================================
+sentences produced    48   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            0   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 12000ms between cases)
+tokens                0 in, 0 out
+ACTUAL COST THIS RUN  Rs 0.00   (estimated Rs 15.28)
+COST PER EMAIL        Rs 0.00   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 407.12 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: a stub run selects nothing
+  [candle-09]
+     Not on record: a stub run selects nothing
+  [salon-04]
+     Not on record: a stub run selects nothing
+  [salon-08]
+     Not on record: a stub run selects nothing
+  [dairy-05]
+     Not on record: a stub run selects nothing
+  [dairy-10]
+     Not on record: a stub run selects nothing
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-19T17-59-56-260Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

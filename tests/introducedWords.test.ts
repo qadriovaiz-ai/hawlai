@@ -276,3 +276,70 @@ describe("the two faults run 9 found", () => {
     expect(introducedWords(["Pure desi ghee, made here."], recordsOnly).map((f) => f.word)).toContain("pure");
   });
 });
+
+describe("6. a superlative that ranks the reader, not the offering", () => {
+  // S2a's second WhatsApp run removed salon-08's whole call to action:
+  //   Removed "Book your slot whenever suits you best 💇‍♂️"
+  //     — it says "best", and nothing on record says that.
+  // Nothing on record needs to. "best" there is an adverb about
+  // whatever time suits the reader, not a boast about the salon.
+  //
+  // The sixth time in this sequence that a check of mine fired on
+  // something true or harmless, and the fourth narrowing of this file.
+  // Named as such rather than presented as a feature.
+
+  it("A CLAUSE-FINAL SUPERLATIVE AFTER \"you\" IS NOT A CLAIM", () => {
+    expect(introducedWords(["Book your slot whenever suits you best 💇‍♂️"], ["A Salon"])).toEqual([]);
+  });
+
+  it("nor in Hinglish", () => {
+    expect(introducedWords(["Slot book karo jab aapko best lage"], ["A Salon"])).toEqual([]);
+    expect(introducedWords(["Jo time tumhe best lage"], ["A Salon"])).toEqual([]);
+  });
+
+  it("BUT A SUPERLATIVE WITH A NOUN AFTER IT STILL IS", () => {
+    // The direction that must not loosen. Second person right before it
+    // changes nothing when there is still something for it to qualify.
+    expect(introducedWords(["Aapko premium candle milegi"], ["A Business"])).toEqual([
+      { sentenceIndex: 0, word: "premium", kind: "intensifier" },
+    ]);
+    expect(introducedWords(["You get the best price in town"], ["A Business"])).toEqual([
+      { sentenceIndex: 0, word: "best", kind: "intensifier" },
+    ]);
+  });
+
+  it("and a boast that merely ends a clause is still caught", () => {
+    // No second-person pronoun before it, so nothing about the reader
+    // is being ranked — this is the salon ranking itself.
+    expect(introducedWords(["Our candles are the finest."], ["A Business"])).toEqual([
+      { sentenceIndex: 0, word: "finest", kind: "intensifier" },
+    ]);
+    expect(introducedWords(["Shahjahanpur mein sabse behtareen"], ["A Business"])).toHaveLength(2);
+  });
+
+  it("THE FRAME IS READ INSIDE ITS CLAUSE, not against the whole sentence", () => {
+    // Mutation M3 of this change survived my first attempt at this
+    // test, which asserted something true either way. Fixing the test,
+    // not the report — CLAUDE.md rule 2.
+    //
+    // The clause split is what makes a reader frame recognisable when
+    // the sentence carries on past it. "Jab aapko best lage, order kar
+    // dena" is ordinary Hinglish, and measured against the whole
+    // sentence "best" has four words after it, so the frame disappears
+    // and the courtesy is removed as a boast.
+    expect(introducedWords(["Jab aapko best lage, order kar dena."], ["A Business"])).toEqual([]);
+    expect(introducedWords(["Whenever suits you best, just message us."], ["A Business"])).toEqual([]);
+    // And in the other direction a boast is not excused by a courtesy
+    // that happens to follow it in the next clause.
+    expect(introducedWords(["The purest ghee in town, whatever suits you best."], ["A Business"])).toEqual([
+      { sentenceIndex: 0, word: "purest", kind: "intensifier" },
+    ]);
+  });
+
+  it("the word is still refused when the records do not have it, in every other frame", () => {
+    // Nothing above weakened the ordinary case.
+    expect(introducedWords(["Pure desi ghee, roz banta hai."], ["A Business", "ghee"])).toEqual([
+      { sentenceIndex: 0, word: "pure", kind: "intensifier" },
+    ]);
+  });
+});

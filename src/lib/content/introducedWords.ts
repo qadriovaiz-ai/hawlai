@@ -72,11 +72,97 @@ const INTENSIFIERS = new Set([
 // deleting true copy, which is the error this whole sequence keeps
 // producing in one form or another.
 
+/**
+ * Second-person pronouns, for the one frame in which a superlative
+ * ranks nothing of ours.
+ */
+const SECOND_PERSON = new Set([
+  "you", "your", "yours",
+  "aap", "aapko", "aapke", "aapki", "aapka",
+  "tum", "tumhe", "tumhein", "tumhara", "tumhare", "tumhari",
+]);
+
+/**
+ * Copulas and subjunctives that can close a Hinglish reader frame.
+ *
+ * Function words only — "be", "seem", "suit", "feel". Nothing here
+ * names a thing anyone sells.
+ */
+const READER_FRAME_VERBS = new Set([
+  "lage", "lagey", "lagega", "lagegi", "lge",
+  "ho", "hai", "hoga", "hogi", "rahe",
+  "mile", "milega", "milegi",
+  "kare", "karo", "chahiye",
+  "suits", "suit", "fits", "works", "feels", "is", "are",
+]);
+
 export type IntroducedWord = {
   sentenceIndex: number;
   word: string;
   kind: "intensifier" | "name";
 };
+
+/**
+ * Clauses, as token lists. Punctuation ends a clause; emoji are not
+ * words and fall out with the rest of the non-letters.
+ *
+ * NEEDED BECAUSE POSITION IS THE ONLY THING THAT DISTINGUISHES the two
+ * uses of a superlative, and a position is only meaningful inside the
+ * clause it sits in.
+ */
+function clauses(text: string): string[][] {
+  return String(text ?? "")
+    .split(/[.,;:!?…—\n]+/)
+    .map((part) => tokens(part))
+    .filter((t) => t.length > 0);
+}
+
+/**
+ * True when this superlative ranks THE READER'S OWN PREFERENCE rather
+ * than anything the business sells.
+ *
+ * THE S2a WHATSAPP RUN OF 2026-10-19 is why this exists. The check
+ * removed "Book your slot whenever suits you best" — reporting that it
+ * says "best", and nothing on record says that. Nothing on record
+ * needs to: "best" there is not a claim about the salon, it is an
+ * adverb about whatever time suits the reader. A broadcast lost its
+ * call to action to a guard that read a courtesy as a boast.
+ *
+ * THE DISTINCTION IS GRAMMATICAL, NOT A WORD. An intensifier makes a
+ * claim when it qualifies a NOUN — "pure ghee", "the best price", "our
+ * finest candles". It makes none when it is an ADVERB whose subject is
+ * the reader — "suits you best", "jaise aapko best lage". Without a
+ * part-of-speech tagger the surface signal for the second case is
+ * narrow and exact: the superlative ENDS ITS CLAUSE and the word
+ * immediately before it is a second-person pronoun. There is no noun
+ * left for it to qualify, and the only thing being ranked is the
+ * reader's convenience.
+ *
+ * HINGLISH PUTS THE VERB LAST, so clause-final is the wrong test for
+ * it and my first version of this function failed its own Hinglish
+ * case: "jab aapko best lage" has "lage" after the superlative, and
+ * "aapko best lage" is the same courtesy as "suits you best". So the
+ * frame admits one trailing copula or subjunctive. Those verbs are
+ * grammatical function words, like the postpositions already in this
+ * file's place check — they name no product, trade or business, which
+ * is the only reason a list of them may live in code.
+ *
+ * WHAT THIS GIVES UP, stated rather than hidden: "whatever works best
+ * for you" is still flagged, because "best" is neither clause-final nor
+ * followed by one of these verbs. That has not been observed, and the
+ * narrowing stays as tight as the fault it was built for. "Aapko
+ * premium candle milegi" is still flagged too, and should be —
+ * "premium" has a noun after it, which is exactly the case this does
+ * not touch.
+ */
+function ranksTheReader(clause: string[], i: number): boolean {
+  if (i === 0 || !SECOND_PERSON.has(clause[i - 1])) return false;
+  const after = clause.slice(i + 1);
+  // "suits you best" — nothing left for it to qualify.
+  if (after.length === 0) return true;
+  // "aapko best lage" — nothing left but the verb.
+  return after.length === 1 && READER_FRAME_VERBS.has(after[0]);
+}
 
 /** Words, lowercased, with punctuation gone. Keeps "100%" as a token. */
 function tokens(text: string): string[] {
@@ -172,10 +258,13 @@ export function introducedWords(sentences: string[], allowed: string[]): Introdu
 
   sentences.forEach((sentence, sentenceIndex) => {
     const seen = new Set<string>();
-    for (const word of tokens(sentence)) {
-      if (!INTENSIFIERS.has(word) || vocabulary.has(word) || seen.has(word)) continue;
-      seen.add(word);
-      found.push({ sentenceIndex, word, kind: "intensifier" });
+    for (const clause of clauses(sentence)) {
+      clause.forEach((word, i) => {
+        if (!INTENSIFIERS.has(word) || vocabulary.has(word) || seen.has(word)) return;
+        if (ranksTheReader(clause, i)) return;
+        seen.add(word);
+        found.push({ sentenceIndex, word, kind: "intensifier" });
+      });
     }
     for (const word of capitalisedWords(sentence)) {
       if (vocabulary.has(word) || seen.has(word)) continue;
