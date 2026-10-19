@@ -332,7 +332,40 @@ describe("6. courtesy is not a capability claim", () => {
     // Deleting the capability type would be the other failure: salon-10
     // invented automatic monthly rebooking, which is exactly the shape
     // this type exists for.
-    expect(src()).toMatch(/will DO something by itself, as a matter of how it operates/);
+    // Reworded 19 October when rule 7a grew to cover statements of
+    // role; the requirement is the same one, now phrased as a test the
+    // reader can apply.
+    expect(src()).toMatch(/names a SPECIFIC OPERATION the business performs by itself/);
+    expect(src()).toMatch(/without the customer asking each time/);
+  });
+});
+
+describe("7. a statement of role is courtesy, not capability", () => {
+  // Run 11's one borderline removal, which the founder confirmed:
+  // "Helping the customer is the business's job." was taken out as a
+  // capability claim. Saying who you are for is not an undertaking to
+  // do a particular thing, and the rule now says so — with the test
+  // that separates the two: can you NAME the operation?
+  const src = () => code("src/lib/facts/extractClaims.ts");
+
+  it("THE RULE COVERS ROLE AND PURPOSE, not only availability", () => {
+    expect(src()).toMatch(/A STATEMENT OF ROLE OR PURPOSE IS COURTESY TOO/);
+    expect(src()).toMatch(/helping you is our job/);
+    expect(src()).toMatch(/aapki madad karna hamara kaam hai/);
+  });
+
+  it("AND GIVES THE TEST THAT SEPARATES THEM", () => {
+    // Without a nameable operation there is nothing a record could ever
+    // support, so refusing it protects nobody and costs the owner their
+    // ordinary warmth.
+    expect(src()).toMatch(/names a SPECIFIC OPERATION the business performs by itself/);
+    expect(src()).toMatch(/If you cannot name the operation, it is not a capability claim/);
+  });
+
+  it("the real capability shape is still named, so the rule cannot swing too far", () => {
+    // salon-10 invented automatic monthly rebooking. That is the shape
+    // this type exists for and it must survive the narrowing.
+    expect(src()).toMatch(/rebook, remind, deliver, follow up, renew/);
     expect(src()).toMatch(/without the customer asking each time/);
   });
 });

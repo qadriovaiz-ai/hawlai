@@ -782,6 +782,14 @@ open questions are answered somewhere else is a plan nobody can read.
 
 ## 4b. The scope rule, and S1's verdict (16 October 2026)
 
+> **S1 PASSED on 19 October 2026**, on the founder's independent blind
+> grading of run 11: 130 sentences, nine cases, **zero F**. Both numbers
+> I could not count myself came back 0, and his grading and my
+> self-report agreed for the first time. Eleven exit runs; Rs 396.41 of
+> the Rs 500 spent. S2 is planned in docs/PLAN-S2.md.
+>
+> The retraction below stands as the record of how it got there.
+>
 > **RETRACTED THE SAME DAY. S1 DOES NOT PASS.** The reviewer graded all
 > 123 sentences and found **13 unsupported claims sitting in drafts with
 > no mark**. The table further down this section reported that number as
