@@ -1,0 +1,63 @@
+
+S1 EXIT TEST — the fact-bound pipeline on email
+==================================================================
+cases                 9  (candle-01, candle-05, candle-08, salon-01, salon-05, salon-10, dairy-01, dairy-04, dairy-07)
+baseline, email only  70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 22.93   (per-run cap Rs 30.00)
+already spent         Rs 252.07 of Rs 500.00
+==================================================================
+18 sentence(s), facts note present
+15 sentence(s), facts note present
+13 sentence(s), facts note present
+11 sentence(s), facts note present
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+
+==================================================================
+sentences produced    62   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  5 of 9   <<< salon-05, salon-10, dairy-01, dairy-04, dairy-07
+calls made            14   (4 per email: select, write, extract, judge)
+cases retried         5   (spacing 12000ms between cases)
+tokens                28833 in, 6672 out
+ACTUAL COST THIS RUN  Rs 10.54   (estimated Rs 22.93)
+COST PER EMAIL        Rs 1.17   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 262.61 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-01]
+     Left out: Establish the candle's core material — soy wax, no paraffin — as a quality signal in the welcome email. — it states Soy wax only, paraffin-free, and the record(s) it cites say Soy wax, 40 hour burn, true, false.
+     Left out: Hand-poured in small batches signals craft and care — ideal tone for a welcome email. — it states Hand-poured in small batches, and the record(s) it cites say true, true.
+     Not on record: What is the scent profile or fragrance note of the Lavender candle specifically? (e.g. 'floral', 'fresh', 'earthy lavender') — record this against product.lavender_candle.fragrance_note so the welcome email can describe the scent experience.
+     Not on record: Is there a candle vessel / container detail for the Lavender candle (e.g. glass jar, tin, size)? Record as product.lavender_candle.vessel so the email can paint a visual picture for the reader.
+  [candle-05]
+     Not on record: The Rose candle's burn time is not recorded against that product. Owner should record: 'Rose candle burn time = X hours' to allow burn-time claims for that item.
+     Not on record: No record states WHY soy wax specifically produces a longer burn compared to paraffin (e.g. a slower, cooler burn rate). Owner could record a factual statement such as: 'Soy wax burns cooler and slower than paraffin, extending burn time.' if they want that explanation in copy.
+     Not on record: No record covers whether the 40-hour burn time applies to the range as a whole or only to the Lavender candle. Owner should confirm and record burn hours against each product individually.
+     Removed "The customer's candle journey starts here." — nothing on record can support a capability claim.
+     Removed "The customer has arrived." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+  [candle-08]
+     Not on record: everything — the business's records could not be read just now
+  [salon-01]
+     Left out: Describe the treatment process — hair wash first, then treatment applied. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Left out: Reassure the reader that ammonia-based products are not used — a meaningful differentiator for a hair treatment. — it states Ammonia wale products use nahi karte., and the record(s) it cites say false.
+     Not on record: What result or outcome does the keratin treatment deliver for the client's hair? (e.g. smoothness, frizz reduction, shine — record this against product.keratin_treatment so it can be stated in copy)
+     Not on record: How long do the results of the keratin treatment last? Record this against product.keratin_treatment.result_duration if known.
+     Not on record: Is there any aftercare instruction the client should follow after the session? Record this against product.keratin_treatment.aftercare if known.
+     Removed "This is the first step of the customer's keratin journey." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The customer has made an enquiry." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The customer has made an enquiry." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "There are no hidden charges." — Fact states the price upfront (₹3500) but does not state that there are no hidden charges. Absence of mention of hidden charges is not the same as stating they don't exist..
+
+
+==================================================================
+THIS RUN IS INCOMPLETE. 5 of 9 cases never reached the model, so the
+sheet below covers only the rest and NO verdict about the pipeline can
+be drawn from it. The low cost is the symptom, not the result.
+==================================================================
+GRADE THIS: scripts\eval\results\s1-exit-2026-10-19T07-04-01-222Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

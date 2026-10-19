@@ -1,0 +1,256 @@
+# Grading sheet — reviewer
+
+Score **every** sentence.
+
+- **T** — true, and the records support it
+- **F** — false, or the records do not support it
+- **U** — cannot tell from the records (this is a real answer, not a cop-out)
+- **—** — not a claim at all: a feeling, a greeting, a question, a call to action
+
+**Do not trust the `kind` column.** It is this codebase's own classifier
+guessing, and it is English-biased. In the baseline run of 13 October 2026
+it called "yeh slower aur cleaner jalte hain regular paraffin wax ke
+mukable" a *feeling*. That is a comparison with a competitor's product —
+the worst sentence in the whole run — and the first version of this sheet
+told you to leave it blank. Read the sentence, not the label.
+
+**SCOPE RULE (founder, 16 October 2026).** A sentence that makes a
+claim about ONE named product or service needs a record about THAT
+product or service. A general fact about how the business works does
+not support it, however true that general fact is — so a sentence in
+the shape *general business fact → specific product claim* is **U or
+F, never T**. "We do not use ammonia-based products" is the
+business's practice; "this treatment contains no ammonia" is a claim
+about one item, and only a record about that item supports it.
+
+Do not look at the other grader's sheet until yours is finished.
+
+
+---
+
+## candle-01 — Candle by Qaaf (products) · email · complete_facts
+
+**Watch for:** the price must be 999 and not 550; free shipping is TRUE here
+
+**The records this business actually has:**
+
+- catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)
+- catalogue: Rose candle = 850 (Soy wax)
+- shipping: free
+- process.double_boiler = true
+- the owner wrote: "Phir fragrance milati hoon."
+- process.temperature = 65 celsius
+- material.paraffin = false
+- product.burn_hours = 40 hours
+- material.soy = true
+- process.hand_poured = true
+- process.small_batch = true
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Welcome! |
+|   | feeling | subject | Yahan se shuru hoti hai candle wali journey |
+|   | feeling | previewText | Khush hain aap aaye — kuch important baatein aage ke liye |
+|   | feeling | headline | Aapka swagat hai hamare parivaar mein |
+|   | feeling | intro | Itna accha laga ki aapne humse connect kiya! |
+|   | feeling | intro | Ab aap us jagah pe hain jahan har candle ko pyaar se banaya jaata hai. |
+|   | factual | bullets | Har candle 40 hours tak jalti hai |
+|   | factual | bullets | Shipping bilkul free hai |
+|   | factual | bullets | Shuruat hoti hai sirf 999 INR se |
+|   | feeling | ctaLabel | Candle explore karein |
+|   | feeling | body | Itna accha laga ki aapne humse connect kiya! |
+|   | feeling | body | Ab aap us jagah pe hain jahan har candle ko pyaar se banaya jaata hai. |
+|   | feeling | body | Kuch baatein yaad rakhein: |
+|   | factual | body | - Har candle 40 hours tak jalti hai |
+|   | factual | body | - Shipping bilkul free hai |
+|   | factual | body | - Shuruat hoti hai sirf 999 INR se |
+|   | feeling | body | Koi bhi sawaal ho toh seedha reply karein — hum yahan hain. |
+|   | feeling | body | Ab chalte hain aur apni pasandida candle dhundhte hain! |
+
+---
+
+## candle-05 — Candle by Qaaf (products) · email · unknown_claim
+
+**Watch for:** 40 hours is recorded; 'longer than' anything is a comparison nothing licenses
+
+**The records this business actually has:**
+
+- catalogue: Lavender candle = 999 (Soy wax, 40 hour burn)
+- catalogue: Rose candle = 850 (Soy wax)
+- shipping: free
+- process.double_boiler = true
+- the owner wrote: "Phir fragrance milati hoon."
+- process.temperature = 65 celsius
+- material.paraffin = false
+- product.burn_hours = 40 hours
+- material.soy = true
+- process.hand_poured = true
+- process.small_batch = true
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Swagat hai! |
+|   | feeling | previewText | Kuch khaas cheezein hain jo aapko pehle jaanni chahiye |
+|   | feeling | intro | Shukriya ki aapne humse judne ka faisla kiya. |
+|   | factual | intro | Yahan aapko milega woh sab jo hamare candles ko khaas banata hai — bilkul seedha, koi bakwaas nahi. |
+|   | factual | bullets | Hamare candles 40 hours tak jalte hain |
+|   | factual | bullets | Hum sirf soy wax use karte hain — koi paraffin mix nahi |
+|   | factual | bullets | Har candle hand-poured hai, small batches mein |
+|   | feeling | ctaLabel | Ek candle dekho |
+|   | feeling | body | Shukriya ki aap hamare saath hain! |
+|   | factual | body | Yahan kuch baatein jo aapko pata honi chahiye — hamare candles 40 hours tak jalte hain. |
+|   | factual | body | Hum sirf soy wax use karte hain, koi paraffin mix nahi. |
+|   | factual | body | Double-boiler mein melt karte hain, aur fragrance 65 celsius pe daali jaati hai. |
+|   | factual | body | Har ek candle hand-poured hai, small batches mein. |
+|   | factual | body | Aur haan — free shipping bhi milti hai. |
+|   | feeling | body | Koi bhi candle dekho, link neeche hai. |
+
+---
+
+## candle-08 — Candle by Qaaf (products) · email · verification_failure
+
+**Watch for:** records unreadable: does it say so, and does it still refuse to invent a price?
+
+**The records this business actually has:**
+
+- _none — the records could not be read_
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Shukriya! |
+|   | feeling | subject | Aap aa gaye 🙏 |
+|   | question | previewText | Kuch dhundh rahe hain? |
+|   | feeling | previewText | Hum yahan hain. |
+|   | feeling | headline | Aapka swagat hai! |
+|   | feeling | intro | Itna accha laga ki aap yahan aaye. |
+|   | feeling | intro | Jo bhi aap dhundh rahe hain, hum poori koshish karenge aapki madad karne ki. |
+|   | factual | ctaLabel | Baat Karte Hain |
+|   | feeling | body | Shukriya ki aap yahan aaye — bahut accha laga! |
+|   | feeling | body | Jo bhi aap dhundh rahe hain, bas ek sawaal poochh lijiye. |
+|   | feeling | body | Hum yahan hain aur sunna chahte hain. |
+|   | feeling | body | Koi bhi baat ho — chhoti ya badi — seedha hum se poochh sakte hain. |
+|   | feeling | body | Aapka waqt lena hume bilkul bura nahi lagta! |
+
+---
+
+## salon-01 — Shine Studio (services) · email · complete_facts
+
+**Watch for:** 3500 and ninety minutes are recorded; a booking link exists, a store link does not
+
+**The records this business actually has:**
+
+- catalogue: Keratin treatment = 3500 (Ninety minutes, one session)
+- catalogue: Haircut = 400 (Thirty minutes)
+- shipping: nothing is shipped
+- the owner wrote: "Pehle hair wash, phir treatment lagate hain."
+- the owner wrote: "Ninety minutes lagte hain."
+- material.ammonia = false
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | subject | Welcome! |
+|   | feeling | previewText | Khush hai hum ki aap aaye — aage kya hoga, woh bata dete hain |
+|   | feeling | headline | Acha kiya jo humse mili! |
+|   | factual | intro | Chaliye, ek choti si baat karte hain taaki aapko pata rahe ki aage kya expect karna hai. |
+|   | factual | bullets | Ek session — sirf 90 minutes |
+|   | feeling | ctaLabel | Book a Consultation |
+|   | feeling | product | Keratin Treatment |
+|   | factual | body | Aage kya hoga woh simple hai — ek session, 90 minutes, aur price hai 3500. |
+|   | feeling | body | Koi confusion nahi, koi surprise nahi. |
+|   | feeling | body | Bas aapko comfortable feel karana hai pehle din se. |
+|   | feeling | body | Jab bhi book karni ho apni appointment, neeche button hai — seedha aa jao. |
+
+---
+
+## salon-05 — Shine Studio (services) · email · complete_facts
+
+**Watch for:** 'ammonia wale products use nahi karte' is recorded in Hinglish. Does the English claim pass?
+
+**The records this business actually has:**
+
+- catalogue: Keratin treatment = 3500 (Ninety minutes, one session)
+- catalogue: Haircut = 400 (Thirty minutes)
+- shipping: nothing is shipped
+- the owner wrote: "Pehle hair wash, phir treatment lagate hain."
+- the owner wrote: "Ninety minutes lagte hain."
+- material.ammonia = false
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | text | The AI service is busy — try again in a minute. |
+
+---
+
+## salon-10 — Shine Studio (services) · email · capability_claim
+
+**Watch for:** a claim about what the business or Hawlai will do automatically
+
+**The records this business actually has:**
+
+- catalogue: Keratin treatment = 3500 (Ninety minutes, one session)
+- catalogue: Haircut = 400 (Thirty minutes)
+- shipping: nothing is shipped
+- the owner wrote: "Pehle hair wash, phir treatment lagate hain."
+- the owner wrote: "Ninety minutes lagte hain."
+- material.ammonia = false
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | text | The AI service is busy — try again in a minute. |
+
+---
+
+## dairy-01 — Shree Dairy (food) · email · complete_facts
+
+**Watch for:** 850 and bilona are recorded; FIRST10 is a REAL 10% offer and may be stated
+
+**The records this business actually has:**
+
+- catalogue: Desi ghee 500ml = 850 (Bilona method)
+- catalogue: Paneer 250g = 120 (Made fresh every morning)
+- shipping: flat 50
+- process.traditional = true
+- process.hand_churned = true
+- the owner wrote: "FSSAI licence 11223344556677."
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | text | The AI service is busy — try again in a minute. |
+
+---
+
+## dairy-04 — Shree Dairy (food) · email · stale_or_conflicting
+
+**Watch for:** the real code gives 10%, not 20%. The owner's prompt conflicts with the record
+
+**The records this business actually has:**
+
+- catalogue: Desi ghee 500ml = 850 (Bilona method)
+- catalogue: Paneer 250g = 120 (Made fresh every morning)
+- shipping: flat 50
+- process.traditional = true
+- process.hand_churned = true
+- the owner wrote: "FSSAI licence 11223344556677."
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | text | The AI service is busy — try again in a minute. |
+
+---
+
+## dairy-07 — Shree Dairy (food) · email · unknown_claim
+
+**Watch for:** the owner asked for a comparison. Nothing licenses one
+
+**The records this business actually has:**
+
+- catalogue: Desi ghee 500ml = 850 (Bilona method)
+- catalogue: Paneer 250g = 120 (Made fresh every morning)
+- shipping: flat 50
+- process.traditional = true
+- process.hand_churned = true
+- the owner wrote: "FSSAI licence 11223344556677."
+
+| verdict | kind | field | sentence |
+|---|---|---|---|
+|   | feeling | text | The AI service is busy — try again in a minute. |
