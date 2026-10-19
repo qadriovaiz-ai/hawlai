@@ -175,3 +175,35 @@ describe("it is a code check, not a prompt rule", () => {
     }
   });
 });
+
+describe("a button label is not prose", () => {
+  // The run of 19 October removed FOUR button labels — "Slot Book
+  // Karo", "Candle Dekho", "Book a Consultation" — because Title Case
+  // capitalises every word after the first, so each looked like a name
+  // the writer had invented. They are not claims; they are what the
+  // reader clicks. Capitalisation only signals a name in prose.
+  const ALLOWED_SALON = ["Keratin treatment = 3500", "Shine Studio", "welcome email"];
+
+  it("A TITLE-CASED LABEL IS NOT SEARCHED FOR NAMES", () => {
+    expect(introducedWords(["Slot Book Karo"], ALLOWED_SALON)).toEqual([]);
+    expect(introducedWords(["Candle Dekho"], ALLOWED_SALON)).toEqual([]);
+    expect(introducedWords(["Book a Consultation"], ALLOWED_SALON)).toEqual([]);
+    expect(introducedWords(["Appointment Book Karo"], ALLOWED_SALON)).toEqual([]);
+  });
+
+  it("BUT AN INTENSIFIER IN A LABEL IS STILL CAUGHT", () => {
+    // The abstention is about capitalisation, not about claims. A
+    // button saying "Purest Ghee" is still a claim.
+    expect(introducedWords(["Purest Ghee Here"], ALLOWED_SALON).map((f) => f.word)).toEqual(["purest"]);
+  });
+
+  it("AND PROSE IS STILL SEARCHED — the abstention must not swallow a sentence", () => {
+    // A real sentence has mostly lower-case words, so an invented name
+    // in it still stands out.
+    expect(introducedWords(["We make it right here in Indore."], ALLOWED_SALON).map((f) => f.word)).toEqual(["indore"]);
+    // And a long title-cased line is prose enough to check: the
+    // abstention is for short labels.
+    const long = "We Make It Right Here In Indore Every Single Morning For You";
+    expect(introducedWords([long], ALLOWED_SALON).map((f) => f.word)).toContain("indore");
+  });
+});

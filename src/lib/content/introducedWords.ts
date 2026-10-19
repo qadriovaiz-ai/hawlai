@@ -99,10 +99,25 @@ function tokens(text: string): string[] {
  */
 function capitalisedWords(sentence: string): string[] {
   const words = String(sentence ?? "").split(/[^\p{L}\p{N}%'’-]+/u).filter(Boolean);
-  return words
-    .slice(1)
-    .filter((w) => /^\p{Lu}\p{Ll}+/u.test(w))
-    .map((w) => w.toLowerCase());
+  const capitalised = words.slice(1).filter((w) => /^\p{Lu}\p{Ll}+/u.test(w));
+
+  // CAPITALISATION ONLY MEANS "NAME" IN PROSE.
+  //
+  // The run of 19 October removed four button labels — "Slot Book
+  // Karo", "Candle Dekho", "Book a Consultation" — because every word
+  // after the first is capitalised in Title Case, so every one of them
+  // looked like a name the writer had invented. They are not claims at
+  // all; they are the thing the reader clicks.
+  //
+  // So when most of a line is capitalised, capitalisation carries no
+  // information about names and this check abstains. The intensifier
+  // check still runs on it: "Purest Ghee In Town" as a button is still
+  // a claim.
+  const content = words.filter((w) => /\p{L}/u.test(w));
+  const titleCased = content.filter((w) => /^\p{Lu}/u.test(w)).length;
+  if (content.length <= 6 && titleCased > content.length / 2) return [];
+
+  return capitalised.map((w) => w.toLowerCase());
 }
 
 /**

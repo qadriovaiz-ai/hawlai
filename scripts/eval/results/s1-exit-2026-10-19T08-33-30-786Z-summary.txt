@@ -1,0 +1,88 @@
+
+S1 EXIT TEST — the fact-bound pipeline on email
+==================================================================
+cases                 9  (candle-01, candle-05, candle-08, salon-01, salon-05, salon-10, dairy-01, dairy-04, dairy-07)
+baseline, email only  70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 22.93   (per-run cap Rs 30.00)
+already spent         Rs 288.41 of Rs 500.00
+==================================================================
+17 sentence(s), facts note present
+16 sentence(s), facts note present
+11 sentence(s), facts note present
+9 sentence(s), facts note present
+13 sentence(s), facts note present
+11 sentence(s), facts note present
+15 sentence(s), facts note present
+13 sentence(s), facts note present
+15 sentence(s), facts note present
+
+==================================================================
+sentences produced    120   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 9
+calls made            34   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 12000ms between cases)
+tokens                70596 in, 17658 out
+ACTUAL COST THIS RUN  Rs 26.76   (estimated Rs 22.93)
+COST PER EMAIL        Rs 2.97   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 315.17 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-01]
+     Not on record: The lavender scent / fragrance used is not recorded against the product — the owner should record: 'Lavender candle uses [fragrance name/type] fragrance oil.'
+     Not on record: No record covers what the reader should do next (CTA link, shop URL, discount code for first purchase) — the owner should record the intended call-to-action URL or offer for welcome emails.
+     Not on record: The business name / brand name is not recorded — the owner should record: 'The brand/business name is [name].' so the email can be signed correctly.
+     Removed "Candle Dekho" — it names "dekho", which is nowhere in your records.
+  [candle-05]
+     Not on record: The Rose candle's catalogue description (f_57265414) lists only 'Soy wax' with no burn-hour figure. If the Rose candle also burns for 40 hours, the owner should record: 'product.rose_candle.burn_hours = 40 hours' so that claim can be made specifically about that product.
+     Not on record: No record explains WHY soy wax burns longer than paraffin in the owner's own words. If the owner wants to include that explanation, they should record a statement such as: 'Soy wax burns cooler and slower than paraffin, which is why our candles last longer.'
+  [candle-08]
+     Not on record: everything — the business's records could not be read just now
+  [salon-01]
+     Left out: Walk the reader through what happens in the session — hair wash first, then treatment — so they feel prepared. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: What results or visible outcome does the keratin treatment deliver? (e.g. frizz reduction, smoothness, shine — record this against product.keratin_treatment so it can be stated in copy.)
+     Not on record: How long do the results last after one session? Record this as product.keratin_treatment.result_duration so it can be cited.
+     Not on record: Is there any aftercare the client should follow post-treatment? Record this as product.keratin_treatment.aftercare so it can be included in a welcome email.
+     Removed "Slot Book Karo" — it names "book", which is nowhere in your records.
+     Removed "Slot Book Karo" — it names "karo", which is nowhere in your records.
+     Removed "The customer has arrived." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The business will handle everything after the customer books a slot." — nothing on record can support a capability claim.
+     Removed "The business will tell the customer directly what happens next." — nothing on record can support a capability claim.
+     Removed "The business will tell the customer directly what happens next." — nothing on record can support a capability claim.
+     Removed "There are no hidden charges." — The fact states the price (₹3500) but does not state that there are no hidden charges..
+     Removed "There are no hidden charges." — The fact states the price (₹3500) but does not state that there are no hidden charges..
+  [salon-05]
+     Left out: Describes the treatment process — hair is washed first, then the treatment is applied. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Left out: Names the key service available, relevant to ammonia-free treatments. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Not on record: Does the business use ammonia-free products across ALL services (haircut, etc.), or only for the keratin treatment? Please record this against each relevant product so the email can name them specifically.
+     Not on record: Are there other ammonia-free products or treatments beyond the keratin treatment that should be featured in this email? Please record each one with its name, price, and duration.
+     Removed "Book a Consultation" — it names "consultation", which is nowhere in your records.
+     Removed "The customer's hair journey starts here." — nothing on record can support a capability claim.
+     Removed "Once the customer books, the business will start the treatment." — nothing on record can support a capability claim.
+  [salon-10]
+     You asked for We will automatically rebook clients every month. Your records say No record exists of any automatic rebooking policy, subscription, or recurring booking system. Selecting this claim would require inventing a business practice not in evidence. — change the record, or I write it without that.
+     Not on record: The business offers a recurring or automatic monthly rebooking arrangement for clients — record what this policy is, how it works, and whether it is truly automatic or requires client action each time.
+  [dairy-01]
+     Not on record: What is the exact coupon code the reader should enter to redeem the 10% first-order discount? (Record the code against the offer so it can be stated in the email.)
+     Not on record: Is the 10% offer available on the Desi Ghee 500ml specifically, or on all products? (Record the offer's scope so the email can state it accurately.)
+     Not on record: Does the business ship outside Indore, and if so, to which cities or states? (Record the delivery coverage so the email can set correct expectations.)
+     Removed "The ghee is made one batch at a time." — No approved fact mentions batches or batch-by-batch production..
+     Removed "The ghee is made one batch at a time." — No approved fact mentions batches or batch-by-batch production..
+  [dairy-04]
+     You asked for 20% Diwali discount. Your records say The only recorded offer is FIRST10 — 10% off. There is no record of a 20% discount or any Diwali-specific offer. — change the record, or I write it without that.
+     Left out: The email is meant to promote a 20% Diwali discount — but the only recorded offer is 10% (FIRST10). Flagging as conflict; cannot select a 20% claim. — it is about "FIRST10", which is not a product or service on record.
+     Left out: Freshness cue for the paneer strengthens the email's quality story. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: A Diwali offer exists with a specific discount percentage (e.g. 20%) and a promo code or redemption method, valid from [start date] to [end date] — please record this against offer.diwali so it can be cited in the email.
+     Removed "Prices are clear." — nothing on record can support a capability claim.
+     Removed "A smaller option of ghee is available at 120 INR." — it states 120 INR for ghee, and that figure belongs to something else.
+     Removed "A smaller option of ghee is available at 120 INR." — it states 120 INR for ghee, and that figure belongs to something else.
+  [dairy-07]
+     Left out: Establishes food-safety credibility and legitimacy without making a health claim. — it states FSSAI licence 11223344556677, and the record(s) it cites say FSSAI licence 11223344556677..
+     Not on record: What breed of cow or type of milk is used? (e.g. A2 Gir cow milk) — record this against product.desi_ghee_500ml so the email can name it as a specific differentiator from supermarket ghee.
+     Not on record: Is the ghee made from curd/yoghurt (curd-first Bilona) or directly from cream? — record the exact starting ingredient against product.desi_ghee_500ml to support a precise process claim.
+     Not on record: How many paid orders or customers has the business served to date? — a customer-count figure (e.g. '40 orders fulfilled') could build social proof in the email, but the current record is an internal metric and its use in public copy needs the owner's explicit sign-off.
+     Removed "The ghee is made the way it has always been done traditionally." — Facts state Bilona method and hand-churning are used, but do not state this is how it has 'always been done' — that is a historical claim not made in the facts..
+
+GRADE THIS: scripts\eval\results\s1-exit-2026-10-19T08-33-30-786Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
