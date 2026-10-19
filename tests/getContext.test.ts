@@ -8,9 +8,10 @@
 // writer and the guard reading different truths.
 
 import { describe, it, expect, vi } from "vitest";
-import { getContext, productsForTopic, productKey } from "@/lib/facts/getContext";
+import { getContext, contextFromFacts, productsForTopic, productKey } from "@/lib/facts/getContext";
+import { validateSelection } from "@/lib/facts/validateSelection";
 import { resolveFactId, isUnlicensable, type FactRecord } from "@/lib/facts/factRecord";
-import { code } from "./helpers/source";
+import { code, sourceWithComments } from "./helpers/source";
 
 const TENANT = "biz_1";
 
@@ -258,5 +259,92 @@ describe("4. it is a wrapper, not a second reader", () => {
     expect(productKey("Lavender candle")).toBe("lavender_candle");
     expect(productKey("Desi ghee 500ml")).toBe("desi_ghee_500ml");
     expect(productKey("  ")).toBe("");
+  });
+});
+
+describe("5. a product description is owner prose, and is licensed as such", () => {
+  // S2a's first WhatsApp run deleted a true, recorded, product-scoped
+  // fact. Shree Dairy's paneer description says "Made fresh every
+  // morning"; Select cited that record and typed the claim
+  // `availability`, which needs "policy" — and the catalogue grants
+  // only value and existence, so step 2 refused it. The note the owner
+  // got read "Left out: Core freshness hook ... a availability claim
+  // needs a record that can establish policy".
+  //
+  // Wrongly removing a true claim is the error class S1 spent eleven
+  // runs driving to zero, and this is the licence table doing it.
+  const facts = {
+    ...CANDLE_FACTS,
+    products: [product("Paneer 250g", 120, { description: "Made fresh every morning" })],
+  } as any;
+  const describedRecord = () => {
+    const ctx = contextFromFacts(TENANT, facts, { kind: "whatsapp", topic: "paneer broadcast" });
+    return ctx.records.find((r) => r.key === "product.paneer_250g.description")!;
+  };
+
+  it("CARRIES POLICY AND PROCESS, so a true description fact is not deleted by the table", () => {
+    // The mutation: put licensesFor("catalogue") back on this record
+    // and this fails, because the catalogue grants neither.
+    const r = describedRecord();
+    expect(r.licenses).toContain("policy");
+    expect(r.licenses).toContain("process");
+    expect(r.licenses).toContain("existence");
+  });
+
+  it("AND NO LONGER CARRIES value — a description may not license a price", () => {
+    // Deliberately a tightening, not a side effect. A price, an offer
+    // and a count have their own columns; a figure typed into prose is
+    // not the row checkout reads.
+    expect(describedRecord().licenses).not.toContain("value");
+  });
+
+  it("the claim that actually failed now passes step 2", () => {
+    const r = describedRecord();
+    const v = validateSelection(
+      { claims: [{ id: "c1", claimType: "availability", factIds: [r.id], intent: "made fresh every morning", aboutProduct: "Paneer 250g" }] },
+      [r],
+      TENANT
+    );
+    expect(v.rejected).toEqual([]);
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("and so does the same fact typed as a process claim", () => {
+    const r = describedRecord();
+    const v = validateSelection(
+      { claims: [{ id: "c1", claimType: "process", factIds: [r.id], intent: "made fresh every morning", aboutProduct: "Paneer 250g" }] },
+      [r],
+      TENANT
+    );
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("A PRICE CLAIM CITED TO THE DESCRIPTION IS STILL REFUSED", () => {
+    // The direction that must not loosen. The figure is in the prose,
+    // the tenant is right, the record is real — and it is still not the
+    // price row.
+    const priced = {
+      ...CANDLE_FACTS,
+      products: [product("Paneer 250g", 120, { description: "Made fresh every morning, 120 rupees" })],
+    } as any;
+    const ctx = contextFromFacts(TENANT, priced, { kind: "whatsapp", topic: "paneer broadcast" });
+    const r = ctx.records.find((x) => x.key === "product.paneer_250g.description")!;
+    const v = validateSelection(
+      { claims: [{ id: "c1", claimType: "price", factIds: [r.id], intent: "the price", value: 120, unit: "inr", aboutProduct: "Paneer 250g" }] },
+      [r],
+      TENANT
+    );
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_on_record");
+  });
+
+  it("the source still says catalogue, because that is where it came from", () => {
+    // Source is provenance and licence is permission; the grading sheet
+    // reads the first one and the owner should keep seeing the truth.
+    expect(describedRecord().source).toBe("catalogue");
+  });
+
+  it("the reason is written down where the record is minted", () => {
+    expect(sourceWithComments("src/lib/facts/getContext.ts")).toMatch(/SOURCE AND LICENCE ANSWER DIFFERENT QUESTIONS/);
   });
 });

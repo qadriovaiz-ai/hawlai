@@ -152,6 +152,29 @@ function catalogueRecords(dealershipId: string, products: CatalogProduct[], obse
     // burn", written against the Lavender candle — is exactly the
     // product-level evidence the rule asks for, and it was sitting
     // unused in a column.
+    //
+    // ITS LICENCES ARE OWNER-PROSE LICENCES, NOT THE CATALOGUE'S, and
+    // the S2a WhatsApp run of 2026-10-19 is why. Shree Dairy's paneer
+    // description says "Made fresh every morning". Select cited it,
+    // typed the claim `availability` — and step 2 refused it, because
+    // `availability` needs a record that can establish "policy" and the
+    // catalogue grants only value and existence. A true, recorded,
+    // product-scoped fact was deleted by the licence table, which is
+    // the one error class S1 fought hardest to reach zero.
+    //
+    // SOURCE AND LICENCE ANSWER DIFFERENT QUESTIONS. `source` says
+    // where the row came from, and this did come from the catalogue —
+    // the grading sheet should keep saying so. `licenses` says what
+    // KIND of claim the row can establish, and that depends on what the
+    // row IS: a price column is a number checkout reads, while a
+    // description column is sentences the owner typed about their own
+    // product. Owner prose establishes existence, policy and process.
+    //
+    // This also DROPS `value`, which is a tightening and deliberate: a
+    // figure in a description may no longer license a price, an offer
+    // or a count, because those have their own columns. A duration
+    // still passes, needing only `existence`, and any figure is still
+    // checked digit-by-digit against the record's own words.
     const description = String(p.description ?? "").trim();
     if (description) {
       out.push({
@@ -162,7 +185,7 @@ function catalogueRecords(dealershipId: string, products: CatalogProduct[], obse
         source: "catalogue",
         sourceRef: ref,
         confidence: "observed",
-        licenses: licensesFor("catalogue"),
+        licenses: licensesFor("owner_stated"),
         recordedText: `${name || key}: ${description}`,
         observedAt,
       });

@@ -369,3 +369,41 @@ describe("7. a statement of role is courtesy, not capability", () => {
     expect(src()).toMatch(/without the customer asking each time/);
   });
 });
+
+describe("8. a benefit is an effect on the person, not a property of the thing", () => {
+  // S2a's first WhatsApp run removed "The paneer is fresh." as a
+  // benefit claim. "Made fresh every morning" is in the paneer's own
+  // catalogue description and reaches the pipeline as
+  // product.paneer_250g.description — so a true, recorded property was
+  // refused because the extractor typed it as an effect on the reader.
+  //
+  // Same family as the ammonia-as-safety mislabel: the licence table is
+  // only as strong as the type the model picks, and the fix belongs
+  // where the typing happens.
+  const src = () => code("src/lib/facts/extractClaims.ts");
+
+  it("THE LINE IS DRAWN BY WHO THE CLAIM IS ABOUT", () => {
+    expect(src()).toMatch(/A BENEFIT IS AN EFFECT ON THE PERSON\. A PROPERTY OF THE THING IS NOT/);
+    expect(src()).toMatch(/about the READER, and no record can support them/);
+    expect(src()).toMatch(/about the THING — its state, its make, its measurements/);
+  });
+
+  it("AND THE TRAP IS NAMED: pleasing is not the test", () => {
+    // The reason the model keeps reaching for `benefit`: a recorded
+    // property a customer would like reads as a benefit if you ask
+    // "would they be pleased?" rather than "who is this about?".
+    expect(src()).toMatch(/not a benefit just because a customer would be pleased by it/);
+  });
+
+  it("the examples are the ones that actually failed, in both directions", () => {
+    expect(src()).toContain("It helps you sleep");
+    expect(src()).toContain("you will taste the difference");
+    expect(src()).toContain("It is fresh");
+    expect(src()).toContain("it burns for 40 hours");
+  });
+
+  it("the safety rule survives the renumbering", () => {
+    // 6a became 6b. The ammonia fix must not be lost in the shuffle.
+    expect(src()).toMatch(/6b\. BUT A STATEMENT ABOUT WHAT IS OR IS NOT IN SOMETHING IS "material", NOT "safety"/);
+  });
+});

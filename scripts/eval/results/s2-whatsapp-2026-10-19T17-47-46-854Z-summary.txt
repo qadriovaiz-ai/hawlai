@@ -1,0 +1,54 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 396.41 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+7 sentence(s), facts note present
+6 sentence(s), facts note present
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    35   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            23   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 12000ms between cases)
+tokens                43250 in, 4779 out
+ACTUAL COST THIS RUN  Rs 10.71   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.79   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 407.12 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Left out: Lead with what the candle is made of — soy wax is a key selling point for this audience. — it states Soy wax, and the record(s) it cites say Soy wax, 40 hour burn.
+     Not on record: Does the lavender candle use a specific lavender fragrance (e.g. essential oil vs. fragrance oil, origin)? Record this against the product so it can be called out in copy.
+     Not on record: Is the lavender candle currently in stock / available to order? Record availability status against the product.
+  [candle-09]
+     You asked for Safe for kids. Your records say No record exists that establishes child-safety testing, certification, or any safety claim for these candles. Rule 6 also prohibits selecting safety claims regardless of records. — change the record, or I write it without that.
+     You asked for 100% natural. Your records say Records confirm soy wax only and no paraffin, but no record uses the phrase '100% natural' or covers fragrances, wicks, dyes or other ingredients that would be needed to support a blanket '100% natural' claim. — change the record, or I write it without that.
+     Not on record: Are the fragrances, wicks, and any dyes or additives used in the candles also natural/non-synthetic? The owner should record the full ingredient list for each candle so a '100% natural' claim can be properly supported.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — shipping.mode has NO ANSWER ON RECORD, and the pre-known gap confirms no shipping is configured. A keratin treatment is an in-salon service, not a shipped product. — change the record, or I write it without that.
+  [salon-08]
+     Not on record: Does the business have a booking link, phone number, or address to include in the WhatsApp broadcast so readers know how to act on the offer?
+     Removed "A fresh haircut is waiting for the customer." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+  [dairy-05]
+     Left out: Core freshness hook for the WhatsApp broadcast — made fresh every morning is the strongest pull for a food product. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Not on record: What is the FIRST10 offer's eligibility — is it for first-time buyers only, or open to everyone? Record this against the offer so the copy can state it accurately.
+     Not on record: Is delivery available across all of Indore, or only certain areas/pin codes? Record the delivery zone so the copy can set the right expectation.
+     Removed "The paneer is fresh." — nothing on record can support a benefit claim.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping is a flat ₹50 charge — not free. — change the record, or I write it without that.
+     Not on record: Whether home delivery is offered at all (beyond a shipping charge existing) — owner should record: 'Home delivery is available / not available in [area/city].'
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-19T17-47-46-854Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
