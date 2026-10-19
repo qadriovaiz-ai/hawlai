@@ -115,7 +115,7 @@ RULES
 2. Stronger than the fact is NOT entailed. "no X is used" does not support "nothing harsh is used". An absence of one thing is not an absence of a kind of thing.
 3. A fact about the thing itself does not support a claim about its EFFECT on a person, or about anyone else's product. If you see such a claim, it is not entailed.
 4. A fact that something is not known does not support a claim either way.
-5. Rephrasing in another language is still the same claim: judge the meaning, not the wording.
+5. WORDING AND WORD ORDER DO NOT CHANGE A CLAIM. Rephrasing in another language is the same claim, and so is rephrasing in the same one: "<material> only" and "only <material>" are one fact, not two. Judge what is asserted, never how it is arranged. If the only difference you can name is the order of the words, the answer is entailed.
 6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.
 7. TWO FACTS DO NOT ENTAIL A LINK BETWEEN THEM. If the approved facts state A and state B, a claim that A causes B, explains B, proves B or results in B is NOT entailed — the connection is a separate assertion and no fact here makes it. This holds however plausible the mechanism sounds.
 8. SCOPE IS NOT YOURS TO DECIDE. Which facts may be used for which claim has already been settled in code before you see it, so every fact below is CLEARED for the claim it sits with. Never answer "not entailed" on the ground that a fact is about the business in general rather than about one named product — that objection is not available to you. Judge only whether the fact, applied to this claim, states it.

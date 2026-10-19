@@ -50,6 +50,18 @@ describe("the scope rule is written where it is enforced", () => {
     expect(src).toMatch(/every fact below is CLEARED for the claim it sits with/);
   });
 
+  it("WORD ORDER DOES NOT MAKE A SECOND CLAIM", () => {
+    // Run 7 refused "the candles are made only with soy wax" twice,
+    // because the record says "soy wax only" and the judge read the
+    // reordering as a different claim. Rule 5 said rephrasing ACROSS
+    // languages is the same claim; it did not say rephrasing within
+    // one is.
+    const src = code("src/lib/facts/verifyClaims.ts");
+    expect(src).toMatch(/WORDING AND WORD ORDER DO NOT CHANGE A CLAIM/);
+    expect(src).toMatch(/one fact, not two/);
+    expect(src).toMatch(/If the only difference you can name is the order of the words, the answer is entailed/);
+  });
+
   it("and the code that now owns the decision is the code the validator reads", () => {
     expect(code("src/lib/facts/validateSelection.ts")).toMatch(/recordSupportsScope/);
     // sourceWithComments, because the thing asserted IS the recorded

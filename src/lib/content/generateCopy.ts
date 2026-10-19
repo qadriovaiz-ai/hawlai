@@ -67,6 +67,7 @@ import { validateSelection, validationNote, type Validated } from "@/lib/facts/v
 import { extractClaims } from "@/lib/facts/extractClaims";
 import { verifyClaims, verifyNote } from "@/lib/facts/verifyClaims";
 import { copySentences, withoutSentences } from "@/lib/content/copySentences";
+import { introducedWords, introducedNote } from "@/lib/content/introducedWords";
 import { type ClaimsMode } from "@/lib/claims/claimCheck";
 import { type BusinessFacts, type FactsAudience, formatFactsForCopy, COPY_TRUTH_RULES } from "@/lib/claims/businessFacts";
 import { type NarrativeFinding } from "@/lib/claims/narrativeProvenance";
@@ -507,6 +508,39 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   let factBoundDegraded = false;
   if (factBound && validated) {
     const sentences = copySentences(parsed);
+
+    // ------------------------------------------------------------------
+    // WORDS THE WRITER BROUGHT THAT NOBODY GAVE IT — in code, before any
+    // model is asked anything.
+    //
+    // Founder's direction of 19 October: "pure" had been fixed three
+    // times, after "asli" and "premium", and each fix added a word to a
+    // list inside a PROMPT. The same rule caught "pure desi ghee" in one
+    // run and let it through in the next, because a prompt rule is
+    // applied unevenly by definition.
+    //
+    // So this runs FIRST and always: an intensifier or a proper noun
+    // that appears in nothing the writer was given is an assertion
+    // nobody made. It catches the fourth boosting adjective and the next
+    // invented city without anybody adding a word.
+    // ------------------------------------------------------------------
+    const allowedVocabulary = [
+      ...validated.approved.map((c) => `${c.intent} ${c.value ?? ""} ${c.unit ?? ""} ${c.aboutProduct ?? ""}`),
+      ...factRecords.map((r) => `${r.key.replace(/[._]/g, " ")} ${r.recordedText} ${r.value ?? ""}`),
+      req.businessName,
+      req.businessCategory,
+      // What the owner typed. A place or a name they asked for is
+      // theirs, not the model's.
+      req.topic,
+      req.brief.label,
+    ];
+    const introduced = introducedWords(sentences.map((s) => s.text), allowedVocabulary);
+    let introducedNoteText: string | null = null;
+    if (introduced.length) {
+      introducedNoteText = introducedNote(introduced, sentences.map((s) => s.text));
+      parsed = withoutSentences(parsed, sentences, [...new Set(introduced.map((f) => f.sentenceIndex))]);
+    }
+
     const extracted = await extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null });
     if (!extracted.ok) {
       // UNVERIFIED IS NOT VERIFIED. The copy stands, and it is marked
@@ -521,6 +555,10 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       }
       factBoundNote = verifyNote(verified);
     }
+    // The word check's findings ride alongside the verifier's, not
+    // instead of them: they are different reasons for removing a
+    // sentence and the owner should see both.
+    factBoundNote = [introducedNoteText, factBoundNote].filter(Boolean).join("\n") || null;
   }
   if (factBound && validated) {
     const selectionNote = validationNote(validated, selection?.conflicts ?? [], selection?.unknowns ?? []);

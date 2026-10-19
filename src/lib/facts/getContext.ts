@@ -305,6 +305,36 @@ function offerRecords(dealershipId: string, f: BusinessFacts, observedAt: string
   return out;
 }
 
+/**
+ * Where the business is, when the owner has said.
+ *
+ * A RECORD BECAUSE THE ABSENCE HAS TO BE CHECKABLE. "Indore" survived
+ * three times in the run of 19 October while no location existed
+ * anywhere in the context — the model reached for a generic Indian city
+ * from its own prior. With the city as a record, a true location claim
+ * can cite it and a false one has nothing to cite, which is C1's
+ * "unknown is explicit" rule applied to a field that was being read
+ * off `facts` by nobody.
+ */
+function placeRecords(dealershipId: string, f: BusinessFacts, observedAt: string): FactRecord[] {
+  const city = String(f.city ?? "").trim();
+  if (!city) return [];
+  return [
+    {
+      id: factId(dealershipId, "business#city", city),
+      dealershipId,
+      key: "business.city",
+      value: city,
+      source: "owner_stated",
+      sourceRef: "dealerships.city",
+      confidence: "observed",
+      licenses: licensesFor("owner_stated"),
+      recordedText: `the business is in ${city}`,
+      observedAt,
+    },
+  ];
+}
+
 /** Counts from our own rows. The answer to "500 happy customers". */
 function measuredRecords(dealershipId: string, f: BusinessFacts, observedAt: string): FactRecord[] {
   const mk = (key: string, value: number, text: string): FactRecord => ({
@@ -370,6 +400,7 @@ export function contextFromFacts(dealershipId: string, facts: BusinessFacts | nu
     ...shippingRecords(dealershipId, facts, observedAt),
     ...offerRecords(dealershipId, facts, observedAt),
     ...measuredRecords(dealershipId, facts, observedAt),
+    ...placeRecords(dealershipId, facts, observedAt),
     // The owner's own rows, already typed by the extractor built in
     // step 1. It takes rows it is handed and reads no database itself.
     ...extractFromKnowledge(dealershipId, (facts.ownerFacts ?? []).map((k, i) => ({

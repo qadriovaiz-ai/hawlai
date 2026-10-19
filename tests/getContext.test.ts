@@ -192,6 +192,23 @@ describe("2. the records", () => {
     expect(name?.licenses).toContain("value");
   });
 
+  it("THE CITY IS A RECORD, so an invented one has nothing to cite", async () => {
+    // "Indore" survived three times in the run of 19 October while no
+    // location existed anywhere in the context — the model reached for
+    // a generic Indian city from its own prior. With the city as a
+    // record, a true location claim can cite it and a false one cannot.
+    const ctx = await context(CANDLE_FACTS, "welcome email");
+    const city = ctx.records.find((r) => r.key === "business.city");
+    expect(city?.value).toBe("Shahjahanpur");
+    expect(city?.source).toBe("owner_stated");
+    expect(city?.recordedText).toBe("the business is in Shahjahanpur");
+  });
+
+  it("and no city on file mints no city record", async () => {
+    const ctx = await context({ ...CANDLE_FACTS, city: null }, "welcome email");
+    expect(ctx.records.some((r) => r.key === "business.city")).toBe(false);
+  });
+
   it("holds no link records, deliberately", async () => {
     // A URL is not a claim. The generators take links from `facts` and
     // repairBookingLinks already owns them; a second home for them
