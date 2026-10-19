@@ -13,7 +13,7 @@
 // approved, not warned about.
 
 import { describe, it, expect } from "vitest";
-import { validateSelection, validationNote, LICENCE_FOR_CLAIM, typeFromKey } from "@/lib/facts/validateSelection";
+import { validateSelection, validationNote, figuresInValue, LICENCE_FOR_CLAIM, typeFromKey } from "@/lib/facts/validateSelection";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, CLAIM_TYPES, type ClaimType } from "@/lib/facts/extractClaims";
 import { licensesFor, type FactRecord } from "@/lib/facts/factRecord";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
@@ -506,5 +506,120 @@ describe("a conflict must not silence the truth as well", () => {
     );
     expect(v.rejected).toEqual([]);
     expect(v.approved).toHaveLength(1);
+  });
+});
+
+describe("only a figure is checked as a figure", () => {
+  // The fifth S2a WhatsApp run refused two true claims here, one of
+  // them absurdly:
+  //
+  //   it states FSSAI licence 11223344556677, and the record(s) it
+  //     cites say FSSAI licence 11223344556677.
+  //   it states Soy wax, and the record(s) it cites say Soy wax,
+  //     40 hour burn.
+  //
+  // The first is the claim and the record agreeing word for word and
+  // being rejected. `value` is documented as "the figure, copied
+  // exactly from the cited record"; Select had put the whole recorded
+  // phrase in it, so Number() gave NaN and the string compare failed on
+  // the surrounding words.
+
+  const licence = record({
+    id: "f_fssai",
+    key: "credential.fssai",
+    value: 11223344556677,
+    unit: null,
+    source: "owner_stated",
+    licenses: licensesFor("owner_stated"),
+    recordedText: "FSSAI licence 11223344556677",
+  });
+  const description = record({
+    id: "f_desc",
+    key: "product.lavender_candle.description",
+    value: "Soy wax, 40 hour burn",
+    unit: null,
+    source: "catalogue",
+    licenses: licensesFor("owner_stated"),
+    recordedText: "Lavender candle: Soy wax, 40 hour burn",
+  });
+
+  it("THE RECORDED PHRASE, COPIED WHOLE, IS NOT A MISMATCH", () => {
+    const v = validate(
+      [claim({ claimType: "credential", factIds: ["f_fssai"], value: "FSSAI licence 11223344556677", unit: null, intent: "the FSSAI licence" })],
+      [licence]
+    );
+    expect(v.rejected).toEqual([]);
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("A VALUE WITH NO DIGITS CARRIES NO FIGURE, so this rule says nothing about it", () => {
+    const v = validate(
+      [claim({ claimType: "material", factIds: ["f_desc"], value: "Soy wax", unit: null, intent: "soy wax, not paraffin", aboutProduct: "Lavender candle" })],
+      [description]
+    );
+    expect(v.rejected).toEqual([]);
+  });
+
+  it("figuresInValue reads the digits, and only the digits", () => {
+    expect(figuresInValue("FSSAI licence 11223344556677")).toEqual([11223344556677]);
+    expect(figuresInValue("Soy wax")).toEqual([]);
+    expect(figuresInValue("11,22,33,44,55,66,77")).toEqual([11223344556677]);
+    expect(figuresInValue(999)).toEqual([999]);
+    expect(figuresInValue(false)).toEqual([false]);
+    expect(figuresInValue(null)).toEqual([]);
+    expect(figuresInValue("")).toEqual([]);
+    expect(figuresInValue("₹999 for 2 candles")).toEqual([999, 2]);
+  });
+
+  it("EVERY NUMBER IN THE VALUE MUST BE THE RECORD'S, not just one", () => {
+    // "₹999 for 2 candles" carries two claims. The 999 is right and the
+    // 2 is nowhere, and a check that accepted the first would approve
+    // an invented quantity alongside a true price.
+    const v = validate(
+      [claim({ claimType: "price", factIds: ["f_price"], value: "₹999 for 2 candles", unit: "inr", intent: "the price" })],
+      [record()]
+    );
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("figure_mismatch");
+  });
+
+  it("AND A WRONG NUMBER IN PROSE IS STILL REFUSED", () => {
+    const v = validate(
+      [claim({ claimType: "credential", factIds: ["f_fssai"], value: "FSSAI licence 99999999999999", unit: null, intent: "the licence" })],
+      [licence]
+    );
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("figure_mismatch");
+  });
+
+  it("CITING AN ABSENCE IS STILL REFUSED, figure or not", () => {
+    // The guard that the narrowing above must not drop: a record whose
+    // value is null is a known-unknown, and a prose value citing only
+    // those is citing something we looked for and did not find.
+    const nothing = record({ id: "f_null", key: "shipping.mode", value: null, unit: null, source: "shipping_config", licenses: licensesFor("shipping_config"), recordedText: "nothing is shipped" });
+    const v = validate(
+      [claim({ claimType: "shipping", factIds: ["f_null"], value: "free shipping", unit: null, intent: "shipping is free" })],
+      [nothing]
+    );
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].reason).toMatch(/no value/);
+  });
+});
+
+describe("the Select model's prose does not authorise its own words", () => {
+  it("A STRING VALUE IS KEPT OUT OF THE ALLOWED VOCABULARY", async () => {
+    // Same fault as including c.intent, removed for the same reason: a
+    // check measured against text a model wrote is the model marking
+    // its own work. Every record's words are in the vocabulary already,
+    // so a value genuinely copied from a record is still there.
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/content/generateCopy.ts");
+    expect(src).toMatch(/typeof c\.value === "string" \? "" : c\.value \?\? ""/);
+    // c.intent belongs in the WRITER'S prompt — it is what the claim is
+    // for. It must not be in the vocabulary, which is what the checks
+    // measure the written words against.
+    const vocabulary = src.slice(src.indexOf("const allowedVocabulary"), src.indexOf("introducedWords(sentences"));
+    expect(vocabulary).not.toMatch(/c\.intent/);
+    expect(vocabulary).toMatch(/r\.recordedText/);
   });
 });

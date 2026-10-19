@@ -135,6 +135,24 @@ export type Validated = {
 };
 
 /** Same number to the paisa. "₹549" and "₹549.00" are one figure. */
+/**
+ * The figures a claim's `value` actually carries.
+ *
+ * A number or a boolean is one figure. A string is read for digit runs,
+ * so "FSSAI licence 11223344556677" yields one and "Soy wax" yields
+ * none — and none means "this is not a figure", not "this is a figure
+ * of nothing". Grouping commas are dropped so "11,22,33,44,55,66,77"
+ * and "11223344556677" are the same number.
+ */
+export function figuresInValue(value: unknown): (number | boolean)[] {
+  if (value === null || value === undefined || value === "") return [];
+  if (typeof value === "boolean") return [value];
+  if (typeof value === "number") return Number.isFinite(value) ? [value] : [];
+  const text = String(value);
+  const runs = text.replace(/,/g, "").match(/[0-9]+(?:\.[0-9]+)?/g) ?? [];
+  return runs.map(Number).filter((n) => Number.isFinite(n));
+}
+
 function sameFigure(a: unknown, b: unknown): boolean {
   // A BOOLEAN IS NOT A NUMBER. Number(false) is 0, so without this a
   // claim of 0 — "₹0", "free" — matches any record whose value is
@@ -340,8 +358,35 @@ export function validateSelection(
     // 6. THE FIGURE COMES FROM THE RECORD. A claim carrying a number
     // that no cited record carries is the candle-03 failure in another
     // form: Rs 850 was a real price, of the other product.
-    if (claim.value !== null && claim.value !== undefined && claim.value !== "") {
-      const match = cited.find((r) => sameFigure(r.value, claim.value)) ?? cited.find((r) => figureInText(r, claim.value));
+    //
+    // ONLY A FIGURE IS CHECKED AS A FIGURE, and the fifth S2a WhatsApp
+    // run of 2026-10-19 is why that has to be said out loud. Two true
+    // claims were refused here, one of them absurdly:
+    //
+    //   it states FSSAI licence 11223344556677, and the record(s) it
+    //     cites say FSSAI licence 11223344556677.
+    //   it states Soy wax, and the record(s) it cites say Soy wax,
+    //     40 hour burn.
+    //
+    // The first is the claim and the record agreeing word for word and
+    // being rejected. `value` is documented as "the figure, copied
+    // exactly" — Select had put the whole recorded phrase in it, so
+    // Number() gave NaN, the string compare failed on the surrounding
+    // words, and figureInText could not read a figure out of prose.
+    //
+    // So the kind of value decides which rule applies. A number or a
+    // boolean is arithmetic, as before. A string CONTAINING digits is
+    // checked digit by digit — every number in it must be the record's,
+    // because "Rs 999 for 2 candles" carries two of them. A string with
+    // NO digits carries no figure at all, and this rule has nothing to
+    // say about it: whether those words are true is a question of
+    // meaning, which is step 4's judge with the records in front of it.
+    // Refusing it here deletes a true claim, which is the one error
+    // class this whole initiative exists to drive to zero.
+    const figures = figuresInValue(claim.value);
+    if (figures.length) {
+      const matchesAll = (r: FactRecord) => figures.every((f) => sameFigure(r.value, f) || figureInText(r, f));
+      const match = cited.find(matchesAll);
       if (!match) {
         rejected.push({
           claim,
@@ -358,6 +403,13 @@ export function validateSelection(
         rejected.push({ claim, rule: "figure_mismatch", reason: "the record it cites has no value — we looked and there is no answer" });
         continue;
       }
+    } else if (claim.value !== null && claim.value !== undefined && claim.value !== "" && cited.every((r) => r.value === null)) {
+      // KEPT FOR A VALUE THAT IS NOT A FIGURE TOO. Narrowing the rule
+      // above to figures must not quietly drop this: a claim that
+      // asserts anything at all, citing only records we have looked for
+      // and not found, is citing an absence.
+      rejected.push({ claim, rule: "figure_mismatch", reason: "the record it cites has no value — we looked and there is no answer" });
+      continue;
     }
 
     approved.push(claim);

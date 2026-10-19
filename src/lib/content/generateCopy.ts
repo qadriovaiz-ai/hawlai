@@ -546,7 +546,19 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // `value`, `unit` and `aboutProduct` stay, because each was matched
     // against a record in step 2 before it got here.
     const allowedVocabulary = [
-      ...validated.approved.map((c) => `${c.value ?? ""} ${c.unit ?? ""} ${c.aboutProduct ?? ""}`),
+      // A FIGURE AND A PRODUCT NAME ONLY, never prose the Select model
+      // wrote. `value` is documented as "the figure, copied exactly
+      // from the cited record", and when Select puts a phrase there
+      // instead (the run of 2026-10-19 put "Soy wax" and "FSSAI licence
+      // 11223344556677" in it) that phrase would authorise its own
+      // words — the same fault as including c.intent, which was removed
+      // for exactly this reason: a check measured against text a model
+      // wrote is the model marking its own work.
+      //
+      // Nothing legitimate is lost. Every record's own words are in the
+      // vocabulary on the next line, so a value genuinely copied from a
+      // record is already there.
+      ...validated.approved.map((c) => `${typeof c.value === "string" ? "" : c.value ?? ""} ${c.unit ?? ""} ${c.aboutProduct ?? ""}`),
       ...factRecords.map((r) => `${r.key.replace(/[._]/g, " ")} ${r.recordedText} ${r.value ?? ""}`),
       req.businessName,
       req.businessCategory,
