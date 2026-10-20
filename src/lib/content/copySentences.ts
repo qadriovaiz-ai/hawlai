@@ -16,8 +16,51 @@ export type CopySentence = {
   field: string;
   /** Index within that field's own list, for an array field. */
   slot: number;
+  /** What was written, and what gets published. Removal matches on this. */
   text: string;
+  /**
+   * The same sentence with hashtags opened into words, for the checks.
+   *
+   * THE FOUNDER'S DIRECTION OF 2026-10-20: a hashtag must go through the
+   * same claim check, the same vocabulary and scope guard and the same
+   * removal list as body text. It looked like three separate faults and
+   * it is one - A HASHTAG WAS BEING ANALYSED AS OPAQUE PROSE:
+   *
+   *   the grading sheet   classifySentence("#SoyWaxOnly") is "feeling",
+   *                       so 26 of the 29 hashtag rows in the social
+   *                       sheet told the grader they were not claims.
+   *                       The human never had to rule on
+   *                       "#HandPouredInShahjahanpur"
+   *   the extractor       was handed one unreadable token rather than
+   *                       words, so whether a claim inside a tag
+   *                       reached the judge was luck
+   *   the removal         blanked an array element to "" instead of
+   *                       dropping it, so a refused tag published as an
+   *                       empty one
+   *
+   * So the analysed form is separate from the published one. The checks
+   * read "Soy Wax Only"; the post still says "#SoyWaxOnly".
+   */
+  analysed: string;
 };
+
+/**
+ * A hashtag opened into the words it is made of.
+ *
+ * "#SoyWaxOnly" becomes "Soy Wax Only", "#candlebyqaaf" is left alone
+ * because there is no case boundary to split on, and ordinary prose
+ * passes through untouched. The same case-boundary rule the
+ * introduced-word check has used since the social cases found boosters
+ * hiding inside tags.
+ */
+export function expandHashtags(text: string): string {
+  return String(text ?? "").replace(/#([\p{L}\p{N}_]+)/gu, (_m, body: string) =>
+    String(body)
+      .replace(/_+/g, " ")
+      .replace(/(\p{Ll}|\p{N})(\p{Lu})/gu, "$1 $2")
+      .trim()
+  );
+}
 
 /** Every string in a generated output, in a stable order, split into sentences. */
 export function copySentences(output: unknown): CopySentence[] {
@@ -32,7 +75,7 @@ export function copySentences(output: unknown): CopySentence[] {
     forEachString(value, 0, (text, slot) => {
       for (const sentence of pieces(text)) {
         const trimmed = sentence.trim();
-        if (trimmed) out.push({ field, slot, text: trimmed });
+        if (trimmed) out.push({ field, slot, text: trimmed, analysed: expandHashtags(trimmed) });
       }
     });
   }
@@ -87,7 +130,12 @@ export function withoutSentences(output: any, sentences: CopySentence[], dropInd
 
   const walk = (value: unknown, field: string, slot: number): unknown => {
     if (typeof value === "string") return strip(value, `${field}#${slot}`);
-    if (Array.isArray(value)) return value.map((v, i) => walk(v, field, i));
+    // AN ARRAY ELEMENT IS DROPPED, NOT BLANKED, and that is the one
+    // place the "empty not missing" rule above does not apply. An email
+    // whose SUBJECT is removed must arrive with an empty subject the
+    // caller can see; a hashtag whose every word was refused must not
+    // publish as an empty hashtag beside the real ones.
+    if (Array.isArray(value)) return value.map((v, i) => walk(v, field, i)).filter((v) => !(typeof v === "string" && !v.trim()));
     if (value && typeof value === "object") {
       const copy: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {

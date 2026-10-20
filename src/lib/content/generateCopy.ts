@@ -641,14 +641,14 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // the message is not a claim, so no claim check can see it — and
     // "[LICENSE NUMBER NEEDED]" reaching a customer is worse than an
     // unsupported sentence, which is at least addressed to the reader.
-    const notCopy = notCopySentences(sentences.map((s) => s.text));
+    const notCopy = notCopySentences(sentences.map((s) => s.analysed));
     let notCopyNoteText: string | null = null;
     if (notCopy.length) {
       notCopyNoteText = notCopyNote(notCopy, sentences.map((s) => s.text));
       parsed = withoutSentences(parsed, sentences, [...new Set(notCopy.map((f) => f.sentenceIndex))]);
     }
 
-    const introduced = introducedWords(sentences.map((s) => s.text), allowedVocabulary);
+    const introduced = introducedWords(sentences.map((s) => s.analysed), allowedVocabulary);
     let introducedNoteText: string | null = null;
     if (introduced.length) {
       introducedNoteText = introducedNote(introduced, sentences.map((s) => s.text));
@@ -677,8 +677,8 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // material goes to the judge - but nothing can ever license a
     // benefit, so a missed one is simply published.
     const [firstPass, secondNet] = await Promise.all([
-      extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null }),
-      extractUnlicensable(sentences.map((s) => s.text), { logContext: req.logContext ?? null }),
+      extractClaims(sentences.map((s) => s.analysed), { logContext: req.logContext ?? null }),
+      extractUnlicensable(sentences.map((s) => s.analysed), { logContext: req.logContext ?? null }),
     ]);
     let extracted: typeof firstPass =
       firstPass.ok && secondNet.ok
@@ -704,7 +704,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // only fires when the first pass returned nothing at all from copy
     // written out of approved facts.
     if (extracted.ok && validated.approved.length > 0 && extracted.claims.length === 0) {
-      const second = await extractClaims(sentences.map((s) => s.text), {
+      const second = await extractClaims(sentences.map((s) => s.analysed), {
         logContext: req.logContext ?? null,
         model: CLAUDE_MODELS.standard,
       });

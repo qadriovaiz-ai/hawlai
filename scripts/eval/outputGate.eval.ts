@@ -33,6 +33,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { extractClaims, UNLICENSABLE_TYPES, NEEDS_RECIPIENT_RECORD } from "@/lib/facts/extractClaims";
 import { notCopySentences } from "@/lib/content/notCopy";
+import { expandHashtags } from "@/lib/content/copySentences";
 import { WHATSAPP_OPT_OUT } from "@/lib/expertise/channelRules";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
@@ -134,11 +135,15 @@ describe("the output gate", () => {
       for (const s of c.sentences) {
         if (FAILURE_MARKERS.some((re) => re.test(s))) failed.push(c.caseId);
       }
-      for (const f of notCopySentences(c.sentences)) {
+      for (const f of notCopySentences(c.sentences.map(expandHashtags))) {
         notCopyFound.push({ caseId: c.caseId, sentence: c.sentences[f.sentenceIndex] });
       }
 
-      const r = await extractClaims(c.sentences, { logContext: null });
+      // THE SAME OPENED-OUT FORM THE DOOR USES. A gate that hands the
+    // extractor "#SoyWaxOnly" is asking a different question from the
+    // one the pipeline asks, and would clear a run whose tags carry
+    // claims - which is what it did on 2026-10-20.
+    const r = await extractClaims(c.sentences.map(expandHashtags), { logContext: null });
       spent += r.costInr;
       say();
       say(`[${c.caseId}]  ${c.sentences.length} sentence(s)`);

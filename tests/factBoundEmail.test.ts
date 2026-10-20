@@ -407,7 +407,20 @@ describe("6. splitting and re-assembling a piece", () => {
     const result = withoutSentences(output, sentences, [1, 4]);
     expect(result.subject).toBe("One.");
     expect(result.body).toBe("Three. Four.");
-    expect(result.bullets).toEqual(["", "Six."]);
+    // AN EMPTIED ARRAY ELEMENT IS DROPPED, NOT KEPT AS "", and this
+    // assertion said the opposite until 2026-10-20. Changed on the
+    // founder's instruction about hashtags, not to make a change of
+    // mine fit — CLAUDE.md rule 7 cares about which of those it is.
+    //
+    // His point: a hashtag whose every word was refused was publishing
+    // as an EMPTY hashtag beside the real ones. The "empty, not
+    // missing" rule was written for a subject line, where the caller
+    // has to see that it lost its text; a list ITEM carries no such
+    // meaning by being present and blank.
+    //
+    // The test below still pins "empty, not missing" for a string
+    // field, so both halves are covered.
+    expect(result.bullets).toEqual(["Six."]);
     expect(result._factsNote).toBe("Seven.");
   });
 

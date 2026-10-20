@@ -99,7 +99,11 @@ describe("3. what the owner is told", () => {
 describe("4. it runs in the door, before any model call", () => {
   it("THE CHECK IS WIRED AND ITS REMOVALS REACH THE OWNER", () => {
     const src = code("src/lib/content/generateCopy.ts");
-    expect(src).toMatch(/const notCopy = notCopySentences\(sentences\.map\(\(s\) => s\.text\)\)/);
+    // READS .analysed SINCE 2026-10-20, not .text: a hashtag has to be
+    // opened into words before any check can see what is inside it.
+    // The owner's NOTE still quotes .text, because they must see the
+    // line as it was written.
+    expect(src).toMatch(/const notCopy = notCopySentences\(sentences\.map\(\(s\) => s\.analysed\)\)/);
     expect(src).toMatch(/parsed = withoutSentences\(parsed, sentences, \[\.\.\.new Set\(notCopy\.map\(\(f\) => f\.sentenceIndex\)\)\]\)/);
     expect(src).toMatch(/\[notCopyNoteText, introducedNoteText, factBoundNote\]/);
   });

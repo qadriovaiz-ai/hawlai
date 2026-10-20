@@ -24,6 +24,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { pieces } from "@/lib/claims/claimCheck";
 import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import { classifySentence } from "@/lib/facts/sentenceKind";
+import { expandHashtags } from "@/lib/content/copySentences";
 import type { EvalCase } from "./cases";
 
 /**
@@ -208,7 +209,30 @@ export function toGradedRows(
           surface: c.surface,
           field,
           sentence: s,
-          kind: classifySentence(s),
+          // CLASSIFIED ON THE OPENED-OUT FORM, so a hashtag is not
+          // presented to a human grader as "not a claim".
+          //
+          // 26 of the 29 hashtag rows in the social sheet of
+          // 2026-10-20 were labelled `feeling`, because
+          // classifySentence("#SoyWaxOnly") sees one unreadable token.
+          // The grader was therefore never asked to rule on
+          // "#HandPouredInShahjahanpur" or "#SoyWaxOnly" - and that is
+          // why a social sheet could come back clean with claims
+          // sitting in its tags.
+          // A HASHTAG ROW IS ALWAYS PUT TO THE GRADER AS A CLAIM.
+          //
+          // Opening the tag into words is necessary and not sufficient:
+          // "Best In Indore", "Hand Poured In Shahjahanpur" and "Free
+          // Shipping" classify factual once expanded, but "Soy Wax
+          // Only" and "Pure Soy" still do not - the classifier has no
+          // cue for a bare material or a bare booster.
+          //
+          // The field name is information we already have, so it
+          // decides. A tag that turns out to be harmless costs the
+          // grader one glance; a tag that hides a claim costs a false
+          // publication, and 26 of 29 hashtag rows were being labelled
+          // "feeling" before this.
+          kind: field === "hashtags" ? "factual" : classifySentence(expandHashtags(s)),
           availableFacts: available,
           removedByGuard,
           watch: c.watch,
