@@ -238,14 +238,29 @@ But most cases do not need a model at all, and that is the real saving:
 | **2** | Only the cases whose answer needs a **model**: claim typing (B7), extractor recall in a real batch (B11), judge entailment (B4, B8) | **Rs 3–5** | one batched run, before any paid run |
 | **3** | The paid exit run, per surface | Rs 12–17 | **confirmation only, never debugging** |
 
-I expect roughly **200 of the 280 to land in tier 1** — because B1, B3,
-B6, B9, B10, B12, B13, B14, B16 and B17's code half are all decided in
-code, and those shapes account for most of the twenty-six runs. Tier 2 is the ~80 cases
-where a model's judgement is the thing under test.
+**MEASURED, 20 Oct, now that the cases exist.** 287 written; **170 in
+tier 1** and **117 in tier 2**. I estimated 200 free and it is 170, and
+the reason is worth recording: B6 (a figure against the wrong
+authority, 43 cases) and B7 (claim typing, 46 cases) are settled by the
+verifier and the extractor rather than by a per-sentence code check, so
+more cases need a model than I expected.
 
-**Tier 1 is the prize.** It runs on every commit forever, it costs
-nothing, and it would have caught ten of the sixteen shapes before a
-rupee was spent.
+**The tier-2 cost comes out BELOW the Rs 3-5 I asked for**, because only
+117 cases need a call rather than all 287: about ten batched Haiku calls,
+roughly Rs 4. The Rs 28 figure in the paragraph above was the cost of
+model-testing everything, and it is no longer the relevant number.
+
+| | Cases | Cost |
+|---|---|---|
+| Tier 1 — free, every commit | **170** | Rs 0 |
+| Tier 2 — one batched run | **117** | ~Rs 4 |
+| Tier 3 — paid confirmation | per surface | Rs 12-17 each |
+
+**Tier 1 is the prize.** 170 assertions that run on every commit for
+nothing, and they have already found four real bugs before a rupee was
+spent: a hashtag hiding a booster, a rank spelled as a phrase, a
+minimiser excused by the owner's use of the word elsewhere, and an
+owner-recorded fact that never becomes a citable record at all.
 
 ---
 

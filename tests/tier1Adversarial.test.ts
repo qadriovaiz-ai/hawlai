@@ -25,10 +25,16 @@ import { contextFromFacts } from "@/lib/facts/getContext";
 import { WHATSAPP_ADVERSARIAL } from "../scripts/eval/adversarial/whatsapp";
 import { LEAD_MESSAGE_ADVERSARIAL } from "../scripts/eval/adversarial/leadMessage";
 import { SOCIAL_ADVERSARIAL } from "../scripts/eval/adversarial/social";
+import { PRODUCT_DESCRIPTION_ADVERSARIAL } from "../scripts/eval/adversarial/productDescription";
 import { tier1, tier2, type AdversarialCase } from "../scripts/eval/adversarial/types";
 import { SHAPE_IDS, SHAPES, CODE_SHAPES } from "../scripts/eval/shapes";
 
-const ALL: AdversarialCase[] = [...WHATSAPP_ADVERSARIAL, ...LEAD_MESSAGE_ADVERSARIAL, ...SOCIAL_ADVERSARIAL];
+const ALL: AdversarialCase[] = [
+  ...WHATSAPP_ADVERSARIAL,
+  ...LEAD_MESSAGE_ADVERSARIAL,
+  ...SOCIAL_ADVERSARIAL,
+  ...PRODUCT_DESCRIPTION_ADVERSARIAL,
+];
 
 /**
  * The names the lead-message cases use.
@@ -53,7 +59,14 @@ function vocabularyFor(c: AdversarialCase): string[] {
   // task, so scoring a social case against an email's slice measures a
   // context the pipeline would never have had — which is B18, and it
   // cost me a red test on a sentence that was perfectly fine.
-  const kind = c.surface === "lead_message" ? "lead_message" : c.surface === "social" ? "facebook_post" : c.surface;
+  const kind =
+    c.surface === "lead_message"
+      ? "lead_message"
+      : c.surface === "social"
+        ? "facebook_post"
+        : c.surface === "product_description"
+          ? "product_description"
+          : c.surface;
   const ctx = contextFromFacts("biz_eval", c.fixture.facts, { kind: kind as any, topic: c.topic });
   const facts = c.fixture.facts as any;
   return [
