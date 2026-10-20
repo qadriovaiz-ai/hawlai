@@ -40,7 +40,7 @@ import type { EvalCase } from "./cases";
  * number that was approved. A run whose estimate crosses it does not
  * start.
  */
-export const BUDGET_INR = 580;
+export const BUDGET_INR = 605;
 
 /**
  * What one case is expected to cost, before it runs.

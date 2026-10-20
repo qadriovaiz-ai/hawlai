@@ -123,6 +123,7 @@ RULES
 6. When you are unsure, the answer is not entailed. A claim nobody can trace to a fact is the thing this step exists to catch.
 7. TWO FACTS DO NOT ENTAIL A LINK BETWEEN THEM. If the approved facts state A and state B, a claim that A causes B, explains B, proves B or results in B is NOT entailed — the connection is a separate assertion and no fact here makes it. This holds however plausible the mechanism sounds.
 8. SCOPE IS NOT YOURS TO DECIDE. Which facts may be used for which claim has already been settled in code before you see it, so every fact below is CLEARED for the claim it sits with. Never answer "not entailed" on the ground that a fact is about the business in general rather than about one named product — that objection is not available to you. Judge only whether the fact, applied to this claim, states it.
+9. YOU MAY BE SHOWN TWO LISTS, AND BOTH ARE EVIDENCE. The first is the facts chosen for this piece. The second, when it appears, is everything else on record for this business - things the owner has written down that nobody picked for this particular message. A claim supported by the second list is ENTAILED, exactly as if it had been chosen: the owner recorded it, so it is true of their business, and which facts a writer found useful for one message decides nothing about what is true. NEVER answer "not entailed" on the ground that a fact was not chosen for this piece - like rule 8, that objection is not available to you. WHAT DOES NOT CHANGE: the fact must still STATE the claim. A second list is more evidence to read, not a lower standard to meet. Scope still applies exactly as in rule 8 - each fact carries what it covers in square brackets, and a fact covering one product says nothing about another. If neither list states the claim, it is not entailed, and that is the answer however much is on file.
 9. You are deciding MEANING. Is the claim what the fact says, or more than the fact says? That is the whole question.`;
 
 /**
@@ -148,6 +149,43 @@ RULES
  */
 export function approvedForJudge(approved: SelectedClaim[], records: FactRecord[] = []): string {
   return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}${scopeLine(c, records)}`).join("\n");
+}
+
+/**
+ * The records Select did NOT choose for this piece, in the owner's own
+ * words.
+ *
+ * THE FOUNDER'S DECISION OF 2026-10-20, and his reasoning is the whole
+ * of it: SELECT IS CURATION, NOT GATEKEEPING. His rule has always been
+ * that what is in the record may be written. The judge was shown only
+ * the claims Select chose, so the pipeline was enforcing something
+ * narrower - that only what Select CHOSE may be written.
+ *
+ * Run 12 is where the two came apart. dairy-10's copy said "The paneer
+ * is fresh." and the judge removed it: "No approved fact states
+ * anything about the paneer's freshness." It is recorded -
+ * product.paneer_250g.description says "Made fresh every morning" - and
+ * Select had simply picked other facts for a message about delivery. A
+ * true, recorded, product-scoped sentence deleted because of which
+ * facts a model found most useful ten seconds earlier.
+ *
+ * MARKED, NOT MIXED IN. The judge is told which facts were chosen for
+ * this piece and which were merely on file, because the two mean
+ * different things to an owner reading the note afterwards - and
+ * because a claim resting on an unchosen record is exactly the case
+ * worth being able to see later.
+ *
+ * WHAT THIS DOES NOT LOOSEN. Scope is still scope: a record about one
+ * product still says nothing about another, and the rubric's rule 8
+ * still stands. The unlicensable types never reach the judge at all,
+ * and a figure is still decided by arithmetic. This widens the EVIDENCE
+ * the judge may read, not the standard it applies.
+ */
+export function alsoOnRecord(approved: SelectedClaim[], records: FactRecord[]): string {
+  const cited = new Set(approved.flatMap((c) => c.factIds));
+  const rest = records.filter((r) => !cited.has(r.id) && r.value !== null && r.value !== undefined && r.value !== "");
+  if (!rest.length) return "";
+  return rest.map((r) => `- ${r.recordedText}${r.unit ? ` (${r.value} ${r.unit})` : ""} [${describeCoverage(r.key)}]`).join("\n");
 }
 
 /**
@@ -356,6 +394,7 @@ export async function verifyClaims(
   }
 
   const numbered = forJudge.map((c, i) => `[${i}] (${c.claimType}) ${c.canonical}`).join("\n");
+  const unchosen = alsoOnRecord(approved, opts.records ?? []);
   const result = await callClaude(
     {
       model: opts.model ?? CLAUDE_MODELS.fast,
@@ -364,7 +403,18 @@ export async function verifyClaims(
       system: JUDGE_SYSTEM,
       tools: [JUDGE_TOOL],
       tool_choice: { type: "tool", name: JUDGE_TOOL.name },
-      messages: [{ role: "user", content: `Approved facts:\n${approvedForJudge(approved, opts.records ?? [])}\n\nClaims to decide:\n${numbered}` }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            `Facts chosen for this piece:\n${approvedForJudge(approved, opts.records ?? [])}`,
+            unchosen ? `\nAlso on record for this business, but NOT chosen for this piece - evidence just the same:\n${unchosen}` : "",
+            `\nClaims to decide:\n${numbered}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+      ],
     },
     { operation: "claim_entailment", logContext: opts.logContext ?? null, attempts: 2, timeoutMs: 60_000 }
   );

@@ -427,3 +427,104 @@ describe("a figure written into a record's words, not its value", () => {
     expect(r.verdicts[0].verdict).toBe("unsupported");
   });
 });
+
+describe("Select is curation, not gatekeeping", () => {
+  // THE FOUNDER'S DECISION OF 2026-10-20. Run 12's dairy-10 copy said
+  // "The paneer is fresh." and the judge removed it — "No approved fact
+  // states anything about the paneer's freshness." It IS recorded;
+  // Select had simply picked other facts for a message about delivery.
+  //
+  // His rule has always been that what is in the record may be written.
+  // The pipeline was enforcing something narrower: that only what
+  // Select CHOSE may be written. A true, recorded, product-scoped
+  // sentence was deleted because of which facts a model found most
+  // useful ten seconds earlier.
+
+  const rec = (over: Partial<FactRecord>): FactRecord => ({
+    id: "f_x",
+    dealershipId: "biz_1",
+    key: "product.paneer_250g.description",
+    value: "Made fresh every morning",
+    unit: null,
+    source: "catalogue",
+    sourceRef: "products:p1",
+    confidence: "observed",
+    licenses: ["existence", "policy", "process"],
+    recordedText: "Paneer 250g: Made fresh every morning",
+    observedAt: "2026-10-20T00:00:00.000Z",
+    ...over,
+  });
+
+  const chosen = approvedClaim({ claimType: "shipping", value: 50, unit: "inr", intent: "delivery costs ₹50" });
+  const shipRecord = rec({ id: "f1", key: "shipping.rate", value: 50, unit: "inr", recordedText: "shipping is flat ₹50", source: "shipping_config", licenses: ["policy", "value", "existence"] });
+  const freshRecord = rec({
+    id: "f_fresh",
+    key: "product.paneer_250g.description",
+    value: "Made fresh every morning",
+    unit: null,
+    recordedText: "Paneer 250g: Made fresh every morning",
+  });
+
+  it("THE UNCHOSEN RECORDS REACH THE JUDGE, MARKED AS SUCH", async () => {
+    const sent: any[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_verdicts", input: { verdicts: [{ index: 0, entailed: true, why: "it is on record" }] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const r = await verifyClaims(
+      [extracted({ claimType: "material", canonical: "the paneer is fresh", aboutProduct: "paneer" })],
+      [chosen],
+      { records: [shipRecord, freshRecord] }
+    );
+    const prompt = JSON.stringify(sent[0]);
+    expect(prompt).toMatch(/Facts chosen for this piece/);
+    expect(prompt).toMatch(/Also on record for this business, but NOT chosen for this piece/);
+    expect(prompt).toMatch(/Made fresh every morning/);
+    expect(r.verdicts[0].verdict).toBe("entailed");
+  });
+
+  it("alsoOnRecord LEAVES OUT WHAT WAS ALREADY CHOSEN", async () => {
+    const { alsoOnRecord } = await import("@/lib/facts/verifyClaims");
+    const text = alsoOnRecord([chosen], [shipRecord, freshRecord]);
+    // chosen cites f1, so the shipping row must not appear twice.
+    expect(text).toMatch(/Made fresh every morning/);
+    expect(text).not.toMatch(/shipping is flat/);
+  });
+
+  it("AND LEAVES OUT A RECORD WITH NO VALUE — citing an absence is not evidence", async () => {
+    const { alsoOnRecord } = await import("@/lib/facts/verifyClaims");
+    const nothing = rec({ id: "f_null", key: "shipping.mode", value: null, unit: null, recordedText: "nothing is shipped" });
+    expect(alsoOnRecord([], [nothing])).toBe("");
+  });
+
+  it("each unchosen fact carries what it covers, so scope still decides", async () => {
+    const { alsoOnRecord } = await import("@/lib/facts/verifyClaims");
+    expect(alsoOnRecord([], [freshRecord])).toMatch(/\[.+\]/);
+  });
+
+  it("THE RUBRIC SAYS BOTH LISTS ARE EVIDENCE AND THE STANDARD IS UNCHANGED", async () => {
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/facts/verifyClaims.ts");
+    expect(src).toMatch(/YOU MAY BE SHOWN TWO LISTS, AND BOTH ARE EVIDENCE/);
+    expect(src).toMatch(/NEVER answer "not entailed" on the ground that a fact was not chosen for this piece/);
+    // The half that stops this becoming a licence to be lenient.
+    expect(src).toMatch(/A second list is more evidence to read, not a lower standard to meet/);
+    expect(src).toMatch(/If neither list states the claim, it is not entailed/);
+  });
+
+  it("and with no records passed the judge sees one list, exactly as before", async () => {
+    const sent: any[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_verdicts", input: { verdicts: [{ index: 0, entailed: false, why: "nothing states it" }] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    await verifyClaims([extracted({ claimType: "material", canonical: "the paneer is fresh" })], [chosen]);
+    expect(JSON.stringify(sent[0])).not.toMatch(/Also on record/);
+  });
+});
