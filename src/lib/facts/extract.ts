@@ -56,7 +56,15 @@ export type Extraction = {
   records: FactRecord[];
   sentences: ExtractedSentence[];
   /** Rows held back whole, and why — so the owner can see what was skipped. */
-  skipped: { rowTitle: string; reason: "private" | "story" | "empty" }[];
+  /**
+   * Everything that produced no record, with the reason.
+   *
+   * "question" and "cta" were ADDED 2026-10-20. Until then a sentence
+   * the classifier called either one minted nothing and appeared in no
+   * list at all, so it left no trace anywhere — which is how three
+   * misclassified owner facts sat in the eval fixtures unnoticed.
+   */
+  skipped: { rowTitle: string; reason: "private" | "story" | "empty" | "question" | "cta" }[];
   /** Sentences dropped as the owner's motive rather than a fact. */
   droppedMotive: { rowTitle: string; text: string }[];
   /** Sentences dropped because they report someone else's belief, usually to correct it. */
@@ -144,7 +152,57 @@ export function extractFromKnowledge(dealershipId: string, rows: KnowledgeRow[] 
       // it can be cited. It licenses `existence` only — a restatement
       // of what the owner said — and never a number, because the number
       // is exactly the part we failed to read.
-      if (kind === "factual" && !readings.length) {
+      // AND THE SAME FOR A SENTENCE THE CLASSIFIER DID NOT CALL
+      // FACTUAL, which is the bigger half of this and was invisible
+      // until 2026-10-20.
+      //
+      // THE ASYMMETRY WAS REASONED ABOUT IN ONE DIRECTION ONLY.
+      // sentenceKind's own header says "when in doubt: factual",
+      // because in the VERIFICATION direction calling a factual
+      // sentence `feeling` lets an unsupported claim through with no
+      // citation. True. But the same function runs in the EXTRACTION
+      // direction, where calling a factual sentence `feeling` means the
+      // owner's recorded fact NEVER BECOMES A RECORD AT ALL — and
+      // nothing was written down about that.
+      //
+      // Three of the eval fixtures' ten owner rows were landing on the
+      // wrong side of it, each for a missing Hinglish verb form:
+      //
+      //   "Products Korea se aate hain."           the cue list has
+      //                                            se aata, se aati,
+      //                                            not se aate
+      //   "Peanut oil kitchen mein nahi aata."     the refusal list has
+      //                                            nahi karti/karta/
+      //                                            karte, not nahi aata
+      //   "Har batch mein maximum twelve students." a spelled-out
+      //                                            quantity needs a
+      //                                            UNIT, and "students"
+      //                                            is a product noun
+      //                                            that rule 3 rightly
+      //                                            bars from the
+      //                                            classifier
+      //
+      // A recorded batch size, a recorded refusal about peanut oil in a
+      // kitchen, and a recorded supplier country. All three read as
+      // sentences the model had invented, because the record they
+      // should have cited did not exist.
+      //
+      // I AM NOT CHASING CONJUGATIONS. That is B10 — a word list
+      // defeated by the next form — and the classifier has been patched
+      // for Hinglish gaps twice already. The structural answer is that
+      // the FALLBACK should not depend on the classifier being right:
+      // every sentence the owner wrote that is not a question, not a
+      // call to action and not someone else's reported belief becomes a
+      // citable statement, licensed for `existence` only.
+      //
+      // That is safe in the one direction it has to be. `existence` on
+      // a quoted sentence licenses nothing numeric, the judge still has
+      // to find that the words state the claim, and the words are the
+      // OWNER'S — so the worst case is that a business can cite
+      // something it wrote down itself, which is the whole point of the
+      // record layer.
+      const quotable = kind === "factual" ? !readings.length : kind === "feeling";
+      if (quotable) {
         const id = factId(dealershipId, `${sourceRef}#statement`, text);
         ids.push(id);
         records.push({
@@ -178,6 +236,16 @@ export function extractFromKnowledge(dealershipId: string, rows: KnowledgeRow[] 
           observedAt,
         });
       }
+
+      // NOTHING LEAVES WITHOUT AN ACCOUNT OF ITSELF.
+      //
+      // Before this, a sentence the classifier called `cta` or
+      // `question` minted no record and appeared in NO list — not
+      // skipped, not droppedMotive, not droppedBelief. It simply
+      // vanished, and that is why a misclassified fact could sit in
+      // three fixtures for weeks without anybody noticing. F-01 in the
+      // record layer: silence read as nothing-to-see.
+      if (!ids.length) skipped.push({ rowTitle, reason: kind === "question" ? "question" : "cta" });
 
       sentences.push({ rowId, rowTitle, text, kind, readings, factIds: ids });
     }

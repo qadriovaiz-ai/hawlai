@@ -208,9 +208,11 @@ export const SOCIAL_ADVERSARIAL: AdversarialCase[] = [
     shape: "B1", topic: "post about the products used",
     sentence: "Products Korea se aate hain.",
     direction: "must_survive",
-    because: "The owner's own recorded row about where her supplies come from, quoted as she wrote it, and the pipeline cannot cite it.",
-    // A FINDING, NOT A PASSING CASE, and deliberately left without a
-    // code check so the suite does not report it as settled.
+    because: "The owner's own recorded row about where her supplies come from, quoted as she wrote it and now citable.",
+    check: "introducedWords",
+    // FOUND BY THIS CASE AND FIXED ON 2026-10-20, so it is a tier-1
+    // case again rather than a standing finding. The history stays
+    // because it is the best argument this whole plan has.
     //
     // This sentence is the salon's own business_knowledge row, titled
     // "Materials and suppliers". extractFromKnowledge mints NO record
@@ -226,8 +228,9 @@ export const SOCIAL_ADVERSARIAL: AdversarialCase[] = [
     // all sit on that path and which of them drops it needs its own
     // look, not one at the end of a long day.
     //
-    // KEPT IN THE SET because dropping a row to make a suite green is
-    // exactly B18, and the next person to run this should see it.
+    // KEPT IN THE SET while it was broken, because dropping a row to
+    // make a suite green is exactly B18 — and the founder said the same
+    // thing back: never hide a case so the suite looks green.
   }),
   so(27, SALON, "salon", {
     shape: "B9", topic: "post about the products used",

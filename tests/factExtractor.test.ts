@@ -329,9 +329,94 @@ describe("6. extracting from the recorded rows", () => {
     }
   });
 
-  it("A FEELING SENTENCE MINTS NO RECORD", () => {
+  it("A FEELING SENTENCE IS QUOTED, NEVER TYPED", () => {
+    // THIS TEST ASSERTED THE OPPOSITE UNTIL 2026-10-20: that a feeling
+    // sentence mints NO record. It was changed on the founder's
+    // explicit instruction, not to make a change of mine fit, and the
+    // distinction matters because CLAUDE.md rule 7 forbids the second.
+    //
+    // WHAT HE DECIDED, and why. Three of the eval fixtures' ten owner
+    // rows were classifying as `feeling` and therefore minting nothing:
+    // a batch size, a refusal about peanut oil in a kitchen, and a
+    // supplier country. All three then read as invented when copy
+    // stated them, because the record they should have cited did not
+    // exist. His words: if this is happening to other owner notes too,
+    // they will all look invented when they are in fact right.
+    //
+    // THE ASYMMETRY WAS REASONED ABOUT IN ONE DIRECTION ONLY.
+    // sentenceKind says "when in doubt: factual" because in the
+    // VERIFICATION direction a misread fact escapes citation. In the
+    // EXTRACTION direction the same misread loses the owner's fact
+    // entirely, and nothing had been written down about that.
+    //
+    // SO THE SAFETY HALF IS WHAT THIS NOW PINS, and it has more teeth
+    // than the old assertion did: a feeling sentence is QUOTED, with
+    // `existence` only and `observed` confidence, and it is never
+    // given a typed reading. A quoted sentence can license the owner's
+    // own words and nothing else — no number, no policy, no process.
+    // MUTATION M42 STILL SURVIVES, AND I AM SAYING SO RATHER THAN
+    // CLAIMING OTHERWISE. Letting readingsFor run on feeling sentences
+    // changes nothing observable, because the classifier's `feeling`
+    // bucket and readingsFor's typeable set do not currently overlap:
+    // every sentence readings.ts can type carries a cue that makes the
+    // classifier call it factual first.
+    //
+    // So this assertion documents the INTENT and guards a future change
+    // to readings.ts — it is not evidence that the guard bites today. A
+    // test whose mutation survives is worth keeping when the property
+    // matters and worth labelling honestly, which is what this comment
+    // is for.
+    const risky = extractFromKnowledge(TENANT, [
+      { id: "f1", category: "general", title: "Batch size", content: "Har batch mein maximum twelve students." },
+    ] as any);
+    const quoted = risky.records;
+    expect(quoted.length).toBe(1);
+    expect(quoted[0].key).toMatch(/^statement\./);
+    expect(quoted[0].licenses).toEqual(["existence"]);
+
     const feelings = x.sentences.filter((s) => s.kind === "feeling");
-    for (const f of feelings) expect(f.factIds, f.text).toEqual([]);
+    expect(feelings.length).toBeGreaterThan(0);
+    for (const f of feelings) {
+      expect(f.readings, f.text).toEqual([]);
+      for (const id of f.factIds) {
+        const record = x.records.find((r) => r.id === id)!;
+        expect(record.key, f.text).toMatch(/^statement\./);
+        expect(record.licenses, f.text).toEqual(["existence"]);
+        expect(record.confidence, f.text).toBe("observed");
+      }
+    }
+  });
+
+  it("A QUESTION AND A CALL TO ACTION ARE ACCOUNTED FOR, not vanished", () => {
+    // MUTATION M41 SURVIVED my first version of this, which walked the
+    // shared fixture — and after the fix above every sentence in that
+    // fixture mints a record, so the loop had nothing to check. A test
+    // that cannot fail is not a test. Fixing the test, not the report.
+    //
+    // These two kinds still mint nothing, by design, and the point is
+    // that they must now SAY SO. Before 2026-10-20 a sentence the
+    // classifier called `cta` or `question` appeared in no list at all.
+    const only = extractFromKnowledge(TENANT, [
+      { id: "q1", category: "general", title: "Our hours", content: "Kya aap khule ho?" },
+      { id: "q2", category: "general", title: "How to order", content: "Order it on the store page." },
+    ] as any);
+    expect(only.records).toEqual([]);
+    expect(only.skipped.map((k) => k.reason).sort()).toEqual(["cta", "question"]);
+  });
+
+  it("AND NOTHING LEAVES WITHOUT AN ACCOUNT OF ITSELF", () => {
+    // The fault that hid the one above. A sentence that minted no
+    // record used to appear in no list at all — not skipped, not
+    // droppedMotive, not droppedBelief — so a misclassified fact left
+    // no trace anywhere. F-01 in the record layer.
+    for (const s of x.sentences) {
+      if (s.factIds.length) continue;
+      const accounted =
+        x.skipped.some((k) => k.rowTitle === s.rowTitle) ||
+        x.droppedMotive.some((d) => d.text === s.text) ||
+        x.droppedBelief.some((d) => d.text === s.text);
+      expect(accounted, `${s.text} (${s.kind}) produced no record and no account`).toBe(true);
+    }
   });
 
   it("every record belongs to the business it was extracted for", () => {
