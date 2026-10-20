@@ -55,6 +55,35 @@ export async function runCase(c: EvalCase): Promise<CaseResult> {
         note: r.note ?? null,
       };
     }
+    case "product_description": {
+      // S2d. DIFFERENT IN SHAPE FROM EVERY OTHER CASE HERE: the
+      // generator takes an item name and a details string rather than
+      // a topic, and returns three fields - a title, a description and
+      // a list of highlights.
+      //
+      // THE HIGHLIGHTS ARE WHY THIS SURFACE NEEDED ITS OWN THOUGHT. A
+      // bullet list is where a model puts the specifics it could not
+      // fit in prose, so it is exactly where an invented one lands -
+      // and copySentences has to split them as sentences for the
+      // checks to see them at all.
+      const { generateProductDescription } = await import("@/lib/agents/creativeAgent");
+      const item = c.fixture.facts?.products?.[0];
+      const r: any = await generateProductDescription(
+        String(item?.name ?? c.topic),
+        // What the owner would have typed into the box, which is the
+        // product's own recorded description when there is one.
+        String(item?.description ?? ""),
+        null,
+        category,
+        undefined,
+        facts
+      );
+      return {
+        output: { title: r.title, description: r.description, highlights: r.highlights },
+        removed: r.claimsRemoved ?? [],
+        note: r.note ?? null,
+      };
+    }
     default:
       throw new Error(`unknown surface: ${c.surface}`);
   }

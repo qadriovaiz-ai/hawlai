@@ -238,7 +238,15 @@ describe("the S1 exit test", () => {
       expect(base.T).toBe(34);
     }
 
-    if (estimate > PER_RUN_CAP_INR || estimate + spentSoFar > BUDGET_INR) {
+    // A STUB IS NOT A SPEND, SO NO CEILING APPLIES TO IT.
+    //
+    // Found on 2026-10-20 with Rs 6.25 left: the product-description
+    // wiring could not be checked with a free stub run, because the
+    // ceiling test ran before the STUB test and refused it. That is
+    // backwards in the worst possible way - a stub costs nothing, and
+    // the moment it matters MOST is exactly when the budget is almost
+    // gone and no paid run is available to prove a wiring works.
+    if (!STUB && (estimate > PER_RUN_CAP_INR || estimate + spentSoFar > BUDGET_INR)) {
       say("STOPPING: over a ceiling. Nothing was called.");
       return;
     }

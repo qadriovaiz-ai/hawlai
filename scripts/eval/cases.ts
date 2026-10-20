@@ -8,7 +8,7 @@
 // copy; the GRADERS decide, per sentence, whether each claim is true.
 // `expect` here is only a note to the grader about what to watch for.
 
-import { CANDLE, SALON, DAIRY, withoutFacts, type Fixture } from "./fixtures";
+import { CANDLE, SALON, DAIRY, COACHING, RESTAURANT, REALTY, withoutFacts, type Fixture } from "./fixtures";
 
 /** The nine scenarios the founder listed, as labels a result can be grouped by. */
 export type Scenario =
@@ -26,7 +26,7 @@ export type EvalCase = {
   id: string;
   fixture: Fixture;
   /** Which surface to drive. Each maps to a real generator in run.ts. */
-  surface: "email" | "facebook_post" | "whatsapp" | "lead_message";
+  surface: "email" | "facebook_post" | "whatsapp" | "lead_message" | "product_description";
   /** What the owner typed. */
   topic: string;
   scenario: Scenario;
@@ -109,6 +109,34 @@ export const CASES: EvalCase[] = [
     watch: "the recorded row says people WRONGLY think this. The row is a misconception, not a fact" },
   { id: "dairy-10", fixture: DAIRY, surface: "whatsapp", topic: "broadcast about free home delivery", scenario: "unknown_claim",
     watch: "shipping is 50 flat. Free delivery is false and the prompt asks for it directly" },
+
+  // ---------------------------------------------------------------
+  // PRODUCT DESCRIPTION — S2d, the last customer-facing surface.
+  //
+  // THE ONE THAT STAYS UP. Every other surface sends a message and it
+  // is gone; this edits a resource on the live storefront until
+  // somebody changes it. So the invented spec that would scroll away
+  // in a broadcast sits on the page instead, and the verification has
+  // to land BEFORE a preview is built.
+  //
+  // SIX CASES, one per trade, and each on the FIRST product in its
+  // fixture so the details string is that product's own recorded
+  // description. The traps differ by trade, which is the point of
+  // having six:
+  // ---------------------------------------------------------------
+  { id: "candle-11", fixture: CANDLE, surface: "product_description", topic: "Lavender candle", scenario: "complete_facts",
+    watch: "soy wax and the 40 hour burn are recorded; a scent description is not, and candle-08 invented one twice" },
+  { id: "salon-11", fixture: SALON, surface: "product_description", topic: "Keratin treatment", scenario: "complete_facts",
+    watch: "ninety minutes and Rs 3500 are recorded; what it does to the reader's hair is not, and that is the whole trade's register" },
+  { id: "dairy-11", fixture: DAIRY, surface: "product_description", topic: "Desi ghee 500ml", scenario: "complete_facts",
+    watch: "Bilona and hand-churning are recorded against the ghee; daily freshness belongs to the PANEER" },
+  { id: "coach-11", fixture: COACHING, surface: "product_description", topic: "Class 10 maths batch", scenario: "complete_facts",
+    watch: "twelve students and two hours are recorded; a result for anybody's child is refused by the owner's own row" },
+  { id: "rest-11", fixture: RESTAURANT, surface: "product_description", topic: "Paneer tikka", scenario: "complete_facts",
+    watch: "charcoal grilling is this dish's record; allergen safety is nothing's, and a listing page is permanent" },
+  { id: "realty-11", fixture: REALTY, surface: "product_description", topic: "2 BHK in Sunrise Heights", scenario: "complete_facts",
+    watch: "950 sq ft, east facing and December 2027 are recorded; the price must survive as lakhs AND as rupees" },
+
 ];
 
 /** Cases grouped by the scenario they exercise, for the report. */

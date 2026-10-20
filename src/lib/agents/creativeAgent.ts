@@ -54,6 +54,7 @@ import { callClaude } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 // All three generators here write customer-facing copy: one door.
 import { generateCopy } from "@/lib/content/generateCopy";
+import type { TaskKind } from "@/lib/facts/getContext";
 import { type BusinessFacts } from "@/lib/claims/businessFacts";
 
 /**
@@ -79,6 +80,18 @@ async function askThroughDoor(
     maxTokens: number;
     operation: string;
     logContext?: { supabase: any; dealershipId: string };
+    /**
+     * Opt this ONE caller onto the fact-bound pipeline.
+     *
+     * PER-CALLER AND NOT PER-HELPER, deliberately. Three functions
+     * share askThroughDoor - a video script, copy variations and a
+     * product listing - and turning the pipeline on here would turn it
+     * on for all three at once, changing the cost and behaviour of two
+     * surfaces nobody has measured. S2 covers the listing; the other
+     * two wait their turn.
+     */
+    factBound?: boolean;
+    task?: TaskKind;
   }
 ): Promise<any | null> {
   const copy = await generateCopy({
@@ -91,6 +104,8 @@ async function askThroughDoor(
     revise: true,
     language: (opts.brandProfile as any)?.preferred_language ?? opts.facts?.brand?.language ?? null,
     operation: opts.operation,
+    factBound: opts.factBound === true,
+    task: opts.task,
     logContext: opts.logContext,
     maxTokens: opts.maxTokens,
     brief: {
@@ -237,6 +252,24 @@ Details provided: "${details}"`,
     facts,
     maxTokens: 500,
     operation: "product_description",
+    // S2d: the fourth and last customer-facing surface on the
+    // fact-bound pipeline. Does nothing unless FACT_BOUND_COPY=1.
+    //
+    // DIFFERENT IN KIND FROM THE OTHER THREE, as PLAN-S2 §2 said before
+    // any of this was built. The others send a message and it is gone;
+    // this one edits a resource that SITS on the live storefront until
+    // somebody changes it, so an invented spec stays visible rather
+    // than scrolling away. src/lib/publish/ owns that path, and the
+    // verification has to happen BEFORE a preview is built - an owner
+    // approving a preview is approving what they were shown.
+    //
+    // `page_text` because that is what a storefront listing is. The
+    // kind does not change which records are selected - getContext
+    // narrows by TOPIC, not by kind - so this is a label for the owner
+    // and for the sheet rather than a behavioural switch, and it should
+    // say the true thing.
+    factBound: true,
+    task: "page_text",
     logContext,
   });
   if (!parsed) return fallback;
