@@ -627,11 +627,39 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     }
 
     const extracted = await extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null });
-    if (!extracted.ok) {
+    // AN EMPTY EXTRACTION IS NOT A CLEAN ONE, and the eighth S2a run of
+    // 2026-10-20 is why this branch exists.
+    //
+    // salon-04's message said "Rs 3500 mein apke baal soft aur shiny ho
+    // jayenge". That is a benefit claim, benefit is unlicensable, and
+    // the verifier refuses it with no judge call - measured afterwards
+    // on the EXACT five sentences the door sent, for 30 paise: the
+    // extractor reports it and it is refused outright. In the run it
+    // was not removed, because the extractor came back with no claims
+    // at all. No claims means no verdicts, no verdicts means no
+    // removals and no note, and the run printed a clean case.
+    //
+    // THIS IS F-01 IN A NEW PLACE. `facts ? guard() : skip` turned the
+    // claims layer off on a transient read error; here an empty answer
+    // from one model call turned the verifier off, and silence read as
+    // approval. Everything in this pipeline must fail closed, including
+    // its own measurements of itself.
+    //
+    // THE TEST IS THE SELECTION, not a guess about the prose. Select
+    // approved facts and the writer was told to state them, so a piece
+    // whose copy yields NO claim either states nothing factual - in
+    // which case it is a generic piece, which the anti-generic verdict
+    // handles - or was never examined. Marking it unverified is the
+    // only safe reading, and it costs nothing when the copy really is
+    // factless because there is then nothing to publish anyway.
+    const examinedNothing = extracted.ok && validated.approved.length > 0 && extracted.claims.length === 0;
+    if (!extracted.ok || examinedNothing) {
       // UNVERIFIED IS NOT VERIFIED. The copy stands, and it is marked
       // and made unpublishable rather than quietly treated as checked.
       factBoundDegraded = true;
-      factBoundNote = "This could not be checked against your records just now, so it is marked unverified.";
+      factBoundNote = extracted.ok
+        ? "This was written from your records, but the check that reads it back found nothing to check, so it is marked unverified rather than approved."
+        : "This could not be checked against your records just now, so it is marked unverified.";
     } else {
       const verified = await verifyClaims(extracted.claims, validated.approved, { logContext: req.logContext ?? null, records: factRecords });
       factBoundDegraded = verified.degraded;

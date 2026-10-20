@@ -82,6 +82,31 @@ const MUST_NOT = [
   { id: "control-6", text: "Free shipping bhi hai.", why: "a shipping policy" },
 ];
 
+/**
+ * salon-04's SIX SENTENCES FROM RUN 8, exactly as the pipeline sends
+ * them.
+ *
+ * THE REASON THIS BATCH EXISTS. The benefit sentence came back
+ * `benefit` and REFUSED when I sent it with four other test sentences,
+ * for Rs 1.34 — and the same sentence survived run 8 untouched. The
+ * difference is not the rule and not the temperature, which is 0: it is
+ * the BATCH. The extractor sees a whole message at once, and what it
+ * notices in a message is not what it notices in a list of specimens.
+ *
+ * Measuring a rule on a batch the pipeline never sends is the same
+ * mistake as the first recall gate, which measured the OLD prompt's
+ * sentences and cleared a pipeline that then let thirteen claims
+ * through. I made it again in a smaller way.
+ */
+const RUN8_SALON04 = [
+  "Keratin treatment ke liye aao!",
+  "₹3500 mein apke baal soft aur shiny ho jayenge ✨",
+  "Indore mein hum hain.",
+  "Book karo abhi!",
+  "💇",
+  "Reply STOP to stop these messages.",
+];
+
 describe("the three graded F, and the controls for the rules that fix them", () => {
   it("enumerates the benefit and splits the list, without over-firing", async () => {
     const per = costOfClaudeResponseInr({ input_tokens: 2600, output_tokens: 400 }, CLAUDE_MODELS.fast);
@@ -125,6 +150,28 @@ describe("the three graded F, and the controls for the rules that fix them", () 
     const caught = await report("MUST CATCH", MUST_CATCH.map((m) => m.text));
     const controls = await report("CONTROLS — none of these may be a benefit", MUST_NOT.map((m) => m.text));
 
+    // THE SAME SENTENCE, IN THE BATCH THE PIPELINE ACTUALLY SENDS, on
+    // the cheap model it actually uses and on the next one up. If Haiku
+    // misses it in context and Sonnet does not, the fix is a model
+    // choice with a price on it, and that is the founder's call rather
+    // than mine.
+    const inContextFast = await report(`IN CONTEXT - run 8's own six sentences, ${CLAUDE_MODELS.fast}`, RUN8_SALON04);
+    // AND THE FIVE THE DOOR ACTUALLY SEES. The opt-out line is appended
+    // AFTER the door, so the extractor never saw it in run 8 - and a
+    // batch I measure must be the batch the pipeline sends, or I am
+    // back to clearing a pipeline on sentences it never handled.
+    const inDoorFast = await report(`IN THE DOOR - the five before the opt-out line, ${CLAUDE_MODELS.fast}`, RUN8_SALON04.slice(0, 5));
+    const r2 = await extractClaims(RUN8_SALON04, { logContext: null, model: CLAUDE_MODELS.standard });
+    spent += r2.costInr;
+    say("");
+    say(`[IN CONTEXT - the same six, ${CLAUDE_MODELS.standard}]`);
+    const inContextStandard = r2.ok ? r2.claims : [];
+    for (const c of inContextStandard) {
+      const refused = REFUSED.has(c.claimType) ? "  <- REFUSED OUTRIGHT" : "";
+      say(`  - ${c.claimType} "${c.canonical}"${refused}`);
+    }
+    if (!inContextStandard.length) say("  (no claims reported)");
+
     say("");
     say("=".repeat(68));
     const benefits = caught.filter((c) => c.claimType === "benefit");
@@ -138,12 +185,16 @@ describe("the three graded F, and the controls for the rules that fix them", () 
     const overFired = controls.filter((c) => c.claimType === "benefit");
     say(`dairy-10  figure-free area/delivery claims ${areaClaims.length}   (needs >= 1: the coverage must be its own claim)`);
     say(`candle-09 claims about a new arrival       ${arrival.length}   (needs >= 1)`);
+    say(`IN CONTEXT  benefit on ${CLAUDE_MODELS.fast}          ${inContextFast.filter((c) => c.claimType === "benefit").length}   (run 8 says this is 0)`);
+    say(`IN CONTEXT  benefit on ${CLAUDE_MODELS.standard}       ${inContextStandard.filter((c) => c.claimType === "benefit").length}`);
+    say(`IN THE DOOR benefit on ${CLAUDE_MODELS.fast}          ${inDoorFast.filter((c) => c.claimType === "benefit").length}   (this is the batch run 8 sent)`);
+    say(`IN THE DOOR claims of any kind                        ${inDoorFast.length}   (run 8 behaved as if this were 0)`);
     say(`controls  wrongly typed benefit           ${overFired.length}   (must be 0)`);
     for (const c of overFired) say(`           OVER-FIRED: "${c.canonical}"`);
     say(`ACTUAL COST           Rs ${spent.toFixed(2)}`);
     say("=".repeat(68));
 
-    ledger.runs.push({ at: new Date().toISOString(), label: "graded-f extractor gate", inr: Math.round(spent * 100) / 100, calls: 2 });
+    ledger.runs.push({ at: new Date().toISOString(), label: "graded-f extractor gate", inr: Math.round(spent * 100) / 100, calls: 5 });
     ledger.totalInr = Math.round((ledger.totalInr + spent) * 100) / 100;
     writeFileSync(LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
     say(`RUNNING TOTAL         Rs ${ledger.totalInr.toFixed(2)} of Rs ${BUDGET_INR.toFixed(2)}`);

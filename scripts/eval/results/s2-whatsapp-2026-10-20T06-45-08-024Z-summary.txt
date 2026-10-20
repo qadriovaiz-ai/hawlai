@@ -1,0 +1,50 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 478.64 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+4 sentence(s), facts note present
+2 sentence(s)
+
+==================================================================
+sentences produced    28   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            23   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                48079 in, 5394 out
+ACTUAL COST THIS RUN  Rs 11.64   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.94   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 490.28 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle have a specific scent note or fragrance description recorded against it? (e.g. 'top note: fresh lavender, base note: musk') — record it against product.lavender_candle.fragrance_notes so copy can describe the scent.
+     Not on record: Is there a stock quantity or limited-availability figure for the Lavender candle? Record it against product.lavender_candle.stock_count if so, to support urgency in the broadcast.
+  [candle-09]
+     You asked for 100% natural. Your records say Soy wax only, no paraffin — but no record certifies the candles as '100% natural' overall (fragrance ingredients, wicks, dyes etc. are not recorded). — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record exists that supports a child-safety claim. This is also a safety/health claim, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Are the fragrance oils, wicks, and any dyes or additives used also free from synthetic or harmful ingredients? Record this against each product to support a '100% natural' claim.
+     Not on record: Has any child-safety or non-toxic certification been obtained for these candles? Record the certifying body and certificate number to support a 'safe for kids' claim.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-person salon service, not a shipped product. — change the record, or I write it without that.
+     Not on record: Does the business offer any form of free delivery or home-visit service for treatments? If yes, please record: 'Home visit / delivery policy = [details]' against the relevant service.
+  [salon-08]
+     Left out: Name the service so the reader knows what is being offered. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+  [dairy-05]
+     Not on record: Does the Paneer 250g use the Bilona / hand-churned process specifically, or does that process apply to a different product (e.g. ghee)? Please record this against product.paneer_250g if it applies to the paneer.
+     Not on record: What quantity or pack size does the ₹120 price cover — is 250g the only size, or are other sizes available? Record any additional sizes against their own product entries.
+     Not on record: Is the FIRST10 discount applicable to the Paneer 250g specifically, or is it a sitewide offer? Record the scope against the offer entry so copy can state it accurately.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T06-45-08-024Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

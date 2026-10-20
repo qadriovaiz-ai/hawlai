@@ -323,10 +323,27 @@ describe("5. what the owner is told", () => {
     // Nothing rejected, no conflict, no unknown, nothing removed by the
     // verifier — so there is nothing to tell the owner, and an empty
     // note would be noise on every email.
+    //
+    // ITS FIXTURE CHANGED ON 2026-10-20, AND THE ASSERTION DID NOT.
+    //
+    // I wrote this test with the extractor answering `claims: []` —
+    // using "the extractor found nothing" as a stand-in for "nothing
+    // was wrong". The eighth S2a WhatsApp run showed those are not the
+    // same thing: salon-04's benefit claim survived because the
+    // extractor came back empty, so no verdict was reached, so nothing
+    // was removed and no note was written. The run read as clean. An
+    // empty extraction now marks the piece unverified.
+    //
+    // So this fixture was encoding the very assumption the fix removes.
+    // A clean piece is one whose claims were EXAMINED and entailed, and
+    // that is what it now scripts — the assertion is untouched.
     script(
       await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "we never use cheap paraffin wax" }]),
       prose(JSON.stringify({ subject: "Hi", body: "We never use cheap paraffin wax." })),
-      tool("report_claims", { claims: [] }),
+      tool("report_claims", {
+        claims: [{ sentenceIndex: 0, canonical: "the business does not use cheap paraffin wax", claimType: "material", subject: "own_business", polarity: "deny" }],
+      }),
+      tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says exactly this" }] }),
     );
     const r = await generateCopy(request());
     expect(r.output._factsNote).toBeUndefined();

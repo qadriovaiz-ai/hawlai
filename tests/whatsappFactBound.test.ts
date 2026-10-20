@@ -315,3 +315,82 @@ describe("6. the writer is given the real address, not a hole to leave", () => {
     expect(notCopySentences(["Order at https://hawlai.online/site/a-business"])).toEqual([]);
   });
 });
+
+describe("7. an empty extraction is not a clean one", () => {
+  // Run 8, salon-04. The message said "₹3500 mein apke baal soft aur
+  // shiny ho jayenge" — a benefit claim, and benefit is unlicensable,
+  // so the verifier refuses it with no judge call. Measured afterwards
+  // on the exact five sentences the door sent, for 30 paise: the
+  // extractor reports it and it IS refused.
+  //
+  // In the run it was not removed, because the extractor came back with
+  // no claims at all. No claims, no verdicts; no verdicts, no removals
+  // and no note; and the run printed a clean case and offered itself
+  // for grading.
+  //
+  // F-01 in a new place: silence read as approval.
+
+  it("A PIECE WITH APPROVED FACTS AND NO EXTRACTED CLAIMS IS UNVERIFIED", async () => {
+    script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Lavender candle hand-poured hai." })),
+      // The extractor answers, correctly formed, with nothing in it.
+      tool("report_claims", { claims: [] }),
+    );
+    const r = await generateCopy(request());
+    expect(r.publishable).toBe(false);
+    expect(JSON.stringify(r)).toMatch(/found nothing to check/);
+    expect(JSON.stringify(r)).toMatch(/marked unverified rather than approved/);
+  });
+
+  it("THE COPY STILL STANDS — it is marked, not deleted", async () => {
+    // Fail closed means unpublishable, not blank. An owner who loses
+    // the text to a transient model answer has lost real work.
+    //
+    // My first version of this test used "Soy wax only, no cheap
+    // paraffin", which the OLD claims guard removed as a claim about
+    // other people's products — correctly, and nothing to do with this
+    // branch. Recorded because it is a fair reminder that the old guard
+    // is still standing behind this one.
+    script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Lavender candle hand-poured hai." })),
+      tool("report_claims", { claims: [] }),
+    );
+    const r = await generateCopy(request());
+    expect(r.output.message).toContain("hand-poured");
+  });
+
+  it("but a piece with NOTHING APPROVED is not degraded by an empty extraction", async () => {
+    // The branch must not fire on the "no fact was approved" path,
+    // where a factless greeting is the correct output and an empty
+    // extraction is the honest answer.
+    script(
+      await selectPicking([]),
+      prose(JSON.stringify({ message: "Hum yahan hain. Poochh lo." })),
+      tool("report_claims", { claims: [] }),
+    );
+    const r = await generateCopy(request());
+    expect(JSON.stringify(r)).not.toMatch(/found nothing to check/);
+  });
+
+  it("and a normal extraction is untouched", async () => {
+    const { contextFromFacts } = await import("@/lib/facts/getContext");
+    const ctx = contextFromFacts("biz_1", FACTS, { kind: "whatsapp", topic: "broadcast about the lavender candle" });
+    const priceId = ctx.records.find((r) => r.key === "product.lavender_candle.price")!.id;
+    script(
+      tool("select_claims", {
+        claims: [{ id: "c1", claimType: "price", factIds: [priceId], intent: "the candle is ₹999", value: 999, unit: "inr", aboutProduct: "Lavender candle" }],
+        conflicts: [],
+        unknowns: [],
+      }),
+      prose(JSON.stringify({ message: "Lavender candle ₹999 mein." })),
+      tool("report_claims", {
+        claims: [{ sentenceIndex: 0, canonical: "the lavender candle costs ₹999", claimType: "price", subject: "own_product", polarity: "assert", value: { number: 999, unit: "inr" }, aboutProduct: "Lavender candle" }],
+      }),
+    );
+    const r = await generateCopy(request());
+    expect(JSON.stringify(r)).not.toMatch(/found nothing to check/);
+    expect(r.output.message).toMatch(/999/);
+  });
+});

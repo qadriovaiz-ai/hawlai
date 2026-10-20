@@ -48,9 +48,9 @@ export async function generateWhatsappContent(
   facts?: BusinessFacts | null,
   /** "draft" when the owner reviews this before it's used: unverified prices are flagged, not removed. */
   claimsMode: ClaimsMode = "publish"
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean; _incomplete?: boolean }> {
   const meta = WHATSAPP_TASKS.find((t) => t.key === taskKey);
-  if (!meta) return { output: { message: "Unknown task type." }, _fallback: true };
+  if (!meta) return { output: { message: "Unknown task type." }, _fallback: true, _incomplete: true };
 
   const fallback = {
     output: { message: aiFailureMessage("bad_request") },
@@ -105,9 +105,23 @@ ${brandContext}`,
     // the SPECIFIC failure message in it, and
     // tests/aiFailureRest.test.ts asserts the owner reads that
     // rather than "something went wrong".
-    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    // _incomplete TRAVELS OUT, so a caller can tell "nothing was
+    // written" from "something was written badly". The email surface has
+    // done this since 2026-10-16, when an eval read five
+    // unreachable-model cases as fine because nothing threw.
+    //
+    // THIS SURFACE DID NOT, and the eighth S2a run of 2026-10-20 paid
+    // for it: dairy-10 failed closed, its message was "Something went
+    // wrong writing this - try again", and the run printed "CASES THAT
+    // WROTE NOTHING 0 of 6" and offered itself for grading. I wired
+    // this surface into the eval and copied the email case's reading of
+    // _incomplete without giving this agent anything to read. The
+    // founder's rule from 2026-10-16 - an incomplete run must never
+    // read as a clean one - was implemented on one surface only.
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure, _incomplete: copy.incomplete === true };
     if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
-    if (copy._fallback) return fallback;
+    if (copy.incomplete) return { output: copy.output, _fallback: true, _incomplete: true };
+    if (copy._fallback) return { ...fallback, _incomplete: true };
     // The opt-out line goes on AFTER the claims check, so it can never
     // be stripped as a "claim", and on in code so it is never forgotten.
     return {
@@ -119,6 +133,6 @@ ${brandContext}`,
     };
   } catch (err: any) {
     console.error("[whatsapp-marketing-agent] error:", err.message);
-    return fallback;
+    return { ...fallback, _incomplete: true };
   }
 }

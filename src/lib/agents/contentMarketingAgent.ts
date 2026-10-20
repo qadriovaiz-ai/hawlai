@@ -183,9 +183,9 @@ export async function generateContent(
      */
     keepLinks?: boolean;
   } = {}
-): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; revised?: boolean; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean }> {
+): Promise<{ output: any; _fallback?: boolean; _aiFailure?: AiFailureNote; claimsRemoved?: string[]; priceWarnings?: string[]; substantiation?: string[]; revised?: boolean; publishable?: boolean; _cause?: string; _detail?: string; _malformed?: boolean; _incomplete?: boolean }> {
   const meta = CONTENT_TYPES.find((t) => t.key === contentTypeKey);
-  if (!meta) return { output: { text: "Unknown content type." }, _fallback: true };
+  if (!meta) return { output: { text: "Unknown content type." }, _fallback: true, _incomplete: true };
 
   // Said plainly, never a template dressed up as a draft.
   const fallback = { output: { text: aiFailureMessage("bad_request") }, _fallback: true };
@@ -231,9 +231,15 @@ ${sound}`,
         shapeHint: `Return JSON only, no markdown, no preamble. Shape the JSON sensibly for this content type (e.g. use "slides" array for carousels, "days" array for a content calendar, "hooks" array for hook generation, "ctas" array for CTA generation, otherwise a "text" field or clearly-named fields matching the requirements above). Be specific to this business and topic — never generic filler.`,
       },
     });
-    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure };
+    // _incomplete TRAVELS OUT. The eighth S2a run of 2026-10-20 found
+    // this missing on WhatsApp, where a case that failed closed was
+    // counted as a case that ran; the test written for that found it
+    // missing here too, on the surface S2c is going to use. Email had
+    // it since 2026-10-16 and nobody carried it across.
+    if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure, _incomplete: copy.incomplete === true };
     if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
-    if (copy._fallback) return fallback;
+    if (copy.incomplete) return { output: copy.output, _fallback: true, _incomplete: true };
+    if (copy._fallback) return { ...fallback, _incomplete: true };
 
     const linkRuleFor = opts.keepLinks ? "" : contentTypeKey;
     // Enforced, not requested: a real booking link in the facts is exactly
@@ -259,7 +265,7 @@ ${sound}`,
     };
   } catch (err: any) {
     console.error("[content-marketing-agent] error:", err.message);
-    return fallback;
+    return { ...fallback, _incomplete: true };
   }
 }
 
