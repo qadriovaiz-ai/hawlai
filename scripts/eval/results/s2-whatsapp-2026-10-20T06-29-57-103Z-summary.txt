@@ -1,0 +1,55 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 464.54 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+7 sentence(s), facts note present
+5 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    32   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            24   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                49878 in, 5293 out
+ACTUAL COST THIS RUN  Rs 11.71   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.95   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 476.25 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Is free shipping available specifically for the Lavender candle, or does it apply to all orders? Please record the scope against the shipping policy so the copy can be precise.
+     Not on record: Does the business ship outside Shahjahanpur, and if so, to which areas? Record the delivery reach so the broadcast can name it.
+  [candle-09]
+     You asked for 100% natural. Your records say Soy wax only, paraffin-free — the records confirm the wax is soy-based and paraffin-free, but no record certifies the candles as '100% natural' overall (fragrance ingredients, wicks, dyes etc. are not recorded). Claiming '100% natural' goes beyond what the records can support. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record exists that supports a child-safety claim. This is also a safety/health claim, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Are the fragrance oils used skin-safe, phthalate-free, or certified by any body (e.g. IFRA)? Record this against each product to support a fuller 'clean ingredients' claim.
+     Not on record: Are the wicks cotton or wood (i.e. lead-free)? Record the wick material against each product — this is what would actually let you speak to ingredient purity beyond the wax.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-salon service, not a shipped product. — change the record, or I write it without that.
+  [salon-08]
+     Left out: Name the service being advertised so the reader knows what this WhatsApp is about. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+  [dairy-05]
+     Not on record: Stock or order cut-off time: what is the last time a customer can order to receive that day's fresh batch? Record this against the product so the copy can state a deadline.
+     Not on record: Delivery area: which pin codes or localities in Indore does the business currently deliver to? Record this so the copy does not raise false expectations.
+     Removed "The butter is fresh." — No approved fact states anything about butter. All facts concern paneer or the business generally..
+     Removed "The butter was made this morning." — No approved fact states anything about butter. The 'made fresh every morning' fact applies only to paneer 250g..
+     Removed "The butter is hand-churned." — No approved fact states anything about butter. The 'hand-churned' fact applies to what the business makes in general, but there is no claim that the business makes butter..
+     Removed "The butter is made in the traditional way." — No approved fact states anything about butter. The 'Bilona method' fact applies to what the business makes in general, but there is no claim that the business makes butter..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Whether home delivery is available — and if so, to which areas or pin codes within Indore. Please record this as a fact, e.g. 'Home delivery available to all Indore pin codes' or list the specific areas served.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T06-29-57-103Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

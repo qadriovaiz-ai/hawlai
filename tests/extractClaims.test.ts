@@ -424,21 +424,49 @@ describe("9. the two shapes the founder's blind grading caught", () => {
   // sent in the same call and none was wrongly typed `benefit`.
   const src = () => code("src/lib/facts/extractClaims.ts");
 
-  it("A FUTURE STATE OF THE READER'S OWN THING IS A BENEFIT, IN ANY LANGUAGE", () => {
-    expect(src()).toMatch(/A PROMISE THAT SOMETHING OF THE READER'S WILL BECOME SOME WAY IS A BENEFIT CLAIM, IN ANY LANGUAGE/);
-    // The form that escaped: Hinglish carries it in the verb at the end.
-    expect(src()).toMatch(/HINGLISH PUTS IT IN THE VERB AT THE END OF THE SENTENCE/);
-    for (const verb of ["ho jayenge", "ban jayenge", "mehsoos hoga", "dikhega"]) {
-      expect(src()).toContain(verb);
-    }
+  it("THE TEST IS THE SUBJECT OF THE CHANGE, NEVER THE VERB", () => {
+    // Run 7 reworded the salon sentence and walked straight through my
+    // first version of this rule, which listed Hinglish verb endings:
+    // "pa jaao" was not on the list. A word list in disguise — the
+    // thing the founder told me to stop building, built by me one
+    // commit after being told.
+    //
+    // So the rule now leads with the test and the forms are only
+    // illustrations of it.
+    expect(src()).toMatch(/IF THE SENTENCE NAMES A STATE THE READER OR THEIR BELONGINGS WILL BE IN, IT IS A BENEFIT CLAIM/);
+    expect(src()).toMatch(/THE TEST IS THE SUBJECT OF THE CHANGE, NEVER THE VERB/);
+    expect(src()).toMatch(/what is different, and does it belong to the reader or to the seller/);
+  });
+
+  it("A BARE NOUN PHRASE WITH NO VERB IS STILL THE SAME CLAIM", () => {
+    // "₹3500 mein glossy, smooth hair" asserts the outcome without a
+    // verb to catch. Measured: all three wordings now come back as
+    // `benefit` and are refused outright.
+    expect(src()).toMatch(/A BARE NOUN PHRASE COUNTS/);
+    expect(src()).toMatch(/states no verb and promises the same outcome/);
+  });
+
+  it("the failure of my own first version is recorded in the rule", () => {
+    expect(src()).toMatch(/I patched this rule once with a list of verb endings and the next run simply used a different one/);
   });
 
   it("AND THE RULE NAMES WHAT IS NOT ONE, because over-firing is the other failure", () => {
-    // "order ho jayega" and "aapko 10% off milega" are the business
-    // acting, not a change to anything of the reader's. The gate
-    // confirmed both: capability and offer, no benefit.
-    expect(src()).toMatch(/NOT every future verb is a benefit/);
-    expect(src()).toMatch(/The test is whether the thing changing belongs to the reader/);
+    // Six controls were sent in the same gate call and none came back
+    // a benefit: "order ho jayega", "aapko 10% off milega", "delivery
+    // ho jayegi Indore mein", "free shipping bhi hai", a price and a
+    // process claim.
+    expect(src()).toMatch(/NOT A BENEFIT: a state of the THING ITSELF/);
+    expect(src()).toMatch(/anything the BUSINESS will do or give/);
+  });
+
+  it("A FIGURE CLAIM CARRIES NOTHING BUT THE FIGURE", () => {
+    // Mine, not from the grading. The figure path is arithmetic and
+    // never reads the sentence for meaning, so "we charge ₹50 for
+    // delivery across Indore" rode a true ₹50 into an entailed verdict
+    // and the delivery area was never weighed by anything.
+    expect(src()).toMatch(/A CLAIM THAT CARRIES A FIGURE CARRIES NOTHING ELSE/);
+    expect(src()).toMatch(/never examined by anybody unless you report it as its own claim/);
+    expect(src()).toMatch(/every condition, area, guarantee or qualifier beside it as a separate claim with NO figure/);
   });
 
   it("ONE PROPERTY OVER SEVERAL THINGS IS SEVERAL CLAIMS", () => {

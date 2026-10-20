@@ -54,7 +54,22 @@ const REFUSED = new Set<string>([...UNLICENSABLE_TYPES, ...NEEDS_RECIPIENT_RECOR
 /** The graded failures, verbatim. */
 const MUST_CATCH = [
   { id: "salon-04", text: "₹3500 mein apke baal soft aur shiny ho jayenge 💇‍♀️", want: "a benefit claim — the change is to the reader" },
+  // RUN 7 REWORDED IT AND WALKED THROUGH. My first version of rule 6c
+  // listed Hinglish verb endings, so the writer used one that was not
+  // on the list — an imperative, and then a bare noun phrase with no
+  // verb at all. A word list in disguise, which is the thing I was
+  // told to stop building. Both forms stay here for good.
+  { id: "salon-04-run7", text: "₹3500 mein *glossy, smooth hair* pa jaao 💇‍♀️", want: "the same claim in an imperative" },
+  { id: "salon-04-bare", text: "₹3500 mein glossy, smooth hair.", want: "the same claim with no verb at all" },
   { id: "dairy-10", text: "Fresh *desi ghee* and *paneer* now in Indore with flat ₹50 delivery anywhere in the city.", want: "two claims, one per product, so the ghee's has no evidence" },
+  // RUN 7, AND NOT FROM THE GRADING — mine. The figure path is
+  // arithmetic and never reads the sentence for meaning, so "anywhere
+  // in the city" rode into a shipping claim with a correct ₹50 and was
+  // never weighed by anything. Rule 11a splits it.
+  { id: "dairy-10-run7", text: "Just to let you know, we charge ₹50 for delivery across Indore — same rate, no matter what you order.", want: "the rate AND the delivery area, as two claims" },
+  // candle-09 wrote this and the sheet filed it as a feeling, so no
+  // human would have graded it. Nothing records a new arrival.
+  { id: "candle-09-run7", text: "Naye candles aa gaye, aur sab soy wax se banaye hain 🕯️", want: "an availability claim for the new arrival, plus the material claim" },
 ];
 
 /** Must NOT become a benefit claim. Over-firing is the other failure. */
@@ -63,6 +78,8 @@ const MUST_NOT = [
   { id: "control-2", text: "Aapko 10% off milega FIRST10 se.", why: "an offer, not a promise about the reader" },
   { id: "control-3", text: "₹120 for 250g.", why: "a price and a pack size" },
   { id: "control-4", text: "Har ek hand-poured, small batches mein.", why: "a property of the thing (6a)" },
+  { id: "control-5", text: "Delivery ho jayegi Indore mein.", why: "the business delivers; nothing of the reader's changes" },
+  { id: "control-6", text: "Free shipping bhi hai.", why: "a shipping policy" },
 ];
 
 describe("the three graded F, and the controls for the rules that fix them", () => {
@@ -112,11 +129,15 @@ describe("the three graded F, and the controls for the rules that fix them", () 
     say("=".repeat(68));
     const benefits = caught.filter((c) => c.claimType === "benefit");
     const aboutGhee = caught.filter((c) => /ghee/i.test(c.aboutProduct ?? ""));
+    const areaClaims = caught.filter((c) => !c.value && /indore|city|area|deliver/i.test(c.canonical));
+    const arrival = caught.filter((c) => /new|naye|arriv/i.test(c.canonical));
     const aboutPaneer = caught.filter((c) => /paneer/i.test(c.aboutProduct ?? ""));
-    say(`salon-04  benefit claims reported        ${benefits.length}   (needs >= 1)`);
+    say(`salon-04  benefit claims reported        ${benefits.length}   (needs >= 3 — one per wording)`);
     say(`dairy-10  claims naming the ghee          ${aboutGhee.length}`);
     say(`dairy-10  claims naming the paneer        ${aboutPaneer.length}   (both needed: the split is the fix)`);
     const overFired = controls.filter((c) => c.claimType === "benefit");
+    say(`dairy-10  figure-free area/delivery claims ${areaClaims.length}   (needs >= 1: the coverage must be its own claim)`);
+    say(`candle-09 claims about a new arrival       ${arrival.length}   (needs >= 1)`);
     say(`controls  wrongly typed benefit           ${overFired.length}   (must be 0)`);
     for (const c of overFired) say(`           OVER-FIRED: "${c.canonical}"`);
     say(`ACTUAL COST           Rs ${spent.toFixed(2)}`);
