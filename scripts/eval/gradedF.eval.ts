@@ -22,7 +22,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { extractClaims, UNLICENSABLE_TYPES, NEEDS_RECIPIENT_RECORD } from "@/lib/facts/extractClaims";
+import { extractClaims, extractUnlicensable, UNLICENSABLE_TYPES, NEEDS_RECIPIENT_RECORD } from "@/lib/facts/extractClaims";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
 import { BUDGET_INR } from "./harness";
@@ -172,6 +172,45 @@ describe("the three graded F, and the controls for the rules that fix them", () 
     }
     if (!inContextStandard.length) say("  (no claims reported)");
 
+    // THE SECOND NET, on the batches where the main pass has missed.
+    // Four runs published salon-04's benefit claim; the question is
+    // whether one short question catches what a long instruction does
+    // not, on the REAL batches rather than on specimens.
+    const netBatches: { label: string; sentences: string[] }[] = [
+      { label: "run 10 salon-04", sentences: ["Keratin treatment ke liye aao!", "₹3500 mein apke baal smooth aur shiny ho jayenge ✨", "Indore mein hum kar rahe hain."] },
+      { label: "run 8 salon-04", sentences: RUN8_SALON04.slice(0, 5) },
+      // MUST STAY SILENT. A net that reported these would delete a
+      // salon's own broadcast — the mis-typing the output gate found on
+      // run 10 — or a true product property.
+      {
+        label: "controls",
+        sentences: [
+          "We're doing haircuts at 400 for 30 minutes.",
+          "Hamare hand-poured candles soy wax hain.",
+          "Delivery ho jayegi Indore mein.",
+          "Free shipping bhi hai.",
+          "The paneer is fresh.",
+          "Ask us anything!",
+        ],
+      },
+    ];
+    let netBenefit = 0;
+    let netControlNoise = 0;
+    for (const b of netBatches) {
+      const n = await extractUnlicensable(b.sentences, { logContext: null });
+      spent += n.costInr;
+      say("");
+      say(`[SECOND NET — ${b.label}]`);
+      if (!n.ok) {
+        say(`  unreachable: ${n.reason}`);
+        continue;
+      }
+      for (const c of n.claims) say(`  - ${c.claimType} [${c.sentenceIndex}] "${c.canonical}"`);
+      if (!n.claims.length) say("  (nothing reported)");
+      if (b.label === "controls") netControlNoise += n.claims.length;
+      else netBenefit += n.claims.filter((c) => c.claimType === "benefit").length;
+    }
+
     say("");
     say("=".repeat(68));
     const benefits = caught.filter((c) => c.claimType === "benefit");
@@ -189,12 +228,14 @@ describe("the three graded F, and the controls for the rules that fix them", () 
     say(`IN CONTEXT  benefit on ${CLAUDE_MODELS.standard}       ${inContextStandard.filter((c) => c.claimType === "benefit").length}`);
     say(`IN THE DOOR benefit on ${CLAUDE_MODELS.fast}          ${inDoorFast.filter((c) => c.claimType === "benefit").length}   (this is the batch run 8 sent)`);
     say(`IN THE DOOR claims of any kind                        ${inDoorFast.length}   (run 8 behaved as if this were 0)`);
+    say(`SECOND NET  benefits on the two real batches       ${netBenefit}   (needs 2)`);
+    say(`SECOND NET  noise on the controls                  ${netControlNoise}   (must be 0)`);
     say(`controls  wrongly typed benefit           ${overFired.length}   (must be 0)`);
     for (const c of overFired) say(`           OVER-FIRED: "${c.canonical}"`);
     say(`ACTUAL COST           Rs ${spent.toFixed(2)}`);
     say("=".repeat(68));
 
-    ledger.runs.push({ at: new Date().toISOString(), label: "graded-f extractor gate", inr: Math.round(spent * 100) / 100, calls: 5 });
+    ledger.runs.push({ at: new Date().toISOString(), label: "graded-f extractor gate", inr: Math.round(spent * 100) / 100, calls: 8 });
     ledger.totalInr = Math.round((ledger.totalInr + spent) * 100) / 100;
     writeFileSync(LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
     say(`RUNNING TOTAL         Rs ${ledger.totalInr.toFixed(2)} of Rs ${BUDGET_INR.toFixed(2)}`);

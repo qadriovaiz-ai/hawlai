@@ -80,13 +80,45 @@ function script(...bodies: unknown[]) {
   const sent: any[] = [];
   let i = 0;
   globalThis.fetch = (async (_url: any, init: any) => {
-    sent.push(JSON.parse(init.body));
+    const request = JSON.parse(init.body);
+    sent.push(request);
+    // THE SECOND NET ANSWERS ITSELF UNLESS A TEST SAYS OTHERWISE.
+    //
+    // extractUnlicensable (2026-10-20) added a call to every piece, and
+    // scripting it in forty existing tests would have meant renumbering
+    // every one of them — turning a change in the pipeline into a
+    // change in forty unrelated assertions, where a slip is invisible.
+    //
+    // So a request for that tool gets an empty, well-formed answer
+    // here: the net reports nothing, the piece is unaffected, and the
+    // tests that do care about it script it explicitly and are matched
+    // first by the loop below.
+    const wants = request?.tool_choice?.name;
+    const scripted = bodies.find(
+      (b: any) => wants && b && Array.isArray((b as any).content) && (b as any).content.some((c: any) => c?.name === wants)
+    );
+    if (wants === "report_unlicensable" && !scripted) {
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_unlicensable", input: { claims: [] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
     const body = bodies[Math.min(i, bodies.length - 1)];
     i += 1;
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   return sent;
 }
+/**
+ * The calls that asked for one tool, in order.
+ *
+ * BY NAME, NOT BY INDEX. The second net runs beside the main
+ * extraction in a Promise.all, so a position in `sent` is no longer a
+ * stable way to name a step — and it never should have been, since the
+ * number of calls is a thing the pipeline is allowed to change.
+ */
+const asking = (sent: any[], name: string) => sent.filter((c) => c?.tool_choice?.name === name);
+
 const tool = (name: string, input: unknown) => ({ content: [{ type: "tool_use", name, input }], usage: { input_tokens: 10, output_tokens: 5 } });
 const prose = (text: string) => ({ content: [{ type: "text", text }], usage: { input_tokens: 10, output_tokens: 5 } });
 
@@ -143,7 +175,9 @@ describe("2. the routed model", () => {
       tool("report_claims", { claims: [] }),
     );
     await generateCopy(request());
-    expect(sent[2].model).toBe(CLAUDE_MODELS.fast);
+    expect(asking(sent, "report_claims")[0].model).toBe(CLAUDE_MODELS.fast);
+    // And the second net is cheap too — it exists to be cheap.
+    expect(asking(sent, "report_unlicensable")[0].model).toBe(CLAUDE_MODELS.fast);
   });
 });
 
@@ -224,7 +258,10 @@ describe("4. a short message is where a false refusal hurts most", () => {
     );
     const r = await generateCopy(request());
     // The figure is decided by arithmetic, so no judge call is made.
-    expect(sent).toHaveLength(3);
+    expect(asking(sent, "report_verdicts")).toHaveLength(0);
+    expect(asking(sent, "select_claims")).toHaveLength(1);
+    expect(asking(sent, "report_claims")).toHaveLength(1);
+    expect(asking(sent, "report_unlicensable")).toHaveLength(1);
     expect(r.output.message).toMatch(/999/);
   });
 });
@@ -242,12 +279,11 @@ describe("5. a slot or a note never reaches the customer", () => {
     expect(r.output.message).not.toContain("[LICENSE NUMBER NEEDED]");
     expect(r.output.message).not.toMatch(/Cannot finalize/);
     expect(r.output.message).toContain("Soy wax only.");
-    // FOUR CALLS, NOT THREE, since 2026-10-20: the canned extractor
-    // here answers with nothing, which now earns one escalation to
-    // Sonnet before the piece would be degraded. The count is asserted
-    // rather than ignored, because a fifth call would mean the
-    // escalation had started firing on ordinary pieces.
-    expect(sent).toHaveLength(4);
+    // The canned extractor here answers with nothing and so does the
+    // net, which earns one escalation to Sonnet before the piece would
+    // be degraded. Asserted by name: exactly one escalation, never two.
+    expect(asking(sent, "report_claims")).toHaveLength(2);
+    expect(asking(sent, "report_claims")[1].model).toBe(CLAUDE_MODELS.standard);
   });
 
   it("and the owner is told why, in their own words", async () => {
@@ -353,8 +389,10 @@ describe("7. an empty extraction is not a clean one", () => {
     );
     const r = await generateCopy(request());
     // Haiku first, then Sonnet for the retry.
-    expect(sent[2].model).toBe(CLAUDE_MODELS.fast);
-    expect(sent[3].model).toBe(CLAUDE_MODELS.standard);
+    const passes = asking(sent, "report_claims");
+    expect(passes).toHaveLength(2);
+    expect(passes[0].model).toBe(CLAUDE_MODELS.fast);
+    expect(passes[1].model).toBe(CLAUDE_MODELS.standard);
     // And the piece is NOT degraded, because the second pass examined it.
     expect(JSON.stringify(r)).not.toMatch(/found nothing to check/);
     expect(r.output.message).toContain("hand-poured");
@@ -372,8 +410,9 @@ describe("7. an empty extraction is not a clean one", () => {
       tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says hand-poured" }] }),
     );
     await generateCopy(request());
-    // select, write, extract, judge. No fifth call.
-    expect(sent).toHaveLength(4);
+    // One extraction pass, not two: the escalation did not fire.
+    expect(asking(sent, "report_claims")).toHaveLength(1);
+    // Sonnet appears once, for Select.
     expect(sent.filter((c: any) => c.model === CLAUDE_MODELS.standard)).toHaveLength(1);
   });
 
@@ -442,5 +481,129 @@ describe("7. an empty extraction is not a clean one", () => {
     const r = await generateCopy(request());
     expect(JSON.stringify(r)).not.toMatch(/found nothing to check/);
     expect(r.output.message).toMatch(/999/);
+  });
+});
+
+describe("8. the second net, under the four classes nothing can license", () => {
+  // salon-04's "₹3500 mein apke baal soft aur shiny ho jayenge" was
+  // published by runs 6, 7, 8 and 10. Sent on its own the extractor
+  // reports it as `benefit` and the verifier refuses it outright — the
+  // rule is right, and the gate proves it for a rupee. In a real
+  // five-sentence message among a price, a location and a call to
+  // action, the same call at temperature 0 does not mention it.
+  //
+  // A recall failure on a long instruction. No retry can fix it: the
+  // answer is deterministic, so two identical calls are two bills and
+  // one answer.
+  //
+  // extractUnlicensable asks about four classes and nothing else.
+  // Measured on the exact batches those four runs shipped: 2 of 2
+  // found, 0 of 6 controls disturbed.
+
+  it("A CLAIM THE MAIN PASS MISSES IS STILL REMOVED", async () => {
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax candles.\n₹3500 mein apke baal soft ho jayenge." })),
+      // The main pass sees only the honest sentence — the run-10 shape.
+      tool("report_claims", {
+        claims: [{ sentenceIndex: 0, canonical: "the candles are soy wax", claimType: "material", subject: "own_product", polarity: "assert" }],
+      }),
+      // The net sees the one it missed.
+      tool("report_unlicensable", {
+        claims: [{ sentenceIndex: 1, claimType: "benefit", canonical: "the customer's hair will be soft" }],
+      }),
+      tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says soy wax" }] }),
+    );
+    const r = await generateCopy(request());
+    expect(r.output.message).not.toMatch(/baal soft/);
+    expect(r.output.message).toContain("Soy wax candles.");
+    expect(asking(sent, "report_unlicensable")).toHaveLength(1);
+  });
+
+  it("IT RUNS ON THE CHEAP MODEL — that is the whole point of it", async () => {
+    // Sonnet for every extraction would also have worked and would
+    // have raised the cost of every piece the product writes by about
+    // half, to fix a miss in four classes out of fourteen.
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax candles." })),
+      tool("report_claims", {
+        claims: [{ sentenceIndex: 0, canonical: "the candles are soy wax", claimType: "material", subject: "own_product", polarity: "assert" }],
+      }),
+      tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says soy wax" }] }),
+    );
+    await generateCopy(request());
+    expect(asking(sent, "report_unlicensable")[0].model).toBe(CLAUDE_MODELS.fast);
+  });
+
+  it("THE NET FAILING DOES NOT DEGRADE A PIECE THE MAIN PASS READ", async () => {
+    // Fail closed applies to the thing that decides. The net is a
+    // second look at four classes; losing it is not losing the check.
+    let n = 0;
+    globalThis.fetch = (async (_url: any, init: any) => {
+      const request = JSON.parse(init.body);
+      n += 1;
+      if (request?.tool_choice?.name === "report_unlicensable") {
+        return new Response(JSON.stringify({ error: { type: "overloaded_error", message: "overloaded" } }), { status: 529 });
+      }
+      const bodies: Record<string, unknown> = {
+        select_claims: { claims: [{ id: "c1", claimType: "material", factIds: ["x"], intent: "soy wax" }], conflicts: [], unknowns: [] },
+        report_claims: { claims: [] },
+        report_verdicts: { verdicts: [] },
+      };
+      const wants = request?.tool_choice?.name as string | undefined;
+      if (wants) {
+        return new Response(JSON.stringify({ content: [{ type: "tool_use", name: wants, input: bodies[wants] ?? {} }], usage: { input_tokens: 10, output_tokens: 5 } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ message: "Soy wax candles." }) }], usage: { input_tokens: 10, output_tokens: 5 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const r = await generateCopy(request());
+    // The copy stands and the main pass's reading is what decided.
+    expect(r.output.message).toContain("Soy wax candles.");
+    expect(n).toBeGreaterThan(2);
+  });
+
+  it("AND THE MAIN PASS FAILING IS NOT RESCUED BY THE NET", async () => {
+    // MUTATION M25 SURVIVED MY FIRST VERSION OF THIS TEST, which only
+    // grepped the comment that claims the protection. Fixing the test,
+    // not the report - CLAUDE.md rule 2.
+    //
+    // The net reads four claim classes out of fourteen. If it stood in
+    // for a failed main pass, a piece could have its benefit claim
+    // refused, its other ten classes never looked at, and still read as
+    // examined. Unverified is the only honest state.
+    globalThis.fetch = (async (_url: any, init: any) => {
+      const req2 = JSON.parse(init.body);
+      const wants = req2?.tool_choice?.name as string | undefined;
+      // The main extraction is the one that fails.
+      if (wants === "report_claims") {
+        return new Response(JSON.stringify({ error: { type: "overloaded_error", message: "overloaded" } }), { status: 529 });
+      }
+      // And the net succeeds, with something in it.
+      const inputs: Record<string, unknown> = {
+        report_unlicensable: { claims: [{ sentenceIndex: 0, claimType: "benefit", canonical: "the reader will feel better" }] },
+        select_claims: { claims: [{ id: "c1", claimType: "material", factIds: ["x"], intent: "soy wax" }], conflicts: [], unknowns: [] },
+        report_verdicts: { verdicts: [] },
+      };
+      if (wants) {
+        return new Response(
+          JSON.stringify({ content: [{ type: "tool_use", name: wants, input: inputs[wants] ?? {} }], usage: { input_tokens: 10, output_tokens: 5 } }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ message: "Soy wax candles." }) }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const r = await generateCopy(request());
+    expect(r.publishable).toBe(false);
+    expect(JSON.stringify(r)).toMatch(/could not be checked against your records/);
   });
 });

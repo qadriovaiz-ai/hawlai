@@ -323,3 +323,121 @@ function normalise(c: any): ExtractedClaim | null {
 export function needsNoRecord(claim: ExtractedClaim): boolean {
   return UNLICENSABLE_TYPES.includes(claim.claimType) || claim.subject === "competitor";
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// A SECOND NET, ON THE FOUR CLASSES WHERE A MISS CANNOT BE RECOVERED.
+//
+// THE PROBLEM, measured rather than guessed. salon-04's sentence
+// "Rs 3500 mein apke baal soft aur shiny ho jayenge" survived runs 6,
+// 7, 8 and 10. Sent on its own, or in a batch of specimens, the
+// extractor reports it as `benefit` and the verifier refuses it
+// outright — the rule is right and the gate proves it for a rupee. In a
+// real five-sentence message among a price, a location and a call to
+// action, the same call with the same prompt at temperature 0 simply
+// does not mention it. That is a RECALL failure on a long instruction,
+// not a reasoning failure.
+//
+// WHY A RETRY CANNOT FIX IT. Temperature is 0, so asking the same model
+// the same question again returns the same answer. A union of two
+// identical calls is two bills and one answer.
+//
+// WHY NOT JUST USE SONNET. It would work — the gate measured Sonnet
+// reporting the claim twice where Haiku reported it once — and it
+// raises the cost of every piece the product writes by roughly half,
+// to fix a miss in four claim classes out of fourteen.
+//
+// SO: ONE SHORT QUESTION INSTEAD OF A LONGER ANSWER. These four classes
+// are the ones where a miss is unrecoverable, because NO record can
+// ever license them: a missed price is caught by arithmetic against the
+// record, a missed material goes to the judge, but a missed benefit is
+// simply published. This pass asks about nothing else, in about thirty
+// lines instead of two hundred, and its output is unioned with the main
+// extraction.
+//
+// It is a net under the four classes, not a replacement for the
+// extractor. If it and the main pass disagree, both claims stand: the
+// verifier refuses either one, which is the safe direction.
+
+const UNLICENSABLE_TOOL = {
+  name: "report_unlicensable",
+  description: "Report every sentence that promises something to the reader, claims safety, promises the business will act by itself, or compares with anyone else.",
+  input_schema: {
+    type: "object",
+    properties: {
+      claims: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            sentenceIndex: { type: "number", description: "Which sentence, counting from 0." },
+            claimType: { type: "string", enum: ["benefit", "safety", "capability", "comparison"] },
+            canonical: { type: "string", description: "The claim in plain English, one sentence." },
+          },
+          required: ["sentenceIndex", "claimType", "canonical"],
+        },
+      },
+    },
+    required: ["claims"],
+  },
+} as const;
+
+const UNLICENSABLE_SYSTEM = `You are given the sentences of one marketing message. Find every sentence that makes one of FOUR kinds of claim, and nothing else. Ignore prices, products, materials, methods, offers, delivery, opening hours and everything else — they are someone else's job.
+
+1. "benefit" — IT PROMISES SOMETHING TO THE READER. The test is the subject of the change: after this sentence, what is different, and does it belong to the READER or to the seller? "your <thing> will be <quality>", "get <quality> <thing>", "<quality> <thing> in one visit", "you will feel", "you will notice", and the same thing with no verb at all — "<price> mein <quality> <thing>". In Hinglish the promise is usually the last word: "ho jayenge", "ban jayenge", "lagega", "mehsoos hoga", "pa jaao", "paao". A state of the THING is not this: "it is fresh", "it burns for 40 hours", "it is hand-poured" are about the product, not about the reader.
+
+2. "safety" — IT SAYS SOMETHING IS SAFE, gentle, non-toxic, or suitable for babies, children, pregnancy or sensitive skin. Saying what is or is not IN something is not this.
+
+3. "capability" — IT SAYS THE BUSINESS WILL ACT BY ITSELF, unasked, on the reader's behalf: remind, rebook, renew, follow up, deliver automatically, keep track. Selling a service is NOT this — "we offer <service>", "we do <service>", "<service> available" only say what is for sale. Being willing or available is not this either: "ask us anything", "we are here", "poochh lo".
+
+4. "comparison" — IT MEASURES THE BUSINESS AGAINST ANYONE ELSE: better than, unlike, cheaper than, the best in <place>, longer-lasting than.
+
+Report each one with the sentence's index. If a sentence makes none of these four, say nothing about it. An empty list is a perfectly good answer.`;
+
+/**
+ * The four unlicensable classes, asked about on their own.
+ *
+ * Returns claims in the same shape as the main extraction, so the two
+ * can be unioned. `subject` and `polarity` are filled in with the only
+ * values that matter here — these claims are refused whatever they say.
+ */
+export async function extractUnlicensable(
+  sentences: string[],
+  opts: { logContext?: { supabase: any; dealershipId: string } | null; model?: string } = {}
+): Promise<ExtractResult> {
+  const clean = sentences.map((s) => String(s ?? "").trim());
+  if (!clean.some(Boolean)) return { ok: true, claims: [], costInr: 0 };
+
+  const result = await callClaude(
+    {
+      model: opts.model ?? CLAUDE_MODELS.fast,
+      temperature: 0,
+      max_tokens: 1000,
+      system: UNLICENSABLE_SYSTEM,
+      tools: [UNLICENSABLE_TOOL],
+      tool_choice: { type: "tool", name: UNLICENSABLE_TOOL.name },
+      messages: [{ role: "user", content: clean.map((s, i) => `[${i}] ${s}`).join("\n") }],
+    },
+    { operation: "claim_extraction", logContext: opts.logContext ?? null, attempts: 2, timeoutMs: 60_000 }
+  );
+
+  if (!result.ok) return { ok: false, reason: result.failure.message, costInr: 0 };
+  const block = (result.data?.content ?? []).find((c: any) => c?.type === "tool_use" && c?.name === UNLICENSABLE_TOOL.name);
+  if (!block) return { ok: false, reason: "the model did not use the tool", costInr: result.costInr };
+
+  const claims: ExtractedClaim[] = (Array.isArray(block.input?.claims) ? block.input.claims : [])
+    .map((c: any): ExtractedClaim | null => {
+      const claimType = (["benefit", "safety", "capability", "comparison"] as ClaimType[]).find((t) => t === c?.claimType);
+      const index = Number(c?.sentenceIndex);
+      if (!claimType || !Number.isInteger(index) || index < 0 || index >= clean.length) return null;
+      return {
+        sentenceIndex: index,
+        canonical: String(c?.canonical ?? "").trim() || `a ${claimType} claim`,
+        claimType,
+        subject: claimType === "comparison" ? "competitor" : "own_product",
+        polarity: "assert",
+      };
+    })
+    .filter((c: ExtractedClaim | null): c is ExtractedClaim => c !== null);
+
+  return { ok: true, claims, costInr: result.costInr };
+}

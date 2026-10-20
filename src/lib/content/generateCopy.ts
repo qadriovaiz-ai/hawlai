@@ -64,7 +64,7 @@ import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import type { FactRecord } from "@/lib/facts/factRecord";
 import { selectClaims, type SelectedClaim, type Selection } from "@/lib/facts/selectClaims";
 import { validateSelection, validationNote, type Validated } from "@/lib/facts/validateSelection";
-import { extractClaims } from "@/lib/facts/extractClaims";
+import { extractClaims, extractUnlicensable } from "@/lib/facts/extractClaims";
 import { verifyClaims, verifyNote } from "@/lib/facts/verifyClaims";
 import { copySentences, withoutSentences } from "@/lib/content/copySentences";
 import { introducedWords, introducedNote } from "@/lib/content/introducedWords";
@@ -626,7 +626,39 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       parsed = withoutSentences(parsed, sentences, [...new Set(introduced.map((f) => f.sentenceIndex))]);
     }
 
-    let extracted = await extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null });
+    // TWO PASSES, AND THE SECOND ASKS ONE SHORT QUESTION.
+    //
+    // salon-04's "Rs 3500 mein apke baal ... ho jayenge" was published
+    // by runs 6, 7, 8 and 10. The rule that should catch it is right -
+    // sent on its own the extractor reports it as `benefit` and the
+    // verifier refuses it outright - but in a real five-sentence
+    // message among a price, a location and a call to action, the same
+    // call at temperature 0 does not mention it. A recall failure on a
+    // long instruction, which no retry can fix because the answer is
+    // deterministic.
+    //
+    // extractUnlicensable asks about four classes and nothing else, in
+    // thirty lines instead of two hundred. Measured on the exact
+    // batches those four runs shipped: 2 of 2 found, and nothing at all
+    // on six controls including "The paneer is fresh.", "We're doing
+    // haircuts at 400" and "Ask us anything!".
+    //
+    // THE FOUR ARE THE ONES WHERE A MISS IS UNRECOVERABLE. A missed
+    // price is caught by arithmetic against the record, a missed
+    // material goes to the judge - but nothing can ever license a
+    // benefit, so a missed one is simply published.
+    const [firstPass, secondNet] = await Promise.all([
+      extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null }),
+      extractUnlicensable(sentences.map((s) => s.text), { logContext: req.logContext ?? null }),
+    ]);
+    let extracted: typeof firstPass =
+      firstPass.ok && secondNet.ok
+        ? { ok: true, claims: [...firstPass.claims, ...secondNet.claims], costInr: firstPass.costInr + secondNet.costInr }
+        : // THE NET FAILING DOES NOT DEGRADE A PIECE THE MAIN PASS READ,
+          // and the main pass failing is not rescued by the net: it
+          // reads four classes out of fourteen, so on its own it would
+          // mean "nothing else was checked".
+          firstPass;
     // AND IF IT SAW NOTHING, ASK A BETTER MODEL ONCE BEFORE GIVING UP.
     //
     // The output gate of 2026-10-20 caught the extractor doing two

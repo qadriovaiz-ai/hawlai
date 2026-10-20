@@ -119,8 +119,19 @@ describe("fix 2 — the extractor sees both claims in one sentence", () => {
   it("the rules are numbered without a gap or a repeat", () => {
     // They were renumbered twice while being added, and a prompt with
     // two rule 10s is a prompt the model reads once.
-    const numbers = [...src().matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
+    //
+    // SCOPED TO THE MAIN PROMPT ON 2026-10-20, because the file now
+    // holds a second one. extractUnlicensable asks about four claim
+    // classes in a list of its own, numbered 1 to 4, so grepping the
+    // whole file for numbered lines found 1-4 twice and read as a
+    // repeat. The assertion is unchanged; what it reads is now the
+    // prompt it was always about.
+    const body = src();
+    const main = body.slice(body.indexOf("const SYSTEM = "), body.indexOf("const UNLICENSABLE_TOOL"));
+    expect(main.length).toBeGreaterThan(1000);
+    const numbers = [...main.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
     const inPrompt = numbers.filter((n) => n <= 14);
+    expect(inPrompt.length).toBeGreaterThan(10);
     expect(new Set(inPrompt).size).toBe(inPrompt.length);
   });
 });

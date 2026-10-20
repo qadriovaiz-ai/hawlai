@@ -66,13 +66,45 @@ function script(...bodies: unknown[]) {
   const sent: any[] = [];
   let i = 0;
   globalThis.fetch = (async (_url: any, init: any) => {
-    sent.push(JSON.parse(init.body));
+    const request = JSON.parse(init.body);
+    sent.push(request);
+    // THE SECOND NET ANSWERS ITSELF UNLESS A TEST SAYS OTHERWISE.
+    //
+    // extractUnlicensable (2026-10-20) added a call to every piece, and
+    // scripting it in forty existing tests would have meant renumbering
+    // every one of them — turning a change in the pipeline into a
+    // change in forty unrelated assertions, where a slip is invisible.
+    //
+    // So a request for that tool gets an empty, well-formed answer
+    // here: the net reports nothing, the piece is unaffected, and the
+    // tests that do care about it script it explicitly and are matched
+    // first by the loop below.
+    const wants = request?.tool_choice?.name;
+    const scripted = bodies.find(
+      (b: any) => wants && b && Array.isArray((b as any).content) && (b as any).content.some((c: any) => c?.name === wants)
+    );
+    if (wants === "report_unlicensable" && !scripted) {
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_unlicensable", input: { claims: [] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
     const body = bodies[Math.min(i, bodies.length - 1)];
     i += 1;
     return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   return sent;
 }
+
+/**
+ * The calls that asked for one tool, in order.
+ *
+ * BY NAME, NOT BY INDEX. The second net runs beside the main
+ * extraction in a Promise.all, so a position in `sent` is no longer a
+ * stable way to name a step — and it never should have been, since how
+ * many calls the pipeline makes is a thing it is allowed to change.
+ */
+const asking = (sent: any[], name: string) => sent.filter((c) => c?.tool_choice?.name === name);
 
 const tool = (name: string, input: unknown) => ({ content: [{ type: "tool_use", name, input }], usage: { input_tokens: 10, output_tokens: 5 } });
 const prose = (text: string) => ({ content: [{ type: "text", text }], usage: { input_tokens: 10, output_tokens: 5 } });
@@ -206,7 +238,9 @@ describe("3. the claim the founder named — customer_state", () => {
       tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the approved fact says so" }] }),
     );
     const r = await generateCopy(request());
-    expect(sent).toHaveLength(4);
+    // select, write, extract (+ the second net beside it), judge.
+    expect(asking(sent, "report_claims")).toHaveLength(1);
+    expect(asking(sent, "report_verdicts")).toHaveLength(1);
     expect(r.output.subject ?? "").not.toMatch(/on its way/);
     // The honest claim beside it survives.
     expect(r.output.body).toMatch(/paraffin/);
@@ -230,8 +264,12 @@ describe("3b. the judge is shown the records, not a paraphrase", () => {
         tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says so" }] }),
       );
       await generateCopy(request());
-      expect(sent).toHaveLength(4);
-      const judgePrompt = JSON.stringify(sent[3]);
+      // select, write, extract (+ the second net beside it), judge.
+      expect(asking(sent, "report_claims")).toHaveLength(1);
+      expect(asking(sent, "report_verdicts")).toHaveLength(1);
+      // BY NAME, because the second net now runs beside the main
+      // extraction and index 3 is no longer the judge.
+      const judgePrompt = JSON.stringify(asking(sent, "report_verdicts")[0]);
       // The owner's own words, in their own language.
       expect(judgePrompt).toMatch(/Kabhi sasta paraffin wax mix nahi karti/);
       expect(judgePrompt).toMatch(/recorded as:/);
