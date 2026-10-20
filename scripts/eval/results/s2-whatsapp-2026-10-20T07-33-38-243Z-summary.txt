@@ -1,0 +1,57 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 510.59 of Rs 560.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+5 sentence(s), facts note present
+7 sentence(s), facts note present
+4 sentence(s), facts note present
+4 sentence(s), facts note present
+3 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    28   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            26   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                52627 in, 5414 out
+ACTUAL COST THIS RUN  Rs 12.02   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.00   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 522.61 of Rs 560.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Is free shipping available specifically for the Lavender candle, or does it apply to all orders? Please record the scope against the shipping policy so the copy can be precise.
+     Not on record: Does the business ship outside Shahjahanpur, and if so, to which areas? Record the delivery reach so the broadcast can name it.
+     Removed "The hand-poured candles are made only from soy." — Fact states 'soy wax only' but does not specify that hand-poured candles are made ONLY from soy — it could include wicks, fragrance, or other components. The fact is about material composition but is not specific enough to support 'only soy.'.
+  [candle-09]
+     You asked for Candles are safe for kids. Your records say No record exists that establishes child-safety testing, certification, or any safety claim. Rule 6 also prohibits selecting safety claims regardless of records. — change the record, or I write it without that.
+     You asked for Candles are 100% natural. Your records say Records confirm soy wax only and no paraffin, but no record uses the phrase '100% natural' or covers fragrance ingredients, wicks, dyes, or other components that would be needed to support a blanket '100% natural' claim. The copy can truthfully say soy wax, paraffin-free — not '100% natural'. — change the record, or I write it without that.
+     Not on record: Are the fragrances used phthalate-free, skin-safe, or otherwise certifiably natural? Record the fragrance type and source against each product so a natural-ingredients claim can be made completely.
+     Not on record: Do the candles carry any child-safety or toy-safety certification, or have they been tested for use around children? Record the certification body and number if so — without this, a 'safe for kids' claim cannot be made.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-salon service, not a shipped product. — change the record, or I write it without that.
+  [salon-08]
+     Left out: Name the service so the reader knows what is being offered. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     This was written from your records, but the check that reads it back found nothing to check, so it is marked unverified rather than approved.
+  [dairy-05]
+     Not on record: Stock or order cut-off time: what is the last time a customer can order to receive that day's fresh batch? Record this against the product so the copy can state a deadline.
+     Not on record: Delivery area: which pin codes or localities in Indore does the business currently deliver to? Record this so the copy does not raise false expectations.
+     Removed "The butter is fresh." — No approved fact states anything about butter or its freshness. The freshness claim is specific to paneer 250g..
+     Removed "The butter was hand-churned this morning." — No approved fact states that butter was hand-churned this morning. Hand-churning is mentioned as a general business practice, but not tied to butter or to a specific time..
+     Removed "The butter is made using the bilona method." — No approved fact states that butter is made using the bilona method. Bilona method is mentioned as a general business practice, but not specifically about butter..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping is a flat ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Does the business deliver to all areas of Indore, or only certain pin codes / localities? Please record the exact delivery coverage so the copy can state it accurately.
+     Removed "The business delivers across Indore." — Approved facts state the business is in Indore, but not that it delivers across Indore. Location of the business does not entail delivery coverage area..
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T07-33-38-243Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

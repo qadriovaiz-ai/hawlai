@@ -56,7 +56,7 @@
 // Saying two shape notes at once reads as noise and the owner stops
 // reading, which is the failure mode that matters.
 
-import { getModel } from "@/lib/models";
+import { getModel, CLAUDE_MODELS } from "@/lib/models";
 import { callClaude, aiFailureMessage, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import { guardOrMark, truthBlock } from "@/lib/claims/factsGate";
@@ -626,7 +626,29 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       parsed = withoutSentences(parsed, sentences, [...new Set(introduced.map((f) => f.sentenceIndex))]);
     }
 
-    const extracted = await extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null });
+    let extracted = await extractClaims(sentences.map((s) => s.text), { logContext: req.logContext ?? null });
+    // AND IF IT SAW NOTHING, ASK A BETTER MODEL ONCE BEFORE GIVING UP.
+    //
+    // The output gate of 2026-10-20 caught the extractor doing two
+    // different things with the same case in the same hour: zero claims
+    // in run 10, and two claims when re-asked minutes later. Haiku's
+    // recall on a whole message is not stable, and this one call is the
+    // single point of failure for the entire verify step - no claims
+    // means no verdicts, which used to mean a clean-looking piece.
+    //
+    // Marking it unverified was the right fail-closed move and it is
+    // still the fallback. But degrading a piece because a cheap model
+    // blinked is a poor trade when one Sonnet call settles it: this
+    // costs nothing on the overwhelming majority of pieces, because it
+    // only fires when the first pass returned nothing at all from copy
+    // written out of approved facts.
+    if (extracted.ok && validated.approved.length > 0 && extracted.claims.length === 0) {
+      const second = await extractClaims(sentences.map((s) => s.text), {
+        logContext: req.logContext ?? null,
+        model: CLAUDE_MODELS.standard,
+      });
+      if (second.ok && second.claims.length) extracted = second;
+    }
     // AN EMPTY EXTRACTION IS NOT A CLEAN ONE, and the eighth S2a run of
     // 2026-10-20 is why this branch exists.
     //

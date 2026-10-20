@@ -1,0 +1,50 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-whatsapp-2026-10-20T07-33-38-243Z.json
+cases                6
+sentences            22   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 522.61 of Rs 560.00
+====================================================================
+
+[candle-04]  4 sentence(s)
+      duration "The candle burns for 40 hours."
+      shipping "Shipping is free."
+
+[candle-09]  6 sentence(s)
+      material "The candles are made from soy wax."
+      material "The candles do not contain paraffin."
+      process "The candles are hand-poured."
+      process "The candles are made in small batches."
+      shipping "Shipping is free."
+
+[salon-04]  3 sentence(s)
+  *** benefit "For ₹3500, the customer's hair will become smooth and shiny."   <- SHOULD HAVE BEEN REMOVED
+      price "The keratin treatment costs ₹3500."
+      availability "The business is located in Indore."
+
+[salon-08]  3 sentence(s)
+  *** capability "The business offers keratin treatment."   <- SHOULD HAVE BEEN REMOVED
+  *** capability "The business offers fresh haircuts."   <- SHOULD HAVE BEEN REMOVED
+
+[dairy-05]  2 sentence(s)
+      offer "A 10% discount applies to the first order in Indore."
+      offer "The 10% discount applies to orders in Indore."
+
+[dairy-10]  4 sentence(s)
+      availability "Desi ghee is stocked in Indore"
+      availability "Fresh paneer is stocked in Indore"
+      offer "The customer receives 10% off their first order"
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   3
+   [salon-04] benefit — "For ₹3500, the customer's hair will become smooth and shiny."
+   [salon-08] capability — "The business offers keratin treatment."
+   [salon-08] capability — "The business offers fresh haircuts."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 2.53
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

@@ -242,7 +242,12 @@ describe("5. a slot or a note never reaches the customer", () => {
     expect(r.output.message).not.toContain("[LICENSE NUMBER NEEDED]");
     expect(r.output.message).not.toMatch(/Cannot finalize/);
     expect(r.output.message).toContain("Soy wax only.");
-    expect(sent).toHaveLength(3);
+    // FOUR CALLS, NOT THREE, since 2026-10-20: the canned extractor
+    // here answers with nothing, which now earns one escalation to
+    // Sonnet before the piece would be degraded. The count is asserted
+    // rather than ignored, because a fifth call would mean the
+    // escalation had started firing on ordinary pieces.
+    expect(sent).toHaveLength(4);
   });
 
   it("and the owner is told why, in their own words", async () => {
@@ -330,11 +335,56 @@ describe("7. an empty extraction is not a clean one", () => {
   //
   // F-01 in a new place: silence read as approval.
 
+  it("A ZERO-CLAIM EXTRACTION IS ASKED AGAIN, ON A BETTER MODEL", async () => {
+    // The output gate of 2026-10-20 caught the extractor doing two
+    // different things with the same case in the same hour: zero claims
+    // in run 10, two claims when re-asked minutes later. One cheap call
+    // is the single point of failure for the whole verify step, so it
+    // gets one escalation before the piece is degraded.
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Lavender candle hand-poured hai." })),
+      tool("report_claims", { claims: [] }),
+      // The second pass, on Sonnet, sees it.
+      tool("report_claims", {
+        claims: [{ sentenceIndex: 0, canonical: "the candle is hand-poured", claimType: "process", subject: "own_product", polarity: "assert" }],
+      }),
+      tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says hand-poured" }] }),
+    );
+    const r = await generateCopy(request());
+    // Haiku first, then Sonnet for the retry.
+    expect(sent[2].model).toBe(CLAUDE_MODELS.fast);
+    expect(sent[3].model).toBe(CLAUDE_MODELS.standard);
+    // And the piece is NOT degraded, because the second pass examined it.
+    expect(JSON.stringify(r)).not.toMatch(/found nothing to check/);
+    expect(r.output.message).toContain("hand-poured");
+  });
+
+  it("IT ONLY FIRES ON A ZERO-CLAIM PASS, never on an ordinary one", async () => {
+    // A second call on every piece would double the extraction cost of
+    // the whole product. This must stay rare.
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Lavender candle hand-poured hai." })),
+      tool("report_claims", {
+        claims: [{ sentenceIndex: 0, canonical: "the candle is hand-poured", claimType: "process", subject: "own_product", polarity: "assert" }],
+      }),
+      tool("report_verdicts", { verdicts: [{ index: 0, entailed: true, why: "the record says hand-poured" }] }),
+    );
+    await generateCopy(request());
+    // select, write, extract, judge. No fifth call.
+    expect(sent).toHaveLength(4);
+    expect(sent.filter((c: any) => c.model === CLAUDE_MODELS.standard)).toHaveLength(1);
+  });
+
   it("A PIECE WITH APPROVED FACTS AND NO EXTRACTED CLAIMS IS UNVERIFIED", async () => {
     script(
       await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
       prose(JSON.stringify({ message: "Lavender candle hand-poured hai." })),
-      // The extractor answers, correctly formed, with nothing in it.
+      // The extractor answers, correctly formed, with nothing in it —
+      // twice, because the second pass on Sonnet is now asked before
+      // the piece is degraded.
+      tool("report_claims", { claims: [] }),
       tool("report_claims", { claims: [] }),
     );
     const r = await generateCopy(request());
