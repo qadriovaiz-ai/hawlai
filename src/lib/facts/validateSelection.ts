@@ -49,7 +49,32 @@ export const LICENCE_FOR_CLAIM: Partial<Record<ClaimType, FactLicence>> = {
   // grants as policy — and the rate, which it grants as value. Policy is
   // the weaker requirement, and the figure is checked separately below.
   shipping: "policy",
-  availability: "policy",
+  // AVAILABILITY MEANS "WE SELL THIS", AND A CATALOGUE ROW IS THE
+  // RECORD OF IT. Four runs paid for this line.
+  //
+  // It required "policy", which only the shipping config and the
+  // owner's own statements grant - so an availability claim citing a
+  // product or service row was always refused, however real the row.
+  // The owner's note read "Left out: Name the service so the reader
+  // knows what is being offered" in runs 7, 9, 10, 11 and 12, and in
+  // run 12 it went further: salon-04 had NOTHING approved, so the
+  // writer's two true sentences - "Keratin treatment is available" and
+  // "Haircut is available" - were both removed for having no fact
+  // behind them. A salon could not say what it does for a living.
+  //
+  // Rule 7b in the extractor draws the line this depends on: selling a
+  // service is `availability`, while the business acting by itself,
+  // unasked, is `capability`, which nothing can license.
+  //
+  // WHAT THIS ACCEPTS, stated rather than discovered later: "in stock
+  // today" and "we sell this" are one claim type, so a catalogue
+  // listing now licenses the stronger reading too. Inventory is not
+  // tracked anywhere in this product, so the alternative was deleting
+  // every true sentence about what a business offers - which is what
+  // has been happening. Same shape as the `duration: "existence"` fix
+  // of 2026-10-16, and the same reasoning: the licence has to match
+  // what the record actually is.
+  availability: "existence",
   credential: "existence",
   material: "existence",
   process: "process",

@@ -191,6 +191,14 @@ describe("the three graded F, and the controls for the rules that fix them", () 
           "Free shipping bhi hai.",
           "The paneer is fresh.",
           "Ask us anything!",
+          // ADDED AFTER RUN 12, where the net reported "You will get
+          // 10% off your first order in Indore." as a benefit and a
+          // true recorded discount was cut from the message. My
+          // control set had no offer-to-the-reader sentence in it,
+          // which is the hole that let my own net over-fire.
+          "You will get 10% off your first order in Indore.",
+          "Aapko 10% off milega FIRST10 se.",
+          "You pay ₹50 for delivery.",
         ],
       },
     ];

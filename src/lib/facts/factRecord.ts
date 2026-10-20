@@ -87,7 +87,14 @@ const LICENCES: Record<FactSource, FactLicence[]> = {
   // discount" when the real code gives 10%. A conflict can only be
   // reported against a value that exists.
   offers: ["value", "existence"],
-  shipping_config: ["policy", "value"],
+  // EXISTENCE ADDED 2026-10-20, with availability. A shipping-config
+  // row establishes that a shipping arrangement EXISTS as plainly as it
+  // establishes the policy and the rate - and without it, moving
+  // `availability` onto "existence" so a catalogue row could say "we
+  // sell this" would have taken "we deliver" away from the shipping
+  // config, which has licensed it since this table was written. My own
+  // test caught that, which is the only reason it is not a regression.
+  shipping_config: ["policy", "value", "existence"],
   measured: ["value"],
   owner_stated: ["existence", "policy", "process"],
   site_owner_written: ["existence", "policy", "process"],

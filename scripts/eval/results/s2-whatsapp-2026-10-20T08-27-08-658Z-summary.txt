@@ -1,0 +1,59 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 550.31 of Rs 580.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+3 sentence(s), facts note present
+5 sentence(s), facts note present
+3 sentence(s), facts note present
+5 sentence(s), facts note present
+4 sentence(s), facts note present
+4 sentence(s), facts note present
+
+==================================================================
+sentences produced    24   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            42   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                85706 in, 7581 out
+ACTUAL COST THIS RUN  Rs 15.85   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.64   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 566.16 of Rs 580.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship from Shahjahanpur only, or pan-India? Record the delivery area against the product so the copy can state it accurately.
+     Not on record: Is there a specific lavender fragrance note or scent description (e.g. 'fresh', 'floral', 'calming') recorded against the Lavender candle? A scent descriptor would strengthen a WhatsApp broadcast but no record covers it.
+  [candle-09]
+     You asked for 100% natural. Your records say Records confirm soy wax only and no paraffin, but no record uses the phrase '100% natural' or certifies the candles as such. The copy can truthfully say soy wax, paraffin-free — it cannot claim a certified '100% natural' standard. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record supports a safety claim of any kind. This falls under the safety category, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Whether the candles carry any third-party natural or non-toxic certification (e.g., from a recognised body) — if so, record the certifying body and certificate number against each product so the copy can state it accurately.
+     Removed "No shortcuts are taken in making the candle." — The fact describes the method (double-boiler, controlled temperature) but does not state that no shortcuts are taken — that is an inference about what the method implies, not a statement of fact..
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-salon service, not a shipped product. — change the record, or I write it without that.
+     Removed "Keratin treatment is available." — no fact was approved for this piece, so there is nothing to support it.
+     Removed "Haircut is available." — no fact was approved for this piece, so there is nothing to support it.
+  [salon-08]
+     Left out: Name the service so the reader knows what is being offered. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+  [dairy-05]
+     Not on record: Does the 10% FIRST10 offer apply specifically to the Paneer 250g, or is it sitewide / for new customers only? Please record the exact scope and any expiry date so the copy can state it accurately.
+     Not on record: Is the Bilona / hand-churned process used specifically for the Paneer 250g, or is it a business-wide process? Please record it against the product so the claim can be scoped correctly.
+     Removed "You will get 10% off your first order in Indore." — nothing on record can support a benefit claim.
+     Removed "The discount applies to Indore." — Approved fact states the discount is a store-wide policy, but does not specify geographic scope or which locations it applies to..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 (flat). There is no record of free delivery. — change the record, or I write it without that.
+     Not on record: Is home delivery ever free — e.g. above a minimum order value, or for a limited period? If so, record the exact condition and the threshold amount so the copy can state it accurately.
+     Removed "*Pure desi ghee and fresh paneer*, now in Indore." — it says "pure", and nothing on record says that.
+     Removed "You will taste the difference." — nothing on record can support a benefit claim.
+     Removed "The ghee is pure desi ghee." — No approved fact states anything about the ghee's material or purity..
+     Removed "The paneer is fresh." — No approved fact states anything about the paneer's freshness..
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T08-27-08-658Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

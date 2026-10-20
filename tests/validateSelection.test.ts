@@ -623,3 +623,68 @@ describe("the Select model's prose does not authorise its own words", () => {
     expect(vocabulary).toMatch(/r\.recordedText/);
   });
 });
+
+describe("a business may say what it sells", () => {
+  // Run 12, salon-04. Select approved NOTHING, so the writer's two
+  // true sentences were both removed:
+  //
+  //   Removed "Keratin treatment is available." — no fact was approved
+  //     for this piece, so there is nothing to support it.
+  //   Removed "Haircut is available."
+  //
+  // `availability` required a licence of "policy", which only the
+  // shipping config and the owner's own statements grant. A catalogue
+  // row — the actual record of what a business sells — could never
+  // support it. The owner's note read "Left out: Name the service so
+  // the reader knows what is being offered" in five consecutive runs
+  // before this one took the sentences out altogether.
+
+  const service = record({
+    id: "f_svc",
+    key: "product.keratin_treatment.name",
+    value: "Keratin treatment",
+    unit: null,
+    source: "catalogue",
+    licenses: licensesFor("catalogue"),
+    recordedText: "Keratin treatment",
+  });
+
+  it("A CATALOGUE ROW LICENSES AN AVAILABILITY CLAIM", () => {
+    const v = validate(
+      [claim({ claimType: "availability", factIds: ["f_svc"], value: null, unit: null, intent: "name the service", aboutProduct: "Keratin treatment" })],
+      [service]
+    );
+    expect(v.rejected).toEqual([]);
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("AND THE LICENCE IS THE ONE THE RECORD ACTUALLY GRANTS", () => {
+    expect(LICENCE_FOR_CLAIM.availability).toBe("existence");
+    expect(licensesFor("catalogue")).toContain("existence");
+  });
+
+  it("the shipping config still licenses one too, as it always did", () => {
+    const ship = record({ id: "f_ship2", key: "shipping.mode", value: "free", unit: null, source: "shipping_config", licenses: licensesFor("shipping_config"), recordedText: "shipping is free" });
+    const v = validate([claim({ claimType: "availability", factIds: ["f_ship2"], value: null, unit: null, intent: "we deliver" })], [ship]);
+    expect(v.approved).toHaveLength(1);
+  });
+
+  it("BUT A CAPABILITY CLAIM IS STILL REFUSED — that is the line rule 7b draws", () => {
+    // "We offer keratin treatment" is availability. "We will rebook you
+    // automatically" is capability, and nothing licenses it. Loosening
+    // the first must not loosen the second.
+    const v = validate(
+      [claim({ claimType: "capability", factIds: ["f_svc"], value: null, unit: null, intent: "we rebook you automatically" })],
+      [service]
+    );
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_exists");
+  });
+
+  it("and a measured row still cannot license it, because it grants only value", () => {
+    const counted = record({ id: "f_m", key: "business.paid_orders", value: 2, unit: null, source: "measured", licenses: licensesFor("measured"), recordedText: "2 paid order(s) on record" });
+    const v = validate([claim({ claimType: "availability", factIds: ["f_m"], value: null, unit: null, intent: "we are open" })], [counted]);
+    expect(v.approved).toEqual([]);
+    expect(v.rejected[0].rule).toBe("no_licence_on_record");
+  });
+});
