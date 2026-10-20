@@ -23,10 +23,22 @@ import { introducedWords } from "@/lib/content/introducedWords";
 import { notCopySentences } from "@/lib/content/notCopy";
 import { contextFromFacts } from "@/lib/facts/getContext";
 import { WHATSAPP_ADVERSARIAL } from "../scripts/eval/adversarial/whatsapp";
+import { LEAD_MESSAGE_ADVERSARIAL } from "../scripts/eval/adversarial/leadMessage";
+import { SOCIAL_ADVERSARIAL } from "../scripts/eval/adversarial/social";
 import { tier1, tier2, type AdversarialCase } from "../scripts/eval/adversarial/types";
 import { SHAPE_IDS, SHAPES, CODE_SHAPES } from "../scripts/eval/shapes";
 
-const ALL: AdversarialCase[] = [...WHATSAPP_ADVERSARIAL];
+const ALL: AdversarialCase[] = [...WHATSAPP_ADVERSARIAL, ...LEAD_MESSAGE_ADVERSARIAL, ...SOCIAL_ADVERSARIAL];
+
+/**
+ * The names the lead-message cases use.
+ *
+ * In the product these come from the lead row, one at a time. Here they
+ * are listed because a case set cannot read a database — and listing
+ * them is itself the assertion that the surface must pass the name
+ * through, because every one of these cases fails if it does not.
+ */
+const LEAD_NAMES = ["Ravi", "Priya", "Anil", "Sunita", "Rajesh", "Meera"];
 
 /**
  * Everything the pipeline would legitimately have had in front of it.
@@ -37,13 +49,25 @@ const ALL: AdversarialCase[] = [...WHATSAPP_ADVERSARIAL];
  * word the model introduced.
  */
 function vocabularyFor(c: AdversarialCase): string[] {
-  const ctx = contextFromFacts("biz_eval", c.fixture.facts, { kind: "whatsapp", topic: c.topic });
+  // THE SLICE IS THE CASE'S OWN SURFACE. getContext narrows records by
+  // task, so scoring a social case against an email's slice measures a
+  // context the pipeline would never have had — which is B18, and it
+  // cost me a red test on a sentence that was perfectly fine.
+  const kind = c.surface === "lead_message" ? "lead_message" : c.surface === "social" ? "facebook_post" : c.surface;
+  const ctx = contextFromFacts("biz_eval", c.fixture.facts, { kind: kind as any, topic: c.topic });
   const facts = c.fixture.facts as any;
   return [
     ...ctx.records.map((r) => `${r.key.replace(/[._]/g, " ")} ${r.recordedText} ${r.value ?? ""}`),
     facts.businessName ?? "",
     facts.category ?? "",
     c.topic,
+    // THE LEAD'S NAME, which the lead_message surface passes to the
+    // writer from the lead row. PLAN-S2 §2 called this a certainty
+    // rather than a risk: a proper noun in no record, landing in copy,
+    // which introducedWords would flag the moment it reached a place
+    // position. It belongs in the vocabulary for the same reason the
+    // store link does — it is data the writer was legitimately given.
+    ...(c.surface === "lead_message" ? LEAD_NAMES : []),
   ];
 }
 
@@ -139,8 +163,8 @@ describe("2. the set covers the shapes it claims to", () => {
   });
 });
 
-describe("3. WHATSAPP — the free cases, one assertion each", () => {
-  for (const c of tier1(WHATSAPP_ADVERSARIAL)) {
+describe("3. the free cases, one assertion each", () => {
+  for (const c of tier1(ALL)) {
     const must = c.direction === "must_be_removed" ? "REMOVED" : "SURVIVES";
     it(`${c.id} [${c.shape}] ${must}: ${c.sentence}`, () => {
       const { removed, why } = verdictFor(c);

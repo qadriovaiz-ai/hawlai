@@ -114,6 +114,26 @@ const READER_FRAME_VERBS = new Set([
  * it is saying the price is low. So the figure has to be there, and
  * `minimisesAFigure` below is what decides.
  */
+/**
+ * Rank written as a phrase rather than a word.
+ *
+ * Found by the adversarial set on 2026-10-20: "Lucknow ki NUMBER ONE
+ * coaching class" asserts a rank as plainly as "best" does, and the
+ * intensifier class holds only single words.
+ *
+ * NOT A LONGER WORD LIST, and the distinction matters after B10. These
+ * are the ways a rank is SPELLED - "number one", "no 1", "#1", "no. 1"
+ * - not a list of things one could boast about. The class is the same
+ * closed grammatical one; only the tokenisation differs, which is why
+ * it needs its own pass over adjacent tokens.
+ */
+const RANK_PHRASES: string[][] = [
+  ["number", "one"],
+  ["number", "1"],
+  ["no", "1"],
+  ["nambar", "one"],
+];
+
 const MINIMISERS = new Set([
   "just", "only", "merely", "simply", "mere",
   "sirf", "bas", "keval", "kewal", "matr",
@@ -210,13 +230,47 @@ function ranksTheReader(clause: string[], i: number): boolean {
   return after.length === 1 && READER_FRAME_VERBS.has(after[0]);
 }
 
-/** Words, lowercased, with punctuation gone. Keeps "100%" as a token. */
+/**
+ * Words, lowercased, with punctuation gone. Keeps "100%" as a token.
+ *
+ * A HASHTAG IS A COMPOUND WORD AND ITS PARTS ARE WORDS. Found by the
+ * adversarial set on 2026-10-20, for nothing: "#PureSoy", "#PurestGhee",
+ * "#BestSalonIndore" and "#TopResults" all walked through the
+ * intensifier check, because stripping the punctuation leaves
+ * "puresoy" as a single token that no list contains.
+ *
+ * PLAN-S2.md §2 predicted this before S2a began - "a hashtag tokenises
+ * into one word that escapes the place-position test by accident" -
+ * and then S2c was never reached, so it was never tested. Four cases
+ * found it in the first social batch.
+ *
+ * So a run of letters that changes from lower case to upper case is
+ * split at the boundary: PureSoy becomes pure + soy, BestSalonIndore
+ * becomes best + salon + indore. The joined form is KEPT TOO, because
+ * an owner whose records say "#PureSoy" has said it and the vocabulary
+ * must still be able to match it whole.
+ */
 function tokens(text: string): string[] {
   return String(text ?? "")
+    // Split camel and Pascal case before lowercasing, so a hashtag's
+    // parts become words. "40Hour" splits at the letter boundary too.
+    .replace(/(\p{Ll}|\p{N})(\p{Lu})/gu, "$1 $2")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}%]+/gu, " ")
     .split(/\s+/)
     .filter(Boolean);
+}
+
+/**
+ * The tokens of a text, plus each hashtag's joined form.
+ *
+ * Only the VOCABULARY side needs this: if the owner wrote "#PureSoy",
+ * both "pure"/"soy" and "puresoy" are theirs. On the copy side the
+ * split form is what the checks must see.
+ */
+function vocabularyTokens(text: string): string[] {
+  const joined = (String(text ?? "").match(/#[\p{L}\p{N}]+/gu) ?? []).map((t) => t.slice(1).toLowerCase());
+  return [...tokens(text), ...joined];
 }
 
 /**
@@ -299,7 +353,7 @@ function capitalisedWords(sentence: string): string[] {
  * the model's.
  */
 export function introducedWords(sentences: string[], allowed: string[]): IntroducedWord[] {
-  const vocabulary = new Set(allowed.flatMap(tokens));
+  const vocabulary = new Set(allowed.flatMap(vocabularyTokens));
   // A MINIMISER IS NOT EXCUSED BY THE OWNER USING IT SOMEWHERE ELSE.
   //
   // Found by the adversarial set on 2026-10-20, for nothing, before any
@@ -327,6 +381,17 @@ export function introducedWords(sentences: string[], allowed: string[]): Introdu
   sentences.forEach((sentence, sentenceIndex) => {
     const seen = new Set<string>();
     for (const clause of clauses(sentence)) {
+      // Rank spelled as two tokens, before the single-word pass.
+      for (const phrase of RANK_PHRASES) {
+        for (let i = 0; i + phrase.length <= clause.length; i += 1) {
+          if (!phrase.every((w, k) => clause[i + k] === w)) continue;
+          const written = phrase.join(" ");
+          if (vocabulary.has(phrase[0]) && vocabulary.has(phrase[1])) continue;
+          if (seen.has(written)) continue;
+          seen.add(written);
+          found.push({ sentenceIndex, word: written, kind: "intensifier" });
+        }
+      }
       clause.forEach((word, i) => {
         if (seen.has(word)) return;
         // The vocabulary excuses everything EXCEPT a minimiser, which
