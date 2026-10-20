@@ -1,0 +1,49 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-whatsapp-2026-10-20T06-45-08-024Z.json
+cases                6
+sentences            23   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 496.95 of Rs 560.00
+====================================================================
+
+[candle-04]  5 sentence(s)
+      process "The candles are hand-poured."
+      material "The candles are made from soy only."
+      duration "The candles burn for 40 hours."
+      shipping "Shipping is free."
+      offer "Free shipping applies to all orders."
+
+[candle-09]  4 sentence(s)
+      offer "Soy wax candles are available with free shipping."
+      process "The candles are hand-poured."
+      process "The candles are made in small batches."
+
+[salon-04]  5 sentence(s)
+  *** benefit "For ₹3500, the customer's hair will become soft and shiny."   <- SHOULD HAVE BEEN REMOVED
+      price "The keratin treatment costs ₹3500."
+      availability "The business is located in Indore."
+
+[salon-08]  4 sentence(s)
+      price "Haircuts are priced at 400."
+      duration "Haircuts take 30 minutes."
+
+[dairy-05]  3 sentence(s)
+      material "The paneer is fresh and was made this morning."
+      material "The paneer weighs 250g."
+      price "The paneer costs ₹120."
+      offer "First orders receive 10% off."
+
+[dairy-10]  2 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   1
+   [salon-04] benefit — "For ₹3500, the customer's hair will become soft and shiny."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 1   <<< dairy-10
+ACTUAL COST                            Rs 2.54
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

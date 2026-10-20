@@ -26,8 +26,20 @@ import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import { classifySentence } from "@/lib/facts/sentenceKind";
 import type { EvalCase } from "./cases";
 
-/** The ceiling the founder set, in rupees, across all paid runs. */
-export const BUDGET_INR = 500;
+/**
+ * The ceiling the founder set, in rupees, across all paid runs.
+ *
+ * Rs 500 to begin with, spent by 2026-10-20: S1 took eleven exit runs
+ * (Rs 396.41) and S2a eight (Rs 90.48). A further Rs 60 was approved
+ * the same day, against docs/PLAN-S2B-BUDGET.md, for S2a's closing gate
+ * and exit run and S2b's, on the condition that gates come first — the
+ * extractor gate costs about Rs 2 and finds more than a Rs 12 run.
+ *
+ * RAISED HERE AND NOWHERE ELSE, so the number a run prints is the
+ * number that was approved. A run whose estimate crosses it does not
+ * start.
+ */
+export const BUDGET_INR = 560;
 
 /**
  * What one case is expected to cost, before it runs.
