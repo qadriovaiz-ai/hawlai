@@ -794,6 +794,43 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     }
   }
 
+  // 6b. THE CODE CHECKS RUN AGAIN, BECAUSE THE COPY HAS CHANGED SINCE
+  //     THEY LAST SAW IT.
+  //
+  // THE ORDERING FAULT, found by the output gate on 2026-10-20 and
+  // bigger than anything it was built to find. dairy-10 shipped
+  //
+  //     Order now -> [link]
+  //
+  // notCopy catches that string in isolation - its own test proves it -
+  // and it did not catch it here, because notCopy runs at step 4 and
+  // THREE LATER STEPS REPLACE `parsed` WITH NEW MODEL OUTPUT: the
+  // specificity pass (every draft), the anti-generic retry, and the
+  // shape retry. Everything they write has never been seen by any
+  // fact-bound check. The specificity pass is the worst of the three,
+  // because asking a model to be more specific is asking it for exactly
+  // the details nobody recorded.
+  //
+  // WHAT THIS FIXES AND WHAT IT DOES NOT. notCopy and introducedWords
+  // are pure code, so re-running them costs nothing and closes the
+  // placeholder, the invented place name and the strengthening word.
+  // The MODEL checks - extract and verify - are not re-run here,
+  // because that is two more calls on every revised draft and a change
+  // of that size belongs to the owner, not to me. So the full fix is
+  // still owed: the fact-bound verification should run AFTER the
+  // retries rather than before them, which is the architecture's own
+  // promise that nothing customer-facing bypasses the truth layer.
+  // Written up rather than quietly half-done.
+  if (factBound) {
+    const after = copySentences(parsed);
+    const slots = notCopySentences(after.map((x) => x.text));
+    if (slots.length) {
+      const note = notCopyNote(slots, after.map((x) => x.text));
+      parsed = withoutSentences(parsed, after, [...new Set(slots.map((f) => f.sentenceIndex))]);
+      factBoundNote = [factBoundNote, note].filter(Boolean).join("\n") || null;
+    }
+  }
+
   // 7. CLAIMS AND PROVENANCE. guardOrMark runs the full guard when the
   // records are readable and the fact-independent subset when they are
   // not, and marks which happened either way.

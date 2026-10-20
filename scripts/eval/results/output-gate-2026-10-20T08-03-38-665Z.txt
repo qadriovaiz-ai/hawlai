@@ -1,0 +1,53 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-whatsapp-2026-10-20T08-03-02-126Z.json
+cases                6
+sentences            24   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 547.52 of Rs 560.00
+====================================================================
+
+[candle-04]  5 sentence(s)
+      process "The candles are hand-poured."
+      material "The candles are made from soy wax."
+      duration "The candles burn for 40 hours."
+      shipping "Shipping is free."
+
+[candle-09]  3 sentence(s)
+      material "The candles are made from soy wax only."
+      material "The candles contain no paraffin."
+      process "The candles are hand-poured."
+      process "The candles are made in small batches."
+
+[salon-04]  5 sentence(s)
+      availability "Keratin treatment is available to book."
+      availability "Fresh haircut is available to book."
+      availability "The business is located in Indore."
+
+[salon-08]  3 sentence(s)
+      duration "Keratin treatment can be completed in 30 minutes."
+      availability "The business offers keratin treatment appointments in Indore."
+
+[dairy-05]  5 sentence(s)
+      process "Fresh paneer is made daily."
+      price "Paneer is sold at ₹120 for 250g."
+      offer "A 10% discount is offered on the first order in Indore."
+      availability "The 10% discount applies to orders in Indore."
+
+[dairy-10]  3 sentence(s)
+      availability "Fresh desi ghee is now available in Indore."
+      availability "Fresh paneer is now available in Indore."
+      material "Desi ghee is fresh."
+      material "Paneer is fresh."
+      offer "A customer receives 10% off their first order."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            1
+   [dairy-10] "Order now → [link]"
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 2.79
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

@@ -239,7 +239,19 @@
       "label": "graded-f extractor gate",
       "inr": 4.14,
       "calls": 8
+    },
+    {
+      "at": "2026-10-20T08:03:02.130Z",
+      "label": "s2-whatsapp-2026-10-20T08-03-02-126Z",
+      "inr": 14.53,
+      "calls": 35
+    },
+    {
+      "at": "2026-10-20T08:03:38.662Z",
+      "label": "output gate on s2-whatsapp-2026-10-20T08-03-02-126Z.json",
+      "inr": 2.79,
+      "calls": 6
     }
   ],
-  "totalInr": 532.99
+  "totalInr": 550.31
 }

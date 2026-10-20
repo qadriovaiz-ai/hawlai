@@ -115,3 +115,49 @@ describe("4. it runs in the door, before any model call", () => {
     expect(sourceWithComments("src/lib/content/notCopy.ts")).toMatch(/still passes/);
   });
 });
+
+describe("5. the copy changes after the checks, so the checks run again", () => {
+  // THE ORDERING FAULT, found by the output gate on 2026-10-20 and
+  // bigger than anything the gate was built to find. dairy-10 shipped
+  //
+  //     Order now → [link]
+  //
+  // notCopy catches that string in isolation — the tests above prove it
+  // — and it did not catch it in the run, because notCopy runs at step
+  // 4 and THREE LATER STEPS REPLACE the copy with new model output: the
+  // specificity pass, which runs on every draft, the anti-generic
+  // retry, and the shape retry.
+  //
+  // Everything those three write had never been seen by any fact-bound
+  // check. Asking a model to be more specific is asking it for exactly
+  // the details nobody recorded.
+
+  it("THE FREE CHECKS RUN AFTER THE RETRIES TOO", async () => {
+    const src = code("src/lib/content/generateCopy.ts");
+    const atFirst = src.indexOf("const notCopy = notCopySentences");
+    const atRetry = src.indexOf("const slots = notCopySentences");
+    expect(atFirst).toBeGreaterThan(0);
+    expect(atRetry).toBeGreaterThan(atFirst);
+    // After all three things that can replace the copy.
+    expect(atRetry).toBeGreaterThan(src.indexOf("retryForSpecificity"));
+    expect(atRetry).toBeGreaterThan(src.indexOf("retryForShape"));
+    expect(atRetry).toBeGreaterThan(src.indexOf("ruthlessEditBrief"));
+    // And before the output is assembled.
+    expect(atRetry).toBeLessThan(src.indexOf("guardOrMark(parsed, req.facts"));
+  });
+
+  it("AND THE OWNER IS TOLD, on the same note as everything else", async () => {
+    const src = code("src/lib/content/generateCopy.ts");
+    expect(src).toMatch(/factBoundNote = \[factBoundNote, note\]\.filter\(Boolean\)/);
+  });
+
+  it("THE FULL FIX IS RECORDED AS STILL OWED, not quietly half-done", () => {
+    // The model checks are not re-run: that is two more calls on every
+    // revised draft, and a change of that size is the owner's to
+    // approve. Saying so in the code is the difference between a known
+    // gap and a hidden one.
+    const withComments = sourceWithComments("src/lib/content/generateCopy.ts");
+    expect(withComments).toMatch(/the full fix is\s*\n?\s*\/\/\s*still owed/i);
+    expect(withComments).toMatch(/should run AFTER the\s*\n?\s*\/\/\s*retries/);
+  });
+});
