@@ -1,0 +1,52 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 620.42 of Rs 682.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+6 sentence(s), facts note present
+7 sentence(s), facts note present
+4 sentence(s), facts note present
+5 sentence(s)
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    31   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            33   (4 per email: select, write, extract, judge)
+cases retried         1   (spacing 1500ms between cases)
+tokens                73776 in, 6431 out
+ACTUAL COST THIS RUN  Rs 15.18   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.53   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 635.60 of Rs 682.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship with any specific scent description or fragrance note recorded against it? (e.g. 'fresh lavender', 'floral', 'calming') — record it against product.lavender_candle.fragrance_note so copy can name it.
+     Not on record: Is there a stock quantity or availability status recorded for the Lavender candle? (e.g. 'in stock', 'limited units') — record it against product.lavender_candle.stock so copy can create urgency honestly.
+  [candle-09]
+     You asked for 100% natural. Your records say Soy wax only, paraffin-free — but no record uses the phrase '100% natural' or certifies the fragrance, wick or any other ingredient as natural. Selecting that phrase would go beyond what the records support. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record makes any safety claim or child-safety claim. This is also a safety/health claim the rules prohibit selecting regardless of records. — change the record, or I write it without that.
+     Not on record: Are the fragrances used also natural/non-toxic (e.g. essential-oil-based rather than synthetic)? Record this against each product if true — e.g. 'product.lavender_candle.fragrance = 100% essential oil'. Without it, a '100% natural' claim cannot be made honestly.
+     Not on record: Is there any third-party certification (e.g. non-toxic, child-safe, or natural ingredient certification) held for these candles? Record the certifying body and certificate number if so.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — shipping.mode has NO ANSWER ON RECORD, and it is already known that no shipping is configured. — change the record, or I write it without that.
+  [dairy-05]
+     Not on record: What is the pack size or weight option beyond 250g, if any? (Record as: 'product.paneer_Xg.name = Paneer Xg' with price and description, if other sizes exist.)
+     Not on record: Is the FIRST10 offer specific to paneer, or valid on all products? (Record as: 'offer.first10.scope = paneer_only' or 'offer.first10.scope = all_products'.)
+     Not on record: Is there a minimum order value or order deadline (e.g. order by 8 AM for same-day delivery)? (Record as: 'policy.order_cutoff_time = HH:MM' or 'policy.min_order_value = X inr'.)
+     Removed "The discount applies to the first order." — Fact states 'FIRST10 — 10% off' but does not specify it applies only to first orders.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Does the business offer free delivery under any condition (e.g. above a minimum order value)? If yes, record the threshold amount and the condition against the shipping policy so it can be stated in copy.
+     Removed "Delivery is simple and predictable." — nothing on record can support a benefit claim.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T11-18-11-225Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

@@ -50,6 +50,8 @@ const GO = process.env.EVAL_GO === "1";
 const STUB = process.env.EVAL_STUB === "1";
 const OUT = join("scripts", "eval", "results");
 const LEDGER = join("scripts", "eval", "spend.json");
+/** Where a parallel run puts its own row, to be merged afterwards. */
+const LEDGER_D = join("scripts", "eval", "spend.d");
 const PER_RUN_CAP_INR = 30;
 
 /**
@@ -63,7 +65,31 @@ const PER_RUN_CAP_INR = 30;
  *   EVAL_SURFACE=whatsapp  npx vitest run --config vitest.eval.config.mts scripts/eval/s1Exit.eval.ts
  */
 const SURFACE = process.env.EVAL_SURFACE ?? "email";
-const EMAIL_CASES = CASES.filter((c) => c.surface === SURFACE);
+/**
+ * A slice of a surface's cases, as "1of2".
+ *
+ * NEEDED BY THE PER-RUN CAP, which did its job on 2026-10-20 and is the
+ * reason this exists. The social run estimated Rs 30.57 against a
+ * ceiling of Rs 30.00, so the harness stopped before calling anything -
+ * correctly, and the twelve cases did not run.
+ *
+ * Twelve cases is the largest surface in the set, and the answer is not
+ * to raise the ceiling: a cap that moves whenever something touches it
+ * is not a cap. Two halves of six cost the same money, fit under the
+ * cap, and produce two sheets that grade exactly as one would.
+ */
+const SLICE = process.env.EVAL_SLICE ?? "";
+
+function sliced<T>(all: T[]): T[] {
+  const m = /^(\d+)of(\d+)$/.exec(SLICE);
+  if (!m) return all;
+  const part = Number(m[1]);
+  const parts = Number(m[2]);
+  const size = Math.ceil(all.length / parts);
+  return all.slice((part - 1) * size, part * size);
+}
+
+const EMAIL_CASES = sliced(CASES.filter((c) => c.surface === SURFACE));
 
 /**
  * The baseline, email only, from the reviewer's filled sheet.
@@ -182,7 +208,7 @@ describe("the S1 exit test", () => {
     say("");
     say(`EXIT TEST — the fact-bound pipeline on ${SURFACE}`);
     say("=".repeat(66));
-    say(`cases                 ${EMAIL_CASES.length}  (${EMAIL_CASES.map((c) => c.id).join(", ")})`);
+    say(`cases                 ${EMAIL_CASES.length}${SLICE ? ` of this surface, slice ${SLICE}` : ""}  (${EMAIL_CASES.map((c) => c.id).join(", ")})`);
     say(`baseline (email)      ${base.claims} claim sentences: ${base.T} T, ${base.F} F, ${base.U} U`);
     say(`ESTIMATE THIS RUN     Rs ${estimate.toFixed(2)}   (per-run cap Rs ${PER_RUN_CAP_INR.toFixed(2)})`);
     say(`already spent         Rs ${spentSoFar.toFixed(2)} of Rs ${BUDGET_INR.toFixed(2)}`);
@@ -294,7 +320,7 @@ describe("the S1 exit test", () => {
 
     if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const label = `${SURFACE === "email" ? "s1-exit" : `s2-${SURFACE}`}-${stamp}`;
+    const label = `${SURFACE === "email" ? "s1-exit" : `s2-${SURFACE}`}${SLICE ? `-${SLICE}` : ""}-${stamp}`;
     writeFileSync(join(OUT, `${label}.json`), JSON.stringify({ label, baseline: base, perCase, rows }, null, 2), "utf8");
     writeFileSync(join(OUT, `${label}-grade-reviewer.md`), gradingSheet(rows, "reviewer"), "utf8");
 
@@ -337,7 +363,23 @@ describe("the S1 exit test", () => {
     if (!STUB) ledger.runs.push({ at: new Date().toISOString(), label, inr: rounded, calls: spend.calls });
     if (!STUB) {
       ledger.totalInr = Math.round((spentSoFar + rounded) * 100) / 100;
-      writeFileSync(LEDGER, JSON.stringify(ledger, null, 2), "utf8");
+      // ONE FILE PER RUN, BECAUSE THREE RUNS GO AT ONCE NOW.
+      //
+      // The founder asked for the three confirmation runs in parallel.
+      // Each process reads this ledger, appends its own row and writes
+      // the whole file back — so three of them racing would silently
+      // drop two rows, and the ledger is the only record of what has
+      // been spent. An instrument that loses its own measurements is
+      // the worst version of B18.
+      //
+      // So a run writes its row to spend.d/ and nothing else, and the
+      // rows are merged into spend.json afterwards. The "already spent"
+      // figure each parallel run PRINTS is therefore the total as it
+      // stood when they all started, which is accurate for the decision
+      // it informs — whether the run may begin — and is reconciled
+      // after.
+      mkdirSync(LEDGER_D, { recursive: true });
+      writeFileSync(join(LEDGER_D, `${label}.json`), JSON.stringify({ at: new Date().toISOString(), label, inr: rounded, calls: spend.calls }, null, 2), "utf8");
     }
 
     if (STUB) say("STUB RUN — canned replies, nothing called, nothing spent.");

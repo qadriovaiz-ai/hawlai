@@ -114,6 +114,23 @@ export async function generateFollowUpMessage(
       revise,
       language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
       operation: "follow_up_message",
+      // S2b: the third surface on the fact-bound pipeline. Does nothing
+      // unless FACT_BOUND_COPY=1 is also set.
+      //
+      // FOUND BY THE CONFIRMATION RUN OF 2026-10-20, which is the whole
+      // argument for running one. The lead-message run came in at
+      // Rs 1.52 against a Rs 7.64 estimate and I nearly reported that
+      // as good news - but the reason was that this surface was never
+      // wired to the door at all, so the run measured the OLD path and
+      // its sheet would have confirmed nothing.
+      //
+      // THE LEAD'S NAME IS ALREADY SAFE, and not by luck: `topic` above
+      // is "follow up with <name> about <interest>", and generateCopy
+      // puts req.topic in the allowed vocabulary. PLAN-S2 §2 called the
+      // name "a certainty, not a risk" - it is covered, and
+      // leadMessageFactBound.test.ts pins it rather than trusting it.
+      factBound: true,
+      task: "lead_message",
       logContext,
       brief: {
         label: `follow-up ${channel} message to a lead`,

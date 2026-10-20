@@ -311,7 +311,19 @@
       "label": "tier-2 adversarial gate",
       "inr": 2.82,
       "calls": 6
+    },
+    {
+      "at": "2026-10-20T11:15:48.540Z",
+      "label": "s2-lead_message-2026-10-20T11-15-48-536Z",
+      "inr": 1.52,
+      "calls": 3
+    },
+    {
+      "at": "2026-10-20T11:18:11.230Z",
+      "label": "s2-whatsapp-2026-10-20T11-18-11-225Z",
+      "inr": 15.18,
+      "calls": 33
     }
   ],
-  "totalInr": 620.42
+  "totalInr": 637.12
 }
