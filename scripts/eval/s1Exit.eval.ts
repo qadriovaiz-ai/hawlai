@@ -89,7 +89,28 @@ function sliced<T>(all: T[]): T[] {
   return all.slice((part - 1) * size, part * size);
 }
 
-const EMAIL_CASES = sliced(CASES.filter((c) => c.surface === SURFACE));
+/**
+ * Named cases only, comma-separated.
+ *
+ * FOR RECOVERING A PARTIAL RUN WITHOUT PAYING FOR ALL OF IT. The
+ * parallel social runs of 2026-10-20 lost three cases to rate limiting
+ * - "The AI service is busy" - and their 45-second retries hit it too,
+ * because three processes each making seven calls per case is three
+ * times the concurrent rate the spacing was tuned for. I warned about
+ * exactly that before launching and kept per-process spacing, and
+ * per-process spacing is not what the provider counts.
+ *
+ * Re-running both affected halves would have cost Rs 35 to recover
+ * three cases and thrown away nine good ones. This costs about Rs 9.
+ */
+const ONLY_CASES = (process.env.EVAL_CASES ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const EMAIL_CASES = ONLY_CASES.length
+  ? CASES.filter((c) => ONLY_CASES.includes(c.id))
+  : sliced(CASES.filter((c) => c.surface === SURFACE));
 
 /**
  * The baseline, email only, from the reviewer's filled sheet.
@@ -328,7 +349,7 @@ describe("the S1 exit test", () => {
 
     if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const label = `${SURFACE === "email" ? "s1-exit" : `s2-${SURFACE}`}${SLICE ? `-${SLICE}` : ""}-${stamp}`;
+    const label = `${SURFACE === "email" ? "s1-exit" : `s2-${SURFACE}`}${SLICE ? `-${SLICE}` : ""}${ONLY_CASES.length ? "-topup" : ""}-${stamp}`;
     writeFileSync(join(OUT, `${label}.json`), JSON.stringify({ label, baseline: base, perCase, rows }, null, 2), "utf8");
     writeFileSync(join(OUT, `${label}-grade-reviewer.md`), gradingSheet(rows, "reviewer"), "utf8");
 

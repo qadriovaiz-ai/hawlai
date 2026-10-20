@@ -1,0 +1,47 @@
+{
+  "label": "s2-facebook_post-topup-2026-10-20T15-55-29-245Z",
+  "baseline": {
+    "T": 34,
+    "F": 20,
+    "U": 16,
+    "claims": 70
+  },
+  "perCase": [
+    {
+      "id": "salon-02",
+      "sentences": 1,
+      "removed": 0,
+      "note": null,
+      "incomplete": true
+    }
+  ],
+  "rows": [
+    {
+      "caseId": "salon-02",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "facebook_post",
+      "field": "text",
+      "sentence": "The AI service is busy — try again in a minute.",
+      "kind": "feeling",
+      "availableFacts": [
+        "product.keratin_treatment.name = Keratin treatment",
+        "product.keratin_treatment.description = Ninety minutes, one session",
+        "product.keratin_treatment.price = 3500 inr",
+        "product.keratin_treatment.duration_minutes = 90 minutes",
+        "shipping.mode = NO ANSWER ON RECORD",
+        "business.paid_orders = 11",
+        "business.leads = 6",
+        "business.city = Indore",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false",
+        "the owner wrote: \"Products Korea se aate hain.\"",
+        "(not given to the writer for this piece: Haircut)"
+      ],
+      "removedByGuard": [],
+      "watch": "ninety minutes is a SERVICE duration — it must not be refused as a performance claim"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 3  (salon-02, salon-03, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 7.64   (per-run cap Rs 30.00)
+already spent         Rs 675.75 of Rs 762.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+
+==================================================================
+sentences produced    3   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  3 of 3   <<< salon-02, salon-03, dairy-09
+calls made            0   (4 per email: select, write, extract, judge)
+cases retried         3   (spacing 4000ms between cases)
+tokens                0 in, 0 out
+ACTUAL COST THIS RUN  Rs 0.00   (estimated Rs 7.64)
+COST PER EMAIL        Rs 0.00   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 675.75 of Rs 762.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+
+
+==================================================================
+THIS RUN IS INCOMPLETE. 3 of 3 cases never reached the model, so the
+sheet below covers only the rest and NO verdict about the pipeline can
+be drawn from it. The low cost is the symptom, not the result.
+==================================================================
+GRADE THIS: scripts\eval\results\s2-facebook_post-topup-2026-10-20T15-54-12-087Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

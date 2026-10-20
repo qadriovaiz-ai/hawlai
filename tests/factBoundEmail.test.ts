@@ -424,3 +424,46 @@ describe("6. splitting and re-assembling a piece", () => {
     expect(withoutSentences(output, copySentences(output), [])).toBe(output);
   });
 });
+
+describe("7. a failure keeps its real name", () => {
+  // THE API CREDIT BALANCE RAN OUT MID-RUN, 20 October 2026, and that
+  // is how this was found. claude.ts classified it correctly as
+  // `credits` and has the right words for it — "AI features are
+  // temporarily unavailable on our side, the Hawlai team has been
+  // alerted" — and this door threw the kind away and substituted
+  // "overloaded", so the owner was told "The AI service is busy, try
+  // again in a minute".
+  //
+  // An owner told to try again in a minute tries again in a minute,
+  // and keeps trying, and it never works. classifyClaudeError's own
+  // header says the reason was discarded 48 times before it existed.
+  // This was the 49th place.
+
+  it("A CREDITS FAILURE IS NOT REPORTED AS BUSYNESS", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." } }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      )) as typeof fetch;
+    const r = await generateCopy(request());
+    const said = JSON.stringify(r);
+    expect(said).toMatch(/temporarily unavailable on our side/);
+    expect(said).not.toMatch(/busy — try again in a minute/);
+    expect(r._aiFailure?.kind).toBe("credits");
+  });
+
+  it("AND AN OVERLOAD STILL IS, because that one IS worth retrying", async () => {
+    // The direction that must not change. A 529 really is busyness and
+    // "try again in a minute" is the right thing to say about it.
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: { type: "overloaded_error", message: "overloaded" } }), { status: 529 })) as typeof fetch;
+    const r = await generateCopy(request());
+    expect(JSON.stringify(r)).toMatch(/busy — try again in a minute/);
+  });
+
+  it("the kind travels out of Select rather than being guessed at the door", async () => {
+    const { code } = await import("./helpers/source");
+    expect(code("src/lib/facts/selectClaims.ts")).toMatch(/kind: result\.failure\.kind/);
+    expect(code("src/lib/content/generateCopy.ts")).toMatch(/aiFailureMessage\(selected\.kind \?\? "overloaded"\)/);
+  });
+});

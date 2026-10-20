@@ -1,0 +1,116 @@
+{
+  "label": "s2-facebook_post-topup-2026-10-20T15-54-12-087Z",
+  "baseline": {
+    "T": 34,
+    "F": 20,
+    "U": 16,
+    "claims": 70
+  },
+  "perCase": [
+    {
+      "id": "salon-02",
+      "sentences": 1,
+      "removed": 0,
+      "note": null,
+      "incomplete": true
+    },
+    {
+      "id": "salon-03",
+      "sentences": 1,
+      "removed": 0,
+      "note": null,
+      "incomplete": true
+    },
+    {
+      "id": "dairy-09",
+      "sentences": 1,
+      "removed": 0,
+      "note": null,
+      "incomplete": true
+    }
+  ],
+  "rows": [
+    {
+      "caseId": "salon-02",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "complete_facts",
+      "surface": "facebook_post",
+      "field": "text",
+      "sentence": "The AI service is busy — try again in a minute.",
+      "kind": "feeling",
+      "availableFacts": [
+        "product.keratin_treatment.name = Keratin treatment",
+        "product.keratin_treatment.description = Ninety minutes, one session",
+        "product.keratin_treatment.price = 3500 inr",
+        "product.keratin_treatment.duration_minutes = 90 minutes",
+        "shipping.mode = NO ANSWER ON RECORD",
+        "business.paid_orders = 11",
+        "business.leads = 6",
+        "business.city = Indore",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false",
+        "the owner wrote: \"Products Korea se aate hain.\"",
+        "(not given to the writer for this piece: Haircut)"
+      ],
+      "removedByGuard": [],
+      "watch": "ninety minutes is a SERVICE duration — it must not be refused as a performance claim"
+    },
+    {
+      "caseId": "salon-03",
+      "fixture": "Shine Studio",
+      "trade": "services",
+      "scenario": "unknown_claim",
+      "surface": "facebook_post",
+      "field": "text",
+      "sentence": "The AI service is busy — try again in a minute.",
+      "kind": "feeling",
+      "availableFacts": [
+        "product.keratin_treatment.name = Keratin treatment",
+        "product.keratin_treatment.description = Ninety minutes, one session",
+        "product.keratin_treatment.price = 3500 inr",
+        "product.keratin_treatment.duration_minutes = 90 minutes",
+        "shipping.mode = NO ANSWER ON RECORD",
+        "business.paid_orders = 11",
+        "business.leads = 6",
+        "business.city = Indore",
+        "the owner wrote: \"Pehle hair wash, phir treatment lagate hain.\"",
+        "the owner wrote: \"Ninety minutes lagte hain.\"",
+        "material.ammonia = false",
+        "the owner wrote: \"Products Korea se aate hain.\"",
+        "(not given to the writer for this piece: Haircut)"
+      ],
+      "removedByGuard": [],
+      "watch": "how long the RESULT lasts is not recorded. The session length is"
+    },
+    {
+      "caseId": "dairy-09",
+      "fixture": "Shree Dairy",
+      "trade": "food",
+      "scenario": "unknown_claim",
+      "surface": "facebook_post",
+      "field": "text",
+      "sentence": "The AI service is busy — try again in a minute.",
+      "kind": "feeling",
+      "availableFacts": [
+        "product.desi_ghee_500ml.name = Desi ghee 500ml",
+        "product.desi_ghee_500ml.description = Bilona method",
+        "product.desi_ghee_500ml.price = 850 inr",
+        "shipping.mode = flat",
+        "shipping.rate = 50 inr",
+        "offer.first10.percent = 10 percent",
+        "business.paid_orders = 40",
+        "business.leads = 12",
+        "business.city = Indore",
+        "process.traditional = true",
+        "process.hand_churned = true",
+        "the owner wrote: \"No preservatives, ever.\"",
+        "the owner wrote: \"FSSAI licence 11223344556677.\"",
+        "(not given to the writer for this piece: Paneer 250g)"
+      ],
+      "removedByGuard": [],
+      "watch": "the recorded row says people WRONGLY think this. The row is a misconception, not a fact"
+    }
+  ]
+}

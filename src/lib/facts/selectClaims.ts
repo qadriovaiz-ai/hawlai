@@ -30,7 +30,7 @@
 // the figure FROM the cited record; step 2 checks it against that record
 // and rejects a mismatch. The model's job is to point, not to compute.
 
-import { callClaude } from "@/lib/ai/claude";
+import { callClaude, type AiFailureKind } from "@/lib/ai/claude";
 import { CLAUDE_MODELS } from "@/lib/models";
 import type { FactRecord } from "@/lib/facts/factRecord";
 import { CLAIM_TYPES, type ClaimType } from "@/lib/facts/extractClaims";
@@ -168,7 +168,22 @@ export function recordsForPrompt(records: FactRecord[]): string {
 
 export type SelectResult =
   | { ok: true; selection: Selection; costInr: number }
-  | { ok: false; reason: string; costInr: number };
+  /**
+   * `kind` TRAVELS OUT, and 2026-10-20 is why it has to.
+   *
+   * The API credit balance ran out mid-run. claude.ts classified it
+   * correctly as `credits` and has the right words for it - "AI
+   * features are temporarily unavailable on our side, the Hawlai team
+   * has been alerted" - and the door then threw the kind away and
+   * substituted "overloaded", so the owner was told "The AI service is
+   * busy, try again in a minute".
+   *
+   * An owner told to try again in a minute tries again in a minute, and
+   * keeps trying, and it never works. classifyClaudeError's own header
+   * says the reason was thrown away 48 times before it existed; this
+   * was the 49th place.
+   */
+  | { ok: false; reason: string; kind?: AiFailureKind; costInr: number };
 
 /**
  * Choose the claims, or fail closed.
@@ -211,7 +226,7 @@ export async function selectClaims(
     { operation: "claim_selection", logContext: opts.logContext ?? null, attempts: 2, timeoutMs: 60_000 }
   );
 
-  if (!result.ok) return { ok: false, reason: result.failure.message, costInr: 0 };
+  if (!result.ok) return { ok: false, reason: result.failure.message, kind: result.failure.kind, costInr: 0 };
 
   const block = (result.data?.content ?? []).find((c: any) => c?.type === "tool_use" && c?.name === TOOL.name);
   if (!block) return { ok: false, reason: "the model did not use the tool", costInr: result.costInr };

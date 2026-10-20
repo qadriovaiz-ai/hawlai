@@ -485,8 +485,18 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     const selected = await selectClaims(ctx, { logContext: req.logContext ?? null });
     if (!selected.ok) {
       console.error(`[generateCopy] ${req.operation} selection failed: ${selected.reason}`);
+      // THE REAL KIND, NOT A GUESS. This said aiFailureMessage("overloaded")
+      // until 2026-10-20, when the API credit balance ran out mid-run:
+      // claude.ts classified it as `credits` and has the right words
+      // for it, and this line overwrote them with "The AI service is
+      // busy — try again in a minute".
+      //
+      // An owner told to try again in a minute does exactly that, and
+      // keeps doing it, and it never works. A credits failure is not
+      // busyness and is not the owner's to wait out.
       return fail({
-        output: { text: aiFailureMessage("overloaded") },
+        output: { text: aiFailureMessage(selected.kind ?? "overloaded") },
+        _aiFailure: selected.kind ? aiFailureNote({ kind: selected.kind }) : undefined,
         blockedReason: `The facts for this business could not be checked just now (${selected.reason}) — nothing was written.`,
         incomplete: true,
       });

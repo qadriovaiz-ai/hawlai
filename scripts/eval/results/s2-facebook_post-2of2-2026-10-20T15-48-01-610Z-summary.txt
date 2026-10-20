@@ -1,0 +1,58 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 2of2  (salon-07, salon-09, dairy-02, dairy-03, dairy-06, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 675.75 of Rs 762.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+9 sentence(s), facts note present
+3 sentence(s), facts note present
+8 sentence(s), facts note present
+9 sentence(s), facts note present
+8 sentence(s)
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+
+==================================================================
+sentences produced    38   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  1 of 6   <<< dairy-09
+calls made            34   (4 per email: select, write, extract, judge)
+cases retried         1   (spacing 1500ms between cases)
+tokens                80828 in, 9144 out
+ACTUAL COST THIS RUN  Rs 17.22   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.87   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 692.97 of Rs 762.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [salon-07]
+     Not on record: Award-winning stylists: please record the specific award(s) won, the awarding body, and the year(s) — e.g. 'Won Best Stylist at [Award Name], [City], [Year].'
+  [salon-09]
+     Not on record: everything — the business's records could not be read just now
+  [dairy-02]
+     Left out: The Bilona / hand-churned process is the hero differentiator for this ghee — lead with it. — it cites a record (e138f4eb) that does not exist.
+     Not on record: What animal / milk source is the ghee made from (e.g. A2 Gir cow milk)? Record it against product.desi_ghee_500ml.milk_source so the copy can state it.
+     Not on record: What quantity or batch size does the business produce? Record it against product.desi_ghee_500ml.batch_size if the owner wants to highlight small-batch production.
+     Not on record: Is there a specific city/area the business delivers to, or is delivery nationwide? Record it against shipping.coverage so the copy can set correct expectations.
+     Removed "No shortcuts are taken in making the desi ghee." — No fact states that no shortcuts are taken; facts about specific methods do not entail absence of shortcuts elsewhere..
+     Removed "Fresh paneer is made every morning." — No fact on record mentions paneer or when it is made; this product is not covered by any approved or recorded fact..
+  [dairy-03]
+     Not on record: The request asks for a claim that ghee is good for digestion. No record on file supports a digestion benefit for this product. Owner to record: 'Desi ghee 500ml supports digestion because [specific reason, e.g. contains butyric acid / Ayurvedic reference].' Once recorded, this can be cited.
+     Removed "If you have been putting off trying pure ghee because you are worried about weight, it is worth knowing that is a common misunderstanding about how good ghee actually works." — it says "pure", and nothing on record says that.
+     Removed "Pure ghee works in a way that contradicts the common misunderstanding about weight." — nothing on record can support a benefit claim.
+     Removed "A 250g quantity of paneer costs ₹120." — it states 120 ₹, and the figures on record are 850 inr.
+     Removed "Pure ghee will help you understand how good ghee actually works, addressing weight concerns." — nothing on record can support a benefit claim.
+     Removed "The business makes fresh paneer every morning." — No fact on either list states that the business makes paneer, fresh or otherwise, or that it makes anything every morning..
+     Removed "Paneer is sold in 250g quantities." — No fact on either list states that paneer is sold, or in what quantities..
+
+
+==================================================================
+THIS RUN IS INCOMPLETE. 1 of 6 cases never reached the model, so the
+sheet below covers only the rest and NO verdict about the pipeline can
+be drawn from it. The low cost is the symptom, not the result.
+==================================================================
+GRADE THIS: scripts\eval\results\s2-facebook_post-2of2-2026-10-20T15-48-01-610Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

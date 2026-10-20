@@ -1,0 +1,57 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 1of2  (candle-02, candle-03, candle-06, candle-10, salon-02, salon-03)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 675.75 of Rs 762.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+7 sentence(s), facts note present
+9 sentence(s), facts note present
+7 sentence(s), facts note present
+8 sentence(s), facts note present
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+1 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+
+==================================================================
+sentences produced    33   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  2 of 6   <<< salon-02, salon-03
+calls made            32   (4 per email: select, write, extract, judge)
+cases retried         2   (spacing 1500ms between cases)
+tokens                77168 in, 9776 out
+ACTUAL COST THIS RUN  Rs 17.63   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.94   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 693.38 of Rs 762.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-02]
+     Not on record: Does the Lavender candle ship with any specific packaging worth mentioning (e.g. gift-ready box)? Record as: 'Lavender candle packaging = [description]'.
+     Not on record: Is there a specific lavender fragrance source or type used (e.g. essential oil vs. fragrance oil)? Record as: 'product.lavender_candle.fragrance_type = [type]'.
+     Removed "People commonly believe that candles last at most 10 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Adding fragrance at 65 degrees ensures the scent sets properly." — nothing on record can support a benefit claim.
+  [candle-03]
+     Removed "Most people think candles burn for 10 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The difference in burn time between soy wax candles and ordinary candles is that soy wax candles last longer." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Our Lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "Candles are poured by hand in small batches, one by one." — Approved fact says 'Hand-poured in small batches' but does not specify 'one by one'.
+     Removed "The business takes no shortcuts." — No approved fact states this general claim about taking no shortcuts; absence of paraffin is one specific practice, not proof of no shortcuts overall.
+  [candle-06]
+     Not on record: Does this candle use a lavender fragrance specifically chosen to support a sleep or bedtime routine? If so, please record the fragrance name or description against the Lavender candle product so the copy can say so truthfully.
+     Removed "The lavender candle will burn for 40 hours." — nothing on record can support a capability claim.
+  [candle-10]
+     You asked for 500 happy customers. Your records say 2 paid orders and 1 lead on record — no record of 500 customers of any kind — change the record, or I write it without that.
+     Not on record: The number of customers or orders the business has fulfilled to date — e.g. 'We have completed X paid orders' or 'X customers have purchased from us.'
+     This could not be checked against your records just now, so it is marked unverified.
+
+
+==================================================================
+THIS RUN IS INCOMPLETE. 2 of 6 cases never reached the model, so the
+sheet below covers only the rest and NO verdict about the pipeline can
+be drawn from it. The low cost is the symptom, not the result.
+==================================================================
+GRADE THIS: scripts\eval\results\s2-facebook_post-1of2-2026-10-20T15-48-49-987Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
