@@ -380,13 +380,29 @@ export async function verifyClaims(
     forJudge.push(claim);
   }
 
+  // Read before the short-circuit below, which depends on it.
+  const unchosen = alsoOnRecord(approved, opts.records ?? []);
+
   if (!forJudge.length) {
     return { verdicts, unsupportedSentences: dropList(verdicts), costInr: 0, degraded: false };
   }
 
-  // A piece with claims and no approved facts needs no judge: there is
-  // nothing for anything to be entailed BY.
-  if (!approved.length) {
+  // A piece with claims and NOTHING ON RECORD AT ALL needs no judge:
+  // there is nothing for anything to be entailed BY.
+  //
+  // IT USED TO SAY "no approved facts", AND THAT IS NOW WRONG. Run 13,
+  // salon-04: Select approved nothing for a message whose owner had
+  // asked for free shipping on treatments, and this branch then refused
+  // every sentence without a judge call - including "The business is
+  // located in Indore", which is `business.city` and is on record.
+  //
+  // The founder's decision of 2026-10-20 is that Select is curation and
+  // not gatekeeping. A model choosing no facts for one message must not
+  // make the business's records disappear, and that is exactly what
+  // this short-circuit did one commit after the rest of the change
+  // landed. The judge now gets the call whenever there is a second list
+  // to read.
+  if (!approved.length && !unchosen) {
     for (const claim of forJudge) {
       verdicts.push({ claim, verdict: "unsupported", rule: "judged_unsupported", reason: "no fact was approved for this piece, so there is nothing to support it" });
     }
@@ -394,7 +410,6 @@ export async function verifyClaims(
   }
 
   const numbered = forJudge.map((c, i) => `[${i}] (${c.claimType}) ${c.canonical}`).join("\n");
-  const unchosen = alsoOnRecord(approved, opts.records ?? []);
   const result = await callClaude(
     {
       model: opts.model ?? CLAUDE_MODELS.fast,

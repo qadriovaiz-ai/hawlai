@@ -515,6 +515,48 @@ describe("Select is curation, not gatekeeping", () => {
     expect(src).toMatch(/If neither list states the claim, it is not entailed/);
   });
 
+  it("NOTHING CHOSEN IS NOT NOTHING ON RECORD", async () => {
+    // Run 13, salon-04. Select approved nothing for a message whose
+    // owner had asked for free shipping on treatments, and the verifier
+    // then refused every sentence WITHOUT A JUDGE CALL - including "The
+    // business is located in Indore", which is business.city and is on
+    // record.
+    //
+    // The short-circuit said "no approved facts, so nothing can be
+    // entailed", which was true until the records became evidence one
+    // commit earlier. A model choosing no facts for one message must
+    // not make the business's records disappear.
+    const sent: any[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_verdicts", input: { verdicts: [{ index: 0, entailed: true, why: "business.city says Indore" }] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const city = rec({ id: "f_city", key: "business.city", value: "Indore", unit: null, recordedText: "the business is in Indore" });
+    const r = await verifyClaims(
+      [extracted({ claimType: "availability", canonical: "the business is located in Indore" })],
+      // NOTHING approved.
+      [],
+      { records: [city] }
+    );
+    expect(sent).toHaveLength(1);
+    expect(JSON.stringify(sent[0])).toMatch(/the business is in Indore/);
+    expect(r.verdicts[0].verdict).toBe("entailed");
+  });
+
+  it("BUT NOTHING ON RECORD AT ALL STILL NEEDS NO JUDGE", async () => {
+    // The short-circuit must still fire when it is genuinely true,
+    // because a call that can only be answered one way is a wasted one.
+    globalThis.fetch = (async () => {
+      throw new Error("the judge was called with nothing to show it");
+    }) as typeof fetch;
+    const r = await verifyClaims([extracted({ claimType: "availability", canonical: "the business is open" })], [], { records: [] });
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+    expect(r.verdicts[0].reason).toMatch(/nothing to support it/);
+  });
+
   it("and with no records passed the judge sees one list, exactly as before", async () => {
     const sent: any[] = [];
     globalThis.fetch = (async (_url: any, init: any) => {

@@ -1,0 +1,54 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 570.33 of Rs 605.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+6 sentence(s), facts note present
+3 sentence(s), facts note present
+0 sentence(s), facts note present
+2 sentence(s), facts note present
+4 sentence(s), facts note present
+4 sentence(s), facts note present
+
+==================================================================
+sentences produced    19   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            40   (4 per email: select, write, extract, judge)
+cases retried         1   (spacing 1500ms between cases)
+tokens                87574 in, 7212 out
+ACTUAL COST THIS RUN  Rs 16.62   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.77   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 586.95 of Rs 605.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship to all cities, or only within Shahjahanpur / a specific area? Record this as: 'Lavender candle ships to [area/all India].'
+  [candle-09]
+     You asked for Safe for kids. Your records say No record exists that certifies or tests these candles as safe for children. This is also a safety claim, which cannot be selected regardless of records. — change the record, or I write it without that.
+     You asked for 100% natural. Your records say Records confirm soy wax only and no paraffin, but also note that fragrance is added (f_9f97d5d5). Synthetic fragrances are not natural, so '100% natural' may not be accurate. The owner should confirm whether the fragrances used are natural/essential-oil-based before making that claim. — change the record, or I write it without that.
+     Not on record: Are the fragrances used natural (e.g. essential oils) or synthetic? Record needed: product.fragrance_type = [natural essential oil / synthetic fragrance] — this determines whether '100% natural' can honestly be claimed.
+     Not on record: Has any independent body tested or certified these candles as safe for children? Record needed: certification.child_safe = [certifying body and certificate number].
+     Removed "No shortcuts are taken in making the candle." — No approved fact states that no shortcuts are taken. The double-boiler method and hand-pouring signal care, but stating a process detail does not entail that no shortcuts are taken elsewhere..
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is a salon treatment, not a shipped product. — change the record, or I write it without that.
+     Removed "A hair makeover costs ₹3500" — it states 3500 ₹, and no figure was approved for this piece.
+     Removed "A simple haircut costs ₹400" — it states 400 ₹, and no figure was approved for this piece.
+     Removed "Your hair will get a keratin treatment." — nothing on record can support a benefit claim.
+     Removed "The business is located in Indore" — no fact was approved for this piece, so there is nothing to support it.
+  [salon-08]
+     Removed "Keratin treatment is available for booking." — No fact states that keratin treatment is available for booking. The second list mentions treatment generally but does not specify keratin treatment or availability for booking..
+  [dairy-05]
+     Removed "Desi ghee is now available in Indore." — No fact states that desi ghee is available. The facts cover paneer, not ghee..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping is ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Does the business offer free delivery under any condition (e.g. above a minimum order value)? If yes, record the threshold amount and the condition against the shipping policy so it can be stated accurately.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T08-48-52-141Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
