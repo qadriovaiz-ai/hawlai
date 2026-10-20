@@ -395,9 +395,27 @@ describe("7. B16 — a word that makes a figure sound small", () => {
     expect(note).toMatch(/says the amount is small, and that is your call to make/);
   });
 
-  it("and a minimiser the owner typed themselves is theirs", () => {
-    // Same rule as every other word check: what the owner put in the
-    // brief is not something the model introduced.
-    expect(introducedWords(["Delivery for just ₹50."], ["sirf ₹50 likho", "just"])).toEqual([]);
+  it("A MINIMISER THE OWNER TYPED IN THE SAME FRAME IS THEIRS", () => {
+    // What the owner put in the brief is not something the model
+    // introduced — but for a minimiser the exemption is the FRAME, not
+    // the word, so the owner has to have put it in front of a figure.
+    expect(introducedWords(["Delivery for just ₹50."], ["just ₹50 likho isme"])).toEqual([]);
+  });
+
+  it("BUT THE SAME WORD USED ELSEWHERE DOES NOT EXCUSE IT", () => {
+    // Found by the adversarial set on 2026-10-20, free, before any paid
+    // run: the restaurant's row says "dine-in ONLY after 9 pm", so
+    // "only" was in the vocabulary and that bare word match licensed
+    // "Lunch thali only ₹199".
+    //
+    // The claim a minimiser makes is not about the word, it is about
+    // THIS AMOUNT, and "dine-in only after 9 pm" says nothing about
+    // ₹199.
+    expect(introducedWords(["Lunch thali only ₹199 on weekdays."], ["Forty seats, dine-in only after 9 pm."])).toEqual([
+      { sentenceIndex: 0, word: "only", kind: "minimiser" },
+    ]);
+    // And an intensifier keeps the ordinary word-level exemption,
+    // because if the record says "pure", the owner has said "pure".
+    expect(introducedWords(["Pure soy wax."], ["the owner wrote: pure soy wax only"])).toEqual([]);
   });
 });

@@ -300,13 +300,38 @@ function capitalisedWords(sentence: string): string[] {
  */
 export function introducedWords(sentences: string[], allowed: string[]): IntroducedWord[] {
   const vocabulary = new Set(allowed.flatMap(tokens));
+  // A MINIMISER IS NOT EXCUSED BY THE OWNER USING IT SOMEWHERE ELSE.
+  //
+  // Found by the adversarial set on 2026-10-20, for nothing, before any
+  // paid run. The restaurant's own row says "dine-in ONLY after 9 pm",
+  // so "only" was in the vocabulary — and that bare word match then
+  // licensed "Lunch thali only Rs 199", which is the B16 claim the
+  // founder graded F in another trade.
+  //
+  // The word-level exemption is right for an intensifier: if the record
+  // says "pure", the owner has said "pure". It is wrong here, because
+  // the claim a minimiser makes is not about the WORD, it is about THIS
+  // AMOUNT. "Dine-in only after 9 pm" says nothing about Rs 199.
+  //
+  // So a minimiser is the owner's only when the owner used it in the
+  // same frame — in front of a figure — and that is decided by the same
+  // function that decides it in the copy.
+  const ownMinimisers = new Set<string>();
+  for (const clause of allowed.flatMap((text) => clauses(text))) {
+    clause.forEach((word, i) => {
+      if (MINIMISERS.has(word) && minimisesAFigure(clause, i)) ownMinimisers.add(word);
+    });
+  }
   const found: IntroducedWord[] = [];
 
   sentences.forEach((sentence, sentenceIndex) => {
     const seen = new Set<string>();
     for (const clause of clauses(sentence)) {
       clause.forEach((word, i) => {
-        if (vocabulary.has(word) || seen.has(word)) return;
+        if (seen.has(word)) return;
+        // The vocabulary excuses everything EXCEPT a minimiser, which
+        // has its own narrower exemption above.
+        if (vocabulary.has(word) && !MINIMISERS.has(word)) return;
         if (INTENSIFIERS.has(word)) {
           if (ranksTheReader(clause, i)) return;
           seen.add(word);
@@ -314,7 +339,7 @@ export function introducedWords(sentences: string[], allowed: string[]): Introdu
           return;
         }
         // A minimiser is a claim only in front of a figure.
-        if (MINIMISERS.has(word) && minimisesAFigure(clause, i)) {
+        if (MINIMISERS.has(word) && !ownMinimisers.has(word) && minimisesAFigure(clause, i)) {
           seen.add(word);
           found.push({ sentenceIndex, word, kind: "minimiser" });
         }
