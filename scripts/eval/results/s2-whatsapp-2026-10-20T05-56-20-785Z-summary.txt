@@ -1,0 +1,56 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 451.62 of Rs 500.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+9 sentence(s), facts note present
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    37   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            24   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                47124 in, 6037 out
+ACTUAL COST THIS RUN  Rs 11.99   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.00   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 463.61 of Rs 500.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Is free shipping available specifically for the Lavender candle, or are there order-value or location conditions? Owner to record: 'Free shipping applies to all single-item orders including the Lavender candle, with no minimum order value.'
+     Not on record: What fragrance/scent notes does the Lavender candle carry beyond the name? Owner to record e.g. 'Lavender candle fragrance notes: fresh lavender, light floral.'
+     Not on record: Is the Lavender candle currently in stock and available to order? Owner to record: 'Lavender candle stock status = in stock / limited stock / made to order.'
+     Removed "Hamare candles 40 hours tak jalte hain aur pure soy se bante hain 🕯️" — it says "pure", and nothing on record says that.
+  [candle-09]
+     You asked for 100% natural. Your records say Records confirm soy wax only and no paraffin, but also note fragrance is added (f_9f97d5d5). Fragrance additives are not recorded as natural or certified natural, so '100% natural' cannot be supported as stated. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record exists for any child-safety claim, certification, or testing. This is also a safety/health claim excluded by policy. — change the record, or I write it without that.
+     Not on record: Is the fragrance used natural, synthetic, or certified (e.g. phthalate-free, IFRA-compliant)? Record this against each product to support a '100% natural' or 'clean fragrance' claim.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-person salon service, not a shipped product. — change the record, or I write it without that.
+  [salon-08]
+     Left out: Name the service being advertised so the reader knows what this WhatsApp is about. — a availability claim needs a record that can establish "policy", and the one(s) cited cannot.
+     Not on record: Is there a booking link, phone number, or WhatsApp contact the reader should use to book? Record it as: 'Haircut booking contact = [number / link]'.
+     Not on record: Are there any current offers or discounts on the haircut? Record it as: 'product.haircut.offer = [description of offer, or none]'.
+  [dairy-05]
+     Not on record: What quantity or pack size does the FIRST10 offer apply to — and is it still active? Please record: 'offer.first10.active = true/false' and 'offer.first10.applies_to = [product or order level]'.
+     Not on record: Does the Bilona / hand-churned process apply specifically to the Paneer 250g, or to a different product (e.g. ghee)? Please record: 'product.paneer_250g.process = bilona, hand-churned' if confirmed for this item.
+     Not on record: Is delivery available in Indore only, or to other cities too? Please record: 'shipping.coverage = [Indore only / pan-India / specific pincodes]'.
+     Removed "The paneer is made in the traditional way." — Approved facts state the paneer is hand-churned and made using the Bilona method, but 'traditional way' is broader and not explicitly stated. The facts name specific methods but do not assert they are traditional..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Is home delivery actually free under any condition (e.g. above a minimum order value)? If so, please record: 'Delivery is free on orders above ₹[amount].' Otherwise the recorded rate of ₹50 flat will be used.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T05-56-20-785Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

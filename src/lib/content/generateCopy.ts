@@ -68,6 +68,7 @@ import { extractClaims } from "@/lib/facts/extractClaims";
 import { verifyClaims, verifyNote } from "@/lib/facts/verifyClaims";
 import { copySentences, withoutSentences } from "@/lib/content/copySentences";
 import { introducedWords, introducedNote } from "@/lib/content/introducedWords";
+import { notCopySentences, notCopyNote } from "@/lib/content/notCopy";
 import { type ClaimsMode } from "@/lib/claims/claimCheck";
 import { type BusinessFacts, type FactsAudience, formatFactsForCopy, COPY_TRUTH_RULES } from "@/lib/claims/businessFacts";
 import { type NarrativeFinding } from "@/lib/claims/narrativeProvenance";
@@ -373,6 +374,12 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
       : `\n\nNO FACT WAS APPROVED FOR THIS PIECE. Write only a greeting, one line about what the reader may be looking for, and one invitation to ask. State nothing about the product, the price, the materials, the process or the business. Do not fill the gap.`,
     `\n\nRULES`,
     `\n- State nothing factual that is not in the list above: not a number, not a material, not a process, not a comparison, not a benefit, not a promise about anything happening automatically.`,
+    // THE FIELDS GO TO THE CUSTOMER. On 2026-10-20 the writer put
+    // "FSSAI: [LICENSE NUMBER NEEDED]" and its own four questions into
+    // dairy-05's WhatsApp message. notCopy.ts strips both in code; this
+    // is the half that stops them being written. Both, because a rule
+    // in a prompt is applied unevenly by definition.
+    `\n- Everything you write in these fields is sent to the customer as it stands. Never leave a blank, a bracket or a placeholder for someone to fill in later, and never write a note, a question or a list of what you still need — if a fact is missing, leave the sentence out altogether and say nothing about it.`,
     `\n- Greetings, feelings, questions and one call to action are yours to write freely. Those are not facts.`,
     // THE TWO SHAPES THAT GOT THROUGH ON 16 OCTOBER 2026, named because
     // the model plainly does not read them as factual claims. Insurance
@@ -573,6 +580,17 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       // introduced name.
       req.brief.channelRules ?? "",
     ];
+    // NOT COPY AT ALL, checked first. A slot or a note about writing
+    // the message is not a claim, so no claim check can see it — and
+    // "[LICENSE NUMBER NEEDED]" reaching a customer is worse than an
+    // unsupported sentence, which is at least addressed to the reader.
+    const notCopy = notCopySentences(sentences.map((s) => s.text));
+    let notCopyNoteText: string | null = null;
+    if (notCopy.length) {
+      notCopyNoteText = notCopyNote(notCopy, sentences.map((s) => s.text));
+      parsed = withoutSentences(parsed, sentences, [...new Set(notCopy.map((f) => f.sentenceIndex))]);
+    }
+
     const introduced = introducedWords(sentences.map((s) => s.text), allowedVocabulary);
     let introducedNoteText: string | null = null;
     if (introduced.length) {
@@ -597,7 +615,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // The word check's findings ride alongside the verifier's, not
     // instead of them: they are different reasons for removing a
     // sentence and the owner should see both.
-    factBoundNote = [introducedNoteText, factBoundNote].filter(Boolean).join("\n") || null;
+    factBoundNote = [notCopyNoteText, introducedNoteText, factBoundNote].filter(Boolean).join("\n") || null;
   }
   if (factBound && validated) {
     const selectionNote = validationNote(validated, selection?.conflicts ?? [], selection?.unknowns ?? []);

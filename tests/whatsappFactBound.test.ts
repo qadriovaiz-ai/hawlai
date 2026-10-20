@@ -228,3 +228,43 @@ describe("4. a short message is where a false refusal hurts most", () => {
     expect(r.output.message).toMatch(/999/);
   });
 });
+
+describe("5. a slot or a note never reaches the customer", () => {
+  it("THE PLACEHOLDER IS STRIPPED FROM THE MESSAGE THAT GOES OUT", async () => {
+    // What dairy-05 actually produced on 20 October 2026, end to end
+    // through the real door rather than against the check in isolation.
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax only.\nFSSAI: [LICENSE NUMBER NEEDED].\nCannot finalize without: (1) the licence number." })),
+      tool("report_claims", { claims: [] }),
+    );
+    const r = await generateCopy(request());
+    expect(r.output.message).not.toContain("[LICENSE NUMBER NEEDED]");
+    expect(r.output.message).not.toMatch(/Cannot finalize/);
+    expect(r.output.message).toContain("Soy wax only.");
+    expect(sent).toHaveLength(3);
+  });
+
+  it("and the owner is told why, in their own words", async () => {
+    script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax only.\nFSSAI: [LICENSE NUMBER NEEDED]." })),
+      tool("report_claims", { claims: [] }),
+    );
+    const r = await generateCopy(request());
+    expect(JSON.stringify(r)).toMatch(/never filled in/);
+  });
+
+  it("THE WRITER IS ALSO TOLD NOT TO WRITE THEM", async () => {
+    // Both halves: the prompt stops most of it, the code catches the
+    // rest. A rule in a prompt is applied unevenly by definition.
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax only." })),
+      tool("report_claims", { claims: [] }),
+    );
+    await generateCopy(request());
+    expect(JSON.stringify(sent[1])).toMatch(/Never leave a blank, a bracket or a placeholder/);
+    expect(JSON.stringify(sent[1])).toMatch(/never write a note, a question or a list of what you still need/);
+  });
+});
