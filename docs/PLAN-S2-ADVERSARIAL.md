@@ -4,7 +4,7 @@ Written 2026-10-20, on the founder's direction after fourteen WhatsApp
 exit runs. No code until this is approved.
 
 **The honest summary of why this plan exists.** S1 took eleven paid runs
-and S2a has taken fourteen. Twenty-five runs, Rs 587, and **not one of
+and S2a has taken fifteen. Twenty-six runs, Rs 604, and **not one of
 the faults they found was the model inventing a fact.** Every single one
 was a guard of mine refusing something true, or a gap where nothing was
 looking. I found them one at a time because I was discovering them one

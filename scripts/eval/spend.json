@@ -275,7 +275,13 @@
       "label": "s2-whatsapp-2026-10-20T08-57-21-888Z",
       "inr": 14.26,
       "calls": 35
+    },
+    {
+      "at": "2026-10-20T08:59:46.283Z",
+      "label": "output gate on s2-whatsapp-2026-10-20T08-57-21-888Z.json",
+      "inr": 2.51,
+      "calls": 6
     }
   ],
-  "totalInr": 601.21
+  "totalInr": 603.72
 }
