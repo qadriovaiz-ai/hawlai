@@ -1,0 +1,53 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 586.95 of Rs 605.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+4 sentence(s), facts note present
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+3 sentence(s), facts note present
+8 sentence(s), facts note present
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    30   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            35   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                75994 in, 6049 out
+ACTUAL COST THIS RUN  Rs 14.26   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.38   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 601.21 of Rs 605.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the lavender candle ship to all cities, or only within Shahjahanpur / a specific region? Record this against the product so the copy can set accurate expectations.
+     Not on record: Is there a specific scent description or fragrance note for the lavender candle (e.g. 'fresh', 'floral', 'calming')? Record it against the product so the copy can describe the experience without guessing.
+     Removed "The candles cost 999." — it states 999 for hand-poured candles, and that figure belongs to something else.
+  [candle-09]
+     You asked for 100% natural. Your records say The records confirm soy wax only and no paraffin, but no record uses the phrase '100% natural' or certifies the candles as such. Selecting that exact claim would go beyond what is recorded. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record exists that supports a safety claim for children. This is also a safety/health claim about what the product does, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Does the business hold any certification (e.g. natural, non-toxic, child-safe) for its candles or ingredients? If so, record the certifying body and certificate number against the relevant product.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is a salon service, not a shipped product. — change the record, or I write it without that.
+  [salon-08]
+     Removed "The haircut is quick." — nothing on record can support a benefit claim.
+     Removed "The haircut is clean." — nothing on record can support a benefit claim.
+  [dairy-05]
+     Not on record: Does the Bilona / hand-churned process apply specifically to the Paneer 250g, or to a different product line? Owner should record this against product.paneer_250g so the copy can state it with certainty about this item.
+     Not on record: Is the FIRST10 offer currently active and applicable to the Paneer 250g? Owner should confirm the offer's validity period and eligible products so the copy does not mislead.
+     Not on record: What quantity or pack size options exist beyond 250g? Owner could record additional SKUs if they want the broadcast to mention them.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping costs ₹50 (flat rate). There is no record of free delivery. — change the record, or I write it without that.
+     Not on record: Does the business offer free home delivery under any condition (e.g., above a minimum order value)? If yes, record the threshold amount and the condition against the shipping policy so it can be stated in copy.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T08-57-21-888Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
