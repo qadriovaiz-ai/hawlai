@@ -343,3 +343,61 @@ describe("6. a superlative that ranks the reader, not the offering", () => {
     ]);
   });
 });
+
+describe("7. B16 — a word that makes a figure sound small", () => {
+  // The founder's blind grading of run 14, 20 October 2026. The message
+  // said "We deliver to your door in Indore for just ₹50", and he
+  // marked it false for two reasons. One was the delivery area. The
+  // other was "just" — a judgement that ₹50 is a little, which no
+  // record makes. The intensifier class holds purity and superlative
+  // words, so nothing looked at it.
+  //
+  // He named it a new shape and an extension of B10, which is the right
+  // reading: a boosting word and a minimising word are the same move in
+  // opposite directions.
+
+  it("THE SENTENCE HE GRADED F IS CAUGHT", () => {
+    // "Indore" is in the allowed list because business.city puts it
+    // there in the real pipeline — the city record was added on 19
+    // October for exactly this reason. Leaving it out would make this
+    // test pass on the wrong finding.
+    const found = introducedWords(["We deliver to your door in Indore for just ₹50 — flat rate, same for everyone."], ["Shree Dairy", "business city Indore"]);
+    expect(found).toEqual([{ sentenceIndex: 0, word: "just", kind: "minimiser" }]);
+  });
+
+  it("in either language, and with or without the currency word", () => {
+    for (const s of ["Sirf ₹50 mein delivery.", "Bas 400 mein haircut.", "Only Rs 999 for the candle.", "Just 50 for delivery.", "Keval ₹120."]) {
+      expect(introducedWords([s], ["A Business"]), s).toHaveLength(1);
+    }
+  });
+
+  it("A FIGURE MUST BE THERE — this is the whole reason it may be a list", () => {
+    // "only" and "sirf" were kept OUT of the intensifier class because
+    // "soy wax only" is often the record's own phrasing, and a flat
+    // word match emptied true sentences twice. Those stay safe.
+    expect(introducedWords(["Soy wax only, no paraffin."], ["A Business"])).toEqual([]);
+    expect(introducedWords(["Sirf soy wax use karti hoon."], ["A Business"])).toEqual([]);
+    expect(introducedWords(["Just message us and we will book you in."], ["A Business"])).toEqual([]);
+    expect(introducedWords(["Simply reply to this message."], ["A Business"])).toEqual([]);
+  });
+
+  it("AND A PRICE STATED PLAINLY IS NOT TOUCHED", () => {
+    // The direction that must not loosen. The figure is the owner's and
+    // reporting it is the entire job.
+    expect(introducedWords(["Delivery is ₹50, flat rate."], ["A Business"])).toEqual([]);
+    expect(introducedWords(["₹120 for 250g."], ["A Business"])).toEqual([]);
+    expect(introducedWords(["The candle costs ₹999."], ["A Business"])).toEqual([]);
+  });
+
+  it("the owner is told it is their call, not a fact", () => {
+    const sentences = ["Delivery for just ₹50."];
+    const note = introducedNote(introducedWords(sentences, ["A Business"]), sentences);
+    expect(note).toMatch(/says the amount is small, and that is your call to make/);
+  });
+
+  it("and a minimiser the owner typed themselves is theirs", () => {
+    // Same rule as every other word check: what the owner put in the
+    // brief is not something the model introduced.
+    expect(introducedWords(["Delivery for just ₹50."], ["sirf ₹50 likho", "just"])).toEqual([]);
+  });
+});

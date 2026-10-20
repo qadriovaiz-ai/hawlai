@@ -570,3 +570,44 @@ describe("Select is curation, not gatekeeping", () => {
     expect(JSON.stringify(sent[0])).not.toMatch(/Also on record/);
   });
 });
+
+describe("two true records side by side are not a third fact", () => {
+  // The founder's blind grading of run 14 found one F in 26 sentences:
+  //
+  //   "We deliver to your door in Indore for just ₹50 — flat rate,
+  //    same for everyone."
+  //
+  // The RATE is on record. The AREA is not, anywhere. The judge put
+  // business.city next to shipping.rate and read a delivery area out of
+  // the pair — and the second list, added the same day, is what made
+  // two unrelated records easy to find together.
+  //
+  // This is the causal rule of 18 October in the one place the change
+  // made it easy to break: two true facts do not make the link between
+  // them true.
+
+  it("THE RUBRIC NAMES THE TRAP AND THE SENTENCE THAT SPRANG IT", async () => {
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/facts/verifyClaims.ts");
+    expect(src).toMatch(/WHERE A BUSINESS IS, AND WHAT IT CHARGES TO DELIVER, DO NOT ADD UP TO WHERE IT DELIVERS/);
+    expect(src).toMatch(/that needs a record of the coverage itself, naming the area, the pin codes or the radius/);
+    expect(src).toMatch(/is NOT ENTAILED by "the business is in Indore" plus "delivery costs Rs 50"/);
+  });
+
+  it("AND IT NAMES THE SAME TRAP IN OTHER CLOTHES, so the fix is not one sentence", async () => {
+    // B10's lesson: a rule written as one example is defeated by the
+    // next example. Opening hours plus a phone number, a price plus a
+    // product, a process plus a material.
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/facts/verifyClaims.ts");
+    expect(src).toMatch(/THE SAME TRAP IN ITS OTHER FORMS/);
+    expect(src).toMatch(/a price plus a product do not establish that it is in stock/);
+    expect(src).toMatch(/is there ONE record that states this, or am I adding two together/);
+  });
+
+  it("it sits with the second-list rule, because that is what it guards", async () => {
+    const { code } = await import("./helpers/source");
+    const src = code("src/lib/facts/verifyClaims.ts");
+    expect(src.indexOf("WHERE A BUSINESS IS")).toBeGreaterThan(src.indexOf("YOU MAY BE SHOWN TWO LISTS"));
+  });
+});

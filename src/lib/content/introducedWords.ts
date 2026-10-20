@@ -96,10 +96,33 @@ const READER_FRAME_VERBS = new Set([
   "suits", "suit", "fits", "works", "feels", "is", "are",
 ]);
 
+/**
+ * Words that make a figure sound small.
+ *
+ * B16, FROM THE FOUNDER'S BLIND GRADING OF RUN 14 (2026-10-20). The
+ * message said "We deliver to your door in Indore for just Rs 50", and
+ * he marked it false for two reasons. One was the delivery area; the
+ * other was "just" - a judgement that Rs 50 is a little, which no
+ * record makes. The intensifier class holds purity and superlative
+ * words, so nothing looked at it.
+ *
+ * THESE ARE ONLY A CLAIM IN FRONT OF A FIGURE, and that is the whole
+ * reason this can be a list at all. "Only" and "sirf" were kept OUT of
+ * the intensifier class on purpose, because "soy wax only" is often the
+ * record's own phrasing and a flat word match emptied true sentences -
+ * twice. "Only Rs 50" is a different act: it is not reporting the price,
+ * it is saying the price is low. So the figure has to be there, and
+ * `minimisesAFigure` below is what decides.
+ */
+const MINIMISERS = new Set([
+  "just", "only", "merely", "simply", "mere",
+  "sirf", "bas", "keval", "kewal", "matr",
+]);
+
 export type IntroducedWord = {
   sentenceIndex: number;
   word: string;
-  kind: "intensifier" | "name";
+  kind: "intensifier" | "name" | "minimiser";
 };
 
 /**
@@ -155,6 +178,29 @@ function clauses(text: string): string[][] {
  * "premium" has a noun after it, which is exactly the case this does
  * not touch.
  */
+/**
+ * True when this minimiser is making a FIGURE sound small.
+ *
+ * The figure must be within the next two tokens, so "just Rs 50", "just
+ * 50", "sirf 400 mein" and "only Rs 999" are caught while "soy wax
+ * only", "only the finest" and "just message us" are not. Two tokens
+ * because a currency word sits between in one language and after in
+ * another.
+ *
+ * A NUMBER IS A NUMBER WHEREVER IT CAME FROM. The figure itself may be
+ * perfectly true and on record - that is not what this is about. The
+ * claim being added is that the amount is SMALL, and nothing in a
+ * record says what counts as small.
+ */
+function minimisesAFigure(clause: string[], i: number): boolean {
+  const CURRENCY = new Set(["rs", "inr", "rupees", "rupee", "r", "₹"]);
+  for (const next of clause.slice(i + 1, i + 3)) {
+    if (/[0-9]/.test(next)) return true;
+    if (!CURRENCY.has(next)) return false;
+  }
+  return false;
+}
+
 function ranksTheReader(clause: string[], i: number): boolean {
   if (i === 0 || !SECOND_PERSON.has(clause[i - 1])) return false;
   const after = clause.slice(i + 1);
@@ -260,10 +306,18 @@ export function introducedWords(sentences: string[], allowed: string[]): Introdu
     const seen = new Set<string>();
     for (const clause of clauses(sentence)) {
       clause.forEach((word, i) => {
-        if (!INTENSIFIERS.has(word) || vocabulary.has(word) || seen.has(word)) return;
-        if (ranksTheReader(clause, i)) return;
-        seen.add(word);
-        found.push({ sentenceIndex, word, kind: "intensifier" });
+        if (vocabulary.has(word) || seen.has(word)) return;
+        if (INTENSIFIERS.has(word)) {
+          if (ranksTheReader(clause, i)) return;
+          seen.add(word);
+          found.push({ sentenceIndex, word, kind: "intensifier" });
+          return;
+        }
+        // A minimiser is a claim only in front of a figure.
+        if (MINIMISERS.has(word) && minimisesAFigure(clause, i)) {
+          seen.add(word);
+          found.push({ sentenceIndex, word, kind: "minimiser" });
+        }
       });
     }
     for (const word of capitalisedWords(sentence)) {
@@ -285,7 +339,9 @@ export function introducedNote(found: IntroducedWord[], sentences: string[]): st
     .map((f) =>
       f.kind === "intensifier"
         ? `Removed "${(sentences[f.sentenceIndex] ?? "").trim()}" — it says "${f.word}", and nothing on record says that.`
-        : `Removed "${(sentences[f.sentenceIndex] ?? "").trim()}" — it names "${f.word}", which is nowhere in your records.`
+        : f.kind === "minimiser"
+          ? `Removed "${(sentences[f.sentenceIndex] ?? "").trim()}" — "${f.word}" says the amount is small, and that is your call to make, not mine.`
+          : `Removed "${(sentences[f.sentenceIndex] ?? "").trim()}" — it names "${f.word}", which is nowhere in your records.`
     )
     .join("\n");
 }

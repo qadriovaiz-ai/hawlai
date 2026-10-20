@@ -18,7 +18,7 @@ across surfaces, and a shape can be provoked on purpose for nothing.
 
 ## 1. The known bug-shapes
 
-Fourteen, drawn from the commit record rather than from memory. Each is
+Sixteen, drawn from the commit record rather than from memory. Each is
 a *shape*, not an incident — the incidents are listed under it so the
 claim can be checked.
 
@@ -131,9 +131,27 @@ Three steps replace the copy with new model output: the specificity pass
 *Incident:* run 11's "[link]" went out through a guard whose own test
 proves it catches that string.
 
-### And the fifteenth, which is not a product bug
+**B16 — A word that makes a figure sound small.**
+The mirror of B10: a boosting word and a minimising word are the same
+move in opposite directions, and the intensifier class only ever looked
+one way.
+*Incident:* run 14's "delivery for **just** ₹50" — the founder's blind
+grading, 20 Oct. The rate is recorded; that it is a *little* is a
+judgement no record makes. Caught only in front of a figure, because
+"soy wax only" is often the record's own phrasing and a flat word match
+emptied true sentences twice before.
 
-**B15 — The instrument tells a false story.**
+**B17 — Two true records side by side read as a third fact.**
+Separated from B3 because the cause is different: not scope, but
+addition. The second list makes two unrelated records easy to find
+together.
+*Incident:* "We deliver to your door **in Indore**" entailed from
+`business.city` plus `shipping.rate` — the same blind grading, the same
+sentence, the second half of its single F.
+
+### And the last one, which is not a product bug
+
+**B18 — The instrument tells a false story.**
 Listed separately because it damages the *evidence*, not the copy — and
 it has cost more of this budget than any product fault.
 *Incidents:* the first recall gate measured the OLD prompt's sentences
@@ -185,7 +203,7 @@ or a prompt. `multiTenantVocabulary.test.ts` and
 **What makes a case adversarial rather than just another case.** Each
 carries, written down in the case itself:
 
-- the **shape** it targets (B1–B14),
+- the **shape** it targets (B1–B17),
 - the **records the business has**, chosen so the trap is real,
 - **what the right answer is** — stated as *this sentence must survive*
   or *this sentence must be removed*, which is what the current cases
@@ -200,7 +218,7 @@ scored by machine for most shapes, which is what makes 280 affordable.
 **Generation is free and it is mine to do, with one honesty
 constraint:** I write the cases from the *shapes*, never from a run's
 output, because a case written from output I have already seen tests my
-memory rather than the pipeline. B15 is what that mistake looks like.
+memory rather than the pipeline. B18 is what that mistake looks like.
 
 ---
 
@@ -221,12 +239,12 @@ But most cases do not need a model at all, and that is the real saving:
 | **3** | The paid exit run, per surface | Rs 12–17 | **confirmation only, never debugging** |
 
 I expect roughly **200 of the 280 to land in tier 1** — because B1, B3,
-B6, B9, B10, B12, B13 and B14 are all decided in code, and those eight
-shapes account for most of the twenty-five runs. Tier 2 is the ~80 cases
+B6, B9, B10, B12, B13, B14, B16 and B17's code half are all decided in
+code, and those shapes account for most of the twenty-six runs. Tier 2 is the ~80 cases
 where a model's judgement is the thing under test.
 
 **Tier 1 is the prize.** It runs on every commit forever, it costs
-nothing, and it would have caught eight of the fourteen shapes before a
+nothing, and it would have caught ten of the sixteen shapes before a
 rupee was spent.
 
 ---
@@ -296,6 +314,6 @@ Nothing paid happens in step 1.
 **And one thing I would rather put plainly.** This plan is good
 engineering and it is also me paying back a debt. Twenty-five runs went
 on discovering, one failure at a time, what a few hundred free
-adversarial cases would have shown at once — and B15 says the
+adversarial cases would have shown at once — and B18 says the
 instruments I measured with were wrong six times. The tier-1 suite is
 the part that makes that unrepeatable.
