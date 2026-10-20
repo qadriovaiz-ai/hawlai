@@ -1,0 +1,30 @@
+
+EXIT TEST — the fact-bound pipeline on lead_message
+==================================================================
+cases                 3  (candle-07, salon-06, dairy-08)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 7.64   (per-run cap Rs 30.00)
+already spent         Rs 637.12 of Rs 682.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is lead_message.
+Its own 13 October baseline: see the graded sheet, surface lead_message.
+4 sentence(s)
+3 sentence(s)
+3 sentence(s)
+
+==================================================================
+sentences produced    10   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 3
+calls made            18   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                40034 in, 3788 out
+ACTUAL COST THIS RUN  Rs 8.98   (estimated Rs 7.64)
+COST PER EMAIL        Rs 2.99   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 646.10 of Rs 682.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+
+GRADE THIS: scripts\eval\results\s2-lead_message-2026-10-20T11-26-44-185Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

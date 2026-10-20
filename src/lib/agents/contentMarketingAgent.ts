@@ -219,6 +219,29 @@ export async function generateContent(
       recent: opts.recent,
       language: brandProfile?.preferred_language ?? facts?.brand?.language ?? null,
       operation: "content_generation",
+      // S2c: the fourth surface on the fact-bound pipeline. Does nothing
+      // unless FACT_BOUND_COPY=1 is also set.
+      //
+      // FOUND BY THE CONFIRMATION RUN OF 2026-10-20, and it is the
+      // largest thing those runs turned up. The social output gate
+      // reported TWENTY-ONE unsupported claims across twelve cases -
+      // benefit claims about the reader's hair, a capability claim
+      // about appointment details, comparisons - and the reason was not
+      // that the guards had failed. It was that THEY HAD NEVER RUN.
+      // This surface was not wired to the door at all.
+      //
+      // The same fault lead_message had, found the same hour. S2a wired
+      // WhatsApp and PLAN-S2 described the rest; the describing was not
+      // the doing, and a confirmation run is what tells the difference.
+      //
+      // NOTE FOR WHOEVER COSTS THIS: specificityPass is true on this
+      // surface, which means the second verification pass of 2026-10-20
+      // fires on EVERY social draft rather than only on revised ones.
+      // Social is also the largest surface at twelve cases. Its runs
+      // will be the most expensive in the set and that is the correct
+      // trade - a post is public, stays up and gets screenshotted.
+      factBound: true,
+      task: "social_post",
       logContext,
       brief: {
         label: meta.label,

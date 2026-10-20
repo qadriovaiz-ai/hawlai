@@ -1,0 +1,97 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-2of2-2026-10-20T11-26-54-401Z.json
+cases                6
+sentences            74   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 671.57 of Rs 682.00
+====================================================================
+
+[salon-07]  10 sentence(s)
+      process "Shine Studio's keratin treatment process is straightforward: first hair wash, then treatment application."
+      duration "The keratin treatment takes 90 minutes."
+      process "No shortcuts are taken in the keratin treatment process."
+      material "Shine Studio does not use ammonia-based products."
+      material "The products used in Shine Studio's treatments come from Korea."
+      price "A haircut at Shine Studio costs ₹400."
+      duration "A haircut at Shine Studio takes 30 minutes."
+      price "A keratin treatment session at Shine Studio costs ₹3500."
+
+[salon-09]  12 sentence(s)
+  *** benefit "Keratin treatment reduces frizz, poofiness, and stubborn waves."   <- SHOULD HAVE BEEN REMOVED
+  *** benefit "Keratin treatment produces smoothness inside the hair."   <- SHOULD HAVE BEEN REMOVED
+  *** benefit "Keratin treatment produces a soft, silky finish on the outside of the hair."   <- SHOULD HAVE BEEN REMOVED
+  *** benefit "After keratin treatment, the customer does not waste an extra 30-40 minutes getting ready every day."   <- SHOULD HAVE BEEN REMOVED
+      duration "Keratin treatment results last for a considerable amount of time."
+  *** capability "Keratin treatment works equally well on both straight and wavy hair types."   <- SHOULD HAVE BEEN REMOVED
+  *** capability "The business will discuss appointment details with the customer."   <- SHOULD HAVE BEEN REMOVED
+
+[dairy-02]  12 sentence(s)
+  *** benefit "Ghee adds weight."   <- SHOULD HAVE BEEN REMOVED
+      material "The ghee contains no preservatives."
+      material "Nothing is added to the ghee."
+      material "The ghee contains only what the milk gives."
+      process "Shree Dairy makes desi ghee using the bilona method."
+      process "The desi ghee is churned by hand."
+      process "The desi ghee is made in small batches."
+      credential "The desi ghee carries FSSAI certification."
+      credential "The FSSAI licence number is 11223344556677."
+      price "A 500 ml jar of desi ghee is priced at ₹850."
+      shipping "Shipping costs ₹50 on every order."
+      offer "Code FIRST10 gives 10% off."
+
+[dairy-03]  11 sentence(s)
+  *** benefit "Ghee adds weight."   <- SHOULD HAVE BEEN REMOVED
+  *** benefit "Ghee is hard on the stomach."   <- SHOULD HAVE BEEN REMOVED
+      process "Shree Dairy's desi ghee is made using the Bilona method."
+      process "Shree Dairy's desi ghee is churned by hand."
+      process "The Bilona method is exactly as the process has always been done."
+      material "Shree Dairy's ghee contains no preservatives."
+      credential "Shree Dairy is FSSAI licensed."
+      price "500 ml of Shree Dairy's ghee is priced at ₹850."
+      shipping "Shree Dairy charges flat ₹50 shipping."
+      offer "Code FIRST10 gives 10% off."
+
+[dairy-06]  13 sentence(s)
+      credential "Shree Dairy holds a valid FSSAI licence numbered 11223344556677."
+      credential "Shree Dairy's food safety practices have been verified by the regulatory authority."
+      process "Shree Dairy's desi ghee is made using the bilona method."
+      process "Shree Dairy's desi ghee is churned by hand."
+      material "Shree Dairy's desi ghee contains no preservatives."
+      process "Shree Dairy's paneer is made fresh every morning."
+      price "Shree Dairy's desi ghee 500ml is priced at ₹850."
+      price "Shree Dairy's paneer 250g is priced at ₹120."
+      offer "Code FIRST10 provides 10% off."
+
+[dairy-09]  16 sentence(s)
+  *** benefit "Ghee causes weight gain."   <- SHOULD HAVE BEEN REMOVED
+      material "Ghee made the traditional way contains no fillers."
+      material "Ghee made the traditional way contains no water."
+      material "Ghee made the traditional way contains no preservatives."
+      process "Shree Dairy makes every batch using the Bilona method."
+      process "Shree Dairy churns ghee by hand."
+      material "Shree Dairy ghee contains no preservatives."
+      credential "Shree Dairy ghee is FSSAI licensed."
+      price "A 500 ml jar of Shree Dairy ghee costs ₹850."
+      offer "Code FIRST10 gives 10% off."
+      shipping "Shree Dairy charges ₹50 for shipping."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   10
+   [salon-09] benefit — "Keratin treatment reduces frizz, poofiness, and stubborn waves."
+   [salon-09] benefit — "Keratin treatment produces smoothness inside the hair."
+   [salon-09] benefit — "Keratin treatment produces a soft, silky finish on the outside of the hair."
+   [salon-09] benefit — "After keratin treatment, the customer does not waste an extra 30-40 minutes getting ready every day."
+   [salon-09] capability — "Keratin treatment works equally well on both straight and wavy hair types."
+   [salon-09] capability — "The business will discuss appointment details with the customer."
+   [dairy-02] benefit — "Ghee adds weight."
+   [dairy-03] benefit — "Ghee adds weight."
+   [dairy-03] benefit — "Ghee is hard on the stomach."
+   [dairy-09] benefit — "Ghee causes weight gain."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 4.18
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

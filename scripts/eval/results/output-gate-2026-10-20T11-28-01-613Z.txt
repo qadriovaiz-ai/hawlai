@@ -1,0 +1,33 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-lead_message-2026-10-20T11-26-44-185Z.json
+cases                3
+sentences            10   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 1.73
+already spent        Rs 666.06 of Rs 682.00
+====================================================================
+
+[candle-07]  4 sentence(s)
+      material "The candles in the range are soy candles."
+      material "The candles contain no paraffin."
+      process "Each candle is hand-poured."
+      price "Candles start at a price of 999."
+      shipping "Free shipping is provided."
+
+[salon-06]  3 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[dairy-08]  3 sentence(s)
+      process "The ghee is hand-churned using the Bilona method."
+      price "The ghee is priced at 850."
+      credential "The business is FSSAI licensed."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 1.28
+====================================================================
+WORTH GRADING. Send the sheet.
+====================================================================

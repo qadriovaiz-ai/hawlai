@@ -493,3 +493,55 @@ describe("9. the two shapes the founder's blind grading caught", () => {
     expect(at("7")).toBeGreaterThan(at("6d"));
   });
 });
+
+describe("10. doing what the customer asked for is not a capability claim", () => {
+  // THE WHATSAPP CONFIRMATION RUN OF 2026-10-20, and it found a
+  // conflict inside my own rule rather than a drift in the model's.
+  //
+  //   "We're based in Indore and happy to get your order to you."
+  //     -> capability "The business will get the customer's order to
+  //        them."  <- SHOULD HAVE BEEN REMOVED
+  //
+  // Nothing can license a capability claim, so a dairy with a recorded
+  // flat ₹50 shipping policy could not say that it delivers.
+  //
+  // Rule 7 lists "deliver" among the automatic actions, and rule 7b
+  // (added the same week) drew the line at SELLING a thing. Neither
+  // covered FULFILLING AN ORDER — which is the single most ordinary
+  // sentence a shop writes.
+  const src = () => code("src/lib/facts/extractClaims.ts");
+
+  it("THE TEST IS WHETHER THE BUSINESS ACTS WITHOUT BEING ASKED EACH TIME", () => {
+    expect(src()).toMatch(/DOING WHAT THE CUSTOMER ASKED FOR IS NOT A CAPABILITY CLAIM EITHER/);
+    expect(src()).toMatch(/The test is whether the business acts WITHOUT BEING ASKED EACH TIME/);
+    expect(src()).toMatch(/Sending what somebody ordered is not that/);
+  });
+
+  it("AND IT NAMES WHAT A DELIVERY CLAIM ACTUALLY IS", () => {
+    // Not merely "not capability" — the rule has to say which type to
+    // use instead, or the model picks another unlicensable one.
+    expect(src()).toMatch(/the claimType is "shipping" or "availability"/);
+    expect(src()).toMatch(/a shipping or delivery policy on record is exactly what supports it/);
+  });
+
+  it("the sentence that found it is quoted, and the conflict named as mine", () => {
+    expect(src()).toMatch(/happy to get your order to you/);
+    expect(src()).toMatch(/This is the line my own rule got wrong/);
+  });
+
+  it("AND THE REAL CAPABILITY CLAIMS ARE STILL NAMED AS SUCH", () => {
+    // The direction that must not loosen. Reminding, rebooking and
+    // renewing by itself are what nothing can license, and rule 7 still
+    // says so.
+    expect(src()).toMatch(/remember, remind, rebook, repeat, deliver or follow up automatically/);
+    expect(src()).toMatch(/reminding, rebooking, renewing, following up by itself/);
+  });
+
+  it("and the rules stay in order after the insertion", () => {
+    const body = src();
+    const at = (n: string) => body.indexOf(`\n${n}. `);
+    expect(at("7a")).toBeGreaterThan(at("7"));
+    expect(at("7b")).toBeGreaterThan(at("7a"));
+    expect(at("8")).toBeGreaterThan(at("7c"));
+  });
+});

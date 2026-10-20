@@ -1,0 +1,100 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-1of2-2026-10-20T11-27-07-872Z.json
+cases                6
+sentences            66   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 667.34 of Rs 682.00
+====================================================================
+
+[candle-02]  13 sentence(s)
+      availability "The Lavender Candle is made for the purpose of providing a presence that fills the entire room."
+      material "The Lavender Candle is made from soy wax."
+      process "The Lavender Candle is hand-poured in small batches."
+      material "The Lavender Candle does not contain paraffin."
+      process "Fragrance is added to the candle when the wax is at 65 degrees."
+      process "No shortcuts are taken in the process of making the candle."
+      duration "A candle burns for 40 hours."
+      price "The Lavender Candle costs ₹999."
+      shipping "Shipping is free."
+
+[candle-03]  12 sentence(s)
+  *** customer_state "Most people think candles burn out in 10 hours."   <- SHOULD HAVE BEEN REMOVED
+      duration "The lavender candle burns for 40 hours."
+      process "Wax is melted in a double boiler."
+      process "Fragrance is added at exactly 65 degrees."
+      process "If temperature is wrong, the scent does not set properly."
+      material "Paraffin is never mixed into the candles."
+      material "The candles are made with pure soy wax."
+      process "The candles are hand-poured in small batches."
+  *** benefit "The extra steps ensure that the fragrance in the home is correct and thorough, not rushed."   <- SHOULD HAVE BEEN REMOVED
+      price "The lavender candle costs ₹999."
+      price "The rose candle costs ₹850."
+      shipping "Shipping is free on every order."
+
+[candle-06]  14 sentence(s)
+  *** benefit "A good fragrance can change how a room feels."   <- SHOULD HAVE BEEN REMOVED
+  *** benefit "Burning lavender before sleep and putting the phone away for a few minutes will help."   <- SHOULD HAVE BEEN REMOVED
+      material "The Lavender Candle is made from pure soy wax."
+      material "The Lavender Candle contains no paraffin."
+      process "The Lavender Candle is made by melting wax in a double boiler and adding fragrance at 65 degrees."
+      process "The Lavender Candle is hand-poured in small batches."
+      duration "The Lavender Candle burns for 40 hours."
+  *** comparison "The Lavender Candle burns for 40 hours, not 10-12 hours as people commonly think."   <- SHOULD HAVE BEEN REMOVED
+      price "The price of the Lavender Candle is ₹999."
+      shipping "Shipping is free on every order."
+
+[candle-10]  11 sentence(s)
+      material "Lavender candles are made from soy wax."
+      material "Rose candles are made from soy wax."
+      material "Lavender candles do not contain paraffin."
+      material "Rose candles do not contain paraffin."
+      process "The wax is melted in a double boiler."
+      process "Fragrance is added when the temperature is 65 degrees."
+      process "The scent properly sets because of the temperature control process."
+      duration "The candle burns for 40 hours."
+  *** customer_state "Many people think candles burn out in 10 hours."   <- SHOULD HAVE BEEN REMOVED
+      duration "The candle has a 40 hours burn time."
+      price "Lavender candles cost ₹999."
+      price "Rose candles cost ₹850."
+      shipping "Free shipping is offered on all orders."
+
+[salon-02]  9 sentence(s)
+  *** benefit "Keratin treatment addresses frizz and roughness in hair."   <- SHOULD HAVE BEEN REMOVED
+      process "Shine Studio's keratin treatment process includes hair wash followed by treatment application."
+      duration "A complete keratin treatment session at Shine Studio lasts ninety minutes."
+  *** capability "The customer needs to visit only once for a complete keratin treatment session."   <- SHOULD HAVE BEEN REMOVED
+      material "Shine Studio's keratin treatment products are sourced from Korea."
+      material "Shine Studio's keratin treatment products contain no ammonia."
+      price "Keratin treatment costs ₹3500."
+
+[salon-03]  7 sentence(s)
+  *** capability "The duration of keratin treatment depends on the customer's hair care routine."   <- SHOULD HAVE BEEN REMOVED
+  *** benefit "Gentler hair care results in longer-lasting keratin treatment."   <- SHOULD HAVE BEEN REMOVED
+      material "The products used by this business come from Korea."
+      material "This business does not use ammonia in its products."
+  *** benefit "Not using ammonia means hair does not experience unnecessary harshness."   <- SHOULD HAVE BEEN REMOVED
+      process "The keratin treatment process includes a thorough hair wash followed by proper application of treatment."
+      duration "A keratin treatment session lasts 90 minutes."
+      price "Keratin treatment booking is available at ₹3500 on /book/shine-studio."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   11
+   [candle-03] customer_state — "Most people think candles burn out in 10 hours."
+   [candle-03] benefit — "The extra steps ensure that the fragrance in the home is correct and thorough, not rushed."
+   [candle-06] benefit — "A good fragrance can change how a room feels."
+   [candle-06] benefit — "Burning lavender before sleep and putting the phone away for a few minutes will help."
+   [candle-06] comparison — "The Lavender Candle burns for 40 hours, not 10-12 hours as people commonly think."
+   [candle-10] customer_state — "Many people think candles burn out in 10 hours."
+   [salon-02] benefit — "Keratin treatment addresses frizz and roughness in hair."
+   [salon-02] capability — "The customer needs to visit only once for a complete keratin treatment session."
+   [salon-03] capability — "The duration of keratin treatment depends on the customer's hair care routine."
+   [salon-03] benefit — "Gentler hair care results in longer-lasting keratin treatment."
+   [salon-03] benefit — "Not using ammonia means hair does not experience unnecessary harshness."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 4.23
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

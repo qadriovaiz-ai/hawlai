@@ -1,0 +1,33 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 2of2  (salon-07, salon-09, dairy-02, dairy-03, dairy-06, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 637.12 of Rs 682.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+10 sentence(s)
+12 sentence(s)
+12 sentence(s)
+11 sentence(s)
+13 sentence(s)
+16 sentence(s)
+
+==================================================================
+sentences produced    74   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            11   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                17556 in, 2547 out
+ACTUAL COST THIS RUN  Rs 7.91   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.32   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 645.03 of Rs 682.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-2of2-2026-10-20T11-26-54-401Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
