@@ -41,6 +41,7 @@ import { join } from "node:path";
 import { extractClaims, extractUnlicensable, UNLICENSABLE_TYPES, NEEDS_RECIPIENT_RECORD } from "@/lib/facts/extractClaims";
 import { contextFromFacts } from "@/lib/facts/getContext";
 import { figureInText } from "@/lib/facts/validateSelection";
+import { atScale } from "@/lib/facts/scale";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
 import { BUDGET_INR } from "./harness";
@@ -112,16 +113,47 @@ function batches(strategy: Strategy): { key: string; cases: AdversarialCase[] }[
   const by = new Map<string, AdversarialCase[]>();
   const put = (key: string, c: AdversarialCase) => by.set(key, [...(by.get(key) ?? []), c]);
   for (const c of ALL) {
+    if (ONLY && c.fixture.key !== ONLY) continue;
     if (strategy === "message") put(`${c.fixture.key}/${c.surface}`, c);
     else if (strategy === "fixture") put(c.fixture.key, c);
     // split: recall cases keep their message shape, the rest do not need it.
     else if (c.shape === "B11") put(`${c.fixture.key}/${c.surface}`, c);
     else put(c.fixture.key, c);
   }
-  return [...by.entries()].map(([key, cases]) => ({ key, cases }));
+  // A BATCH HAS A CEILING, and the realty batch is why.
+  //
+  // Twenty-four fact-dense sentences - crores, square feet, a RERA
+  // number - produced more claims than the extractor's 2000 output
+  // tokens could hold, so the tool call came back truncated and the
+  // whole batch read as unreachable. Twice. Eighteen real-estate cases
+  // went unmeasured, which are exactly the ones that fixture exists
+  // for.
+  //
+  // Eight is also closer to a real message than twenty-four ever was,
+  // so this is not only a workaround.
+  const MAX = 8;
+  const out: { key: string; cases: AdversarialCase[] }[] = [];
+  for (const [key, cases] of by.entries()) {
+    for (let i = 0; i < cases.length; i += MAX) {
+      const part = cases.slice(i, i + MAX);
+      out.push({ key: cases.length > MAX ? `${key}#${Math.floor(i / MAX) + 1}` : key, cases: part });
+    }
+  }
+  return out;
 }
 
 const STRATEGY: Strategy = (process.env.EVAL_BATCH as Strategy) || "split";
+
+/**
+ * One fixture only, for re-running a batch that did not reach the model.
+ *
+ * NEEDED THE FIRST TIME IT RAN. The realty batch came back unreachable
+ * on 2026-10-20, so eighteen real-estate cases - the ones this fixture
+ * exists for, the crores and the RERA number - were simply not
+ * measured. Re-running the whole set to recover one batch would have
+ * cost Rs 10 again; this costs Rs 1.
+ */
+const ONLY = process.env.EVAL_ONLY ?? "";
 
 /** Every figure this business has on record, for the arithmetic half. */
 function recordsFor(c: AdversarialCase) {
@@ -130,12 +162,28 @@ function recordsFor(c: AdversarialCase) {
 
 type Verdict = "refused" | "figure_mismatch" | "needs_judge";
 
-export function verdictFor(c: AdversarialCase, claims: { claimType: string; value?: { number: number } | null }[]): Verdict {
+export function verdictFor(c: AdversarialCase, claims: { claimType: string; value?: { number: number; unit?: string } | null }[]): Verdict {
   if (claims.some((cl) => REFUSED.has(cl.claimType))) return "refused";
   const records = recordsFor(c);
   for (const cl of claims) {
     if (!cl.value || !NUMERIC.has(cl.claimType)) continue;
-    const found = records.some((r) => figureInText(r, cl.value!.number) || Number(r.value) === cl.value!.number);
+    // THE SAME ARITHMETIC THE PRODUCT USES, including the scale words.
+    //
+    // My first version of this line had its own comparison, and when
+    // lakh and crore were fixed in verifyClaims the gate went on
+    // reporting five wrongly-refused cases that the product no longer
+    // refused. An instrument that disagrees with the thing it measures
+    // tells a false story in whichever direction it happens to lean,
+    // and this one leant pessimistic — which is the luckier half of
+    // B18, not an excuse for it.
+    const stated = atScale(cl.value.number, (cl.value as { unit?: string }).unit);
+    const found = records.some(
+      (r) =>
+        figureInText(r, cl.value!.number) ||
+        figureInText(r, stated) ||
+        Number(r.value) === cl.value!.number ||
+        Number(r.value) === stated
+    );
     if (!found) return "figure_mismatch";
   }
   return "needs_judge";
@@ -153,7 +201,7 @@ describe("tier 2 — the model-dependent adversarial cases", () => {
     say();
     say("TIER 2 — THE CASES ONLY A MODEL CAN SETTLE");
     say("=".repeat(70));
-    say(`cases                ${sentences}`);
+    say(`cases                ${list.reduce((n, b) => n + b.cases.length, 0)} of ${sentences}${ONLY ? `   (EVAL_ONLY=${ONLY})` : ""}`);
     say(`batching             ${STRATEGY}   (EVAL_BATCH=message | fixture | split)`);
     say(`batches              ${list.length}`);
     for (const alt of ["message", "fixture", "split"] as Strategy[]) {
@@ -182,7 +230,13 @@ describe("tier 2 — the model-dependent adversarial cases", () => {
       ]);
       spent += (main.ok ? main.costInr : 0) + (net.ok ? net.costInr : 0);
       if (!main.ok) {
-        unreachable.push(batch.key);
+        // THE REASON, NOT JUST THE FACT. The realty batch came back
+        // unreachable twice on 2026-10-20 and my first version of this
+        // line recorded only that it had - so a repeatable failure
+        // looked like a flaky one, and I nearly reported it as
+        // transient. An instrument that says "it did not work" without
+        // saying why is B18.
+        unreachable.push(`${batch.key} (${batch.cases.length} sentences): ${main.reason}`);
         continue;
       }
       const claims = [...main.claims, ...(net.ok ? net.claims : [])];
@@ -204,7 +258,8 @@ describe("tier 2 — the model-dependent adversarial cases", () => {
     say(`MUST BE REMOVED — needs the judge   ${missed.length}   (undecided, NOT a pass)`);
     say(`MUST SURVIVE  — WRONGLY REFUSED     ${wronglyRefused.length}   (must be 0)`);
     say(`MUST SURVIVE  — reached the judge   ${survived.length}`);
-    say(`batches unreachable                 ${unreachable.length}${unreachable.length ? `   <<< ${unreachable.join(", ")}` : ""}`);
+    say(`batches unreachable                 ${unreachable.length}`);
+    for (const u of unreachable) say(`   ${u}`);
     say(`ACTUAL COST                         Rs ${spent.toFixed(2)}`);
     say("=".repeat(70));
 

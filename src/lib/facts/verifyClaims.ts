@@ -21,6 +21,7 @@ import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type Extra
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
 import { describeCoverage, sameProductName, scopeOfKey } from "@/lib/facts/scope";
+import { atScale, isScaleOnly } from "@/lib/facts/scale";
 import { figureInText } from "@/lib/facts/validateSelection";
 
 /** Claim types whose verdict is arithmetic, never judgement. */
@@ -70,12 +71,32 @@ function sameUnit(a: string | undefined, b: string | null | undefined): boolean 
     const raw = placeholderFree(u).toLowerCase().trim();
     return SYNONYMS[raw] ?? raw.replace(/s$/, "");
   };
+  // A SCALE WORD IS A SIZE, NOT A KIND. "Rs 72 lakh" has unit "lakh",
+  // which says nothing about currency, so it must not be refused for
+  // disagreeing with the record's "inr".
+  if (isScaleOnly(a) || isScaleOnly(b)) return true;
   const x = norm(a ?? "");
   const y = norm(b ?? "");
   // An absent unit on either side is not a mismatch: "999" and "₹999"
   // are the same claim, and the number is what carries the risk.
   if (!x || !y) return true;
   return x === y;
+}
+
+/**
+ * A record's value as a scaled number, or null when it is not a number.
+ *
+ * NULL FOR A BOOLEAN, and a test caught me losing that. My first
+ * version of the scale change passed `atScale(Number(a.value), a.unit)`
+ * straight into sameNumber - and Number(false) is 0, so the boolean
+ * guard that sameNumber exists for was bypassed and a claim of "Rs 0"
+ * could match a record whose value is false. "A BOOLEAN RECORD CANNOT
+ * BACK A FIGURE OF ZERO" went red, which is exactly what it is for.
+ */
+function scaledNumber(value: unknown, unit: string | null | undefined): number | null {
+  if (typeof value === "boolean") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? atScale(n, unit) : null;
 }
 
 function sameNumber(a: number, b: unknown): boolean {
@@ -304,9 +325,14 @@ export async function verifyClaims(
       // present in the other's.
       const sameThing = (a: SelectedClaim) =>
         !claim.aboutProduct || !a.aboutProduct || sameProductName(claim.aboutProduct, a.aboutProduct);
-      const match = approved.find(
-        (a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit) && sameThing(a)
-      );
+      // SCALED BEFORE COMPARING. "1.2 crore" and 12000000 are the same
+      // number written two ways, and the tier-2 gate of 2026-10-20
+      // caught five true recorded prices being refused for it.
+      const stated = atScale(claim.value!.number, claim.value!.unit);
+      const match = approved.find((a) => {
+        const recorded = scaledNumber(a.value, a.unit);
+        return recorded !== null && sameNumber(stated, recorded) && sameUnit(claim.value!.unit, a.unit) && sameThing(a);
+      });
       // THE RECORDS ARE THE AUTHORITY ON A FIGURE, NOT THE CLAIM LIST,
       // and the fourth S2a WhatsApp run of 2026-10-19 is why this
       // second look exists. Two true figures were removed:
@@ -342,7 +368,7 @@ export async function verifyClaims(
         match
           ? null
           : (opts.records ?? []).find((r) => {
-              if (!figureInText(r, claim.value!.number)) return false;
+              if (!figureInText(r, claim.value!.number) && !figureInText(r, stated)) return false;
               const scope = scopeOfKey(r.key);
               if (scope.kind !== "product") return true;
               return !claim.aboutProduct || sameProductName(claim.aboutProduct, scope.product);
@@ -362,7 +388,10 @@ export async function verifyClaims(
           .map((a) => `${a.value}${a.unit ? ` ${a.unit}` : ""}`);
         const wrongThing =
           claim.aboutProduct &&
-          approved.some((a) => sameNumber(claim.value!.number, a.value) && sameUnit(claim.value!.unit, a.unit));
+          approved.some((a) => {
+            const recorded = scaledNumber(a.value, a.unit);
+            return recorded !== null && sameNumber(stated, recorded) && sameUnit(claim.value!.unit, a.unit);
+          });
         verdicts.push({
           claim,
           verdict: "unsupported",

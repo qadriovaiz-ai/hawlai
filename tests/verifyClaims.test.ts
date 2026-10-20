@@ -611,3 +611,94 @@ describe("two true records side by side are not a third fact", () => {
     expect(src.indexOf("WHERE A BUSINESS IS")).toBeGreaterThan(src.indexOf("YOU MAY BE SHOWN TWO LISTS"));
   });
 });
+
+describe("lakh and crore are multipliers, not units", () => {
+  // FOUND BY THE TIER-2 ADVERSARIAL GATE, 20 October 2026, for Rs 2.82,
+  // and it is the one thing the real-estate fixture was built to
+  // provoke. Five true recorded prices were being refused:
+  //
+  //   "4 BHK penthouse at ₹1.2 Cr"      record: 12000000
+  //   "3 BHK ₹72 lakh"                  record:  7200000
+  //   "2 BHK, 950 sq ft. ₹45 lakh"      record:  4500000
+  //
+  // The extractor reports what the sentence says — 1.2, unit "Cr" — and
+  // the arithmetic compared 1.2 with 12000000 and deleted the sentence.
+  //
+  // THIS IS NOT THE MODEL CONVERTING ANYTHING. It still copies what it
+  // was given. It is the CHECKER learning that "1.2 crore" and
+  // "12000000" are one number written two ways, exactly as it already
+  // knows "hours" and "hour" are one unit.
+
+  const flat = approvedClaim({ claimType: "price", value: 12000000, unit: "inr", intent: "the penthouse costs ₹1.2 crore", aboutProduct: "4 BHK penthouse" });
+
+  it("A PRICE IN CRORES MATCHES THE SAME PRICE IN RUPEES", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "the penthouse costs ₹1.2 crore", value: { number: 1.2, unit: "crore" }, aboutProduct: "4 BHK penthouse" })],
+      [flat]
+    );
+    expect(r.verdicts[0].verdict).toBe("entailed");
+    expect(r.unsupportedSentences).toEqual([]);
+  });
+
+  it("and in every spelling a listing actually uses", async () => {
+    for (const unit of ["Cr", "crore", "crores", "karod"]) {
+      const r = await verifyClaims(
+        [extracted({ claimType: "price", canonical: "₹1.2 Cr", value: { number: 1.2, unit }, aboutProduct: "4 BHK penthouse" })],
+        [flat]
+      );
+      expect(r.verdicts[0].verdict, unit).toBe("entailed");
+    }
+  });
+
+  it("lakhs too, against the record's plain rupees", async () => {
+    const twoBhk = approvedClaim({ claimType: "price", value: 4500000, unit: "inr", intent: "the 2 BHK costs ₹45 lakh", aboutProduct: "2 BHK" });
+    for (const unit of ["lakh", "lakhs", "lac", "L"]) {
+      const r = await verifyClaims(
+        [extracted({ claimType: "price", canonical: "₹45 lakh", value: { number: 45, unit }, aboutProduct: "2 BHK" })],
+        [twoBhk]
+      );
+      expect(r.verdicts[0].verdict, unit).toBe("entailed");
+    }
+  });
+
+  it("AND A WRONG FIGURE IN CRORES IS STILL REFUSED", async () => {
+    // The direction that must not loosen. 12 crore is not 1.2 crore,
+    // and at this scale the difference is a hundred and eight million
+    // rupees.
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "₹12 crore", value: { number: 12, unit: "crore" }, aboutProduct: "4 BHK penthouse" })],
+      [flat]
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+
+  it("AND THE WRONG SCALE WORD IS STILL REFUSED", async () => {
+    // "₹1.2 lakh" for a record of 1.2 crore is the factor-of-a-hundred
+    // error this fixture exists for.
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "₹1.2 lakh", value: { number: 1.2, unit: "lakh" }, aboutProduct: "4 BHK penthouse" })],
+      [flat]
+    );
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+
+  it("A SCALE WORD SAYS NOTHING ABOUT CURRENCY, so it cannot disagree with one", async () => {
+    // "₹72 lakh" has unit "lakh". Refusing it for not saying "inr"
+    // would delete a true price on a technicality.
+    const { scaleOf, isScaleOnly } = await import("@/lib/facts/scale");
+    expect(isScaleOnly("lakh")).toBe(true);
+    expect(isScaleOnly("inr")).toBe(false);
+    expect(scaleOf("Cr")).toBe(10000000);
+    expect(scaleOf("lakh")).toBe(100000);
+    expect(scaleOf("inr")).toBe(1);
+    expect(scaleOf(null)).toBe(1);
+  });
+
+  it("and an ordinary rupee price is untouched by any of this", async () => {
+    const r = await verifyClaims(
+      [extracted({ claimType: "price", canonical: "the candle costs ₹999", value: { number: 999, unit: "inr" } })],
+      [approvedClaim()]
+    );
+    expect(r.verdicts[0].verdict).toBe("entailed");
+  });
+});

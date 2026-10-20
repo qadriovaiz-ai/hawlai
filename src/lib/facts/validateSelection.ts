@@ -14,6 +14,7 @@
 import { resolveFactId, type FactLicence, type FactRecord } from "@/lib/facts/factRecord";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, type ClaimType } from "@/lib/facts/extractClaims";
 import { describeScope, recordSupportsScope, resolveProduct, scopeOfKey } from "@/lib/facts/scope";
+import { scaleOf } from "@/lib/facts/scale";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 
 /**
@@ -410,7 +411,16 @@ export function validateSelection(
     // class this whole initiative exists to drive to zero.
     const figures = figuresInValue(claim.value);
     if (figures.length) {
-      const matchesAll = (r: FactRecord) => figures.every((f) => sameFigure(r.value, f) || figureInText(r, f));
+      // SCALED, as at step 4. A claim whose value says "1.2" with a unit
+      // of "crore" carries the same figure as a record holding 12000000.
+      const scale = scaleOf(claim.unit);
+      const matchesAll = (r: FactRecord) =>
+        figures.every(
+          (f) =>
+            sameFigure(r.value, f) ||
+            figureInText(r, f) ||
+            (typeof f === "number" && (sameFigure(r.value, f * scale) || figureInText(r, f * scale)))
+        );
       const match = cited.find(matchesAll);
       if (!match) {
         rejected.push({

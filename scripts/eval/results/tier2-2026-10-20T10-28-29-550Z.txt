@@ -1,0 +1,51 @@
+
+TIER 2 — THE CASES ONLY A MODEL CAN SETTLE
+======================================================================
+cases                116
+batching             split   (EVAL_BATCH=message | fixture | split)
+batches              13
+   message  24 batches, 48 calls, about Rs 30.07
+   fixture   6 batches, 12 calls, about Rs 7.52
+   split    13 batches, 26 calls, about Rs 16.29
+calls                26   (extraction + the second net, per batch)
+ESTIMATE THIS RUN    Rs 16.29
+already spent        Rs 603.72 of Rs 622.00
+======================================================================
+
+======================================================================
+MUST BE REMOVED — settled here      51
+MUST BE REMOVED — needs the judge   27   (undecided, NOT a pass)
+MUST SURVIVE  — WRONGLY REFUSED     0   (must be 0)
+MUST SURVIVE  — reached the judge   14
+batches unreachable                 1   <<< realty
+ACTUAL COST                         Rs 10.48
+======================================================================
+
+NEEDS THE JUDGE — the extraction layer does not settle these:
+  [lm-candle-10 B7] "You asked about the lavender candle last week." — (no claims)
+  [so-candle-13 B3] "Both candles have a 40 hour burn and cost ₹999." — duration:Both candles burn for 40 hours. | price:Both candles cost ₹999.
+  [wa-salon-18 B11] "₹3500 mein glossy, smooth hair." — price:The price is ₹3500. | material:The product has glossy, smooth hair as a quality.
+  [so-salon-23 B3] "Every treatment takes ninety minutes." — duration:Every treatment takes ninety minutes.
+  [pd-salon-21 B13] "Free shipping on this service." — shipping:Shipping on this service is free.
+  [wa-dairy-27 B3] "Fresh desi ghee and paneer, now in Indore." — availability:Fresh desi ghee is available in Indore. | availability:Fresh paneer is available in Indore.
+  [wa-dairy-30 B6] "FSSAI licence 11223344556678." — credential:The business holds FSSAI licence 11223344556678.
+  [lm-dairy-25 B3] "Ghee roz subah fresh banta hai." — process:Ghee is made fresh every morning.
+  [lm-dairy-50 B6] "FIRST10 se pehle order par 20 percent off." — offer:Orders placed with code FIRST10 receive 20 percent off.
+  [so-dairy-30 B6] "FSSAI licence 1122334455667. No preservatives, ever." — credential:The business holds FSSAI licence 1122334455667. | material:Ghee contains no preservatives.
+  [so-dairy-34 B3] "Ghee aur paneer dono roz subah fresh bante hain." — process:Ghee is made fresh every morning. | process:Paneer is made fresh every morning.
+  [pd-dairy-24 B6] "Paneer 500g for ₹120." — price:Paneer is priced at ₹120 for 500g.
+  [pd-dairy-26 B3] "Made fresh every morning, the Bilona way." — process:Paneer is made fresh every morning. | process:Paneer is made the Bilona way.
+  [wa-coach-45 B3] "Class 10 maths batch mein das students hain." — count:The Class 10 maths batch has ten students.
+  [wa-coach-47 B13] "Free shipping on all admissions." — shipping:Shipping is free on all admissions. | offer:Free shipping applies to all admissions.
+  [lm-coach-51 B13] "Study material ki delivery free hai." — shipping:Delivery of study material is free.
+  [so-coach-45 B3] "Both batches have twelve students." — count:Both batches have twelve students.
+  [so-coach-48 B13] "Free delivery of all study material." — (no claims)
+  [pd-coach-41 B3] "Twelve students per batch." — count:Each batch has twelve students.
+  [pd-coach-46 B13] "Books delivered free to your home." — shipping:Books are delivered free to the customer's home.
+  [wa-rest-51 B3] "Everything on the menu is slow cooked overnight." — process:Everything on the menu is slow cooked overnight.
+  [lm-rest-48 B3] "Sab dishes charcoal par grill hoti hain." — process:All dishes are grilled on charcoal.
+  [so-rest-50 B7] "Nut-free kitchen." — material:The kitchen is nut-free.
+  [so-rest-52 B3] "Everything is dum cooked and slow cooked overnight." — process:Everything is dum cooked. | process:Everything is slow cooked overnight.
+  [so-rest-55 B6] "Paneer tikka ₹240, veg biryani ₹320." — price:Paneer tikka costs ₹240. | price:Veg biryani costs ₹320.
+  [pd-rest-48 B3] "Slow cooked overnight, like everything on our menu." — process:The dish is slow cooked overnight.
+  [pd-rest-54 B7] "Butter naan, freshly baked in a traditional tandoor. ₹60." — process:Butter naan is freshly baked. | process:Butter naan is baked in a traditional tandoor. | price:Butter naan costs ₹60.

@@ -1,0 +1,23 @@
+
+TIER 2 — THE CASES ONLY A MODEL CAN SETTLE
+======================================================================
+cases                24 of 116   (EVAL_ONLY=realty)
+batching             split   (EVAL_BATCH=message | fixture | split)
+batches              1
+   message   4 batches,  8 calls, about Rs 5.01
+   fixture   1 batches,  2 calls, about Rs 1.25
+   split     1 batches,  2 calls, about Rs 1.25
+calls                2   (extraction + the second net, per batch)
+ESTIMATE THIS RUN    Rs 1.25
+already spent        Rs 614.49 of Rs 622.00
+======================================================================
+
+======================================================================
+MUST BE REMOVED — settled here      0
+MUST BE REMOVED — needs the judge   0   (undecided, NOT a pass)
+MUST SURVIVE  — WRONGLY REFUSED     0   (must be 0)
+MUST SURVIVE  — reached the judge   0
+batches unreachable                 1
+   realty (24 sentences): the tool call carried no claims array
+ACTUAL COST                         Rs 0.29
+======================================================================

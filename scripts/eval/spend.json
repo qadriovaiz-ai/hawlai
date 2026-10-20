@@ -281,7 +281,37 @@
       "label": "output gate on s2-whatsapp-2026-10-20T08-57-21-888Z.json",
       "inr": 2.51,
       "calls": 6
+    },
+    {
+      "at": "2026-10-20T10:28:29.549Z",
+      "label": "tier-2 adversarial gate",
+      "inr": 10.48,
+      "calls": 26
+    },
+    {
+      "at": "2026-10-20T10:29:31.824Z",
+      "label": "tier-2 adversarial gate",
+      "inr": 0.29,
+      "calls": 2
+    },
+    {
+      "at": "2026-10-20T10:30:11.766Z",
+      "label": "tier-2 adversarial gate",
+      "inr": 0.29,
+      "calls": 2
+    },
+    {
+      "at": "2026-10-20T10:31:17.757Z",
+      "label": "tier-2 adversarial gate",
+      "inr": 2.82,
+      "calls": 6
+    },
+    {
+      "at": "2026-10-20T10:39:36.311Z",
+      "label": "tier-2 adversarial gate",
+      "inr": 2.82,
+      "calls": 6
     }
   ],
-  "totalInr": 603.72
+  "totalInr": 620.42
 }

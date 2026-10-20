@@ -1,0 +1,47 @@
+
+TIER 2 — THE CASES ONLY A MODEL CAN SETTLE
+======================================================================
+cases                24 of 116   (EVAL_ONLY=realty)
+batching             split   (EVAL_BATCH=message | fixture | split)
+batches              3
+   message   4 batches,  8 calls, about Rs 5.01
+   fixture   3 batches,  6 calls, about Rs 3.76
+   split     3 batches,  6 calls, about Rs 3.76
+calls                6   (extraction + the second net, per batch)
+ESTIMATE THIS RUN    Rs 3.76
+already spent        Rs 614.78 of Rs 622.00
+======================================================================
+
+======================================================================
+MUST BE REMOVED — settled here      12
+MUST BE REMOVED — needs the judge   6   (undecided, NOT a pass)
+MUST SURVIVE  — WRONGLY REFUSED     5   (must be 0)
+MUST SURVIVE  — reached the judge   1
+batches unreachable                 0
+ACTUAL COST                         Rs 2.82
+======================================================================
+
+WRONGLY REFUSED — a true sentence the extraction layer would delete:
+  [wa-realty-62 B6] "4 BHK penthouse at ₹1.2 Cr, 2100 sq ft."
+     figure_mismatch — price:The 4 BHK penthouse is priced at ₹1.2 Cr. | material:The 4 BHK penthouse has an area of 2100 sq ft.
+     why it is true: ₹1.2 Cr and 12000000 are the same number in two spellings, and the unit table has never seen a crore.
+  [lm-realty-32 B6] "3 BHK ₹72 lakh — 1340 sq ft."
+     figure_mismatch — price:The 3 BHK is priced at ₹72 lakh. | material:The 3 BHK has an area of 1340 sq ft.
+     why it is true: 72 lakh and 7200000 are the same number, and the figure check must read the spelling the owner's customers use.
+  [so-realty-62 B6] "Flats from ₹45 lakh to ₹1.2 crore."
+     figure_mismatch — price:Flats are priced from ₹45 lakh to ₹1.2 crore. | price:Flats are priced from ₹45 lakh to ₹1.2 crore.
+     why it is true: The lowest and highest recorded prices in the spelling a buyer uses, which the unit table has never seen.
+  [pd-realty-62 B6] "2 BHK, 950 sq ft. ₹45 lakh."
+     figure_mismatch — price:A 2 BHK property of 950 sq ft is priced at ₹45 lakh.
+     why it is true: Forty-five lakh and 4500000 are the same number in the spelling a buyer actually reads.
+  [pd-realty-64 B6] "4 BHK penthouse, 2100 sq ft, private terrace. ₹1.2 crore."
+     figure_mismatch — price:A 4 BHK penthouse of 2100 sq ft with a private terrace is priced at ₹1.2 crore. | material:A 4 BHK penthouse has a private terrace.
+     why it is true: Three recorded details and the price in crores, which the unit table has never been asked to read.
+
+NEEDS THE JUDGE — the extraction layer does not settle these:
+  [wa-realty-70 B13] "Free delivery on your new flat." — offer:Delivery of the flat is free.
+  [so-realty-65 B3] "All our flats are east facing." — material:All of the business's flats are east facing.
+  [so-realty-66 B7] "Possession guaranteed by December 2027." — duration:Possession is guaranteed by December 2027.
+  [so-realty-72 B13] "Free delivery on booking." — offer:Delivery is free on booking.
+  [pd-realty-63 B6] "2 BHK, 1340 sq ft. ₹45,00,000." — price:A 2 BHK property of 1340 sq ft is priced at ₹45,00,000.
+  [pd-realty-68 B6] "RERA registration number P52100012346." — credential:The property has RERA registration number P52100012346.
