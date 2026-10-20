@@ -23,7 +23,14 @@ import { knownText } from "../src/lib/claims/businessFacts";
 
 describe("the eval fixtures' owner knowledge", () => {
   it("EVERY FIXTURE'S ownerFacts IS ITS OWN rows — not empty, not something else", () => {
-    expect(FIXTURES.length).toBe(3);
+    // SIX SINCE 2026-10-20: the three originals plus coaching, a
+    // restaurant and real estate, added on the founder's direction so
+    // the adversarial cases have trades that spring shapes the first
+    // three cannot. The number is pinned rather than left loose because
+    // a fixture added without being wired into the ownerFacts loop
+    // below would otherwise go unnoticed - which is the exact fault
+    // this file exists to prevent.
+    expect(FIXTURES.length).toBe(6);
     for (const f of FIXTURES) {
       const owner = (f.facts as any).ownerFacts as { category: string; title: string; content: string }[];
       expect(owner, `${f.key} has no ownerFacts`).toBeTruthy();
