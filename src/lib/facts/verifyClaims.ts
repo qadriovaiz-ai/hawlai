@@ -20,7 +20,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
-import { describeCoverage, sameProductName, scopeOfKey } from "@/lib/facts/scope";
+import { describeCoverage, recordSupportsScope, sameProductName, scopeOfKey } from "@/lib/facts/scope";
 import { atScale, isScaleOnly } from "@/lib/facts/scale";
 import { figureInText } from "@/lib/facts/validateSelection";
 
@@ -203,9 +203,36 @@ export function approvedForJudge(approved: SelectedClaim[], records: FactRecord[
  * and a figure is still decided by arithmetic. This widens the EVIDENCE
  * the judge may read, not the standard it applies.
  */
-export function alsoOnRecord(approved: SelectedClaim[], records: FactRecord[]): string {
+export function alsoOnRecord(approved: SelectedClaim[], records: FactRecord[], aboutProduct?: string | null): string {
   const cited = new Set(approved.flatMap((c) => c.factIds));
-  const rest = records.filter((r) => !cited.has(r.id) && r.value !== null && r.value !== undefined && r.value !== "");
+  // SCOPE IS ENFORCED HERE, IN CODE, NOT LEFT TO THE RUBRIC.
+  //
+  // THE FOUNDER'S BUG REPORT OF 2026-10-20: "made by hand-churning"
+  // belongs to the ghee and not to the paneer, and the pipeline was
+  // letting it cross over.
+  //
+  // The scope rule already refuses that at step 2 -
+  // recordSupportsScope("process.hand_churned", "paneer") is false,
+  // because a business-level process record cannot carry a claim about
+  // one named product. The leak was the SECOND LIST added the same
+  // day: every unchosen record went to the judge in one block, and
+  // rubric rule 8 tells the judge that scope objections are "not
+  // available to you" - true while every fact it saw had been cleared
+  // in code, false the moment this list existed.
+  //
+  // So the filter sits where it cannot be talked out of. A
+  // business-level record still covers a COLLECTIVE claim, because
+  // recordSupportsScope returns true when the claim names no one
+  // product - which is what keeps "the candles burn for 40 hours"
+  // sayable.
+  const rest = records.filter(
+    (r) =>
+      !cited.has(r.id) &&
+      r.value !== null &&
+      r.value !== undefined &&
+      r.value !== "" &&
+      recordSupportsScope(r.key, aboutProduct)
+  );
   if (!rest.length) return "";
   return rest.map((r) => `- ${r.recordedText}${r.unit ? ` (${r.value} ${r.unit})` : ""} [${describeCoverage(r.key)}]`).join("\n");
 }
@@ -439,7 +466,21 @@ export async function verifyClaims(
     return { verdicts, unsupportedSentences: dropList(verdicts), costInr: 0, degraded: false };
   }
 
-  const numbered = forJudge.map((c, i) => `[${i}] (${c.claimType}) ${c.canonical}`).join("\n");
+  // PER CLAIM, NOT ONE SHARED BLOCK. A shared list of unchosen records
+  // is a list the judge can apply to whatever claim it likes, and that
+  // is how the ghee's hand-churning reached the paneer.
+  const numbered = forJudge
+    .map((c, i) => {
+      const covering = alsoOnRecord(approved, opts.records ?? [], c.aboutProduct);
+      const head = `[${i}] (${c.claimType}) ${c.canonical}`;
+      if (!covering) return head;
+      const indented = covering
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+      return `${head}\n    ALSO ON RECORD AND ABLE TO COVER THIS CLAIM:\n${indented}`;
+    })
+    .join("\n");
   const result = await callClaude(
     {
       model: opts.model ?? CLAUDE_MODELS.fast,
@@ -453,7 +494,13 @@ export async function verifyClaims(
           role: "user",
           content: [
             `Facts chosen for this piece:\n${approvedForJudge(approved, opts.records ?? [])}`,
-            unchosen ? `\nAlso on record for this business, but NOT chosen for this piece - evidence just the same:\n${unchosen}` : "",
+            // THE SHARED BLOCK IS GONE. It used to sit here, and it is
+            // where the ghee's hand-churning reached the paneer: one
+            // list of unchosen records that the judge could apply to
+            // any claim it liked. Each claim now carries the records
+            // that can actually cover IT, filtered in code above by
+            // recordSupportsScope.
+            "",
             `\nClaims to decide:\n${numbered}`,
           ]
             .filter(Boolean)

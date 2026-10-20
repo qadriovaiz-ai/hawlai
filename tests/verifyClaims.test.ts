@@ -481,7 +481,12 @@ describe("Select is curation, not gatekeeping", () => {
     );
     const prompt = JSON.stringify(sent[0]);
     expect(prompt).toMatch(/Facts chosen for this piece/);
-    expect(prompt).toMatch(/Also on record for this business, but NOT chosen for this piece/);
+    // PER CLAIM SINCE 2026-10-20, not one shared block. The founder
+    // reported that "made by hand-churning" was reaching the paneer,
+    // and a shared list is a list the judge can apply to whichever
+    // claim it likes. Each claim now carries only the records that
+    // recordSupportsScope says can cover IT.
+    expect(prompt).toMatch(/ALSO ON RECORD AND ABLE TO COVER THIS CLAIM/);
     expect(prompt).toMatch(/Made fresh every morning/);
     expect(r.verdicts[0].verdict).toBe("entailed");
   });
@@ -700,5 +705,122 @@ describe("lakh and crore are multipliers, not units", () => {
       [approvedClaim()]
     );
     expect(r.verdicts[0].verdict).toBe("entailed");
+  });
+});
+
+describe("hand-churning belongs to the ghee, not to the paneer", () => {
+  // THE FOUNDER'S BUG REPORT, 20 October 2026. The dairy's own row says
+  // "Bilona method se banate hain. Haath se churn karte hain." — a
+  // business-level process record. Hand-churning is how the GHEE is
+  // made; paneer is not churned at all.
+  //
+  // The scope rule already refused this at step 2:
+  // recordSupportsScope("process.hand_churned", "paneer") is false,
+  // because a business-level record cannot carry a claim about one
+  // named product. The leak was the SECOND LIST added the same morning
+  // — every unchosen record went to the judge in one block, and rubric
+  // rule 8 tells the judge that scope objections are "not available to
+  // you". That was true while every fact it saw had been cleared in
+  // code, and false the moment that list existed.
+  //
+  // So the filter moved to where a prompt cannot talk it out: per
+  // claim, in code.
+
+  const rec2 = (over: Partial<FactRecord>): FactRecord => ({
+    id: "f_churn",
+    dealershipId: "biz_1",
+    key: "process.hand_churned",
+    value: true,
+    unit: null,
+    source: "owner_stated",
+    sourceRef: "business_knowledge:d1",
+    confidence: "inferred",
+    licenses: ["existence", "policy", "process"],
+    recordedText: "Haath se churn karte hain.",
+    observedAt: "2026-10-20T00:00:00.000Z",
+    ...over,
+  });
+
+  /**
+   * The CLAIMS section of the user message only.
+   *
+   * TWO WRONG VERSIONS OF THIS BEFORE IT WAS RIGHT, both for the same
+   * reason: I kept searching text that contains the word for reasons
+   * that have nothing to do with the thing being tested.
+   *
+   *   the whole request body   JUDGE_SYSTEM uses hand-churning as one
+   *                            of its own worked examples, seven times
+   *   the whole claims block   the CLAIM says "the paneer is
+   *                            hand-churned", so of course it contains
+   *                            "churn"
+   *
+   * The property is whether EVIDENCE was attached to the claim, so that
+   * is what these assert: the presence or absence of the evidence
+   * header the per-claim block prints.
+   */
+  const claimsBlock = (request: any): string => {
+    const content = String(request?.messages?.[0]?.content ?? "");
+    const at = content.indexOf("Claims to decide:");
+    return at < 0 ? "" : content.slice(at);
+  };
+
+  function capture() {
+    const sent: any[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_verdicts", input: { verdicts: [{ index: 0, entailed: true, why: "x" }] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    return sent;
+  }
+
+  it("A BUSINESS-LEVEL PROCESS RECORD IS NOT SHOWN FOR A NAMED PRODUCT'S CLAIM", async () => {
+    const sent = capture();
+    await verifyClaims(
+      [extracted({ claimType: "process", canonical: "the paneer is hand-churned", aboutProduct: "Paneer 250g" })],
+      [approvedClaim({ claimType: "price", value: 120, unit: "inr", aboutProduct: "Paneer 250g" })],
+      { records: [rec2({})] }
+    );
+    // The judge is asked, and the churning record is NOT in front of it.
+    expect(sent).toHaveLength(1);
+    expect(claimsBlock(sent[0])).not.toMatch(/ALSO ON RECORD/);
+  });
+
+  it("BUT IT IS SHOWN FOR A CLAIM ABOUT THE RANGE, which is what keeps it sayable", async () => {
+    // recordSupportsScope returns true when the claim names no one
+    // product. "We hand-churn" is a true thing about the business and
+    // must stay available — the fix is about CROSSING OVER, not about
+    // locking the record away.
+    const sent = capture();
+    await verifyClaims(
+      [extracted({ claimType: "process", canonical: "the business hand-churns" })],
+      [approvedClaim({ claimType: "price", value: 120, unit: "inr" })],
+      { records: [rec2({})] }
+    );
+    expect(claimsBlock(sent[0])).toMatch(/ALSO ON RECORD[\s\S]*churn/i);
+  });
+
+  it("AND THE GHEE'S OWN RECORD STILL COVERS THE GHEE", async () => {
+    // The direction that must not over-fire: a product-scoped record
+    // reaching its own product.
+    const sent = capture();
+    await verifyClaims(
+      [extracted({ claimType: "process", canonical: "the ghee is made by the Bilona method", aboutProduct: "Desi ghee 500ml" })],
+      [approvedClaim({ claimType: "price", value: 850, unit: "inr", aboutProduct: "Desi ghee 500ml" })],
+      { records: [rec2({ id: "f_bilona", key: "product.desi_ghee_500ml.description", value: "Bilona method", recordedText: "Desi ghee 500ml: Bilona method" })] }
+    );
+    expect(claimsBlock(sent[0])).toMatch(/ALSO ON RECORD[\s\S]*Bilona/);
+  });
+
+  it("and one product's record is never shown for another product's claim", async () => {
+    const sent = capture();
+    await verifyClaims(
+      [extracted({ claimType: "process", canonical: "the paneer is made by the Bilona method", aboutProduct: "Paneer 250g" })],
+      [approvedClaim({ claimType: "price", value: 120, unit: "inr", aboutProduct: "Paneer 250g" })],
+      { records: [rec2({ id: "f_bilona", key: "product.desi_ghee_500ml.description", value: "Bilona method", recordedText: "Desi ghee 500ml: Bilona method" })] }
+    );
+    expect(claimsBlock(sent[0])).not.toMatch(/ALSO ON RECORD/);
   });
 });

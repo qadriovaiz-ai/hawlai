@@ -89,7 +89,21 @@ export function recordSupportsScope(recordKey: string, aboutProduct: string | nu
   const wanted = productSlug(aboutProduct);
   if (!wanted) return true;
   if (scope.kind === "policy") return true;
-  if (scope.kind === "product") return scope.product === wanted;
+  // TOLERANT, NOT EXACT, and the same reasoning as the figure check of
+  // 18 October: slug equality refused a true price because the sentence
+  // said "ghee" and the catalogue said "Desi ghee 500ml".
+  //
+  // CAUGHT ON 2026-10-20 WHILE FIXING THE HAND-CHURNING LEAK. Moving
+  // the scope filter in front of the judge made this strictness visible
+  // for the first time: a claim about "paneer" was being denied the
+  // paneer's OWN description, because the record's slug is
+  // "paneer_250g". A filter that drops the right record is worse than
+  // no filter - it deletes a true claim instead of a false one.
+  //
+  // sameProductName asks whether one name's content words are all
+  // present in the other's, so "paneer" matches "paneer 250g" and
+  // "Rose candle" still does not match "lavender candle".
+  if (scope.kind === "product") return sameProductName(wanted, scope.product);
   return false;
 }
 

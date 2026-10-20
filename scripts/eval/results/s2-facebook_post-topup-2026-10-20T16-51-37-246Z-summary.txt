@@ -1,0 +1,51 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 3  (salon-02, salon-03, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 7.64   (per-run cap Rs 30.00)
+already spent         Rs 725.75 of Rs 762.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+7 sentence(s), facts note present
+7 sentence(s), facts note present
+8 sentence(s), facts note present
+
+==================================================================
+sentences produced    22   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 3
+calls made            27   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 3000ms between cases)
+tokens                63912 in, 7710 out
+ACTUAL COST THIS RUN  Rs 13.92   (estimated Rs 7.64)
+COST PER EMAIL        Rs 4.64   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 739.67 of Rs 762.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [salon-02]
+     Left out: Show the step-by-step process (hair wash first, then treatment) to build trust and set expectations. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Left out: Korean-sourced products signal quality and give the post a credible, specific detail. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Does the business want to include a booking method (phone number, DM, WhatsApp link, or walk-in)? Please record the preferred call-to-action so the post can direct readers to act.
+     Not on record: Are there any before/after results or client testimonials the business wants to reference? Please record a specific, factual outcome (e.g. 'frizz reduced for X weeks') so it can be cited.
+     Removed "The salon does not use ammonia-containing products." — nothing on record can support a safety claim.
+     Removed "The business does not use anything containing ammonia." — Chosen fact states ammonia-free products are used, but this does not state that nothing containing ammonia is used — absence of one product type is not absence of all products with that ingredient..
+  [salon-03]
+     Left out: Briefly describes the process step (wash then treatment) to give context around the session. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: How long does the keratin treatment result last on the hair (e.g. 'results last X weeks/months') — please record this against the Keratin treatment so it can be stated in copy.
+     Removed "The products used do not contain ammonia." — nothing on record can support a safety claim.
+     Removed "The time taken for keratin treatment is necessary because the work is done properly." — No fact states that the duration is necessary because work is done properly. Two facts (duration and quality) would need to be linked by a causal claim, which is not stated..
+  [dairy-09]
+     You asked for Ghee se weight nahi badhta (health/body claim). Your records say Koi bhi record yeh claim support nahi karta. Records mein sirf process, ingredients aur credentials hain — body ya weight ke baare mein kuch nahi. — change the record, or I write it without that.
+     Left out: Bilona method se bana ghee — process batana jo product ki authenticity dikhata hai — it cites a record (e138f4eb) that does not exist.
+     Not on record: Owner ko record karna chahiye: 'Desi ghee 500ml ke baare mein koi specific nutritional ya dietary fact jo hum claim kar sakein' — jaise fat type, calorie count, ya koi lab-tested property. Abhi koi aisa record nahi hai.
+     Removed "Most ghee sold in shops contains preservatives." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Ghee causes weight gain." — nothing on record can support a benefit claim.
+     Removed "If you have been avoiding ghee because you think it will cause weight gain, we are happy to talk about that, implying ghee will not cause weight gain." — nothing on record can support a benefit claim.
+     Removed "Shree Dairy's ghee contains no shortcuts in its making." — No fact states absence of shortcuts; 'no preservatives' and hand-churning do not entail no shortcuts overall..
+     Removed "Shree Dairy's ghee contains no additives." — Fact states 'no preservatives' but not 'no additives' — preservatives are one kind of additive, not all additives..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-topup-2026-10-20T16-51-37-246Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
