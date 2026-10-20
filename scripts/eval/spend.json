@@ -161,7 +161,13 @@
       "label": "s2-whatsapp-2026-10-20T05-56-20-785Z",
       "inr": 11.99,
       "calls": 24
+    },
+    {
+      "at": "2026-10-20T06:20:15.784Z",
+      "label": "graded-f extractor gate",
+      "inr": 0.93,
+      "calls": 2
     }
   ],
-  "totalInr": 463.61
+  "totalInr": 464.54
 }

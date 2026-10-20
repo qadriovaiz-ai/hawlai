@@ -407,3 +407,61 @@ describe("8. a benefit is an effect on the person, not a property of the thing",
     expect(src()).toMatch(/6b\. BUT A STATEMENT ABOUT WHAT IS OR IS NOT IN SOMETHING IS "material", NOT "safety"/);
   });
 });
+
+describe("9. the two shapes the founder's blind grading caught", () => {
+  // Blind grading of the sixth S2a WhatsApp run, 20 October 2026, found
+  // three F. One was code (notCopy.ts). These are the other two, and
+  // both were the extractor failing to enumerate a claim that was
+  // there:
+  //
+  //   salon-04  "apke baal soft aur shiny ho jayenge"
+  //   dairy-10  "Fresh desi ghee and paneer"
+  //
+  // Measured on the live extractor by scripts/eval/gradedF.eval.ts for
+  // Rs 0.93 — a gate, not an exit run. Result: the first is reported as
+  // `benefit` and refused outright; the second splits into one claim
+  // per product, so the ghee's has nothing to cite. Four controls were
+  // sent in the same call and none was wrongly typed `benefit`.
+  const src = () => code("src/lib/facts/extractClaims.ts");
+
+  it("A FUTURE STATE OF THE READER'S OWN THING IS A BENEFIT, IN ANY LANGUAGE", () => {
+    expect(src()).toMatch(/A PROMISE THAT SOMETHING OF THE READER'S WILL BECOME SOME WAY IS A BENEFIT CLAIM, IN ANY LANGUAGE/);
+    // The form that escaped: Hinglish carries it in the verb at the end.
+    expect(src()).toMatch(/HINGLISH PUTS IT IN THE VERB AT THE END OF THE SENTENCE/);
+    for (const verb of ["ho jayenge", "ban jayenge", "mehsoos hoga", "dikhega"]) {
+      expect(src()).toContain(verb);
+    }
+  });
+
+  it("AND THE RULE NAMES WHAT IS NOT ONE, because over-firing is the other failure", () => {
+    // "order ho jayega" and "aapko 10% off milega" are the business
+    // acting, not a change to anything of the reader's. The gate
+    // confirmed both: capability and offer, no benefit.
+    expect(src()).toMatch(/NOT every future verb is a benefit/);
+    expect(src()).toMatch(/The test is whether the thing changing belongs to the reader/);
+  });
+
+  it("ONE PROPERTY OVER SEVERAL THINGS IS SEVERAL CLAIMS", () => {
+    expect(src()).toMatch(/ONE PROPERTY OVER SEVERAL NAMED THINGS IS SEVERAL CLAIMS/);
+    expect(src()).toMatch(/report the claim ONCE PER THING, each with its own aboutProduct/);
+    // Why it matters, in the words that make it checkable.
+    expect(src()).toMatch(/the one with evidence carries the one without/);
+  });
+
+  it("the rule is stated in shapes, never in one trade's words", () => {
+    // multiTenantVocabulary would refuse "hair" or "ghee" as an
+    // example, and should. The rule uses <thing A> and <thing B>.
+    expect(src()).toContain("<thing A>");
+    expect(src()).not.toMatch(/"Fresh desi ghee/);
+  });
+
+  it("and the rules are in order, so a later edit does not bury one", () => {
+    const body = src();
+    const at = (n: string) => body.indexOf(`\n${n}. `);
+    expect(at("6a")).toBeGreaterThan(0);
+    expect(at("6b")).toBeGreaterThan(at("6a"));
+    expect(at("6c")).toBeGreaterThan(at("6b"));
+    expect(at("6d")).toBeGreaterThan(at("6c"));
+    expect(at("7")).toBeGreaterThan(at("6d"));
+  });
+});

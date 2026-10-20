@@ -357,6 +357,29 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
     ? approved.map((c, i) => `[${i + 1}] ${c.intent || c.claimType}${figure(c)}`).join("\n")
     : "(none)";
   const language = languageFor(req.topic, req.language ?? req.facts?.brand?.language ?? null);
+  // THE ADDRESSES, WHICH ARE FURNITURE AND NOT CLAIMS.
+  //
+  // candle-09's WhatsApp message on 2026-10-20 ended "Check them out
+  // [link]". That placeholder is nobody's merge field - nothing in this
+  // codebase fills one in, and the convention everywhere else is the
+  // real address: businessFacts tells the old path "the ONLY website
+  // address you may use", and claimCheck refuses any other host. So the
+  // writer invented a hole because THIS prompt carried no link at all.
+  //
+  // notCopy now strips the placeholder, which is the right outcome and
+  // the wrong fix on its own: the message would simply lose its call to
+  // action. A link is not a claim about the business, it is how the
+  // reader acts, so it belongs here in the same category as WhatsApp's
+  // opt-out line.
+  const store = req.facts?.links?.store ?? null;
+  const bookings = (req.facts?.products ?? [])
+    .map((p) => (p.bookingUrl ? `${p.name} - ${p.bookingUrl}` : null))
+    .filter(Boolean) as string[];
+  const addresses = [
+    store ? `\n\nTHE ONLY WEB ADDRESS YOU MAY USE: ${store}. Write it exactly as given, or leave it out - never a placeholder, never any other address.` : "",
+    bookings.length ? `\nThe only booking addresses: ${bookings.join("; ")}.` : "",
+    store || bookings.length ? "" : "\n\nTHERE IS NO WEB ADDRESS ON RECORD. Do not include a link of any kind, and do not leave a space for one.",
+  ].join("");
   const parts = [
     req.brief.brandContext ?? "",
     `\nYou are writing a ${req.brief.label}.`,
@@ -364,6 +387,7 @@ export function factBoundPrompt(req: CopyRequest, approved: SelectedClaim[], unk
     req.brief.channelRules ? `\n${req.brief.channelRules}` : "",
     recentBlock(req.recent),
     `\n\nTHE ONLY FACTS YOU MAY STATE — every factual sentence must be one of these:\n${claims}`,
+    addresses,
     // A PIECE WITH NOTHING APPROVED IS A SHORT PIECE, NOT AN INVENTED
     // ONE. The founder's rule of 2026-10-15: when the records are thin
     // the copy gets shorter and the owner gets a question. candle-08 and
@@ -579,6 +603,10 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       // "Reply STOP to stop these messages" must not read as an
       // introduced name.
       req.brief.channelRules ?? "",
+      // The addresses the writer was given above. A store host is not a
+      // name the model introduced.
+      req.facts?.links?.store ?? "",
+      ...(req.facts?.products ?? []).map((p) => p.bookingUrl ?? ""),
     ];
     // NOT COPY AT ALL, checked first. A slot or a note about writing
     // the message is not a claim, so no claim check can see it — and

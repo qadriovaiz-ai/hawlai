@@ -268,3 +268,50 @@ describe("5. a slot or a note never reaches the customer", () => {
     expect(JSON.stringify(sent[1])).toMatch(/never write a note, a question or a list of what you still need/);
   });
 });
+
+describe("6. the writer is given the real address, not a hole to leave", () => {
+  // candle-09's message ended "Check them out → [link]". Nothing in
+  // this codebase fills a merge field in — businessFacts tells the OLD
+  // path "the ONLY website address you may use" and claimCheck refuses
+  // any other host. The fact-bound prompt carried no link at all, so
+  // the writer invented a hole.
+  //
+  // notCopy strips it, which is right and is not a fix on its own: the
+  // message would simply lose its call to action.
+
+  it("THE STORE LINK REACHES THE WRITE STEP", async () => {
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax only. /site/a-business" })),
+      tool("report_claims", { claims: [] }),
+    );
+    await generateCopy(request());
+    expect(JSON.stringify(sent[1])).toMatch(/THE ONLY WEB ADDRESS YOU MAY USE: \/site\/a-business/);
+    expect(JSON.stringify(sent[1])).toMatch(/never a placeholder, never any other address/);
+  });
+
+  it("AND WITH NO LINK ON RECORD IT IS TOLD TO LEAVE NO SPACE FOR ONE", async () => {
+    const noLink = { ...FACTS, links: { store: null, products: [], booking: null } } as any;
+    const sent = script(
+      await selectPicking([{ id: "c1", claimType: "material", factIds: ["__PARAFFIN__"], intent: "no cheap paraffin wax" }]),
+      prose(JSON.stringify({ message: "Soy wax only." })),
+      tool("report_claims", { claims: [] }),
+    );
+    await generateCopy(request({ facts: noLink }));
+    expect(JSON.stringify(sent[1])).toMatch(/THERE IS NO WEB ADDRESS ON RECORD/);
+    expect(JSON.stringify(sent[1])).not.toMatch(/THE ONLY WEB ADDRESS YOU MAY USE/);
+  });
+
+  it("the address is in the allowed vocabulary, so its own words are not read as invented", async () => {
+    const src = code("src/lib/content/generateCopy.ts");
+    expect(src).toMatch(/req\.facts\?\.links\?\.store \?\? ""/);
+  });
+
+  it("A PLACEHOLDER IS STILL STRIPPED, because the prompt is only half of it", async () => {
+    const { notCopySentences } = await import("@/lib/content/notCopy");
+    expect(notCopySentences(["Check them out → [link]"])).toEqual([{ sentenceIndex: 0, reason: "slot" }]);
+    // And the real address is not a slot.
+    expect(notCopySentences(["Check them out → /site/a-business"])).toEqual([]);
+    expect(notCopySentences(["Order at https://hawlai.online/site/a-business"])).toEqual([]);
+  });
+});
