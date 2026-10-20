@@ -1,0 +1,35 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 1  (candle-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 2.55   (per-run cap Rs 30.00)
+already spent         Rs 749.84 of Rs 762.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    6   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 1
+calls made            8   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 12000ms between cases)
+tokens                20821 in, 1889 out
+ACTUAL COST THIS RUN  Rs 3.98   (estimated Rs 2.55)
+COST PER EMAIL        Rs 3.98   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 753.82 of Rs 762.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-10]
+     You asked for 500 happy customers. Your records say 2 paid orders and 1 lead on record — no record of 500 customers of any kind — change the record, or I write it without that.
+     Not on record: Total number of customers or orders to date — e.g. 'We have served X customers as of [date].'
+     Removed "For ₹999, you typically do not get a candle that burns for 40 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "You will experience lavender's peace or rose's fragrance." — nothing on record can support a benefit claim.
+     Removed "You get a candle that burns for 40 hours at this price." — nothing on record can support a benefit claim.
+     Removed "The business ships to locations outside Shahjahanpur." — The business is in Shahjahanpur and shipping is free, but no record states which locations are shipped to. Location and cost do not establish coverage..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-topup-2026-10-20T17-06-51-069Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

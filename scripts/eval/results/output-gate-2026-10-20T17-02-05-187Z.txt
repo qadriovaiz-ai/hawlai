@@ -1,0 +1,55 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-1of2-2026-10-20T15-48-49-987Z.json
+cases                6
+sentences            33   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 742.31 of Rs 762.00
+====================================================================
+
+[candle-02]  7 sentence(s)
+      duration "The Lavender candle burns for 40 hours."
+      material "The candle is made from soy wax."
+      material "The candle contains no paraffin."
+      process "The candle is hand-poured."
+      process "The candle is made in small batches."
+      price "The candle costs ₹999."
+      offer "Shipping is free."
+
+[candle-03]  9 sentence(s)
+      material "The business uses soy wax in its candles."
+      material "The business does not use paraffin in its candles."
+      process "The business melts wax in a double boiler."
+      process "Fragrance is added when the temperature is exactly 65 degrees celsius."
+
+[candle-06]  7 sentence(s)
+      process "Fragrance is added at exactly 65 degrees."
+      process "The candle sets properly when fragrance is added at exactly 65 degrees."
+      material "The candle does not contain cheap paraffin mix."
+      process "The candle is made in Shahjahanpur."
+      shipping "Shipping is free."
+
+[candle-10]  8 sentence(s)
+      process "Soy wax is melted in a double boiler."
+      process "Fragrance is added at exactly 65 degrees."
+      process "The business waits until the temperature is correct before adding fragrance."
+      material "Paraffin is not used."
+      duration "The lavender candle burns for 40 hours."
+  *** comparison "The lavender candle burns for 40 hours, not 10 hours."   <- SHOULD HAVE BEEN REMOVED
+
+[salon-02]  1 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[salon-03]  1 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   1
+   [candle-10] comparison — "The lavender candle burns for 40 hours, not 10 hours."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 2   <<< salon-02, salon-03
+ACTUAL COST                            Rs 2.97
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

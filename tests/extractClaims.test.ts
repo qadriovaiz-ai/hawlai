@@ -545,3 +545,48 @@ describe("10. doing what the customer asked for is not a capability claim", () =
     expect(at("8")).toBeGreaterThan(at("7c"));
   });
 });
+
+describe("11. correcting a false belief about your own thing is not a comparison", () => {
+  // THE SOCIAL CONFIRMATION RUN OF 2026-10-20, candle-10. The copy said
+  //
+  //   "The lavender candle burns for 40 hours, not 10 hours."
+  //
+  // and it came back as `comparison`, which nothing can license — so
+  // the one sentence the owner wrote a Business Knowledge row IN ORDER
+  // TO SAY could not be said. Her row is "Log sochte hain ki 10 ghante
+  // jalti hai", recorded precisely to correct that belief.
+  //
+  // A comparison needs a SECOND PARTY. "X, not Y" about the same thing
+  // of yours is a recorded figure plus a correction.
+  const src = () => code("src/lib/facts/extractClaims.ts");
+
+  it("A COMPARISON NEEDS A SECOND PARTY", () => {
+    expect(src()).toMatch(/BUT CORRECTING A FALSE BELIEF ABOUT YOUR OWN THING IS NOT A COMPARISON/);
+    expect(src()).toMatch(/A comparison needs A SECOND PARTY/);
+  });
+
+  it("AND THE RULE SAYS WHICH TYPE TO USE INSTEAD", () => {
+    // A rule that only says "not that one" leaves the model to pick
+    // another unlicensable type, which is how rule 7b was written and
+    // why 7c had to follow it.
+    expect(src()).toMatch(/its claimType is whatever the figure is/);
+    expect(src()).toMatch(/a duration here, with the recorded number/);
+  });
+
+  it("the shape is quoted, and in NO trade's words", () => {
+    // multiTenantVocabulary refused my first version of this rule
+    // because it named one trade's product noun, in a prompt every
+    // business runs. Rule 3, and the test was right — it has caught me
+    // on this prompt before. The rule says <the item>.
+    expect(src()).toMatch(/lasts 40 hours, not 10 hours/);
+    expect(src()).toMatch(/<the item>/);
+    expect(src()).toMatch(/people think it is 10/);
+  });
+
+  it("AND A REAL COMPARISON IS STILL A COMPARISON", () => {
+    // The direction that must not loosen. Rule 5 still names the
+    // implied forms, which are the ones that slip through.
+    expect(src()).toMatch(/has subject "competitor" and claimType "comparison"/);
+    expect(src()).toMatch(/the ordinary kind|what most places use/);
+  });
+});

@@ -1,0 +1,55 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-2of2-2026-10-20T15-48-01-610Z.json
+cases                6
+sentences            38   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 745.28 of Rs 762.00
+====================================================================
+
+[salon-07]  9 sentence(s)
+      process "The keratin treatment process involves washing the hair thoroughly and then applying the treatment."
+      duration "The keratin treatment process takes 90 minutes."
+      material "The business does not use ammonia-based products in keratin treatment."
+      material "The products used in keratin treatment come from Korea."
+      price "Keratin treatment can be booked for ₹3500."
+      duration "A simple haircut takes 30 minutes."
+      price "A simple haircut can be booked for ₹400."
+
+[salon-09]  3 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[dairy-02]  8 sentence(s)
+      offer "The business offers a discount of 10% when code FIRST10 is used."
+      credential "The business holds FSSAI licence 11223344556677."
+      shipping "Shipping costs ₹50 on all orders."
+      shipping "The business ships to all orders."
+
+[dairy-03]  9 sentence(s)
+      process "The desi ghee is made using the bilona method."
+      process "The desi ghee is hand-churned."
+      material "The desi ghee contains no preservatives."
+      credential "The desi ghee is produced under FSSAI licence 11223344556677."
+      count "Each jar contains 500ml."
+      price "The desi ghee costs ₹850 per jar."
+      shipping "Shipping costs ₹50 flat."
+      offer "Code FIRST10 gives 10% off the first order."
+
+[dairy-06]  8 sentence(s)
+      credential "Shree Dairy holds FSSAI licence number 11223344556677."
+      process "The ghee is made using the traditional Bilona method."
+      process "The ghee is hand-churned."
+      material "The ghee contains no preservatives."
+
+[dairy-09]  1 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 1   <<< dairy-09
+ACTUAL COST                            Rs 3.05
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

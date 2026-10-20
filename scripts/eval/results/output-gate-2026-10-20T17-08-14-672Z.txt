@@ -1,0 +1,97 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-merged.json
+cases                12
+sentences            88   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 6.92
+already spent        Rs 749.84 of Rs 762.00
+====================================================================
+
+[candle-02]  7 sentence(s)
+      duration "The Lavender candle burns for 40 hours."
+      material "The candle is made of soy wax."
+      material "The candle does not contain paraffin."
+      process "The candle is hand-poured."
+      process "The candle is made in small batches."
+      price "The candle costs ₹999."
+      offer "Shipping is free."
+
+[candle-03]  9 sentence(s)
+      material "The business uses soy wax in its candles."
+      material "The business does not use paraffin in its candles."
+      process "The business melts wax in a double boiler."
+      process "Fragrance is added when the temperature is exactly 65 degrees celsius."
+      process "Fragrance is not added before the temperature reaches exactly 65 degrees celsius."
+
+[candle-06]  7 sentence(s)
+      process "Fragrance is added to the wax at exactly 65 degrees."
+      process "The wax sets correctly when fragrance is added at exactly 65 degrees."
+      material "The product does not contain cheap paraffin."
+      process "The product is made in Shahjahanpur."
+      shipping "Shipping is free."
+
+[candle-10]  6 sentence(s)
+      material "Both candles are made of soy wax."
+      process "Both candles are hand-poured."
+      material "The candles do not contain paraffin."
+
+[salon-07]  9 sentence(s)
+      process "The keratin treatment process involves washing the hair thoroughly first, then applying the treatment."
+      duration "The complete keratin treatment process takes 90 minutes."
+      material "The business does not use ammonia-containing products for keratin treatment."
+      material "The keratin treatment products used by the business come from Korea."
+      price "A keratin treatment can be booked for ₹3500."
+      duration "A simple haircut takes 30 minutes."
+      price "A simple haircut costs ₹400."
+
+[salon-09]  3 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[dairy-02]  8 sentence(s)
+      offer "The business offers a discount of 10% when code FIRST10 is used."
+      credential "The business holds FSSAI licence 11223344556677."
+      shipping "Shipping costs ₹50 on all orders."
+      shipping "The business ships to all orders."
+
+[dairy-03]  9 sentence(s)
+      process "The desi ghee is made using the bilona method."
+      process "The desi ghee is hand-churned."
+      material "The desi ghee contains no preservatives."
+      credential "The desi ghee is produced under FSSAI licence 11223344556677."
+      count "Each jar contains 500ml."
+      price "The price of the desi ghee is ₹850."
+      shipping "Shipping costs ₹50 flat."
+      offer "Code FIRST10 gives 10% off the first order."
+
+[dairy-06]  8 sentence(s)
+      credential "Shree Dairy holds FSSAI licence number 11223344556677."
+      process "The ghee is made using the traditional Bilona method."
+      process "The ghee is hand-churned."
+      material "The ghee contains no preservatives."
+
+[salon-02]  7 sentence(s)
+      duration "A session of keratin treatment lasts 90 minutes."
+      process "A session includes hair wash followed by treatment."
+      price "Keratin treatment costs ₹3500."
+      material "The keratin treatment is ammonia-free."
+
+[salon-03]  7 sentence(s)
+      duration "Keratin treatment session lasts 90 minutes."
+      process "Hair wash happens before treatment is applied in keratin treatment."
+
+[dairy-09]  8 sentence(s)
+      process "The ghee at Shree Dairy in Indore is made using the Bilona method."
+      process "The ghee at Shree Dairy in Indore is churned by hand."
+      credential "The business holds an FSSAI license numbered 11223344556677."
+      price "A 500 ml jar of ghee costs ₹850."
+      shipping "Delivery costs ₹50 flat."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 6.52
+====================================================================
+WORTH GRADING. Send the sheet.
+====================================================================

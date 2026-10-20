@@ -1,0 +1,36 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-topup-2026-10-20T16-51-37-246Z.json
+cases                3
+sentences            22   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 1.73
+already spent        Rs 748.33 of Rs 762.00
+====================================================================
+
+[salon-02]  7 sentence(s)
+      duration "A session lasts 90 minutes."
+      process "A session includes hair wash followed by treatment."
+      price "Pricing is ₹3500."
+      material "The product is ammonia-free."
+
+[salon-03]  7 sentence(s)
+      duration "Keratin treatment session lasts 90 minutes."
+      process "Hair wash happens before treatment is applied in keratin treatment."
+
+[dairy-09]  8 sentence(s)
+      process "The ghee is made without shortcuts on quality."
+      process "The ghee is made using the Bilona method."
+      process "The ghee is churned by hand."
+      credential "The business holds an FSSAI license numbered 11223344556677."
+      price "A 500 ml jar costs ₹850."
+      shipping "Delivery costs ₹50 flat."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 1.51
+====================================================================
+WORTH GRADING. Send the sheet.
+====================================================================

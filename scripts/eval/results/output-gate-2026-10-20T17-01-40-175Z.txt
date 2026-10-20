@@ -1,0 +1,46 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-whatsapp-2026-10-20T15-46-49-416Z.json
+cases                6
+sentences            19   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 3.46
+already spent        Rs 739.67 of Rs 762.00
+====================================================================
+
+[candle-04]  5 sentence(s)
+      process "The candles are hand-poured."
+      material "The candles are made of soy wax."
+      duration "The candles burn for 40 hours."
+      shipping "Shipping is free."
+
+[candle-09]  3 sentence(s)
+      material "The candle is hand-poured from soy wax."
+      offer "Shipping is free."
+
+[salon-04]  3 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[salon-08]  3 sentence(s)
+      price "A fresh haircut is available at a price of 400."
+      duration "A haircut takes 30 minutes."
+
+[dairy-05]  4 sentence(s)
+      material "The paneer is fresh."
+      process "The paneer is made by hand-churning."
+      material "The paneer contains no preservatives."
+      offer "The first order receives a 10 percent discount."
+      price "Delivery costs 50."
+      shipping "Delivery is flat-rate."
+
+[dairy-10]  1 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 2.64
+====================================================================
+WORTH GRADING. Send the sheet.
+====================================================================

@@ -401,7 +401,49 @@
       "label": "output gate on s2-whatsapp-2026-10-20T15-46-49-416Z.json",
       "inr": 0,
       "calls": 6
+    },
+    {
+      "at": "2026-10-20T16:51:37.255Z",
+      "label": "s2-facebook_post-topup-2026-10-20T16-51-37-246Z",
+      "inr": 13.92,
+      "calls": 27
+    },
+    {
+      "at": "2026-10-20T17:01:40.171Z",
+      "label": "output gate on s2-whatsapp-2026-10-20T15-46-49-416Z.json",
+      "inr": 2.64,
+      "calls": 6
+    },
+    {
+      "at": "2026-10-20T17:02:05.185Z",
+      "label": "output gate on s2-facebook_post-1of2-2026-10-20T15-48-49-987Z.json",
+      "inr": 2.97,
+      "calls": 6
+    },
+    {
+      "at": "2026-10-20T17:02:32.483Z",
+      "label": "output gate on s2-facebook_post-2of2-2026-10-20T15-48-01-610Z.json",
+      "inr": 3.05,
+      "calls": 6
+    },
+    {
+      "at": "2026-10-20T17:03:02.130Z",
+      "label": "output gate on s2-facebook_post-topup-2026-10-20T16-51-37-246Z.json",
+      "inr": 1.51,
+      "calls": 3
+    },
+    {
+      "at": "2026-10-20T17:08:14.670Z",
+      "label": "output gate on s2-facebook_post-merged.json",
+      "inr": 6.52,
+      "calls": 12
+    },
+    {
+      "at": "2026-10-20T17:06:51.075Z",
+      "label": "s2-facebook_post-topup-2026-10-20T17-06-51-069Z",
+      "inr": 3.98,
+      "calls": 8
     }
   ],
-  "totalInr": 725.75
+  "totalInr": 760.34
 }
