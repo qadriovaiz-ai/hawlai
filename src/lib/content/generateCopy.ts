@@ -547,7 +547,26 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   // ------------------------------------------------------------------
   let factBoundNote: string | null = null;
   let factBoundDegraded = false;
-  if (factBound && validated) {
+  // THE CHECKS ARE A FUNCTION, BECAUSE THEY RUN TWICE.
+  //
+  // Approved by the founder on 2026-10-20, with the cost named: two
+  // extra model calls on every revised draft. His reason is the right
+  // one and worth keeping here - the specificity pass runs on EVERY
+  // draft, so before this most pieces were leaving through the gap
+  // without a full check.
+  //
+  // The ordering fault: notCopy, introducedWords, the extractor and
+  // the verifier all ran at step 4, and three later steps replace the
+  // copy with new model output - the specificity pass, the
+  // anti-generic retry and the shape retry. Everything they wrote had
+  // never been seen by any of them. dairy-10 shipped "Order now ->
+  // [link]" through a check that catches that string in isolation.
+  //
+  // ONE IMPLEMENTATION, CALLED TWICE, rather than a second copy of a
+  // hundred and eighty lines that would drift from the first within a
+  // week.
+  const runFactChecks = async (): Promise<void> => {
+    if (!factBound || !validated) return;
     const sentences = copySentences(parsed);
 
     // ------------------------------------------------------------------
@@ -726,7 +745,11 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // instead of them: they are different reasons for removing a
     // sentence and the owner should see both.
     factBoundNote = [notCopyNoteText, introducedNoteText, factBoundNote].filter(Boolean).join("\n") || null;
-  }
+  };
+  await runFactChecks();
+  // WHAT THE FIRST PASS ACTUALLY SAW, so step 6b can tell whether the
+  // retries changed it.
+  const verifiedShape = JSON.stringify(parsed);
   if (factBound && validated) {
     const selectionNote = validationNote(validated, selection?.conflicts ?? [], selection?.unknowns ?? []);
     factBoundNote = [selectionNote, factBoundNote].filter(Boolean).join("\n") || null;
@@ -794,41 +817,41 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     }
   }
 
-  // 6b. THE CODE CHECKS RUN AGAIN, BECAUSE THE COPY HAS CHANGED SINCE
-  //     THEY LAST SAW IT.
+  // 6b. AND NOW THE WHOLE CHECK AGAIN, BECAUSE THE COPY HAS CHANGED.
   //
-  // THE ORDERING FAULT, found by the output gate on 2026-10-20 and
-  // bigger than anything it was built to find. dairy-10 shipped
+  // Three steps above replace `parsed` with new model output: the
+  // specificity pass, which runs on EVERY draft, the anti-generic
+  // retry and the shape retry. Before 2026-10-20 nothing they wrote
+  // was ever checked - not the placeholder guard, not the
+  // introduced-word check, not the extractor, not the verifier. The
+  // founder approved the full fix with its cost stated: two extra
+  // model calls on a revised draft.
   //
-  //     Order now -> [link]
+  // ONLY WHEN THE COPY ACTUALLY CHANGED. An unrevised draft pays
+  // nothing, and the comparison that decides is free. That matters
+  // more than it looks: the specificity pass fires on every draft but
+  // often returns nothing usable, and those pieces must not be billed
+  // twice.
   //
-  // notCopy catches that string in isolation - its own test proves it -
-  // and it did not catch it here, because notCopy runs at step 4 and
-  // THREE LATER STEPS REPLACE `parsed` WITH NEW MODEL OUTPUT: the
-  // specificity pass (every draft), the anti-generic retry, and the
-  // shape retry. Everything they write has never been seen by any
-  // fact-bound check. The specificity pass is the worst of the three,
-  // because asking a model to be more specific is asking it for exactly
-  // the details nobody recorded.
-  //
-  // WHAT THIS FIXES AND WHAT IT DOES NOT. notCopy and introducedWords
-  // are pure code, so re-running them costs nothing and closes the
-  // placeholder, the invented place name and the strengthening word.
-  // The MODEL checks - extract and verify - are not re-run here,
-  // because that is two more calls on every revised draft and a change
-  // of that size belongs to the owner, not to me. So the full fix is
-  // still owed: the fact-bound verification should run AFTER the
-  // retries rather than before them, which is the architecture's own
-  // promise that nothing customer-facing bypasses the truth layer.
-  // Written up rather than quietly half-done.
-  if (factBound) {
-    const after = copySentences(parsed);
-    const slots = notCopySentences(after.map((x) => x.text));
-    if (slots.length) {
-      const note = notCopyNote(slots, after.map((x) => x.text));
-      parsed = withoutSentences(parsed, after, [...new Set(slots.map((f) => f.sentenceIndex))]);
-      factBoundNote = [factBoundNote, note].filter(Boolean).join("\n") || null;
-    }
+  // THE SECOND PASS IS THE ONE THAT COUNTS. It sees the copy the
+  // customer would actually receive, which is what this layer was
+  // always supposed to be checking. The first pass is not wasted - it
+  // removes unsupported sentences before the retries spend a call
+  // polishing them.
+  if (factBound && validated && JSON.stringify(parsed) !== verifiedShape) {
+    // THE NOTE IS REBUILT, NOT STACKED. The first pass's removals
+    // describe sentences that may no longer exist, and an owner
+    // reading "Removed X" about a line they cannot see has been told
+    // something false.
+    factBoundNote = null;
+    factBoundDegraded = false;
+    await runFactChecks();
+    const selectionNote = validationNote(validated, selection?.conflicts ?? [], selection?.unknowns ?? []);
+    factBoundNote = [selectionNote, factBoundNote].filter(Boolean).join("\n") || null;
+    // RE-MEASURED, NOT ASSUMED. A removal here can leave the piece
+    // short or generic, and the owner should be told the truth about
+    // what they are looking at now. Pure code, so it costs nothing.
+    shapeProblem = customerFirstProblem(parsed, req.contentTypeKey ?? "", req.topic);
   }
 
   // 7. CLAIMS AND PROVENANCE. guardOrMark runs the full guard when the

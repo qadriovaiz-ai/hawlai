@@ -607,3 +607,118 @@ describe("8. the second net, under the four classes nothing can license", () => 
     expect(JSON.stringify(r)).toMatch(/could not be checked against your records/);
   });
 });
+
+describe("9. a retry's own output is checked, not trusted", () => {
+  // dairy-10 shipped "Order now → [link]" in run 11. The specificity
+  // pass rewrote the copy AFTER every fact-bound check had run, so the
+  // line it wrote was never seen by any of them. The founder approved
+  // running the model checks again after the retries, cost and all,
+  // because that pass fires on every draft.
+
+  /** The paraffin record's real id, which getContext mints from the owner row. */
+  async function paraffinId(): Promise<string> {
+    const { contextFromFacts } = await import("@/lib/facts/getContext");
+    const ctx = contextFromFacts("biz_1", FACTS, { kind: "whatsapp", topic: "broadcast about the lavender candle" });
+    return ctx.records.find((r) => r.key === "material.paraffin")!.id;
+  }
+
+  /** Replies chosen by what the request asks for, so order cannot matter. */
+  function byTool(opts: {
+    factId: string;
+    write: string[];
+    claims?: unknown[][];
+    verdicts?: unknown[];
+  }) {
+    const sent: any[] = [];
+    let writes = 0;
+    let extractions = 0;
+    globalThis.fetch = (async (_url: any, init: any) => {
+      const req2 = JSON.parse(init.body);
+      sent.push(req2);
+      const wants = req2?.tool_choice?.name as string | undefined;
+      const reply = (input: unknown) =>
+        new Response(JSON.stringify({ content: [{ type: "tool_use", name: wants, input }], usage: { input_tokens: 10, output_tokens: 5 } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (wants === "select_claims") {
+        return reply({ claims: [{ id: "c1", claimType: "material", factIds: [opts.factId], intent: "no cheap paraffin wax" }], conflicts: [], unknowns: [] });
+      }
+      if (wants === "report_claims") {
+        const list = opts.claims?.[extractions] ?? [];
+        extractions += 1;
+        return reply({ claims: list });
+      }
+      if (wants === "report_unlicensable") return reply({ claims: [] });
+      if (wants === "report_verdicts") {
+        // ENTAILS WHATEVER IT IS ASKED ABOUT, by index, so a test does
+        // not have to predict how many claims reach the judge. A stub
+        // that entails only index 0 silently removes every other
+        // sentence, which is a fixture artefact masquerading as a
+        // finding — it cost me two red tests before I noticed.
+        return reply({
+          verdicts: opts.verdicts ?? Array.from({ length: 10 }, (_, index) => ({ index, entailed: true, why: "the record says so" })),
+        });
+      }
+      // Every non-tool call is a write: the first draft, then whatever
+      // the specificity and shape passes ask for.
+      const text = opts.write[Math.min(writes, opts.write.length - 1)];
+      writes += 1;
+      return new Response(JSON.stringify({ content: [{ type: "text", text }], usage: { input_tokens: 10, output_tokens: 5 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    return sent;
+  }
+
+  it("A PLACEHOLDER A RETRY INVENTS IS STILL STRIPPED", async () => {
+    // The first draft is clean. A later pass adds the slot — exactly
+    // what run 11 did.
+    const sent = byTool({
+      factId: await paraffinId(),
+      write: [
+        JSON.stringify({ message: "Soy wax candles, hand-poured." }),
+        JSON.stringify({ message: "Soy wax candles, hand-poured.\nOrder now → [link]" }),
+      ],
+    });
+    const r = await generateCopy(request({ specificityPass: true, revise: true }));
+    expect(r.output.message).not.toContain("[link]");
+    expect(r.output.message).toContain("Soy wax candles");
+    expect(JSON.stringify(r)).toMatch(/never filled in/);
+    // And the checks really did run a second time.
+    expect(asking(sent, "report_claims").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("AN UNCHANGED DRAFT IS NOT CHECKED TWICE — nobody pays for nothing", async () => {
+    const sent = byTool({
+      factId: await paraffinId(),
+      write: [JSON.stringify({ message: "Soy wax candles, hand-poured." })],
+      claims: [[{ sentenceIndex: 0, canonical: "the candles are soy wax", claimType: "material", subject: "own_product", polarity: "assert" }]],
+    });
+    await generateCopy(request({ specificityPass: false, revise: true }));
+    expect(asking(sent, "report_claims")).toHaveLength(1);
+  });
+
+  it("AND A CLAIM A RETRY INVENTS IS REMOVED BY THE SECOND PASS", async () => {
+    // Not just slots. The point of paying for the extra calls is that a
+    // retry can introduce a CLAIM, and only a model can see that.
+    byTool({
+      factId: await paraffinId(),
+      write: [
+        JSON.stringify({ message: "Soy wax candles, hand-poured." }),
+        JSON.stringify({ message: "Soy wax candles, hand-poured.\nOur candles last longer than any other brand." }),
+      ],
+      claims: [
+        [{ sentenceIndex: 0, canonical: "the candles are soy wax", claimType: "material", subject: "own_product", polarity: "assert" }],
+        [
+          { sentenceIndex: 0, canonical: "the candles are soy wax", claimType: "material", subject: "own_product", polarity: "assert" },
+          { sentenceIndex: 1, canonical: "the candles last longer than other brands", claimType: "comparison", subject: "competitor", polarity: "assert" },
+        ],
+      ],
+    });
+    const r = await generateCopy(request({ specificityPass: true, revise: true }));
+    expect(r.output.message).not.toMatch(/last longer/);
+    expect(r.output.message).toContain("Soy wax candles");
+  });
+});

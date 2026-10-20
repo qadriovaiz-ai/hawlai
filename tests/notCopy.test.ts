@@ -120,44 +120,64 @@ describe("5. the copy changes after the checks, so the checks run again", () => 
   // THE ORDERING FAULT, found by the output gate on 2026-10-20 and
   // bigger than anything the gate was built to find. dairy-10 shipped
   //
-  //     Order now → [link]
+  //     Order now -> [link]
   //
-  // notCopy catches that string in isolation — the tests above prove it
-  // — and it did not catch it in the run, because notCopy runs at step
-  // 4 and THREE LATER STEPS REPLACE the copy with new model output: the
-  // specificity pass, which runs on every draft, the anti-generic
-  // retry, and the shape retry.
+  // notCopy catches that string in isolation - the tests above prove it
+  // - and it did not catch it in the run, because every fact-bound
+  // check ran at step 4 and THREE LATER STEPS REPLACE the copy with new
+  // model output: the specificity pass, which runs on every draft, the
+  // anti-generic retry, and the shape retry.
   //
-  // Everything those three write had never been seen by any fact-bound
-  // check. Asking a model to be more specific is asking it for exactly
-  // the details nobody recorded.
+  // Nothing those three wrote had ever been seen by notCopy,
+  // introducedWords, the extractor or the verifier. Asking a model to
+  // be more specific is asking it for exactly the details nobody
+  // recorded.
+  //
+  // The founder approved the full fix on 2026-10-20 with its cost
+  // stated - two extra model calls on a revised draft - because the
+  // specificity pass runs on every draft, so most pieces were leaving
+  // through this gap without a full check.
+  const src = () => code("src/lib/content/generateCopy.ts");
 
-  it("THE FREE CHECKS RUN AFTER THE RETRIES TOO", async () => {
-    const src = code("src/lib/content/generateCopy.ts");
-    const atFirst = src.indexOf("const notCopy = notCopySentences");
-    const atRetry = src.indexOf("const slots = notCopySentences");
-    expect(atFirst).toBeGreaterThan(0);
-    expect(atRetry).toBeGreaterThan(atFirst);
-    // After all three things that can replace the copy.
-    expect(atRetry).toBeGreaterThan(src.indexOf("retryForSpecificity"));
-    expect(atRetry).toBeGreaterThan(src.indexOf("retryForShape"));
-    expect(atRetry).toBeGreaterThan(src.indexOf("ruthlessEditBrief"));
+  it("THE CHECKS ARE ONE FUNCTION, CALLED TWICE", () => {
+    // Not a second copy of a hundred and eighty lines, which would
+    // drift from the first within a week.
+    expect(src()).toMatch(/const runFactChecks = async \(\): Promise<void> => \{/);
+    expect([...src().matchAll(/await runFactChecks\(\)/g)]).toHaveLength(2);
+  });
+
+  it("AND THE SECOND CALL IS AFTER EVERYTHING THAT REWRITES THE COPY", () => {
+    const body = src();
+    const second = body.lastIndexOf("await runFactChecks()");
+    for (const rewriter of ["ruthlessEditBrief", "retryForSpecificity", "retryForShape", "tightenOutput"]) {
+      expect(second, rewriter).toBeGreaterThan(body.indexOf(rewriter));
+    }
     // And before the output is assembled.
-    expect(atRetry).toBeLessThan(src.indexOf("guardOrMark(parsed, req.facts"));
+    expect(second).toBeLessThan(body.indexOf("guardOrMark(parsed, req.facts"));
   });
 
-  it("AND THE OWNER IS TOLD, on the same note as everything else", async () => {
-    const src = code("src/lib/content/generateCopy.ts");
-    expect(src).toMatch(/factBoundNote = \[factBoundNote, note\]\.filter\(Boolean\)/);
+  it("IT ONLY FIRES WHEN THE COPY ACTUALLY CHANGED", () => {
+    // An unrevised draft must pay nothing, and the comparison that
+    // decides is free.
+    expect(src()).toMatch(/const verifiedShape = JSON\.stringify\(parsed\)/);
+    expect(src()).toMatch(/JSON\.stringify\(parsed\) !== verifiedShape/);
   });
 
-  it("THE FULL FIX IS RECORDED AS STILL OWED, not quietly half-done", () => {
-    // The model checks are not re-run: that is two more calls on every
-    // revised draft, and a change of that size is the owner's to
-    // approve. Saying so in the code is the difference between a known
-    // gap and a hidden one.
-    const withComments = sourceWithComments("src/lib/content/generateCopy.ts");
-    expect(withComments).toMatch(/the full fix is\s*\n?\s*\/\/\s*still owed/i);
-    expect(withComments).toMatch(/should run AFTER the\s*\n?\s*\/\/\s*retries/);
+  it("THE NOTE IS REBUILT RATHER THAN STACKED", () => {
+    // The first pass's removals describe sentences that may no longer
+    // exist, and an owner reading "Removed X" about a line they cannot
+    // see has been told something false.
+    const body = src();
+    const rebuild = body.indexOf("factBoundNote = null;");
+    expect(rebuild).toBeGreaterThan(0);
+    expect(body.indexOf("factBoundDegraded = false;", rebuild)).toBeGreaterThan(rebuild);
+    expect(body.indexOf("await runFactChecks()", rebuild)).toBeGreaterThan(rebuild);
+  });
+
+  it("and the shape verdict is re-measured after it, not assumed", () => {
+    const body = src();
+    const second = body.lastIndexOf("await runFactChecks()");
+    const remeasure = body.indexOf("shapeProblem = customerFirstProblem", second);
+    expect(remeasure).toBeGreaterThan(second);
   });
 });
