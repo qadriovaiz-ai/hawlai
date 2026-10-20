@@ -119,7 +119,16 @@ ${brandContext}`,
     // founder's rule from 2026-10-16 - an incomplete run must never
     // read as a clean one - was implemented on one surface only.
     if (copy._aiFailure) return { output: copy.output, _fallback: true, _aiFailure: copy._aiFailure, _incomplete: copy.incomplete === true };
-    if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true };
+    // A MALFORMED REPLY WROTE NOTHING EITHER, and the ninth S2a run of
+    // 2026-10-20 is the third time this lesson has cost a run.
+    // dairy-05 shipped "Something went wrong writing this - try
+    // again" and the run again reported incomplete: false, because
+    // _malformed was surfaced for diagnostics and not as "nothing
+    // usable came back". The owner sees the failure message either
+    // way. The rule is simple and now holds everywhere: ANY return
+    // whose output is a failure message instead of copy is
+    // incomplete.
+    if (copy._malformed) return { ...fallback, _cause: copy._cause, _detail: copy._detail, _malformed: true, _incomplete: true };
     if (copy.incomplete) return { output: copy.output, _fallback: true, _incomplete: true };
     if (copy._fallback) return { ...fallback, _incomplete: true };
     // The opt-out line goes on AFTER the claims check, so it can never

@@ -48,6 +48,41 @@ describe("1. the eval asks every surface the same question", () => {
   });
 });
 
+describe("1b. the rule, stated once and checked everywhere", () => {
+  // THREE RUNS PAID FOR THIS LESSON, one layer at a time:
+  //
+  //   run 8  WhatsApp never propagated _incomplete at all
+  //   (same)  the test for that found contentMarketingAgent missing it too
+  //   run 9  _malformed carried it on no surface, so dairy-05 shipped
+  //          "Something went wrong writing this" and the run again
+  //          reported incomplete: false
+  //
+  // Each time I fixed the branch in front of me. The rule is simpler
+  // than the branches: ANY return whose output is a failure message
+  // instead of copy is incomplete. Checked as a rule, so the next
+  // branch cannot be missed in the same way.
+
+  it("EVERY FALLBACK RETURN SAYS NOTHING WAS WRITTEN", () => {
+    for (const { surface, file } of SURFACES) {
+      const lines = code(file)
+        .split(/\r?\n/)
+        .filter((l) => /return \{[^}]*\.\.\.fallback/.test(l));
+      expect(lines.length, `${surface} should have fallback returns to check`).toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(line, `${surface}: a fallback return without _incomplete`).toMatch(/_incomplete: true/);
+      }
+    }
+  });
+
+  it("AND A MALFORMED REPLY IS ONE OF THEM, on every surface", () => {
+    // The run-9 gap specifically. _malformed was surfaced for
+    // diagnostics and not as "nothing usable came back".
+    for (const { surface, file } of SURFACES) {
+      expect(code(file), `${surface}`).toMatch(/_malformed: true, _incomplete: true/);
+    }
+  });
+});
+
 describe("2. the WhatsApp surface, which is where it broke", () => {
   const src = () => code("src/lib/agents/whatsappMarketingAgent.ts");
 

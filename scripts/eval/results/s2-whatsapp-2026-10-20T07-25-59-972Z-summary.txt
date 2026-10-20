@@ -1,0 +1,48 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 499.49 of Rs 560.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+5 sentence(s), facts note present
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+2 sentence(s)
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    27   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            21   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 1500ms between cases)
+tokens                45840 in, 4875 out
+ACTUAL COST THIS RUN  Rs 11.10   (estimated Rs 15.28)
+COST PER EMAIL        Rs 1.85   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 510.59 of Rs 560.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle have a specific scent description or fragrance note (e.g. 'fresh floral', 'calming lavender fields') recorded against this product? Please record it under product.lavender_candle.fragrance_note so the copy can say something specific about the scent.
+     Not on record: Is there a stock quantity or limited-availability status recorded for the Lavender candle? Record it under product.lavender_candle.stock if you want the broadcast to create urgency.
+     Removed "The candles cost 999." — it states 999 for hand-poured candles, and that figure belongs to something else.
+  [candle-09]
+     You asked for 100% natural. Your records say Soy wax only, paraffin-free — the records confirm the wax is soy-based and paraffin-free, but no record certifies the candles as '100% natural' overall (fragrance ingredients, wicks, dyes etc. are not recorded). — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record exists that supports a child-safety claim. This is also a safety/health claim, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Child-safety status: if the candles are genuinely safe around children (e.g. no lead wicks, no synthetic fragrance), record the specific evidence — e.g. 'cotton wicks only' or 'phthalate-free fragrance oils' — so the claim can be made honestly.
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is an in-salon service, not a shipped product. — change the record, or I write it without that.
+  [salon-08]
+     Not on record: Is there a limited-time offer, discount, or call-to-action (e.g. a booking link or phone number) the owner wants included in the WhatsApp message?
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Home delivery is available: please record the exact delivery area or pin codes served, so the copy can state where delivery applies.
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-20T07-25-59-972Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
