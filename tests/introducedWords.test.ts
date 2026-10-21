@@ -175,10 +175,18 @@ describe("what the owner reads", () => {
 describe("it is a code check, not a prompt rule", () => {
   it("THE DOOR RUNS IT BEFORE ASKING ANY MODEL ANYTHING", () => {
     const src = code("src/lib/content/generateCopy.ts");
-    expect(src).toMatch(/introducedWords\(sentences\.map/);
+    // THE CALL TAKES A THIRD ARGUMENT SINCE 2026-10-21: a per-sentence
+    // flag saying which sentences are hashtags, where a capitalised
+    // word anywhere is an introduced name.
+    expect(src).toMatch(/introducedWords\(\s*sentences\.map/);
+    expect(src).toMatch(/sentences\.map\(\(s\) => s\.field === "hashtags"\)/);
     // It must run before the extractor, or its findings would depend on
     // a model call that can fail.
-    const atCheck = src.indexOf("introducedWords(sentences.map");
+    // The call is formatted across lines now that it takes three
+    // arguments, so this looks for the call rather than one spelling
+    // of it — my own assertion broke on whitespace, which is not a
+    // property worth testing.
+    const atCheck = src.indexOf("introducedWords(");
     const atExtract = src.indexOf("extractClaims(sentences.map");
     expect(atCheck).toBeGreaterThan(-1);
     expect(atCheck).toBeLessThan(atExtract);

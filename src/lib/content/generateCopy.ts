@@ -648,7 +648,15 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       parsed = withoutSentences(parsed, sentences, [...new Set(notCopy.map((f) => f.sentenceIndex))]);
     }
 
-    const introduced = introducedWords(sentences.map((s) => s.analysed), allowedVocabulary);
+    const introduced = introducedWords(
+      sentences.map((s) => s.analysed),
+      allowedVocabulary,
+      // A hashtag is a label the business chose, so a capitalised word
+      // in one is either the owner's or the model's - no greetings, no
+      // accidental Title Case. "#FreshPaneer" in a piece whose paneer
+      // record was withheld is what this is for.
+      sentences.map((s) => s.field === "hashtags")
+    );
     let introducedNoteText: string | null = null;
     if (introduced.length) {
       introducedNoteText = introducedNote(introduced, sentences.map((s) => s.text));

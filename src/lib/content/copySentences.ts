@@ -53,6 +53,22 @@ export type CopySentence = {
  * introduced-word check has used since the social cases found boosters
  * hiding inside tags.
  */
+/**
+ * A run of hashtags, split into one tag each.
+ *
+ * Whitespace, commas and bullets between tags are separators. A string
+ * with no "#" in it comes back whole, because a hashtags field is not
+ * always only hashtags.
+ */
+export function splitTags(text: string): string[] {
+  const t = String(text ?? "").trim();
+  if (!t.includes("#")) return t ? [t] : [];
+  return t
+    .split(/[\s,·•]+(?=#)/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 export function expandHashtags(text: string): string {
   return String(text ?? "").replace(/#([\p{L}\p{N}_]+)/gu, (_m, body: string) =>
     String(body)
@@ -73,7 +89,20 @@ export function copySentences(output: unknown): CopySentence[] {
     // thing it is reporting.
     if (field.startsWith("_")) continue;
     forEachString(value, 0, (text, slot) => {
-      for (const sentence of pieces(text)) {
+      // ONE TAG IS ONE SENTENCE, whatever shape the model returned it in.
+      //
+      // THE FOUNDER'S GRADING OF 2026-10-21: dairy-09 shipped
+      // "#ShreeDairy #BilonaGhee #FreshPaneer" as ONE string while
+      // dairy-03 shipped three separate array items. The same three
+      // claims, and in the first shape they were one sentence - so a
+      // refusal would have taken all three tags out together, two of
+      // them true, and the extractor saw one jumble instead of three
+      // labels.
+      //
+      // A hashtag ends where the next one begins. That is a sentence
+      // boundary `pieces` has no reason to know about.
+      const units = field === "hashtags" ? splitTags(text) : pieces(text);
+      for (const sentence of units) {
         const trimmed = sentence.trim();
         if (trimmed) out.push({ field, slot, text: trimmed, analysed: expandHashtags(trimmed) });
       }
@@ -121,15 +150,34 @@ export function withoutSentences(output: any, sentences: CopySentence[], dropInd
     removeByKey.set(key, set);
   });
 
-  const strip = (text: string, key: string): string => {
+  // THE SAME SPLIT ON BOTH SIDES, OR THE REMOVAL SILENTLY DOES
+  // NOTHING.
+  //
+  // copySentences started splitting a hashtag run into one tag per
+  // sentence; this re-split with `pieces`, which keeps the run whole,
+  // so "#FreshPaneer" was never found among the pieces and nothing
+  // was removed - while the owner's note said it had been. A note
+  // claiming a removal that did not happen is worse than no note: it
+  // is the pipeline telling the owner it protected them when it did
+  // not.
+  //
+  // Found by mutation M55, which survived my first test of this
+  // because that test asserted splitTags() directly rather than the
+  // property.
+  const strip = (text: string, key: string, field: string): string => {
     const remove = removeByKey.get(key);
     if (!remove) return text;
-    const kept = pieces(text).filter((p) => !remove.has(p.trim()));
-    return kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    const units = field === "hashtags" ? splitTags(text) : pieces(text);
+    const kept = units.filter((p) => !remove.has(p.trim()));
+    const joined = field === "hashtags" ? kept.join(" ") : kept.join("");
+    return joined
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   };
 
   const walk = (value: unknown, field: string, slot: number): unknown => {
-    if (typeof value === "string") return strip(value, `${field}#${slot}`);
+    if (typeof value === "string") return strip(value, `${field}#${slot}`, field);
     // AN ARRAY ELEMENT IS DROPPED, NOT BLANKED, and that is the one
     // place the "empty not missing" rule above does not apply. An email
     // whose SUBJECT is removed must arrive with an empty subject the

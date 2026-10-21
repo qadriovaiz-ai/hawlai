@@ -480,7 +480,14 @@ describe("Select is curation, not gatekeeping", () => {
       { records: [shipRecord, freshRecord] }
     );
     const prompt = JSON.stringify(sent[0]);
-    expect(prompt).toMatch(/Facts chosen for this piece/);
+    // THE FIRST LIST IS PER CLAIM TOO SINCE 2026-10-21, so the shared
+    // "Facts chosen for this piece:" header is gone. The founder found
+    // the hand-churning bug a second time and the cause was that this
+    // list - the chosen facts - was never scope-filtered against the
+    // WRITTEN claim. A collective fact was handed over as evidence
+    // about one named product, with a note saying it covers everything
+    // the business makes.
+    expect(prompt).toMatch(/FACTS CHOSEN FOR THIS PIECE THAT CAN COVER THIS CLAIM|NO FACT CHOSEN FOR THIS PIECE CAN COVER THIS CLAIM/);
     // PER CLAIM SINCE 2026-10-20, not one shared block. The founder
     // reported that "made by hand-churning" was reaching the paneer,
     // and a shared list is a list the judge can apply to whichever
@@ -822,5 +829,83 @@ describe("hand-churning belongs to the ghee, not to the paneer", () => {
       { records: [rec2({ id: "f_bilona", key: "product.desi_ghee_500ml.description", value: "Bilona method", recordedText: "Desi ghee 500ml: Bilona method" })] }
     );
     expect(claimsBlock(sent[0])).not.toMatch(/ALSO ON RECORD/);
+  });
+});
+
+describe("a collective fact is not one product's attribute", () => {
+  // THE FOUNDER FOUND THE HAND-CHURNING BUG TWICE, and the second time
+  // is the one that matters. On 20 October I filtered the judge's
+  // SECOND list by scope and reported it fixed. The next run shipped
+  //
+  //   "Fresh paneer just made — hand-churned, no preservatives."
+  //
+  // because the leak is in the FIRST list, which was never filtered at
+  // all. What the judge was shown for a claim about the paneer:
+  //
+  //   - we hand-churn
+  //       recorded as: "Haath se churn karte hain."
+  //       this fact covers: recorded about the business, so it covers
+  //       what the business makes in general
+  //
+  // That last line does not merely permit the crossover, it invites it.
+
+  const churn = (): FactRecord => ({
+    id: "f_churn",
+    dealershipId: "biz_1",
+    key: "process.hand_churned",
+    value: true,
+    unit: null,
+    source: "owner_stated",
+    sourceRef: "business_knowledge:d1",
+    confidence: "inferred",
+    licenses: ["existence", "policy", "process"],
+    recordedText: "Haath se churn karte hain.",
+    observedAt: "2026-10-21T00:00:00.000Z",
+  });
+
+  /** A collective claim Select approves perfectly correctly. */
+  const collective = () => approvedClaim({ claimType: "process", factIds: ["f_churn"], value: null, unit: null, intent: "we hand-churn", aboutProduct: null });
+
+  it("A COLLECTIVE APPROVED CLAIM IS NOT EVIDENCE FOR ONE NAMED PRODUCT", async () => {
+    const { approvedForJudge } = await import("@/lib/facts/verifyClaims");
+    // Shown for a collective written claim: yes.
+    expect(approvedForJudge([collective()], [churn()], null)).toMatch(/hand-churn/);
+    // Shown for a claim about the paneer: no.
+    expect(approvedForJudge([collective()], [churn()], "Paneer 250g")).toBe("");
+  });
+
+  it("THE JUDGE IS TOLD PLAINLY WHEN NOTHING COVERS THE CLAIM", async () => {
+    const sent: any[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      sent.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({ content: [{ type: "tool_use", name: "report_verdicts", input: { verdicts: [{ index: 0, entailed: false, why: "nothing covers it" }] } }], usage: { input_tokens: 10, output_tokens: 5 } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof fetch;
+    const r = await verifyClaims(
+      [extracted({ claimType: "process", canonical: "the paneer is hand-churned", aboutProduct: "Paneer 250g" })],
+      [collective()],
+      { records: [churn()] }
+    );
+    const content = String(sent[0].messages[0].content);
+    expect(content).toMatch(/NO FACT CHOSEN FOR THIS PIECE CAN COVER THIS CLAIM/);
+    expect(content).not.toMatch(/covers what the business makes in general/);
+    expect(r.verdicts[0].verdict).toBe("unsupported");
+  });
+
+  it("AND A PRODUCT'S OWN CLAIM IS STILL ITS EVIDENCE", async () => {
+    // The direction that must not over-fire: the paneer's own price
+    // claim covering a claim about the paneer.
+    const { approvedForJudge } = await import("@/lib/facts/verifyClaims");
+    const own = approvedClaim({ claimType: "price", value: 120, unit: "inr", intent: "the paneer costs ₹120", aboutProduct: "Paneer 250g" });
+    expect(approvedForJudge([own], [], "paneer")).toMatch(/120/);
+  });
+
+  it("and store-wide policy still covers every product", async () => {
+    const { approvedForJudge } = await import("@/lib/facts/verifyClaims");
+    const ship = approvedClaim({ claimType: "shipping", factIds: ["f_ship"], value: 50, unit: "inr", intent: "delivery is ₹50", aboutProduct: null });
+    const record: FactRecord = { ...churn(), id: "f_ship", key: "shipping.rate", value: 50, unit: "inr", recordedText: "shipping is flat ₹50" };
+    expect(approvedForJudge([ship], [record], "Paneer 250g")).toMatch(/50/);
   });
 });

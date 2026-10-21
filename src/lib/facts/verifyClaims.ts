@@ -169,8 +169,59 @@ RULES
  * So a boolean never appears as a bare value. `false` says the thing is
  * NOT used or present; `true` says it is.
  */
-export function approvedForJudge(approved: SelectedClaim[], records: FactRecord[] = []): string {
-  return approved.map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}${scopeLine(c, records)}`).join("\n");
+export function approvedForJudge(
+  approved: SelectedClaim[],
+  records: FactRecord[] = [],
+  aboutProduct?: string | null
+): string {
+  return approved
+    .filter((c) => supportsProduct(c, records, aboutProduct))
+    .map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}${scopeLine(c, records)}`)
+    .join("\n");
+}
+
+/**
+ * Can this APPROVED claim be evidence for a written claim about
+ * `aboutProduct`?
+ *
+ * THE HOLE THE FOUNDER FOUND TWICE. On 2026-10-20 I filtered the
+ * judge's SECOND list by scope and reported the hand-churning bug
+ * fixed. It was not: the leak is in the FIRST list, which was never
+ * filtered at all, and "Fresh paneer just made - hand-churned, no
+ * preservatives" came back on the very next run.
+ *
+ * What the judge was shown for a claim about the paneer:
+ *
+ *   - we hand-churn
+ *       recorded as: "Haath se churn karte hain."
+ *       this fact covers: recorded about the business, so it covers
+ *       what the business makes in general
+ *
+ * That last line does not merely permit the crossover, IT INVITES IT.
+ * A collective claim Select approved perfectly correctly - the business
+ * does hand-churn - was handed to the judge as evidence about one named
+ * product, with a note saying it covers everything the business makes.
+ *
+ * THE FOUNDER'S RULE OF 16 OCTOBER, applied in the direction nobody
+ * applied it: a claim about ONE SPECIFICALLY NAMED product needs
+ * evidence about THAT product. It was enforced on Select's claims, each
+ * against its own aboutProduct, and never between the WRITER's claim
+ * and the evidence put in front of the judge for it.
+ *
+ * A collective written claim is unaffected: when the writer names no
+ * one product every approved claim is fair evidence, which is what
+ * keeps "the candles burn for 40 hours" sayable.
+ */
+function supportsProduct(claim: SelectedClaim, records: FactRecord[], aboutProduct?: string | null): boolean {
+  if (!aboutProduct) return true;
+  if (claim.aboutProduct && sameProductName(claim.aboutProduct, aboutProduct)) return true;
+  return claim.factIds.some((id) => {
+    const record = records.find((r) => r.id === id);
+    if (!record) return false;
+    // Store-wide policy covers every product; a business-level fact
+    // does not cover one named product.
+    return recordSupportsScope(record.key, aboutProduct) && scopeOfKey(record.key).kind !== "business";
+  });
 }
 
 /**
@@ -471,8 +522,16 @@ export async function verifyClaims(
   // is how the ghee's hand-churning reached the paneer.
   const numbered = forJudge
     .map((c, i) => {
+      const chosen = approvedForJudge(approved, opts.records ?? [], c.aboutProduct);
       const covering = alsoOnRecord(approved, opts.records ?? [], c.aboutProduct);
-      const head = `[${i}] (${c.claimType}) ${c.canonical}`;
+      const head =
+        `[${i}] (${c.claimType}) ${c.canonical}` +
+        (chosen
+          ? `\n    FACTS CHOSEN FOR THIS PIECE THAT CAN COVER THIS CLAIM:\n${chosen
+              .split("\n")
+              .map((line) => `    ${line}`)
+              .join("\n")}`
+          : `\n    NO FACT CHOSEN FOR THIS PIECE CAN COVER THIS CLAIM.`);
       if (!covering) return head;
       const indented = covering
         .split("\n")
@@ -493,7 +552,10 @@ export async function verifyClaims(
         {
           role: "user",
           content: [
-            `Facts chosen for this piece:\n${approvedForJudge(approved, opts.records ?? [])}`,
+            // THE FIRST LIST IS PER CLAIM NOW TOO. A shared one is
+            // exactly how a collective fact became one product's
+            // attribute: see supportsProduct above.
+            "",
             // THE SHARED BLOCK IS GONE. It used to sit here, and it is
             // where the ghee's hand-churning reached the paneer: one
             // list of unchosen records that the judge could apply to

@@ -283,7 +283,7 @@ function vocabularyTokens(text: string): string[] {
  * real limit, stated rather than hidden, and the reason the intensifier
  * class carries Hinglish words of its own.
  */
-function capitalisedWords(sentence: string): string[] {
+function capitalisedWords(sentence: string, namesAnywhere = false): string[] {
   // A LIST MARKER IS NOT THE FIRST WORD.
   //
   // Run 9 removed two bullets — "- Har candle hand-poured hai" and
@@ -310,7 +310,10 @@ function capitalisedWords(sentence: string): string[] {
   // a claim.
   const content = words.filter((w) => /\p{L}/u.test(w));
   const titleCased = content.filter((w) => /^\p{Lu}/u.test(w)).length;
-  if (content.length <= 6 && titleCased > content.length / 2) return [];
+  // The Title-Case abstention is for BUTTONS, not for tags: every
+  // hashtag is Title-Cased by construction, so abstaining here would
+  // undo the whole point.
+  if (!namesAnywhere && content.length <= 6 && titleCased > content.length / 2) return [];
 
   // ONLY A WORD IN A PLACE POSITION, and this is a narrowing with a
   // cost that is worth naming.
@@ -341,7 +344,8 @@ function capitalisedWords(sentence: string): string[] {
     return (i > 0 && BEFORE.has(lower[i - 1])) || (i + 1 < lower.length && AFTER.has(lower[i + 1]));
   };
 
-  return capitalised.filter(inPlacePosition).map((w) => w.toLowerCase());
+  // In a hashtag, position proves nothing and is not required.
+  return (namesAnywhere ? capitalised : capitalised.filter(inPlacePosition)).map((w) => w.toLowerCase());
 }
 
 /**
@@ -352,7 +356,36 @@ function capitalisedWords(sentence: string): string[] {
  * category, and what the owner typed. A word there is the owner's, not
  * the model's.
  */
-export function introducedWords(sentences: string[], allowed: string[]): IntroducedWord[] {
+export function introducedWords(
+  sentences: string[],
+  allowed: string[],
+  /**
+   * Per sentence: is this one a hashtag, where a capitalised word
+   * anywhere is an introduced name?
+   *
+   * THE PLACE-POSITION NARROWING WAS RIGHT FOR PROSE AND WRONG FOR A
+   * TAG. On 19 October I narrowed the name check to words in a place
+   * position - after "in", "from", before "mein", "se" - because it
+   * was deleting Hinglish greetings and Title-Cased buttons. I wrote
+   * the cost down at the time: "an invented brand or person's name
+   * that is not in a place position is no longer caught", and added
+   * that it had never been observed and the claim extractor would see
+   * it anyway.
+   *
+   * THE FOUNDER'S GRADING OF 2026-10-21 OBSERVED IT. dairy-03 and
+   * dairy-09 shipped "#FreshPaneer" in pieces where the paneer record
+   * was explicitly withheld from the writer. "Fresh Paneer" has no
+   * preposition near it, so the name check never looked; and the
+   * fallback I was relying on did not hold either.
+   *
+   * A TAG HAS NO GREETINGS IN IT. Nobody writes "#KhushAamdeed" as a
+   * salutation or "#BookASlot" as a sentence that got Title-Cased by
+   * accident - a hashtag is a label the business chose, so every
+   * capitalised word in one is either the owner's or the model's. That
+   * makes the narrowing unnecessary here, and only here.
+   */
+  namesAnywhere: boolean[] = []
+): IntroducedWord[] {
   const vocabulary = new Set(allowed.flatMap(vocabularyTokens));
   // A MINIMISER IS NOT EXCUSED BY THE OWNER USING IT SOMEWHERE ELSE.
   //
@@ -410,7 +443,7 @@ export function introducedWords(sentences: string[], allowed: string[]): Introdu
         }
       });
     }
-    for (const word of capitalisedWords(sentence)) {
+    for (const word of capitalisedWords(sentence, namesAnywhere[sentenceIndex] === true)) {
       if (vocabulary.has(word) || seen.has(word)) continue;
       // A number-word like "100" is not a name.
       if (/^\d+%?$/.test(word)) continue;

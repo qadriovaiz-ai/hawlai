@@ -93,3 +93,96 @@ describe("a hashtag goes through the same checks as body text", () => {
     expect(after.subject).toBe("");
   });
 });
+
+describe("an invented product name inside a tag", () => {
+  // THE FOUNDER'S GRADING OF 2026-10-21. dairy-03 and dairy-09 shipped
+  // "#FreshPaneer" in pieces where the paneer record was EXPLICITLY
+  // WITHHELD from the writer — the sheet's own records box says "(not
+  // given to the writer for this piece: Paneer 250g)". dairy-02 and
+  // dairy-06 did not, which is what made it look random.
+  //
+  // Nothing caught it. The name check was narrowed to words in a PLACE
+  // POSITION on 19 October, to stop it deleting Hinglish greetings and
+  // Title-Cased buttons, and I wrote the cost down at the time: an
+  // invented name not in a place position is no longer caught, it has
+  // never been observed, and the claim extractor would see it anyway.
+  //
+  // Two of those three turned out to be wrong on the same day.
+
+  it("THE TAG THE FOUNDER FOUND IS CAUGHT", async () => {
+    const { introducedWords } = await import("@/lib/content/introducedWords");
+    // The vocabulary a dairy piece has when the paneer is withheld.
+    const vocab = ["Shree Dairy", "Desi ghee 500ml Bilona method", "shipping is flat", "business city Indore"];
+    expect(introducedWords(["Fresh Paneer"], vocab, [true])).toEqual([
+      { sentenceIndex: 0, word: "paneer", kind: "name" },
+    ]);
+  });
+
+  it("AND IS NOT CAUGHT WHEN THE RECORD IS THERE", async () => {
+    // dairy-06 had the paneer and used it. The check must not fire on
+    // the owner's own product.
+    const { introducedWords } = await import("@/lib/content/introducedWords");
+    const vocab = ["Shree Dairy", "product paneer 250g Paneer 250g: Made fresh every morning"];
+    expect(introducedWords(["Fresh Paneer"], vocab, [true])).toEqual([]);
+  });
+
+  it("PROSE KEEPS THE NARROWING, so the greeting stays safe", async () => {
+    const { introducedWords } = await import("@/lib/content/introducedWords");
+    // The sentence run 10 deleted. In prose, position still decides.
+    expect(introducedWords(["Khush Aamdeed — aap sahi jagah aaye!"], ["A Business"], [false])).toEqual([]);
+    // And a Title-Cased button is still left alone in prose.
+    expect(introducedWords(["Book A Slot Today"], ["A Business"], [false])).toEqual([]);
+  });
+
+  it("BUT A TITLE-CASED TAG IS NOT A BUTTON, so the abstention does not apply", async () => {
+    const { introducedWords } = await import("@/lib/content/introducedWords");
+    // Every hashtag is Title-Cased by construction. Abstaining on that
+    // basis inside a tag would undo the whole fix.
+    expect(introducedWords(["Book A Slot Today"], ["A Business"], [true]).length).toBeGreaterThan(0);
+  });
+
+  it("and the owner's own business name in a tag is theirs", async () => {
+    const { introducedWords } = await import("@/lib/content/introducedWords");
+    expect(introducedWords(["Shree Dairy"], ["Shree Dairy"], [true])).toEqual([]);
+  });
+});
+
+describe("a run of tags in one string is still one tag per sentence", () => {
+  // MUTATION M55 SURVIVED my first pass at this: I asserted splitTags()
+  // directly and the only copySentences case used an array of single
+  // tags, so removing the split from the door changed nothing any test
+  // could see. Fixing the test, not the report.
+  //
+  // THE SHAPE THAT MATTERS, from the founder's grading of 2026-10-21:
+  // dairy-09 shipped all three tags as ONE string while dairy-03
+  // shipped three array items. The same three claims. In the first
+  // shape a refusal would have taken all three out together — two of
+  // them true — and the extractor would have seen one jumble instead
+  // of three labels.
+
+  const out = () => ({ text: "Bilona ghee.", hashtags: ["#ShreeDairy #BilonaGhee #FreshPaneer"] });
+
+  it("THREE TAGS IN ONE STRING BECOME THREE SENTENCES", () => {
+    const s = copySentences(out() as any);
+    const tags = s.filter((x) => x.field === "hashtags");
+    expect(tags.map((t) => t.text)).toEqual(["#ShreeDairy", "#BilonaGhee", "#FreshPaneer"]);
+    expect(tags.map((t) => t.analysed)).toEqual(["Shree Dairy", "Bilona Ghee", "Fresh Paneer"]);
+  });
+
+  it("SO REFUSING ONE KEEPS THE OTHER TWO", () => {
+    // The whole point. Two of those three tags are the owner's own
+    // words; only the paneer one was invented.
+    const o = out();
+    const s = copySentences(o as any);
+    const i = s.findIndex((x) => x.text === "#FreshPaneer");
+    const after = withoutSentences(o as any, s, [i]);
+    expect(after.hashtags).toEqual(["#ShreeDairy #BilonaGhee"]);
+  });
+
+  it("and a hashtags field that is not tags at all is left whole", () => {
+    // The field is not always only hashtags, and splitting on "#" must
+    // not mangle a sentence that happens to live there.
+    const s = copySentences({ hashtags: ["no tags here"] } as any);
+    expect(s.map((x) => x.text)).toEqual(["no tags here"]);
+  });
+});
