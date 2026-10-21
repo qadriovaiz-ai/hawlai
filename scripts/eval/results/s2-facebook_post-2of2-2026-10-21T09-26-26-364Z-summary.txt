@@ -1,0 +1,62 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 2of2  (salon-07, salon-09, dairy-02, dairy-03, dairy-06, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 837.12 of Rs 915.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+5 sentence(s), facts note present
+4 sentence(s), facts note present
+8 sentence(s), facts note present
+7 sentence(s), facts note present
+8 sentence(s), facts note present
+2 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+
+==================================================================
+sentences produced    34   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  1 of 6   <<< dairy-09
+calls made            31   (4 per email: select, write, extract, judge)
+cases retried         1   (spacing 4000ms between cases)
+tokens                78466 in, 7531 out
+ACTUAL COST THIS RUN  Rs 16.31   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.72   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 853.43 of Rs 915.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [salon-07]
+     Not on record: Award-winning stylists: please record the specific award(s) won, the awarding body, and the year(s) — e.g. 'Won Best Stylist at [Award Name], [City], [Year].'
+     Removed "Haircut bhi available hai — sirf 30 minutes mein." — "sirf" says the amount is small, and that is your call to make, not mine.
+     Removed "Shine Studio applies keratin treatment using Korean products after hair wash." — nothing on record can support a capability claim.
+     Removed "The keratin treatment will make the reader's hair smooth and frizz-free." — nothing on record can support a benefit claim.
+     Removed "You will get smooth, frizz-free hair from this treatment." — nothing on record can support a benefit claim.
+     Removed "The keratin treatment contains no ammonia." — No fact states the keratin treatment contains no ammonia. The second list mentions 'Ammonia wale products use nahi karte' (they don't use ammonia products), which covers the business in general, but this is not specific to the keratin treatment itself..
+  [salon-09]
+     Not on record: everything — the business's records could not be read just now
+  [dairy-02]
+     Left out: The Bilona method is the hero differentiator — lead with it to establish craft and authenticity. — it cites a record (e138f4eb) that does not exist.
+     Not on record: What milk source is used for the ghee — e.g. A2 cow milk, buffalo milk, a specific breed? Record it against product.desi_ghee_500ml so the copy can name it.
+     Not on record: What is the shelf life of the 500ml jar? Record it against product.desi_ghee_500ml (e.g. '12 months from date of manufacture').
+     Not on record: Is the FIRST10 offer limited to the first 10 customers, first-time buyers only, or open to all? Record the exact eligibility rule against offer.first10 so the post does not mislead.
+     Removed "Desi ghee is hand-churned." — No fact states that desi ghee is hand-churned. The Bilona method is recorded, but hand-churning is not stated in the available facts..
+     Removed "Desi ghee contains no preservatives." — The chosen facts do not state this. The second list does not contain a fact about preservatives in desi ghee specifically..
+     Removed "Desi ghee is made without shortcuts." — No fact states that desi ghee is made without shortcuts. The Bilona method is recorded, but this does not necessarily entail the absence of shortcuts..
+  [dairy-03]
+     Not on record: Ghee being good for digestion: no record supports a digestion benefit claim for this product or for the business's ghee generally. Owner should record a specific, verifiable statement about digestion — e.g. a cited traditional-use reference or a qualified nutritionist's note — tied to this product, before this claim can appear in copy.
+     Removed "Most people assume ghee leads to weight gain." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "Ghee leads to weight gain." — nothing on record can support a benefit claim.
+  [dairy-06]
+     This could not be checked against your records just now, so it is marked unverified.
+
+
+==================================================================
+THIS RUN IS INCOMPLETE. 1 of 6 cases never reached the model, so the
+sheet below covers only the rest and NO verdict about the pipeline can
+be drawn from it. The low cost is the symptom, not the result.
+==================================================================
+GRADE THIS: scripts\eval\results\s2-facebook_post-2of2-2026-10-21T09-26-26-364Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

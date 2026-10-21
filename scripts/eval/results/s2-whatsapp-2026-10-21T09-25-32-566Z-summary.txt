@@ -1,0 +1,56 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 837.12 of Rs 915.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+3 sentence(s), facts note present
+4 sentence(s), facts note present
+4 sentence(s), facts note present
+6 sentence(s)
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+
+==================================================================
+sentences produced    26   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            39   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                91666 in, 6968 out
+ACTUAL COST THIS RUN  Rs 16.15   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.69   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 853.27 of Rs 915.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship currently — is it in stock and available to order right now? Record this against the product so availability can be stated.
+     Not on record: Is there a specific scent description or mood the lavender fragrance is meant to create (e.g. 'calming', 'floral')? Record a product-level description so the copy can name it without guessing.
+     Removed "Rose candles are available." — No fact states that rose candles exist or are available. Free shipping is a store policy but does not establish that rose candles are in stock..
+  [candle-09]
+     You asked for 100% natural. Your records say The records confirm soy wax only and no paraffin, but no record uses the phrase '100% natural' or certifies the candles as natural. That specific claim cannot be selected. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record covers child safety, child-safe testing, or any safety certification. This is also a safety claim, which cannot be selected regardless of records. — change the record, or I write it without that.
+     Not on record: Does the business hold any third-party certification (e.g. organic, non-toxic, or child-safe) for its candles or ingredients? If so, record the certifying body and certificate number against each product.
+     Removed "A new batch of candles is ready." — No fact states that a new batch is ready. Facts describe the process and materials, not current availability or batch status..
+     Removed "The candles are hand-poured." — The chosen fact is only 'Free shipping'. The second list contains 'Hand-poured in small batches' but that was not chosen for this claim, so it cannot be used here..
+     Removed "The candles are made from soy wax." — The chosen fact is only 'Free shipping'. The second list contains 'Soy wax' facts for specific candles, but those were not chosen for this claim..
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — shipping.mode has NO ANSWER ON RECORD, and the business is already flagged as one where nothing ships. A salon treatment is delivered in-person, not shipped. — change the record, or I write it without that.
+  [dairy-05]
+     Not on record: Stock or batch size per day — how many units of Paneer 250g are available each morning? Record this against the product so the copy can create urgency (e.g. 'Only X packs daily').
+     Not on record: Delivery area — which localities or pin codes in Indore does the business currently deliver to? Record this so the broadcast can tell readers whether they are in the delivery zone.
+     Removed "Paneer is now available in Indore." — No fact states where paneer is available or delivered to. Shipping cost and freshness do not establish delivery coverage to Indore..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping rate is ₹50 (flat). There is no record of free delivery. — change the record, or I write it without that.
+     Not on record: Whether home delivery is available at all (vs. pickup only) — owner should record: 'Home delivery is available / not available in [area/city].'
+     Not on record: Whether there is any free-delivery threshold or promotion (e.g., free delivery above a certain order value) — owner should record the exact condition and minimum order amount if one exists.
+     Removed "The business delivers fresh dairy to the customer's door in Indore." — The business is in Indore and charges ₹50 shipping, but no fact states delivery coverage to Indore addresses. Rule 10: location + delivery cost ≠ delivery area. Also, no fact states the dairy is fresh..
+     Removed "The dairy delivered is fresh." — No fact states the dairy delivered is fresh. Paneer is made fresh every morning, but that is a different product and does not cover dairy in general..
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-21T09-25-32-566Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

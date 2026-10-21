@@ -1,0 +1,56 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 1of2  (candle-02, candle-03, candle-06, candle-10, salon-02, salon-03)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 837.12 of Rs 915.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+5 sentence(s), facts note present
+2 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+2 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+2 sentence(s)   *** NOTHING WAS WRITTEN - the model could not be reached ***
+
+==================================================================
+sentences produced    27   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  3 of 6   <<< candle-10, salon-02, salon-03
+calls made            27   (4 per email: select, write, extract, judge)
+cases retried         3   (spacing 4000ms between cases)
+tokens                75033 in, 9516 out
+ACTUAL COST THIS RUN  Rs 15.81   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.64   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 852.93 of Rs 915.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-02]
+     Not on record: What scent/fragrance note or mood does the lavender candle deliver? Record this against the product so the post can describe the experience (e.g. 'product.lavender_candle.fragrance_note = fresh floral lavender').
+     Not on record: Is there a specific jar style, size, or visual detail for the lavender candle? Record it against the product so the post can describe what the buyer receives.
+     Removed "Ordinary candles burn for 10 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Our Lavender candle burns for 40 hours, unlike other candles that only burn for 10 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+  [candle-03]
+     Removed "Fragrance binds properly at 65 degrees." — Fact states fragrance is added at 65 degrees, but does not state that it binds properly at that temperature. The mechanism is not stated..
+     Removed "The temperature of 65 degrees is the reason fragrance binds properly." — Two facts do not entail a causal link. The fact states the temperature and that fragrance is added, but not that the temperature is the reason binding occurs properly..
+  [candle-06]
+     Not on record: The post is requested to be about lavender for better sleep, but no record confirms that this candle contains lavender fragrance or that it is positioned for sleep. Owner should record: 'Lavender candle contains lavender fragrance, intended for relaxation / sleep use.' against product.lavender_candle.
+     Removed "This candle burns for 40 hours, unlike what people commonly think (10 hours)." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "This small process makes a difference to the candle." — nothing on record can support a benefit claim.
+     Removed "The lavender candle is hand-poured." — No fact states the candle is hand-poured. The chosen facts do not include this information..
+     Removed "The business does not mix cheap paraffin wax into the candle." — The fact states soy wax is used, but does not state that paraffin wax is not mixed in. Absence of mention is not absence of the material..
+     Removed "The candle is made only of soy wax." — Fact states the candle is made of soy wax, but does not state it is made ONLY of soy wax. More specific than the fact is not entailed..
+     Removed "The fragrance is added at 65 degrees and then set." — No fact states fragrance is added at 65 degrees and then set. The chosen facts do not include this process detail..
+     Removed "If fragrance is not added at the correct temperature, the scent does not set properly." — This is a causal claim about what happens if temperature is incorrect. No fact states this mechanism or consequence..
+
+
+==================================================================
+THIS RUN IS INCOMPLETE. 3 of 6 cases never reached the model, so the
+sheet below covers only the rest and NO verdict about the pipeline can
+be drawn from it. The low cost is the symptom, not the result.
+==================================================================
+GRADE THIS: scripts\eval\results\s2-facebook_post-1of2-2026-10-21T09-28-04-234Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

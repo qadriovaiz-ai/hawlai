@@ -520,11 +520,21 @@ describe("Select is curation, not gatekeeping", () => {
   it("THE RUBRIC SAYS BOTH LISTS ARE EVIDENCE AND THE STANDARD IS UNCHANGED", async () => {
     const { code } = await import("./helpers/source");
     const src = code("src/lib/facts/verifyClaims.ts");
-    expect(src).toMatch(/YOU MAY BE SHOWN TWO LISTS, AND BOTH ARE EVIDENCE/);
-    expect(src).toMatch(/NEVER answer "not entailed" on the ground that a fact was not chosen for this piece/);
+    // REWORDED 2026-10-21 TO MATCH THE SHAPE THE JUDGE ACTUALLY SEES.
+    // When the lists became per-claim, this rule still described two
+    // global sections — and the judge read the second heading as
+    // something it may not use, refusing "the candles are hand-poured"
+    // with "that was not chosen for this claim". A rubric that
+    // describes a prompt the model is not being shown is worse than no
+    // rubric.
+    expect(src).toMatch(/BOTH HEADINGS ARE EVIDENCE OF EQUAL STANDING/);
+    expect(src).toMatch(/THE SECOND HEADING IS NOT WEAKER THAN THE FIRST/);
+    expect(src).toMatch(/NEVER answer "not entailed" because a fact was "not chosen for this claim"/);
     // The half that stops this becoming a licence to be lenient.
-    expect(src).toMatch(/A second list is more evidence to read, not a lower standard to meet/);
-    expect(src).toMatch(/If neither list states the claim, it is not entailed/);
+    expect(src).toMatch(/More evidence to read is not a lower standard to meet/);
+    expect(src).toMatch(/is not entailed, which is the answer however much is on file elsewhere/);
+    // And the half that stops the judge second-guessing the code.
+    expect(src).toMatch(/ALREADY BEEN CHECKED FOR SCOPE IN CODE/);
   });
 
   it("NOTHING CHOSEN IS NOT NOTHING ON RECORD", async () => {

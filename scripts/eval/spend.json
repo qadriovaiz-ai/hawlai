@@ -473,7 +473,25 @@
       "label": "output gate on s2-whatsapp-2026-10-21T08-29-28-741Z.json",
       "inr": 2.82,
       "calls": 6
+    },
+    {
+      "at": "2026-10-21T09:28:04.245Z",
+      "label": "s2-facebook_post-1of2-2026-10-21T09-28-04-234Z",
+      "inr": 15.81,
+      "calls": 27
+    },
+    {
+      "at": "2026-10-21T09:26:26.376Z",
+      "label": "s2-facebook_post-2of2-2026-10-21T09-26-26-364Z",
+      "inr": 16.31,
+      "calls": 31
+    },
+    {
+      "at": "2026-10-21T09:25:32.578Z",
+      "label": "s2-whatsapp-2026-10-21T09-25-32-566Z",
+      "inr": 16.15,
+      "calls": 39
     }
   ],
-  "totalInr": 837.12
+  "totalInr": 885.39
 }
