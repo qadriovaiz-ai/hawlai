@@ -1,0 +1,86 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-social-hashtagfix.json
+cases                12
+sentences            75   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 6.92
+already spent        Rs 828.18 of Rs 837.00
+====================================================================
+
+[candle-02]  8 sentence(s)
+      material "The business does not mix cheap paraffin wax into its candles."
+      material "The candles are made from soy wax."
+      process "The candles are hand-poured."
+      process "The candles are made in small batches."
+      duration "The candles last for more than a few days."
+
+[candle-03]  8 sentence(s)
+      material "Candles made by this business do not contain paraffin wax."
+      process "Soy wax is melted in a double-boiler in the candle-making process."
+      process "Each candle is poured by hand in small batches."
+      duration "Candles burn for 40 hours."
+      material "Candles are made with soy wax only."
+      process "Candles are hand-poured."
+
+[candle-06]  8 sentence(s)
+      process "Each candle is made by melting wax in a double boiler and then adding fragrance at 65 degrees."
+      material "Paraffin is never mixed into the candles."
+      material "The candles are made from soy wax only."
+      process "The candles are hand-poured."
+      process "The candles are made in small batches."
+
+[candle-10]  6 sentence(s)
+      duration "The Lavender candle burns for 40 hours."
+
+[salon-02]  5 sentence(s)
+      duration "A keratin treatment session lasts 90 minutes."
+      price "The price of keratin treatment is ₹3500."
+      material "The keratin treatment contains no ammonia."
+
+[salon-03]  6 sentence(s)
+      material "The products used by this business come from Korea."
+      price "A booking costs ₹3500."
+
+[salon-07]  8 sentence(s)
+      duration "Keratin treatment takes 90 minutes per session."
+      process "Hair wash is performed before keratin treatment is applied."
+      duration "A haircut takes 30 minutes."
+
+[salon-09]  3 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[dairy-02]  6 sentence(s)
+      shipping "Shipping costs ₹50 flat."
+      credential "The business holds an FSSAI license numbered 11223344556677."
+      material "Bilona Ghee contains no preservatives."
+
+[dairy-03]  8 sentence(s)
+      process "Shree Dairy's desi ghee is made using the bilona method."
+      process "Shree Dairy's desi ghee is hand-churned."
+      material "Shree Dairy's desi ghee contains no preservatives."
+      shipping "Shipping costs ₹50 flat."
+      credential "The product has identifier 11223344556677."
+
+[dairy-06]  3 sentence(s)
+      credential "Shree Dairy holds FSSAI licence 11223344556677."
+      process "The ghee is made by hand."
+      process "The ghee is made using the Bilona method."
+      material "The ghee contains no preservatives."
+
+[dairy-09]  6 sentence(s)
+      process "Shree Dairy Bilona Ghee is made using the bilona method."
+      process "Shree Dairy Bilona Ghee is hand-churned."
+      material "Shree Dairy Bilona Ghee contains no preservatives."
+      price "A 500ml jar of Shree Dairy Bilona Ghee costs ₹850."
+      offer "The first order gets 10% off with code FIRST10."
+      shipping "Shipping costs ₹50 on every order."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 6.12
+====================================================================
+WORTH GRADING. Send the sheet.
+====================================================================

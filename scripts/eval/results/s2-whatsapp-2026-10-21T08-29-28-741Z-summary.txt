@@ -1,0 +1,53 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 760.34 of Rs 837.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+4 sentence(s), facts note present
+6 sentence(s)
+6 sentence(s), facts note present
+4 sentence(s), facts note present
+
+==================================================================
+sentences produced    31   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            32   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                76726 in, 6264 out
+ACTUAL COST THIS RUN  Rs 14.46   (estimated Rs 15.28)
+COST PER EMAIL        Rs 2.41   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 774.80 of Rs 837.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship from Shahjahanpur only, or pan-India? Record the delivery reach against the product so the copy can say where it ships to.
+     Not on record: Is there a specific fragrance note or scent description recorded for the Lavender candle beyond 'lavender'? A one-line scent note (e.g. 'fresh floral', 'calming herbal') would strengthen the broadcast.
+  [candle-09]
+     You asked for 100% natural. Your records say Records confirm soy wax only and no paraffin, but no record uses the phrase '100% natural' or certifies the candles as natural. That specific claim is not on record. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record makes any safety or child-safety claim. Rule 6 also prohibits selecting safety claims regardless of records. — change the record, or I write it without that.
+     Not on record: Whether the candles carry any third-party natural or non-toxic certification (e.g., from a certifying body) — if so, record the certifier's name and certificate number against the product so copy can state it accurately.
+     Removed "Free shipping applies to all orders." — The fact states 'shipping is free' but does not specify that it applies to ALL orders. The fact is a store-wide policy, but 'all orders' is stronger than what is stated—there could be exceptions (minimum order, certain locations, etc.) not ruled out by the record..
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. This is a salon treatment, not a shipped product. — change the record, or I write it without that.
+     Removed "For ₹3500, the customer's hair will become soft and shiny." — nothing on record can support a benefit claim.
+     Removed "A haircut is available for ₹400." — it states 400 ₹, and no figure was approved for this piece.
+     Removed "Your hair will become soft and shiny." — nothing on record can support a benefit claim.
+  [dairy-05]
+     Not on record: What quantity or pack size does the FIRST10 offer apply to — is it valid on the Paneer 250g specifically, or on all products? Please record this against the offer so the copy can state it accurately.
+     Not on record: Is delivery available across Indore, or only in certain areas? Please record the delivery zone so the broadcast can tell readers whether they are covered.
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping costs ₹50 — it is not free. — change the record, or I write it without that.
+     Not on record: Does the business deliver to all areas of Indore, or only specific pin codes / localities? Please record the exact delivery zone so the copy can state it accurately.
+     Removed "The customer will receive their order at their door." — No approved fact states that customers receive orders at their door. 'The business is in Indore' says where it is located, not where it delivers to or how delivery works. Location and delivery coverage are separate facts (Rule 10)..
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-21T08-29-28-741Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

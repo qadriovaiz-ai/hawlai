@@ -1,0 +1,66 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 2of2  (salon-07, salon-09, dairy-02, dairy-03, dairy-06, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 760.34 of Rs 837.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+8 sentence(s), facts note present
+3 sentence(s), facts note present
+6 sentence(s), facts note present
+8 sentence(s), facts note present
+3 sentence(s), facts note present
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    34   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            47   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                119330 in, 13491 out
+ACTUAL COST THIS RUN  Rs 24.62   (estimated Rs 15.28)
+COST PER EMAIL        Rs 4.10   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 784.96 of Rs 837.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [salon-07]
+     Not on record: Award-winning stylists: please record the specific award(s) won, the awarding body, and the year(s) — e.g. 'Won Best Stylist at [Award Name], [City/Organisation], [Year].'
+     Removed "The products used do not contain ammonia." — nothing on record can support a safety claim.
+  [salon-09]
+     Not on record: everything — the business's records could not be read just now
+  [dairy-02]
+     Left out: Lead with the traditional Bilona method — the core reason to choose this ghee over mass-produced alternatives. — it cites a record (e138f4eb) that does not exist.
+     Not on record: What animal (e.g. A2 cow breed, buffalo) does the milk come from? Record this against product.desi_ghee_500ml so the copy can name it.
+     Not on record: What quantity or batch size does the business produce at a time? Record this against product.desi_ghee_500ml if the small-batch angle is to be stated.
+     Not on record: Is the 500 ml jar/container made of glass or plastic? Record the packaging material against product.desi_ghee_500ml.
+     Removed "The Bilona method is how ghee was always meant to be made." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The quality of the Bilona method shows in the flavour of the ghee." — nothing on record can support a benefit claim.
+     Removed "A 500ml jar of ghee costs ₹850." — it states 850 ₹ for Bilona Ghee, and that figure belongs to something else.
+     Removed "The quality of the ghee shows in the flavour." — nothing on record can support a benefit claim.
+     Removed "No shortcuts are taken in making the desi ghee." — No fact states that no shortcuts are taken; hand-churning and no preservatives do not entail absence of all shortcuts..
+  [dairy-03]
+     Not on record: The request asks for a claim that ghee is good for digestion. No record supports a digestion or health-benefit claim for this product. If the owner wants to make this claim, they should record a specific, verifiable basis for it against the product — for example: 'product.desi_ghee_500ml.digestion_benefit = [the exact claim, e.g. a cited Ayurvedic reference or a qualified nutritionist statement].'
+     Removed "A 500ml jar of ghee costs ₹850." — it states 850 ₹, and no figure was approved for this piece.
+     Removed "A 250g quantity of paneer costs ₹120." — it states 120 ₹, and no figure was approved for this piece.
+     Removed "You will feel quietly satisfied by ghee made the old way." — nothing on record can support a benefit claim.
+     Removed "Shree Dairy's paneer is made fresh every morning." — No approved fact states anything about paneer or when it is made. The facts cover only desi ghee processes and ingredients..
+     Removed "Shree Dairy's ghee and paneer are covered under FSSAI Licence No. 11223344556677." — Approved fact states 'FSSAI licence 11223344556677' recorded about the business in general, but does not specify which products are covered by this licence. The claim asserts both ghee AND paneer are covered, but no fact states paneer is covered..
+  [dairy-06]
+     Removed "The Bilona method is not a shortcut-friendly process." — No approved fact characterizes the Bilona method as shortcut-unfriendly; stating the method exists does not entail claims about its difficulty or efficiency..
+     Removed "Shree Dairy makes ghee only using the Bilona method." — Approved facts state the business uses Bilona method, but do not state it uses ONLY this method; absence of other methods is not stated..
+     Removed "Shree Dairy offers fresh morning paneer." — Record shows 'Paneer 250g: Made fresh every morning' but no fact links this to Shree Dairy's offerings; the paneer record does not cover this claim per scope rules..
+  [dairy-09]
+     You asked for Ghee se weight nahi badhta (ghee does not cause weight gain). Your records say No record exists that makes any claim about ghee's effect on weight or body composition. Rule 6 also prohibits claims about what a product will do to the reader's body. — change the record, or I write it without that.
+     Not on record: Owner should record a specific factual statement about the nutritional or dietary nature of this ghee — e.g. 'made from 100% A2 milk' or 'contains no hydrogenated fats' — if they want a health-adjacent claim that can be cited. A body-effect claim (weight gain/loss) cannot be selected regardless of records.
+     Removed "A 250g paneer costs ₹120." — it states 120 ₹, and the figures on record are 850 inr.
+     Removed "The product is FSSAI licensed, so you know exactly what you are getting." — nothing on record can support a safety claim.
+     Removed "Fresh paneer is available." — No fact on record states that fresh paneer is available. The facts concern only desi ghee..
+     Removed "The paneer is made every morning." — No fact on record states that paneer is made every morning. The facts concern only desi ghee..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-2of2-2026-10-21T08-31-15-445Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

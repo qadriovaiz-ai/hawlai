@@ -1,0 +1,74 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 1of2  (candle-02, candle-03, candle-06, candle-10, salon-02, salon-03)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 760.34 of Rs 837.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+8 sentence(s), facts note present
+6 sentence(s), facts note present
+5 sentence(s), facts note present
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    41   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            52   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                136159 in, 15974 out
+ACTUAL COST THIS RUN  Rs 28.76   (estimated Rs 15.28)
+COST PER EMAIL        Rs 4.79   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 789.10 of Rs 837.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-02]
+     Not on record: Does the lavender candle use a specific type or origin of lavender fragrance? Record it against the product so the copy can name it.
+     Not on record: Is there a scent throw or fragrance load percentage recorded for the lavender candle specifically? If so, record it against the product.
+     Not on record: Is there a product photo or visual asset available for this post? The owner should confirm what image will accompany it.
+     Removed "People commonly believe the lavender candle burns for 10 hours." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "Adding fragrance at 65 degrees causes the scent to settle properly." — The fact states fragrance is added at 65 degrees, but does not state that this causes the scent to settle properly—that is a causal claim not supported by the record..
+  [candle-03]
+     Removed "Fragrance tab milata hai jab wax 65 degrees par ho — is step mein sabse zyada time lagta hai, lekin yahi sahi tarika hai." — it says "sabse", and nothing on record says that.
+     Removed "Our Lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "The fragrance-adding step takes the most time in the candle-making process." — No fact states which step takes the most time. The chosen facts describe steps but do not compare their durations..
+  [candle-06]
+     Not on record: The post is requested to be about lavender for better sleep, but no record confirms that this candle contains lavender fragrance or that it is positioned for sleep. Owner should record: 'Lavender candle contains lavender fragrance, intended for relaxation / sleep use.' against product.lavender_candle.
+     Removed "The lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "These candles are not 10-hour candles, contrary to what people commonly believe." — Fact states candles have 40 hour burn time, but does not address what people commonly believe or contradict 10-hour claims..
+  [candle-10]
+     You asked for 500 happy customers. Your records say 2 paid orders and 1 lead on record — no record of 500 customers of any kind — change the record, or I write it without that.
+     Not on record: The number of customers or orders the business has fulfilled to date — e.g. 'We have completed X paid orders' or 'X customers have purchased from us.'
+     Removed "The candle is made from soy wax." — No facts chosen for this piece; shipping policy does not state material composition..
+     Removed "The candle contains no paraffin." — No facts chosen for this piece; shipping policy does not state material composition..
+     Removed "The wax is melted in a double boiler." — No facts chosen for this piece; shipping policy does not state production process..
+     Removed "Fragrance is added at 65 degrees." — No facts chosen for this piece; shipping policy does not state production process..
+     Removed "The temperature at which fragrance is added affects burn quality." — No facts chosen for this piece; shipping policy does not state causal relationships..
+     Removed "No shortcuts are taken in the production process." — No facts chosen for this piece; shipping policy does not state production practices..
+     Removed "The candles are made in small batches." — No facts chosen for this piece; shipping policy does not state production scale..
+     Removed "The candles are hand-poured." — No facts chosen for this piece; shipping policy does not state production method..
+     Removed "Each candle receives individual attention." — No facts chosen for this piece; shipping policy does not state production practices..
+  [salon-02]
+     Left out: Describes the treatment process step — hair wash first, then treatment applied. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Left out: Highlights that products are sourced from Korea — adds credibility and quality signal. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: What specific result or benefit does the keratin treatment deliver for the hair? (e.g., 'smooths frizz for up to X weeks') — record this against the keratin treatment so the copy can state it.
+     Not on record: How can a customer book or enquire — phone number, DM, WhatsApp link? Record the booking/contact method so the post can include a clear call to action.
+     Removed "The keratin treatment process includes washing the hair first." — No fact states that the keratin treatment process includes washing hair first.
+     Removed "The keratin treatment process includes applying treatment after washing." — No fact states that the keratin treatment process includes applying treatment after washing.
+     Removed "Keratin treatment products come from Korea." — No fact states that keratin treatment products come from Korea.
+  [salon-03]
+     Left out: Describes the process step (hair wash before treatment) to give the post useful context about the session. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: How long do the keratin results last (e.g., 'results last X weeks/months')? The records only cover the session duration (90 minutes), not the longevity of the treatment effect. Please record this against the Keratin treatment so it can be stated in copy.
+     Removed "Keratin treatment sirf 90 minute mein ho jaati hai yahan." — "sirf" says the amount is small, and that is your call to make, not mine.
+     Removed "Your keratin treatment will be completed in just 90 minutes." — nothing on record can support a benefit claim.
+     Removed "The products used do not contain ammonia." — nothing on record can support a safety claim.
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-1of2-2026-10-21T08-31-39-883Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

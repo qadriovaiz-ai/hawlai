@@ -443,7 +443,37 @@
       "label": "s2-facebook_post-topup-2026-10-20T17-06-51-069Z",
       "inr": 3.98,
       "calls": 8
+    },
+    {
+      "at": "2026-10-21T08:31:39.892Z",
+      "label": "s2-facebook_post-1of2-2026-10-21T08-31-39-883Z",
+      "inr": 28.76,
+      "calls": 52
+    },
+    {
+      "at": "2026-10-21T08:31:15.452Z",
+      "label": "s2-facebook_post-2of2-2026-10-21T08-31-15-445Z",
+      "inr": 24.62,
+      "calls": 47
+    },
+    {
+      "at": "2026-10-21T08:29:28.747Z",
+      "label": "s2-whatsapp-2026-10-21T08-29-28-741Z",
+      "inr": 14.46,
+      "calls": 32
+    },
+    {
+      "at": "2026-10-21T08:33:04.082Z",
+      "label": "output gate on s2-social-hashtagfix.json",
+      "inr": 6.12,
+      "calls": 12
+    },
+    {
+      "at": "2026-10-21T08:33:58.807Z",
+      "label": "output gate on s2-whatsapp-2026-10-21T08-29-28-741Z.json",
+      "inr": 2.82,
+      "calls": 6
     }
   ],
-  "totalInr": 760.34
+  "totalInr": 837.12
 }
