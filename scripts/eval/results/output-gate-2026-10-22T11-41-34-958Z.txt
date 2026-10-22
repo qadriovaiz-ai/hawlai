@@ -1,0 +1,33 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-topup-2026-10-22T11-40-29-956Z.json
+cases                2
+sentences            14   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 1.15
+already spent        Rs 1011.31 of Rs 1026.62
+====================================================================
+
+[dairy-03]  8 sentence(s)
+  *** customer_state "People commonly believe that ghee causes weight gain."   <- SHOULD HAVE BEEN REMOVED
+      availability "Shree Dairy's desi ghee is available in 500ml jars."
+      price "Shree Dairy's desi ghee in 500ml jars costs ₹850."
+      offer "First-time customers can use code FIRST10 to receive 10% off."
+      shipping "Shree Dairy charges ₹50 flat for shipping."
+      credential "Shree Dairy holds FSSAI licence 11223344556677."
+
+[dairy-06]  6 sentence(s)
+      process "Ghee is made by hand."
+      process "Ghee is churned the traditional Bilona way."
+      process "Paneer is made fresh every morning."
+      credential "The business is FSSAI Licensed."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   1
+   [dairy-03] customer_state — "People commonly believe that ghee causes weight gain."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 1.11
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

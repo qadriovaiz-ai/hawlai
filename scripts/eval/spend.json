@@ -539,7 +539,19 @@
       "label": "output gate on s2-facebook_post-topup-2026-10-22T09-58-21-563Z.json",
       "inr": 2.39,
       "calls": 4
+    },
+    {
+      "at": "2026-10-22T11:41:34.956Z",
+      "label": "output gate on s2-facebook_post-topup-2026-10-22T11-40-29-956Z.json",
+      "inr": 1.11,
+      "calls": 2
+    },
+    {
+      "at": "2026-10-22T11:40:29.959Z",
+      "label": "s2-facebook_post-topup-2026-10-22T11-40-29-956Z",
+      "inr": 9.79,
+      "calls": 18
     }
   ],
-  "totalInr": 1011.31
+  "totalInr": 1022.21
 }

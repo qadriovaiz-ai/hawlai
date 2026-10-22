@@ -1,0 +1,38 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 2  (dairy-03, dairy-06)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 11.86   (per-run cap Rs 30.00)
+already spent         Rs 1011.31 of Rs 1026.62
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+8 sentence(s), facts note present
+6 sentence(s), facts note present
+
+==================================================================
+sentences produced    14   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 2
+calls made            18   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                50140 in, 5009 out
+ACTUAL COST THIS RUN  Rs 9.79   (estimated Rs 11.86)
+COST PER EMAIL        Rs 4.89   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 1021.10 of Rs 1026.62
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [dairy-03]
+     Not on record: The request asks for a claim that this ghee is good for digestion. No record states anything about digestion, gut health, or any digestive benefit. Owner to record: a specific, factual statement about this product and digestion (e.g. a cited source, a traditional-use note, or a qualified claim) so the copy can state it truthfully.
+     Removed "The ghee is made using the Bilona method." — No fact states the ghee is made using the Bilona method. Shipping, discount, and price policies do not cover this claim..
+     Removed "The ghee is made by hand." — No fact states the ghee is made by hand. Shipping, discount, and price policies do not cover this claim..
+     Removed "The ghee contains no preservatives." — No fact states the ghee contains no preservatives. Shipping, discount, and price policies do not cover this claim..
+  [dairy-06]
+     Not on record: What exactly is covered under the FSSAI licence — all products, or specific ones? Record this against each product (e.g. product.desi_ghee_500ml.fssai_covered = true) so the copy can name them specifically if needed.
+     Removed "The product contains no preservatives." — nothing on record can support a safety claim.
+     Removed "Nothing is added to the business's products." — The record states 'No preservatives, ever' which is absence of one thing (preservatives), not absence of all additions. Rule 2: absence of one thing is not absence of a kind of thing..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-topup-2026-10-22T11-40-29-956Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
