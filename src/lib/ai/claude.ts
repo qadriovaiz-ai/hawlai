@@ -28,7 +28,7 @@ import { getModel } from "@/lib/models";
 
 export const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 
-export type AiFailureKind = "credits" | "auth" | "rate_limited" | "overloaded" | "bad_request" | "network";
+export type AiFailureKind = "credits" | "usage_limit" | "auth" | "rate_limited" | "overloaded" | "bad_request" | "network";
 
 export type AiFailure = {
   kind: AiFailureKind;
@@ -47,6 +47,31 @@ export type ClaudeResult = { ok: true; data: any; text: string; /** Tokens plus 
 // docs also list a dedicated billing_error (402). Both are caught.
 const CREDITS_MESSAGE = /credit balance|billing|purchase credits|plans\s*&\s*billing|payment/i;
 
+/**
+ * A workspace spend limit, which Anthropic also reports as HTTP 400.
+ *
+ * FOUND 2026-10-22, AND IT IS THE SAME MISTAKE AS THE CREDITS ONE A DAY
+ * EARLIER. The body said:
+ *
+ *   "You have reached your specified workspace API usage limits. You
+ *    will regain access on 2026-11-01 at 00:00 UTC."
+ *
+ * That fell through every branch to `bad_request`, whose owner-facing
+ * words are "Something went wrong writing this - try again. If it keeps
+ * happening, let us know." Trying again cannot work for ten days, and
+ * nothing went wrong with the writing.
+ *
+ * IT IS ALSO THE ONE FAILURE THAT KNOWS WHEN IT ENDS, which is the most
+ * useful thing anybody could be told about it - so the kind is its own
+ * rather than folded into `credits`, and the message says the team has
+ * been alerted instead of asking the owner to retry.
+ *
+ * classifyClaudeError's header says the reason was thrown away 48 times
+ * before this function existed. Counting the Select-step guess I fixed
+ * yesterday, this is the 50th.
+ */
+const USAGE_LIMIT_MESSAGE = /usage limit|spend limit|quota|regain access/i;
+
 export function classifyClaudeError(status: number | null, body: any): AiFailure {
   const e = body?.error ?? {};
   const type = String(e.type ?? "");
@@ -55,6 +80,10 @@ export function classifyClaudeError(status: number | null, body: any): AiFailure
 
   if (status === null) return failure("network", true);
   if (status === 402 || type === "billing_error" || (status === 400 && CREDITS_MESSAGE.test(message))) return failure("credits", false);
+  // CHECKED BEFORE auth AND rate_limited, because a workspace limit
+  // arrives as a plain 400 and would otherwise reach `bad_request` and
+  // tell the owner to try again.
+  if (USAGE_LIMIT_MESSAGE.test(message)) return failure("usage_limit", false);
   if (status === 401 || status === 403 || type === "authentication_error" || type === "permission_error") return failure("auth", false);
   if (status === 429 || type === "rate_limit_error") return failure("rate_limited", true);
   if (status === 529 || status >= 500 || type === "overloaded_error" || type === "api_error") return failure("overloaded", true);
@@ -65,6 +94,10 @@ export function classifyClaudeError(status: number | null, body: any): AiFailure
 /** What a business owner is told. Approved wording, 2026-09-18. */
 export const AI_FAILURE_MESSAGE: Record<AiFailureKind, string> = {
   credits: "AI features are temporarily unavailable on our side — the Hawlai team has been alerted. Please try again later.",
+  // NOT "try again": a workspace limit has a reset date, and retrying
+  // before it cannot succeed. The owner is told it is ours to fix and
+  // that somebody knows.
+  usage_limit: "AI features are paused on our side until our usage limit resets — the Hawlai team has been alerted. Nothing you do will unblock it, and your draft is safe.",
   auth: "AI features are temporarily unavailable on our side — the Hawlai team has been alerted. Please try again later.",
   rate_limited: "The AI service is busy — try again in a minute.",
   overloaded: "The AI service is busy — try again in a minute.",
@@ -115,6 +148,10 @@ export function aiFailureOf(result: unknown): AiFailureNote | null {
 /** Short reason for Automation Health and the daily job list (approved 2026-09-18: "AI unavailable (credits)"). */
 export const AI_FAILURE_LABEL: Record<AiFailureKind, string> = {
   credits: "AI unavailable (credits)",
+  // Distinct from (credits) on purpose: one needs money added, the
+  // other needs a limit raised or a date to pass, and whoever reads
+  // Automation Health is the person who has to tell them apart.
+  usage_limit: "AI paused (usage limit reached)",
   auth: "AI unavailable (API key rejected)",
   rate_limited: "AI unavailable (busy)",
   overloaded: "AI unavailable (busy)",

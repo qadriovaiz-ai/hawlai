@@ -1,0 +1,84 @@
+{
+  "label": "s2-whatsapp-topup-2026-10-22T08-36-16-239Z",
+  "baseline": {
+    "T": 34,
+    "F": 20,
+    "U": 16,
+    "claims": 70
+  },
+  "perCase": [
+    {
+      "id": "candle-04",
+      "sentences": 2,
+      "removed": 0,
+      "note": null,
+      "incomplete": true,
+      "failure": {
+        "kind": "bad_request",
+        "malformed": false
+      }
+    }
+  ],
+  "rows": [
+    {
+      "caseId": "candle-04",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "language",
+      "surface": "whatsapp",
+      "field": "text",
+      "sentence": "Something went wrong writing this — try again.",
+      "kind": "feeling",
+      "availableFacts": [
+        "product.lavender_candle.name = Lavender candle",
+        "product.lavender_candle.description = Soy wax, 40 hour burn",
+        "product.lavender_candle.price = 999 inr",
+        "shipping.mode = free",
+        "business.paid_orders = 2",
+        "business.leads = 1",
+        "business.city = Shahjahanpur",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true",
+        "(not given to the writer for this piece: Rose candle)"
+      ],
+      "removedByGuard": [],
+      "watch": "no language is set, so Hinglish is expected; numbers must survive the language"
+    },
+    {
+      "caseId": "candle-04",
+      "fixture": "Candle by Qaaf",
+      "trade": "products",
+      "scenario": "language",
+      "surface": "whatsapp",
+      "field": "text",
+      "sentence": "If it keeps happening, let us know.",
+      "kind": "feeling",
+      "availableFacts": [
+        "product.lavender_candle.name = Lavender candle",
+        "product.lavender_candle.description = Soy wax, 40 hour burn",
+        "product.lavender_candle.price = 999 inr",
+        "shipping.mode = free",
+        "business.paid_orders = 2",
+        "business.leads = 1",
+        "business.city = Shahjahanpur",
+        "process.double_boiler = true",
+        "the owner wrote: \"Phir fragrance milati hoon.\"",
+        "process.temperature = 65 celsius",
+        "material.paraffin = false",
+        "product.burn_hours = 40 hours",
+        "material.soy = true",
+        "process.hand_poured = true",
+        "process.small_batch = true",
+        "(not given to the writer for this piece: Rose candle)"
+      ],
+      "removedByGuard": [],
+      "watch": "no language is set, so Hinglish is expected; numbers must survive the language"
+    }
+  ]
+}

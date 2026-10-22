@@ -9,6 +9,7 @@
 //  - a monitor that couldn't check says so, instead of "no new alerts".
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { classifyClaudeError, aiFailureMessage, aiFailureLabel } from "@/lib/ai/claude";
 
 vi.mock("@/lib/notifications/emit", () => ({ emitNotification: async () => {} }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({ from: () => ({ select: () => ({ eq: async () => ({ data: [] }) }) }) }) }));
@@ -210,5 +211,51 @@ describe("monitors: 'couldn't check' is not 'nothing new'", () => {
     const r: any = await generateVideoTask("reel_script", "Candle by Qaaf", "Home fragrance", "Diwali");
     expect(r._fallback).toBeUndefined();
     expect(r._aiFailure).toBeUndefined();
+  });
+});
+
+describe("a workspace usage limit is not a bad request", () => {
+  // FOUND 2026-10-22, the same mistake as the credits one a day
+  // earlier. Every case of a WhatsApp confirmation run failed at
+  // Rs 0.00 and the body said:
+  //
+  //   "You have reached your specified workspace API usage limits. You
+  //    will regain access on 2026-11-01 at 00:00 UTC."
+  //
+  // That fell through every branch to `bad_request`, whose owner-facing
+  // words are "Something went wrong writing this — try again." Trying
+  // again cannot work for ten days, and nothing went wrong with the
+  // writing.
+
+  it("IS CLASSIFIED AS ITS OWN KIND, and is not retryable", () => {
+    const f = classifyClaudeError(400, {
+      error: { type: "invalid_request_error", message: "You have reached your specified workspace API usage limits. You will regain access on 2026-11-01 at 00:00 UTC." },
+    });
+    expect(f.kind).toBe("usage_limit");
+    expect(f.retryable).toBe(false);
+  });
+
+  it("AND THE OWNER IS NOT TOLD TO TRY AGAIN", () => {
+    // The whole point. A reset date means retrying is the one thing
+    // that cannot help.
+    const said = aiFailureMessage("usage_limit");
+    expect(said).not.toMatch(/try again/i);
+    expect(said).toMatch(/paused on our side/);
+    expect(said).toMatch(/your draft is safe/);
+  });
+
+  it("IT IS DISTINCT FROM credits, because the two need different actions", () => {
+    // One needs money added, the other needs a limit raised or a date
+    // to pass, and whoever reads Automation Health has to tell them
+    // apart.
+    expect(aiFailureLabel("usage_limit")).toBe("AI paused (usage limit reached)");
+    expect(aiFailureLabel("credits")).toBe("AI unavailable (credits)");
+    expect(aiFailureMessage("usage_limit")).not.toBe(aiFailureMessage("credits"));
+  });
+
+  it("and an ordinary bad request still says what it always said", () => {
+    const f = classifyClaudeError(400, { error: { type: "invalid_request_error", message: "max_tokens: must be greater than 0" } });
+    expect(f.kind).toBe("bad_request");
+    expect(aiFailureMessage("bad_request")).toMatch(/try again/i);
   });
 });
