@@ -555,6 +555,67 @@ describe("the old homepage-only path is gone, not left beside the new one", () =
   });
 });
 
+// ---- the owner's own words, end to end --------------------------------
+
+describe("S3 — a claim the records cannot back, dictated by the owner", () => {
+  // THE FOUNDER'S THIRD P5 ATTEMPT, 22 October 2026. He dictated a
+  // superlative and was refused again, and asked the right question:
+  // are comparisons and superlatives in the same category as prices,
+  // where his own words never override - or did the escape path miss
+  // that gate?
+  //
+  // NEITHER. There is no superlative gate in this path at all. The only
+  // unconditional refusals are catalogue-driven blocks and
+  // price/stock; a superlative is caught by the ordinary claims layer,
+  // which honours `writtenByOwner`. This pins that end to end through
+  // the tool, so the answer is a measurement rather than my reading of
+  // the code.
+  const SUPERLATIVE = "We are the best candle makers in the market.";
+
+  it("GOES ON THE PAGE WHEN HE DICTATED IT, with the warning", async () => {
+    const r: any = await tool("edit_page_text", {
+      page: "home",
+      edits: [{ blockId: "t1", prop: "html", text: SUPERLATIVE, writtenByOwner: true }],
+    });
+    expect(r.error, JSON.stringify(r)).toBeUndefined();
+    expect(created).toHaveLength(1);
+    const edits = (created[0].requestedChanges as any).edits;
+    expect(edits.map((e: any) => e.after)).toContain(SUPERLATIVE);
+    // He is told, not overruled.
+    const said = JSON.stringify(r);
+    expect(said).toMatch(/standing behind|Saved exactly as you wrote it|doesn't back up/i);
+  });
+
+  it("AND IS REFUSED WHEN THE MODEL WROTE IT", async () => {
+    const r: any = await tool("edit_page_text", {
+      page: "home",
+      edits: [{ blockId: "t1", prop: "html", text: SUPERLATIVE }],
+    });
+    expect(created).toEqual([]);
+    expect(r.error).toBeTruthy();
+  });
+
+  it("and the refusal tells the model the owner's-words path exists", async () => {
+    const r: any = await tool("edit_page_text", {
+      page: "home",
+      edits: [{ blockId: "t1", prop: "html", text: SUPERLATIVE }],
+    });
+    expect(r.note).toMatch(/writtenByOwner/);
+    expect(r.note).toMatch(/dictated by them/);
+  });
+
+  it("A PRICE IS THE REAL EXCEPTION, and is refused even dictated", async () => {
+    // The one category where his words genuinely do not override, and
+    // the line that tells the two apart.
+    const r: any = await tool("edit_page_text", {
+      page: "home",
+      edits: [{ blockId: "t1", prop: "html", text: "Our candles are ₹999.", writtenByOwner: true }],
+    });
+    expect(created).toEqual([]);
+    expect(r.error).toMatch(/not even when you dictate it yourself/);
+  });
+});
+
 // ---- undo: which change, and which KIND of change ---------------------
 
 describe("S3 fix — a search listing can be put back, and undo asks which", () => {
