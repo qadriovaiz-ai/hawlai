@@ -73,9 +73,43 @@ export function expandHashtags(text: string): string {
   return String(text ?? "").replace(/#([\p{L}\p{N}_]+)/gu, (_m, body: string) =>
     String(body)
       .replace(/_+/g, " ")
+      // AN ACRONYM RUNS INTO THE NEXT WORD WITH NO LOWER-CASE BOUNDARY,
+      // and that defeated the whole expansion on 2026-10-22.
+      //
+      // "#FSSAICertified" has no lower-to-upper transition, so the rule
+      // below never fired and the tag reached every check as the single
+      // token "FSSAICertified" — in no vocabulary, and not matched as a
+      // name either, because a name test wants one capital followed by
+      // lower case. An opaque token is exactly the state the hashtag
+      // work of 20 October was supposed to end: "#FreshPaneer" split and
+      // was caught, "#FSSAICertified" did not and published.
+      //
+      // So a capital that begins a lower-cased word is a boundary even
+      // when the capital before it is part of a run: FSSAI|Certified.
+      .replace(/(\p{Lu}+)(\p{Lu}\p{Ll})/gu, "$1 $2")
       .replace(/(\p{Ll}|\p{N})(\p{Lu})/gu, "$1 $2")
       .trim()
   );
+}
+
+/**
+ * Is this field a LABEL rather than prose?
+ *
+ * THE BLIND SPOT THE FOUNDER FOUND ON 2026-10-22. The introduced-name
+ * check abstains when most of a short line is capitalised, because on
+ * 19 October it was deleting buttons — "Book a Consultation", "Slot
+ * Book Karo" — for being Title Case. A title is ALWAYS Title Case and
+ * always short, so that abstention made every title permanently
+ * invisible to the name check, and "Smooth Finish" published as a
+ * product title with nothing on record for it.
+ *
+ * A label field has no prose for capitalisation to carry information
+ * about, so the abstention has nothing to protect there. Prose fields —
+ * body, message, text, description, subject — keep it, because that is
+ * where the greetings it was built for live.
+ */
+export function isLabelField(field: string): boolean {
+  return field === "hashtags" || field === "title" || field === "headline" || field === "ctaLabel" || field === "cta";
 }
 
 /** Every string in a generated output, in a stable order, split into sentences. */

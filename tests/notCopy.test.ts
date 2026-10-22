@@ -105,7 +105,12 @@ describe("4. it runs in the door, before any model call", () => {
     // line as it was written.
     expect(src).toMatch(/const notCopy = notCopySentences\(sentences\.map\(\(s\) => s\.analysed\)\)/);
     expect(src).toMatch(/parsed = withoutSentences\(parsed, sentences, \[\.\.\.new Set\(notCopy\.map\(\(f\) => f\.sentenceIndex\)\)\]\)/);
-    expect(src).toMatch(/\[notCopyNoteText, introducedNoteText, factBoundNote\]/);
+    // WIDENED 2026-10-22: the withheld-subject check joined this
+    // chain, and an owner must be told about its removals too. The
+    // assertion's point is unchanged — notCopy's removals reach the
+    // owner rather than being computed and dropped, which is exactly
+    // the bug this spelling caught in the new check on the same day.
+    expect(src).toMatch(/\[notCopyNoteText, withheldNoteText, introducedNoteText, factBoundNote\]/);
   });
 
   it("the incident is recorded where the check lives", () => {

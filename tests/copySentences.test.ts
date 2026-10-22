@@ -71,7 +71,23 @@ describe("a hashtag goes through the same checks as body text", () => {
 
     const { code } = await import("./helpers/source");
     const harness = code("scripts/eval/harness.ts");
-    expect(harness).toMatch(/field === "hashtags" \? "factual" : classifySentence\(expandHashtags\(s\)\)/);
+    // WIDENED 2026-10-22, NOT RELAXED. This used to pin
+    // `field === "hashtags"`. The founder's audit found the same miss
+    // one field over: salon-11's TITLE held "Smooth Finish" and the
+    // sheet labelled it "feeling", so he was never asked to rule on it.
+    // A title is a label, not prose, exactly as a tag is.
+    expect(harness).toMatch(/isLabelField\(field\) \? "factual" : classifySentence\(s\.analysed\)/);
+    // The hashtag case it replaced is still named, so nothing is given
+    // up by the wider spelling, and this is behaviour rather than a
+    // grep for it.
+    const { isLabelField } = await import("@/lib/content/copySentences");
+    expect(isLabelField("hashtags")).toBe(true);
+    expect(isLabelField("title")).toBe(true);
+    // Prose keeps the classifier, because that is where the greetings
+    // the Title-Case abstention protects actually live.
+    expect(isLabelField("text")).toBe(false);
+    expect(isLabelField("message")).toBe(false);
+    expect(isLabelField("description")).toBe(false);
   });
 
   it("AND A REFUSED TAG IS DROPPED, not published empty", () => {

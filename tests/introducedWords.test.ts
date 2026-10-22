@@ -179,6 +179,14 @@ describe("it is a code check, not a prompt rule", () => {
     // flag saying which sentences are hashtags, where a capitalised
     // word anywhere is an introduced name.
     expect(src).toMatch(/introducedWords\(\s*sentences\.map/);
+    // STILL HASHTAGS, AND MEASURED RATHER THAN ASSUMED. On 2026-10-22 I
+    // widened this to every label field, because the Title-Case
+    // abstention makes titles invisible to the name check and that is
+    // how "Smooth Finish" published. Swept over the 127 sentences the
+    // current runs shipped, it removed four lines and one of them was
+    // true: "2 BHK Flat at Sunrise Heights". Narrowed back, with the
+    // title gap recorded in the door's own comment instead of pretended
+    // away.
     expect(src).toMatch(/sentences\.map\(\(s\) => s\.field === "hashtags"\)/);
     // It must run before the extractor, or its findings would depend on
     // a model call that can fail.

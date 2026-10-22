@@ -24,7 +24,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { pieces } from "@/lib/claims/claimCheck";
 import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import { classifySentence } from "@/lib/facts/sentenceKind";
-import { expandHashtags } from "@/lib/content/copySentences";
+import { copySentences, isLabelField } from "@/lib/content/copySentences";
 import type { EvalCase } from "./cases";
 
 /**
@@ -226,10 +226,24 @@ export function toGradedRows(
   const available = [...records, ...withheld];
 
   const rows: GradedSentence[] = [];
-  for (const [field, value] of Object.entries(output ?? {})) {
-    if (field.startsWith("_")) continue;
-    for (const text of flatten(value)) {
-      for (const s of pieces(text).map((x) => x.trim()).filter(Boolean)) {
+  // ENUMERATED BY THE DOOR'S OWN FUNCTION, not by a second copy here.
+  //
+  // FOUND 2026-10-22, auditing why dairy-06's three tags arrived as one
+  // row. This loop used `pieces()` on every field, while copySentences
+  // splits a hashtags field with `splitTags` — so the door checked
+  // "#ShreeDairy", "#BilonaGhee" and "#FSSAICertified" as three
+  // sentences and the sheet showed the founder one. A grader cannot
+  // rule on a tag that is not a row, and I could not tell from the
+  // sheet which of the three had been checked.
+  //
+  // The same B18 shape as the records box before 19 October and the
+  // output gate's own arithmetic before 20 October: wherever the
+  // instrument re-describes the pipeline, it eventually describes a
+  // different one.
+  for (const s of copySentences(output ?? {})) {
+    {
+      {
+        const field = s.field;
         rows.push({
           caseId: c.id,
           fixture: c.fixture.label,
@@ -237,7 +251,7 @@ export function toGradedRows(
           scenario: c.scenario,
           surface: c.surface,
           field,
-          sentence: s,
+          sentence: s.text,
           // CLASSIFIED ON THE OPENED-OUT FORM, so a hashtag is not
           // presented to a human grader as "not a claim".
           //
@@ -261,7 +275,12 @@ export function toGradedRows(
           // grader one glance; a tag that hides a claim costs a false
           // publication, and 26 of 29 hashtag rows were being labelled
           // "feeling" before this.
-          kind: field === "hashtags" ? "factual" : classifySentence(expandHashtags(s)),
+          // A LABEL ROW IS ALWAYS PUT TO THE GRADER AS A CLAIM, and
+          // that now covers titles. salon-11's title "Keratin
+          // Treatment — Ek Session, Smooth Finish" was labelled
+          // "feeling", so the founder was never asked to rule on
+          // "Smooth Finish" — the same miss as the 26 hashtag rows.
+          kind: isLabelField(field) ? "factual" : classifySentence(s.analysed),
           availableFacts: available,
           removedByGuard,
           watch: c.watch,

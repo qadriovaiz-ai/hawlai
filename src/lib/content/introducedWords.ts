@@ -42,6 +42,8 @@
  * product, a trade or a place. multiTenantVocabulary permits this for
  * exactly that reason.
  */
+import { FUNCTION_WORDS } from "@/lib/content/functionWords";
+
 const INTENSIFIERS = new Set([
   // purity and authenticity
   "pure", "purest", "genuine", "authentic", "real", "unadulterated", "natural",
@@ -283,6 +285,33 @@ function vocabularyTokens(text: string): string[] {
  * real limit, stated rather than hidden, and the reason the intensifier
  * class carries Hinglish words of its own.
  */
+/**
+ * A word reduced to its stem, for the NAME check only.
+ *
+ * NEEDED BY THE ACRONYM SPLIT OF 2026-10-22. Opening "#FSSAILicensed"
+ * into "FSSAI Licensed" is what makes the tag checkable at all - but
+ * the record says "FSSAI licence", and an exact-token vocabulary reads
+ * "licensed" as a name nobody gave the writer. The tag is TRUE, so
+ * removing it would be B9: the guard deleting real copy, which has
+ * happened eight times here and costs more than any leak.
+ *
+ * Only the closed classes stay exact. An intensifier and a minimiser
+ * are fixed lists and mean what they say; a NAME is the one class where
+ * the owner's own word and the model's differ by an ending.
+ *
+ * The c/s swap is English orthography, not vocabulary: licence and
+ * license, defence and defense. Nothing in here is a trade, product or
+ * industry word, and nothing in here may become a way around
+ * multiTenantVocabulary.ts.
+ */
+function stemOf(word: string): string {
+  let w = String(word ?? "").toLowerCase();
+  w = w.replace(/(ing|ed|es|s)$/u, "");
+  w = w.replace(/e$/u, "");
+  w = w.replace(/c$/u, "s");
+  return w;
+}
+
 function capitalisedWords(sentence: string, namesAnywhere = false): string[] {
   // A LIST MARKER IS NOT THE FIRST WORD.
   //
@@ -294,7 +323,14 @@ function capitalisedWords(sentence: string, namesAnywhere = false): string[] {
   // punctuation, not a word.
   const line = String(sentence ?? "").replace(/^\s*(?:[-*•–—]+|\d+[.)])\s*/, "");
   const words = line.split(/[^\p{L}\p{N}%'’-]+/u).filter(Boolean);
-  const capitalised = words.slice(1).filter((w) => /^\p{Lu}\p{Ll}+/u.test(w));
+  // A CAPITALISED DETERMINER IS NOT AN INVENTED NAME. Needed the
+  // moment the name check started running on label fields: the title
+  // "Keratin Treatment — Ek Session, Smooth Finish" reported "ek", and
+  // deleting a true title for the Hinglish word for "one" is B9.
+  const capitalised = words
+    .slice(1)
+    .filter((w) => /^\p{Lu}\p{Ll}+/u.test(w))
+    .filter((w) => !FUNCTION_WORDS.has(w.toLowerCase()));
 
   // CAPITALISATION ONLY MEANS "NAME" IN PROSE.
   //
@@ -443,8 +479,9 @@ export function introducedWords(
         }
       });
     }
+    const stems = new Set([...vocabulary].map(stemOf));
     for (const word of capitalisedWords(sentence, namesAnywhere[sentenceIndex] === true)) {
-      if (vocabulary.has(word) || seen.has(word)) continue;
+      if (vocabulary.has(word) || stems.has(stemOf(word)) || seen.has(word)) continue;
       // A number-word like "100" is not a name.
       if (/^\d+%?$/.test(word)) continue;
       seen.add(word);

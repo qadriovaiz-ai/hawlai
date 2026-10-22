@@ -69,6 +69,7 @@ import { verifyClaims, verifyNote } from "@/lib/facts/verifyClaims";
 import { copySentences, withoutSentences } from "@/lib/content/copySentences";
 import { introducedWords, introducedNote } from "@/lib/content/introducedWords";
 import { notCopySentences, notCopyNote } from "@/lib/content/notCopy";
+import { withheldNames, withheldNote } from "@/lib/content/withheldNames";
 import { type ClaimsMode } from "@/lib/claims/claimCheck";
 import { type BusinessFacts, type FactsAudience, formatFactsForCopy, COPY_TRUTH_RULES } from "@/lib/claims/businessFacts";
 import { type NarrativeFinding } from "@/lib/claims/narrativeProvenance";
@@ -465,9 +466,28 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   let factRecords: FactRecord[] = [];
   let validated: Validated | null = null;
   let selection: Selection | null = null;
+  /**
+   * The names getContext kept back from this piece, and the ones it
+   * gave. Lifted to this scope because the checks need them and `ctx`
+   * does not survive the branch.
+   *
+   * ONLY WHEN THE SLICE NARROWED ON PURPOSE. When the records cannot
+   * be read at all, `slice.products` is empty and every product in the
+   * business would read as withheld — which would delete every true
+   * sentence in the piece. An unreadable record set is a reason to mark
+   * a piece unverified, never a reason to call its copy false.
+   */
+  let withheldSubjects: string[] = [];
+  let allowedSubjects: string[] = [req.businessName, req.businessCategory, req.topic, req.brief.label];
   if (factBound) {
     const ctx = contextFromFacts(req.logContext?.dealershipId ?? "unknown", req.facts, { kind: req.task ?? "other", topic: req.topic });
     factRecords = ctx.records;
+    allowedSubjects = [...allowedSubjects, ...ctx.slice.products];
+    withheldSubjects = ctx.slice.narrowedByTopic
+      ? (req.facts?.products ?? [])
+          .map((p) => String(p?.name ?? ""))
+          .filter((name) => name && !ctx.slice.products.includes(name))
+      : [];
     // NOTHING TO SELECT FROM IS NOT A FAILURE TO SELECT.
     //
     // With no records there is nothing for a model to choose between, so
@@ -648,13 +668,45 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
       parsed = withoutSentences(parsed, sentences, [...new Set(notCopy.map((f) => f.sentenceIndex))]);
     }
 
+    // NAMES THE WRITER WAS NOT GIVEN. Field-blind and kind-blind on
+    // purpose: this is the one check that does not need anything to
+    // call the sentence a claim first.
+    const withheld = withheldNames(sentences.map((s) => s.analysed), withheldSubjects, allowedSubjects);
+    let withheldNoteText: string | null = null;
+    if (withheld.length) {
+      withheldNoteText = withheldNote(withheld, sentences.map((s) => s.text));
+      parsed = withoutSentences(parsed, sentences, [...new Set(withheld.map((f) => f.sentenceIndex))]);
+    }
+
     const introduced = introducedWords(
       sentences.map((s) => s.analysed),
       allowedVocabulary,
-      // A hashtag is a label the business chose, so a capitalised word
-      // in one is either the owner's or the model's - no greetings, no
-      // accidental Title Case. "#FreshPaneer" in a piece whose paneer
-      // record was withheld is what this is for.
+      // A HASHTAG, AND DELIBERATELY NOT EVERY LABEL. A capitalised word
+      // in a tag is either the owner's or the model's - no greetings, no
+      // accidental Title Case - so "#FreshPaneer" in a piece whose
+      // paneer record was withheld is caught here.
+      //
+      // I TRIED TO WIDEN THIS TO TITLES ON 2026-10-22 AND MEASURED IT
+      // DELETING TRUE COPY. The founder's finding was real: a title is
+      // always Title Case, so the abstention above made every title
+      // invisible to this check and "Smooth Finish" published. But
+      // swept over the 127 sentences the current runs shipped, widening
+      // it removed four lines and only three of them were claims:
+      //
+      //   "Keratin Treatment - Ek Session, Smooth Finish"   right
+      //   "Class 10 Maths Batch - Small Group, Focused ..."  right
+      //   "2 BHK Flat at Sunrise Heights"                    WRONG
+      //
+      // "flat" is on no record and a 2 BHK in a housing project is a
+      // flat. Nothing in CODE separates that from "Smooth Finish"
+      // without a list of quality words, which would be trade
+      // vocabulary and is barred. In a Title-Cased label capitalisation
+      // carries no information - which is what the abstention above
+      // always said, and it was right.
+      //
+      // So a title is not silently published either: isLabelField puts
+      // every label row to the GRADER as a claim, and an unlicensed
+      // title is a claim-path problem, not a name-check one.
       sentences.map((s) => s.field === "hashtags")
     );
     let introducedNoteText: string | null = null;
@@ -762,7 +814,7 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
     // The word check's findings ride alongside the verifier's, not
     // instead of them: they are different reasons for removing a
     // sentence and the owner should see both.
-    factBoundNote = [notCopyNoteText, introducedNoteText, factBoundNote].filter(Boolean).join("\n") || null;
+    factBoundNote = [notCopyNoteText, withheldNoteText, introducedNoteText, factBoundNote].filter(Boolean).join("\n") || null;
   };
   await runFactChecks();
   // WHAT THE FIRST PASS ACTUALLY SAW, so step 6b can tell whether the
