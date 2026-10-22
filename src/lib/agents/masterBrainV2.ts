@@ -1445,6 +1445,45 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         }
         nameWarnings.push(unknownNameWarning(phrase));
       }
+      // THE FACT-BOUND CHECK, FOR WORDING THE MODEL WROTE — S3/P4.
+      //
+      // The founder's rule: his own exact words go on the page
+      // untouched, anything the model wrote or reworded is checked. The
+      // provenance half is `writtenByOwner` above; this is the check.
+      //
+      // BEHIND THE SAME FLAG AS THE REST OF THE PIPELINE. FACT_BOUND_COPY
+      // is blank until the founder turns it on, and switching it on for
+      // page edits alone would mean one surface running a pipeline the
+      // other four are not - the opposite of what S2 spent its budget
+      // establishing. With the flag off this path behaves exactly as it
+      // did, including the older claims layer inside applyEdits, which
+      // is not removed.
+      //
+      // REFUSED, NOT TRIMMED, and the error shape is the one this case
+      // already uses when its old guard empties a line: the model is
+      // told to write it again from what the records support, and told
+      // not to resend the same wording.
+      const modelWritten = wanted.filter((e: any) => !e.writtenByOwner).map((e: any) => String(e.text));
+      if (process.env.FACT_BOUND_COPY === "1" && editFacts && modelWritten.length > 0) {
+        const { verifyEditedText, editRefusalNote } = await import("../content/verifyEditedText");
+        const checked = await verifyEditedText({
+          texts: modelWritten,
+          facts: editFacts,
+          dealershipId: ctx.id,
+          topic: typeof input.page === "string" && input.page.trim() ? input.page.trim() : "home",
+          logContext: { supabase, dealershipId: ctx.id },
+        });
+        if (!checked.ok) {
+          return {
+            error: editRefusalNote(checked),
+            saved: false,
+            note: checked.unverified
+              ? "Do NOT retry immediately with the same wording — the check itself was unavailable."
+              : "Write it again from what the business can actually support, or ask them to record the missing fact first. Do not simply resend the same wording. If these are THEIR exact words, say so and set writtenByOwner.",
+          };
+        }
+      }
+
       const result = applyEdits(liveSections, wanted, editFacts);
 
       if (result.applied.length === 0) {
