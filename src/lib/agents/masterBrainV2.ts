@@ -244,7 +244,12 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        page: { type: "string", description: "Which page, if they named one. Omit to undo the most recent chat edit on any page." },
+        edit_id: {
+          type: "string",
+          description:
+            "The action_id of the edit to put back. PREFER THIS whenever you have it — every edit you make returns one, so when they say \"undo that\" about an edit from this conversation, pass that edit's action_id rather than a page name. Without it I fall back to the most recent chat edit on the page, which can be the wrong one if there were two.",
+        },
+        page: { type: "string", description: "Which page, if they named one and you have no edit_id. Omit to undo the most recent chat edit on any page." },
       },
       required: [],
     },
@@ -1175,9 +1180,48 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         .limit(5);
       const candidates = (lastAction ?? []) as any[];
       const askedPage = typeof input.page === "string" ? input.page.trim().toLowerCase() : null;
-      const chosen = askedPage
-        ? candidates.find((a) => String(a.target_label ?? "").toLowerCase().includes(askedPage))
-        : candidates[0];
+
+      // AN ID BEATS A GUESS. S3/P2.
+      //
+      // Selection used to be a substring match on target_label across
+      // the last five executed rows, and with two edits to one page it
+      // reverses the wrong one — silently, because every candidate is a
+      // legitimate row. Every edit this tool makes returns its
+      // action_id, so when the owner says "undo that" about something
+      // from this conversation the model has the exact row to name.
+      //
+      // The old behaviour is still the fallback, because "undo that"
+      // can arrive in a fresh conversation with no id in sight. What
+      // changed is that the fallback NAMES THE PAGE BACK in the result,
+      // so a wrong guess is visible on the approval card before anyone
+      // approves it rather than after.
+      const askedId = typeof input.edit_id === "string" && input.edit_id.trim() ? input.edit_id.trim() : null;
+      let chosen: any = null;
+      let chosenBy: "id" | "page" | "most_recent" = "most_recent";
+      if (askedId) {
+        const { data: byId } = await supabase
+          .from("publish_actions")
+          .select("id, action_key, target_ref, target_label, preview, executed_at")
+          .eq("dealership_id", ctx.id)
+          .eq("id", askedId)
+          .eq("status", "executed")
+          .maybeSingle();
+        if (!byId) {
+          return {
+            error:
+              "I can't find an edit of mine with that id that has actually been applied, so there's nothing to put back. If it's still waiting for approval, reject the card instead — that needs no undo.",
+            saved: false,
+          };
+        }
+        chosen = byId;
+        chosenBy = "id";
+      } else if (askedPage) {
+        chosen = candidates.find((a) => String(a.target_label ?? "").toLowerCase().includes(askedPage));
+        chosenBy = "page";
+      } else {
+        chosen = candidates[0];
+        chosenBy = "most_recent";
+      }
       if (!chosen) {
         return {
           error: askedPage
@@ -1246,6 +1290,15 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         action_id: createdUndo.actionId,
         page: proposal.targetLabel,
         changed: proposal.changed,
+        // WHICH EDIT, AND HOW I PICKED IT. A guess the owner cannot see
+        // is the actual fault here; one they can read on the card is a
+        // question they can answer before approving.
+        undoing:
+          chosenBy === "id"
+            ? `the edit you pointed at (${chosen.id})`
+            : chosenBy === "page"
+              ? `the most recent chat edit on ${proposal.targetLabel}, of ${candidates.length} I have on record`
+              : `the most recent chat edit I made, on ${proposal.targetLabel}`,
         summary: createdUndo.preview?.summary ?? "",
         warnings: [...(createdUndo.preview?.warnings ?? []), ...proposal.warnings],
         note: "Waiting for approval — nothing has changed yet. This is one step back, to exactly what it said before that edit.",

@@ -248,3 +248,98 @@ describe("4. the chat tool dispatches instead of knowing", () => {
     expect(caseBody).toMatch(/action_key, target_ref/);
   });
 });
+
+describe("5. S3/P2 — has the page moved on since that edit?", () => {
+  it("REFUSES WHEN THE LINE CHANGED AGAIN, because restoring would wipe that out", async () => {
+    // The page says neither what the edit set it to ("The new heading")
+    // nor what it said before ("The old heading"). Something else
+    // changed it afterwards, and the approval card would have shown
+    // "from The new heading to The old heading" — a from-value that is
+    // not on the page.
+    const supabase = fakeSupabase({ page: { sections: [{ id: "b1", type: "heading", props: { text: "A third heading entirely" } }] } });
+    const platform = createHawlaiSitePlatform({ supabase: supabase as any });
+    const r = await platform.undo!(action());
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/changed again since the edit/);
+  });
+
+  it("AND SAYS WHAT IT ACTUALLY SAYS NOW, so the owner can decide", async () => {
+    const supabase = fakeSupabase({ page: { sections: [{ id: "b1", type: "heading", props: { text: "A third heading entirely" } }] } });
+    const platform = createHawlaiSitePlatform({ supabase: supabase as any });
+    const r = await platform.undo!(action());
+    if (r.ok) throw new Error("expected refusal");
+    expect(r.reason).toMatch(/A third heading entirely/);
+    expect(r.reason).toMatch(/set it directly/);
+  });
+
+  it("is not confused by the page already being back", async () => {
+    // now === before must stay "nothing to put back", not "moved on".
+    // The two refusals mean different things to an owner.
+    const supabase = fakeSupabase({ page: { sections: [{ id: "b1", type: "heading", props: { text: "The old heading" } }] } });
+    const platform = createHawlaiSitePlatform({ supabase: supabase as any });
+    const r = await platform.undo!(action());
+    if (r.ok) throw new Error("expected refusal");
+    expect(r.reason).toMatch(/already says what it said before/);
+    expect(r.reason).not.toMatch(/changed again/);
+  });
+
+  it("and lets an untouched line through", async () => {
+    const platform = createHawlaiSitePlatform({ supabase: fakeSupabase() as any });
+    const r = await platform.undo!(action());
+    expect(r.ok).toBe(true);
+  });
+
+  it("ASKS THE SAME QUESTION OF A SEARCH LISTING", async () => {
+    const supabase = fakeSupabase({ page: { seo_title: "Something else again", meta_description: "New description" } });
+    const platform = createHawlaiSitePlatform({ supabase: supabase as any });
+    const r = await platform.undo!(
+      action({
+        actionKey: "update_page_meta",
+        preview: {
+          summary: "s",
+          changes: [
+            { field: "seoTitle", before: "Old search title", after: "New search title" },
+            { field: "metaDescription", before: "Old description", after: "New description" },
+          ],
+          warnings: [],
+        },
+      })
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/changed again since the edit/);
+  });
+});
+
+describe("6. S3/P2 — an id beats a guess", () => {
+  const src = code("src/lib/agents/masterBrainV2.ts");
+  const caseBody = src.slice(src.indexOf('case "undo_page_edit"'), src.indexOf('case "read_page"'));
+
+  it("THE TOOL CAN BE TOLD EXACTLY WHICH EDIT", () => {
+    const schema = src.slice(src.indexOf('name: "undo_page_edit"'), src.indexOf('name: "generate_social_management"'));
+    expect(schema).toMatch(/edit_id/);
+    expect(schema).toMatch(/action_id/);
+  });
+
+  it("AND THE LOOKUP IS SCOPED TO THIS BUSINESS AND TO AN APPLIED EDIT", () => {
+    // An id is owner-supplied input. Without both filters it could name
+    // another business's action, or one still awaiting approval - which
+    // needs no undo at all, only a rejection.
+    const byId = caseBody.slice(caseBody.indexOf("if (askedId)"), caseBody.indexOf("} else if (askedPage)"));
+    expect(byId).toMatch(/\.eq\("dealership_id", ctx\.id\)/);
+    expect(byId).toMatch(/\.eq\("id", askedId\)/);
+    expect(byId).toMatch(/\.eq\("status", "executed"\)/);
+  });
+
+  it("the guess survives as a fallback, and is NAMED BACK to the owner", () => {
+    // The fault was never the fallback. It was that a wrong guess was
+    // invisible until after it was approved.
+    expect(caseBody).toMatch(/chosenBy/);
+    expect(caseBody).toMatch(/undoing:/);
+  });
+
+  it("and an id that names nothing applied is refused with the useful answer", () => {
+    expect(caseBody).toMatch(/reject the card instead/);
+  });
+});

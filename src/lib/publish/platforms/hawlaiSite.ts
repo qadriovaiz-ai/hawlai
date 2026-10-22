@@ -517,6 +517,39 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
         if (restores.length === 0) {
           return { ok: false, reason: "That edit didn't record what the line said before, so I can't put it back without guessing — and I won't guess at your page copy." };
         }
+
+        // HAS THE PAGE MOVED ON SINCE THAT EDIT? S3/P2.
+        //
+        // The same question executeText asks before it writes, asked
+        // here for the first time. If a line now says neither what the
+        // edit set it to nor what it said before, SOMETHING ELSE
+        // changed it afterwards — another chat edit, or Website
+        // Builder. Restoring the old wording would throw that away
+        // silently, and the owner approving the card would have no way
+        // to see it happening: the card shows "from X to Y" and X is
+        // not what is on the page.
+        //
+        // Refused rather than warned, because this is executor.ts's own
+        // judgement about the same situation: "nothing is wrong, the
+        // human's decision is simply out of date and must be re-taken
+        // against current reality."
+        const movedOn = action.preview.changes
+          .filter((c) => typeof c.field === "string" && c.field.includes(":"))
+          .filter((c) => {
+            const [blockId, prop] = String(c.field).split(":");
+            const now = lineNow(page.sections, blockId, prop);
+            return now !== null && !sameText(now, c.before) && !sameText(now, c.after);
+          });
+        if (movedOn.length > 0) {
+          const first = movedOn[0];
+          const [blockId, prop] = String(first.field).split(":");
+          const now = lineNow(page.sections, blockId, prop) ?? "";
+          return {
+            ok: false,
+            reason:
+              `That line has changed again since the edit I would be undoing, so putting the old wording back would wipe out the newer change. It now says "${now}". Tell me what you want it to say and I'll set it directly.`,
+          };
+        }
         const { applyEdits } = await import("@/lib/pages/editPage");
         const undone = applyEdits(page.sections, restores, null);
         if (undone.applied.length === 0) {
@@ -549,6 +582,18 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
         const changed = wanted.filter((c) => String(currentOf(c.field) ?? "") !== String(c.before ?? ""));
         if (changed.length === 0) {
           return { ok: false, reason: "The page's search listing already says what it said before that edit — there's nothing to put back." };
+        }
+        // Moved on since that edit — see the note in the text branch.
+        const metaMovedOn = wanted.filter((c) => {
+          const now = String(currentOf(c.field) ?? "");
+          return !sameText(now, c.before) && !sameText(now, c.after);
+        });
+        if (metaMovedOn.length > 0) {
+          return {
+            ok: false,
+            reason:
+              "The page's search listing has changed again since the edit I would be undoing, so putting the old one back would wipe out the newer change. Tell me what you want it to say and I'll set it directly.",
+          };
         }
         const requested: Record<string, unknown> = {};
         for (const c of changed) {
