@@ -356,10 +356,30 @@ export async function createPublishAction(
   // — the executor refuses anything whose approval_id is missing — so
   // a crash between the two inserts leaves an orphan approval to be
   // rejected, never an action that can run unapproved.
-  await supabase
+  // CHECKED, 22 October 2026. This write is the only thing connecting a
+  // recorded decision to the work it authorises: releaseApprovedAction
+  // finds the action BY approval_id, and an action it cannot find is one
+  // that can never run. It was unchecked - the one `await` in this
+  // function whose error was discarded - so a failure here produced an
+  // approval card that worked, an approve click that reported success,
+  // and no change on the site. The comment below already said the
+  // action "cannot be executed" until this lands; it simply did not
+  // notice when it had not.
+  const { error: linkError } = await supabase
     .from("publish_actions")
     .update({ status: "awaiting_approval", approval_id: approval.id })
     .eq("id", draft.id);
+  if (linkError) {
+    publishError("create.link_failed", { action: draft.id, approval: approval.id, detail: linkError.message });
+    await supabase
+      .from("publish_actions")
+      .update({ status: "failed", error: `Could not link the approval: ${linkError.message}` })
+      .eq("id", draft.id);
+    // The approval row is left for the owner to reject. Deleting it
+    // would be a second write that can fail the same way, and a
+    // rejectable card is a better end state than an orphan nobody sees.
+    return { ok: false, reason: "I couldn't connect that to its approval card, so I've not asked you to approve something I couldn't then carry out. Ask me again." };
+  }
 
   publishLog("create.awaiting_approval", { action: draft.id, approval: approval.id, summary: preview.preview.summary, warnings: preview.preview.warnings.length });
   return { ok: true, actionId: draft.id, preview: preview.preview, approvalId: approval.id };

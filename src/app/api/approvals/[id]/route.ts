@@ -478,6 +478,33 @@ export async function PATCH(
       id
     );
 
+    // AN APPROVAL THAT SHOULD HAVE HAD AN ACTION AND HAS NONE.
+    //
+    // THE FOUNDER'S P5 FAILURE, 22 October 2026: he approved a
+    // paragraph edit and an undo of a page title, both cards confirmed,
+    // and neither reached the live page — with no error anywhere. This
+    // is the shape that produces exactly that. `not_a_publish_action`
+    // is a legitimate answer for an ad budget change, so the route
+    // falls through to a plain 200 — and the chat card, seeing no
+    // `publish` key, says "Applied." in green.
+    //
+    // The two cases are distinguishable and were never distinguished:
+    // an approval RAISED BY createPublishAction carries
+    // action_details.publish_action_id. If that is present and no
+    // publish action links back, the link between the decision and the
+    // work is broken, nothing will ever run, and the owner must be told
+    // rather than congratulated.
+    if (released.kind === "not_a_publish_action" && (approval?.action_details as any)?.publish_action_id) {
+      return NextResponse.json({
+        ...data,
+        publish: {
+          status: "failed",
+          message:
+            "Your approval was recorded, but I couldn't find the change it belongs to, so nothing was applied. Nothing is half-done — ask me for it again and I'll raise a fresh card.",
+        },
+      });
+    }
+
     if (released.kind === "ran") {
       const { outcome } = released;
 
