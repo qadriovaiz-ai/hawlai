@@ -298,7 +298,16 @@ describe("the S1 exit test", () => {
     const spend = new Spend();
     const restore = STUB ? stubPipeline() : meterFetch(spend);
     const rows: GradedSentence[] = [];
-    const perCase: { id: string; sentences: number; removed: number; note: string | null; incomplete: boolean; error?: string }[] = [];
+    const perCase: {
+      id: string;
+      sentences: number;
+      removed: number;
+      note: string | null;
+      incomplete: boolean;
+      error?: string;
+      /** The agent's own account of why nothing was written. */
+      failure?: { kind?: string; cause?: string; detail?: string; malformed?: boolean } | null;
+    }[] = [];
 
     try {
       const { runCase } = await import("./surfaces");
@@ -334,7 +343,7 @@ describe("the S1 exit test", () => {
           // looked like good news. An incomplete run must not be able
           // to read as a clean one.
           const incomplete = Boolean(r.incomplete);
-          perCase.push({ id: c.id, sentences: graded.length, removed: r.removed.length, note, incomplete });
+          perCase.push({ id: c.id, sentences: graded.length, removed: r.removed.length, note, incomplete, failure: r.failure ?? null });
           say(`${graded.length} sentence(s)${note ? ", facts note present" : ""}${incomplete ? "   *** NOTHING WAS WRITTEN - the model could not be reached ***" : ""}`);
         } catch (err: any) {
           perCase.push({ id: c.id, sentences: 0, removed: 0, note: null, incomplete: true, error: err?.message ?? String(err) });
@@ -378,6 +387,21 @@ describe("the S1 exit test", () => {
     if (incomplete.length) {
       say("");
       say("=".repeat(66));
+      // AND WHY, not just which. A run that says only "3 of 6 wrote
+      // nothing" sends somebody back to the provider's dashboard
+      // guessing; the agents know the difference between a truncated
+      // reply, an unreachable model and an exhausted account.
+      for (const p of incomplete) {
+        const f = p.failure;
+        const why = f
+          ? [f.kind && `kind: ${f.kind}`, f.malformed && "the reply could not be parsed", f.cause && `cause: ${f.cause}`, f.detail && `detail: ${f.detail}`]
+              .filter(Boolean)
+              .join(" | ")
+          : p.error
+            ? `threw: ${p.error}`
+            : "no reason recorded by the agent";
+        say(`   [${p.id}] ${why}`);
+      }
       say(`THIS RUN IS INCOMPLETE. ${incomplete.length} of ${EMAIL_CASES.length} cases never reached the model, so the`);
       say("sheet below covers only the rest and NO verdict about the pipeline can");
       say("be drawn from it. The low cost is the symptom, not the result.");

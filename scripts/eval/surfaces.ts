@@ -22,7 +22,33 @@ export type CaseResult = {
   note: string | null;
   /** True when the model could not be reached, so nothing was written. */
   incomplete?: boolean;
+  /**
+   * WHY a case wrote nothing, in the agent's own words.
+   *
+   * ADDED 2026-10-22, AND IT SHOULD HAVE EXISTED ALL ALONG. Four of
+   * twelve social cases failed at the write step on 21 October -
+   * candle-10, salon-02, salon-03, dairy-09 - and I could not say why,
+   * because nothing recorded it. The agents return `_cause`, `_detail`,
+   * `_malformed` and `_aiFailure` precisely so a caller can tell a
+   * truncated reply from an unreachable model from an exhausted
+   * account; this function threw all four away and kept only
+   * `_incomplete`.
+   *
+   * So the saved results said "wrote nothing" and the console said
+   * nothing at all, because vitest only prints a test's stderr when
+   * the test FAILS, and an incomplete run does not fail the test. The
+   * run was reporting less than the product knew.
+   */
+  failure?: { kind?: string; cause?: string; detail?: string; malformed?: boolean } | null;
 };
+
+/** The agent's own account of why it produced no copy. */
+function failureOf(r: any): CaseResult["failure"] {
+  if (!r) return null;
+  const kind = r._aiFailure?.kind ?? undefined;
+  if (!kind && !r._cause && !r._detail && !r._malformed) return null;
+  return { kind, cause: r._cause, detail: r._detail, malformed: r._malformed === true };
+}
 
 export async function runCase(c: EvalCase): Promise<CaseResult> {
   const facts = c.fixture.facts ?? null;
@@ -33,17 +59,17 @@ export async function runCase(c: EvalCase): Promise<CaseResult> {
     case "email": {
       const { generateEmailContent } = await import("@/lib/agents/emailMarketingAgent");
       const r: any = await generateEmailContent("welcome_email", name, category, c.topic, null, undefined, undefined, facts, "draft");
-      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true };
+      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true, failure: failureOf(r) };
     }
     case "facebook_post": {
       const { generateContent } = await import("@/lib/agents/contentMarketingAgent");
       const r: any = await generateContent("facebook_post", name, category, c.topic, null, undefined, undefined, facts, "draft", { revise: true });
-      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true };
+      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true, failure: failureOf(r) };
     }
     case "whatsapp": {
       const { generateWhatsappContent } = await import("@/lib/agents/whatsappMarketingAgent");
       const r: any = await generateWhatsappContent("broadcast", name, category, c.topic, null, undefined, undefined, facts, "draft");
-      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true };
+      return { output: r.output ?? {}, removed: r.claimsRemoved ?? [], note: r.output?._claimsNote ?? null, incomplete: r._incomplete === true, failure: failureOf(r) };
     }
     case "lead_message": {
       const { generateFollowUpMessage } = await import("@/lib/agents/contentAgent");
@@ -53,6 +79,7 @@ export async function runCase(c: EvalCase): Promise<CaseResult> {
         output: { message: r.message, ...(r.subject ? { subject: r.subject } : {}) },
         removed: r.claimsRemoved ?? [],
         note: r.note ?? null,
+        failure: failureOf(r),
       };
     }
     case "product_description": {
@@ -82,6 +109,7 @@ export async function runCase(c: EvalCase): Promise<CaseResult> {
         output: { title: r.title, description: r.description, highlights: r.highlights },
         removed: r.claimsRemoved ?? [],
         note: r.note ?? null,
+        failure: failureOf(r),
       };
     }
     default:
