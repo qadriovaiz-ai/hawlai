@@ -240,10 +240,20 @@ const STOCK_IN_TEXT = /\b(?:only\s+)?\d+\s*(?:left|in\s+stock|remaining|availabl
  */
 export function statesPriceOrStock(text: string): string | null {
   if (PRICE_IN_TEXT.test(text)) {
-    return "I don't put prices in page text at all — not the wrong one and not the right one. The price lives on the product itself, so a number typed into a paragraph would sit beside the catalogue's own figure with nothing keeping the two in step, and whichever changed first would make the other a lie. Ask me to change the product's price and it goes through the catalogue with its own card.";
+    // SAYS THAT DICTATED WORDING DOES NOT OVERRIDE IT — 22 October 2026.
+    //
+    // Every CLAIMS check in the edit path exempts words the owner
+    // dictated. This one does not, deliberately, because the harm it
+    // prevents is not a false claim: it is two numbers drifting apart
+    // with nothing to keep them in step. But an owner who has been told
+    // "your own words go on as you wrote them" and then hits this reads
+    // it as the flag being broken - which is exactly how it looked in
+    // P5 testing - so the rule says so itself rather than leaving them
+    // to guess.
+    return "I don't put prices in page text at all — not the wrong one, not the right one, and not even when you dictate it yourself. This is the one thing your own wording doesn't override, and it isn't about whether the number is true: the price lives on the product, so a number typed into a paragraph would sit beside the catalogue's own figure with nothing keeping the two in step, and whichever changed first would make the other a lie. Ask me to change the product's price and it goes through the catalogue with its own card.";
   }
   if (STOCK_IN_TEXT.test(text)) {
-    return "I don't put stock counts in page text. The quantity lives on the product and changes with every order, so a number written into a paragraph is out of date the moment someone buys one. The product page shows it live.";
+    return "I don't put stock counts in page text, and this is the other thing your own wording doesn't override. The quantity lives on the product and changes with every order, so a number written into a paragraph is out of date the moment someone buys one. The product page shows it live.";
   }
   return null;
 }

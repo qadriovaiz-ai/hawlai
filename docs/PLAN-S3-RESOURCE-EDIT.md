@@ -269,9 +269,18 @@ the `from` value on it not matching what the page currently says.
 ### 2. The new half — undo a search listing
 
 Same loop with *"page ka search title badal do"*, then *"undo that"*.
-This has never been possible before. Expect the warning that Google
-re-reads a listing in its own time — the title in search may lag, and
-that is not a failure.
+Expect the warning that Google re-reads a listing in its own time — the
+title in search may lag, and that is not a failure.
+
+**This step was wrong when first written, and the founder paid for it
+in P5.** `hawlaiSite.undo` handled page meta from P1, but the chat
+tool's candidate query was left text-only on purpose while selection
+was a label guess — I wrote that in the P1 commit and then put this
+step in the runbook anyway. He tested it, chat correctly said it had no
+record of such an edit, and the time was wasted. The candidates now
+cover both kinds, and with no `edit_id` and both kinds in range undo
+**asks which** rather than reversing whichever is newer: one of them is
+invisible on the page, so a wrong choice there is one nobody can see.
 
 ### 3. The fact check on an edit — needs the flag
 
@@ -284,6 +293,23 @@ verbatim with a warning that the owner is the one standing behind it.
 
 **Cost:** two or three Haiku calls per model-written edit, about
 Rs 0.4–0.8. Zero on anything dictated.
+
+**One correction to how I described this.** I wrote that "the owner's
+dictated words are never checked". That is true of every CLAIMS check —
+the old layer keeps them and warns, the unknown-name refusal fires only
+on wording the model wrote, and the fact-bound check filters them out
+before it runs. It is **not** true of one rule: a price or a stock count
+in page text is refused for everybody, including the owner, because the
+harm there is not a false claim but two numbers drifting apart with
+nothing keeping them in step. That rule now says so in its own message,
+because an owner who has been told the first thing reads the second as
+the flag being broken.
+
+**And the flag has to be on.** The fact-bound check sits behind
+`FACT_BOUND_COPY`. In the founder's P5 test it was off, so what refused
+his dictated wording was the older layer — whose note, until this fix,
+never mentioned that `writtenByOwner` existed. Every refusal note now
+carries that path, from one shared constant.
 
 ### What P5 cannot tell us
 

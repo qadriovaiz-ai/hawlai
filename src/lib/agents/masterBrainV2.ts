@@ -240,7 +240,7 @@ export const TOOLS = [
   {
     name: "undo_page_edit",
     description:
-      "Put a page's wording back to what it was before the last chat edit. USE THIS when they say \"undo that\", \"wapas kar do\", \"purana wala better tha\" about words on their website. It replays the exact previous text recorded on the edit that changed it, so nothing is regenerated and nothing is guessed. It shows an approval card like any other edit and changes nothing until they approve. It can only undo an edit made through chat — a change made in Website Builder has no record here, and a second undo does not go two steps back.",
+      "Put a page's wording — or its search title and description — back to what it was before the last chat edit. USE THIS when they say \"undo that\", \"wapas kar do\", \"purana wala better tha\" about words on their website. It replays the exact previous text recorded on the edit that changed it, so nothing is regenerated and nothing is guessed. It shows an approval card like any other edit and changes nothing until they approve. It can only undo an edit made through chat — a change made in Website Builder has no record here, and a second undo does not go two steps back.",
     input_schema: {
       type: "object",
       properties: {
@@ -250,6 +250,12 @@ export const TOOLS = [
             "The action_id of the edit to put back. PREFER THIS whenever you have it — every edit you make returns one, so when they say \"undo that\" about an edit from this conversation, pass that edit's action_id rather than a page name. Without it I fall back to the most recent chat edit on the page, which can be the wrong one if there were two.",
         },
         page: { type: "string", description: "Which page, if they named one and you have no edit_id. Omit to undo the most recent chat edit on any page." },
+        what: {
+          type: "string",
+          enum: ["text", "search_listing"],
+          description:
+            "Which KIND of change to put back: \"text\" for words on the page, \"search_listing\" for the search title or description. Pass it when they made that clear. If you pass neither this nor edit_id and both kinds are in range, I will come back asking which — relay that question instead of choosing for them.",
+        },
       },
       required: [],
     },
@@ -916,6 +922,33 @@ function malformedToolError(result: { _fallback?: boolean; _aiFailure?: unknown;
 }
 
 // Exported for tests: every chat tool's real behaviour runs through here.
+/**
+ * What a refused edit must tell the model about the owner's own words.
+ *
+ * ONE STRING, SHARED BY EVERY GATE THAT REFUSES AN EDIT. The founder's
+ * P5 test of 22 October 2026 is why. He dictated wording the records
+ * could not support, said in as many words that it was his own, and was
+ * refused exactly as though the model had written it.
+ *
+ * Every CLAIMS check in the edit path already honoured `writtenByOwner`
+ * - `clean()` keeps the owner's wording and warns, the unknown-name
+ * refusal fires only when the flag is false, and the fact-bound check
+ * filters those lines out before it runs. The bug was that NOTHING TOLD
+ * THE MODEL THE FLAG EXISTED while it was being refused. Two of the
+ * notes it gets back actively push the other way - "do not retry with
+ * the same name", "do not simply resend the same wording" - and the one
+ * note that did mention the flag sits behind FACT_BOUND_COPY, which was
+ * off. A path the model is never told about at the moment it matters
+ * does not exist.
+ *
+ * One constant because three gates refuse an edit and a fourth will be
+ * added eventually. Three copies would drift, and the drift would be
+ * invisible until someone tested it by hand, which is exactly how this
+ * was found.
+ */
+const OWNER_WORDS_PATH =
+  "If these are THEIR OWN exact words, dictated by them, say so and set writtenByOwner on that edit — then it is saved verbatim, with a warning that they are the one standing behind the claim. Never set it for anything you wrote yourself, including a draft they approved.";
+
 export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
   const gatedFeature: GatedFeatureKey | undefined =
     toolName === "manage_watch" && input?.kind === "competitor" ? "competitorIntel" : TOOL_FEATURE_MAP[toolName];
@@ -1167,14 +1200,25 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         .from("publish_actions")
         .select("id, action_key, target_ref, target_label, preview, executed_at")
         .eq("dealership_id", ctx.id)
-        // STILL TEXT ONLY, AND DELIBERATELY SO FOR NOW. hawlaiSite.undo
-        // handles update_page_meta as well since P1, but "undo" is
-        // still resolved by a substring match on a label (see below),
-        // and widening the candidates before P2 makes selection
-        // explicit would mean the wrong guess can now reverse a page's
-        // SEARCH LISTING instead of a line of its text. The capability
-        // becomes reachable when the choosing is trustworthy.
-        .eq("action_key", "update_page_text")
+        // BOTH SITE EDIT KINDS, since the choosing is now explicit.
+        //
+        // THE FOUNDER FOUND THIS IN P5 TESTING, 22 October 2026, and the
+        // fault was mine twice over. hawlaiSite.undo has handled
+        // update_page_meta since P1, but this filter kept the candidate
+        // list text-only, so "undo that" after a search-title change
+        // found nothing and said so - correctly. I had left that on
+        // purpose while selection was a label guess, written it in the
+        // commit, and then put "undo a search title" in the P5 runbook
+        // as something to test. He spent his time on a step I had not
+        // wired.
+        //
+        // Safe to widen now because an id beats a guess (P2) and
+        // because, with no id, this no longer guesses ACROSS kinds: if
+        // both a text edit and a listing edit are in range it asks
+        // which, rather than reversing the one that happens to be
+        // newer. A wrong guess here would reverse a page's search
+        // listing instead of a line of its text.
+        .in("action_key", ["update_page_text", "update_page_meta"])
         .eq("status", "executed")
         .order("executed_at", { ascending: false })
         .limit(5);
@@ -1215,12 +1259,39 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         }
         chosen = byId;
         chosenBy = "id";
-      } else if (askedPage) {
-        chosen = candidates.find((a) => String(a.target_label ?? "").toLowerCase().includes(askedPage));
-        chosenBy = "page";
       } else {
-        chosen = candidates[0];
-        chosenBy = "most_recent";
+        const KIND_OF: Record<string, string> = { update_page_text: "text", update_page_meta: "search_listing" };
+        const askedWhat = input.what === "text" || input.what === "search_listing" ? String(input.what) : null;
+        let inRange = candidates;
+        if (askedWhat) inRange = inRange.filter((a) => KIND_OF[String(a.action_key)] === askedWhat);
+        if (askedPage) inRange = inRange.filter((a) => String(a.target_label ?? "").toLowerCase().includes(askedPage));
+
+        // ASKS INSTEAD OF GUESSING ACROSS KINDS. Putting a line of page
+        // text back and putting a page's search listing back are
+        // different acts with different consequences, and "undo that"
+        // does not say which. One of them is invisible on the page, so a
+        // wrong choice here is one the owner cannot see.
+        const kinds = new Set(inRange.map((a) => KIND_OF[String(a.action_key)] ?? "text"));
+        if (!askedWhat && kinds.size > 1) {
+          const describe = (a: any) =>
+            `${KIND_OF[String(a.action_key)] === "search_listing" ? "the search listing" : "the wording"} on ${a.target_label ?? "a page"}`;
+          return {
+            needs_choice: true,
+            saved: false,
+            question: `I have changed two different things recently — ${describe(inRange[0])} and ${describe(
+              inRange.find((a) => KIND_OF[String(a.action_key)] !== KIND_OF[String(inRange[0].action_key)])
+            )}. Which one should I put back?`,
+            options: inRange.slice(0, 4).map((a) => ({
+              edit_id: a.id,
+              what: KIND_OF[String(a.action_key)] ?? "text",
+              page: a.target_label ?? null,
+              at: a.executed_at ?? null,
+            })),
+            note: "Ask them which one, then call undo_page_edit again with that option's edit_id. Do not pick for them.",
+          };
+        }
+        chosen = inRange[0];
+        chosenBy = askedPage || askedWhat ? "page" : "most_recent";
       }
       if (!chosen) {
         return {
@@ -1441,7 +1512,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         const phrase = unknownProductName(edit.text, editFacts);
         if (!phrase) continue;
         if (!edit.writtenByOwner) {
-          return { error: unknownNameRefusal(phrase), saved: false, note: "Do NOT retry with the same name. Use a product that is actually in the catalogue, or ask which one they meant." };
+          return {
+            error: unknownNameRefusal(phrase),
+            saved: false,
+            note: `Do NOT retry with the same name. Use a product that is actually in the catalogue, or ask which one they meant. ${OWNER_WORDS_PATH}`,
+          };
         }
         nameWarnings.push(unknownNameWarning(phrase));
       }
@@ -1479,7 +1554,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             saved: false,
             note: checked.unverified
               ? "Do NOT retry immediately with the same wording — the check itself was unavailable."
-              : "Write it again from what the business can actually support, or ask them to record the missing fact first. Do not simply resend the same wording. If these are THEIR exact words, say so and set writtenByOwner.",
+              : `Write it again from what the business can actually support, or ask them to record the missing fact first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
           };
         }
       }
@@ -1498,7 +1573,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         return {
           error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left on the page.",
           saved: false,
-          note: "Write it again from what the business can actually support, or ask them to add the missing fact to their Business Story first. Do not simply resend the same wording.",
+          note: `Write it again from what the business can actually support, or ask them to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
         };
       }
 
@@ -1596,7 +1671,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         return {
           error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to put on the page.",
           saved: false,
-          note: "Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording.",
+          note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
         };
       }
 

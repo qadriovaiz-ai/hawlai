@@ -91,6 +91,42 @@ block for the licence digits, which the claim's own canonical prints, so
 it passed with the evidence filter mutated out. Both kept, with the
 mistake recorded in the test.
 
+## 22 October 2026 — S3, and two findings from the founder's own testing
+
+**S3a — I wrote a runbook step for something I had deliberately not
+wired.** `hawlaiSite.undo` handled page meta from P1; the chat tool's
+candidate query stayed text-only on purpose while undo still chose by a
+label guess, and I recorded that in the commit. Then I put "undo a
+search title" in the P5 runbook as a thing to test. He tested it and
+chat correctly told him there was no such record. The lesson is not
+about undo: a capability on a module is not a capability in the
+product, and a runbook must be written from the reachable path rather
+than from what I had just built.
+
+**S3b — a flag the model is never told about does not exist.** Every
+claims check in the edit path honoured `writtenByOwner`. What was
+missing is that no refusal note mentioned it, and two of them actively
+said "do not retry with the same wording" — so when the founder said
+"these are my exact words" the model had no path to act on it. Fixed as
+one shared constant carried by every refusal, rather than a fourth
+sentence in a fourth place.
+
+**S3c — the price rule is the one thing the owner's words do not
+override, and it now says so.** Deliberate: the harm is two numbers
+drifting apart, not a false claim. Left as it is, with the message
+changed, because an owner told "your own words are saved as you wrote
+them" otherwise reads it as a broken flag. My own description of the
+rule to the founder was too broad and is corrected in the plan.
+
+**S3d — test doubles extended, not assertions weakened.** Making the
+meta undo reachable changed undo's query to `.in("action_key", [...])`,
+which the chat test's fake supabase did not implement. The double was
+extended and taught to honour its filters — it had been returning every
+row whatever was asked for, so the action_key filter had never been
+exercised by any test — and the fixture row was given the
+`action_key` it always implicitly had. One existing assertion on the
+price message was widened to cover the new sentence.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -101,9 +101,29 @@ function db(): any {
       const chain: any = {
         select(c?: string) { cols = c ?? ""; return chain; },
         eq(col: string, value: any) { filters[col] = value; return chain; },
+        // ADDED 22 October 2026, with the fake taught to honour it.
+        //
+        // undo's candidate query became `.in("action_key", [...])` when
+        // meta undo was made reachable, and this double had no `in` at
+        // all - so six undo tests failed with "in is not a function".
+        // The double was extended rather than the query changed back,
+        // and it now FILTERS instead of ignoring the filters, which is
+        // what it did before: `actions.slice(0, n)` returned every row
+        // whatever was asked for, so the action_key filter was never
+        // exercised by any test.
+        in(col: string, values: any[]) { filters[col] = values; return chain; },
         order() { return chain; },
         limit(n: number) {
-          if (table === "publish_actions") return Promise.resolve({ data: actions.slice(0, n) });
+          if (table === "publish_actions") {
+            // Only filters this row can actually answer. A fixture row
+            // that does not carry a column is not evidence about it.
+            const matches = (row: any) =>
+              Object.entries(filters).every(([col, want]) => {
+                if (!(col in row)) return true;
+                return Array.isArray(want) ? want.includes(row[col]) : row[col] === want;
+              });
+            return Promise.resolve({ data: actions.filter(matches).slice(0, n) });
+          }
           return chain;
         },
         update(values: any) { writes.push({ table, values, filters: { ...filters } }); return chain; },
@@ -117,6 +137,16 @@ function db(): any {
             return { data: row ? { ...row, website_id: site.id } : null, error: null };
           }
           if (table === "dealerships") return { data: { plan: "pro" } };
+          if (table === "publish_actions") {
+            // undo by edit_id looks one row up directly. Same
+            // filter-honouring rule as limit() above.
+            const row = actions.find((r: any) =>
+              Object.entries(filters).every(([col, want]) =>
+                !(col in r) ? true : Array.isArray(want) ? (want as any[]).includes(r[col]) : r[col] === want
+              )
+            );
+            return { data: row ?? null, error: null };
+          }
           return { data: null };
         },
         async single() { return { data: null, error: null }; },
@@ -396,8 +426,15 @@ describe("pages whose words are not the page's to change", () => {
     // refusal with "₹499 isn't your real price", which invites a retry
     // with the right one, and the right one is still wrong here.
     const correct: any = await tool("edit_page_text", { page: "products", edits: [{ blockId: "t4", prop: "html", text: "Our Lavender candle is ₹999." }] });
-    expect(correct.error).toMatch(/not the wrong one and not the right one/);
+    expect(correct.error).toMatch(/not the wrong one, not the right one/);
     expect(correct.note).toMatch(/Do NOT retry with a different number/);
+    // WIDENED 22 October 2026, not relaxed. The message now also says
+    // that dictating the wording yourself does NOT override this one,
+    // because every claims check in this path does exempt the owner's
+    // words and an owner who hits this reads it as the flag being
+    // broken - which is how it looked in the founder's P5 test.
+    expect(correct.error).toMatch(/not even when you dictate it yourself/);
+    expect(correct.error).toMatch(/your own wording doesn't override/);
     expect(created).toEqual([]);
   });
 
@@ -518,6 +555,93 @@ describe("the old homepage-only path is gone, not left beside the new one", () =
   });
 });
 
+// ---- undo: which change, and which KIND of change ---------------------
+
+describe("S3 fix — a search listing can be put back, and undo asks which", () => {
+  // THE FOUNDER'S P5 FINDING, 22 October 2026. hawlaiSite.undo has
+  // handled update_page_meta since P1, but the candidate query stayed
+  // text-only, so "undo that" after a search-title change found nothing
+  // and said so. I had left that on purpose and then put the step in
+  // the P5 runbook anyway.
+  beforeEach(() => {
+    actions = [
+      {
+        id: "act_meta",
+        action_key: "update_page_meta",
+        target_ref: "p1",
+        target_label: "Home (/site/candle-by-qaaf)",
+        executed_at: "2026-10-04T10:00:00Z",
+        preview: {
+          changes: [
+            // `after` is what the page says now, so this is neither
+            // already-back nor moved-on.
+            { field: "seoTitle", before: "Soy candles, Shahjahanpur", after: "Candle by Qaaf" },
+          ],
+        },
+      },
+      {
+        id: "act_text",
+        action_key: "update_page_text",
+        target_ref: "p1",
+        target_label: "Home (/site/candle-by-qaaf)",
+        executed_at: "2026-10-03T10:00:00Z",
+        preview: { changes: [{ field: "t1:html", before: "Small-batch soy candles, poured by hand.", after: "Hand-poured soy candles, made in Shahjahanpur." }] },
+      },
+    ];
+    pages[0].sections = [
+      {
+        id: "s1", type: "section", props: {},
+        children: [{ id: "t1", type: "text", props: { html: "Hand-poured soy candles, made in Shahjahanpur.", _source: "generated" }, children: [] }],
+      },
+    ];
+  });
+
+  it("ASKS WHICH, rather than reversing whichever is newer", async () => {
+    const r: any = await tool("undo_page_edit", {});
+    expect(r.needs_choice).toBe(true);
+    expect(r.question).toMatch(/search listing/);
+    expect(r.question).toMatch(/wording/);
+    // Nothing proposed, nothing created, nobody asked to approve.
+    expect(created).toEqual([]);
+    expect(r.note).toMatch(/Do not pick for them/);
+  });
+
+  it("offers the ids to come back with", async () => {
+    const r: any = await tool("undo_page_edit", {});
+    expect(r.options.map((o: any) => o.edit_id).sort()).toEqual(["act_meta", "act_text"]);
+    expect(r.options.map((o: any) => o.what).sort()).toEqual(["search_listing", "text"]);
+  });
+
+  it("PUTS THE SEARCH LISTING BACK when told that is the one", async () => {
+    const r: any = await tool("undo_page_edit", { what: "search_listing" });
+    expect(r.error, JSON.stringify(r)).toBeUndefined();
+    expect(created).toHaveLength(1);
+    expect(created[0].actionKey).toBe("update_page_meta");
+    expect(created[0].requestedChanges).toEqual({ seoTitle: "Soy candles, Shahjahanpur" });
+    expect(r.changed.map((c: any) => c.what)).toEqual(["search title"]);
+  });
+
+  it("and says search takes its own time, which page text never needs to", async () => {
+    const r: any = await tool("undo_page_edit", { what: "search_listing" });
+    expect(r.warnings.join(" ")).toMatch(/few days/);
+  });
+
+  it("an edit_id still wins, and is not confused by the other kind", async () => {
+    const r: any = await tool("undo_page_edit", { edit_id: "act_text" });
+    expect(created).toHaveLength(1);
+    expect(created[0].actionKey).toBe("update_page_text");
+    expect(r.undoing).toMatch(/act_text/);
+  });
+
+  it("does not ask when only one kind is in range", async () => {
+    actions = [actions[1]];
+    const r: any = await tool("undo_page_edit", {});
+    expect(r.needs_choice).toBeUndefined();
+    expect(created).toHaveLength(1);
+    expect(created[0].actionKey).toBe("update_page_text");
+  });
+});
+
 // ---- undo -------------------------------------------------------------
 
 describe("undo replays what the line said before", () => {
@@ -528,6 +652,10 @@ describe("undo replays what the line said before", () => {
     actions = [
       {
         id: "act1",
+        // NAMED NOW THAT THE QUERY ASKS FOR IT. This row has always
+        // been a text edit - its preview changes a block prop - and the
+        // column was simply absent because nothing read it.
+        action_key: "update_page_text",
         target_ref: "p1",
         target_label: "Home (/site/candle-by-qaaf)",
         executed_at: "2026-10-03T10:00:00Z",
