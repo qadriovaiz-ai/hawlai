@@ -24,7 +24,19 @@
 export type MeasurementHealth = "ok" | "partial" | "broken";
 
 export type TrackingState = {
-  siteEvents: { firing: boolean; lastAt: string | null; visitorEvents30d: number };
+  siteEvents: {
+    firing: boolean;
+    lastAt: string | null;
+    visitorEvents30d: number;
+    /**
+     * The earliest visitor event EVER, not within the window.
+     *
+     * The maturity rule is "fewer than 14 days of data", and 14 days
+     * cannot be measured from a 30-day window that may itself be the
+     * first week of the business's life.
+     */
+    firstAt: string | null;
+  };
   searchConsole: { connected: boolean; siteUrl: string | null };
   /**
    * Conversions are "verified" only when something countable has
@@ -56,6 +68,19 @@ export async function checkTracking(supabase: any, dealershipId: string, now: Da
     visitorEvents30d = events.data.length;
     lastAt = events.data[0]?.created_at ?? null;
   }
+
+  // The first visitor event ever, for the maturity rule. Its own query
+  // because the window above cannot answer "how long has there been
+  // any data at all".
+  let firstAt: string | null = null;
+  const firstEvent = await supabase
+    .from("page_events")
+    .select("created_at")
+    .eq("dealership_id", dealershipId)
+    .eq("is_internal", false)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (!firstEvent.error && Array.isArray(firstEvent.data)) firstAt = firstEvent.data[0]?.created_at ?? null;
 
   // --- Search Console ------------------------------------------------
   let connected = false;
@@ -108,7 +133,7 @@ export async function checkTracking(supabase: any, dealershipId: string, now: Da
   const health: MeasurementHealth = !firing ? "broken" : connected && adsConversions.verified ? "ok" : "partial";
 
   return {
-    siteEvents: { firing, lastAt, visitorEvents30d },
+    siteEvents: { firing, lastAt, visitorEvents30d, firstAt },
     searchConsole: { connected, siteUrl },
     adsConversions,
     health,
