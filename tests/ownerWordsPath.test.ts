@@ -117,3 +117,52 @@ describe("3. the one rule the owner's words do NOT override says so itself", () 
     expect(statesPriceOrStock("Hand-poured in small batches.")).toBeNull();
   });
 });
+
+describe("4. the system prompt tells the model to use the path", () => {
+  // S3 fix 5. The founder's third P5 attempt was refused IN THE MODEL'S
+  // OWN VOICE, before any tool ran, and the cause was not the model: a
+  // system-prompt rule said "when someone ASKS you to write a claim you
+  // cannot back — that they are the best — do not write it", with no
+  // exception for the owner dictating it himself. It was following its
+  // instructions.
+  //
+  // THIS TEST READS THE SOURCE WITH COMMENTS NOWHERE. The prompt is a
+  // template literal, so it IS code, and `code()` is the right reader.
+  const src = code("src/lib/agents/masterBrainV2.ts");
+  const rules = src.slice(src.indexOf("- When someone ASKS you to write a claim you cannot back"));
+  const rule = rules.slice(0, rules.indexOf("`;") + 2);
+
+  it("THE 'DO NOT WRITE THE BEST' RULE NOW CARRIES ITS EXCEPTION", () => {
+    // The rule itself stays - it is what stops the model inventing a
+    // superlative nobody asked for.
+    expect(rule).toMatch(/do not write it and do not quietly write something near it/);
+    // And the exception sits with it, not three hundred lines away.
+    expect(rule).toMatch(/THEIR OWN DICTATED WORDS ARE THEIRS/);
+    expect(rule).toMatch(/writtenByOwner TRUE/);
+  });
+
+  it("IT RECOGNISES WHAT THE OWNER ACTUALLY SAYS, in both languages", () => {
+    expect(rule).toMatch(/ye mere exact words hain/);
+    expect(rule).toMatch(/aise hi likho/);
+    expect(rule).toMatch(/write it exactly like this/);
+  });
+
+  it("AND FORBIDS THE REFUSAL THAT ACTUALLY HAPPENED", () => {
+    expect(rule).toMatch(/do not refuse in your own voice/i);
+  });
+
+  it("KEEPS THE LIMIT, so a draft the owner approved is still not his wording", () => {
+    expect(rule).toMatch(/ONLY for words they dictated/);
+    expect(rule).toMatch(/approving a draft is approving its publication, not vouching for it/);
+  });
+
+  it("AND STOPS THE PRICE RULE BEING GENERALISED", () => {
+    // My own fix-3 wording is the likely reason the model said the rule
+    // applied "whether the words came from me or from you": it read
+    // "the one thing your own wording doesn't override" and spread the
+    // sentiment. So the prompt now says what is NOT a number.
+    expect(rule).toMatch(/only numbers/i);
+    expect(rule).toMatch(/Do NOT generalise that refusal/);
+    expect(rule).toMatch(/how something is made/);
+  });
+});
