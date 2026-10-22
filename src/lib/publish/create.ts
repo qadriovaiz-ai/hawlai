@@ -17,6 +17,8 @@ import type { PublishPlatform, ActionKey, PlatformId, PreviewDiff } from "./type
 import type { ResolutionPath, ResolutionDetail } from "./resolve";
 import { toRecord } from "./executor";
 import { publishLog, publishError } from "./log";
+import { requiresApproval, levelNote } from "@/lib/autonomyLevels";
+import { readStoredLevel } from "@/lib/autonomyLevelsStore";
 
 export type CreateInput = {
   dealershipId: string;
@@ -273,10 +275,41 @@ export async function createPublishAction(
     .update({ status: "previewed", preview: preview.preview, previewed_at: new Date().toISOString() })
     .eq("id", draft.id);
 
-  // Every publish action requires approval — ACTION_POLICIES says so
-  // unconditionally. The branch stays because the policy is the
-  // authority, not this function's assumption about it.
-  if (!policy.requiresApproval) {
+  // DOES THIS BUSINESS STILL NEED TO BE ASKED? S3/P3.
+  //
+  // Until now the only input was ACTION_POLICIES, which says the same
+  // thing for every business. A level is the per-business answer: L0
+  // asks every time, L1 acts on the owner's own instruction because the
+  // change is reversible.
+  //
+  // NOTHING CHANGES UNTIL A ROW EXISTS. `action_levels` is empty, every
+  // unclear case reads as L0, and a read error reads as L0 too — so
+  // this path behaves exactly as it did before the level existed. That
+  // is deliberate: the dangerous direction here is up, and a gating
+  // change that alters behaviour on the day it ships has no safe way to
+  // be checked.
+  //
+  // THE UNDO IS PART OF THE QUESTION, not a detail. L1 is only
+  // justified by reversibility, so an action whose platform cannot put
+  // itself back is refused L1 however the row is set — which is why
+  // `undo` being optional on PublishPlatform is load-bearing rather
+  // than untidy.
+  const storedLevel = await readStoredLevel(supabase, input.dealershipId, input.actionKey);
+  const needsApproval = requiresApproval(input.actionKey, {
+    stored: storedLevel,
+    hasUndo: typeof platform.undo === "function",
+    direction: null,
+  });
+  if (storedLevel === "L1" && needsApproval) {
+    // A level the owner set that could not be honoured is explained,
+    // never silently downgraded.
+    publishLog("create.level_not_honoured", {
+      action: draft.id,
+      actionKey: input.actionKey,
+      why: levelNote(input.actionKey, { stored: storedLevel, hasUndo: typeof platform.undo === "function" }),
+    });
+  }
+  if (!needsApproval) {
     await supabase.from("publish_actions").update({ status: "approved" }).eq("id", draft.id);
     return { ok: true, actionId: draft.id, preview: preview.preview, approvalId: null };
   }

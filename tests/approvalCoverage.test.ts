@@ -225,6 +225,77 @@ describe("every outbound action is gated", () => {
 // The registry itself.
 // ---------------------------------------------------------------------
 
+describe("S3/P3 — a LEVEL can never become a bypass", () => {
+  // EXTENDED, NEVER LOOSENED. Levels introduce a second way for an
+  // action to skip the approval row, which is exactly the kind of
+  // addition this file exists to catch. The question it has always
+  // asked - "can anything reach a live write without being asked?" -
+  // now has to be asked of the table too.
+  const CREATE = "src/lib/publish/create.ts";
+  const create = readFileSync(CREATE, "utf8");
+
+  it("THE APPROVAL DECISION GOES THROUGH THE LEVEL RULES, not round them", () => {
+    expect(create).toMatch(/requiresApproval\(input\.actionKey, \{/);
+    expect(create).toMatch(/stored: storedLevel/);
+  });
+
+  it("AND THE UNDO IS PART OF THE QUESTION", () => {
+    // L1 is justified only by reversibility. A platform with no undo
+    // must keep asking however the row is set.
+    //
+    // ANCHORED INSIDE THE DECISION, not across the file. My first
+    // version searched the whole of create.ts for the hasUndo
+    // expression, and the mutation that hardcoded it to `true` in the
+    // decision still passed - because the LOGGING call a few lines
+    // below mentions it too. The same mistake the hand-churning and
+    // credential tests both record: matching text that is present for
+    // an unrelated reason.
+    const decision = create.slice(
+      create.indexOf("const needsApproval = requiresApproval("),
+      create.indexOf("if (storedLevel === \"L1\" && needsApproval)")
+    );
+    expect(decision.length).toBeGreaterThan(0);
+    expect(decision).toMatch(/hasUndo: typeof platform\.undo === "function"/);
+  });
+
+  it("A LEVEL IS READ FROM THE TABLE, NOT FROM THE REQUEST", () => {
+    // If the level could arrive as an argument, a caller could grant
+    // itself L1 - which is the shape of every bypass in this file's
+    // header.
+    expect(create).toMatch(/readStoredLevel\(supabase, input\.dealershipId, input\.actionKey\)/);
+    expect(create).not.toMatch(/input\.level/);
+  });
+
+  it("EVERY UNREADABLE ANSWER MEANS ASK", async () => {
+    const { readStoredLevel } = await import("@/lib/autonomyLevelsStore");
+    const dead = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "boom" } }) }) }) }) }) };
+    const throws = { from: () => { throw new Error("no such table"); } };
+    const unknown = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { level: "L2" }, error: null }) }) }) }) }) };
+    expect(await readStoredLevel(dead, "d1", "update_page_text")).toBeNull();
+    expect(await readStoredLevel(throws, "d1", "update_page_text")).toBeNull();
+    // A level this build does not understand is not a level.
+    expect(await readStoredLevel(unknown, "d1", "update_page_text")).toBeNull();
+  });
+
+  it("and a stored L1 that cannot be honoured is logged rather than silently dropped", () => {
+    expect(create).toMatch(/create\.level_not_honoured/);
+  });
+
+  it("NO PUBLISH ACTION IN THE ALWAYS-APPROVE LIST CAN BE RAISED BY A ROW", async () => {
+    const { effectiveLevel } = await import("@/lib/autonomyLevels");
+    for (const key of ALWAYS_REQUIRES_APPROVAL) {
+      const policy = getActionPolicy(key);
+      // Either the key is pinned by its own type/risk, or it is a
+      // reversible edit that MAY hold L1 - but then it must have an
+      // undo, which the previous test pins. What must never happen is
+      // a spend or a critical action being raised.
+      if (policy && (policy.actionType === "spend" || policy.riskLevel === "critical")) {
+        expect(effectiveLevel(key, { stored: "L1", hasUndo: true })).toBe("L0");
+      }
+    }
+  });
+});
+
 describe("the registries stay honest", () => {
   it("every platform publish action is in ALWAYS_REQUIRES_APPROVAL and ACTION_RISK", () => {
     for (const key of ALWAYS_REQUIRES_APPROVAL) {
