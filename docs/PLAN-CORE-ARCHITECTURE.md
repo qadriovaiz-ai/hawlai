@@ -593,13 +593,81 @@ run by hand.
 
 | Step | Size | Riskiest part | Exit test, exactly as the design states it |
 |---|---|---|---|
-| **S1** C1 `getContext` v1 + C2 full pipeline, behind a flag, EMAIL only | **M** | **Select's recall.** Under-selection deletes true claims, and today's false-positive rate is 0 of 72 — the one number that can only get worse. Second: the fixture bug in §4.1 must be fixed first, or S1 compares against a baseline run with a limb tied | *"Re-run the 13 Oct eval on email cases: unsupported claims 0 by reviewer grading; wrongly-removed not worse; cost per email measured"* |
-| **S2** C2 on every customer-facing surface | **L** | **Haiku's extraction recall on Hinglish.** A claim that is not enumerated is never judged, and that failure is silent. Gate it on the 135 graded sentences before widening | *"Full eval: 33 F -> 0; judge agreement with human labels measured and reported"* |
-| **S3** C4 Actions for site edits + C6 levels (L0/L1) | **M** | **`undo()` for page text.** `publish/types.ts:74-79` records that `website_pages` IS what `/site/{slug}` renders — there is no draft layer, so an approved edit is public the moment it saves. Undo must restore a stored previous version, which means storing one | *"Approve in UI -> change live -> verify -> undo works, on candle_by_qaaf"* |
+| **S1 — DONE** C1 `getContext` v1 + C2 full pipeline, behind a flag, EMAIL only | **M** | **Select's recall.** Under-selection deletes true claims, and today's false-positive rate is 0 of 72 — the one number that can only get worse. Second: the fixture bug in §4.1 must be fixed first, or S1 compares against a baseline run with a limb tied | *"Re-run the 13 Oct eval on email cases: unsupported claims 0 by reviewer grading; wrongly-removed not worse; cost per email measured"* |
+| **S2 — SUBSTANTIALLY COMPLETE (22 Oct 2026, §3a)** C2 on every customer-facing surface | **L** | **Haiku's extraction recall on Hinglish.** A claim that is not enumerated is never judged, and that failure is silent. Gate it on the 135 graded sentences before widening | *"Full eval: 33 F -> 0; judge agreement with human labels measured and reported"* |
+| **S3 — PLANNED ([PLAN-S3-RESOURCE-EDIT.md](PLAN-S3-RESOURCE-EDIT.md))** C4 Actions for site edits + C6 levels (L0/L1) | **M** | **`undo()` for page text.** `publish/types.ts:74-79` records that `website_pages` IS what `/site/{slug}` renders — there is no draft layer, so an approved edit is public the moment it saves. Undo must restore a stored previous version, which means storing one | *"Approve in UI -> change live -> verify -> undo works, on candle_by_qaaf"* |
 | **S4** C3 Growth Manager v1 + daily report | **L** | **Self-calls.** A seven-stage loop built as route-to-route calls hits the Vercel 508 at ~4 hops, and `/api/autopilot/daily-run` is the exact route that did it before | *"Daily email arrives with only counted numbers; each suggestion cites evidence and the goal it serves"* |
 | **S5** C5 outcome records + results job; 90-day strategy; monthly review | **M** | **The 28-day wait is unfalsifiable until it elapses.** Nothing can be verified live for a month, so the check-date job needs its own test with a frozen clock | *"After 28 days, each executed action has an outcome row"* |
 | **S6** Remaining tools into Actions; retire duplicate agents; autopilot through C2+C6 | **L** | **Retiring an agent whose route is still live.** Each duplicate has one or two importing routes (§4.2), so each retirement is a production route change, not a deletion | *"Tool count falls; no surface writes copy outside C2 (test that greps for direct model calls in customer-copy paths)"* — the second half already exists, see §4.4 |
 | **S7** Autonomy promotion from data; experiments; local/GBP and AI-visibility | **M** | **Promotion to L2.** Demotion must be automatic and must fire on the first unsupported claim reaching the public, which means C7's online monitor has to exist first | *"Promotion and demotion both tested; spend never auto (test)"* |
+
+---
+
+## 3a. S2 closed — substantially complete, 22 October 2026
+
+Four customer-facing surfaces on the fact-bound pipeline, each confirmed
+on live output and blind-graded by the founder:
+
+| Surface | Verdict |
+|---|---|
+| email | S1's exit, passed |
+| lead message | **PASS** — 10 sentences, 3 cases, 0 F, blind-graded 2026-10-20 |
+| whatsapp | confirmed; withheld-name leak closed, no over-fire |
+| facebook_post | confirmed; hashtags split per tag, scope-filtered, acronym tags opened |
+| product_description | confirmed; wired and paid-run measured |
+
+The decisive change was not another run. It was
+[PLAN-S2-ADVERSARIAL.md](PLAN-S2-ADVERSARIAL.md): 287 adversarial cases
+and ~170 free code-only tests, which found four real faults before a
+rupee was spent, after twenty-five paid runs had found them one at a
+time. [AUDIT-FIELD-CHECKS.md](AUDIT-FIELD-CHECKS.md) is the structural
+audit that closed the last family of leaks — three findings in three
+fields that were one root cause.
+
+### Known issues, parked on the founder's instruction
+
+Documented rather than chased: diminishing returns.
+
+**K1 — an unlicensed benefit claim can sit in a `title`.** salon-11
+shipped `"Keratin Treatment — Ek Session, Smooth Finish"`. The
+introduced-name check abstains on a mostly-Title-Cased short line — a
+rule added for buttons — so every title is invisible to it. Widening it
+was measured and rejected: across the 127 sentences the current runs
+shipped it removed four lines and one was true copy,
+`"2 BHK Flat at Sunrise Heights"`. Separating those needs a list of
+quality words, which is trade vocabulary and barred by CLAUDE.md rule 3.
+**Future fix is model- or prompt-level, not code.** The sheet now puts
+every label row to the grader as a claim, so it is visible rather than
+silent.
+
+**K2 — realty-11's listing came out thin.** Price and size missing from
+the copy though both are on record. A quality gap, not a false claim.
+
+**K3 — Select can choose a thin or wrong fact set, and the judge then
+refuses true copy.** dairy-03 three times chose shipping, discount and
+price for a ghee post, so `Bilona method`, `made by hand` and
+`no preservatives` were removed as uncovered although the ghee's own
+records carry them. This is the "wrongly removed" number, not the
+unsupported-claim number, and it is the one the founder grades first —
+recorded here because it recurred after the credential fix.
+
+**K4 — the output gate mis-types an attributed belief.** Twice, on the
+same sentence shape: *"A lot of people assume ghee adds weight"* came
+back from the gate's re-ask as a `benefit` claim once and a
+`customer_state` claim once. The main pipeline handled it correctly both
+times and published it, which is what the owner's recorded misconception
+row exists to allow. The gate reads one sentence without its frame.
+
+**K5 — the same scope question is answered two different ways.** Select
+asks it through `resolveProduct`, which has deliberate carve-outs for a
+collective reference and for a single-product catalogue. The judge's two
+evidence lists ask `recordSupportsScope` with the raw product name and
+get neither carve-out. So in a single-product slice Select decides scope
+does not apply and the judge's filter decides it does. The credential
+exception of 22 October fixed the case this surfaced through
+(dairy-03's FSSAI licence); **the asymmetry itself is unfixed**, and it
+is on the axis that has already produced one over-correction and one
+under-correction, so it should not be touched without a decision.
 
 ---
 

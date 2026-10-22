@@ -26,6 +26,71 @@ Section 32b: judgment calls made during this audit that weren't explicitly asked
 
 **32a — summary table over full column dump.** `docs/DATABASE.md` documents 87 tables at "purpose + which migration to check" granularity, not full DDL. Chosen because a full dump would duplicate the migrations (the real source of truth) and go stale immediately. If the intent was closer to a complete standalone schema reference, this undershoots that.
 
+## 22 October 2026 — S2's close
+
+**S2a — the estimator was replaced by measurement, not repaired.** Four
+confirmation runs were approved at ~Rs 78 and cost Rs 94.73 because the
+estimator modelled a four-call pipeline that now makes five to nine
+calls. I deleted the hand-written call list rather than updating its
+numbers: a second description of the pipeline drifts the moment the
+pipeline changes, which is how it got wrong in the first place. The
+estimate is now the worst per-case cost anyone has actually paid, plus
+20%, with the measured runs listed by date. Consequence the owner must
+live with: a 6-case run no longer fits the Rs 30 per-run cap, so runs
+are 4-5 cases and the social surface needs three slices.
+
+**S2b — parallel runs now reserve before they check.** The ceiling was
+being checked against the ledger as it stood when all four runs
+started, so each found room for itself in the same Rs 78. A run writes
+its estimate to `spend.d/` before calling anything, and the ceiling
+counts outstanding reservations. Two runs starting in the same instant
+both stop, which is the safe direction.
+
+**S2c — the withheld-subject check is code, not a prompt rule.** The
+scope filter can only judge claims the extractor reported, and the
+extractor is correctly told that calls to action are not claims — so a
+product name inside one was never scope-checked. Rather than weaken
+that rule, a separate code-only check asks which records were withheld
+from this piece and whether the copy names one. Field-blind and
+kind-blind, no model, no cost. Its safety is that a withheld name is
+reduced to the words appearing nowhere in what the writer was given and
+all of them must be present, so a shared word can never delete a true
+sentence.
+
+**S2d — the name check was NOT widened to label fields, and the number
+is why.** Widening it is the obvious fix for an unlicensed benefit claim
+in a title. Measured across the 127 sentences the current runs shipped,
+it removed four lines and one was true copy: "2 BHK Flat at Sunrise
+Heights". Separating that from "Smooth Finish" needs a list of quality
+words, which is trade vocabulary and barred by rule 3. Narrowed back,
+gap recorded in the door's own comment and in the roadmap as K1. The
+grading sheet still puts every label row to the grader as a claim, so
+the gap is visible rather than silent.
+
+**S2e — the credential exception contains exactly one claim type.** A
+business-level record may cover a claim about one named product only
+when the claim type is `credential`. Not process, not material: those
+are the classes the 20 October paneer incident was about. Confirmed by
+an exhaustive free sweep — 6 fixtures, 6,384 record x product x
+claim-type pairs, 532 allowed and all of them credentials, 0 other
+crossovers.
+
+**S2f — three existing source-grep assertions were widened, not
+weakened.** Each pinned the spelling of a mechanism I broadened, and
+each kept its original case explicitly plus behaviour. Flagged to the
+owner in the same turn, per rule 7. One of them earned its keep within
+the hour: `notCopy.test.ts`'s note-chain assertion caught the new
+check's owner note being computed and never shown.
+
+**S2g — two of my own tests were vacuous and were rewritten rather than
+deleted.** A mutation check revealed that dropping `claim.claimType`
+from Select broke only a source grep and not the behavioural test beside
+it, which led to finding that Select never refused dairy-03's claim at
+all — I had reported that it did. The second searched the judge's claims
+block for the licence digits, which the claim's own canonical prints, so
+it passed with the evidence filter mutated out. Both kept, with the
+mistake recorded in the test.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
