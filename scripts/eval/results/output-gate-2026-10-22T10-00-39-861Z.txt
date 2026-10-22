@@ -1,0 +1,28 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-whatsapp-topup-2026-10-22T09-57-20-417Z.json
+cases                3
+sentences            10   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 1.73
+already spent        Rs 1007.67 of Rs 1026.62
+====================================================================
+
+[candle-04]  4 sentence(s)
+      offer "Shipping is free on orders."
+
+[salon-04]  2 sentence(s)
+  NO CLAIMS REPORTED — the same empty answer that made run 8 look clean
+
+[salon-08]  4 sentence(s)
+      price "A fresh haircut costs 400."
+      duration "A fresh haircut takes 30 minutes."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   0
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 1.25
+====================================================================
+WORTH GRADING. Send the sheet.
+====================================================================

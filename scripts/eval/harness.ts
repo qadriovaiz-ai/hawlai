@@ -40,8 +40,15 @@ import type { EvalCase } from "./cases";
  * RAISED HERE AND NOWHERE ELSE, so the number a run prints is the
  * number that was approved. A run whose estimate crosses it does not
  * start.
+ *
+ * 2026-10-22: Rs 46.50 approved for the Option A confirmation of the
+ * field-check audit - WhatsApp 3 cases and social 4 - on a ledger
+ * standing at Rs 980.12, which was itself Rs 16.12 past the previous
+ * ceiling after I overspent an approval. 980.12 + 46.50 = 1026.62, and
+ * the ceiling is now the arithmetic rather than a round number, so
+ * nothing is quietly available that was not approved.
  */
-export const BUDGET_INR = 964;
+export const BUDGET_INR = 1026.62;
 
 /**
  * WHAT A CASE HAS ACTUALLY COST, MEASURED — not modelled.

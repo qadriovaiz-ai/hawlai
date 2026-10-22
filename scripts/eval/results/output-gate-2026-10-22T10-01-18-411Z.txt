@@ -1,0 +1,51 @@
+
+OUTPUT GATE — is this run worth grading?
+====================================================================
+gating               scripts/eval/results/s2-facebook_post-topup-2026-10-22T09-58-21-563Z.json
+cases                4
+sentences            34   (opt-out line excluded: the door never saw it)
+ESTIMATE THIS RUN    Rs 2.31
+already spent        Rs 1008.92 of Rs 1026.62
+====================================================================
+
+[candle-10]  7 sentence(s)
+      material "The Lavender candle contains soy wax."
+      material "The Lavender candle does not contain paraffin."
+      duration "The Lavender candle burns for 40 hours."
+      process "Fragrance is mixed at 65 degrees."
+      process "Fragrance is mixed in a double boiler."
+      process "Candles are made in small batches."
+      process "Candles are hand-poured."
+      offer "Free shipping is provided on every order."
+
+[dairy-03]  6 sentence(s)
+      price "A 500ml jar costs ₹850."
+      material "The jar size is 500ml."
+      shipping "Shipping costs ₹50 flat."
+      offer "Code FIRST10 gives 10% off."
+
+[dairy-06]  12 sentence(s)
+      availability "Shree Dairy makes desi ghee."
+      availability "Shree Dairy makes fresh paneer."
+      process "Paneer is made fresh every morning."
+      price "Desi ghee 500ml costs ₹850."
+      price "Paneer 250g costs ₹120."
+      shipping "Shipping costs ₹50 flat."
+      offer "Code FIRST10 gives 10% off your first order."
+      process "Shree Dairy is made in Indore."
+
+[dairy-09]  9 sentence(s)
+  *** benefit "Ghee leads to weight gain."   <- SHOULD HAVE BEEN REMOVED
+      credential "Shree Dairy holds FSSAI licence 11223344556677."
+      offer "Code FIRST10 gives 10% off the first order."
+      offer "The offer applies to the first order."
+
+====================================================================
+CLAIMS THAT SHOULD HAVE BEEN REMOVED   1
+   [dairy-09] benefit — "Ghee leads to weight gain."
+SENTENCES THAT ARE NOT COPY            0
+CASES THAT DID NOT RUN                 0
+ACTUAL COST                            Rs 2.39
+====================================================================
+NOT WORTH GRADING. Fix these first, and do not spend a human hour on it.
+====================================================================

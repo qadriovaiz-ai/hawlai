@@ -1,0 +1,55 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 4  (candle-10, dairy-03, dairy-06, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 23.72   (per-run cap Rs 30.00)
+already spent         Rs 980.12 of Rs 1026.62
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+committed elsewhere   Rs 17.79   (other runs in flight, or rows not yet merged)
+7 sentence(s), facts note present
+6 sentence(s), facts note present
+12 sentence(s), facts note present
+9 sentence(s), facts note present
+
+==================================================================
+sentences produced    34   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 4
+calls made            35   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                98501 in, 10965 out
+ACTUAL COST THIS RUN  Rs 19.63   (estimated Rs 23.72)
+COST PER EMAIL        Rs 4.91   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 999.75 of Rs 1026.62
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-10]
+     You asked for 500 happy customers. Your records say 2 paid orders and 1 lead on record — no record of 500 customers of any kind — change the record, or I write it without that.
+     Not on record: Total number of customers or orders to date — e.g. 'We have served X customers as of [date]'. Please record the verified figure before it appears in copy.
+     Removed "Candles typically burn for 10 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "This candle lasts longer than the typical 10-hour candle that many people think of." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The Rose candle is made with the same care." — No fact about Rose candle's process or care; facts about Lavender candle's process do not establish Rose candle is made with same care.
+  [dairy-03]
+     Not on record: The post requests a claim that ghee is good for digestion. No record supports a digestion benefit for this product. Owner to record: 'Desi ghee 500ml supports digestion because [specific reason, e.g. contains butyric acid].' This must be owner-stated and, ideally, substantiated before it appears in copy.
+     Removed "#BIlonaMethod" — it names "ilona", which is nowhere in your records.
+     Removed "Most ghee on the shelf has preservatives added." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Most ghee on the shelf has preservatives added, implying ours is different." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "This ghee does not contain preservatives." — No fact states the absence of preservatives. Bilona method and hand-churning signal traditional making but do not state that preservatives are not used..
+     Removed "This ghee carries FSSAI licence 11223344556677." — No fact on record states any FSSAI licence number. The specific credential claimed is not recorded..
+  [dairy-06]
+     Left out: Supports the trust angle of the licence post — a concrete, owner-stated quality commitment. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Removed "Ghee is often blamed for weight gain, but this belief is incomplete." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "The ghee is churned slowly." — No fact states the ghee is churned slowly; Bilona method is mentioned but does not necessarily entail slow churning..
+  [dairy-09]
+     Not on record: The business wants to claim 'ghee se weight nahi badhta' (ghee does not cause weight gain) — no record supports this health/body claim. Owner should record a specific, sourced factual statement about this if they want it in copy — e.g. a citation from a registered nutritionist or a published study they can name.
+     Removed "The 500ml jar is priced at ₹850." — it states 850 ₹ for Bilona Ghee, and that figure belongs to something else.
+     Removed "The desi ghee is made using the Bilona method." — No approved fact states the Bilona method is used. Shipping and discount policies do not cover this claim..
+     Removed "The desi ghee is hand-churned." — No approved fact states the desi ghee is hand-churned. Shipping and discount policies do not cover this claim..
+     Removed "The desi ghee contains no preservatives." — No approved fact states the desi ghee contains no preservatives. Shipping and discount policies do not cover this claim..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-topup-2026-10-22T09-58-21-563Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
