@@ -84,11 +84,55 @@ export function productSlug(name: string | null | undefined): string {
  *                             statement is exactly the right evidence
  *                             for a business-level claim
  */
-export function recordSupportsScope(recordKey: string, aboutProduct: string | null | undefined): boolean {
+/**
+ * Claim types that are BUSINESS-LEVEL BY NATURE, where a product
+ * inherits the fact from the business that sells it.
+ *
+ * THE FOUNDER'S FINDING OF 2026-10-22, and the narrowest possible
+ * exception to the scope rule. dairy-03 lost
+ * "This ghee carries FSSAI licence 11223344556677." although
+ * `the owner wrote: "FSSAI licence 11223344556677."` is on its record -
+ * and the owner was told "No fact on record states any FSSAI licence
+ * number", which is false about their own data. In the SAME run,
+ * dairy-09 published the same licence from the same record, because
+ * that sentence named no product.
+ *
+ * A licence is not like a process. "We hand-churn" does not tell you
+ * whether THIS paneer was hand-churned - that was the 20 October
+ * incident and the scope rule exists for it. But an FSSAI licence is
+ * held by the business, and everything the business sells is sold under
+ * it. Refusing it per product does not protect anyone; it deletes a
+ * true sentence and denies the owner's own record.
+ *
+ * ONLY CREDENTIALS, AND DELIBERATELY NOTHING ELSE. Not process, not
+ * material, not duration, not count. Those are the classes where a
+ * business-level fact genuinely says nothing about one named item, and
+ * widening this set is how the paneer bug comes back. The claim TYPE
+ * decides, never the record's wording - a record can be cited for a
+ * process claim and a credential claim, and only the second inherits.
+ *
+ * THE CONTENT CHECK IS UNTOUCHED. This says a business-level record is
+ * allowed to be CONSIDERED for a credential claim about one product;
+ * whether it actually states that credential is still the judge's call.
+ */
+const BUSINESS_LEVEL_CLAIM_TYPES = new Set(["credential"]);
+
+/** True when a claim of this type is held by the business, not per item. */
+export function inheritsFromBusiness(claimType: string | null | undefined): boolean {
+  return BUSINESS_LEVEL_CLAIM_TYPES.has(String(claimType ?? ""));
+}
+
+export function recordSupportsScope(
+  recordKey: string,
+  aboutProduct: string | null | undefined,
+  claimType?: string | null
+): boolean {
   const scope = scopeOfKey(recordKey);
   const wanted = productSlug(aboutProduct);
   if (!wanted) return true;
   if (scope.kind === "policy") return true;
+  // A credential is the business's, and the product is sold under it.
+  if (scope.kind === "business" && inheritsFromBusiness(claimType)) return true;
   // TOLERANT, NOT EXACT, and the same reasoning as the figure check of
   // 18 October: slug equality refused a true price because the sentence
   // said "ghee" and the catalogue said "Desi ghee 500ml".

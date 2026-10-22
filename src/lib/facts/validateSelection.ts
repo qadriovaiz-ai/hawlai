@@ -350,7 +350,10 @@ export function validateSelection(
       });
       continue;
     }
-    if (named.kind === "known" && !cited.some((r) => recordSupportsScope(r.key, named.slug))) {
+    // THE CREDENTIAL EXCEPTION APPLIES HERE TOO, or dairy-03's claim
+    // dies at step 2 and never reaches the judge at all. A licence is
+    // the business's and the product is sold under it.
+    if (named.kind === "known" && !cited.some((r) => recordSupportsScope(r.key, named.slug, claim.claimType))) {
       rejected.push({
         claim,
         rule: "wrong_scope",

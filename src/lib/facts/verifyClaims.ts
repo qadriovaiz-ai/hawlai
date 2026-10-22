@@ -20,7 +20,7 @@ import { CLAUDE_MODELS } from "@/lib/models";
 import { NEEDS_RECIPIENT_RECORD, UNLICENSABLE_TYPES, placeholderFree, type ExtractedClaim } from "@/lib/facts/extractClaims";
 import type { SelectedClaim } from "@/lib/facts/selectClaims";
 import type { FactRecord } from "@/lib/facts/factRecord";
-import { describeCoverage, recordSupportsScope, sameProductName, scopeOfKey } from "@/lib/facts/scope";
+import { describeCoverage, inheritsFromBusiness, recordSupportsScope, sameProductName, scopeOfKey } from "@/lib/facts/scope";
 import { atScale, isScaleOnly } from "@/lib/facts/scale";
 import { figureInText } from "@/lib/facts/validateSelection";
 
@@ -172,10 +172,11 @@ RULES
 export function approvedForJudge(
   approved: SelectedClaim[],
   records: FactRecord[] = [],
-  aboutProduct?: string | null
+  aboutProduct?: string | null,
+  writtenClaimType?: string | null
 ): string {
   return approved
-    .filter((c) => supportsProduct(c, records, aboutProduct))
+    .filter((c) => supportsProduct(c, records, aboutProduct, writtenClaimType))
     .map((c) => `- ${c.intent || c.claimType}${valueForJudge(c)}${citedWords(c, records)}${scopeLine(c, records)}`)
     .join("\n");
 }
@@ -212,15 +213,30 @@ export function approvedForJudge(
  * one product every approved claim is fair evidence, which is what
  * keeps "the candles burn for 40 hours" sayable.
  */
-function supportsProduct(claim: SelectedClaim, records: FactRecord[], aboutProduct?: string | null): boolean {
+function supportsProduct(
+  claim: SelectedClaim,
+  records: FactRecord[],
+  aboutProduct?: string | null,
+  /**
+   * The type of the WRITTEN claim this evidence is for — not the
+   * selected claim's own type. A credential is held by the business and
+   * inherited by what it sells, so for that one class a business-level
+   * record is allowed in. Everything else keeps the 20 October rule.
+   */
+  writtenClaimType?: string | null
+): boolean {
   if (!aboutProduct) return true;
   if (claim.aboutProduct && sameProductName(claim.aboutProduct, aboutProduct)) return true;
   return claim.factIds.some((id) => {
     const record = records.find((r) => r.id === id);
     if (!record) return false;
     // Store-wide policy covers every product; a business-level fact
-    // does not cover one named product.
-    return recordSupportsScope(record.key, aboutProduct) && scopeOfKey(record.key).kind !== "business";
+    // does not cover one named product — unless the claim is one the
+    // product inherits from the business, which is credentials only.
+    if (scopeOfKey(record.key).kind === "business") {
+      return inheritsFromBusiness(writtenClaimType);
+    }
+    return recordSupportsScope(record.key, aboutProduct, writtenClaimType);
   });
 }
 
@@ -254,7 +270,12 @@ function supportsProduct(claim: SelectedClaim, records: FactRecord[], aboutProdu
  * and a figure is still decided by arithmetic. This widens the EVIDENCE
  * the judge may read, not the standard it applies.
  */
-export function alsoOnRecord(approved: SelectedClaim[], records: FactRecord[], aboutProduct?: string | null): string {
+export function alsoOnRecord(
+  approved: SelectedClaim[],
+  records: FactRecord[],
+  aboutProduct?: string | null,
+  writtenClaimType?: string | null
+): string {
   const cited = new Set(approved.flatMap((c) => c.factIds));
   // SCOPE IS ENFORCED HERE, IN CODE, NOT LEFT TO THE RUBRIC.
   //
@@ -282,7 +303,7 @@ export function alsoOnRecord(approved: SelectedClaim[], records: FactRecord[], a
       r.value !== null &&
       r.value !== undefined &&
       r.value !== "" &&
-      recordSupportsScope(r.key, aboutProduct)
+      recordSupportsScope(r.key, aboutProduct, writtenClaimType)
   );
   if (!rest.length) return "";
   return rest.map((r) => `- ${r.recordedText}${r.unit ? ` (${r.value} ${r.unit})` : ""} [${describeCoverage(r.key)}]`).join("\n");
@@ -522,8 +543,8 @@ export async function verifyClaims(
   // is how the ghee's hand-churning reached the paneer.
   const numbered = forJudge
     .map((c, i) => {
-      const chosen = approvedForJudge(approved, opts.records ?? [], c.aboutProduct);
-      const covering = alsoOnRecord(approved, opts.records ?? [], c.aboutProduct);
+      const chosen = approvedForJudge(approved, opts.records ?? [], c.aboutProduct, c.claimType);
+      const covering = alsoOnRecord(approved, opts.records ?? [], c.aboutProduct, c.claimType);
       const head =
         `[${i}] (${c.claimType}) ${c.canonical}` +
         (chosen
