@@ -213,6 +213,88 @@ own site and his own instruction each time.
 
 ---
 
+## 4a. Where P0–P4 ended up (22 October 2026)
+
+All four built, all free, each committed on its own with mutation
+checks. 291 test files, 4,845 tests, `tsc` clean.
+
+| Phase | What landed | The part worth knowing |
+|---|---|---|
+| **P0** | `autonomyLevels.ts`, migration 209 | **L2 is not expressible in the database.** The CHECK allows `'L0'` and `'L1'` only, so no row can say L2 until a later migration widens it. A code-only guard would be one edit away from gone. Spend, delete and critical actions are pinned to L0 by action TYPE, and the test walks every one in the registry rather than the one I thought of |
+| **P1** | `undo?()` on `PublishPlatform`, implemented in `hawlaiSite` | **Page meta has an undo for the first time.** It also warns that a search listing takes days to re-crawl, which page text never needs to say. `undo?()` is optional, and that is load-bearing: `canHoldL1` refuses L1 without one, so Shopify and Meta leaving it off is a statement with a consequence |
+| **P2** | the moved-on check; selection by `action_id` | Undo never asked the question `executeText` asks before every write. If a line now says neither what the edit set nor what it said before, something changed it since, and restoring would wipe that out silently. Refused, with what the line actually says now |
+| **P3** | levels read from the table, in `createPublishAction` | **Nothing changes until a row exists.** Empty table, missing row and read error all read as L0, so all 4,845 tests passed unchanged. `approvalCoverage.test.ts` extended, never loosened |
+| **P4** | `verifyEditedText`, wired behind `FACT_BOUND_COPY` | The owner's dictated words are never checked; model-written wording goes through the extractor, the second net and the judge. **Refused, not trimmed** — half a line the owner asked for is worse than none |
+
+### Two things I reported wrongly and corrected
+
+**"Undo must store a previous version."** The architecture plan's sizing
+said so and this plan repeated it. It was already stored, on
+`preview.changes[].before`. No new table.
+
+**"Select kills dairy-03's claim at step 2."** It does not.
+`resolveProduct` returns `none` for a single-product catalogue on
+purpose — "a single-product catalogue has no such gap, so scope never
+blocks" — so Select approved it before the fix and after. The gate that
+deleted it was the judge's evidence filter. Found by a mutation check,
+not by reading.
+
+**"A naive reuse of the verifier would refuse every edited line."**
+Half wrong. An edit has no Select step, so `approved` is empty — and the
+verifier was already built for that: the figures records-fallback ("not
+only what Select happened to pick") and rubric rule 9 ("the second
+heading is not weaker than the first"). Both added after real incidents.
+No framing change was needed.
+
+---
+
+## 4b. P5 — the live exit test, as a runbook
+
+Three things to check, in this order. Each is the founder at the screen;
+nothing here can be verified from a test suite.
+
+### 1. The founder's own test — edit, approve, verify, undo
+
+1. In chat: *"homepage pe heading badal do: <exact words>"* — give the
+   wording yourself, so provenance is `writtenByOwner` and nothing is
+   claim-checked.
+2. Approve the card. The page at `/site/candle-by-qaaf` should show it.
+3. In chat: *"undo that"*. The card should name **which** edit it is
+   reversing.
+4. Approve. The old heading should be back.
+
+**What would be a finding:** the undo card naming a different edit, or
+the `from` value on it not matching what the page currently says.
+
+### 2. The new half — undo a search listing
+
+Same loop with *"page ka search title badal do"*, then *"undo that"*.
+This has never been possible before. Expect the warning that Google
+re-reads a listing in its own time — the title in search may lag, and
+that is not a failure.
+
+### 3. The fact check on an edit — needs the flag
+
+Only with `FACT_BOUND_COPY=1` set on the deployment. Ask for wording
+the records cannot support without dictating it, e.g. *"heading mein
+likho ki hamari candles market se behtar jalti hain"*. It should be
+**refused with the reason**, not published and not trimmed. Then say
+*"ye mere exact words hain, aise hi likho"* — and it should be saved
+verbatim with a warning that the owner is the one standing behind it.
+
+**Cost:** two or three Haiku calls per model-written edit, about
+Rs 0.4–0.8. Zero on anything dictated.
+
+### What P5 cannot tell us
+
+Whether levels work. `action_levels` is empty, so every action is still
+L0 and the test above exercises the approval path exactly as it was. L1
+is a separate, deliberate decision — the SQL to set it and to take it
+back is in chat rather than in this document, because turning it on
+changes whether the founder is asked before his own site changes.
+
+---
+
 ## 5. Risks, with the evidence for each
 
 **R1 — Undo reverses the wrong edit.** M2. Today's selection is a
