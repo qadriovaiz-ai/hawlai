@@ -201,19 +201,37 @@ async function detectCandidates(supabase: any, dealershipId: string): Promise<Ca
 export async function syncOpportunities(supabase: any, dealershipId: string): Promise<void> {
   const candidates = await detectCandidates(supabase, dealershipId);
 
-  const { data: openOpportunities } = await supabase
+  // OPEN **AND REJECTED** — S4/P0, and this is what makes the 30-day
+  // cooldown real rather than advisory.
+  //
+  // This read used to ask for 'open' only, and anything it could not
+  // see was inserted fresh. So a finding the owner rejected yesterday
+  // was detected again today, inserted as a new 'open' row, and
+  // surfaced — with its rejection, and its cooldown, left behind on a
+  // row nobody looked at. Migration 210 widens the unique index to
+  // cover 'rejected' for the same reason, and the two have to land
+  // together: the index alone would turn that re-insert into a failed
+  // insert instead of a correct skip, and the insert's error is not
+  // checked.
+  const { data: liveOpportunities } = await supabase
     .from("opportunities")
-    .select("id, type, reference_id")
+    .select("id, type, reference_id, status")
     .eq("dealership_id", dealershipId)
-    .eq("status", "open");
+    .in("status", ["open", "rejected"]);
 
-  const openKeys = new Set((openOpportunities ?? []).map((o: any) => `${o.type}:${o.reference_id}`));
+  const live = liveOpportunities ?? [];
+  const liveKeys = new Set(live.map((o: any) => `${o.type}:${o.reference_id}`));
+  // Resolution is still about OPEN rows only. A rejected finding whose
+  // issue has gone is left exactly as it is: completing it would clear
+  // the cooldown, which is the opposite of what the owner asked for
+  // when they said no.
+  const openOpportunities = live.filter((o: any) => o.status === "open");
   const candidateKeys = new Set(candidates.map((c) => `${c.type}:${c.reference_id ?? "singleton"}`));
 
-  // Insert anything newly detected that isn't already open.
-  const toInsert = candidates.filter((c) => !openKeys.has(`${c.type}:${c.reference_id ?? "singleton"}`));
+  // Insert anything newly detected that is not already live.
+  const toInsert = candidates.filter((c) => !liveKeys.has(`${c.type}:${c.reference_id ?? "singleton"}`));
   if (toInsert.length > 0) {
-    await supabase.from("opportunities").insert(
+    const { error: insertError } = await supabase.from("opportunities").insert(
       toInsert.map((c) => ({
         dealership_id: dealershipId,
         type: c.type,
@@ -224,10 +242,16 @@ export async function syncOpportunities(supabase: any, dealershipId: string): Pr
         action_href: c.action_href ?? null,
       }))
     );
+    // CHECKED, because Perceive failing silently reads as "nothing is
+    // wrong with this business" — the most expensive kind of quiet in
+    // this whole loop.
+    if (insertError) {
+      console.error(`[opportunityAgent] insert failed for ${dealershipId}: ${insertError.message}`);
+    }
   }
 
   // Auto-resolve open opportunities whose underlying issue no longer applies.
-  const toResolve = (openOpportunities ?? []).filter(
+  const toResolve = openOpportunities.filter(
     (o: any) => !candidateKeys.has(`${o.type}:${o.reference_id}`)
   );
   if (toResolve.length > 0) {
