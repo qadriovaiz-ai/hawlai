@@ -1,0 +1,73 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 1of2  (candle-02, candle-03, candle-06, candle-10, salon-02, salon-03)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 885.39 of Rs 964.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+7 sentence(s), facts note present
+9 sentence(s), facts note present
+8 sentence(s), facts note present
+7 sentence(s), facts note present
+4 sentence(s), facts note present
+4 sentence(s), facts note present
+
+==================================================================
+sentences produced    39   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            52   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                145489 in, 16485 out
+ACTUAL COST THIS RUN  Rs 29.65   (estimated Rs 15.28)
+COST PER EMAIL        Rs 4.94   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 915.04 of Rs 964.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-02]
+     Not on record: Does the lavender candle use a specific type or origin of lavender fragrance? Record it against the product so the copy can name it.
+     Not on record: Is there a scent throw or fragrance load percentage recorded for the lavender candle specifically? If so, record it against the product.
+     Not on record: Is there a product photo or visual asset available for this post? The owner should confirm what image will accompany it.
+     Removed "People often think candles last only 10 hours." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "Your candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "The fragrance in the Lavender candle is mixed at exactly 65 degrees." — No fact states the fragrance is mixed at exactly 65 degrees. The record says 'Fragrance ko 65 degrees par milana padta hai' (fragrance must be mixed at 65 degrees), but this describes a requirement for the process, not a specific fact about this candle's fragrance mixing..
+     Removed "The 40-hour burn time of the Lavender candle is possible because of the soy wax and the fragrance mixed at exactly 65 degrees." — This claims a causal link: that the 40-hour burn time is 'possible because of' the soy wax and fragrance at 65 degrees. The facts state both elements exist, but do not state the causal connection — that is a separate assertion not supported by the records..
+  [candle-03]
+     Removed "Most people think an ordinary candle burns for 8-10 hours." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Your Lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "The Lavender candle burns for 40 hours because no shortcuts are taken in the process." — No fact states that the 40-hour burn is because no shortcuts are taken. The burn time and the process are separate facts; causation is not established..
+     Removed "Free delivery applies to all locations including Shahjahanpur and elsewhere." — The fact 'shipping is free' does not specify which locations are covered. The business location (Shahjahanpur) and free shipping are separate facts; neither establishes delivery coverage to all locations..
+  [candle-06]
+     Not on record: Does this candle use lavender fragrance specifically, and is it natural or synthetic? Please record this against the Lavender candle product so the post can truthfully connect it to sleep or relaxation.
+     Not on record: Is there any specific sleep or relaxation benefit the owner wants to claim for this candle? If so, please record the basis for that claim (e.g. a customer testimonial, an ingredient note) so it can be cited.
+     Removed "People believe the candle lasts 10 hours." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "The lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+  [candle-10]
+     You asked for 500 happy customers. Your records say 2 paid orders and 1 lead on record — no record of 500 customers of any kind — change the record, or I write it without that.
+     Not on record: Total number of customers or orders to date — e.g. 'We have served X customers as of [date].' Please record the verified figure before it appears in copy.
+     Removed "#SoyWaxCandles" — it names "candles", which is nowhere in your records.
+     Removed "When both the wax and the process are correct, the candle burns longer." — nothing on record can support a benefit claim.
+     Removed "Our Lavender candle will burn for 40 hours." — nothing on record can support a benefit claim.
+     Removed "Our candles last longer than what people typically assume (10 hours)." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "This process is used for every candle made by Candle by Qaaf." — The facts describe the process used but do not state it is used for every candle made by the business..
+  [salon-02]
+     Left out: Shows the step-by-step process: hair wash first, then treatment — builds trust. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Left out: Korean products origin — adds a quality/provenance signal to the post. — a process claim needs a record that can establish "process", and the one(s) cited cannot.
+     Not on record: Does the business want to include a booking method (phone number, DM, WhatsApp link)? Please record the preferred booking contact or URL so the post can include a clear call to action.
+     Not on record: Are there any before/after results or client outcomes the business wants to mention? Please record a specific, factual result (e.g. 'frizz reduced for X weeks') so it can be cited.
+     Removed "Your hair straightening will be done in ninety minutes." — nothing on record can support a benefit claim.
+     Removed "The Keratin Treatment includes a thorough hair wash followed by application of products from Korea." — No approved fact states the treatment includes a hair wash or Korean products. Price and duration alone do not describe the process..
+     Removed "The Keratin Treatment contains no ammonia." — No approved fact states the treatment contains no ammonia. Price and duration do not establish the chemical composition..
+  [salon-03]
+     Not on record: How long does the keratin treatment result last on the hair (e.g., 'Results last X weeks/months') — please record this against the keratin treatment so the post can state it.
+     Removed "A keratin treatment session consists of a hair wash followed by treatment." — The approved facts only state the duration (90 minutes), not the process or steps involved (hair wash followed by treatment)..
+     Removed "The business does not use ammonia-containing products in keratin treatment." — The approved facts do not mention ammonia-containing products or their absence. Duration and price alone do not state what products are or are not used..
+     Removed "The products used in keratin treatment come from Korea." — The approved facts do not state the origin of products. No information about Korea or product sourcing is recorded..
+     Removed "Keratin treatment bookings can be made on /book/shine-studio." — The approved facts do not mention booking methods or URLs. Duration and price do not establish where or how bookings can be made..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-1of2-2026-10-22T08-55-33-248Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

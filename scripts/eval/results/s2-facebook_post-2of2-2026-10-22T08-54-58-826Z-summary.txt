@@ -1,0 +1,78 @@
+
+EXIT TEST — the fact-bound pipeline on facebook_post
+==================================================================
+cases                 6 of this surface, slice 2of2  (salon-07, salon-09, dairy-02, dairy-03, dairy-06, dairy-09)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 885.39 of Rs 964.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is facebook_post.
+Its own 13 October baseline: see the graded sheet, surface facebook_post.
+8 sentence(s), facts note present
+6 sentence(s), facts note present
+6 sentence(s), facts note present
+8 sentence(s), facts note present
+6 sentence(s), facts note present
+4 sentence(s), facts note present
+
+==================================================================
+sentences produced    38   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            47   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                121868 in, 13625 out
+ACTUAL COST THIS RUN  Rs 24.89   (estimated Rs 15.28)
+COST PER EMAIL        Rs 4.15   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 910.28 of Rs 964.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [salon-07]
+     Not on record: Award-winning stylists: no record confirms any award, recognition, certification or credential held by the stylists or the business. Please record the specific award name, awarding body, and year so this claim can be made.
+     Removed "The products used do not contain ammonia and are imported from Korea, making them safe for hair." — nothing on record can support a safety claim.
+  [salon-09]
+     Not on record: everything — the business's records could not be read just now
+  [dairy-02]
+     Left out: Lead with the traditional Bilona method — the core differentiator for this product. — it cites a record (e138f4eb) that does not exist.
+     Not on record: What milk source is used for the ghee (e.g., A2 cow, buffalo)? Record it against product.desi_ghee_500ml so the copy can name it.
+     Not on record: Is the FIRST10 offer specific to the Desi Ghee 500ml, or sitewide? Record the scope against the offer so the copy can state it accurately.
+     Removed "#FreshPaneer" — it names "paneer", which is nowhere in your records.
+     Removed "The Bilona method takes more time and effort than the usual process." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "250g of paneer costs ₹120." — it states 120 ₹, and the figures on record are 850 INR, 10 percent, 50 INR, 11223344556677.
+     Removed "Ghee causes weight gain." — nothing on record can support a benefit claim.
+     Removed "Ghee will not cause weight gain." — nothing on record can support a benefit claim.
+     Removed "Desi Ghee has nothing added to it." — No fact states that nothing is added. 'No preservatives' does not entail 'nothing added' — absence of one thing is not absence of a kind of thing (Rule 2)..
+     Removed "Paneer is made fresh every morning." — No fact chosen or on record covers paneer or its freshness. The facts listed are store-wide policies (discount, shipping) with no scope to paneer..
+  [dairy-03]
+     You asked for Ghee is good for digestion. Your records say No record exists that supports a claim about what this ghee does to the reader's digestion or body. Rule 6 also prohibits selecting claims about what a product will do to the reader's body or health. — change the record, or I write it without that.
+     Not on record: Does the business have a recorded statement specifically about this ghee's digestive or gut-health properties? If so, record it against product.desi_ghee_500ml so it can be cited in copy.
+     Removed "Most people assume ghee causes weight gain." — it says something about the reader's own order or booking, and nothing here knows who is reading it.
+     Removed "Making desi ghee using the Bilona method takes longer than making it another way." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Ghee causes weight gain." — nothing on record can support a benefit claim.
+     Removed "The desi ghee is hand-churned." — The Bilona method is recorded, but hand-churning is not stated. The Bilona method is a traditional slow process, but this does not necessarily mean hand-churned — it is a stronger claim than what is recorded..
+     Removed "The desi ghee contains no preservatives." — No fact states that the desi ghee contains no preservatives. The Bilona method being traditional does not state the absence of preservatives — that would require an explicit statement about ingredients or additives..
+     Removed "The desi ghee is FSSAI licensed with license number 11223344556677." — No fact on record states any FSSAI license number or licensing status. This credential is not mentioned in any of the available facts..
+  [dairy-06]
+     Removed "Most ghee found in shops contains preservatives." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "A 500ml jar of ghee costs ₹850." — it states 850 ₹, and the figures on record are FSSAI licence 11223344556677..
+     Removed "This ghee does not contain preservatives." — Shipping policy and discount code do not state the material composition or absence of preservatives in ghee..
+     Removed "The absence of preservatives is recorded on the FSSAI licence numbered 11223344556677." — Shipping policy and discount code do not state what is recorded on an FSSAI licence..
+     Removed "The desi ghee is made using the Bilona method." — Shipping policy and discount code do not state the manufacturing method of ghee..
+     Removed "The curd is churned by hand." — Shipping policy and discount code do not state how curd is processed..
+     Removed "The butter is separated slowly." — Shipping policy and discount code do not state how butter is separated..
+     Removed "The ghee is then clarified." — Shipping policy and discount code do not state the clarification process of ghee..
+     Removed "No shortcuts are taken in making the ghee." — Shipping policy and discount code do not state whether shortcuts are taken in production..
+  [dairy-09]
+     You asked for Ghee se weight nahi badhta (health/body claim). Your records say Koi bhi record yeh claim support nahi karta. Records mein sirf process, ingredients aur credentials hain — body ya weight ke baare mein kuch nahi. — change the record, or I write it without that.
+     Not on record: Does the business have any recorded customer feedback, nutritional data, or expert/dietitian statement about ghee and weight that can be cited? Please record it as a specific, sourced fact before this claim is made in copy.
+     Removed "#FreshPaneer" — it names "paneer", which is nowhere in your records.
+     Removed "Ghee leads to weight gain." — it compares with someone else's product, and nothing this business records about itself can establish that.
+     Removed "Shree Dairy's paneer is available to order at ₹120 for 250g." — it states 120 ₹, and the figures on record are 850 inr.
+     Removed "What you put in matters for weight gain." — nothing on record can support a benefit claim.
+     Removed "Shree Dairy's desi ghee contains no preservatives." — No fact states that desi ghee contains no preservatives. The Bilona method and hand-churning are processes, not statements about preservative content..
+     Removed "Shree Dairy's products are made the way they have been for generations." — The fact that a product uses a 'traditional process' (Bilona method) does not state that it has been made the same way for generations. Traditional does not necessarily mean generational continuity..
+     Removed "Shree Dairy's paneer is made fresh every morning." — No fact on record covers paneer or when it is made. The facts are only about desi ghee..
+
+GRADE THIS: scripts\eval\results\s2-facebook_post-2of2-2026-10-22T08-54-58-826Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

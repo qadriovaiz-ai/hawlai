@@ -1,0 +1,33 @@
+
+EXIT TEST — the fact-bound pipeline on product_description
+==================================================================
+cases                 6  (candle-11, salon-11, dairy-11, coach-11, rest-11, realty-11)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 885.39 of Rs 964.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is product_description.
+Its own 13 October baseline: see the graded sheet, surface product_description.
+6 sentence(s)
+6 sentence(s)
+5 sentence(s)
+4 sentence(s)
+7 sentence(s)
+4 sentence(s)
+
+==================================================================
+sentences produced    32   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            30   (4 per email: select, write, extract, judge)
+cases retried         0   (spacing 4000ms between cases)
+tokens                78566 in, 12636 out
+ACTUAL COST THIS RUN  Rs 20.75   (estimated Rs 15.28)
+COST PER EMAIL        Rs 3.46   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 906.14 of Rs 964.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+
+GRADE THIS: scripts\eval\results\s2-product_description-2026-10-22T08-54-36-114Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.

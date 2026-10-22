@@ -41,27 +41,56 @@ import type { EvalCase } from "./cases";
  * number that was approved. A run whose estimate crosses it does not
  * start.
  */
-export const BUDGET_INR = 915;
+export const BUDGET_INR = 964;
 
 /**
- * What one case is expected to cost, before it runs.
+ * WHAT A CASE HAS ACTUALLY COST, MEASURED — not modelled.
  *
- * Deliberately PESSIMISTIC: three calls, a fat prompt and a long
- * answer. An estimate that comes in under the actual is worse than
- * useless — it is the number a budget was approved against.
+ * FOUND ON 2026-10-22, AFTER OVERSPENDING AN APPROVAL BY Rs 16.73.
+ * Four runs were approved at about Rs 78 on the strength of this
+ * function, and cost Rs 94.73. The estimate was not slightly out; it
+ * described a pipeline that no longer exists.
+ *
+ * The old version modelled exactly four calls an email - select,
+ * write, extract, judge - at 1500/1100/900/700 input tokens, plus 20%.
+ * Every one of those numbers has since been overtaken by this
+ * session's own work:
+ *
+ *   the second net        extractUnlicensable is a FIFTH call, added
+ *                         beside the extractor and never added here
+ *   the second pass       runFactChecks runs again after the retries
+ *                         whenever the copy changed
+ *   the retry itself      a removal means writing and re-verifying
+ *   bigger prompts        the records block, the two evidence headings
+ *                         and rubric rules 8-10 took input from ~1100
+ *                         to ~2600 tokens a call
+ *
+ * Measured calls per case on 2026-10-22: 8.7, 7.8, 7.0, 5.0 against
+ * the four this modelled.
+ *
+ * SO IT IS NO LONGER MODELLED AT ALL. A hand-written call list is a
+ * second description of the pipeline, and it drifts the moment the
+ * pipeline changes - the same fault as the output gate keeping its own
+ * arithmetic (B18). These are the rupees four real runs cost, divided
+ * by their cases, and the estimate is the WORST of them plus headroom.
+ * When the pipeline grows another call, the next run's actual cost
+ * lands here and the estimate follows reality instead of leading it.
  */
-export const ESTIMATE = {
-  callsPerCase: 3,
-  inputTokensPerCall: 2600,
-  outputTokensPerCall: 420,
-};
+export const MEASURED_PER_CASE_INR: { on: string; surface: string; inr: number; cases: number }[] = [
+  { on: "2026-10-22", surface: "whatsapp", inr: 19.44, cases: 6 },
+  { on: "2026-10-22", surface: "facebook_post 1of2", inr: 29.65, cases: 6 },
+  { on: "2026-10-22", surface: "facebook_post 2of2", inr: 24.89, cases: 6 },
+  { on: "2026-10-22", surface: "product_description", inr: 20.75, cases: 6 },
+];
 
-export function estimateInr(caseCount: number, model: string = CLAUDE_MODELS.standard): number {
-  const perCall = costOfClaudeResponseInr(
-    { input_tokens: ESTIMATE.inputTokensPerCall, output_tokens: ESTIMATE.outputTokensPerCall },
-    model
-  );
-  return Math.round(perCall * ESTIMATE.callsPerCase * caseCount * 100) / 100;
+/** The dearest case anyone has actually paid for, in rupees. */
+export const WORST_MEASURED_PER_CASE_INR = Math.max(...MEASURED_PER_CASE_INR.map((m) => m.inr / m.cases));
+
+export function estimateInr(caseCount: number): number {
+  // 20% headroom on the worst measured case. An estimate that comes in
+  // UNDER is the one that matters: it is the number an approval is
+  // asked for.
+  return Math.round(WORST_MEASURED_PER_CASE_INR * caseCount * 1.2 * 100) / 100;
 }
 
 /** A running tally of what a run actually spent, read off the API's own usage. */

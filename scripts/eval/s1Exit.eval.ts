@@ -23,10 +23,19 @@
 //     the paid run, with FACT_BOUND_COPY forced on
 
 import { describe, it, expect } from "vitest";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { CASES } from "./cases";
-import { BUDGET_INR, Spend, meterFetch, toGradedRows, gradingSheet, type GradedSentence } from "./harness";
+import {
+  BUDGET_INR,
+  Spend,
+  estimateInr,
+  WORST_MEASURED_PER_CASE_INR,
+  meterFetch,
+  toGradedRows,
+  gradingSheet,
+  type GradedSentence,
+} from "./harness";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
 
@@ -53,6 +62,14 @@ const LEDGER = join("scripts", "eval", "spend.json");
 /** Where a parallel run puts its own row, to be merged afterwards. */
 const LEDGER_D = join("scripts", "eval", "spend.d");
 const PER_RUN_CAP_INR = 30;
+/**
+ * This process's name for its own reservation.
+ *
+ * Not `label`, which is only built once the run is over because it
+ * carries the finishing timestamp. The pid is in it so two runs of the
+ * same surface reserve separately instead of overwriting each other.
+ */
+const RESERVE_KEY = `${process.env.EVAL_SURFACE ?? "email"}${process.env.EVAL_SLICE ? `-${process.env.EVAL_SLICE}` : ""}-${process.pid}`;
 
 /**
  * The cases for the surface under test.
@@ -162,16 +179,59 @@ function loadKey(): boolean {
   return false;
 }
 
-/** Four calls an email: select and write on sonnet, extract and judge on haiku. */
-function estimateInr(caseCount: number): number {
-  const per =
-    costOfClaudeResponseInr({ input_tokens: 1500, output_tokens: 350 }, CLAUDE_MODELS.standard) +
-    costOfClaudeResponseInr({ input_tokens: 1100, output_tokens: 450 }, CLAUDE_MODELS.standard) +
-    costOfClaudeResponseInr({ input_tokens: 900, output_tokens: 400 }, CLAUDE_MODELS.fast) +
-    costOfClaudeResponseInr({ input_tokens: 700, output_tokens: 200 }, CLAUDE_MODELS.fast);
-  // 20% headroom: the first baseline's estimate was 4x its actual, and
-  // an estimate that comes in UNDER is the one that matters.
-  return Math.round(per * caseCount * 1.2 * 100) / 100;
+/**
+ * What other runs have already committed but not yet spent.
+ *
+ * THE HOLE THE Rs 16.73 WENT THROUGH, on 2026-10-22. Four runs were
+ * started in parallel, as the founder asked. Each read the ledger,
+ * found Rs 885.39 spent against a Rs 964 ceiling, added its own
+ * Rs 15.28 estimate, saw Rs 900.67 and began. All four were right about
+ * the ledger and all four were wrong about the room: none of them could
+ * see the other three.
+ *
+ * The comment on the ledger write said the stale figure was "accurate
+ * for the decision it informs - whether the run may begin". It was not.
+ * It is accurate for REPORTING what had been spent, which is the only
+ * thing I checked it against.
+ *
+ * So a run now RESERVES its estimate in spend.d/ before it calls
+ * anything, and the ceiling is checked against the ledger plus every
+ * outstanding reservation and unmerged row. Written first and read
+ * back after, so two runs starting in the same instant both see each
+ * other; if that reads over the ceiling they both stop, which is the
+ * safe direction.
+ */
+function outstandingInr(exceptKey: string): number {
+  if (!existsSync(LEDGER_D)) return 0;
+  let total = 0;
+  for (const f of readdirSync(LEDGER_D)) {
+    if (!f.endsWith(".json") || f === `${exceptKey}.reserve.json`) continue;
+    try {
+      total += Number(JSON.parse(readFileSync(join(LEDGER_D, f), "utf8")).inr ?? 0);
+    } catch {
+      // A row that cannot be read is not a reason to spend. Treat an
+      // unreadable reservation as a full one rather than as zero.
+      total += WORST_MEASURED_PER_CASE_INR * 6 * 1.2;
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function reserve(label: string, inr: number): void {
+  mkdirSync(LEDGER_D, { recursive: true });
+  writeFileSync(
+    join(LEDGER_D, `${label}.reserve.json`),
+    JSON.stringify({ at: new Date().toISOString(), label: `RESERVATION ${label}`, inr, calls: 0 }, null, 2),
+    "utf8"
+  );
+}
+
+function releaseReservation(label: string): void {
+  try {
+    rmSync(join(LEDGER_D, `${label}.reserve.json`), { force: true });
+  } catch {
+    /* the row is written; a stale reservation only ever over-counts */
+  }
 }
 
 /**
@@ -267,8 +327,18 @@ describe("the S1 exit test", () => {
     // backwards in the worst possible way - a stub costs nothing, and
     // the moment it matters MOST is exactly when the budget is almost
     // gone and no paid run is available to prove a wiring works.
-    if (!STUB && (estimate > PER_RUN_CAP_INR || estimate + spentSoFar > BUDGET_INR)) {
+    // RESERVED BEFORE THE CHECK, NOT AFTER. The reservation is what a
+    // run starting a moment later can see; writing it only once this
+    // run is cleared is how four runs all cleared the same room.
+    if (!STUB) reserve(RESERVE_KEY, estimate);
+    const committed = STUB ? 0 : outstandingInr(RESERVE_KEY);
+    if (committed > 0) {
+      say(`committed elsewhere   Rs ${committed.toFixed(2)}   (other runs in flight, or rows not yet merged)`);
+    }
+    if (!STUB && (estimate > PER_RUN_CAP_INR || estimate + committed + spentSoFar > BUDGET_INR)) {
       say("STOPPING: over a ceiling. Nothing was called.");
+      say(`  this run Rs ${estimate.toFixed(2)} + committed Rs ${committed.toFixed(2)} + spent Rs ${spentSoFar.toFixed(2)} against Rs ${BUDGET_INR.toFixed(2)}`);
+      releaseReservation(RESERVE_KEY);
       return;
     }
     if (!GO && !STUB) {
@@ -426,13 +496,22 @@ describe("the S1 exit test", () => {
       // the worst version of B18.
       //
       // So a run writes its row to spend.d/ and nothing else, and the
-      // rows are merged into spend.json afterwards. The "already spent"
-      // figure each parallel run PRINTS is therefore the total as it
-      // stood when they all started, which is accurate for the decision
-      // it informs — whether the run may begin — and is reconciled
-      // after.
+      // rows are merged into spend.json afterwards.
+      //
+      // THE SENTENCE THAT USED TO BE HERE WAS WRONG, and it cost
+      // Rs 16.73 on 2026-10-22. It said the stale "already spent"
+      // figure was "accurate for the decision it informs — whether the
+      // run may begin". It is accurate for REPORTING what has been
+      // spent, which is the only use I checked it against. For the
+      // DECISION it is not: four runs each added their estimate to the
+      // same Rs 885.39 and each concluded there was room. See
+      // outstandingInr, which is why the reservation exists.
       mkdirSync(LEDGER_D, { recursive: true });
       writeFileSync(join(LEDGER_D, `${label}.json`), JSON.stringify({ at: new Date().toISOString(), label, inr: rounded, calls: spend.calls }, null, 2), "utf8");
+      // The row replaces the reservation. Released only after the row
+      // is on disk, so there is no instant in which this run's money is
+      // invisible to a sibling.
+      releaseReservation(RESERVE_KEY);
     }
 
     if (STUB) say("STUB RUN — canned replies, nothing called, nothing spent.");

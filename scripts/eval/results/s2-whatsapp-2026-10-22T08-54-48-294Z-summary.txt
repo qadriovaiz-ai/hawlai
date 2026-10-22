@@ -1,0 +1,58 @@
+
+EXIT TEST — the fact-bound pipeline on whatsapp
+==================================================================
+cases                 6  (candle-04, candle-09, salon-04, salon-08, dairy-05, dairy-10)
+baseline (email)      70 claim sentences: 34 T, 20 F, 16 U
+ESTIMATE THIS RUN     Rs 15.28   (per-run cap Rs 30.00)
+already spent         Rs 885.39 of Rs 964.00
+==================================================================
+NOTE: the baseline figures above are EMAIL's. This run is whatsapp.
+Its own 13 October baseline: see the graded sheet, surface whatsapp.
+4 sentence(s), facts note present
+5 sentence(s), facts note present
+5 sentence(s), facts note present
+3 sentence(s), facts note present
+3 sentence(s), facts note present
+4 sentence(s), facts note present
+
+==================================================================
+sentences produced    24   (baseline email run produced 136 in total)
+cases that threw      0
+CASES THAT WROTE NOTHING  0 of 6
+calls made            42   (4 per email: select, write, extract, judge)
+cases retried         1   (spacing 4000ms between cases)
+tokens                102713 in, 7856 out
+ACTUAL COST THIS RUN  Rs 19.44   (estimated Rs 15.28)
+COST PER EMAIL        Rs 3.24   (baseline was Rs 0.93)
+RUNNING TOTAL         Rs 904.83 of Rs 964.00
+==================================================================
+
+WHAT THE OWNER WOULD HAVE BEEN TOLD, per case:
+  [candle-04]
+     Not on record: Does the Lavender candle ship from Shahjahanpur only locally, or nationwide? Owner should record the delivery area so the copy can set correct expectations.
+     Not on record: Is the Lavender candle currently in stock and available to order? Owner should record current availability so the broadcast is not sent when the item is sold out.
+     Removed "A new collection has arrived." — No fact states that a new collection has arrived. Facts describe existing products and their properties, not new arrivals..
+  [candle-09]
+     You asked for 100% natural. Your records say Soy wax only, paraffin-free — but no record certifies the candles or their fragrance ingredients as '100% natural'. Fragrances are added (f_9f97d5d5) and their composition is not recorded. — change the record, or I write it without that.
+     You asked for safe for kids. Your records say No record addresses child safety, age-suitability, or any safety certification. This is a safety claim and cannot be selected under any circumstances. — change the record, or I write it without that.
+     Not on record: Are the fragrances used also natural/essential-oil-based, or are they synthetic? Please record the fragrance type against each product so a 'natural ingredients' claim can be made accurately.
+     Removed "A new collection has arrived." — No fact states that a new collection has arrived. The facts describe existing products and processes, not new arrivals..
+  [salon-04]
+     You asked for Free shipping on treatments. Your records say Nothing is shipped — no shipping mode is on record. The keratin treatment is an in-salon service, not a shipped product. — change the record, or I write it without that.
+     Not on record: Does the business offer any form of free delivery or a delivery/shipping service at all? If yes, record what is shipped, to which areas, at what cost, and any minimum order or conditions.
+  [salon-08]
+     Not on record: Is there a booking link, phone number, or address the reader should use to book a haircut? Please record the contact or booking detail so the WhatsApp broadcast can include a clear call to action.
+     This was written from your records, but the check that reads it back found nothing to check, so it is marked unverified rather than approved.
+  [dairy-05]
+     Not on record: How many grams or servings does 250g of paneer serve? Record this against product.paneer_250g so the copy can give buyers a practical size reference.
+     Not on record: Is there a specific order/delivery cutoff time tied to the 'made fresh every morning' process? Record this against product.paneer_250g (e.g. 'order by 8 AM for same-day delivery') so the copy can set accurate expectations.
+     Not on record: What is the expiry or best-before window for the paneer once delivered? Record this against product.paneer_250g so buyers know how long it stays fresh.
+     Removed "Desi ghee 500ml is priced at ₹850." — it states 850 ₹, and the figures on record are Made fresh every morning, 120 inr, 10 percent, 50 inr, FSSAI licence 11223344556677.
+     Removed "The business accepts orders in Indore." — The business is in Indore, but location and delivery coverage are separate facts. No record states the business accepts orders in Indore..
+  [dairy-10]
+     You asked for Free home delivery. Your records say Shipping is flat at ₹50 — not free. — change the record, or I write it without that.
+     Not on record: Does the business offer free delivery under any condition (e.g. above a minimum order value)? If yes, please record: 'Free home delivery on orders above ₹[amount].'
+     Removed "The business delivers fresh products across Indore." — The business location (Indore) and shipping cost (₹50 flat) do not establish delivery coverage. Rule 10: location + cost ≠ delivery area. No fact states which areas are actually delivered to..
+
+GRADE THIS: scripts\eval\results\s2-whatsapp-2026-10-22T08-54-48-294Z-grade-reviewer.md
+The three numbers are the reviewer's to fill in. This run measures cost and produces the sheet.
