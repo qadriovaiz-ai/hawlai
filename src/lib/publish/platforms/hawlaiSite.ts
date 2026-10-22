@@ -25,7 +25,7 @@
 
 import { publishLog, publishError } from "../log";
 import { readLiveMeta, verifyAgainst, type MetaVerification } from "@/lib/seo/liveMeta";
-import type { ExecuteResult, FieldChange, PreviewResult, PublishActionRecord, PublishPlatform } from "../types";
+import type { ExecuteResult, FieldChange, PreviewResult, PublishActionRecord, PublishPlatform, UndoProposal } from "../types";
 
 /** What Google shows before it cuts the line off. Advisory, never enforced. */
 export const TITLE_LIMIT = 60;
@@ -481,6 +481,100 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
           verification,
         },
       };
+    },
+
+    /**
+     * Put one executed site change back, word for word.
+     *
+     * LIFTED OUT OF masterBrainV2 IN S3/P1, unchanged in behaviour for
+     * page text and newly available for page meta — which changes what
+     * the whole internet sees of a page and had no undo at all.
+     *
+     * The old wording is read off the action that changed it
+     * (`preview.changes[].before`), so this never regenerates anything
+     * and cannot drift from what the page actually said. It returns a
+     * REQUEST: the reversal gets its own preview and its own approval,
+     * exactly like the edit it reverses.
+     */
+    async undo(action: PublishActionRecord): Promise<UndoProposal> {
+      if (!action.targetRef) return { ok: false, reason: "That edit didn't record which page it changed, so I can't put it back." };
+      if (!action.preview) return { ok: false, reason: "That edit was never previewed, so there is no record of what the page said before." };
+
+      const read = await readPage(action.dealershipId, action.targetRef);
+      if (!read.ok) return { ok: false, reason: read.reason };
+      if (!read.page) return { ok: false, reason: "That page isn't on your website any more, so there's nothing to put back." };
+      const { page } = read;
+      const label = String(action.targetLabel ?? page.slug);
+
+      if (action.actionKey === "update_page_text") {
+        // "<blockId>:<prop>", the shape previewText writes.
+        const restores = action.preview.changes
+          .filter((c) => typeof c.field === "string" && c.field.includes(":") && typeof c.before === "string" && c.before.trim())
+          .map((c) => {
+            const [blockId, prop] = String(c.field).split(":");
+            return { blockId, prop: prop as any, text: String(c.before), restore: true as const };
+          });
+        if (restores.length === 0) {
+          return { ok: false, reason: "That edit didn't record what the line said before, so I can't put it back without guessing — and I won't guess at your page copy." };
+        }
+        const { applyEdits } = await import("@/lib/pages/editPage");
+        const undone = applyEdits(page.sections, restores, null);
+        if (undone.applied.length === 0) {
+          return { ok: false, reason: "The page already says what it said before that edit — there's nothing to put back." };
+        }
+        return {
+          ok: true,
+          actionKey: "update_page_text",
+          targetRef: page.id,
+          targetLabel: label,
+          requestedChanges: {
+            edits: undone.applied,
+            claimWarnings: ["This puts back exactly what the line said before, word for word — it isn't rewritten."],
+          },
+          changed: undone.applied.map((a: any) => ({ what: a.blockType, from: a.before, to: a.after })),
+          warnings: [],
+        };
+      }
+
+      if (action.actionKey === "update_page_meta") {
+        // NEW IN P1. The field names are previewMeta's own.
+        const currentOf = (field: string) =>
+          field === "seoTitle" ? page.seo_title : field === "ogImageUrl" ? page.og_image_url : page.meta_description;
+        const wanted = action.preview.changes.filter(
+          (c) => c.field === "seoTitle" || c.field === "metaDescription" || c.field === "ogImageUrl"
+        );
+        if (wanted.length === 0) {
+          return { ok: false, reason: "That edit didn't record what the page's search listing said before, so I can't put it back without guessing." };
+        }
+        const changed = wanted.filter((c) => String(currentOf(c.field) ?? "") !== String(c.before ?? ""));
+        if (changed.length === 0) {
+          return { ok: false, reason: "The page's search listing already says what it said before that edit — there's nothing to put back." };
+        }
+        const requested: Record<string, unknown> = {};
+        for (const c of changed) {
+          if (c.field === "seoTitle") requested.seoTitle = c.before ?? "";
+          if (c.field === "metaDescription") requested.metaDescription = c.before ?? "";
+          if (c.field === "ogImageUrl") requested.ogImageUrl = c.before ?? "";
+        }
+        return {
+          ok: true,
+          actionKey: "update_page_meta",
+          targetRef: page.id,
+          targetLabel: label,
+          requestedChanges: requested,
+          changed: changed.map((c) => ({
+            what: c.field === "seoTitle" ? "search title" : c.field === "ogImageUrl" ? "share image" : "search description",
+            from: String(currentOf(c.field) ?? ""),
+            to: String(c.before ?? ""),
+          })),
+          // SAID BECAUSE IT IS NOT OBVIOUS. A search listing takes days
+          // to re-crawl, so putting it back is not instant the way a
+          // line of page text is.
+          warnings: ["Google re-reads a page's listing in its own time, so the old title may take a few days to show in search again."],
+        };
+      }
+
+      return { ok: false, reason: `I don't know how to put "${action.actionKey}" back.` };
     },
   };
 }

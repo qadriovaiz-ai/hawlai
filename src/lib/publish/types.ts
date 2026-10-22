@@ -184,6 +184,44 @@ export type ExecuteResult =
   | { ok: false; stale?: false; reason: string };
 
 /**
+ * How to put one executed action back.
+ *
+ * A PROPOSAL, NOT A WRITE. Reversing a change is itself a change, so an
+ * undo goes through the same door as the thing it reverses: it comes
+ * back as the request for a new publish action, gets its own preview
+ * and its own approval. The owner sees what will be put back before it
+ * is.
+ *
+ * REPLAYED FROM THE RECORD, NEVER REGENERATED. The old wording lives on
+ * the action that changed it, in `preview.changes[].before` — which is
+ * why undo needs no history table and cannot drift from what was
+ * actually on the page. PLAN-CORE-ARCHITECTURE sized S3 around building
+ * that store; it already existed.
+ */
+export type UndoProposal =
+  | {
+      ok: true;
+      actionKey: ActionKey;
+      targetRef: string;
+      targetLabel: string;
+      requestedChanges: Record<string, unknown>;
+      /**
+       * What goes back, in the owner's terms, for the chat card.
+       *
+       * CARRIED ON THE PROPOSAL BECAUSE THE PLATFORM IS THE ONLY THING
+       * THAT KNOWS IT. Dropping it in P1 broke the one existing test
+       * of the undo card - chatPageEditing's "proposes the exact
+       * previous wording, word for word" - which was right to fail: an
+       * owner approving an undo is approving these lines, not a
+       * summary of them.
+       */
+      changed: { what: string; from: string; to: string }[];
+      /** Said to the owner before they approve. Never blocks. */
+      warnings: string[];
+    }
+  | { ok: false; reason: string };
+
+/**
  * What every platform module must provide, and the ONLY way a write
  * reaches an external system.
  *
@@ -227,6 +265,20 @@ export interface PublishPlatform {
    * cannot tell from its own side whether the write landed.
    */
   execute(action: PublishActionRecord): Promise<ExecuteResult>;
+
+  /**
+   * Describe how to reverse an action this platform already executed.
+   *
+   * OPTIONAL, AND THE OPTIONALITY IS LOAD-BEARING. A platform that
+   * cannot put its own change back must not pretend it can, and
+   * `autonomyLevels.canHoldL1` refuses L1 to any action with no undo —
+   * so leaving this off is a real statement with a real consequence,
+   * not a gap. Shopify and Meta have none yet and say so by absence.
+   *
+   * Reads only. It returns the REQUEST for a reversing action; nothing
+   * is written until that request is itself approved and executed.
+   */
+  undo?(action: PublishActionRecord): Promise<UndoProposal>;
 }
 
 /**

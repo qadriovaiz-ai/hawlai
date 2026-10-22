@@ -1160,8 +1160,15 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // and cannot drift from what was actually on the page.
       const { data: lastAction } = await supabase
         .from("publish_actions")
-        .select("id, target_ref, target_label, preview, executed_at")
+        .select("id, action_key, target_ref, target_label, preview, executed_at")
         .eq("dealership_id", ctx.id)
+        // STILL TEXT ONLY, AND DELIBERATELY SO FOR NOW. hawlaiSite.undo
+        // handles update_page_meta as well since P1, but "undo" is
+        // still resolved by a substring match on a label (see below),
+        // and widening the candidates before P2 makes selection
+        // explicit would mean the wrong guess can now reverse a page's
+        // SEARCH LISTING instead of a line of its text. The capability
+        // becomes reachable when the choosing is trustworthy.
         .eq("action_key", "update_page_text")
         .eq("status", "executed")
         .order("executed_at", { ascending: false })
@@ -1180,48 +1187,51 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         };
       }
 
-      const previous = (chosen.preview?.changes ?? [])
-        .filter((c: any) => typeof c.field === "string" && c.field.includes(":") && typeof c.before === "string" && c.before.trim())
-        .map((c: any) => {
-          const [blockId, prop] = String(c.field).split(":");
-          return { blockId, prop: prop as any, text: String(c.before), restore: true as const };
-        });
-      if (previous.length === 0) {
-        return { error: "That edit didn't record what the line said before, so I can't put it back without guessing — and I won't guess at your page copy.", saved: false };
-      }
-
-      const { data: undoSite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
-      const { data: undoPage } = await supabase
-        .from("website_pages")
-        .select("id, slug, title, sections")
-        .eq("id", chosen.target_ref)
-        .eq("website_id", undoSite?.id ?? "")
-        .maybeSingle();
-      if (!undoSite || !undoPage) return { error: "That page isn't on your website any more, so there's nothing to put back.", saved: false };
-
-      const { applyEdits: applyUndo } = await import("../pages/editPage");
-      const undone = applyUndo(undoPage.sections, previous, null);
-      if (undone.applied.length === 0) {
-        return {
-          error: "The page already says what it said before that edit — there's nothing to put back.",
-          saved: false,
-        };
-      }
-
+      // THE PLATFORM KNOWS HOW TO PUT ITS OWN CHANGE BACK.
+      //
+      // S3/P1. This used to be a hundred lines here: read the preview,
+      // map "<blockId>:<prop>" to a restore edit, read the page, apply,
+      // then build the reversing action. All of that is site knowledge,
+      // and keeping it in the chat layer is why set_page_meta - which
+      // changes what the whole internet sees of a page - had no undo at
+      // all: nobody was going to write the second copy of it.
+      //
+      // WHAT IS STILL WRONG HERE, and it is P2's job: `chosen` above is
+      // picked by a substring match on a label across the last five
+      // executed rows. Two edits to one page and this reverses the
+      // wrong one.
       const { createPublishAction: createUndoAction } = await import("../publish/create");
       const { createHawlaiSitePlatform: createUndoPlatform } = await import("../publish/platforms/hawlaiSite");
       const { createServiceClient: makeUndoService } = await import("../supabase/service");
       const undoService = makeUndoService();
-      const createdUndo = await createUndoAction(undoService, createUndoPlatform({ supabase: undoService }), {
+      const undoPlatform = createUndoPlatform({ supabase: undoService });
+      if (!undoPlatform.undo) {
+        return { error: "Putting a change back isn't available for your website yet.", saved: false };
+      }
+
+      const proposal = await undoPlatform.undo({
+        id: String(chosen.id),
         dealershipId: ctx.id,
         platform: "hawlai_site",
-        actionKey: "update_page_text",
-        targetRef: undoPage.id,
-        targetLabel: String(chosen.target_label ?? undoPage.slug),
-        requestedChanges: {
-          edits: undone.applied,
-          claimWarnings: ["This puts back exactly what the line said before, word for word — it isn't rewritten."],
-        },
+        connectionRef: null,
+        actionKey: String(chosen.action_key ?? "update_page_text") as any,
+        targetRef: chosen.target_ref ?? null,
+        targetLabel: chosen.target_label ?? null,
+        requestedChanges: {},
+        preview: (chosen.preview ?? null) as any,
+        previewedAt: null,
+        status: "executed",
+        idempotencyKey: `undo-read-${chosen.id}`,
+      });
+      if (!proposal.ok) return { error: proposal.reason, saved: false };
+
+      const createdUndo = await createUndoAction(undoService, undoPlatform, {
+        dealershipId: ctx.id,
+        platform: "hawlai_site",
+        actionKey: proposal.actionKey,
+        targetRef: proposal.targetRef,
+        targetLabel: proposal.targetLabel,
+        requestedChanges: proposal.requestedChanges,
         requestedBy: null,
         resolutionPath: "exact",
         // The edit being undone, recorded as the query so the audit
@@ -1234,11 +1244,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         success: true,
         approval_id: createdUndo.approvalId,
         action_id: createdUndo.actionId,
-        page: undoPage.slug,
-        changed: undone.applied.map((a) => ({ what: a.blockType, from: a.before, to: a.after })),
+        page: proposal.targetLabel,
+        changed: proposal.changed,
         summary: createdUndo.preview?.summary ?? "",
-        warnings: createdUndo.preview?.warnings ?? [],
-        note: "Waiting for approval — nothing has changed yet. This is one step back, to exactly what the line said before that edit.",
+        warnings: [...(createdUndo.preview?.warnings ?? []), ...proposal.warnings],
+        note: "Waiting for approval — nothing has changed yet. This is one step back, to exactly what it said before that edit.",
       };
     }
     case "read_page":
