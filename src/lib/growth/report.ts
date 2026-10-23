@@ -208,10 +208,26 @@ export function buildDailyReport(input: {
   return {
     dealershipId: input.dealershipId,
     day: input.day,
-    subject: `${input.businessName} — what I did and what I would do next`,
+    // THE SUBJECT PROMISES ONLY WHAT IS IN THE EMAIL.
+    //
+    // The dry run of 23 October had it say "what I did and what I would
+    // do next" over a report with no account of anything done — S4
+    // takes no actions, it audits and suggests. A subject line is the
+    // first sentence the owner reads and it was overstating by a whole
+    // section. It now counts what is actually below it.
+    subject: subjectFor(input.businessName, blocks),
     blocks,
     counted: input.counted,
   };
+}
+
+/** Says what the email contains, and nothing it does not. */
+function subjectFor(businessName: string, blocks: ReportBlock[]): string {
+  const suggestions = blocks.filter((b) => b.kind === "suggestion").length;
+  const setup = blocks.filter((b) => b.kind === "setup").length;
+  if (suggestions) return `${businessName} — ${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"} for today`;
+  if (setup) return `${businessName} — ${setup} setup ${setup === 1 ? "step" : "steps"} to get started`;
+  return `${businessName} — your daily check, nothing to flag`;
 }
 
 function healthNumbers(t: TrackingState): number[] {

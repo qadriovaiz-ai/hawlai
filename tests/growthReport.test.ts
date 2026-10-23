@@ -147,7 +147,14 @@ describe("1. only counted numbers", () => {
   it("and the rendered text contains no CLAIM digit the structure did not allow", () => {
     // Rendered, not just structural: the email is what the owner reads.
     //
-    // TWO KINDS OF LINE ARE EXCLUDED, and both for the same reason —
+    // THREE LINES ARE EXCLUDED, all for the same reason — none of them
+    // makes a claim about the business. The SUBJECT counts the email's
+    // own sections, which the reader can verify by glancing down the
+    // page; it is pinned separately and exactly by
+    // "THE SUBJECT'S ONLY NUMBER IS A COUNT OF ITS OWN SECTIONS", so
+    // the exemption cannot widen into "the subject may say anything".
+    //
+    // The other two, for the same reason —
     // they carry no claim about the business: the day line, which is
     // the report's own timestamp, and the "Based on" line, which is
     // evidence IDENTIFIERS. "product:x1" has a 1 in it and it is a
@@ -163,7 +170,7 @@ describe("1. only counted numbers", () => {
     }
     const claimLines = renderText(report)
       .split("\n")
-      .filter((l) => !l.startsWith("For ") && !l.trimStart().startsWith("Based on:"));
+      .filter((l, i) => i !== 0 && !l.startsWith("For ") && !l.trimStart().startsWith("Based on:"));
     for (const line of claimLines) {
       for (const found of line.match(/\d[\d,.]*/g) ?? []) {
         expect(allowed.has(found.replace(/[.,]+$/, "")), `${found} in: ${line}`).toBe(true);
@@ -269,6 +276,48 @@ describe("5. the thin branch", () => {
   it("setup steps are not shown once there is enough history", () => {
     const report = build({ setupGoals: [{ key: "k", title: "T", description: "d", targetMetric: null, targetValue: null, basis: [] }] });
     expect(report.blocks.filter((b) => b.kind === "setup")).toEqual([]);
+  });
+});
+
+describe("7. the subject promises only what is in the email", () => {
+  // THE DRY RUN OF 23 OCTOBER CAUGHT THIS. The subject said "what I did
+  // and what I would do next" over a report with no account of anything
+  // done — S4 audits and suggests, it does not act. A subject line is
+  // the first sentence the owner reads and it was overstating by a
+  // whole section.
+
+  it("COUNTS SUGGESTIONS WHEN THERE ARE ANY", () => {
+    expect(build().subject).toBe("A Business — 1 suggestion for today");
+  });
+
+  it("COUNTS SETUP STEPS WHEN THERE ARE NO SUGGESTIONS", () => {
+    expect(buildThin().subject).toBe("A Business — 2 setup steps to get started");
+  });
+
+  it("AND SAYS SO PLAINLY WHEN THERE IS NOTHING TO FLAG", () => {
+    const quiet = build({ suggestions: [], setupGoals: [] });
+    expect(quiet.subject).toBe("A Business — your daily check, nothing to flag");
+  });
+
+  it("THE SUBJECT'S ONLY NUMBER IS A COUNT OF ITS OWN SECTIONS", () => {
+    // The digit walk skips the subject line, so this is what keeps that
+    // exemption narrow: a subject that said "41 visits this month"
+    // would fail here even though the walk would not see it.
+    for (const r of [build(), buildThin(), build({ suggestions: [], setupGoals: [] })]) {
+      const sections = r.blocks.filter((b) => b.kind === "suggestion" || b.kind === "setup").length;
+      const digits = (r.subject.match(/\d+/g) ?? []).map(Number);
+      expect(digits.length).toBeLessThanOrEqual(1);
+      if (digits.length) expect(digits[0]).toBe(sections);
+    }
+  });
+
+  it("NEVER CLAIMS TO HAVE DONE ANYTHING", () => {
+    // S4 takes no actions at all. The day it does, the subject may say
+    // so — and this test will be the thing that makes someone change
+    // it deliberately rather than by accident.
+    for (const r of [build(), buildThin(), build({ suggestions: [], setupGoals: [] })]) {
+      expect(r.subject).not.toMatch(/what I did|I have done|completed|applied/i);
+    }
   });
 });
 
