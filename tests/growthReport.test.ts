@@ -71,6 +71,8 @@ function build(over: Partial<Parameters<typeof buildDailyReport>[0]> = {}): Dail
     counted: COUNTED,
     suggestions: [{ row: row(), goalTitle: "Describe every product" }],
     setupGoals: [],
+    activeGoals: 1,
+    findingCount: 1,
     ...over,
   });
 }
@@ -79,6 +81,8 @@ function buildThin(): DailyReport {
   return build({
     maturity: maturityOf({ firstAt: "2026-10-21T00:00:00Z", events: 3 }, NOW),
     suggestions: [],
+    activeGoals: 0,
+    findingCount: 2,
     setupGoals: [
       { key: "k1", title: "Describe every product", description: "d", targetMetric: "products with a description", targetValue: 6, basis: [{ kind: "counted", id: "products" }] },
       { key: "k2", title: "Publish the website", description: "d", targetMetric: null, targetValue: null, basis: [] },
@@ -247,6 +251,8 @@ describe("5. the thin branch", () => {
       maturity: maturityOf({ firstAt: "2026-10-21T00:00:00Z", events: 3 }, NOW),
       tracking: tracking({ siteEvents: { firing: true, lastAt: "2026-10-22T10:00:00Z", visitorEvents30d: 3, firstAt: "2026-10-21T00:00:00Z" } }),
       suggestions: [],
+      activeGoals: 0,
+      findingCount: 2,
       setupGoals: [
         { key: "products_without_description", title: "Describe every product", description: "Nothing to cite otherwise.", targetMetric: "products with a description", targetValue: 6, basis: [{ kind: "counted", id: "products" }] },
         { key: "site_unpublished", title: "Publish the website", description: "Nobody outside can open it.", targetMetric: null, targetValue: null, basis: [] },
@@ -256,7 +262,7 @@ describe("5. the thin branch", () => {
   it("SAYS STILL LEARNING, and shows setup steps instead of targets", () => {
     const text = renderText(thin());
     expect(text).toMatch(/Still learning:/);
-    expect(text).toMatch(/setup steps, not targets/);
+    expect(text).toMatch(/setup, not targets/);
     expect(text).toMatch(/SETUP STEP — Describe every product/);
     expect(text).toMatch(/Target: products with a description — 6/);
   });
@@ -274,7 +280,7 @@ describe("5. the thin branch", () => {
   });
 
   it("setup steps are not shown once there is enough history", () => {
-    const report = build({ setupGoals: [{ key: "k", title: "T", description: "d", targetMetric: null, targetValue: null, basis: [] }] });
+    const report = build({ activeGoals: 1, setupGoals: [{ key: "k", title: "T", description: "d", targetMetric: null, targetValue: null, basis: [] }] });
     expect(report.blocks.filter((b) => b.kind === "setup")).toEqual([]);
   });
 });
@@ -295,7 +301,7 @@ describe("7. the subject promises only what is in the email", () => {
   });
 
   it("AND SAYS SO PLAINLY WHEN THERE IS NOTHING TO FLAG", () => {
-    const quiet = build({ suggestions: [], setupGoals: [] });
+    const quiet = build({ suggestions: [], setupGoals: [], findingCount: 0 });
     expect(quiet.subject).toBe("A Business — your daily check, nothing to flag");
   });
 
@@ -303,7 +309,7 @@ describe("7. the subject promises only what is in the email", () => {
     // The digit walk skips the subject line, so this is what keeps that
     // exemption narrow: a subject that said "41 visits this month"
     // would fail here even though the walk would not see it.
-    for (const r of [build(), buildThin(), build({ suggestions: [], setupGoals: [] })]) {
+    for (const r of [build(), buildThin(), build({ suggestions: [], setupGoals: [], findingCount: 0 })]) {
       const sections = r.blocks.filter((b) => b.kind === "suggestion" || b.kind === "setup").length;
       const digits = (r.subject.match(/\d+/g) ?? []).map(Number);
       expect(digits.length).toBeLessThanOrEqual(1);
@@ -315,9 +321,68 @@ describe("7. the subject promises only what is in the email", () => {
     // S4 takes no actions at all. The day it does, the subject may say
     // so — and this test will be the thing that makes someone change
     // it deliberately rather than by accident.
-    for (const r of [build(), buildThin(), build({ suggestions: [], setupGoals: [] })]) {
+    for (const r of [build(), buildThin(), build({ suggestions: [], setupGoals: [], findingCount: 0 })]) {
       expect(r.subject).not.toMatch(/what I did|I have done|completed|applied/i);
     }
+  });
+});
+
+describe("8. the report cannot say nothing is wrong while something is", () => {
+  // THE BUG THE FIRST REAL DRY RUN FOUND, 23 October 2026.
+  // candle_by_qaaf: 44 days of data, 55 events — past the thin
+  // threshold — and zero goals. Setup steps rendered only in the
+  // learning state; suggestions need a goal. So two real findings
+  // (5 pages with no search title, 1 product with no image) rendered
+  // as nothing at all, and the subject said "nothing to flag".
+
+  it("SETUP STEPS SHOW WHENEVER THERE IS NO PLAN, not only when the data is thin", () => {
+    const report = build({
+      maturity: maturityOf({ firstAt: "2026-09-09T00:00:00Z", events: 55 }, NOW), // ready
+      activeGoals: 0,
+      findingCount: 2,
+      suggestions: [],
+      setupGoals: [
+        { key: "a", title: "Give every page a search title", description: "d", targetMetric: "pages with a search title", targetValue: 4, basis: [{ kind: "counted", id: "website_pages" }] },
+        { key: "b", title: "Add an image to every product", description: "d", targetMetric: null, targetValue: null, basis: [] },
+      ],
+    });
+    expect(report.blocks.filter((b) => b.kind === "setup")).toHaveLength(2);
+    expect(report.subject).toBe("A Business — 2 setup steps to get started");
+  });
+
+  it("AND NEVER SAYS 'WORKING TO YOUR PLAN' WITH NO PLAN", () => {
+    const report = build({
+      maturity: maturityOf({ firstAt: "2026-09-09T00:00:00Z", events: 55 }, NOW),
+      activeGoals: 0,
+      findingCount: 2,
+      suggestions: [],
+      setupGoals: [],
+    });
+    const text = renderText(report);
+    expect(text).not.toMatch(/Working to your plan/);
+    expect(text).toMatch(/No plan is approved yet/);
+  });
+
+  it("'NOTHING TO FLAG' REQUIRES THAT NOTHING WAS FOUND", () => {
+    const stuck = build({ suggestions: [], setupGoals: [], activeGoals: 1, findingCount: 2 });
+    expect(stuck.subject).not.toMatch(/nothing to flag/);
+    expect(stuck.subject).toBe("A Business — 2 things I could not put in front of you");
+  });
+
+  it("AND THE BODY EXPLAINS IT, not just the subject", () => {
+    const stuck = build({ suggestions: [], setupGoals: [], activeGoals: 1, findingCount: 2 });
+    const text = renderText(stuck);
+    expect(text).toMatch(/could not put them in front of you/);
+    expect(text).toMatch(/which goal they serve/);
+    expect(text).toMatch(/Approve a plan/);
+    // And that count is a declared number like every other.
+    expect(everyNumberIsCounted(stuck).ok).toBe(true);
+  });
+
+  it("while a genuinely quiet day still reads as quiet", () => {
+    const quiet = build({ suggestions: [], setupGoals: [], activeGoals: 1, findingCount: 0 });
+    expect(quiet.subject).toBe("A Business — your daily check, nothing to flag");
+    expect(renderText(quiet)).not.toMatch(/could not put/);
   });
 });
 

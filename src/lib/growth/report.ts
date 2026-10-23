@@ -34,7 +34,7 @@ import type { Evidence } from "@/lib/growth/findings";
 import type { Counted } from "@/lib/growth/audit";
 import type { StrategistRow } from "@/lib/growth/strategist";
 import type { DraftGoal, Maturity } from "@/lib/growth/strategy";
-import { stillLearningLine } from "@/lib/growth/strategy";
+import { hasNoPlan, planLine } from "@/lib/growth/strategy";
 import { measurementHealthLine, type TrackingState } from "@/lib/growth/tracking";
 
 export type ReportBlock =
@@ -140,8 +140,19 @@ export function buildDailyReport(input: {
   counted: Counted[];
   /** Today's picks, already capped and gated by the Strategist. */
   suggestions: { row: StrategistRow; goalTitle: string }[];
-  /** Setup steps, used only while the data is thin. */
+  /** Setup steps, shown whenever there is no plan to score against. */
   setupGoals: DraftGoal[];
+  /** Active goals on record. Zero means there is no plan yet. */
+  activeGoals: number;
+  /**
+   * How many findings the audit made.
+   *
+   * CARRIED SO THE REPORT CANNOT SAY "NOTHING TO FLAG" WHILE FINDINGS
+   * EXIST. The first dry run did exactly that: two real findings, none
+   * renderable, and a subject line telling the owner there was nothing
+   * to look at.
+   */
+  findingCount: number;
 }): DailyReport {
   const byLabel = new Map(input.counted.map((c) => [c.label, c]));
   const blocks: ReportBlock[] = [];
@@ -156,13 +167,17 @@ export function buildDailyReport(input: {
 
   blocks.push({
     kind: "line",
-    text: stillLearningLine(input.maturity),
+    text: planLine(input.maturity, input.activeGoals),
     numbers: maturityCounted(input.maturity),
   });
 
   for (const c of input.counted) blocks.push({ kind: "stat", number: c });
 
-  if (input.maturity.kind === "learning") {
+  // SHOWN WHENEVER THERE IS NO PLAN, not only when the data is thin.
+  // See hasNoPlan: the dry run of 23 October found a business past the
+  // thin threshold with zero goals, where neither setup steps nor
+  // suggestions could render and the owner was told nothing was wrong.
+  if (hasNoPlan(input.maturity, input.activeGoals)) {
     for (const goal of input.setupGoals) {
       blocks.push({
         kind: "setup",
@@ -205,6 +220,18 @@ export function buildDailyReport(input: {
     });
   }
 
+  // NOTHING RENDERABLE AND SOMETHING FOUND: say so, in the body as
+  // well as the subject. Silence here is the failure the dry run
+  // caught, and a subject alone is not an explanation.
+  const renderable = blocks.some((b) => b.kind === "suggestion" || b.kind === "setup");
+  if (!renderable && input.findingCount > 0) {
+    blocks.push({
+      kind: "line",
+      text: `I found ${input.findingCount} ${input.findingCount === 1 ? "thing" : "things"} worth doing and could not put ${input.findingCount === 1 ? "it" : "them"} in front of you, because nothing on record says which goal ${input.findingCount === 1 ? "it serves" : "they serve"}. Approve a plan and they will appear here.`,
+      numbers: [{ label: "findings the audit made", value: input.findingCount, source: "growth audit" }],
+    });
+  }
+
   return {
     dealershipId: input.dealershipId,
     day: input.day,
@@ -215,18 +242,23 @@ export function buildDailyReport(input: {
     // takes no actions, it audits and suggests. A subject line is the
     // first sentence the owner reads and it was overstating by a whole
     // section. It now counts what is actually below it.
-    subject: subjectFor(input.businessName, blocks),
+    subject: subjectFor(input.businessName, blocks, input.findingCount),
     blocks,
     counted: input.counted,
   };
 }
 
 /** Says what the email contains, and nothing it does not. */
-function subjectFor(businessName: string, blocks: ReportBlock[]): string {
+function subjectFor(businessName: string, blocks: ReportBlock[], findingCount: number): string {
   const suggestions = blocks.filter((b) => b.kind === "suggestion").length;
   const setup = blocks.filter((b) => b.kind === "setup").length;
   if (suggestions) return `${businessName} — ${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"} for today`;
   if (setup) return `${businessName} — ${setup} setup ${setup === 1 ? "step" : "steps"} to get started`;
+  // "NOTHING TO FLAG" REQUIRES THAT NOTHING WAS FOUND. The first dry
+  // run said it over two findings that had nowhere to go.
+  if (findingCount > 0) {
+    return `${businessName} — ${findingCount} ${findingCount === 1 ? "thing" : "things"} I could not put in front of you`;
+  }
   return `${businessName} — your daily check, nothing to flag`;
 }
 

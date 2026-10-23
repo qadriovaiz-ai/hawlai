@@ -180,6 +180,8 @@ async function main() {
     // Nothing is surfaced: that needs the Strategist, which writes.
     suggestions: [],
     setupGoals,
+    activeGoals: input.goals.length,
+    findingCount: findings.length,
   });
 
   console.log();

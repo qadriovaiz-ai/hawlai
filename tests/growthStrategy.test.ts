@@ -19,6 +19,8 @@ import {
   maturityOf,
   setupGoalsFrom,
   stillLearningLine,
+  hasNoPlan,
+  planLine,
 } from "@/lib/growth/strategy";
 import { auditCatalogue, auditSite, type AuditFinding, type Counted } from "@/lib/growth/audit";
 
@@ -55,9 +57,31 @@ describe("1. is there enough of this business's own history?", () => {
 
   it("and the line says which it is, in the owner's terms", () => {
     expect(stillLearningLine(maturityOf({ firstAt: daysAgo(2), events: 3 }, NOW))).toMatch(
-      /^Still learning:.*setup steps, not targets\.$/
+      /^Still learning:.*setup, not targets\.$/
     );
     expect(stillLearningLine(maturityOf({ firstAt: daysAgo(40), events: 80 }, NOW))).toMatch(/^Working to your plan:/);
+  });
+
+  it("THERE ARE TWO WAYS TO HAVE NO PLAN, and the second one shipped into a dry run", () => {
+    // candle_by_qaaf: 44 days and 55 events — past the threshold — and
+    // ZERO goals. The still-learning branch did not apply, suggestions
+    // need a goal and had none, so the owner was told "nothing to flag"
+    // over two real findings. §2c's "instead" is about TARGETS, not
+    // about whether findings are shown.
+    const ready = maturityOf({ firstAt: daysAgo(44), events: 55 }, NOW);
+    const thin = maturityOf({ firstAt: daysAgo(2), events: 3 }, NOW);
+    expect(hasNoPlan(thin, 0)).toBe(true);
+    expect(hasNoPlan(thin, 3)).toBe(true);
+    expect(hasNoPlan(ready, 0)).toBe(true);
+    expect(hasNoPlan(ready, 1)).toBe(false);
+  });
+
+  it("AND NEVER CLAIMS A PLAN THAT DOES NOT EXIST", () => {
+    const ready = maturityOf({ firstAt: daysAgo(44), events: 55 }, NOW);
+    expect(planLine(ready, 0)).toMatch(/No plan is approved yet/);
+    expect(planLine(ready, 0)).not.toMatch(/Working to your plan/);
+    expect(planLine(ready, 2)).toMatch(/^Working to your plan:/);
+    expect(planLine(maturityOf({ firstAt: daysAgo(2), events: 3 }, NOW), 0)).toMatch(/^Still learning:/);
   });
 });
 

@@ -196,8 +196,39 @@ export function draftTargetsAreOwn(goals: DraftGoal[]): boolean {
   return goals.every((g) => g.targetValue === null || g.basis.some((b) => b.kind === "counted"));
 }
 
-/** What the report says while there is not enough history for a target. */
+/**
+ * Is there a plan to score today's work against?
+ *
+ * TWO WAYS TO HAVE NO PLAN, and the dry run of 23 October found the
+ * second one the hard way. §2c says "if data thin -> still learning
+ * with setup goals instead", so the first version keyed setup steps on
+ * thin data alone. candle_by_qaaf has 44 days and 55 events — past the
+ * threshold — and ZERO goals, so the still-learning branch did not
+ * apply, suggestions need a goal and had none, and the owner was told
+ * "nothing to flag" over two real findings.
+ *
+ * §2c's "instead" is about TARGETS, not about whether findings are
+ * shown. A business with no approved plan has nothing to score
+ * against, however much history it has.
+ */
+export function hasNoPlan(m: Maturity, activeGoals: number): boolean {
+  return m.kind === "learning" || activeGoals < 1;
+}
+
+/** What the report says about the plan, and it never claims one that does not exist. */
+export function planLine(m: Maturity, activeGoals: number): string {
+  if (m.kind === "learning") {
+    return `Still learning: ${m.why}. Until then the steps below are setup, not targets.`;
+  }
+  if (activeGoals < 1) {
+    // READY, AND NO PLAN. Saying "working to your plan" here was false
+    // and it shipped into the first dry run.
+    return `There is enough history to set targets now: ${m.why}. No plan is approved yet, so the steps below are setup, not targets.`;
+  }
+  return `Working to your plan: ${m.why}.`;
+}
+
+/** Kept for the thin case, and now says what it means. */
 export function stillLearningLine(m: Maturity): string {
-  if (m.kind === "ready") return `Working to your plan: ${m.why}.`;
-  return `Still learning: ${m.why}. Until then the goals below are setup steps, not targets.`;
+  return planLine(m, m.kind === "learning" ? 0 : 1);
 }
