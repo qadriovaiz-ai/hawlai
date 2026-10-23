@@ -295,12 +295,44 @@ async function maybeGenerateVariantOnPause(
   }
 }
 
-export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number; snapshotted: number; aiFailure?: AiFailureNote }> {
+export async function runDailyAutopilot(supabase: any, dealershipId: string): Promise<{ drafted: number; auto_paused: number; snapshotted: number; growth?: { findings: number; suggestions: number; setupSteps: number; sent: boolean; notSentBecause: string | null }; aiFailure?: AiFailureNote }> {
   await syncOpportunities(supabase, dealershipId);
   // What the AI couldn't do this run, reported rather than read as "nothing to draft".
   const ai: AiRun = {};
   const drafted = await draftStuckLeadFollowUps(supabase, dealershipId, ai);
   const auto_paused = await applyAutoPause(supabase, dealershipId, ai);
   const snapshotted = await snapshotCampaignPerformance(supabase, dealershipId);
-  return { drafted, auto_paused, snapshotted, ...(ai.failure ? { aiFailure: ai.failure } : {}) };
+
+  // THE GROWTH MANAGER'S LOOP BODY — S4/P5.
+  //
+  // IN-PROCESS, by import and call. This function is reached from
+  // /api/autopilot/daily-run, the route whose self-calls produced the
+  // Vercel 508, and CLAUDE.md's rule is absolute: extract the logic and
+  // call it, never the URL.
+  //
+  // allowCopyAudit IS NOT SET HERE AND MUST NOT BE. M9's model pass is
+  // the only part of this loop that costs money, and an unattended run
+  // has nobody there to approve a bigger spend. The one-off pass is
+  // asked for explicitly, by a caller that knows what it is spending.
+  //
+  // IT NEVER BREAKS THE REST OF THE RUN. Lead follow-ups, auto-pause
+  // and snapshots have already happened by this point; a growth run
+  // that throws must not undo the report of work that was done.
+  let growth: { findings: number; suggestions: number; setupSteps: number; sent: boolean; notSentBecause: string | null } | undefined;
+  try {
+    const { runDailyGrowth } = await import("@/lib/growth/dailyGrowth");
+    const run = await runDailyGrowth(supabase, dealershipId);
+    growth = {
+      findings: run.findings,
+      suggestions: run.suggestions,
+      setupSteps: run.setupSteps,
+      sent: run.sent,
+      notSentBecause: run.notSentBecause,
+    };
+  } catch (err: any) {
+    console.error(`[autopilot] growth run failed for ${dealershipId}: ${err?.message}`);
+    growth = { findings: 0, suggestions: 0, setupSteps: 0, sent: false, notSentBecause: `the growth run threw: ${err?.message}` };
+  }
+
+  return { drafted, auto_paused, snapshotted, growth, ...(ai.failure ? { aiFailure: ai.failure } : {}) };
 }
