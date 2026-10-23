@@ -29,8 +29,19 @@ import { indiaToday } from "../../src/lib/expertise/seasonalCalendar";
 type DryRunInput = {
   business: { id: string; name: string; sc_access: boolean; sc_refresh: boolean; sc_site_url: string | null } | null;
   site: { id: string; slug: string; published: boolean } | null;
-  pages: any[];
-  products: any[];
+  /**
+   * BOOLEANS, NOT THE TEXT — and that is faithful rather than a
+   * shortcut.
+   *
+   * The first paste of 23 October was TRUNCATED mid-way through the
+   * pages, because the query returned every meta description in full.
+   * The audit's only question about those fields is whether they are
+   * empty (`String(p.seo_title ?? "").trim()`), so a flag carries
+   * exactly the information the verdict depends on — and keeps the
+   * business's own copy out of a chat window.
+   */
+  pages: { id: string; slug?: string; has_title: boolean; has_desc: boolean; is_fallback: boolean }[];
+  products: { id: string; has_desc: boolean; price: number; image_count: number }[];
   events: { visitor_30d: number; first_at: string | null; last_at: string | null };
   campaigns: number;
   paid_orders_30d: number;
@@ -54,8 +65,24 @@ function clientFor(input: DryRunInput) {
 
   const tables: Record<string, any[]> = {
     websites: input.site ? [{ ...input.site, dealership_id: dealershipId }] : [],
-    website_pages: input.pages.map((p) => ({ ...p, website_id: input.site?.id })),
-    products: input.products.map((p) => ({ ...p, dealership_id: dealershipId })),
+    // Expanded back into the shapes the real audit reads. A single
+    // non-empty character is all its emptiness test needs.
+    website_pages: input.pages.map((p) => ({
+      id: p.id,
+      website_id: input.site?.id,
+      slug: p.slug ?? p.id,
+      title: p.slug ?? p.id,
+      seo_title: p.has_title ? "set" : null,
+      meta_description: p.has_desc ? "set" : null,
+      is_fallback: p.is_fallback,
+    })),
+    products: input.products.map((p) => ({
+      id: p.id,
+      dealership_id: dealershipId,
+      description: p.has_desc ? "set" : null,
+      price: p.price,
+      images: Array.from({ length: Math.max(0, p.image_count) }, (_, i) => `image-${i}`),
+    })),
     page_events: events.map((e) => ({ ...e, dealership_id: dealershipId, is_internal: false })),
     ad_creatives: Array.from({ length: input.campaigns }, (_, i) => ({ id: `c${i}`, dealership_id: dealershipId })),
     orders: Array.from({ length: input.paid_orders_30d }, (_, i) => ({
