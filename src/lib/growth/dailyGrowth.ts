@@ -87,8 +87,23 @@ export async function runDailyGrowth(
   const counted: Counted[] = [...site.counted, ...catalogue.counted];
 
   // ---- M9, only when asked -------------------------------------------
+  //
+  // A DATE, NOT A SWITCH, and that is the whole point of the design.
+  //
+  // The founder approved ONE paid pass at Rs 2-4. An on/off env var
+  // left on by accident is Rs 60-120 a month of unattended spend with
+  // nobody watching, and "remember to turn it off tomorrow" is not a
+  // safeguard. So GROWTH_COPY_AUDIT_ON holds a single day in the daily
+  // job's own terms (indiaToday), the pass runs only on that day, and
+  // it expires by itself at midnight whether anyone remembers or not.
+  //
+  // The explicit option still wins, for a caller that knows exactly
+  // what it is spending — a test, or a one-off run somebody is
+  // watching.
+  const onDate = String(process.env.GROWTH_COPY_AUDIT_ON ?? "").trim();
+  const allowCopyAudit = opts.allowCopyAudit ?? (onDate !== "" && onDate === day);
   let copyAuditCostInr = 0;
-  if (opts.allowCopyAudit) {
+  if (allowCopyAudit) {
     const { gatherBusinessFacts } = await import("@/lib/claims/businessFacts");
     const facts = await gatherBusinessFacts(supabase, dealershipId);
     const lines = await copyLinesFor(supabase, dealershipId);

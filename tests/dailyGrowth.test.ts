@@ -227,6 +227,67 @@ describe("3. money", () => {
   });
 });
 
+describe("3b. the paid pass is armed by a DATE, so it expires by itself", () => {
+  // The founder approved ONE pass at Rs 2-4. An on/off env var left on
+  // by accident is Rs 60-120 a month of unattended spend with nobody
+  // watching, and "remember to turn it off" is not a safeguard.
+  const ORIGINAL_FLAG = process.env.GROWTH_COPY_AUDIT_ON;
+  afterEach(() => {
+    if (ORIGINAL_FLAG === undefined) delete process.env.GROWTH_COPY_AUDIT_ON;
+    else process.env.GROWTH_COPY_AUDIT_ON = ORIGINAL_FLAG;
+  });
+
+  it("DOES NOT RUN ON ANY OTHER DAY", async () => {
+    sends.length = 0;
+    const calls = forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = "2026-10-24"; // tomorrow
+    const { client } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(calls).toEqual([]);
+    expect(r.copyAuditCostInr).toBe(0);
+  });
+
+  it("RUNS ON THE DAY IT NAMES", async () => {
+    sends.length = 0;
+    const calls = forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = TODAY;
+    const { client } = db();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    // The model was ASKED. It then failed, because this double refuses
+    // every call — which is the point: the attempt is the property.
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it("AND AN EMPTY OR MISSING VALUE NEVER ARMS IT", async () => {
+    for (const value of ["", "   ", "yes", "1", "true"]) {
+      sends.length = 0;
+      const calls = forbidModelCalls();
+      process.env.GROWTH_COPY_AUDIT_ON = value;
+      const { client } = db();
+      await runDailyGrowth(client, "d1", { now: NOW });
+      expect(calls, `value ${JSON.stringify(value)}`).toEqual([]);
+    }
+  });
+
+  it("an explicit option still wins, for a caller that is watching", async () => {
+    sends.length = 0;
+    const calls = forbidModelCalls();
+    delete process.env.GROWTH_COPY_AUDIT_ON;
+    const { client } = db();
+    await runDailyGrowth(client, "d1", { now: NOW, allowCopyAudit: true });
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it("AND AN EXPLICIT false BEATS THE DATE", async () => {
+    sends.length = 0;
+    const calls = forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = TODAY;
+    const { client } = db();
+    await runDailyGrowth(client, "d1", { now: NOW, allowCopyAudit: false });
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("3a. an unreadable plan is no plan", () => {
   it("A FAILED GOALS READ MEANS NO PLAN, never a plan", async () => {
     // Being wrong the other way produces "working to your plan" sent to
