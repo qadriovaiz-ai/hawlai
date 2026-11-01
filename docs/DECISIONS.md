@@ -127,6 +127,49 @@ exercised by any test — and the fixture row was given the
 `action_key` it always implicitly had. One existing assertion on the
 price message was widened to cover the new sentence.
 
+## 1 November 2026 — the eval spent the product's credit for nine days
+
+**The incident.** Seven eval files each had an identical `loadKey()`
+reading `ANTHROPIC_API_KEY` from `.env.local` and assigning it to
+`process.env` — the variable `lib/ai/claude.ts` uses. Every paid eval
+run in S1 and S2 (~Rs 905; Rs 94.73 on 22 October alone) therefore came
+out of the balance production depends on. The organisation's credit
+reached $0.00 on 23 October and from 24 October to 1 November every AI
+call in the live product failed with `kind: "credits"`.
+
+**Why it was not noticed.** The cost of every run was measured from the
+API's own usage, reported to the rupee, and approved in advance. The
+accounting was immaculate and pointed at the wrong account. Nobody — me
+least of all — asked which balance was being drawn down. A per-run
+ledger answers "how much" and says nothing about "whose".
+
+**Why the evidence looked like a per-business problem.** A successful
+`daily_autopilot` run does not mean an AI call happened:
+`draftStuckLeadFollowUps` returns 0 without calling anything when no
+lead is stuck. So 61 "successes" were mostly runs that never touched
+AI, and the 19 failures were the ones that did. candle_by_qaaf was not
+special, it was the business with stuck leads. There is no per-business
+AI budget: one key for everything, and `generationLimits` covers
+images, video, voiceover, brand kits and website builds — not text.
+
+**The decision: refuse, never fall back.** `loadEvalKey()` requires
+`EVAL_ANTHROPIC_API_KEY` and STOPS the run when it is absent. The
+obvious convenience — fall back to `ANTHROPIC_API_KEY` so a run is
+never blocked — is precisely the fault, so it is gone rather than
+narrowed. It also refuses when both variables hold the same value,
+because the separation would then be decorative.
+
+**And one implementation, not seven.** Fixing one of seven copies would
+have left six still billing production. A test asserts no eval file
+reads or assigns the production key and that the harness holds the only
+assignment left.
+
+**What this says about the dead product's nine days.** The report
+emails were correct throughout and kept arriving, because the audit is
+model-free. Only the parts that need a model were dead. That is the
+free/paid split doing its job, and it is the one piece of this that
+worked as designed.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
