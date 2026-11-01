@@ -34,8 +34,7 @@ import {
   meterFetch,
   toGradedRows,
   gradingSheet,
-  type GradedSentence,
-} from "./harness";
+  type GradedSentence, loadEvalKey } from "./harness";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
 
@@ -162,21 +161,6 @@ function readLedger(): { runs: { at: string; label: string; inr: number; calls: 
   } catch {
     return { runs: [], totalInr: 0 };
   }
-}
-
-function loadKey(): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  if (!existsSync(".env.local")) return false;
-  for (const line of readFileSync(".env.local", "utf8").split(/\r?\n/)) {
-    const at = line.indexOf("=");
-    if (at < 0) continue;
-    if (line.slice(0, at).trim() !== "ANTHROPIC_API_KEY") continue;
-    const value = line.slice(at + 1).trim();
-    if (!value) return false;
-    process.env.ANTHROPIC_API_KEY = value;
-    return true;
-  }
-  return false;
 }
 
 /**
@@ -348,8 +332,9 @@ describe("the S1 exit test", () => {
       say("  EVAL_GO=1    the paid run");
       return;
     }
-    if (!STUB && !loadKey()) {
-      say("STOPPING: ANTHROPIC_API_KEY has no value in .env.local.");
+    const key = STUB ? ({ ok: true } as const) : loadEvalKey();
+    if (!STUB && !key.ok) {
+      say(`STOPPING: ${key.ok ? "" : key.why}`);
       return;
     }
 

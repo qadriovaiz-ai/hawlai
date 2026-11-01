@@ -25,6 +25,7 @@ import { pieces } from "@/lib/claims/claimCheck";
 import { contextFromFacts, type TaskKind } from "@/lib/facts/getContext";
 import { classifySentence } from "@/lib/facts/sentenceKind";
 import { copySentences, isLabelField } from "@/lib/content/copySentences";
+import { existsSync, readFileSync } from "node:fs";
 import type { EvalCase } from "./cases";
 
 /**
@@ -98,6 +99,67 @@ export function estimateInr(caseCount: number): number {
   // UNDER is the one that matters: it is the number an approval is
   // asked for.
   return Math.round(WORST_MEASURED_PER_CASE_INR * caseCount * 1.2 * 100) / 100;
+}
+
+/**
+ * THE EVAL'S OWN KEY, AND NEVER THE PRODUCT'S.
+ *
+ * WHAT THIS COST, 1 November 2026. Seven eval files each had an
+ * identical `loadKey()` that read ANTHROPIC_API_KEY out of .env.local
+ * and assigned it to process.env — the same variable the product uses.
+ * So every paid eval run in S1 and S2, about Rs 905 in all and Rs 94.73
+ * on 22 October alone, was spent from the balance production depends
+ * on. On 23 October that balance reached zero, and from 24 October to
+ * 1 November every AI call in the live product failed with
+ * `kind: "credits"`: nine days of a dead product, found only because
+ * the founder asked why a cost table was empty.
+ *
+ * I measured the cost of every run to the paisa and never once asked
+ * whose balance it came out of.
+ *
+ * THREE REFUSALS, AND THE FIRST IS THE ONE THAT MATTERS:
+ *
+ *   no fallback   when EVAL_ANTHROPIC_API_KEY is missing the eval does
+ *                 NOT fall back to ANTHROPIC_API_KEY. That fallback is
+ *                 the whole fault; a missing eval key must stop the run
+ *   not the same  if the two keys hold the same value the separation is
+ *                 decorative, so it is refused outright
+ *   one place     one implementation, because seven copies is how a fix
+ *                 to one of them leaves six spending production credit
+ */
+export type EvalKeyResult = { ok: true } | { ok: false; why: string };
+
+function fromEnvFile(name: string): string | null {
+  if (!existsSync(".env.local")) return null;
+  for (const line of readFileSync(".env.local", "utf8").split(/\r?\n/)) {
+    const at = line.indexOf("=");
+    if (at < 0 || line.slice(0, at).trim() !== name) continue;
+    const value = line.slice(at + 1).trim();
+    return value || null;
+  }
+  return null;
+}
+
+export function loadEvalKey(): EvalKeyResult {
+  const evalKey = (process.env.EVAL_ANTHROPIC_API_KEY ?? "").trim() || fromEnvFile("EVAL_ANTHROPIC_API_KEY");
+  if (!evalKey) {
+    return {
+      ok: false,
+      why: "EVAL_ANTHROPIC_API_KEY has no value. The eval will NOT fall back to ANTHROPIC_API_KEY: that fallback spent the production balance to zero and killed the live product for nine days. Put an eval-only key, on its own billing, in .env.local.",
+    };
+  }
+  const productionKey = (process.env.ANTHROPIC_API_KEY ?? "").trim() || fromEnvFile("ANTHROPIC_API_KEY");
+  if (productionKey && productionKey === evalKey) {
+    return {
+      ok: false,
+      why: "EVAL_ANTHROPIC_API_KEY and ANTHROPIC_API_KEY hold the same key, so the eval would spend the production balance exactly as before. Use a key on separate billing.",
+    };
+  }
+  // Set for THIS process only. The eval runs the real product code, so
+  // the key has to reach lib/ai/claude.ts — but this is a `vitest run`
+  // of its own and nothing it does here touches the deployment.
+  process.env.ANTHROPIC_API_KEY = evalKey;
+  return { ok: true };
 }
 
 /** A running tally of what a run actually spent, read off the API's own usage. */

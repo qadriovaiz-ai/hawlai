@@ -37,7 +37,7 @@ import { expandHashtags } from "@/lib/content/copySentences";
 import { WHATSAPP_OPT_OUT } from "@/lib/expertise/channelRules";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
-import { BUDGET_INR } from "./harness";
+import { BUDGET_INR, loadEvalKey } from "./harness";
 
 const GO = process.env.EVAL_GO === "1";
 const OUT = join("scripts", "eval", "results");
@@ -47,20 +47,6 @@ const LINES: string[] = [];
 function say(s = ""): void {
   LINES.push(s);
   process.stdout.write(`${s}\n`);
-}
-
-function loadKey(): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  if (!existsSync(".env.local")) return false;
-  for (const line of readFileSync(".env.local", "utf8").split(/\r?\n/)) {
-    const at = line.indexOf("=");
-    if (at < 0 || line.slice(0, at).trim() !== "ANTHROPIC_API_KEY") continue;
-    const value = line.slice(at + 1).trim();
-    if (!value) return false;
-    process.env.ANTHROPIC_API_KEY = value;
-    return true;
-  }
-  return false;
 }
 
 /** Nothing on record can ever license these. A survivor is a failure. */
@@ -122,7 +108,8 @@ describe("the output gate", () => {
       say("DRY RUN — set EVAL_GO=1 to spend.");
       return;
     }
-    expect(loadKey()).toBe(true);
+    const key = loadEvalKey();
+    expect(key.ok, key.ok ? "" : key.why).toBe(true);
 
     let spent = 0;
     const survivors: { caseId: string; claimType: string; canonical: string }[] = [];

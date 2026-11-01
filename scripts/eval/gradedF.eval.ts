@@ -25,27 +25,13 @@ import { join } from "node:path";
 import { extractClaims, extractUnlicensable, UNLICENSABLE_TYPES, NEEDS_RECIPIENT_RECORD } from "@/lib/facts/extractClaims";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
-import { BUDGET_INR } from "./harness";
+import { BUDGET_INR, loadEvalKey } from "./harness";
 
 const GO = process.env.EVAL_GO === "1";
 const LEDGER = join("scripts", "eval", "spend.json");
 
 function say(s = ""): void {
   process.stdout.write(`${s}\n`);
-}
-
-function loadKey(): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  if (!existsSync(".env.local")) return false;
-  for (const line of readFileSync(".env.local", "utf8").split(/\r?\n/)) {
-    const at = line.indexOf("=");
-    if (at < 0 || line.slice(0, at).trim() !== "ANTHROPIC_API_KEY") continue;
-    const value = line.slice(at + 1).trim();
-    if (!value) return false;
-    process.env.ANTHROPIC_API_KEY = value;
-    return true;
-  }
-  return false;
 }
 
 /** Must be refused outright: nothing on record can license these. */
@@ -126,7 +112,8 @@ describe("the three graded F, and the controls for the rules that fix them", () 
       say("DRY RUN — set EVAL_GO=1 to spend.");
       return;
     }
-    expect(loadKey()).toBe(true);
+    const key = loadEvalKey();
+    expect(key.ok, key.ok ? "" : key.why).toBe(true);
 
     let spent = 0;
     const report = async (label: string, sentences: string[]) => {

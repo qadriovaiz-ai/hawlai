@@ -28,7 +28,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { BUDGET_INR } from "./harness";
+import { BUDGET_INR, loadEvalKey } from "./harness";
 import { costOfClaudeResponseInr } from "@/lib/usage/pricing";
 import { CLAUDE_MODELS } from "@/lib/models";
 
@@ -82,21 +82,6 @@ function readLedger(): { runs: { at: string; label: string; inr: number; calls: 
   }
 }
 
-function loadKey(): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  if (!existsSync(".env.local")) return false;
-  for (const line of readFileSync(".env.local", "utf8").split(/\r?\n/)) {
-    const at = line.indexOf("=");
-    if (at < 0) continue;
-    if (line.slice(0, at).trim() !== "ANTHROPIC_API_KEY") continue;
-    const value = line.slice(at + 1).trim();
-    if (!value) return false;
-    process.env.ANTHROPIC_API_KEY = value;
-    return true;
-  }
-  return false;
-}
-
 /** Pessimistic, per case: a fat system prompt, every sentence, a long answer. */
 function estimateInr(caseCount: number): number {
   const per = costOfClaudeResponseInr({ input_tokens: 1300, output_tokens: 900 }, CLAUDE_MODELS.fast);
@@ -140,8 +125,9 @@ describe("the Hinglish recall gate", () => {
       say("Estimate only — nothing called, nothing spent. Set EVAL_GO=1 to run it.");
       return;
     }
-    if (!loadKey()) {
-      say("STOPPING: ANTHROPIC_API_KEY has no value in .env.local.");
+    const key = loadEvalKey();
+    if (!key.ok) {
+      say(`STOPPING: ${key.ok ? "" : key.why}`);
       return;
     }
 

@@ -32,7 +32,7 @@ function say(...parts: unknown[]): void {
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { CASES } from "./cases";
-import { BUDGET_INR, Spend, estimateInr, meterFetch, toGradedRows, gradingSheet, type GradedSentence } from "./harness";
+import { BUDGET_INR, Spend, estimateInr, meterFetch, toGradedRows, gradingSheet, type GradedSentence, loadEvalKey } from "./harness";
 import { CLAUDE_MODELS } from "@/lib/models";
 
 // Flags come from the ENVIRONMENT here, not argv: vitest owns argv.
@@ -53,22 +53,6 @@ const LEDGER = join("scripts", "eval", "spend.json");
 // ---------------------------------------------------------------------
 // The key, loaded from .env.local the way the app does. Never printed.
 // ---------------------------------------------------------------------
-function loadKey(): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  if (!existsSync(".env.local")) return false;
-  for (const line of readFileSync(".env.local", "utf8").split(/\r?\n/)) {
-    const at = line.indexOf("=");
-    if (at < 0) continue;
-    const name = line.slice(0, at).trim();
-    if (name !== "ANTHROPIC_API_KEY") continue;
-    const value = line.slice(at + 1).trim();
-    if (!value) return false;
-    process.env.ANTHROPIC_API_KEY = value;
-    return true;
-  }
-  return false;
-}
-
 type Ledger = { runs: { at: string; label: string; inr: number; calls: number }[]; totalInr: number };
 
 function readLedger(): Ledger {
@@ -113,9 +97,10 @@ async function runEval(): Promise<{ ran: boolean; reason?: string }> {
     return { ran: false, reason: "estimate only" };
   }
 
-  if (!STUB && !loadKey()) {
+  const key = STUB ? ({ ok: true } as const) : loadEvalKey();
+    if (!STUB && !key.ok) {
     say("");
-    say("STOPPING: ANTHROPIC_API_KEY is not set and has no value in .env.local.");
+    say(`STOPPING: ${key.ok ? "" : key.why}`);
     return { ran: false, reason: "no key" };
   }
 
