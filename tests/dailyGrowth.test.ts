@@ -240,17 +240,17 @@ describe("3b. the paid pass is armed by a DATE, so it expires by itself", () => 
   it("DOES NOT RUN ON ANY OTHER DAY", async () => {
     sends.length = 0;
     const calls = forbidModelCalls();
-    process.env.GROWTH_COPY_AUDIT_ON = "2026-10-24"; // tomorrow
+    process.env.GROWTH_COPY_AUDIT_ON = "2026-10-24:d1"; // tomorrow
     const { client } = db();
     const r = await runDailyGrowth(client, "d1", { now: NOW });
     expect(calls).toEqual([]);
     expect(r.copyAuditCostInr).toBe(0);
   });
 
-  it("RUNS ON THE DAY IT NAMES", async () => {
+  it("RUNS ON THE DAY IT NAMES, FOR THE BUSINESS IT NAMES", async () => {
     sends.length = 0;
     const calls = forbidModelCalls();
-    process.env.GROWTH_COPY_AUDIT_ON = TODAY;
+    process.env.GROWTH_COPY_AUDIT_ON = `${TODAY}:d1`;
     const { client } = db();
     await runDailyGrowth(client, "d1", { now: NOW });
     // The model was ASKED. It then failed, because this double refuses
@@ -258,8 +258,43 @@ describe("3b. the paid pass is armed by a DATE, so it expires by itself", () => 
     expect(calls.length).toBeGreaterThan(0);
   });
 
+  it("A BARE DATE ARMS NOTHING — it would have armed EVERY business", async () => {
+    // dailyJobs.ts creates one job per DEALERSHIP per subsystem, so a
+    // bare date meant Rs 2-4 times however many businesses exist,
+    // against an approval for one. The safe direction is a lost day.
+    sends.length = 0;
+    const calls = forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = TODAY;
+    const { client } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(calls).toEqual([]);
+    expect(r.copyAuditCostInr).toBe(0);
+  });
+
+  it("AND SAYS WHY, rather than failing quietly", async () => {
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...a: any[]) => { errors.push(a.join(" ")); });
+    forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = TODAY;
+    const { client } = db();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    spy.mockRestore();
+    expect(errors.join(" ")).toMatch(/bare date/);
+    expect(errors.join(" ")).toMatch(/EVERY business/);
+    expect(errors.join(" ")).toMatch(/<dealership_id>/);
+  });
+
+  it("and a date naming a DIFFERENT business arms nothing here", async () => {
+    sends.length = 0;
+    const calls = forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = `${TODAY}:some-other-business`;
+    const { client } = db();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    expect(calls).toEqual([]);
+  });
+
   it("AND AN EMPTY OR MISSING VALUE NEVER ARMS IT", async () => {
-    for (const value of ["", "   ", "yes", "1", "true"]) {
+    for (const value of ["", "   ", "yes", "1", "true", ":d1", "2026-10-24:", `${TODAY}:`]) {
       sends.length = 0;
       const calls = forbidModelCalls();
       process.env.GROWTH_COPY_AUDIT_ON = value;
@@ -281,7 +316,7 @@ describe("3b. the paid pass is armed by a DATE, so it expires by itself", () => 
   it("AND AN EXPLICIT false BEATS THE DATE", async () => {
     sends.length = 0;
     const calls = forbidModelCalls();
-    process.env.GROWTH_COPY_AUDIT_ON = TODAY;
+    process.env.GROWTH_COPY_AUDIT_ON = `${TODAY}:d1`;
     const { client } = db();
     await runDailyGrowth(client, "d1", { now: NOW, allowCopyAudit: false });
     expect(calls).toEqual([]);

@@ -88,20 +88,39 @@ export async function runDailyGrowth(
 
   // ---- M9, only when asked -------------------------------------------
   //
-  // A DATE, NOT A SWITCH, and that is the whole point of the design.
+  // A DATE AND ONE BUSINESS. Both, or the pass does not run.
   //
-  // The founder approved ONE paid pass at Rs 2-4. An on/off env var
-  // left on by accident is Rs 60-120 a month of unattended spend with
-  // nobody watching, and "remember to turn it off tomorrow" is not a
-  // safeguard. So GROWTH_COPY_AUDIT_ON holds a single day in the daily
-  // job's own terms (indiaToday), the pass runs only on that day, and
-  // it expires by itself at midnight whether anyone remembers or not.
+  // THE DATE, because the founder approved ONE paid pass at Rs 2-4 and
+  // an on/off env var left on by accident is Rs 60-120 a month of
+  // unattended spend with nobody watching. "Remember to turn it off
+  // tomorrow" is not a safeguard, so GROWTH_COPY_AUDIT_ON names a
+  // single day in the daily job's own terms and expires by itself at
+  // midnight whether anyone remembers or not.
+  //
+  // AND THE BUSINESS, which the first version got wrong. dailyJobs.ts
+  // creates one job PER DEALERSHIP per subsystem, so a bare date armed
+  // the paid pass for EVERY business on that day — Rs 2-4 times
+  // however many exist, against an approval for one. Found by reading
+  // the dispatcher the evening before the run, not by it happening.
+  //
+  // A bare date therefore arms NOTHING and says so. The safe direction
+  // is a lost day, not an unbudgeted spend, and the owner has to be
+  // told rather than left to discover it on an invoice.
+  //
+  //   GROWTH_COPY_AUDIT_ON=2026-10-24:ba79191a-...   one business, one day
+  //   GROWTH_COPY_AUDIT_ON=2026-10-24                arms nothing
   //
   // The explicit option still wins, for a caller that knows exactly
-  // what it is spending — a test, or a one-off run somebody is
-  // watching.
-  const onDate = String(process.env.GROWTH_COPY_AUDIT_ON ?? "").trim();
-  const allowCopyAudit = opts.allowCopyAudit ?? (onDate !== "" && onDate === day);
+  // what it is spending — a test, or a run somebody is watching.
+  const armed = String(process.env.GROWTH_COPY_AUDIT_ON ?? "").trim();
+  const [onDate, onBusiness] = armed.includes(":") ? armed.split(":", 2) : [armed, ""];
+  const armedForThis = onDate.trim() === day && onBusiness.trim() === dealershipId;
+  if (armed !== "" && onDate.trim() === day && onBusiness.trim() === "") {
+    console.error(
+      `[growth] GROWTH_COPY_AUDIT_ON is set to a bare date, which would arm the paid copy audit for EVERY business. Nothing was run. Use "${day}:<dealership_id>".`
+    );
+  }
+  const allowCopyAudit = opts.allowCopyAudit ?? armedForThis;
   let copyAuditCostInr = 0;
   if (allowCopyAudit) {
     const { gatherBusinessFacts } = await import("@/lib/claims/businessFacts");
