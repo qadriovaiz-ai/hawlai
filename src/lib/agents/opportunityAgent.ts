@@ -198,6 +198,43 @@ async function detectCandidates(supabase: any, dealershipId: string): Promise<Ca
   return candidates;
 }
 
+/**
+ * The types THIS detector produces, and the only ones it may resolve.
+ *
+ * FOUND IN THE FIRST REAL S4 RUN, 1 November 2026. `opportunities` now
+ * has a second producer: the Growth Manager writes `pages_*`,
+ * `products_*` and `live_copy_*` findings to the same table. This
+ * function auto-resolves every OPEN row it cannot see among its own
+ * candidates — so each morning it marked yesterday's growth findings
+ * `completed`, and the growth run then inserted them again as new rows.
+ *
+ * The evidence was a row the founder read back: a
+ * live_copy_unsupported_wording finding about 9 lines that are still on
+ * the live page, status `completed`.
+ *
+ * WHAT IT COST, which is worth being precise about because the report
+ * itself was never wrong: the audit recomputes its findings every run,
+ * so the owner's email was correct throughout. What churned was the
+ * TABLE — `last_surfaced_on` was lost every night, which is the column
+ * the 3-a-day cap reads. Nothing was visibly broken only because there
+ * are no goals yet and so nothing is surfaced; the day a goal exists,
+ * the same suggestion could go out every day.
+ *
+ * A PRODUCER MAY ONLY RESOLVE WHAT IT PRODUCES. That is the rule, and
+ * it is listed rather than inferred because a type this detector stops
+ * producing should drop off the list deliberately.
+ */
+const DETECTED_TYPES = new Set<string>([
+  "affiliate_commission_owed",
+  "cart_abandonment_buildup",
+  "collab_applications_waiting",
+  "goal_overdue",
+  "no_brand_voice",
+  "no_campaigns",
+  "pending_approvals",
+  "stuck_leads",
+]);
+
 export async function syncOpportunities(supabase: any, dealershipId: string): Promise<void> {
   const candidates = await detectCandidates(supabase, dealershipId);
 
@@ -252,7 +289,10 @@ export async function syncOpportunities(supabase: any, dealershipId: string): Pr
 
   // Auto-resolve open opportunities whose underlying issue no longer applies.
   const toResolve = openOpportunities.filter(
-    (o: any) => !candidateKeys.has(`${o.type}:${o.reference_id}`)
+    // ONLY THIS DETECTOR'S OWN TYPES. See DETECTED_TYPES: another
+    // producer's rows are not ours to close, and closing them every
+    // night is what churned the Growth Manager's findings.
+    (o: any) => DETECTED_TYPES.has(String(o.type)) && !candidateKeys.has(`${o.type}:${o.reference_id}`)
   );
   if (toResolve.length > 0) {
     await supabase

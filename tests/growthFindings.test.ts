@@ -214,6 +214,41 @@ describe("5. the migration says what this file says", () => {
   });
 });
 
+describe("5a. a producer may only resolve what it produces", () => {
+  // FOUND IN THE FIRST REAL S4 RUN, 1 November 2026. `opportunities`
+  // has a second producer now: the Growth Manager writes pages_*,
+  // products_* and live_copy_* findings to the same table.
+  // syncOpportunities auto-resolved every OPEN row it could not see
+  // among its own candidates, so each morning it marked yesterday's
+  // growth findings `completed` and the growth run inserted them again.
+  //
+  // The founder read the evidence back: a live_copy_unsupported_wording
+  // finding about 9 lines still on the live page, status `completed`.
+  const src = code("src/lib/agents/opportunityAgent.ts");
+
+  it("RESOLVES ONLY ITS OWN TYPES", () => {
+    expect(src).toMatch(/DETECTED_TYPES\.has\(String\(o\.type\)\) && !candidateKeys\.has/);
+  });
+
+  it("AND ITS OWN LIST IS THE TYPES IT ACTUALLY PRODUCES", () => {
+    // Listed rather than inferred, so a type it stops producing drops
+    // off deliberately — and so this test fails when a new detector
+    // type is added without being declared.
+    const produced = [...src.matchAll(/type: "([a-z_]+)"/g)].map((m) => m[1]);
+    const declared = [...src.slice(src.indexOf("const DETECTED_TYPES"), src.indexOf("export async function syncOpportunities")).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(produced.length).toBeGreaterThan(0);
+    for (const t of new Set(produced)) expect(declared, t).toContain(t);
+  });
+
+  it("AND THE GROWTH FINDINGS ARE NOT ON IT", () => {
+    // The whole point: these belong to another producer.
+    const declared = src.slice(src.indexOf("const DETECTED_TYPES"), src.indexOf("export async function syncOpportunities"));
+    for (const t of ["pages_without_search_title", "products_without_image", "live_copy_unsupported_wording", "live_copy_unsupported_claim"]) {
+      expect(declared).not.toContain(t);
+    }
+  });
+});
+
 describe("6. Perceive respects a rejection", () => {
   const src = code("src/lib/agents/opportunityAgent.ts");
 
