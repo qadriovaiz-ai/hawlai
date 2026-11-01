@@ -180,7 +180,13 @@ async function main() {
     // Nothing is surfaced: that needs the Strategist, which writes.
     suggestions: [],
     setupGoals,
-    activeGoals: input.goals.length,
+    // ACTIVE ONLY, AND S4/P6 IS WHY THIS WAS WRONG BEFORE. The query
+    // returns every goal with its status, and this counted all of them.
+    // That was harmless while the table was empty; now that the manager
+    // drafts setup steps into it, a pending DRAFT would have counted as
+    // an approved plan here, suppressed the setup steps and shown the
+    // owner a dry run that does not match his email.
+    activeGoals: input.goals.filter((g) => g.status === "active").length,
     findingCount: findings.length,
   });
 
@@ -191,8 +197,9 @@ async function main() {
   const check = everyNumberIsCounted(report);
   console.log(`EVERY NUMBER COUNTED?   ${check.ok ? "YES" : `NO — ${JSON.stringify(check.offenders)}`}`);
   console.log(`findings the audit made ${findings.length}   (${findings.map((f) => f.type).join(", ") || "none"})`);
-  console.log(`setup goals drafted     ${setupGoals.length}`);
-  console.log(`active goals on record  ${input.goals.length}   (a suggestion needs one, so 0 means setup steps only)`);
+  console.log(`setup steps derived     ${setupGoals.length}   (the live run drafts these into goals; this one writes nothing)`);
+  console.log(`active goals on record  ${input.goals.filter((g) => g.status === "active").length}   (a suggestion needs one, so 0 means setup steps only)`);
+  console.log(`setup goals awaiting you ${input.goals.filter((g) => g.status === "draft").length}`);
   console.log("=".repeat(70));
 }
 
