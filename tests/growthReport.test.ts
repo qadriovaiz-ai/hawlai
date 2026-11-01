@@ -374,9 +374,45 @@ describe("8. the report cannot say nothing is wrong while something is", () => {
     const text = renderText(stuck);
     expect(text).toMatch(/could not put them in front of you/);
     expect(text).toMatch(/which goal they serve/);
-    expect(text).toMatch(/Approve a plan/);
     // And that count is a declared number like every other.
     expect(everyNumberIsCounted(stuck).ok).toBe(true);
+  });
+
+  // S4/P6, 1 November 2026. THIS BLOCK USED TO END WITH "Approve a plan
+  // and they will appear here", and this test used to assert that
+  // sentence was present. Nothing wrote a drafted setup step into
+  // `goals`, so there was never a plan to approve: the email named a
+  // mechanism that did not exist, every morning from 24 October.
+  //
+  // THE ASSERTION WAS WIDENED, NOT RELAXED. It used to check one
+  // sentence in one case; it now checks both cases, and that the one
+  // sentence that cannot be acted on is gone.
+  it("NEVER TELLS HIM TO APPROVE SOMETHING WITH NOTHING TO APPROVE", () => {
+    const stuck = build({ suggestions: [], setupGoals: [], activeGoals: 1, findingCount: 2 });
+    const text = renderText(stuck);
+    expect(text).not.toMatch(/Approve a plan/);
+    expect(text).toMatch(/nothing waiting on your Tasks page/);
+    expect(everyNumberIsCounted(stuck).ok).toBe(true);
+  });
+
+  it("AND SENDS HIM TO THE TASKS PAGE ONLY WHEN DRAFTS ARE ACTUALLY WAITING", () => {
+    const waiting = build({
+      suggestions: [],
+      setupGoals: [],
+      activeGoals: 1,
+      findingCount: 2,
+      pendingSetupDrafts: 3,
+    });
+    const text = renderText(waiting);
+    expect(text).toMatch(/3 setup steps are waiting on your Tasks page/);
+    expect(text).not.toMatch(/nothing waiting/);
+    // The 3 is a declared number, same as every other digit in the email.
+    expect(everyNumberIsCounted(waiting).ok).toBe(true);
+  });
+
+  it("and one waiting step is one step, not 1 steps", () => {
+    const one = build({ suggestions: [], setupGoals: [], activeGoals: 1, findingCount: 2, pendingSetupDrafts: 1 });
+    expect(renderText(one)).toMatch(/1 setup step is waiting/);
   });
 
   it("while a genuinely quiet day still reads as quiet", () => {

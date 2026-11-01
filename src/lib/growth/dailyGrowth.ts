@@ -23,6 +23,7 @@ import { auditCatalogue, auditSite, type AuditFinding, type Counted } from "@/li
 import { auditLiveCopy, type CopyLine } from "@/lib/growth/copyAudit";
 import { buildDailyReport, everyNumberIsCounted, renderText, type DailyReport } from "@/lib/growth/report";
 import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
+import { writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { checkTracking } from "@/lib/growth/tracking";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
@@ -51,6 +52,10 @@ export type GrowthRunResult = {
   /** Why nothing was sent, when nothing was. */
   notSentBecause: string | null;
   copyAuditCostInr: number;
+  /** Setup steps put in front of the owner for the first time by this run. */
+  goalsDrafted: number;
+  /** Setup goals waiting on the Tasks page for the owner to confirm. */
+  goalDraftsPending: number;
   report: DailyReport | null;
 };
 
@@ -87,6 +92,8 @@ export async function runDailyGrowth(
     sent: false,
     notSentBecause: null,
     copyAuditCostInr: 0,
+    goalsDrafted: 0,
+    goalDraftsPending: 0,
     report: null,
   };
 
@@ -158,6 +165,22 @@ export async function runDailyGrowth(
   await recordFindings(supabase, dealershipId, findings);
 
   const setupGoals = setupGoalsFrom(findings, counted);
+
+  // PUT THEM WHERE THEY CAN BE APPROVED — S4/P6.
+  //
+  // A setup step existed only inside the email until now. A finding may
+  // not be surfaced without a goal it serves (migration 210), the only
+  // way to get an active goal is the owner confirming a draft on the
+  // Tasks page, and nothing wrote a draft. So the chain had no first
+  // link, and the report told the owner to "approve a plan" with
+  // nothing to approve.
+  //
+  // DRAFTS ONLY, AND THEY DO NOT LINK TODAY. linkFindingsToGoals reads
+  // active goals, so a step drafted this morning starts serving
+  // findings the morning after the owner confirms it. That delay is the
+  // owner's decision sitting in the middle, which is the point.
+  const drafts = await writeSetupGoalDrafts(supabase, dealershipId, setupGoals);
+
   await linkFindingsToGoals(supabase, dealershipId, new Map(setupGoals.map((g) => [g.key, g.title])));
 
   const maturity = maturityOf(
@@ -185,6 +208,7 @@ export async function runDailyGrowth(
     setupGoals: hasNoPlan(maturity, activeGoals) ? setupGoals : [],
     activeGoals,
     findingCount: findings.length,
+    pendingSetupDrafts: drafts.pending,
     aiFailure: opts.aiFailure
       ? { label: aiFailureLabel(opts.aiFailure.kind as any), message: opts.aiFailure.message }
       : null,
@@ -199,6 +223,8 @@ export async function runDailyGrowth(
     setupSteps: report.blocks.filter((b) => b.kind === "setup").length,
     reportSound: check.ok,
     copyAuditCostInr,
+    goalsDrafted: drafts.drafted,
+    goalDraftsPending: drafts.pending,
     report,
   };
 

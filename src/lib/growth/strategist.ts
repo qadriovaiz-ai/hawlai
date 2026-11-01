@@ -17,7 +17,9 @@
 //   4. marks only the picked ones as surfaced
 //
 // IT WRITES NOTHING CUSTOMER-FACING. §2b: "manager never writes
-// customer copy itself". The only table it touches is `opportunities`.
+// customer copy itself". The only table it WRITES is `opportunities`;
+// it reads `goals` to find the goal a finding serves, and S4/P6 put the
+// writing of draft goals in goalDrafts.ts rather than here.
 //
 // AND IT IS IDEMPOTENT FOR THE DAY. The cap counts rows already marked
 // with today's date, so a second run of the daily job surfaces nothing
@@ -155,14 +157,20 @@ export async function recordFindings(
 }
 
 /**
- * Link findings to the goals they serve, by the goal's own title.
+ * Link findings to the goals they serve.
  *
- * BY TITLE, AND THAT IS A STATED WEAKNESS rather than a hidden one.
- * `goals` (migration 131) has no stable key, and `setupGoalsFrom`
- * produces a title per finding type, so an exact title match is what
- * the schema allows today. A renamed goal silently unlinks its
- * findings, which shows up as the finding no longer being surfaced —
- * visible, and safe in the direction that matters.
+ * BY source_key FIRST, TITLE SECOND — S4/P6, migration 211. The title
+ * match was all the schema allowed when this was written, and I wrote
+ * its weakness into the comment at the time: "a renamed goal silently
+ * unlinks its findings". Renaming your own goal is a normal thing to
+ * do, and it would have quietly stopped the suggestions that goal was
+ * approved for. `source_key` holds the finding type the goal was
+ * drafted from, so the link survives any rename.
+ *
+ * THE TITLE FALLBACK STAYS, and is not dead code: every goal written
+ * before 211 — and every goal the owner writes himself through
+ * set_goal — has source_key null, and a title match is the only thing
+ * that can link those.
  *
  * Nothing is invented: a finding whose goal does not exist keeps
  * goal_id null and is simply not surfaced, which is what `surfaceable`
@@ -177,16 +185,31 @@ export async function linkFindingsToGoals(
 
   const { data: goals, error } = await supabase
     .from("goals")
-    .select("id, title, status")
+    .select("id, title, source_key, status")
     .eq("dealership_id", dealershipId)
     .eq("status", "active");
-  if (error || !Array.isArray(goals) || !goals.length) return { linked: 0 };
+  // A MISSING COLUMN READS EXACTLY LIKE AN EMPTY TABLE HERE, and the
+  // consequence — no finding has a goal, so the report surfaces
+  // nothing — is silent. Repo migrations drift from production, so it
+  // is said out loud.
+  if (error) {
+    console.error(
+      `[strategist] could not read goals for ${dealershipId}, so nothing was linked: ${error.message}. If migration 211 has not been run, goals.source_key does not exist yet.`
+    );
+    return { linked: 0 };
+  }
+  if (!Array.isArray(goals) || !goals.length) return { linked: 0 };
 
-  const idByTitle = new Map(goals.map((g: any) => [String(g.title).trim(), String(g.id)]));
+  const idByKey = new Map<string, string>();
+  const idByTitle = new Map<string, string>();
+  for (const g of goals as any[]) {
+    if (g.source_key) idByKey.set(String(g.source_key), String(g.id));
+    idByTitle.set(String(g.title).trim(), String(g.id));
+  }
   let linked = 0;
 
   for (const [type, title] of titleByFindingType.entries()) {
-    const goalId = idByTitle.get(String(title).trim());
+    const goalId = idByKey.get(type) ?? idByTitle.get(String(title).trim());
     if (!goalId) continue;
     const { error: updateError } = await supabase
       .from("opportunities")

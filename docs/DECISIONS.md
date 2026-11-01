@@ -170,6 +170,70 @@ model-free. Only the parts that need a model were dead. That is the
 free/paid split doing its job, and it is the one piece of this that
 worked as designed.
 
+## 2 November 2026 — S4/P6, and three judgment calls inside an approved plan
+
+The founder asked, correctly, whether I had planned the feature he told
+me to plan before building. I had not. I built the drafting half of it
+in P1c, wrote "the owner approves once" into a code comment as though
+that settled it, and moved on. Worse, `report.ts` then shipped the
+sentence *"Approve a plan and they will appear here"* in every daily
+email from 24 October — naming a mechanism that did not exist, because
+nothing wrote a drafted setup step into `goals`.
+
+The plan he then approved is `docs/PLAN-S4-GOAL-APPROVAL.md`. Three
+things were decided while building it that the plan did not say.
+
+**1. "Offered once" had to mean any status, not draft-or-active.** The
+plan said a step would be re-drafted when it had no `draft` or `active`
+goal. Reading `/api/goals/[id]/discard` killed that: it sets
+`'abandoned'` rather than deleting the row. So a step the owner
+explicitly discarded would have come back the next morning, and the
+morning after — breaking the plan's own promise that drafts "appear
+once, not daily". Migration 211's unique index therefore has NO status
+predicate: one setup step produces at most one goal row per business,
+ever, and discard means no. Re-opening a step after its goal completes
+is deliberately left to S5, with the outcome records that could justify
+it.
+
+**2. The report needed the PENDING count, not this run's writes.** A
+step drafted yesterday and still unconfirmed is still waiting. Counting
+only what this run inserted would make the email go quiet about it the
+next morning and the owner would never hear of it again.
+
+**3. The dry-run script was counting a draft as an approved plan.**
+`scripts/growth/dryRunReport.ts` passed `input.goals.length` as
+`activeGoals`, with no status filter. Harmless while the table was
+empty; the moment the manager drafts into it, one pending draft reads
+as an approved plan, suppresses the setup steps, and shows the founder a
+dry run that does not match his real email. Fixed in the same change
+and called out, because it is a behaviour change he did not ask for.
+
+**Three existing tests were changed, each disclosed rather than
+quietly adjusted.** `growthReport`'s assertion on "Approve a plan" —
+the sentence that is the fault — now asserts it is GONE, and covers
+both branches instead of one. `dailyGrowth`'s "TOUCHES NOTHING ELSE"
+exact-set assertion gained `goals`, and is still an exact set, plus a
+new assertion that every `goals` write is an insert and never an
+activation. `dailyGrowth`'s unreadable-goals stub gained the two
+methods the new read uses, and now also asserts nothing was drafted on
+a table that would not answer.
+
+**And `sql()` joined `tests/helpers/source.ts`.** Migrations are
+grepped through `code()` in this suite, which strips `//` and block
+comments — neither of which a `.sql` file uses. So every `--` comment
+survived into the text those tests search, which is the 2026-10-09
+incident exactly: 211's own header explains at length why its index is
+NOT scoped to `status in ('draft','active')`, naming that clause. One
+shared stripper rather than a copy in the test, per CLAUDE.md rule 8.
+
+**13 mutation checks, 13 killed.** One came back SUSPECT — "red, but a
+different test failed" — and that was my runner naming the wrong
+expected test, not a surviving guard; re-run alone, the correct test
+failed. The runner also decodes vitest's output as bytes, because the
+first version let Python decode it as cp1252, threw, and reported every
+verdict as suspect. An instrument that cannot read its own output is
+worth less than no instrument.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

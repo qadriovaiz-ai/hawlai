@@ -11,7 +11,7 @@
 // time, so "running twice must not surface six" is something that will
 // happen.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
 import { MAX_ACTIONS_PER_DAY } from "@/lib/growth/findings";
 import type { AuditFinding } from "@/lib/growth/audit";
@@ -193,6 +193,64 @@ describe("2. linking a finding to the goal it serves", () => {
       goals: [{ id: "g1", title: "Old goal", status: "abandoned" }],
     });
     expect(await linkFindingsToGoals(client, "d1", new Map([["x", "Old goal"]]))).toEqual({ linked: 0 });
+  });
+
+  // S4/P6, migration 211. The title match was all the schema allowed,
+  // and I wrote its weakness into the comment above it at the time: "a
+  // renamed goal silently unlinks its findings". Renaming your own goal
+  // is a normal thing to do, and it would have quietly stopped the
+  // suggestions that goal was approved for.
+  it("LINKS BY source_key EVEN WHEN THE OWNER HAS RENAMED THE GOAL", async () => {
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [{ id: "g1", title: "Fix my Google titles", source_key: "pages_without_search_title", status: "active" }],
+    });
+    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    expect(r.linked).toBe(1);
+    expect(tables.opportunities[0].goal_id).toBe("g1");
+  });
+
+  it("AND THE KEY WINS OVER A TITLE THAT MATCHES A DIFFERENT GOAL", async () => {
+    // Two goals, and the owner's own wording happens to collide with
+    // the audit's. The key is the one that knows which step this is.
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [
+        { id: "g_wrong", title: "Give every page a search title", source_key: null, status: "active" },
+        { id: "g_right", title: "Fix my Google titles", source_key: "pages_without_search_title", status: "active" },
+      ],
+    });
+    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    expect(r.linked).toBe(1);
+    expect(tables.opportunities[0].goal_id).toBe("g_right");
+  });
+
+  it("AND THE TITLE FALLBACK STILL WORKS FOR A GOAL WITH NO KEY", async () => {
+    // Not dead code: every goal written before 211, and every goal the
+    // owner writes through set_goal, has source_key null.
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [{ id: "g1", title: "Give every page a search title", source_key: null, status: "active" }],
+    });
+    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    expect(r.linked).toBe(1);
+    expect(tables.opportunities[0].goal_id).toBe("g1");
+  });
+
+  it("AND AN UNREADABLE goals TABLE IS SAID OUT LOUD, NOT TREATED AS EMPTY", async () => {
+    // A missing column reads exactly like an empty table here, and the
+    // consequence — no finding has a goal, so the report surfaces
+    // nothing — is silent. Repo migrations drift from production.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { client, errors } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [{ id: "g1", title: "Give every page a search title", status: "active" }],
+    });
+    errors["goals:select"] = "column goals.source_key does not exist";
+    expect(await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]))).toEqual({ linked: 0 });
+    expect(spy).toHaveBeenCalled();
+    expect(String(spy.mock.calls[0][0])).toMatch(/migration 211/);
+    spy.mockRestore();
   });
 });
 

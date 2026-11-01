@@ -50,3 +50,32 @@ export function code(path: string): string {
 export function sourceWithComments(path: string): string {
   return readFileSync(path, "utf8");
 }
+
+/**
+ * A migration with its SQL comments removed.
+ *
+ * `code()` strips `//` and `/* … *\/`, which a .sql file does not use,
+ * so grepping a migration through it leaves every `--` comment in
+ * place — exactly the hiding place the incident above is about. This
+ * project's migrations carry long explanatory headers that quote the
+ * very clauses a test looks for: 211's header explains why its index is
+ * NOT scoped to `status in ('draft','active')`, naming that clause.
+ *
+ * Here rather than in a test file, because nothing keeps its own copy
+ * of the stripping logic.
+ */
+export function sql(path: string): string {
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .map((line) => {
+      const at = line.indexOf("--");
+      // A `--` inside a quoted string is not a comment. Cutting on one
+      // would be a wrong strip, which is worse than an unstripped tail,
+      // so an odd number of quotes before it leaves the line alone.
+      if (at === -1) return line;
+      const before = line.slice(0, at);
+      const quotes = (before.match(/'/g) ?? []).length;
+      return quotes % 2 === 1 ? line : before;
+    })
+    .join("\n");
+}

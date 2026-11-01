@@ -176,6 +176,17 @@ export function buildDailyReport(input: {
    * to look at.
    */
   findingCount: number;
+  /**
+   * Setup goals sitting on the Tasks page, waiting to be confirmed.
+   *
+   * WHY IT IS CARRIED, 1 November 2026. The block below used to end
+   * with "Approve a plan and they will appear here", which named a
+   * mechanism that did not exist: nothing wrote a drafted setup step
+   * into `goals`, so there was never anything to approve. The sentence
+   * shipped in every report from 24 October. A report may now only say
+   * there is something to approve when a number says there is.
+   */
+  pendingSetupDrafts?: number;
 }): DailyReport {
   const byLabel = new Map(input.counted.map((c) => [c.label, c]));
   const blocks: ReportBlock[] = [];
@@ -263,10 +274,25 @@ export function buildDailyReport(input: {
   // caught, and a subject alone is not an explanation.
   const renderable = blocks.some((b) => b.kind === "suggestion" || b.kind === "setup");
   if (!renderable && input.findingCount > 0) {
+    const n = input.findingCount;
+    const waiting = Math.max(0, Math.floor(input.pendingSetupDrafts ?? 0));
+    const numbers: Counted[] = [{ label: "findings the audit made", value: n, source: "growth audit" }];
+    // ONLY A COUNTED NUMBER MAY SEND HIM SOMEWHERE. With nothing
+    // waiting, the honest end of this sentence is that there is
+    // nothing to approve — not a suggestion that he go and look.
+    let where = "and there is nothing waiting on your Tasks page to approve yet.";
+    if (waiting > 0) {
+      numbers.push({
+        label: "setup goals waiting for you",
+        value: waiting,
+        source: "goals (status = 'draft', drafted from the audit)",
+      });
+      where = `${waiting} setup ${waiting === 1 ? "step is" : "steps are"} waiting on your Tasks page — confirm the ${waiting === 1 ? "one" : "ones"} you want and these will appear here.`;
+    }
     blocks.push({
       kind: "line",
-      text: `I found ${input.findingCount} ${input.findingCount === 1 ? "thing" : "things"} worth doing and could not put ${input.findingCount === 1 ? "it" : "them"} in front of you, because nothing on record says which goal ${input.findingCount === 1 ? "it serves" : "they serve"}. Approve a plan and they will appear here.`,
-      numbers: [{ label: "findings the audit made", value: input.findingCount, source: "growth audit" }],
+      text: `I found ${n} ${n === 1 ? "thing" : "things"} worth doing and could not put ${n === 1 ? "it" : "them"} in front of you, because nothing on record says which goal ${n === 1 ? "it serves" : "they serve"}. ${where}`,
+      numbers,
     });
   }
 

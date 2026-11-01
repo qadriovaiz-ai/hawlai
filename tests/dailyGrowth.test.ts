@@ -96,6 +96,7 @@ function db(over: Record<string, any[]> = {}) {
         Object.entries(filters).every(([k, v]) => {
           if (k.startsWith("in:")) return (v as any[]).includes(r[k.slice(3)]);
           if (k.startsWith("is:")) return r[k.slice(3)] === null || r[k.slice(3)] === undefined;
+          if (k.startsWith("notnull:")) return r[k.slice(8)] !== null && r[k.slice(8)] !== undefined;
           return k in r ? r[k] === v : true;
         });
       const rows = () => (tables[table] ?? []).filter(matches);
@@ -113,6 +114,7 @@ function db(over: Record<string, any[]> = {}) {
         eq(c: string, v: any) { filters[c] = v; return chain; },
         in(c: string, v: any[]) { filters[`in:${c}`] = v; return chain; },
         is(c: string, _v: any) { filters[`is:${c}`] = true; return chain; },
+        not(c: string, _op: string, _v: any) { filters[`notnull:${c}`] = true; return chain; },
         gte: () => chain,
         order: () => chain,
         limit: () => Promise.resolve(apply()),
@@ -343,6 +345,12 @@ describe("3a. an unreadable plan is no plan", () => {
       const chain: any = {
         select: () => chain,
         eq: () => chain,
+        // S4/P6 widened this stub: the draft write reads `goals` with
+        // .not(...) and would insert into it. An unreadable table is
+        // unreadable for that read too, so both are modelled rather
+        // than left to throw.
+        not: () => chain,
+        insert: () => chain,
         then: (resolve: any) => resolve({ data: null, error: { message: "boom" } }),
       };
       return chain;
@@ -351,6 +359,11 @@ describe("3a. an unreadable plan is no plan", () => {
     expect(r.setupSteps).toBeGreaterThan(0);
     expect(sends[0].body).toMatch(/No plan is approved yet/);
     expect(sends[0].body).not.toMatch(/Working to your plan/);
+    // AND NOTHING WAS DRAFTED ON A TABLE THAT WOULD NOT ANSWER. A run
+    // reporting drafts it did not write is the instrument telling a
+    // false story.
+    expect(r.goalsDrafted).toBe(0);
+    expect(r.goalDraftsPending).toBe(0);
   });
 });
 
@@ -443,12 +456,21 @@ describe("4. in-process, and it never breaks the rest of the run", () => {
 
 describe("5. it records what it found, and only in findings", () => {
   it("WRITES THE FINDINGS AND TOUCHES NOTHING ELSE", async () => {
+    // S4/P6 ADDED ONE TABLE TO THIS LIST, and it is still an exact set:
+    // anything else written still fails here. `goals` is on it because
+    // the manager now puts a setup step where the owner can approve it,
+    // always as a DRAFT — the test below this one is the one that holds
+    // it to a draft. Still nothing customer-facing: §2b's "the manager
+    // never writes customer copy itself" is what this guard is for, and
+    // a draft goal awaiting a button press is not copy.
     sends.length = 0;
     forbidModelCalls();
     const { client, writes, tables } = db();
     await runDailyGrowth(client, "d1", { now: NOW });
     expect(writes.length).toBeGreaterThan(0);
-    expect([...new Set(writes.map((w) => w.table))]).toEqual(["opportunities"]);
+    expect([...new Set(writes.map((w) => w.table))].sort()).toEqual(["goals", "opportunities"]);
+    // And nothing it wrote to `goals` was activated.
+    expect(writes.filter((w) => w.table === "goals").every((w) => w.kind === "insert")).toBe(true);
     // The site has a page with no search title and a product with no
     // image, so both are on record afterwards.
     expect(tables.opportunities.map((o) => o.type).sort()).toEqual([
@@ -466,5 +488,58 @@ describe("5. it records what it found, and only in findings", () => {
     expect(r.suggestions).toBe(0);
     expect(r.setupSteps).toBe(2);
     expect(sends[0].subject).toMatch(/2 setup steps/);
+  });
+});
+
+describe("8. S4/P6 — the setup step reaches a page where it can be approved", () => {
+  // THE LINK THAT WAS MISSING. A finding may not be surfaced without a
+  // goal it serves, the only way to an active goal is the owner
+  // confirming a draft on the Tasks page, and nothing wrote a draft. So
+  // the email said "Approve a plan and they will appear here" every
+  // morning from 24 October about something that could not be done.
+
+  it("DRAFTS EACH SETUP STEP AS A GOAL, AND NEVER ACTIVATES ONE", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client, tables } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    expect(r.goalsDrafted).toBeGreaterThan(0);
+    expect(tables.goals).toHaveLength(r.goalsDrafted);
+    for (const g of tables.goals) {
+      expect(g.status).toBe("draft");
+      expect(g.source_key).toBeTruthy();
+      expect(g.created_by).toBe("growth_manager:setup_step");
+      expect(g.proposed_tasks).toEqual([]);
+    }
+  });
+
+  it("AND A SECOND RUN DRAFTS NOTHING MORE", async () => {
+    // The dispatcher really re-enters a run whose invocation ran out of
+    // time. A second pass must not double the Tasks page.
+    sends.length = 0;
+    forbidModelCalls();
+    const { client, tables } = db();
+    const first = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    const after = tables.goals.length;
+    const second = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    expect(first.goalsDrafted).toBeGreaterThan(0);
+    expect(second.goalsDrafted).toBe(0);
+    expect(tables.goals).toHaveLength(after);
+  });
+
+  it("AND THE EMAIL SENDS HIM TO THE TASKS PAGE INSTEAD OF PROMISING NOTHING", async () => {
+    // An active goal that matches no finding: setup blocks are
+    // suppressed, nothing is renderable, and this is exactly the state
+    // in which the old sentence told him to approve a plan he already
+    // had.
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = db({ goals: [{ id: "g0", dealership_id: "d1", title: "Something of my own", source_key: null, status: "active" }] });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.goalDraftsPending).toBeGreaterThan(0);
+    expect(r.sent).toBe(true);
+    expect(sends[0].body).not.toMatch(/Approve a plan/);
+    expect(sends[0].body).toMatch(/waiting on your Tasks page/);
+    expect(sends[0].body).toMatch(new RegExp(`${r.goalDraftsPending} setup step`));
   });
 });
