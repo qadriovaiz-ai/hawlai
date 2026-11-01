@@ -386,6 +386,62 @@ describe("8. the report cannot say nothing is wrong while something is", () => {
   });
 });
 
+describe("9. an AI failure owns the top of the email and the subject line", () => {
+  // WHY THIS EXISTS, 1 November 2026. The product's AI was dead for nine
+  // days and the owner found out because a cost table was empty. The
+  // daily report kept arriving and kept saying nothing, because the
+  // audit is model-free and so the report had no idea anything was
+  // wrong. The one thing that reaches him every morning was the one
+  // place not saying it.
+  const failed = () =>
+    build({
+      aiFailure: { label: "AI unavailable (credits)", message: "AI features are temporarily unavailable on our side." },
+    });
+
+  it("IS THE FIRST BLOCK, above everything else", () => {
+    const report = failed();
+    expect(report.blocks[0].kind).toBe("alert");
+  });
+
+  it("AND IT OWNS THE SUBJECT LINE", () => {
+    // "2 setup steps" over a dead AI tells the owner the wrong thing
+    // first, which is exactly what nine days of reports did.
+    expect(failed().subject).toBe("A Business — AI unavailable (credits)");
+    expect(failed().subject).not.toMatch(/setup step|suggestion/);
+  });
+
+  it("SAYS THE REST WAS WORKED OUT WITHOUT IT, so the numbers still read as trustworthy", () => {
+    const text = renderText(failed());
+    expect(text).toMatch(/AI unavailable \(credits\)/);
+    expect(text).toMatch(/worked out without it, from your own records/);
+    // And the report is still sound: the audit never needed a model.
+    expect(everyNumberIsCounted(failed()).ok).toBe(true);
+  });
+
+  it("AN ARMED COPY AUDIT THAT COULD NOT FINISH ALSO SAYS SO", () => {
+    // Silence there would read as "your copy is fine", which is what
+    // nobody checked.
+    const report = build({ copyAuditUnverified: true });
+    expect(report.blocks[0].kind).toBe("alert");
+    expect(renderText(report)).toMatch(/could not finish checking your page copy/);
+  });
+
+  it("THE AI FAILURE WINS over the copy-audit note, because it is the bigger fact", () => {
+    const report = build({
+      aiFailure: { label: "AI unavailable (credits)", message: "m" },
+      copyAuditUnverified: true,
+    });
+    expect(report.blocks.filter((b) => b.kind === "alert")).toHaveLength(1);
+    expect(report.subject).toMatch(/AI unavailable/);
+  });
+
+  it("and a healthy run carries no alert at all", () => {
+    const report = build();
+    expect(report.blocks.some((b) => b.kind === "alert")).toBe(false);
+    expect(report.subject).toMatch(/suggestion/);
+  });
+});
+
 describe("6. nothing in the report names a trade", () => {
   it("THE WHOLE RENDERED EMAIL IS TRADE-FREE", () => {
     const text = renderText(thin2());

@@ -38,6 +38,18 @@ import { hasNoPlan, planLine } from "@/lib/growth/strategy";
 import { measurementHealthLine, type TrackingState } from "@/lib/growth/tracking";
 
 export type ReportBlock =
+  /**
+   * The one thing that goes above everything else.
+   *
+   * WHY IT EXISTS, 1 November 2026: the product's AI was dead for nine
+   * days and the owner found out because a cost table was empty. The
+   * daily report kept arriving and kept saying nothing about it, because
+   * the audit is model-free and so the report had no idea anything was
+   * wrong. A report that reaches the owner every morning is the right
+   * place for "the AI is not working", and it was the one place not
+   * saying it.
+   */
+  | { kind: "alert"; text: string; numbers: Counted[] }
   /** Prose. Any digit in it must be a declared number. */
   | { kind: "line"; text: string; numbers: Counted[] }
   /** One counted figure, labelled. */
@@ -112,6 +124,8 @@ function declaredNumbers(block: ReportBlock): Counted[] {
 
 function textOf(block: ReportBlock): string {
   switch (block.kind) {
+    case "alert":
+      return block.text;
     case "stat":
       return `${block.number.label}: ${block.number.value}`;
     case "suggestion":
@@ -145,6 +159,15 @@ export function buildDailyReport(input: {
   /** Active goals on record. Zero means there is no plan yet. */
   activeGoals: number;
   /**
+   * What the AI could not do during this run, if anything.
+   *
+   * Reported above everything else: an owner reading "2 setup steps"
+   * while the product's AI is dead is being told the wrong thing first.
+   */
+  aiFailure?: { label: string; message: string } | null;
+  /** True when M9 was armed but its deep check could not complete. */
+  copyAuditUnverified?: boolean;
+  /**
    * How many findings the audit made.
    *
    * CARRIED SO THE REPORT CANNOT SAY "NOTHING TO FLAG" WHILE FINDINGS
@@ -156,6 +179,21 @@ export function buildDailyReport(input: {
 }): DailyReport {
   const byLabel = new Map(input.counted.map((c) => [c.label, c]));
   const blocks: ReportBlock[] = [];
+
+  // FIRST, ALWAYS. Nothing below it matters as much.
+  if (input.aiFailure) {
+    blocks.push({
+      kind: "alert",
+      text: `${input.aiFailure.label} — ${input.aiFailure.message} Everything below was worked out without it, from your own records.`,
+      numbers: [],
+    });
+  } else if (input.copyAuditUnverified) {
+    blocks.push({
+      kind: "alert",
+      text: "I could not finish checking your page copy against your records this time, so nothing below says anything about it.",
+      numbers: [],
+    });
+  }
 
   // §2c: the measurement health line is in EVERY report.
   const healthText = measurementHealthLine(input.tracking);
@@ -250,6 +288,14 @@ export function buildDailyReport(input: {
 
 /** Says what the email contains, and nothing it does not. */
 function subjectFor(businessName: string, blocks: ReportBlock[], findingCount: number): string {
+  // AN ALERT OWNS THE SUBJECT LINE. "2 setup steps" over a dead AI
+  // tells the owner the wrong thing first, which is exactly what nine
+  // days of reports did.
+  const alert = blocks.find((b) => b.kind === "alert");
+  if (alert && alert.kind === "alert") {
+    const headline = alert.text.split(" — ")[0].trim();
+    return `${businessName} — ${headline}`;
+  }
   const suggestions = blocks.filter((b) => b.kind === "suggestion").length;
   const setup = blocks.filter((b) => b.kind === "setup").length;
   if (suggestions) return `${businessName} — ${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"} for today`;
@@ -289,6 +335,9 @@ export function renderText(report: DailyReport): string {
   const lines: string[] = [`${report.subject}`, `For ${report.day}`, ""];
   for (const block of report.blocks) {
     switch (block.kind) {
+      case "alert":
+        lines.push(block.text, "");
+        break;
       case "health":
       case "line":
         lines.push(block.text, "");

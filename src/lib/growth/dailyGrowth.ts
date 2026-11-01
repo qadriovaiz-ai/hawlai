@@ -26,6 +26,7 @@ import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/str
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { checkTracking } from "@/lib/growth/tracking";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
+import { aiFailureLabel } from "@/lib/ai/claude";
 
 /**
  * The pages M9's model pass looks at, in order, when it is allowed to
@@ -62,6 +63,17 @@ export async function runDailyGrowth(
     allowCopyAudit?: boolean;
     /** Build and check, send nothing. */
     dryRun?: boolean;
+    /**
+     * What the AI could not do earlier in this run.
+     *
+     * PASSED IN RATHER THAN DETECTED HERE. runDailyAutopilot already
+     * knows — draftStuckLeadFollowUps records it — and the growth run
+     * is the only part of the loop that reaches the owner, so the fact
+     * has to travel the short distance between them. For nine days in
+     * October it did not, and the report arrived every morning saying
+     * nothing about a product whose AI was dead.
+     */
+    aiFailure?: { kind: string; message: string } | null;
   } = {}
 ): Promise<GrowthRunResult> {
   const now = opts.now ?? new Date();
@@ -122,6 +134,7 @@ export async function runDailyGrowth(
   }
   const allowCopyAudit = opts.allowCopyAudit ?? armedForThis;
   let copyAuditCostInr = 0;
+  let copyAuditUnverified = false;
   if (allowCopyAudit) {
     const { gatherBusinessFacts } = await import("@/lib/claims/businessFacts");
     const facts = await gatherBusinessFacts(supabase, dealershipId);
@@ -135,6 +148,9 @@ export async function runDailyGrowth(
       findings.push(...copy.findings);
       counted.push(...copy.counted);
       copyAuditCostInr = copy.costInr;
+      // ARMED AND INCOMPLETE IS WORTH SAYING. Silence here would read
+      // as "your copy is fine", which is what nobody checked.
+      copyAuditUnverified = copy.freeLayerOnly;
     }
   }
 
@@ -169,6 +185,10 @@ export async function runDailyGrowth(
     setupGoals: hasNoPlan(maturity, activeGoals) ? setupGoals : [],
     activeGoals,
     findingCount: findings.length,
+    aiFailure: opts.aiFailure
+      ? { label: aiFailureLabel(opts.aiFailure.kind as any), message: opts.aiFailure.message }
+      : null,
+    copyAuditUnverified,
   });
 
   const check = everyNumberIsCounted(report);

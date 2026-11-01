@@ -216,8 +216,12 @@ describe("3. money", () => {
 
   it("AND THE CRON NEVER ASKS", () => {
     const src = code("src/lib/agents/autopilotAgent.ts");
-    const block = src.slice(src.indexOf("runDailyGrowth"), src.indexOf("runDailyGrowth") + 400);
-    expect(block).toMatch(/runDailyGrowth\(supabase, dealershipId\)/);
+    const block = src.slice(src.indexOf("runDailyGrowth"), src.indexOf("runDailyGrowth") + 600);
+    expect(block).toMatch(/runDailyGrowth\(supabase, dealershipId/);
+    // THE PROPERTY, NOT THE CALL'S SHAPE. The cron may pass options —
+    // it passes aiFailure now — but never this one. Pinning the exact
+    // argument list broke the moment a legitimate option was added,
+    // which says the assertion was about the wrong thing.
     expect(block).not.toMatch(/allowCopyAudit/);
   });
 
@@ -350,6 +354,54 @@ describe("3a. an unreadable plan is no plan", () => {
   });
 });
 
+describe("3c. the owner is told when the AI could not work", () => {
+  // The nine-day outage of October 2026: the report arrived every
+  // morning and said nothing, because the audit is model-free and so
+  // the report had no idea. Two mutation checks survived the first pass
+  // here because nothing exercised either path through the loop.
+
+  it("AN AI FAILURE REACHES THE EMAIL, subject first", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = db();
+    const r = await runDailyGrowth(client, "d1", {
+      now: NOW,
+      aiFailure: { kind: "credits", message: "AI features are temporarily unavailable on our side." },
+    });
+    expect(r.sent).toBe(true);
+    expect(sends[0].subject).toBe("A Business — AI unavailable (credits)");
+    expect(sends[0].body).toMatch(/AI unavailable \(credits\)/);
+    expect(sends[0].body).toMatch(/worked out without it, from your own records/);
+  });
+
+  it("AND A HEALTHY RUN SAYS NOTHING ABOUT IT", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = db();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    expect(sends[0].subject).not.toMatch(/AI unavailable/);
+    expect(sends[0].body).not.toMatch(/AI unavailable/);
+  });
+
+  it("AN ARMED COPY AUDIT THAT COULD NOT FINISH IS SAID OUT LOUD", async () => {
+    // Armed for this business and this day, and the model refuses every
+    // call — so the deep check cannot complete. Silence would read as
+    // "your copy is fine", which is what nobody checked.
+    const ORIGINAL = process.env.GROWTH_COPY_AUDIT_ON;
+    sends.length = 0;
+    forbidModelCalls();
+    process.env.GROWTH_COPY_AUDIT_ON = `${TODAY}:d1`;
+    try {
+      const { client } = db();
+      await runDailyGrowth(client, "d1", { now: NOW });
+      expect(sends[0].body).toMatch(/could not finish checking your page copy/);
+    } finally {
+      if (ORIGINAL === undefined) delete process.env.GROWTH_COPY_AUDIT_ON;
+      else process.env.GROWTH_COPY_AUDIT_ON = ORIGINAL;
+    }
+  });
+});
+
 describe("4. in-process, and it never breaks the rest of the run", () => {
   it("NOTHING FETCHES A URL OF THIS APP", () => {
     // /api/autopilot/daily-run is the route whose self-calls produced
@@ -363,6 +415,15 @@ describe("4. in-process, and it never breaks the rest of the run", () => {
     const src = code("src/lib/agents/autopilotAgent.ts");
     expect(src).toMatch(/await import\("@\/lib\/growth\/dailyGrowth"\)/);
     expect(src).toMatch(/await runDailyGrowth\(/);
+  });
+
+  it("AND IT HANDS THE AI FAILURE OVER, because only the report reaches the owner", () => {
+    // A source assertion because the loop tests pass aiFailure directly
+    // and so cannot see this wiring at all — the mutation that removed
+    // it survived them. `ai.failure` is set by the drafting above; the
+    // growth run is the only part of this loop the owner ever reads.
+    const src = code("src/lib/agents/autopilotAgent.ts");
+    expect(src).toMatch(/runDailyGrowth\(supabase, dealershipId, \{ aiFailure: ai\.failure \?\? null \}\)/);
   });
 
   it("AND A GROWTH RUN THAT THROWS DOES NOT UNDO THE WORK ALREADY REPORTED", () => {

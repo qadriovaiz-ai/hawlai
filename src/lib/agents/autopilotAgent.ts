@@ -321,7 +321,10 @@ export async function runDailyAutopilot(supabase: any, dealershipId: string): Pr
   let growth: { findings: number; suggestions: number; setupSteps: number; sent: boolean; notSentBecause: string | null } | undefined;
   try {
     const { runDailyGrowth } = await import("@/lib/growth/dailyGrowth");
-    const run = await runDailyGrowth(supabase, dealershipId);
+    // THE FAILURE TRAVELS THE SHORT DISTANCE. `ai.failure` is already
+    // set by the drafting above; the growth run is the only part of
+    // this loop that reaches the owner.
+    const run = await runDailyGrowth(supabase, dealershipId, { aiFailure: ai.failure ?? null });
     growth = {
       findings: run.findings,
       suggestions: run.suggestions,
