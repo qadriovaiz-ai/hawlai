@@ -200,6 +200,96 @@ the exit test actually requires.
 
 ---
 
+## 4a. Where P0-P5 ended up (1 November 2026)
+
+Built free, each on its own commit with mutation checks. 301 test files,
+5,039 tests, `tsc` clean. Migration 210 run by the owner and verified.
+
+| Phase | What landed | The part worth knowing |
+|---|---|---|
+| **P0** | migration 210, `findings.ts` | **The score is a GENERATED column**, not a number the application writes — two descriptions of one figure is the fault this project has paid for four times. Inputs are all-or-nothing between 1 and 5, so the division can never be by zero |
+| **P1a** | M1, M2, T | Read-only and model-free, and **checked rather than declared**: the test's Supabase double fails the test on any write, and `fetch` fails it on any model call. Every visit count reads `is_internal = false` — migration 207's incident, where the owner's own clicks were most of the signal |
+| **P1b** | M9, two layers | The paid layer is off by default and capped at 40 lines. It reuses `verifyEditedText` rather than calling the extractor again |
+| **P1c** | still-learning + setup goals | A target may only come from a number counted about **this** business. No counted number means no figure, never an invented one |
+| **P3** | the Strategist | Idempotent for the day, because `dailyJobs.ts` really re-enters a run whose invocation ran out of time. A rejection is never overwritten |
+| **P4** | the daily report | **The report is data and the text is derived from it.** A block declares the numbers it may contain; `everyNumberIsCounted` walks the rendered text and fails on any digit that is not one of them |
+| **P5** | in-process wiring | **A report that fails its own number check is not sent.** One email per business per day. M9's paid pass is armed by a DATE AND A BUSINESS, so it expires by itself and cannot run everywhere |
+
+### What the first real dry run found
+
+Run against `candle_by_qaaf`'s own data on 23 October, it produced a
+report with **three false statements**: the subject said "nothing to
+flag" over two real findings, the body said "Working to your plan" to a
+business with no plan, and the findings themselves rendered as nothing.
+
+The cause was mine and structural. §2c says "if data thin -> still
+learning with setup goals instead", and I read "instead" as "instead of
+showing findings". It means instead of TARGETS. `candle_by_qaaf` has 44
+days of data and 55 events — past the thin threshold — and **zero
+goals**, so setup steps did not render and suggestions need a goal.
+Every test I had written built the two states I had imagined; the state
+the real business is actually in had none.
+
+`hasNoPlan` is now its own question, and "nothing to flag" requires
+that nothing was found.
+
+### Three incidents, all recorded
+
+**I1 - the eval was spending the product's credit.** Seven eval files
+each read `ANTHROPIC_API_KEY` from `.env.local`, so ~Rs 905 of S1/S2
+eval spend came out of the balance production depends on. The balance
+reached $0.00 on 23 October and **every AI call in the live product
+failed for nine days**. I measured the cost of every run to the paisa
+and never asked whose balance it was. Fixed: one `loadEvalKey()` that
+REFUSES rather than falling back. Logged in
+[DECISIONS.md](DECISIONS.md).
+
+**I2 - Perceive was closing the Growth Manager's findings every
+night.** `opportunities` has two producers now, and `opportunityAgent`
+auto-resolved every open row it could not see among its own eight
+candidate types. The reports were never wrong — the audit recomputes —
+but `last_surfaced_on` was lost nightly, and that is the column the
+3-a-day cap reads. A producer may now only resolve what it produces.
+
+**I3 - a bare date armed the paid pass for every business.**
+`dailyJobs.ts` creates one job per dealership, so `GROWTH_COPY_AUDIT_ON`
+holding a date alone meant Rs 2-4 times however many businesses exist,
+against an approval for one. Found by reading the dispatcher the evening
+before the run.
+
+### Corrections to this plan's own reasoning
+
+**The 508 was not the riskiest part** and **`TASK_EXECUTORS` was not
+where to add hands** - both already stated in §2 and both held.
+
+**But S was needed in S4 after all.** §1.3 listed the 90-day strategy as
+out of scope, and P0 then made `goal_id` required before a finding may
+be surfaced, because the exit test says "the goal it serves". Without
+goals the report would have been permanently empty. The thin branch of S
+went into P1c on the founder's decision of 23 October; the ready branch
+is still S5.
+
+**And the UI stays deferred** - Suggestions box and Alerts panel, on the
+founder's decision of 1 November: the roadmap's S4 row is email-only and
+the exit test is about an email.
+
+### What is left
+
+- **P6**, the live exit test. Check 1 PASSED on 1 November: nine
+  consecutive daily reports, sent and delivered, verified from
+  `email_sends`. Check 2 is M9's paid verdict, armed for 3 November.
+  Check 3 is the L1 level, which the founder deferred in S3 and which is
+  still not blocking.
+- **The budget, which matters more than anything left in S4.** Measured
+  from `api_usage_logs` for 1-23 October: Rs 626.30 over 336 calls,
+  Rs 1.86 a call, a mean of Rs 27 a calendar day and Rs 39 an active
+  day, with a worst day of Rs 159.62. The eval's spend is **not** in
+  that figure (`scripts/eval/surfaces.ts:9` passes no `logContext`), so
+  it is the real production rate. $5 is roughly eleven to sixteen days,
+  or three on a heavy one.
+
+---
+
 ## 5. The exit test, and how it is tested
 
 > *"Daily email arrives with only counted numbers; each suggestion
