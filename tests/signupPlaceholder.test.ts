@@ -173,11 +173,18 @@ describe("4. the form asks for three things", () => {
     expect(src).not.toMatch(/name="city"/);
   });
 
-  it("AND IT WRITES THE STAND-IN RATHER THAN AN EMPTY STRING", () => {
-    // An empty string would violate nothing in the database and would
-    // be indistinguishable from a name the owner cleared.
-    expect(src).toMatch(/dealership_name: PLACEHOLDER_BUSINESS_NAME/);
-    expect(src).not.toMatch(/dealership_name: ""/);
+  it("AND THE STAND-IN IS WHAT GETS WRITTEN, wherever the write now lives", () => {
+    // Q2 MOVED THE WRITE. It happens after the email code is verified,
+    // because before that there is no session and RLS refuses the row —
+    // so this assertion follows it to createBusiness.ts rather than
+    // being dropped. An empty string would violate nothing in the
+    // database and would be indistinguishable from a name the owner
+    // cleared.
+    const create = code("src/lib/onboarding/createBusiness.ts");
+    expect(create).toMatch(/dealership_name: PLACEHOLDER_BUSINESS_NAME/);
+    expect(create).not.toMatch(/dealership_name: ""/);
+    // And the page itself writes nothing at all any more.
+    expect(src).not.toMatch(/dealership_name:/);
   });
 
   it("AND SENDS NO CITY AT ALL, because the column is nullable", () => {
