@@ -39,6 +39,19 @@ import {
 import { BRANCHES, MIN_DESCRIPTION, branchAsksForWords, normaliseSiteUrl } from "@/components/onboarding/ConnectStep";
 import { provenanceLabel, resolveField, sourceOf, valueOf } from "@/lib/onboarding/provenance";
 import { REQUIRED_FIELDS } from "@/components/onboarding/ConfirmBusinessStep";
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGES,
+  MAX_BRAND_COLORS,
+  TONE_TAGS,
+  addBrandColor,
+  cleanBrandColors,
+  cleanToneTags,
+  composeToneOfVoice,
+  hinglishFrom,
+  isPreferredLanguage,
+  normaliseHexColor,
+} from "@/lib/onboarding/brand";
 import { code, sql } from "./helpers/source";
 
 const ONE_LANGUAGE = { hinglish: false };
@@ -80,9 +93,10 @@ describe("1. the built flow, and where it is heading", () => {
   it("THE TRANSITIONAL LIST ONLY SHRINKS, and every entry says which phase and why", () => {
     // Nothing new goes on this list. A step still here after its phase
     // is visible debt rather than a forgotten one.
-    // THE CAP TIGHTENS EVERY PHASE. P1 allowed two; `describe` left the
-    // flow in P2, so two would now let one quietly come back.
-    expect(TRANSITIONAL.length).toBeLessThanOrEqual(1);
+    // THE CAP TIGHTENS EVERY PHASE and is now ZERO: `describe` left in
+    // P2 and `language` in P4, so every step in the built flow is one
+    // the redesign asked for. The list may never grow again.
+    expect(TRANSITIONAL.length).toBe(0);
     for (const entry of TRANSITIONAL) {
       expect(entry.until, entry.step).toMatch(/^P\d$/);
       expect(entry.why.length, entry.step).toBeGreaterThan(20);
@@ -204,12 +218,13 @@ describe("4. walking the flow", () => {
   it("SKIPS THE CONDITIONAL STEP RATHER THAN LANDING ON IT", () => {
     expect(nextStep("presence")).toBe("connect");
     expect(nextStep("connect")).toBe("confirm");
-    expect(nextStep("language", ONE_LANGUAGE)).toBe("personality");
-    expect(nextStep("language", BOTH_LANGUAGES)).toBe("language_notes");
+    expect(nextStep("confirm")).toBe("brand");
+    expect(nextStep("formality", ONE_LANGUAGE)).toBe("personality");
+    expect(nextStep("formality", BOTH_LANGUAGES)).toBe("language_notes");
   });
 
   it("and back goes back over the same gap", () => {
-    expect(previousStep("personality", ONE_LANGUAGE)).toBe("language");
+    expect(previousStep("personality", ONE_LANGUAGE)).toBe("formality");
     expect(previousStep("personality", BOTH_LANGUAGES)).toBe("language_notes");
   });
 
@@ -570,5 +585,196 @@ describe("11. the category is written once, by the owner", () => {
     expect(route).toMatch(/dealership_name\.trim\(\)\.length < 2/);
     // A city may be cleared, which is not the same as not answering.
     expect(route).toMatch(/city\.trim\(\) \? city\.trim\(\) : null/);
+  });
+});
+
+describe("12. STEP 4 — tone pills that do not break what already reads tone", () => {
+  // tone_of_voice is FREE TEXT that prompts read directly, all over
+  // this codebase. Replacing it with an array would quietly change
+  // what every agent sees, so step 4 writes both.
+
+  it("THE OWNER'S WORDS BECOME THE SENTENCE EVERY PROMPT READS", () => {
+    expect(composeToneOfVoice(["Modern"], "drafted")).toBe("Modern.");
+    expect(composeToneOfVoice(["Modern", "Warm"], "drafted")).toBe("Modern and Warm.");
+    expect(composeToneOfVoice(["Modern", "Warm", "Premium"], "drafted")).toBe("Modern, Warm and Premium.");
+  });
+
+  it("AND THE DRAFTED SENTENCE SURVIVES WHEN HE PICKED NOTHING", () => {
+    // It is richer than a list of adjectives and it is the only thing
+    // there. Composing an empty list into an empty tone_of_voice would
+    // have blanked what the analysis worked out.
+    expect(composeToneOfVoice([], "Trustworthy, no hard-sell")).toBe("Trustworthy, no hard-sell");
+    expect(composeToneOfVoice([], null)).toBe("");
+    expect(composeToneOfVoice(["  "], "drafted")).toBe("drafted");
+  });
+
+  it("AND HIS WORDS ARE NOT BLENDED WITH THE MODEL'S", () => {
+    // An owner who picked "Minimal" and a model that inferred "warm and
+    // chatty" would otherwise both end up in the prompt, contradicting
+    // each other.
+    const composed = composeToneOfVoice(["Minimal"], "Warm, chatty and playful");
+    expect(composed).not.toMatch(/chatty/);
+    expect(composed).toBe("Minimal.");
+  });
+
+  it("ONLY THE WORDS WE OFFERED ARE STORED", () => {
+    expect(cleanToneTags(["Modern", "Premium"])).toEqual(["Modern", "Premium"]);
+    expect(cleanToneTags(["modern", "PREMIUM"])).toEqual(["Modern", "Premium"]);
+    // Anything else is dropped rather than written through.
+    expect(cleanToneTags(["Modern", "Luxury", "<script>"])).toEqual(["Modern"]);
+    expect(cleanToneTags("Modern")).toEqual([]);
+    expect(cleanToneTags(null)).toEqual([]);
+    // De-duplicated, and in the order they were offered.
+    expect(cleanToneTags(["Premium", "Modern", "Premium"])).toEqual(["Modern", "Premium"]);
+  });
+
+  it("AND NO TONE WORD NAMES A TRADE, A PRODUCT OR A CATEGORY", () => {
+    // CLAUDE.md rule 3. These six go to every business of every kind.
+    for (const tag of TONE_TAGS) {
+      expect(tag, tag).toMatch(/^[A-Z][a-z]+$/);
+      for (const word of [/shop/i, /store/i, /salon/i, /candle/i, /sweet/i, /clinic/i, /coaching/i, /jewel/i]) {
+        expect(tag, `${tag} ${word}`).not.toMatch(word);
+      }
+    }
+  });
+});
+
+describe("13. a colour is stored in one spelling, or not at all", () => {
+  it("SHORTHAND, CASE AND PADDING ALL BECOME ONE STRING", () => {
+    // #FFF, #ffffff and #FFFFFF are the same colour. Storing all three
+    // would make "is this colour already in the list?" unanswerable.
+    expect(normaliseHexColor("#FFF")).toBe("#ffffff");
+    expect(normaliseHexColor("#FFFFFF")).toBe("#ffffff");
+    expect(normaliseHexColor("  #4F46E5  ")).toBe("#4f46e5");
+  });
+
+  it("AND ANYTHING THAT IS NOT A COLOUR RETURNS NULL, not a guess", () => {
+    for (const bad of ["", "   ", "red", "#12", "#1234", "#gggggg", "4f46e5", "#4f46e5aa"]) {
+      expect(normaliseHexColor(bad), bad).toBeNull();
+    }
+  });
+
+  it("THE LIST IS DE-DUPLICATED AND CAPPED", () => {
+    expect(cleanBrandColors(["#FFF", "#ffffff", "#000000"])).toEqual(["#ffffff", "#000000"]);
+    const many = Array.from({ length: 20 }, (_, i) => `#0000${i.toString(16).padStart(2, "0")}`);
+    expect(cleanBrandColors(many)).toHaveLength(MAX_BRAND_COLORS);
+    expect(cleanBrandColors("#ffffff")).toEqual([]);
+    expect(cleanBrandColors(null)).toEqual([]);
+  });
+
+  it("ADDING ONE GIVES BACK THE LIST THAT WILL BE STORED", () => {
+    // AS DATA, NOT AS A GREP. The first version searched BrandStep for
+    // `cleanBrandColors(` and a mutation that appended raw survived it,
+    // because the cleaner was still called elsewhere in the file. A
+    // swatch that appears on screen and vanishes on save is the
+    // instrument telling a false story.
+    expect(addBrandColor([], "#FFF")).toEqual(["#ffffff"]);
+    expect(addBrandColor(["#ffffff"], "#FFFFFF")).toEqual(["#ffffff"]);
+    expect(addBrandColor(["#ffffff"], "not a colour")).toEqual(["#ffffff"]);
+    const full = ["#000001", "#000002", "#000003", "#000004", "#000005", "#000006"];
+    expect(addBrandColor(full, "#000007")).toEqual(full);
+  });
+
+  it("AND THE SCREEN ADDS THROUGH IT, while the API stores through the same cleaners", () => {
+    const src = code("src/components/onboarding/BrandStep.tsx");
+    expect(src).toMatch(/addBrandColor\(current, draftColor\)/);
+    const route = code("src/app/api/brand-profile/route.ts");
+    expect(route).toMatch(/cleanBrandColors\(brand_colors\)/);
+    expect(route).toMatch(/cleanToneTags\(tone_tags\)/);
+  });
+
+  it("AND NO COLOUR IS PRE-FILLED", () => {
+    // The mockup shows three swatches already chosen. Nothing in this
+    // product extracts colours from a website, so they would have had
+    // to come from somewhere — the same class of thing as step 3's
+    // "pulled from your website".
+    const src = code("src/components/onboarding/BrandStep.tsx");
+    expect(src).toMatch(/useState<string\[\]>\(\[\]\)/);
+  });
+});
+
+describe("14. LANGUAGE IS ASKED ONCE, AND NO LONGER ASSUMED", () => {
+  // THE BUG THIS PHASE FIXES. The flow asked "do you mix Hindi and
+  // English?", stored the answer in brand_voice.hinglish_ok, and then
+  // wrote `preferred_language: "hinglish"` for EVERY business in the
+  // same save. The question was asked and the field it belonged to was
+  // hardcoded.
+
+  it("THE SAVE NO LONGER HARDCODES A LANGUAGE", () => {
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).not.toMatch(/preferred_language: "hinglish"/);
+    expect(card).toMatch(/preferred_language: language/);
+  });
+
+  it("AND THE BRAND-VOICE FLAG IS DERIVED FROM THE SAME ANSWER", () => {
+    // Two fields answering one question is how they came to disagree.
+    expect(hinglishFrom("hinglish")).toBe(true);
+    expect(hinglishFrom("hindi")).toBe(false);
+    expect(hinglishFrom("english")).toBe(false);
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).toMatch(/hinglish_ok: hinglishFrom\(language\)/);
+    expect(card).not.toMatch(/hinglishOk/);
+  });
+
+  it("THE API REFUSES A LANGUAGE IT DOES NOT KNOW", () => {
+    // It used to take this field on trust, and the only caller that set
+    // it sent the same value for everyone.
+    const route = code("src/app/api/brand-profile/route.ts");
+    expect(route).toMatch(/isPreferredLanguage/);
+    expect(route).toMatch(/Unknown language/);
+    expect(isPreferredLanguage("hinglish")).toBe(true);
+    expect(isPreferredLanguage("urdu")).toBe(false);
+    expect(isPreferredLanguage(null)).toBe(false);
+    expect(LANGUAGES).toEqual(["hindi", "english", "hinglish"]);
+    expect(isPreferredLanguage(DEFAULT_LANGUAGE)).toBe(true);
+  });
+
+  it("AND THE CONDITIONAL STEP FOLLOWS THE PILLS, not a separate question", () => {
+    expect(stepsFor({ hinglish: hinglishFrom("hinglish") })).toContain("language_notes");
+    expect(stepsFor({ hinglish: hinglishFrom("english") })).not.toContain("language_notes");
+  });
+
+  it("AND THE STEP AFTER STEP 4 IS WALKED FROM THE ANSWER JUST GIVEN", () => {
+    // Reading it back out of React state would walk a Hinglish answer
+    // as though it were not: setState has not applied yet.
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).toMatch(/hinglishFrom\(answer\.language\)/);
+  });
+});
+
+describe("15. the order is walked, not guessed", () => {
+  it("STEP 4 IS BOTH NUMBERED AND REACHED", () => {
+    // THE PAIRING IS THE PROPERTY. A step in STEP_ORDER with nothing
+    // rendering it is counted on the bar and never shown; a screen with
+    // no entry in the order is shown and never counted. The first
+    // version of the test below only checked that goAfter and nextStep
+    // were used, so removing `brand` from the order failed a totals
+    // assertion somewhere else instead of this one.
+    expect(STEP_ORDER).toContain("brand");
+    expect(stepNumber("brand")).toBe(4);
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).toMatch(/if \(step === "brand"\)/);
+    expect(card).toMatch(/<BrandStep/);
+  });
+
+  it("TRANSITIONS COME FROM THE REGISTRY", () => {
+    // A step inserted into STEP_ORDER must actually be reached, not
+    // counted on the bar and skipped — which is how P4 would have
+    // numbered `brand` and never shown it.
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).toMatch(/function goAfter\(/);
+    expect(card).toMatch(/nextStep\(current, \{ presence, hinglish: hinglishFrom\(language\) \}\)/);
+    expect(card).toMatch(/<BrandStep/);
+  });
+
+  it("AND MIGRATION 213 KEEPS BOTH COLUMNS AS ARRAYS", () => {
+    const migration = sql("supabase/migrations/213_brand_colors_tone_tags.sql");
+    expect(migration).toMatch(/add column if not exists brand_colors jsonb not null default/);
+    expect(migration).toMatch(/add column if not exists tone_tags jsonb not null default/);
+    // A reader that maps over this must not be handed an object.
+    expect(migration).toMatch(/jsonb_typeof\(brand_colors\) = 'array'/);
+    expect(migration).toMatch(/jsonb_typeof\(tone_tags\) = 'array'/);
+    // tone_of_voice is not replaced by either of them.
+    expect(migration).not.toMatch(/drop column/);
   });
 });

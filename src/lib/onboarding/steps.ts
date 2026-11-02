@@ -82,9 +82,6 @@ export type StepKey =
   | "language_notes"
   | "personality"
   | "avoid_words"
-  // Steps that exist today and are replaced as the redesign lands.
-  // TRANSITIONAL names them and says which phase removes each.
-  | "language"
   // Not a step: the end screen, which is not counted and has no bar.
   | "done";
 
@@ -116,14 +113,17 @@ export const TARGET_ORDER: StepKey[] = [
  * business became four branches chosen by step 1's answer.
  * P3 (2 November): `confirm` is new. Nothing used to show the owner
  * what the analysis had decided about his business before it was used.
+ * P4 (2 November): `brand` is new and `language` is gone — its pills
+ * answer the language question once, instead of a yes/no step whose
+ * answer was then overwritten by a hardcoded "hinglish".
  */
 export const STEP_ORDER: StepKey[] = [
   "presence",
   "connect",
   "confirm",
+  "brand",
   "business_model",
   "formality",
-  "language",
   "language_notes",
   "personality",
   "avoid_words",
@@ -136,7 +136,9 @@ export const STEP_ORDER: StepKey[] = [
  * debt rather than a forgotten one.
  */
 export const TRANSITIONAL: { step: StepKey; until: string; why: string }[] = [
-  { step: "language", until: "P4", why: "step 4's language pills replace the yes/no Hinglish question, and fix preferred_language being written as 'hinglish' for everyone" },
+  // EMPTY SINCE P4, and that is the whole point of the list: every step
+  // in the built flow is now a step the redesign asked for. It may
+  // never grow again.
 ];
 
 /** What the wizard knows so far, as far as the step order cares. */

@@ -6,7 +6,9 @@ import { Loader2, Check, ArrowRight } from "lucide-react";
 import PresenceStep from "@/components/onboarding/PresenceStep";
 import ConnectStep from "@/components/onboarding/ConnectStep";
 import ConfirmBusinessStep, { type ConfirmedBusiness } from "@/components/onboarding/ConfirmBusinessStep";
-import { connectKindFor } from "@/lib/onboarding/steps";
+import BrandStep, { type BrandAnswer } from "@/components/onboarding/BrandStep";
+import { connectKindFor, nextStep } from "@/lib/onboarding/steps";
+import { DEFAULT_LANGUAGE, composeToneOfVoice, hinglishFrom, type PreferredLanguage, type ToneTag } from "@/lib/onboarding/brand";
 import OnboardingProgress from "@/components/onboarding/OnboardingProgress";
 import { type OnlinePresence, type StepKey } from "@/lib/onboarding/steps";
 import { MODE_LABELS, type ProductMode } from "@/lib/onboarding/intentRouter";
@@ -71,7 +73,13 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   const [draft, setDraft] = useState<AnalyzeResult | null>(null);
 
   const [formality, setFormality] = useState<BrandVoiceDraft["formality_level"] | null>(null);
-  const [hinglishOk, setHinglishOk] = useState<boolean | null>(null);
+  // ONE ANSWER FOR LANGUAGE, set by step 4's pills. It used to be two
+  // fields answering the same question — brand_voice.hinglish_ok from a
+  // yes/no step, and preferred_language, which was written as
+  // "hinglish" for every business regardless of that answer.
+  const [language, setLanguage] = useState<PreferredLanguage>(DEFAULT_LANGUAGE);
+  const [brandColors, setBrandColors] = useState<string[]>([]);
+  const [toneTags, setToneTags] = useState<ToneTag[]>([]);
   const [regionalNotes, setRegionalNotes] = useState("");
   const [personalityInput, setPersonalityInput] = useState("");
   const [avoidWordsInput, setAvoidWordsInput] = useState("");
@@ -80,6 +88,14 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   // Saved as soon as it's known rather than batched into the final
   // submit: if someone abandons onboarding after this step, knowing
   // what they came for is still worth having.
+  // THE ORDER COMES FROM THE REGISTRY, not from each handler guessing
+  // its successor. A step inserted into STEP_ORDER is then actually
+  // walked, instead of being counted on the bar and never reached —
+  // which is how P4 would have skipped `brand` while still numbering it.
+  function goAfter(current: StepKey) {
+    setStep(nextStep(current, { presence, hinglish: hinglishFrom(language) }) ?? "done");
+  }
+
   async function handlePresenceResolved(answer: {
     presence: OnlinePresence;
     productMode: ProductMode | null;
@@ -142,7 +158,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       // Nothing on record is a state step 3 already handles: every
       // field then asks to be filled in and claims no source.
     }
-    setStep("confirm");
+    goAfter("connect");
   }
 
   // STEP 3 — the owner has checked what the analysis decided. These are
@@ -164,17 +180,26 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       throw new Error(data.error ?? "Couldn't save that — try again");
     }
     setOnRecord({ name: confirmed.name, city: confirmed.city, category: confirmed.category });
-    setStep("business_model");
+    goAfter("confirm");
+  }
+
+  // STEP 4 — colours, tone words and language. Held in state and
+  // written with the one combined save at the end, like the brand-voice
+  // answers that follow it: nothing here is a correction the owner has
+  // just been asked to confirm, so there is nothing to lose by waiting.
+  function handleBrandSaved(answer: BrandAnswer) {
+    setBrandColors(answer.colors);
+    setToneTags(answer.toneTags);
+    setLanguage(answer.language);
+    // NOT goAfter(): it would read the language from state, which React
+    // has not applied yet, and a Hinglish answer would be walked as
+    // though it were not.
+    setStep(nextStep("brand", { presence, hinglish: hinglishFrom(answer.language) }) ?? "done");
   }
 
   function chooseFormality(value: BrandVoiceDraft["formality_level"]) {
     setFormality(value);
-    setStep("language");
-  }
-
-  function chooseHinglish(value: boolean) {
-    setHinglishOk(value);
-    setStep(value ? "language_notes" : "personality");
+    goAfter("formality");
   }
 
   async function finalizeAndSave() {
@@ -194,7 +219,9 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         vocabulary_preferences: { favor: draft.brand_voice_draft.vocabulary_preferences.favor, avoid },
         sentence_rhythm: draft.brand_voice_draft.sentence_rhythm,
         formality_level: formality ?? draft.brand_voice_draft.formality_level,
-        hinglish_ok: hinglishOk ?? draft.brand_voice_draft.hinglish_ok,
+        // DERIVED FROM THE ONE ANSWER, so the flow cannot disagree with
+        // itself about language.
+        hinglish_ok: hinglishFrom(language),
         regional_language_notes: regionalNotes.trim() || null,
         punctuation_emoji_style: { ...draft.brand_voice_draft.punctuation_emoji_style, notes: null },
         source: "conversational_extraction" as const,
@@ -205,10 +232,19 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tone_of_voice: draft.tone_of_voice,
+            // THE OWNER'S WORDS WHEN HE PICKED ANY, the drafted sentence
+            // when he did not. tone_of_voice stays the free text every
+            // prompt reads; tone_tags is the array the pills own.
+            tone_of_voice: composeToneOfVoice(toneTags, draft.tone_of_voice),
+            tone_tags: toneTags,
+            brand_colors: brandColors,
             target_persona: draft.target_persona,
             messaging_pillars: draft.messaging_pillars,
-            preferred_language: "hinglish",
+            // WAS HARDCODED. The flow asked about language, stored the
+            // answer in brand_voice.hinglish_ok, and then wrote
+            // "hinglish" here for every business — so the question was
+            // asked and the field it belonged to was assumed.
+            preferred_language: language,
             brand_voice,
             // The owner's own words, kept as the source the voice came
             // from (migration 159). Saved here rather than at the
@@ -264,7 +300,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   // registry — see lib/onboarding/steps.ts.
   const Progress = () => (
     <div className="mb-6">
-      <OnboardingProgress step={step} answers={{ presence, hinglish: hinglishOk }} />
+      <OnboardingProgress step={step} answers={{ presence, hinglish: hinglishFrom(language) }} />
     </div>
   );
 
@@ -288,6 +324,15 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
           onConfirmed={handleBusinessConfirmed}
           onSkip={handleSkip}
         />
+      </div>
+    );
+  }
+
+  if (step === "brand") {
+    return (
+      <div className="w-full max-w-xl animate-fade-in-up">
+        <Progress />
+        <BrandStep defaultLanguage={language} onSaved={handleBrandSaved} onSkip={handleSkip} />
       </div>
     );
   }
@@ -399,31 +444,6 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
               {c.label}
             </button>
           ))}
-        </div>
-        <div className="mt-6"><SkipForNow /></div>
-      </div>
-    );
-  }
-
-  if (step === "language") {
-    return (
-      <div className="w-full max-w-xl text-center animate-fade-in-up">
-        <Progress />
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Do you mix Hindi and English with customers?</h1>
-        <p className="text-slate-500 mt-2">Or do you keep it strictly one language?</p>
-        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-          <button
-            onClick={() => chooseHinglish(true)}
-            className="px-5 py-3 rounded-xl border border-slate-200 bg-slate-100 hover:border-brand-500 hover:bg-brand-500/5 text-sm font-medium text-slate-800 transition-colors"
-          >
-            Yes, we mix languages
-          </button>
-          <button
-            onClick={() => chooseHinglish(false)}
-            className="px-5 py-3 rounded-xl border border-slate-200 bg-slate-100 hover:border-brand-500 hover:bg-brand-500/5 text-sm font-medium text-slate-800 transition-colors"
-          >
-            No, one language
-          </button>
         </div>
         <div className="mt-6"><SkipForNow /></div>
       </div>
