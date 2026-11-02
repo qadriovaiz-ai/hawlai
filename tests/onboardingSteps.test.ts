@@ -37,6 +37,8 @@ import {
   type StepKey,
 } from "@/lib/onboarding/steps";
 import { BRANCHES, MIN_DESCRIPTION, branchAsksForWords, normaliseSiteUrl } from "@/components/onboarding/ConnectStep";
+import { provenanceLabel, resolveField, sourceOf, valueOf } from "@/lib/onboarding/provenance";
+import { REQUIRED_FIELDS } from "@/components/onboarding/ConfirmBusinessStep";
 import { code, sql } from "./helpers/source";
 
 const ONE_LANGUAGE = { hinglish: false };
@@ -101,18 +103,18 @@ describe("2. THE TOTAL IS DERIVED, SO IT CANNOT SAY FIVE", () => {
     // The failure this whole file is about: "Step 1 of 5" on a flow
     // that is longer than five.
     expect(totalSteps(ONE_LANGUAGE)).toBeGreaterThan(5);
-    expect(totalSteps(ONE_LANGUAGE)).toBe(7);
+    expect(totalSteps(ONE_LANGUAGE)).toBe(8);
   });
 
   it("AND GROWS BY ONE FOR SOMEONE WHO WRITES IN BOTH, because that step is only asked then", () => {
-    expect(totalSteps(BOTH_LANGUAGES)).toBe(8);
+    expect(totalSteps(BOTH_LANGUAGES)).toBe(9);
     expect(stepsFor(BOTH_LANGUAGES)).toContain("language_notes");
   });
 
   it("AND THE CONDITIONAL STEP IS ABSENT, NOT JUST UNCOUNTED, OTHERWISE", () => {
     expect(stepsFor(ONE_LANGUAGE)).not.toContain("language_notes");
     expect(stepNumber("language_notes", ONE_LANGUAGE)).toBeNull();
-    expect(stepNumber("language_notes", BOTH_LANGUAGES)).toBe(6);
+    expect(stepNumber("language_notes", BOTH_LANGUAGES)).toBe(7);
   });
 
   it("matches the list it came from, for every step and both answers", () => {
@@ -201,6 +203,7 @@ describe("3. STEP 2 FOLLOWS STEP 1, and is not hardcoded", () => {
 describe("4. walking the flow", () => {
   it("SKIPS THE CONDITIONAL STEP RATHER THAN LANDING ON IT", () => {
     expect(nextStep("presence")).toBe("connect");
+    expect(nextStep("connect")).toBe("confirm");
     expect(nextStep("language", ONE_LANGUAGE)).toBe("personality");
     expect(nextStep("language", BOTH_LANGUAGES)).toBe("language_notes");
   });
@@ -423,5 +426,149 @@ describe("8. STEP 2 — four branches, and only one of them can read a link", ()
     // The box it replaced is gone, along with its one-trade placeholder.
     expect(card).not.toMatch(/handleDescribe/);
     expect(card).not.toMatch(/jewelry/i);
+  });
+});
+
+describe("9. STEP 3 — every field says where it actually came from", () => {
+  // The reference design headed this screen "Pulled from your
+  // website". For two of its three fields that was false: the
+  // extractor returned a category but no name and no city, so those
+  // were the owner's own signup typing shown back to him as an
+  // analysis — on the one screen whose whole job is to be checked.
+
+  it("THE ANALYSIS IS THE SOURCE ONLY WHEN IT SAID SOMETHING", () => {
+    expect(sourceOf("A Name", "Typed At Signup")).toBe("analysis");
+    expect(sourceOf("", "Typed At Signup")).toBe("signup");
+    expect(sourceOf(null, "Typed At Signup")).toBe("signup");
+    expect(sourceOf(undefined, "Typed At Signup")).toBe("signup");
+    expect(sourceOf("", "")).toBe("none");
+    expect(sourceOf(null, null)).toBe("none");
+  });
+
+  it("AND WHITESPACE IS NOT AN ANSWER FROM EITHER", () => {
+    // An extractor that returns " " would otherwise be credited with
+    // having read something, and the field would render blank with a
+    // label claiming a source.
+    expect(sourceOf("   ", "Typed At Signup")).toBe("signup");
+    expect(sourceOf("   ", "   ")).toBe("none");
+    expect(valueOf("  A Name  ", "Typed")).toBe("A Name");
+    expect(valueOf("", "  Typed  ")).toBe("Typed");
+    expect(valueOf("", "")).toBe("");
+  });
+
+  it("A FIELD NOBODY HAS ANSWERED CLAIMS NO SOURCE", () => {
+    // A provenance label on an empty field claims a source for a value
+    // that does not exist.
+    for (const kind of ["url", "listing", "handle", "describe"] as const) {
+      expect(provenanceLabel("none", kind), kind).toBeNull();
+    }
+  });
+
+  it("AND A SIGNUP VALUE IS NEVER DESCRIBED AS AN ANALYSIS", () => {
+    for (const kind of ["url", "listing", "handle", "describe"] as const) {
+      const label = provenanceLabel("signup", kind);
+      expect(label, kind).toMatch(/signed up/);
+      expect(label, kind).not.toMatch(/website|listing|profile/i);
+    }
+  });
+
+  it("THE LABEL NEVER NAMES A SOURCE THAT BRANCH COULD NOT READ", () => {
+    // THE LOAD-BEARING ONE. Step 2 tells the owner it cannot read a
+    // Maps listing or a social profile; saying "from your website" or
+    // "from your listing" here would be a second false sentence two
+    // screens later.
+    for (const kind of ["listing", "handle", "describe"] as const) {
+      const label = provenanceLabel("analysis", kind);
+      expect(label, kind).toBe("from what you told me");
+      expect(label, kind).not.toMatch(/website|listing|profile/i);
+    }
+    // And the one branch that did read a website says so.
+    expect(provenanceLabel("analysis", "url")).toBe("from your website");
+  });
+
+  it("resolveField puts the value, the source and the label together", () => {
+    expect(resolveField("From Site", "From Signup", "url")).toEqual({
+      value: "From Site",
+      source: "analysis",
+      label: "from your website",
+    });
+    expect(resolveField("", "From Signup", "url").source).toBe("signup");
+    expect(resolveField("", "", "url")).toEqual({ value: "", source: "none", label: null });
+  });
+
+  it("A NAME AND A TYPE ARE REQUIRED; A CITY IS NOT", () => {
+    // Plenty of businesses are not in one place, and an online-only
+    // shop asked to name a city would either guess or be stuck.
+    expect(REQUIRED_FIELDS).toEqual(["name", "category"]);
+    expect(REQUIRED_FIELDS).not.toContain("city");
+  });
+
+  it("AND THE SCREEN READS THE PROVENANCE RATHER THAN ASSUMING IT", () => {
+    const src = code("src/components/onboarding/ConfirmBusinessStep.tsx");
+    expect(src).toMatch(/resolveField\(/);
+    // Three fields, three resolutions: none of them hardcoded.
+    expect((src.match(/resolveField\(/g) ?? []).length).toBe(3);
+    expect(src).not.toMatch(/Pulled from your website/);
+  });
+});
+
+describe("10. the extractor may now say the name and the city, and may not invent them", () => {
+  const agent = code("src/lib/agents/businessIntelligenceAgent.ts");
+
+  it("IT ASKS FOR BOTH", () => {
+    expect(agent).toMatch(/"business_name"/);
+    expect(agent).toMatch(/"city"/);
+  });
+
+  it("AND TELLS THE MODEL TO LEAVE THEM EMPTY RATHER THAN GUESS", () => {
+    // A guessed city on a confirmation screen is worse than a blank
+    // one: the owner is being asked to confirm it.
+    expect(agent).toMatch(/Empty string if the source does not state a name/);
+    expect(agent).toMatch(/Empty string if the source does not state one/);
+    expect(agent).toMatch(/never inferred from a phone code/);
+  });
+
+  it("THE PROMPT CARRIES NO EXAMPLE NAME OR CITY", () => {
+    // CLAUDE.md rule 3 covers prompts, not just code. The schema's
+    // business_category examples pre-date this and are left alone; the
+    // two fields added here carry none.
+    const schema = agent.slice(agent.indexOf("const RESPONSE_SCHEMA"));
+    const addition = schema.slice(schema.indexOf('"business_name"'), schema.indexOf('"business_category"'));
+    expect(addition.length).toBeGreaterThan(50);
+    expect(addition).not.toMatch(/e\.g\./);
+  });
+
+  it("AND THE FALLBACK IS EMPTY, not a placeholder", () => {
+    // A fallback is what the owner sees when the model failed, and is
+    // exactly where another business's words have leaked before.
+    expect(agent).toMatch(/business_name: "",/);
+    expect(agent).toMatch(/city: "",/);
+  });
+
+  it("the values are trimmed and never null, so one check answers every caller", () => {
+    expect(agent).toMatch(/parsed\.business_name\.trim\(\) : ""/);
+    expect(agent).toMatch(/parsed\.city\.trim\(\) : ""/);
+  });
+});
+
+describe("11. the category is written once, by the owner", () => {
+  it("THE FINAL SAVE NO LONGER OVERWRITES IT WITH THE MODEL'S VERSION", () => {
+    // A latent bug this phase would otherwise have introduced: step 3
+    // lets the owner correct the category, and the combined save at the
+    // end used to PATCH draft.business_category over it. Two writers,
+    // and the second wins without anybody choosing that.
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).not.toMatch(/business_category: draft\.business_category/);
+    expect(card).toMatch(/business_category: confirmed\.category/);
+  });
+
+  it("AND THE API WILL TAKE THE CORRECTION", () => {
+    const route = code("src/app/api/dealership/route.ts");
+    expect(route).toMatch(/dealership_name/);
+    expect(route).toMatch(/Enter your business name/);
+    // The name is read all over the product: changeable, never blankable.
+    expect(route).toMatch(/dealership_name\.trim\(\)\.length < 2/);
+    // A city may be cleared, which is not the same as not answering.
+    expect(route).toMatch(/city\.trim\(\) \? city\.trim\(\) : null/);
   });
 });

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Check, ArrowRight } from "lucide-react";
 import PresenceStep from "@/components/onboarding/PresenceStep";
 import ConnectStep from "@/components/onboarding/ConnectStep";
+import ConfirmBusinessStep, { type ConfirmedBusiness } from "@/components/onboarding/ConfirmBusinessStep";
+import { connectKindFor } from "@/lib/onboarding/steps";
 import OnboardingProgress from "@/components/onboarding/OnboardingProgress";
 import { type OnlinePresence, type StepKey } from "@/lib/onboarding/steps";
 import { MODE_LABELS, type ProductMode } from "@/lib/onboarding/intentRouter";
@@ -57,6 +59,10 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   // language_notes is a step at all, so the total on the bar changes
   // with it — see lib/onboarding/steps.ts.
   const [presence, setPresence] = useState<OnlinePresence | null>(null);
+  // What signup already put on the record, so step 3 can say which of
+  // its fields came from an analysis and which are the owner's own
+  // typing being shown back to him.
+  const [onRecord, setOnRecord] = useState<{ name?: string | null; city?: string | null; category?: string | null }>({});
   const [productMode, setProductMode] = useState<ProductMode | null>(null);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
@@ -123,6 +129,41 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         // first session. The analysis they just gave is already held.
       }
     }
+    // Read before step 3 renders rather than inside it: this await is
+    // already behind step 2's spinner, so the confirm screen appears
+    // complete instead of filling in after the owner is looking at it.
+    try {
+      const res = await fetch("/api/dealership");
+      if (res.ok) {
+        const d = await res.json();
+        setOnRecord({ name: d?.dealership_name ?? null, city: d?.city ?? null, category: d?.business_category ?? null });
+      }
+    } catch {
+      // Nothing on record is a state step 3 already handles: every
+      // field then asks to be filled in and claims no source.
+    }
+    setStep("confirm");
+  }
+
+  // STEP 3 — the owner has checked what the analysis decided. These are
+  // saved NOW rather than batched into the final save, because he has
+  // just been asked to confirm them and a later failure would silently
+  // discard a correction he already made.
+  async function handleBusinessConfirmed(confirmed: ConfirmedBusiness) {
+    const res = await fetch("/api/dealership", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealership_name: confirmed.name,
+        business_category: confirmed.category,
+        city: confirmed.city,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? "Couldn't save that — try again");
+    }
+    setOnRecord({ name: confirmed.name, city: confirmed.city, category: confirmed.category });
     setStep("business_model");
   }
 
@@ -176,13 +217,12 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
             business_description: description.trim(),
           }),
         }),
-        draft.business_category
-          ? fetch("/api/dealership", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ business_category: draft.business_category }),
-            })
-          : Promise.resolve(),
+        // THE CATEGORY IS NO LONGER WRITTEN HERE — onboarding P3. Step 3
+        // shows the owner what the analysis decided and lets him
+        // correct it, and this call would have overwritten that
+        // correction with the model's version at the end of the flow.
+        // Writing it twice from two places is how the second one wins
+        // without anybody choosing that.
         fetch("/api/dealership", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -233,6 +273,21 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       <div className="w-full max-w-xl animate-fade-in-up">
         <Progress />
         <PresenceStep ownerName={ownerName} onResolved={handlePresenceResolved} />
+      </div>
+    );
+  }
+
+  if (step === "confirm") {
+    return (
+      <div className="w-full max-w-xl animate-fade-in-up">
+        <Progress />
+        <ConfirmBusinessStep
+          kind={connectKindFor(presence ?? "none")}
+          analysed={draft}
+          onRecord={onRecord}
+          onConfirmed={handleBusinessConfirmed}
+          onSkip={handleSkip}
+        />
       </div>
     );
   }

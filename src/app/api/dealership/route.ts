@@ -39,7 +39,7 @@ export async function PATCH(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address, business_models, online_presence, online_presence_detail } = await request.json();
+  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address, business_models, online_presence, online_presence_detail, dealership_name, city } = await request.json();
 
   const models = business_models === undefined ? undefined : cleanBusinessModels(business_models);
   if (models === null) {
@@ -52,6 +52,25 @@ export async function PATCH(request: Request) {
 
   if (business_category !== undefined && business_category.trim().length < 2) {
     return NextResponse.json({ error: "Enter a business type" }, { status: 400 });
+  }
+
+  // Onboarding step 3 confirms these, so it has to be able to correct
+  // them. The name is read all over the product, which is why it may be
+  // changed but never blanked.
+  if (dealership_name !== undefined) {
+    if (typeof dealership_name !== "string" || dealership_name.trim().length < 2) {
+      return NextResponse.json({ error: "Enter your business name" }, { status: 400 });
+    }
+    if (dealership_name.trim().length > 120) {
+      return NextResponse.json({ error: "Keep the business name under 120 characters" }, { status: 400 });
+    }
+  }
+
+  // A CITY MAY BE CLEARED, and that is not the same as not answering:
+  // plenty of businesses are not in one place, and step 3 does not
+  // require it.
+  if (city !== undefined && city !== null && (typeof city !== "string" || city.trim().length > 120)) {
+    return NextResponse.json({ error: "Keep the city under 120 characters" }, { status: 400 });
   }
 
   // Validated against the same set as the DB CHECK constraint
@@ -86,6 +105,8 @@ export async function PATCH(request: Request) {
       // Printed in every marketing email's footer; blank clears it (and
       // marketing email stops until it's set again).
       ...(business_address !== undefined && { business_address: typeof business_address === "string" && business_address.trim() ? business_address.trim() : null }),
+      ...(dealership_name !== undefined && { dealership_name: dealership_name.trim() }),
+      ...(city !== undefined && { city: typeof city === "string" && city.trim() ? city.trim() : null }),
       ...(online_presence !== undefined && { online_presence }),
       ...(online_presence_detail !== undefined && {
         online_presence_detail:

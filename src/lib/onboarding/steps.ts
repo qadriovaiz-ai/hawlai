@@ -114,10 +114,13 @@ export const TARGET_ORDER: StepKey[] = [
  * screen.
  * P2 (2 November): `connect` replaces `describe` — one box for every
  * business became four branches chosen by step 1's answer.
+ * P3 (2 November): `confirm` is new. Nothing used to show the owner
+ * what the analysis had decided about his business before it was used.
  */
 export const STEP_ORDER: StepKey[] = [
   "presence",
   "connect",
+  "confirm",
   "business_model",
   "formality",
   "language",

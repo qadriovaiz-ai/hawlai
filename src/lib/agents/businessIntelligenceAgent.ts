@@ -25,6 +25,25 @@ function stripHtmlToText(html: string): string {
 
 export interface BusinessIntelligenceResult {
   summary: string;
+  /**
+   * The business's own name, and the city it is in — EMPTY STRING when
+   * the source did not say.
+   *
+   * ADDED FOR ONBOARDING STEP 3 (2 November). That screen is headed
+   * "Is this your business?" and said the fields were pulled from the
+   * website. Two of the three were not: the name and the city came
+   * from what the owner typed at signup, so the screen was telling him
+   * his own typing was an analysis. These make the claim true where it
+   * can be true, and `src/lib/onboarding/provenance.ts` decides what
+   * each field is actually labelled.
+   *
+   * NEVER INVENTED. An empty string is the honest answer and the
+   * screen then falls back to the signup value with that said on it.
+   * A guessed city on a confirmation screen is worse than a blank one:
+   * the owner is being asked to confirm it.
+   */
+  business_name: string;
+  city: string;
   business_category: string;
   tone_of_voice: string;
   // gender is deliberately absent from age_range/income/concerns' "best
@@ -47,7 +66,7 @@ export interface BusinessIntelligenceResult {
   brand_voice_draft: BrandVoiceProfile;
 }
 
-const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_category":"a short label for the type of business, e.g. 'Sweet Shop', 'Coaching Institute', 'Salon', 'Clothing Store', 'Home Decor'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"],"gender":"ONLY include this field if the business description EXPLICITLY states a gendered customer base (e.g. 'women's ethnic wear', 'men's grooming') — value 'male' or 'female'. NEVER infer gender from the business category or type alone (e.g. do not guess a gender for a restaurant, a clinic or a stationery shop just because of what kind of business it is) — omit the field entirely in every other case."},"messaging_pillars":["3-4 key selling points or values"],"brand_voice_draft":{"personality_traits":["3-4 adjectives capturing this brand's personality"],"vocabulary_preferences":{"favor":["2-3 words/phrases this business would naturally use"],"avoid":["1-2 words/phrases that would feel off-brand, or empty array if nothing obvious"]},"sentence_rhythm":"one sentence describing how this brand should sound written — short and punchy vs. flowing and detailed","formality_level":"casual|conversational|professional|formal","hinglish_ok":true,"punctuation_emoji_style":{"emoji_usage":"none|minimal|expressive","exclamation_marks":"avoid|occasional|frequent"}}}`;
+const RESPONSE_SCHEMA = `{"summary":"2-3 sentence plain-language summary of what this business is and how it presents itself","business_name":"the name this business calls itself, copied EXACTLY from the source. Empty string if the source does not state a name — never a guess, and never a description used as a name","city":"the city or town this business is in, copied EXACTLY from the source. Empty string if the source does not state one — never inferred from a phone code, a language, a currency or a name","business_category":"a short label for the type of business, e.g. 'Sweet Shop', 'Coaching Institute', 'Salon', 'Clothing Store', 'Home Decor'","tone_of_voice":"a short description of the tone/voice this business seems to use or should use, e.g. 'Trustworthy, family-friendly, no hard-sell'","target_persona":{"age_range":"best guess or empty string","income":"best guess or empty string","concerns":["2-3 likely customer concerns"],"gender":"ONLY include this field if the business description EXPLICITLY states a gendered customer base (e.g. 'women's ethnic wear', 'men's grooming') — value 'male' or 'female'. NEVER infer gender from the business category or type alone (e.g. do not guess a gender for a restaurant, a clinic or a stationery shop just because of what kind of business it is) — omit the field entirely in every other case."},"messaging_pillars":["3-4 key selling points or values"],"brand_voice_draft":{"personality_traits":["3-4 adjectives capturing this brand's personality"],"vocabulary_preferences":{"favor":["2-3 words/phrases this business would naturally use"],"avoid":["1-2 words/phrases that would feel off-brand, or empty array if nothing obvious"]},"sentence_rhythm":"one sentence describing how this brand should sound written — short and punchy vs. flowing and detailed","formality_level":"casual|conversational|professional|formal","hinglish_ok":true,"punctuation_emoji_style":{"emoji_usage":"none|minimal|expressive","exclamation_marks":"avoid|occasional|frequent"}}}`;
 
 import type { BrandVoiceProfile } from "./brandVoice";
 import { callClaude, aiFailureNote, type AiFailureNote } from "@/lib/ai/claude";
@@ -67,6 +86,12 @@ const FALLBACK_BRAND_VOICE: BrandVoiceProfile = {
 async function extractProfile(sourceLabel: string, sourceText: string, logContext?: { supabase: any; dealershipId: string }): Promise<BusinessIntelligenceResult | null> {
   const fallback: BusinessIntelligenceResult = {
     summary: "Couldn't generate a detailed profile — try filling in the fields manually.",
+    // EMPTY, NOT A PLACEHOLDER. A fallback is what the owner sees when
+    // the model failed, and it is exactly where another business's
+    // words have leaked into this product before
+    // (multiTenantRender.test.ts exists for that).
+    business_name: "",
+    city: "",
     business_category: "",
     tone_of_voice: "Professional and trustworthy",
     target_persona: {},
@@ -107,6 +132,10 @@ async function extractProfile(sourceLabel: string, sourceText: string, logContex
     const bv = parsed.brand_voice_draft ?? {};
     return {
       summary: parsed.summary ?? fallback.summary,
+      // TRIMMED AND NEVER NULL, so "did the source say?" is one check
+      // for every caller rather than three.
+      business_name: typeof parsed.business_name === "string" ? parsed.business_name.trim() : "",
+      city: typeof parsed.city === "string" ? parsed.city.trim() : "",
       business_category: parsed.business_category ?? fallback.business_category,
       tone_of_voice: parsed.tone_of_voice ?? fallback.tone_of_voice,
       target_persona: parsed.target_persona ?? {},
