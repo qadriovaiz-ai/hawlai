@@ -84,7 +84,6 @@ export type StepKey =
   | "avoid_words"
   // Steps that exist today and are replaced as the redesign lands.
   // TRANSITIONAL names them and says which phase removes each.
-  | "describe"
   | "language"
   // Not a step: the end screen, which is not counted and has no bar.
   | "done";
@@ -112,12 +111,13 @@ export const TARGET_ORDER: StepKey[] = [
  * THE FLOW AS BUILT. Every number the owner sees comes from this.
  *
  * P1 (2 November): `presence` replaces the old free-text-only intent
- * screen. Everything after it is still the flow that was already
- * there.
+ * screen.
+ * P2 (2 November): `connect` replaces `describe` — one box for every
+ * business became four branches chosen by step 1's answer.
  */
 export const STEP_ORDER: StepKey[] = [
   "presence",
-  "describe",
+  "connect",
   "business_model",
   "formality",
   "language",
@@ -133,7 +133,6 @@ export const STEP_ORDER: StepKey[] = [
  * debt rather than a forgotten one.
  */
 export const TRANSITIONAL: { step: StepKey; until: string; why: string }[] = [
-  { step: "describe", until: "P2", why: "step 2's four branches replace the single 'describe your business' box" },
   { step: "language", until: "P4", why: "step 4's language pills replace the yes/no Hinglish question, and fix preferred_language being written as 'hinglish' for everyone" },
 ];
 

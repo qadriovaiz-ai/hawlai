@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
+import { Loader2, Check, ArrowRight } from "lucide-react";
 import PresenceStep from "@/components/onboarding/PresenceStep";
+import ConnectStep from "@/components/onboarding/ConnectStep";
 import OnboardingProgress from "@/components/onboarding/OnboardingProgress";
 import { type OnlinePresence, type StepKey } from "@/lib/onboarding/steps";
 import { MODE_LABELS, type ProductMode } from "@/lib/onboarding/intentRouter";
@@ -100,28 +100,30 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       // first screen of their first session. They continue in the mode
       // they picked; only the persisted record is lost.
     }
-    setStep("describe");
+    setStep("connect");
   }
 
-  async function handleDescribe() {
-    setError(null);
-    if (description.trim().length < 10) return setError("Tell me a bit more — a couple of sentences is enough");
-    setLoading(true);
-    try {
-      const res = await fetch("/api/brand-profile/analyze-description", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Something went wrong");
-      setDraft(data);
-      setStep("business_model");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  // STEP 2 — whichever of the four branches step 1 chose. The analysis
+  // it returns is the same shape the single describe box used to
+  // produce, so everything downstream — the brand-voice questions and
+  // the one combined save — is unchanged.
+  async function handleConnectResolved(answer: { detail: string | null; description: string; draft: any }) {
+    setDescription(answer.description);
+    setDraft(answer.draft);
+    if (answer.detail) {
+      try {
+        await fetch("/api/dealership", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ online_presence_detail: answer.detail }),
+        });
+      } catch {
+        // Best-effort, like the presence save above: a failed write
+        // here must not trap someone on the second screen of their
+        // first session. The analysis they just gave is already held.
+      }
     }
+    setStep("business_model");
   }
 
   function chooseFormality(value: BrandVoiceDraft["formality_level"]) {
@@ -460,51 +462,21 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
     );
   }
 
+  // STEP 2 is the fallthrough, as the describe box was before it.
+  // presence is null only if someone reaches this without answering
+  // step 1, which the flow does not allow — so it falls back to the
+  // branch that needs nothing, rather than rendering a blank screen.
   return (
-    <div className="w-full max-w-2xl text-center">
+    <div className="w-full max-w-xl animate-fade-in-up">
       <Progress />
-      <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-6 shadow-lg shadow-brand-600/30">
-        <Image src="/logo-icon.png" alt="Hawlai" width={56} height={56} className="w-full h-full object-cover" />
-      </div>
-      {/* Acknowledges what they just asked for, so this reads as the
-          next step in one conversation rather than a second, unrelated
-          form. The greeting moves to the intent step when one ran. */}
       {productMode && (
-        <p className="text-xs font-medium text-brand-500 mb-2">
-          Setting up {MODE_LABELS[productMode]}
-        </p>
+        <p className="text-xs font-medium text-brand-500 mb-2">Setting up {MODE_LABELS[productMode]}</p>
       )}
-      <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-        {productMode ? "" : ownerName ? `Welcome, ${ownerName}. ` : "Welcome. "}
-        Tell me about {dealershipName}.
-      </h1>
-      <p className="text-slate-500 mt-3 max-w-md mx-auto">
-        {productMode
-          ? "First, a couple of sentences about your business — what you sell, who your customers are, what makes you different. Everything Hawlai does for you uses this."
-          : "A couple of sentences is enough — what you sell, who your customers are, what makes you different. I'll set up your Brand Voice from it, then ask a couple of quick follow-ups."}
-      </p>
-
-      <div className="mt-8 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left">
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Hum ek jewelry business hain, affordable fashion jewelry banate hain, young customers ke liye..."
-          disabled={loading}
-          autoFocus
-          className="w-full h-28 p-5 text-sm bg-transparent text-slate-900 placeholder-slate-500 border-0 resize-none focus:outline-none disabled:opacity-60 rounded-t-2xl"
-        />
-        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-          <SkipForNow />
-          <button
-            onClick={handleDescribe}
-            disabled={loading || description.trim().length < 10}
-            className="w-9 h-9 shrink-0 flex items-center justify-center bg-gradient-to-b from-brand-600 to-brand-700 text-white rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all disabled:opacity-40"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-      {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+      <ConnectStep
+        presence={presence ?? "none"}
+        onResolved={handleConnectResolved}
+        onSkip={handleSkip}
+      />
     </div>
   );
 }

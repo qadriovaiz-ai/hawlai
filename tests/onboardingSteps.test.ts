@@ -36,6 +36,7 @@ import {
   type OnlinePresence,
   type StepKey,
 } from "@/lib/onboarding/steps";
+import { BRANCHES, MIN_DESCRIPTION, branchAsksForWords, normaliseSiteUrl } from "@/components/onboarding/ConnectStep";
 import { code, sql } from "./helpers/source";
 
 const ONE_LANGUAGE = { hinglish: false };
@@ -77,7 +78,9 @@ describe("1. the built flow, and where it is heading", () => {
   it("THE TRANSITIONAL LIST ONLY SHRINKS, and every entry says which phase and why", () => {
     // Nothing new goes on this list. A step still here after its phase
     // is visible debt rather than a forgotten one.
-    expect(TRANSITIONAL.length).toBeLessThanOrEqual(2);
+    // THE CAP TIGHTENS EVERY PHASE. P1 allowed two; `describe` left the
+    // flow in P2, so two would now let one quietly come back.
+    expect(TRANSITIONAL.length).toBeLessThanOrEqual(1);
     for (const entry of TRANSITIONAL) {
       expect(entry.until, entry.step).toMatch(/^P\d$/);
       expect(entry.why.length, entry.step).toBeGreaterThan(20);
@@ -197,6 +200,7 @@ describe("3. STEP 2 FOLLOWS STEP 1, and is not hardcoded", () => {
 
 describe("4. walking the flow", () => {
   it("SKIPS THE CONDITIONAL STEP RATHER THAN LANDING ON IT", () => {
+    expect(nextStep("presence")).toBe("connect");
     expect(nextStep("language", ONE_LANGUAGE)).toBe("personality");
     expect(nextStep("language", BOTH_LANGUAGES)).toBe("language_notes");
   });
@@ -309,5 +313,115 @@ describe("7. MULTI-TENANT — nothing here belongs to one business", () => {
     for (const key of [...STEP_ORDER, ...TARGET_ORDER]) {
       expect(key, key).toMatch(/^[a-z_]+$/);
     }
+  });
+});
+
+describe("8. STEP 2 — four branches, and only one of them can read a link", () => {
+  const src = code("src/components/onboarding/ConnectStep.tsx");
+
+  it("THE BRANCH COMES FROM STEP 1, not from anything written here", () => {
+    expect(src).toMatch(/connectKindFor\(presence\)/);
+    // No branch decided by reading the presence value directly.
+    expect(src).not.toMatch(/presence === "website"/);
+    expect(src).not.toMatch(/presence === "maps"/);
+  });
+
+  it("AND EVERY BRANCH HAS A SCREEN", () => {
+    // AS DATA, NOT AS A GREP. The first version searched the source for
+    // `${kind}: {`, and renaming `handle` to `xhandle` survived it —
+    // the pattern still matched inside the renamed key. A ConnectKind
+    // without an entry renders undefined copy.
+    expect(Object.keys(BRANCHES).sort()).toEqual(["describe", "handle", "listing", "url"]);
+    for (const kind of ["url", "listing", "handle", "describe"] as const) {
+      expect(BRANCHES[kind].title.length, kind).toBeGreaterThan(5);
+      expect(BRANCHES[kind].blurb.length, kind).toBeGreaterThan(20);
+    }
+  });
+
+  it("THE TWO BRANCHES THAT CANNOT BE READ SAY SO, ON THE SCREEN", () => {
+    // Not a comment: the sentence the owner reads. Claiming to have
+    // read a Maps listing or an Instagram profile would be a false
+    // sentence on his second screen — analyzeWebsite gets almost no
+    // text from either and throws.
+    const saysItCannot = src.match(/cannot read directly/g) ?? [];
+    expect(saysItCannot.length).toBe(2);
+  });
+
+  it("AND A BRANCH THAT CANNOT READ ITS LINK ALWAYS ASKS FOR WORDS", () => {
+    // THE INVARIANT, and the one the first version missed. It asserted
+    // that `wantsWords: true` and `wantsWords: false` both appeared
+    // somewhere in the source, which says nothing about which branch
+    // has which — so a mutation that stopped the Maps branch asking
+    // for words survived. Without words, that branch reaches step 3
+    // with an empty form and nothing to explain it.
+    for (const kind of ["url", "listing", "handle", "describe"] as const) {
+      if (!branchCanAnalyseLink(kind)) {
+        expect(branchAsksForWords(kind), kind).toBe(true);
+      }
+    }
+    // And the one branch that CAN read its link does not ask twice.
+    expect(branchCanAnalyseLink("url")).toBe(true);
+    expect(branchAsksForWords("url")).toBe(false);
+    expect(branchAsksForWords("listing")).toBe(true);
+    expect(branchAsksForWords("handle")).toBe(true);
+    expect(branchAsksForWords("describe")).toBe(true);
+  });
+
+  it("A SITE THAT CANNOT BE READ IS NOT A DEAD END", () => {
+    // Without this the owner is stuck on step 2 of his first session
+    // whenever his site is down, blocks us, or is one JavaScript
+    // bundle.
+    expect(src).toMatch(/setFellBack\(true\)/);
+    expect(src).toMatch(/fellBack \? "describe" : kind/);
+  });
+
+  it("AND THE LINK IS KEPT EVEN THEN", () => {
+    // It is the owner's record of where his business is, not a
+    // by-product of successfully reading it.
+    expect(src).toMatch(/const detail = link\.trim\(\) \|\| null/);
+  });
+
+  it("A BARE DOMAIN IS MADE INTO A URL, because the API refuses one without a scheme", () => {
+    // analyzeWebsite returns 400 for anything not matching ^https?://,
+    // and the reference design's own screen shows a domain typed
+    // without one.
+    expect(normaliseSiteUrl("yourbusiness.com")).toBe("https://yourbusiness.com");
+    expect(normaliseSiteUrl("  yourbusiness.com  ")).toBe("https://yourbusiness.com");
+    // Already a URL, left alone — including http, which is not ours to upgrade.
+    expect(normaliseSiteUrl("https://a.example")).toBe("https://a.example");
+    expect(normaliseSiteUrl("http://a.example")).toBe("http://a.example");
+    expect(normaliseSiteUrl("HTTPS://A.example")).toBe("HTTPS://A.example");
+    // Nothing in, nothing out: never the string "https://".
+    expect(normaliseSiteUrl("   ")).toBe("");
+  });
+
+  it("AND THE DESCRIPTION FLOOR MATCHES THE API'S OWN", () => {
+    // analyzeDescription throws under 10 characters. A screen that
+    // accepted less would send a request it knows will fail.
+    expect(MIN_DESCRIPTION).toBe(10);
+    expect(src).toMatch(/>= MIN_DESCRIPTION/);
+  });
+
+  it("THE URL IS NEVER SAVED AS THE BUSINESS DESCRIPTION", () => {
+    // business_description is the source the brand voice came from
+    // (migration 159). A link is not a description of a business.
+    expect(src).toMatch(/description: fromWebsite \? "" : words\.trim\(\)/);
+  });
+
+  it("and it introduces no model call of its own", () => {
+    // Both endpoints already existed, already log their usage and
+    // already refuse to save defaults when the AI is down.
+    expect(src).toMatch(/analyze-website/);
+    expect(src).toMatch(/analyze-description/);
+    expect(src).not.toMatch(/anthropic/i);
+  });
+
+  it("AND IT IS WHAT STEP 2 ACTUALLY RENDERS", () => {
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    expect(card).toMatch(/<ConnectStep/);
+    expect(card).toMatch(/presence=\{presence \?\? "none"\}/);
+    // The box it replaced is gone, along with its one-trade placeholder.
+    expect(card).not.toMatch(/handleDescribe/);
+    expect(card).not.toMatch(/jewelry/i);
   });
 });
