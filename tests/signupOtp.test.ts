@@ -14,7 +14,8 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  OTP_LENGTH,
+  OTP_MAX_LENGTH,
+  OTP_MIN_LENGTH,
   RESEND_COOLDOWN_SECONDS,
   cleanOtpInput,
   isAlreadyRegistered,
@@ -25,28 +26,50 @@ import { ensureBusinessForOwner } from "@/lib/onboarding/createBusiness";
 import { PLACEHOLDER_BUSINESS_NAME } from "@/lib/onboarding/signup";
 import { code } from "./helpers/source";
 
-describe("1. the code box only accepts what Supabase sends", () => {
-  it("SIX DIGITS, because that is what {{ .Token }} is", () => {
-    expect(OTP_LENGTH).toBe(6);
-    expect(isCompleteOtp("123456")).toBe(true);
+describe("1. the code box takes whatever length Supabase sends", () => {
+  // THE BUG THIS REPLACES (3 November 2026). This file used to assert
+  // `OTP_LENGTH === 6`. Supabase's email OTP length is a PROJECT
+  // SETTING, 6 to 10 digits, and this project sends eight — so the box
+  // dropped the last two digits of every code, verifyOtp was handed a
+  // truncated string, and every correct code came back "expired or
+  // invalid". The test did not catch it; it pinned the assumption, so
+  // the number looked deliberate and checked.
+
+  it("AN EIGHT-DIGIT CODE SURVIVES INTACT", () => {
+    // The exact case that was broken: a real code from this project.
+    expect(cleanOtpInput("19258085")).toBe("19258085");
+    expect(isCompleteOtp("19258085")).toBe(true);
+  });
+
+  it("AND SO DOES EVERY LENGTH SUPABASE ALLOWS", () => {
+    expect(OTP_MIN_LENGTH).toBe(6);
+    expect(OTP_MAX_LENGTH).toBe(10);
+    for (let length = OTP_MIN_LENGTH; length <= OTP_MAX_LENGTH; length += 1) {
+      const digits = "1234567890".slice(0, length);
+      expect(cleanOtpInput(digits), digits).toBe(digits);
+      expect(isCompleteOtp(digits), digits).toBe(true);
+    }
+  });
+
+  it("AND NOTHING SHORTER THAN SUPABASE'S FLOOR IS SENT", () => {
+    // verifyOtp counts against the project's rate limit whether the
+    // code was plausible or not.
     expect(isCompleteOtp("12345")).toBe(false);
     expect(isCompleteOtp("")).toBe(false);
   });
 
   it("AND NOTHING THAT IS NOT A DIGIT GETS THROUGH", () => {
-    // A paste out of an email brings spaces and sometimes a dash, and
-    // verifyOtp counts against the project's rate limit whether the
-    // code was plausible or not.
-    expect(cleanOtpInput("123 456")).toBe("123456");
-    expect(cleanOtpInput("12-34-56")).toBe("123456");
+    // A paste out of an email brings spaces and sometimes a dash.
+    expect(cleanOtpInput("1925 8085")).toBe("19258085");
+    expect(cleanOtpInput("19-25-80-85")).toBe("19258085");
     expect(cleanOtpInput(" 123456 ")).toBe("123456");
     expect(cleanOtpInput("abc123456def")).toBe("123456");
     expect(cleanOtpInput("")).toBe("");
   });
 
-  it("AND A LONGER PASTE IS CUT, not sent whole", () => {
-    expect(cleanOtpInput("1234567890")).toBe("123456");
-    expect(cleanOtpInput("1234567890").length).toBe(OTP_LENGTH);
+  it("AND ONLY WHAT CANNOT BE A CODE AT ALL IS CUT", () => {
+    expect(cleanOtpInput("12345678901234")).toBe("1234567890");
+    expect(cleanOtpInput("12345678901234").length).toBe(OTP_MAX_LENGTH);
   });
 
   it("the cooldown is long enough to be worth having", () => {
@@ -63,9 +86,13 @@ describe("2. EACH FAILURE GETS ITS OWN ADVICE, not its own wording", () => {
     expect(otpFailureMessage("Token has expired or is invalid")).toMatch(/new one/i);
   });
 
-  it("A WRONG CODE SAYS TRY AGAIN", () => {
+  it("A WRONG CODE SAYS TYPE THE WHOLE THING", () => {
+    // "the whole code" rather than "again" since 3 November: a
+    // half-typed code is now possible (the box accepts 6 to 10 digits
+    // because the length is a project setting), and a partial code is
+    // exactly what verifyOtp reports as invalid.
     expect(otpFailureMessage("Invalid token")).toMatch(/not right/i);
-    expect(otpFailureMessage("Invalid token")).toMatch(/type it again/i);
+    expect(otpFailureMessage("Invalid token")).toMatch(/the whole code/i);
   });
 
   it("AND A RATE LIMIT SAYS WAIT", () => {
@@ -277,5 +304,15 @@ describe("4. NOTHING IS WRITTEN BEFORE THE EMAIL IS VERIFIED", () => {
   it("the box is marked up as a one-time code, so a phone offers to fill it", () => {
     expect(page).toMatch(/autoComplete="one-time-code"/);
     expect(page).toMatch(/inputMode="numeric"/);
+  });
+
+  it("AND THE SCREEN STATES NO DIGIT COUNT", () => {
+    // The client cannot read the project's OTP length setting, so any
+    // number in that sentence is a guess shown to the owner as a fact.
+    // Saying "6-digit code" next to a box that cut an 8-digit code is
+    // how the bug of 3 November read as the owner's mistake.
+    expect(page).not.toMatch(/\d-digit/);
+    expect(page).not.toMatch(/OTP_MIN_LENGTH\}-digit/);
+    expect(page).not.toMatch(/placeholder="123456"/);
   });
 });

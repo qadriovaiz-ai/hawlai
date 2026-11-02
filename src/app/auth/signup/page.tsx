@@ -9,7 +9,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { ensureBusinessForOwner } from "@/lib/onboarding/createBusiness";
 import {
-  OTP_LENGTH,
   RESEND_COOLDOWN_SECONDS,
   cleanOtpInput,
   isAlreadyRegistered,
@@ -204,9 +203,13 @@ export default function SignupPage() {
     return shell(
       <>
         <h2 className="text-xl font-semibold text-slate-900 mb-1">Check your email</h2>
+        {/* NO DIGIT COUNT. Supabase's OTP length is a project setting
+            (6-10) and the client cannot read it, so a number here would
+            be a guess shown to the owner as a fact — which is how the
+            box came to cut an 8-digit code down to 6 on 3 November. */}
         <p className="text-slate-500 text-sm mb-6">
-          I sent a {OTP_LENGTH}-digit code to{" "}
-          <span className="text-slate-800 font-medium">{form.email.trim()}</span>.
+          I sent a code to <span className="text-slate-800 font-medium">{form.email.trim()}</span>.
+          Type the whole code.
         </p>
 
         <form onSubmit={handleVerify} className="space-y-4">
@@ -223,8 +226,8 @@ export default function SignupPage() {
               autoComplete="one-time-code"
               value={code}
               onChange={(e) => setCode(cleanOtpInput(e.target.value))}
-              placeholder="123456"
-              className="input text-center text-lg tracking-[0.4em] font-medium tabular-nums"
+              placeholder="Enter the code"
+              className="input text-center text-lg tracking-[0.3em] font-medium tabular-nums"
             />
           </div>
 
