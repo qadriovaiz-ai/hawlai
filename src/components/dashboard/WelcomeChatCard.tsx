@@ -7,6 +7,7 @@ import PresenceStep from "@/components/onboarding/PresenceStep";
 import ConnectStep from "@/components/onboarding/ConnectStep";
 import ConfirmBusinessStep, { type ConfirmedBusiness } from "@/components/onboarding/ConfirmBusinessStep";
 import BrandStep, { type BrandAnswer } from "@/components/onboarding/BrandStep";
+import PhotosStep from "@/components/onboarding/PhotosStep";
 import { connectKindFor, nextStep } from "@/lib/onboarding/steps";
 import { DEFAULT_LANGUAGE, composeToneOfVoice, hinglishFrom, type PreferredLanguage, type ToneTag } from "@/lib/onboarding/brand";
 import OnboardingProgress from "@/components/onboarding/OnboardingProgress";
@@ -328,6 +329,15 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
     );
   }
 
+  if (step === "photos") {
+    return (
+      <div className="w-full max-w-xl animate-fade-in-up">
+        <Progress />
+        <PhotosStep onFinished={() => goAfter("photos")} onSkip={handleSkip} />
+      </div>
+    );
+  }
+
   if (step === "brand") {
     return (
       <div className="w-full max-w-xl animate-fade-in-up">
@@ -537,11 +547,17 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
     );
   }
 
-  // STEP 2 is the fallthrough, as the describe box was before it.
+  // STEP 2 BY NAME, NOT BY FALLING THROUGH. It used to be the
+  // fallthrough — inherited from the describe box it replaced — which
+  // meant any step without a block of its own silently rendered step 2.
+  // A test now asserts each of the five design screens is both
+  // numbered and reached, and it caught this.
+  //
   // presence is null only if someone reaches this without answering
   // step 1, which the flow does not allow — so it falls back to the
   // branch that needs nothing, rather than rendering a blank screen.
-  return (
+  if (step === "connect") {
+    return (
     <div className="w-full max-w-xl animate-fade-in-up">
       <Progress />
       {productMode && (
@@ -552,6 +568,19 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
         onResolved={handleConnectResolved}
         onSkip={handleSkip}
       />
+      </div>
+    );
+  }
+
+  // EVERY StepKey HAS A BLOCK ABOVE, so this is unreachable — and
+  // TypeScript cannot prove that, so it is written as "start again"
+  // rather than as a blank screen. A new step added to the registry
+  // without a screen lands here and sends the owner back to step 1,
+  // which is visible, instead of rendering nothing at all.
+  return (
+    <div className="w-full max-w-xl animate-fade-in-up">
+      <Progress />
+      <PresenceStep ownerName={ownerName} onResolved={handlePresenceResolved} />
     </div>
   );
 }

@@ -116,12 +116,15 @@ export const TARGET_ORDER: StepKey[] = [
  * P4 (2 November): `brand` is new and `language` is gone — its pills
  * answer the language question once, instead of a yes/no step whose
  * answer was then overwritten by a hardcoded "hinglish".
+ * P5 (2 November): `photos` is new, and the built flow now matches
+ * TARGET_ORDER exactly.
  */
 export const STEP_ORDER: StepKey[] = [
   "presence",
   "connect",
   "confirm",
   "brand",
+  "photos",
   "business_model",
   "formality",
   "language_notes",

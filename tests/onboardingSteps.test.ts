@@ -52,6 +52,17 @@ import {
   isPreferredLanguage,
   normaliseHexColor,
 } from "@/lib/onboarding/brand";
+import {
+  MAX_PHOTOS,
+  MAX_RAW_BYTES,
+  MIN_PHOTOS,
+  decodedByteLength,
+  enoughPhotos,
+  isAcceptedImageType,
+  photoStoragePath,
+  readDataUrl,
+  roomForMore,
+} from "@/lib/onboarding/photos";
 import { code, sql } from "./helpers/source";
 
 const ONE_LANGUAGE = { hinglish: false };
@@ -117,18 +128,18 @@ describe("2. THE TOTAL IS DERIVED, SO IT CANNOT SAY FIVE", () => {
     // The failure this whole file is about: "Step 1 of 5" on a flow
     // that is longer than five.
     expect(totalSteps(ONE_LANGUAGE)).toBeGreaterThan(5);
-    expect(totalSteps(ONE_LANGUAGE)).toBe(8);
+    expect(totalSteps(ONE_LANGUAGE)).toBe(9);
   });
 
   it("AND GROWS BY ONE FOR SOMEONE WHO WRITES IN BOTH, because that step is only asked then", () => {
-    expect(totalSteps(BOTH_LANGUAGES)).toBe(9);
+    expect(totalSteps(BOTH_LANGUAGES)).toBe(10);
     expect(stepsFor(BOTH_LANGUAGES)).toContain("language_notes");
   });
 
   it("AND THE CONDITIONAL STEP IS ABSENT, NOT JUST UNCOUNTED, OTHERWISE", () => {
     expect(stepsFor(ONE_LANGUAGE)).not.toContain("language_notes");
     expect(stepNumber("language_notes", ONE_LANGUAGE)).toBeNull();
-    expect(stepNumber("language_notes", BOTH_LANGUAGES)).toBe(7);
+    expect(stepNumber("language_notes", BOTH_LANGUAGES)).toBe(8);
   });
 
   it("matches the list it came from, for every step and both answers", () => {
@@ -219,6 +230,7 @@ describe("4. walking the flow", () => {
     expect(nextStep("presence")).toBe("connect");
     expect(nextStep("connect")).toBe("confirm");
     expect(nextStep("confirm")).toBe("brand");
+    expect(nextStep("brand")).toBe("photos");
     expect(nextStep("formality", ONE_LANGUAGE)).toBe("personality");
     expect(nextStep("formality", BOTH_LANGUAGES)).toBe("language_notes");
   });
@@ -776,5 +788,179 @@ describe("15. the order is walked, not guessed", () => {
     expect(migration).toMatch(/jsonb_typeof\(tone_tags\) = 'array'/);
     // tone_of_voice is not replaced by either of them.
     expect(migration).not.toMatch(/drop column/);
+  });
+});
+
+describe("16. STEP 5 — one photo before setup can continue", () => {
+  it("THE GATE IS ONE PHOTO, AND ZERO IS NOT ENOUGH", () => {
+    expect(MIN_PHOTOS).toBe(1);
+    expect(enoughPhotos(0)).toBe(false);
+    expect(enoughPhotos(1)).toBe(true);
+    expect(enoughPhotos(15)).toBe(true);
+    // A count that is not a number is not a photo.
+    expect(enoughPhotos(NaN)).toBe(false);
+  });
+
+  it("AND THERE IS A CEILING, counted rather than assumed", () => {
+    expect(MAX_PHOTOS).toBe(15);
+    expect(roomForMore(14)).toBe(true);
+    expect(roomForMore(15)).toBe(false);
+    expect(roomForMore(99)).toBe(false);
+    // The API counts it too: a second tab would walk past a screen that
+    // merely stops offering the button.
+    const route = code("src/app/api/business-photos/route.ts");
+    expect(route).toMatch(/count: "exact", head: true/);
+    expect(route).toMatch(/roomForMore\(count \?\? 0\)/);
+  });
+
+  it("THE GATE IS ON THE BUTTON, not only in the copy", () => {
+    const src = code("src/components/onboarding/PhotosStep.tsx");
+    expect(src).toMatch(/const ready = enoughPhotos\(count\)/);
+    expect(src).toMatch(/disabled=\{!ready/);
+  });
+
+  it("and the list starts as unknown rather than as empty", () => {
+    // Starting at [] would tell someone who already has fifteen photos
+    // that they need one, for as long as the first fetch takes.
+    const src = code("src/components/onboarding/PhotosStep.tsx");
+    expect(src).toMatch(/useState<Photo\[\] \| null>\(null\)/);
+  });
+});
+
+describe("17. the bytes, which are a platform limit and not a preference", () => {
+  // A serverless request body is capped at about 4.5 MB, base64 adds
+  // roughly a third, and a phone photo is commonly 3-5 MB. Untouched,
+  // most uploads from the people this screen exists for would fail as a
+  // platform error with nothing useful on the screen.
+
+  it("EVERY IMAGE IS SHRUNK BEFORE IT IS SENT", () => {
+    const src = code("src/components/onboarding/PhotosStep.tsx");
+    expect(src).toMatch(/await shrink\(file\)/);
+    expect(src).toMatch(/MAX_EDGE_PX \/ Math\.max\(bitmap\.width, bitmap\.height\)/);
+  });
+
+  it("AND THE CEILING IS WELL UNDER THE PLATFORM'S", () => {
+    expect(MAX_RAW_BYTES).toBeLessThan(4_500_000 / 1.34);
+    const route = code("src/app/api/business-photos/route.ts");
+    expect(route).toMatch(/decodedByteLength\(read\.base64\) > MAX_RAW_BYTES/);
+  });
+
+  it("the decoded size is measured from the payload, not guessed", () => {
+    // 4 base64 characters carry 3 bytes.
+    expect(decodedByteLength("AAAA")).toBe(3);
+    expect(decodedByteLength("AAAAAAAA")).toBe(6);
+    expect(decodedByteLength("AAA=")).toBe(2);
+    expect(decodedByteLength("")).toBe(0);
+  });
+});
+
+describe("18. what a photo IS comes from the bytes, not from its name", () => {
+  it("AN UNREADABLE OR UNWANTED TYPE IS REFUSED, NOT DEFAULTED", () => {
+    // An earlier upload route in this codebase defaults a missing type
+    // to image/jpeg. A PNG stored as a JPEG renders as a broken image
+    // and nothing says why.
+    expect(readDataUrl("data:image/png;base64,AAAA")).toEqual({ mime: "image/png", base64: "AAAA" });
+    expect(readDataUrl("data:image/jpeg;base64,AAAA")?.mime).toBe("image/jpeg");
+    expect(readDataUrl("data:image/webp;base64,AAAA")?.mime).toBe("image/webp");
+    for (const bad of [
+      "",
+      "AAAA",
+      "data:image/gif;base64,AAAA",
+      "data:application/pdf;base64,AAAA",
+      "data:text/html;base64,AAAA",
+      "data:image/png;base64,",
+    ]) {
+      expect(readDataUrl(bad), bad).toBeNull();
+    }
+  });
+
+  it("AND THE STORED EXTENSION FOLLOWS THE TYPE, not the filename", () => {
+    expect(photoStoragePath("d1", "shopfront.jpg", "image/png", new Date(1000))).toBe(
+      "business-photos/d1/shopfront-1000.png"
+    );
+    expect(photoStoragePath("d1", "whatever.png", "image/jpeg", new Date(1000))).toBe(
+      "business-photos/d1/whatever-1000.jpg"
+    );
+  });
+
+  it("THE OWNER'S FILENAME CANNOT DECIDE WHERE THE FILE LANDS", () => {
+    // A name with a slash or a traversal is a name, not a path.
+    const traversal = photoStoragePath("d1", "../../etc/passwd", "image/jpeg", new Date(1000));
+    expect(traversal).toBe("business-photos/d1/etcpasswd-1000.jpg");
+    expect(traversal).not.toMatch(/\.\./);
+    expect(traversal.startsWith("business-photos/d1/")).toBe(true);
+    // A name made entirely of characters we drop still produces a path.
+    expect(photoStoragePath("d1", "   ", "image/jpeg", new Date(1000))).toBe("business-photos/d1/photo-1000.jpg");
+    // A NAME IN ANY NON-LATIN SCRIPT. The first version of the function
+    // kept the hyphen and produced "--1000.jpg", because the "photo"
+    // fallback only covered a completely empty stem.
+    expect(photoStoragePath("d1", "मेरी-दुकान.jpg", "image/jpeg", new Date(1000))).toBe(
+      "business-photos/d1/photo-1000.jpg"
+    );
+    expect(photoStoragePath("d1", "___.png", "image/png", new Date(1000))).toBe(
+      "business-photos/d1/photo-1000.png"
+    );
+    // And a very long one is cut rather than carried.
+    const long = photoStoragePath("d1", "a".repeat(300) + ".jpg", "image/jpeg", new Date(1000));
+    expect(long.length).toBeLessThan(90);
+  });
+
+  it("only the three types a phone actually produces are accepted", () => {
+    expect(isAcceptedImageType("image/jpeg")).toBe(true);
+    expect(isAcceptedImageType("IMAGE/PNG")).toBe(true);
+    expect(isAcceptedImageType("image/gif")).toBe(false);
+    expect(isAcceptedImageType("image/svg+xml")).toBe(false);
+    expect(isAcceptedImageType(null)).toBe(false);
+  });
+});
+
+describe("19. the row and the file cannot get out of step", () => {
+  const route = code("src/app/api/business-photos/route.ts");
+
+  it("A FAILED INSERT TAKES THE FILE BACK OUT", () => {
+    // A file in storage with no row is a photo nothing can find, and it
+    // makes the gate's count wrong in the direction that blocks the
+    // owner.
+    expect(route).toMatch(/if \(insertError\) \{/);
+    expect(route).toMatch(/remove\(\[storagePath\]\)/);
+  });
+
+  it("AND DELETE IS SCOPED TO THIS BUSINESS IN THE QUERY", () => {
+    // The service client bypasses RLS, so the scoping has to be written
+    // into the query or it is not there at all.
+    expect(route).toMatch(/\.eq\("id", id\)\n\s*\.eq\("dealership_id", resolved\.dealershipId\)/);
+  });
+
+  it("AND THE BUSINESS COMES FROM THE SESSION, never from the body", () => {
+    expect(route).toMatch(/owner_id", user\.id/);
+    expect(route).not.toMatch(/dealership_id \} = await request\.json/);
+  });
+
+  it("AND MIGRATION 214 KEEPS ONE ROW PER FILE", () => {
+    const migration = sql("supabase/migrations/214_business_photos.sql");
+    expect(migration).toMatch(/storage_path text not null unique/);
+    expect(migration).toMatch(/enable row level security/);
+    expect(migration).toMatch(/dealership_id in \(select id from dealerships where owner_id = auth\.uid\(\)\)/);
+    // `kind` stays free text: a CHECK here would be this product
+    // deciding which kinds of business exist (rule 3).
+    expect(migration).not.toMatch(/check \(kind/);
+  });
+});
+
+describe("20. the five design screens are all built", () => {
+  it("THE BUILT FLOW NOW MATCHES THE TARGET EXACTLY", () => {
+    // The end of the gap TRANSITIONAL was tracking.
+    expect(STEP_ORDER).toEqual(TARGET_ORDER);
+    expect(TRANSITIONAL).toHaveLength(0);
+  });
+
+  it("AND EVERY ONE OF THEM IS BOTH NUMBERED AND REACHED", () => {
+    const card = code("src/components/dashboard/WelcomeChatCard.tsx");
+    for (const step of ["presence", "connect", "confirm", "brand", "photos"] as const) {
+      expect(STEP_ORDER, step).toContain(step);
+      expect(card, step).toMatch(new RegExp(`if \\(step === "${step}"\\)`));
+    }
+    // The bar is on every one of them, and on the questions after.
+    expect((card.match(/<Progress \/>/g) ?? []).length).toBeGreaterThanOrEqual(STEP_ORDER.length);
   });
 });
