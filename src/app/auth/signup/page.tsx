@@ -206,7 +206,7 @@ export default function SignupPage() {
         {/* NO DIGIT COUNT. Supabase's OTP length is a project setting
             (6-10) and the client cannot read it, so a number here would
             be a guess shown to the owner as a fact — which is how the
-            box came to cut an 8-digit code down to 6 on 3 November. */}
+            box came to cut an 8-digit code down to 6 on 2 November. */}
         <p className="text-slate-500 text-sm mb-6">
           I sent a code to <span className="text-slate-800 font-medium">{form.email.trim()}</span>.
           Type the whole code.

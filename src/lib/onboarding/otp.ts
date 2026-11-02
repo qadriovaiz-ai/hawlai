@@ -4,7 +4,7 @@
 // of failure are all checked without a browser or a mailbox.
 //
 // THE LENGTH IS NOT OURS TO DECIDE, AND ASSUMING IT COST A WORKING
-// FEATURE (3 November 2026). The first version of this file said
+// FEATURE (2 November 2026). The first version of this file said
 // "Supabase's own code is six digits", capped the input at six, and had
 // a test asserting `OTP_LENGTH === 6`. That was wrong: Supabase's email
 // OTP length is a project setting, allowed anywhere from 6 to 10 digits,
@@ -66,7 +66,7 @@ export function isCompleteOtp(value: string): boolean {
  * advice: a wrong code means try again, an expired one means get a new
  * one, and a rate limit means wait. Showing "Token has expired or is
  * invalid" for all three is how someone retypes a dead code four times
- * — and, on 3 November, how a truncation bug looked like an expiry one.
+ * — and, on 2 November, how a truncation bug looked like an expiry one.
  */
 export function otpFailureMessage(raw: string | null | undefined): string {
   const text = String(raw ?? "").toLowerCase();

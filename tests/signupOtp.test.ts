@@ -27,7 +27,7 @@ import { PLACEHOLDER_BUSINESS_NAME } from "@/lib/onboarding/signup";
 import { code } from "./helpers/source";
 
 describe("1. the code box takes whatever length Supabase sends", () => {
-  // THE BUG THIS REPLACES (3 November 2026). This file used to assert
+  // THE BUG THIS REPLACES (2 November 2026). This file used to assert
   // `OTP_LENGTH === 6`. Supabase's email OTP length is a PROJECT
   // SETTING, 6 to 10 digits, and this project sends eight — so the box
   // dropped the last two digits of every code, verifyOtp was handed a
@@ -87,7 +87,7 @@ describe("2. EACH FAILURE GETS ITS OWN ADVICE, not its own wording", () => {
   });
 
   it("A WRONG CODE SAYS TYPE THE WHOLE THING", () => {
-    // "the whole code" rather than "again" since 3 November: a
+    // "the whole code" rather than "again" since 2 November: a
     // half-typed code is now possible (the box accepts 6 to 10 digits
     // because the length is a project setting), and a partial code is
     // exactly what verifyOtp reports as invalid.
@@ -310,7 +310,7 @@ describe("4. NOTHING IS WRITTEN BEFORE THE EMAIL IS VERIFIED", () => {
     // The client cannot read the project's OTP length setting, so any
     // number in that sentence is a guess shown to the owner as a fact.
     // Saying "6-digit code" next to a box that cut an 8-digit code is
-    // how the bug of 3 November read as the owner's mistake.
+    // how the bug of 2 November read as the owner's mistake.
     expect(page).not.toMatch(/\d-digit/);
     expect(page).not.toMatch(/OTP_MIN_LENGTH\}-digit/);
     expect(page).not.toMatch(/placeholder="123456"/);
