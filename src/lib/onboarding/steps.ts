@@ -7,14 +7,18 @@
 // Hawlai writes. A hardcoded "of 5" would have told every new customer
 // the setup was nearly over four screens before it was.
 //
-// So the number is DERIVED, here, from the same list that decides the
-// order. The two cannot disagree, and `stepsProgressIsDerived` in
-// tests/onboardingSteps.test.ts fails if a literal total ever appears
-// in the progress component.
+// TWO LISTS, AND P0 GOT THIS WRONG. P0 wrote only the destination, so
+// the total counted three screens that did not exist yet and the bar
+// could not be wired to anything without lying about how much was
+// left. `STEP_ORDER` is now the flow AS BUILT and is what every count
+// comes from; `TARGET_ORDER` is where the redesign is going, and a
+// test holds that the built steps appear in the target's relative
+// order. The gap between them shrinks visibly, phase by phase, instead
+// of being a comment somebody has to trust.
 //
 // ONE STEP IS CONDITIONAL. `language_notes` is only asked when the
-// owner has chosen Hinglish, so the total is a function of the answers
-// so far rather than a constant. 9 normally, 10 for Hinglish.
+// owner writes in both languages, so the total is a function of the
+// answers so far rather than a constant.
 //
 // NOTHING HERE IS CLIENT- OR SERVER-ONLY: pure data and pure
 // functions, so the step order can be asserted without rendering
@@ -78,11 +82,20 @@ export type StepKey =
   | "language_notes"
   | "personality"
   | "avoid_words"
-  // Not a step: the end screen, which is not counted or shown on the bar.
+  // Steps that exist today and are replaced as the redesign lands.
+  // TRANSITIONAL names them and says which phase removes each.
+  | "describe"
+  | "language"
+  // Not a step: the end screen, which is not counted and has no bar.
   | "done";
 
-/** The order, and the only place it is written down. */
-export const STEP_ORDER: StepKey[] = [
+/**
+ * WHERE THE REDESIGN IS GOING. Not used for any count — it exists so
+ * the built order cannot drift out of the design's sequence, and so
+ * the remaining work is readable from the code rather than from a
+ * plan document nobody opens.
+ */
+export const TARGET_ORDER: StepKey[] = [
   "presence",
   "connect",
   "confirm",
@@ -95,16 +108,46 @@ export const STEP_ORDER: StepKey[] = [
   "avoid_words",
 ];
 
-/** Steps that are only asked for some answers. */
-const CONDITIONAL: Partial<Record<StepKey, (a: StepAnswers) => boolean>> = {
-  // Only worth asking someone who writes in both languages.
-  language_notes: (a) => a.preferredLanguage === "hinglish",
-};
+/**
+ * THE FLOW AS BUILT. Every number the owner sees comes from this.
+ *
+ * P1 (2 November): `presence` replaces the old free-text-only intent
+ * screen. Everything after it is still the flow that was already
+ * there.
+ */
+export const STEP_ORDER: StepKey[] = [
+  "presence",
+  "describe",
+  "business_model",
+  "formality",
+  "language",
+  "language_notes",
+  "personality",
+  "avoid_words",
+];
+
+/**
+ * Steps that are in the built flow but not in the redesign, each with
+ * the phase that removes it. **Nothing new goes on this list** — it
+ * only shrinks, and a step still here after its phase is a visible
+ * debt rather than a forgotten one.
+ */
+export const TRANSITIONAL: { step: StepKey; until: string; why: string }[] = [
+  { step: "describe", until: "P2", why: "step 2's four branches replace the single 'describe your business' box" },
+  { step: "language", until: "P4", why: "step 4's language pills replace the yes/no Hinglish question, and fix preferred_language being written as 'hinglish' for everyone" },
+];
 
 /** What the wizard knows so far, as far as the step order cares. */
 export type StepAnswers = {
   presence?: OnlinePresence | null;
-  preferredLanguage?: "hindi" | "english" | "hinglish" | null;
+  /** True when the owner writes in both languages. Set by the language step. */
+  hinglish?: boolean | null;
+};
+
+/** Steps that are only asked for some answers. */
+const CONDITIONAL: Partial<Record<StepKey, (a: StepAnswers) => boolean>> = {
+  // Only worth asking someone who writes in both languages.
+  language_notes: (a) => a.hinglish === true,
 };
 
 /** The steps this owner will actually be asked, in order. */
@@ -125,7 +168,7 @@ export function totalSteps(answers: StepAnswers = {}): number {
  *
  * NULL RATHER THAN 0 OR A GUESS. "done" is not a step, and a skipped
  * conditional step is not one either — a caller that asks about one is
- * asking the wrong question, and a silent 0 would render "Step 0 of 9".
+ * asking the wrong question, and a silent 0 would render "Step 0 of 8".
  */
 export function stepNumber(key: StepKey, answers: StepAnswers = {}): number | null {
   const index = stepsFor(answers).indexOf(key);

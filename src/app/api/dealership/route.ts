@@ -7,6 +7,11 @@ import { cleanBusinessModels } from "@/lib/business/businessModel";
 // null, which means "never asked" (every pre-existing business).
 const VALID_PRODUCT_MODES = ["calling", "marketing", "automation", "research", "website", "full"];
 
+// Mirrors migration 212's CHECK constraint. A DIFFERENT AXIS from
+// product_mode: this is where the business already is, that one is
+// what the owner wants. null means never asked, as it does there.
+const VALID_ONLINE_PRESENCES = ["website", "maps", "social", "none"];
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,7 +23,7 @@ export async function GET() {
 
   const { data } = await supabase
     .from("dealerships")
-    .select("dealership_name, city, business_category, product_mode, business_address, business_models")
+    .select("dealership_name, city, business_category, product_mode, business_address, business_models, online_presence, online_presence_detail")
     .eq("id", dealershipId)
     .single();
 
@@ -34,7 +39,7 @@ export async function PATCH(request: Request) {
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address, business_models } = await request.json();
+  const { business_category, onboarding_completed, product_mode, onboarding_intent_text, business_address, business_models, online_presence, online_presence_detail } = await request.json();
 
   const models = business_models === undefined ? undefined : cleanBusinessModels(business_models);
   if (models === null) {
@@ -56,6 +61,21 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unknown product mode" }, { status: 400 });
   }
 
+  // Validated here against the same set as migration 212's CHECK, so a
+  // bad value fails with a sentence rather than as a Postgres
+  // constraint violation on the first screen of someone's first session.
+  if (online_presence !== undefined && online_presence !== null && !VALID_ONLINE_PRESENCES.includes(online_presence)) {
+    return NextResponse.json({ error: "Unknown online presence" }, { status: 400 });
+  }
+
+  if (
+    online_presence_detail !== undefined &&
+    online_presence_detail !== null &&
+    (typeof online_presence_detail !== "string" || online_presence_detail.trim().length > 500)
+  ) {
+    return NextResponse.json({ error: "Keep that under 500 characters" }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("dealerships")
     .update({
@@ -66,6 +86,11 @@ export async function PATCH(request: Request) {
       // Printed in every marketing email's footer; blank clears it (and
       // marketing email stops until it's set again).
       ...(business_address !== undefined && { business_address: typeof business_address === "string" && business_address.trim() ? business_address.trim() : null }),
+      ...(online_presence !== undefined && { online_presence }),
+      ...(online_presence_detail !== undefined && {
+        online_presence_detail:
+          typeof online_presence_detail === "string" && online_presence_detail.trim() ? online_presence_detail.trim() : null,
+      }),
       ...(onboarding_intent_text !== undefined && {
         onboarding_intent_text: typeof onboarding_intent_text === "string" ? onboarding_intent_text.slice(0, 500) : null,
       }),

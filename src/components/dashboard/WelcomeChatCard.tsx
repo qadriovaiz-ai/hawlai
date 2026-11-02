@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Loader2, ArrowUp, Check, ArrowRight } from "lucide-react";
-import IntentStep from "@/components/onboarding/IntentStep";
+import PresenceStep from "@/components/onboarding/PresenceStep";
+import OnboardingProgress from "@/components/onboarding/OnboardingProgress";
+import { type OnlinePresence, type StepKey } from "@/lib/onboarding/steps";
 import { MODE_LABELS, type ProductMode } from "@/lib/onboarding/intentRouter";
 import { BUSINESS_MODELS, BUSINESS_MODEL_OPTIONS, type BusinessModel } from "@/lib/business/businessModel";
 
@@ -37,7 +39,10 @@ interface AnalyzeResult {
 // the customer WANTS before asking who they are. The brand-voice steps
 // that follow are unchanged — they were always good, they just
 // answered the second question first.
-type Step = "intent" | "describe" | "business_model" | "formality" | "language" | "language_notes" | "personality" | "avoid_words" | "done";
+// THE STEP NAMES NOW COME FROM THE REGISTRY (onboarding P1). They used
+// to be a union written here, with no count attached to it, which is
+// how the bar had nowhere truthful to read a total from.
+type Step = StepKey;
 
 const FORMALITY_CHOICES: { label: string; value: BrandVoiceDraft["formality_level"] }[] = [
   { label: "Formal", value: "formal" },
@@ -47,7 +52,11 @@ const FORMALITY_CHOICES: { label: string; value: BrandVoiceDraft["formality_leve
 
 export default function WelcomeChatCard({ dealershipName, ownerName }: { dealershipName: string; ownerName: string | null }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("intent");
+  const [step, setStep] = useState<Step>("presence");
+  // What the step order needs to know. `hinglish` decides whether
+  // language_notes is a step at all, so the total on the bar changes
+  // with it — see lib/onboarding/steps.ts.
+  const [presence, setPresence] = useState<OnlinePresence | null>(null);
   const [productMode, setProductMode] = useState<ProductMode | null>(null);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
@@ -65,13 +74,26 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   // Saved as soon as it's known rather than batched into the final
   // submit: if someone abandons onboarding after this step, knowing
   // what they came for is still worth having.
-  async function handleIntentResolved(mode: ProductMode, intentText: string) {
-    setProductMode(mode);
+  async function handlePresenceResolved(answer: {
+    presence: OnlinePresence;
+    productMode: ProductMode | null;
+    intentText: string;
+  }) {
+    setPresence(answer.presence);
+    setProductMode(answer.productMode);
     try {
       await fetch("/api/dealership", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_mode: mode, onboarding_intent_text: intentText }),
+        body: JSON.stringify({
+          online_presence: answer.presence,
+          // NULL IS SENT ON PURPOSE when routing was not sure: it
+          // already means "never asked" everywhere product_mode is
+          // read, and a guess here routes someone into the wrong
+          // workflow silently.
+          ...(answer.productMode ? { product_mode: answer.productMode } : {}),
+          ...(answer.intentText ? { onboarding_intent_text: answer.intentText } : {}),
+        }),
       });
     } catch {
       // Best-effort — a failed save here shouldn't trap someone on the
@@ -194,10 +216,21 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
     </button>
   );
 
-  if (step === "intent") {
+  // THE BAR, ON EVERY COUNTED STEP. It renders nothing for "done" and
+  // nothing for a step this owner is not asked, so there is no screen
+  // where it can read "Step 0 of 7". Both numbers come from the
+  // registry — see lib/onboarding/steps.ts.
+  const Progress = () => (
+    <div className="mb-6">
+      <OnboardingProgress step={step} answers={{ presence, hinglish: hinglishOk }} />
+    </div>
+  );
+
+  if (step === "presence") {
     return (
       <div className="w-full max-w-xl animate-fade-in-up">
-        <IntentStep ownerName={ownerName} onResolved={handleIntentResolved} />
+        <Progress />
+        <PresenceStep ownerName={ownerName} onResolved={handlePresenceResolved} />
       </div>
     );
   }
@@ -267,6 +300,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       setBusinessModels((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : BUSINESS_MODELS.filter((x) => x === m || prev.includes(x))));
     return (
       <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <Progress />
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">How does your business make money?</h1>
         <p className="text-slate-500 mt-2">Tick everything that applies — this sets up your lead stages and how Hawlai writes about what you offer.</p>
         <div className="mt-6 space-y-2 text-left">
@@ -295,6 +329,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   if (step === "formality") {
     return (
       <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <Progress />
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">How do you usually talk to customers?</h1>
         <p className="text-slate-500 mt-2">Formal, casual, or somewhere in between?</p>
         <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
@@ -316,6 +351,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   if (step === "language") {
     return (
       <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <Progress />
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Do you mix Hindi and English with customers?</h1>
         <p className="text-slate-500 mt-2">Or do you keep it strictly one language?</p>
         <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
@@ -340,6 +376,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   if (step === "language_notes") {
     return (
       <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <Progress />
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Anything else about language?</h1>
         <p className="text-slate-500 mt-2 max-w-md mx-auto">Optional — e.g. a regional language your customers respond well to.</p>
         <div className="mt-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left max-w-md mx-auto">
@@ -367,6 +404,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   if (step === "personality") {
     return (
       <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <Progress />
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">3-4 words for your brand's personality?</h1>
         <p className="text-slate-500 mt-2 max-w-md mx-auto">e.g. confident, warm, direct — separate with commas</p>
         <div className="mt-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left max-w-md mx-auto">
@@ -394,6 +432,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
   if (step === "avoid_words") {
     return (
       <div className="w-full max-w-xl text-center animate-fade-in-up">
+        <Progress />
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">Any words you'd never want us to use?</h1>
         <p className="text-slate-500 mt-2 max-w-md mx-auto">Optional — separate with commas. Last question, then you're set.</p>
         <div className="mt-6 bg-slate-100 border border-slate-200 rounded-2xl shadow-sm text-left max-w-md mx-auto">
@@ -423,6 +462,7 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
 
   return (
     <div className="w-full max-w-2xl text-center">
+      <Progress />
       <div className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-6 shadow-lg shadow-brand-600/30">
         <Image src="/logo-icon.png" alt="Hawlai" width={56} height={56} className="w-full h-full object-cover" />
       </div>
