@@ -21,6 +21,7 @@
 // Pure, so every combination is checked without rendering anything.
 
 import type { ConnectKind } from "@/lib/onboarding/steps";
+import { isPlaceholderBusinessName } from "@/lib/onboarding/signup";
 
 export type FieldSource =
   /** The analysis produced it. */
@@ -30,9 +31,19 @@ export type FieldSource =
   /** Nobody has said it yet. */
   | "none";
 
-/** Blank, whitespace and null are all "nothing was said". */
+/**
+ * Blank, whitespace and null are all "nothing was said".
+ *
+ * AND SO IS THE SIGNUP STAND-IN — signup Q1. Signup writes a
+ * placeholder because dealership_name is not null, and labelling it
+ * "you entered this when you signed up" would be the confirm screen
+ * telling the owner he typed something he never typed. The field
+ * renders empty and asks to be filled, which is exactly right: step 3
+ * is where the name is actually given.
+ */
 function said(value: string | null | undefined): boolean {
-  return typeof value === "string" && value.trim().length > 0;
+  if (typeof value !== "string" || value.trim().length === 0) return false;
+  return !isPlaceholderBusinessName(value);
 }
 
 /**

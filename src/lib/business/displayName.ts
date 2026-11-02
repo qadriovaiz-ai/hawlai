@@ -10,11 +10,19 @@
 // (no spaces, joined with _ or -, all lower case) becomes words; a name the
 // owner typed with its own spacing or capitals is kept exactly.
 
+import { isPlaceholderBusinessName } from "@/lib/onboarding/signup";
+
 const SMALL_WORDS = new Set(["a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"]);
 
 export function businessDisplayName(name: string | null | undefined, fallback = "the business"): string {
   const clean = String(name ?? "").replace(/\s+/g, " ").trim();
-  if (!clean) return fallback;
+  // THE SIGNUP STAND-IN IS NOT A NAME — signup Q1. Signup stopped
+  // asking for the business name (step 3 collects it) and
+  // dealership_name is not null, so a placeholder sits on the record
+  // until then. This is the chokepoint businessFacts reads through, so
+  // treating it as nothing here keeps it out of every generator at
+  // once rather than at 94 call sites.
+  if (!clean || isPlaceholderBusinessName(clean)) return fallback;
   const isHandle = !/\s/.test(clean) && /[_-]/.test(clean) && clean === clean.toLowerCase();
   if (!isHandle) return clean;
   return clean

@@ -1,4 +1,5 @@
 import { sendEmail as sendViaGmail } from "@/lib/agents/gmailAgent";
+import { realBusinessName } from "@/lib/onboarding/signup";
 import { sendViaResend } from "@/lib/email/resendClient";
 import { createServiceClient } from "@/lib/supabase/service";
 import { claimSend, resolveClaim } from "@/lib/email/sendClaim";
@@ -88,7 +89,11 @@ export async function sendDealerEmail(
     return { ...result, via: "gmail" };
   }
 
-  const result = await sendViaResend(to, subject, body, dealership?.dealership_name ?? "Hawlai", {
+  // THE NAME ON THE ENVELOPE, and the signup stand-in must never be on
+  // it: a customer receiving mail "from: Your business" is the product
+  // stating something nobody said. Falls back to what this line
+  // already fell back to when there was no name at all.
+  const result = await sendViaResend(to, subject, body, realBusinessName(dealership?.dealership_name) ?? "Hawlai", {
     replyTo: await ownerEmail(dealership?.owner_id),
     html: options.html,
     headers: options.headers,

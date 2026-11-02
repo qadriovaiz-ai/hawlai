@@ -21,6 +21,7 @@
 // reusing what was already there.
 
 import { recipientOnRecord } from "@/lib/email/consent";
+import { realBusinessName } from "@/lib/onboarding/signup";
 import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { findUnsupportedLinks } from "@/lib/claims/claimCheck";
@@ -140,7 +141,9 @@ export async function sendApprovedEmail(
     result = await sendMarketingEmail(supabase, dealershipId, to, { draft: sendDraft, facts }, requestId);
   } else {
     const { data: dealership } = await supabase.from("dealerships").select("dealership_name").eq("id", dealershipId).single();
-    result = await sendMarketingEmail(supabase, dealershipId, to, { subject: sendSubject, text: sendBody, businessName: dealership?.dealership_name ?? "" }, requestId);
+    // The signup stand-in is not a name to write into copy going to a
+    // customer. "" is what this already used when there was none.
+    result = await sendMarketingEmail(supabase, dealershipId, to, { subject: sendSubject, text: sendBody, businessName: realBusinessName(dealership?.dealership_name) ?? "" }, requestId);
   }
   if (!result.success) {
     // A double-press is 409 and "already sent", not 400 and "couldn't be

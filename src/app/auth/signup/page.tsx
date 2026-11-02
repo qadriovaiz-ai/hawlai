@@ -7,15 +7,20 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
+import { PLACEHOLDER_BUSINESS_NAME } from "@/lib/onboarding/signup";
 
 export default function SignupPage() {
   const router = useRouter();
+  // THREE FIELDS. The business name is collected by onboarding step 3,
+  // which shows the owner what the analysis worked out and lets him
+  // correct it — asking for it twice made the first answer the one
+  // nobody checked. The city is not asked at all: plenty of businesses
+  // are not in one place, and `dealerships.city` is nullable, so
+  // nothing stands in for it.
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
-    dealershipName: "",
-    city: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -52,8 +57,12 @@ export default function SignupPage() {
       const { data: dealership, error: dealershipError } = await supabase
         .from("dealerships")
         .insert({
-          dealership_name: form.dealershipName,
-          city: form.city,
+          // A STAND-IN, BECAUSE THE COLUMN IS not null
+          // (001_schema.sql:15) and the name is not asked for here any
+          // more. Step 3 overwrites it. It is the same words as the
+          // existing "no name" fallbacks, and three chokepoints keep it
+          // from leaving the product — see lib/onboarding/signup.ts.
+          dealership_name: PLACEHOLDER_BUSINESS_NAME,
           owner_id: data.user.id,
         })
         .select()
@@ -106,7 +115,7 @@ export default function SignupPage() {
 
         <div className="bg-slate-100 rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-semibold text-slate-900 mb-1">Create account</h2>
-          <p className="text-slate-500 text-sm mb-6">Register your business</p>
+          <p className="text-slate-500 text-sm mb-6">Takes a minute — we'll set your business up next</p>
 
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -121,14 +130,6 @@ export default function SignupPage() {
               <div className="col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
                 <input name="password" type="password" value={form.password} onChange={handleChange} placeholder="Min 8 characters" required minLength={8} className="input" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Business Name</label>
-                <input name="dealershipName" type="text" value={form.dealershipName} onChange={handleChange} placeholder="Your business name" required className="input" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
-                <input name="city" type="text" value={form.city} onChange={handleChange} placeholder="Mumbai" required className="input" />
               </div>
             </div>
 
