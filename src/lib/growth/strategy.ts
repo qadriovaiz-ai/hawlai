@@ -146,6 +146,31 @@ const GOAL_FOR: Record<string, { title: string; description: string; metric?: st
 };
 
 /**
+ * The title this product gives a goal for that finding type, or null
+ * when it has no recipe.
+ *
+ * EXPORTED SO LINKING DOES NOT NEED TODAY'S FINDINGS — 3 November
+ * 2026. `linkFindingsToGoals` used to be handed a type-to-title map
+ * built from the findings of the run it was in. So a finding type that
+ * is not re-detected today could never be linked, however long its row
+ * had been sitting there with a matching active goal. M9's copy
+ * findings are exactly that: the paid pass runs on one named day, so
+ * the founder confirmed a goal for "wording your records do not
+ * support" and it would have stayed unlinked until the next paid run.
+ *
+ * GOAL_FOR is where those titles came from anyway, so reading them from
+ * here removes the dependency instead of adding a second source.
+ */
+export function goalTitleForFindingType(type: string): string | null {
+  return GOAL_FOR[type]?.title ?? null;
+}
+
+/** Every finding type this product knows how to make a goal for. */
+export function findingTypesWithGoals(): string[] {
+  return Object.keys(GOAL_FOR);
+}
+
+/**
  * Setup goals, drawn from what the audit actually found.
  *
  * DERIVED, NOT LISTED. A fixed list of starter goals would be one

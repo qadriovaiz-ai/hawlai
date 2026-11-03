@@ -157,7 +157,7 @@ describe("2. linking a finding to the goal it serves", () => {
       opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
       goals: [{ id: "g1", title: "Give every page a search title", status: "active" }],
     });
-    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    const r = await linkFindingsToGoals(client, "d1");
     expect(r.linked).toBe(1);
     expect(tables.opportunities[0].goal_id).toBe("g1");
   });
@@ -169,7 +169,7 @@ describe("2. linking a finding to the goal it serves", () => {
       opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
       goals: [],
     });
-    expect(await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]))).toEqual({ linked: 0 });
+    expect(await linkFindingsToGoals(client, "d1")).toEqual({ linked: 0 });
     expect(tables.opportunities[0].goal_id).toBeNull();
   });
 
@@ -182,17 +182,24 @@ describe("2. linking a finding to the goal it serves", () => {
       opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
       goals: [{ id: "g1", title: "Something else entirely", status: "active" }],
     });
-    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    const r = await linkFindingsToGoals(client, "d1");
     expect(r).toEqual({ linked: 0 });
     expect(tables.opportunities[0].goal_id).toBeNull();
   });
 
-  it("and ignores a goal that is no longer active", async () => {
-    const { client } = db({
-      opportunities: [{ id: "o1", type: "x", reference_id: "singleton", status: "open", goal_id: null }],
-      goals: [{ id: "g1", title: "Old goal", status: "abandoned" }],
+  it("AND IGNORES A GOAL THAT IS NO LONGER ACTIVE", async () => {
+    // STRENGTHENED when the map parameter went away on 3 November. The
+    // old version used a goal titled "Old goal" against a finding type
+    // "x" — neither of which GOAL_FOR knows, so the goal could never
+    // have matched and the test passed for the wrong reason. It now
+    // uses a goal that WOULD link if its status allowed it, by
+    // source_key and by title both.
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [{ id: "g1", title: "Give every page a search title", source_key: "pages_without_search_title", status: "abandoned" }],
     });
-    expect(await linkFindingsToGoals(client, "d1", new Map([["x", "Old goal"]]))).toEqual({ linked: 0 });
+    expect(await linkFindingsToGoals(client, "d1")).toEqual({ linked: 0 });
+    expect(tables.opportunities[0].goal_id).toBeNull();
   });
 
   // S4/P6, migration 211. The title match was all the schema allowed,
@@ -205,7 +212,7 @@ describe("2. linking a finding to the goal it serves", () => {
       opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
       goals: [{ id: "g1", title: "Fix my Google titles", source_key: "pages_without_search_title", status: "active" }],
     });
-    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    const r = await linkFindingsToGoals(client, "d1");
     expect(r.linked).toBe(1);
     expect(tables.opportunities[0].goal_id).toBe("g1");
   });
@@ -220,7 +227,7 @@ describe("2. linking a finding to the goal it serves", () => {
         { id: "g_right", title: "Fix my Google titles", source_key: "pages_without_search_title", status: "active" },
       ],
     });
-    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    const r = await linkFindingsToGoals(client, "d1");
     expect(r.linked).toBe(1);
     expect(tables.opportunities[0].goal_id).toBe("g_right");
   });
@@ -232,7 +239,7 @@ describe("2. linking a finding to the goal it serves", () => {
       opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
       goals: [{ id: "g1", title: "Give every page a search title", source_key: null, status: "active" }],
     });
-    const r = await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    const r = await linkFindingsToGoals(client, "d1");
     expect(r.linked).toBe(1);
     expect(tables.opportunities[0].goal_id).toBe("g1");
   });
@@ -247,7 +254,7 @@ describe("2. linking a finding to the goal it serves", () => {
       goals: [{ id: "g1", title: "Give every page a search title", status: "active" }],
     });
     errors["goals:select"] = "column goals.source_key does not exist";
-    expect(await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]))).toEqual({ linked: 0 });
+    expect(await linkFindingsToGoals(client, "d1")).toEqual({ linked: 0 });
     expect(spy).toHaveBeenCalled();
     expect(String(spy.mock.calls[0][0])).toMatch(/migration 211/);
     spy.mockRestore();
@@ -422,9 +429,96 @@ describe("5. it writes nothing but findings", () => {
       goals: [{ id: "g1", title: "Give every page a search title", status: "active" }],
     });
     await recordFindings(client, "d1", [finding({ type: "products_without_image" })]);
-    await linkFindingsToGoals(client, "d1", new Map([["pages_without_search_title", "Give every page a search title"]]));
+    await linkFindingsToGoals(client, "d1");
     await pickToday(client, "d1", tracking(), NOW);
     expect(writes.length).toBeGreaterThan(2);
     expect([...new Set(writes.map((w) => w.table))]).toEqual(["opportunities"]);
+  });
+});
+
+describe("2b. LINKING DOES NOT NEED TODAY'S FINDINGS", () => {
+  // WHAT THIS COST, 3 November 2026. linkFindingsToGoals was handed a
+  // type-to-title map built from the findings of the run it was in. So
+  // a finding type not re-detected today could never be linked, however
+  // long its row had been sitting there with a matching active goal.
+  //
+  // M9's copy findings are exactly that case: the paid pass runs on one
+  // named day. The founder confirmed a goal for "wording your records
+  // do not support", and it would have stayed unlinked — and that
+  // suggestion invisible — until the next paid run, which costs money.
+  //
+  // The audit's own findings hid it: they are re-detected every morning
+  // and so re-linked every morning.
+
+  it("A FINDING FROM A PAST RUN LINKS TO ITS APPROVED GOAL TODAY", async () => {
+    // Nothing about today produced this finding. Its row is simply
+    // there, open, from the day the paid pass ran.
+    const { client, tables } = db({
+      opportunities: [
+        { id: "o1", type: "live_copy_unsupported_wording", reference_id: "singleton", status: "open", goal_id: null },
+      ],
+      goals: [
+        // RENAMED BY THE OWNER, deliberately: with this product's own
+        // title the title fallback would link it and the test would
+        // pass whether source_key worked or not.
+        { id: "g3", title: "Sort out my website wording", source_key: "live_copy_unsupported_wording", status: "active" },
+      ],
+    });
+    const r = await linkFindingsToGoals(client, "d1");
+    expect(r.linked).toBe(1);
+    expect(tables.opportunities[0].goal_id).toBe("g3");
+  });
+
+  it("AND SO DOES ONE WHOSE GOAL HAS NO source_key, by the title this product gives it", async () => {
+    // Every goal written before migration 211 has source_key null, and
+    // those titles come from GOAL_FOR — which is where linking reads
+    // them now, instead of from the run.
+    const { client, tables } = db({
+      opportunities: [
+        { id: "o1", type: "live_copy_unsupported_wording", reference_id: "singleton", status: "open", goal_id: null },
+      ],
+      goals: [
+        { id: "g3", title: "Go through the wording the records do not support", source_key: null, status: "active" },
+      ],
+    });
+    expect((await linkFindingsToGoals(client, "d1")).linked).toBe(1);
+    expect(tables.opportunities[0].goal_id).toBe("g3");
+  });
+
+  it("AND A GOAL FOR A TYPE THIS PRODUCT HAS NO RECIPE FOR LINKS NOTHING", async () => {
+    // stuck_leads and the other seven detected by opportunityAgent have
+    // no GOAL_FOR entry, so nothing places them. They show on the
+    // dashboard and not in the email, which is a known gap and not an
+    // accident of this function.
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "stuck_leads", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [{ id: "g9", title: "Follow up with the leads", source_key: null, status: "active" }],
+    });
+    expect((await linkFindingsToGoals(client, "d1")).linked).toBe(0);
+    expect(tables.opportunities[0].goal_id).toBeNull();
+  });
+
+  it("AND TWO GOALS CLAIMING ONE TYPE DO NOT MAKE IT AMBIGUOUS", async () => {
+    // Migration 211's unique index stops this for drafted goals; a
+    // hand-written one could still collide. First one wins rather than
+    // the last write deciding.
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: null }],
+      goals: [
+        { id: "g_first", title: "Give every page a search title", source_key: "pages_without_search_title", status: "active" },
+        { id: "g_second", title: "Give every page a search title", source_key: "pages_without_search_title", status: "active" },
+      ],
+    });
+    expect((await linkFindingsToGoals(client, "d1")).linked).toBe(1);
+    expect(tables.opportunities[0].goal_id).toBe("g_first");
+  });
+
+  it("and a finding that already has a goal is left alone", async () => {
+    const { client, tables } = db({
+      opportunities: [{ id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "open", goal_id: "g_existing" }],
+      goals: [{ id: "g_new", title: "Give every page a search title", source_key: "pages_without_search_title", status: "active" }],
+    });
+    await linkFindingsToGoals(client, "d1");
+    expect(tables.opportunities[0].goal_id).toBe("g_existing");
   });
 });

@@ -30,6 +30,7 @@
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import type { AuditFinding } from "@/lib/growth/audit";
 import { pickForToday, type Finding } from "@/lib/growth/findings";
+import { findingTypesWithGoals, goalTitleForFindingType } from "@/lib/growth/strategy";
 import { conversionClaimsAllowed, type TrackingState } from "@/lib/growth/tracking";
 
 /**
@@ -159,18 +160,25 @@ export async function recordFindings(
 /**
  * Link findings to the goals they serve.
  *
- * BY source_key FIRST, TITLE SECOND — S4/P6, migration 211. The title
- * match was all the schema allowed when this was written, and I wrote
- * its weakness into the comment at the time: "a renamed goal silently
- * unlinks its findings". Renaming your own goal is a normal thing to
- * do, and it would have quietly stopped the suggestions that goal was
- * approved for. `source_key` holds the finding type the goal was
- * drafted from, so the link survives any rename.
+ * DRIVEN BY THE GOALS ON RECORD, NOT BY TODAY'S FINDINGS — 3 November
+ * 2026. This used to take a type-to-title map built from the findings
+ * of the run it was in, so a finding type not re-detected today could
+ * never be linked, however long its row had been sitting there with a
+ * matching active goal. M9's copy findings are exactly that case: the
+ * paid pass runs on one named day, so the founder confirmed a goal for
+ * "wording your records do not support" and it would have stayed
+ * unlinked until the next paid run — which costs money.
  *
- * THE TITLE FALLBACK STAYS, and is not dead code: every goal written
- * before 211 — and every goal the owner writes himself through
- * set_goal — has source_key null, and a title match is the only thing
- * that can link those.
+ * The audit's own findings hid the problem, because they are
+ * re-detected every morning and so re-linked every morning.
+ *
+ * BY source_key FIRST, TITLE SECOND — S4/P6, migration 211. A renamed
+ * goal would otherwise silently unlink its findings, and renaming your
+ * own goal is a normal thing to do. The title fallback is not dead
+ * code: every goal written before 211, and every goal the owner writes
+ * through set_goal, has source_key null, and its title is the only
+ * thing that can place it. Those titles come from GOAL_FOR, which is
+ * where they came from before.
  *
  * Nothing is invented: a finding whose goal does not exist keeps
  * goal_id null and is simply not surfaced, which is what `surfaceable`
@@ -178,11 +186,8 @@ export async function recordFindings(
  */
 export async function linkFindingsToGoals(
   supabase: any,
-  dealershipId: string,
-  titleByFindingType: Map<string, string>
+  dealershipId: string
 ): Promise<{ linked: number }> {
-  if (!titleByFindingType.size) return { linked: 0 };
-
   const { data: goals, error } = await supabase
     .from("goals")
     .select("id, title, source_key, status")
@@ -200,17 +205,38 @@ export async function linkFindingsToGoals(
   }
   if (!Array.isArray(goals) || !goals.length) return { linked: 0 };
 
-  const idByKey = new Map<string, string>();
-  const idByTitle = new Map<string, string>();
-  for (const g of goals as any[]) {
-    if (g.source_key) idByKey.set(String(g.source_key), String(g.id));
-    idByTitle.set(String(g.title).trim(), String(g.id));
+  // WHICH FINDING TYPE EACH ACTIVE GOAL SERVES. source_key says it
+  // outright; a goal without one is placed by its title, against the
+  // titles this product gives goals (GOAL_FOR).
+  const typeByTitle = new Map<string, string>();
+  for (const type of findingTypesWithGoals()) {
+    const title = goalTitleForFindingType(type);
+    if (title) typeByTitle.set(title.trim(), type);
   }
-  let linked = 0;
 
-  for (const [type, title] of titleByFindingType.entries()) {
-    const goalId = idByKey.get(type) ?? idByTitle.get(String(title).trim());
-    if (!goalId) continue;
+  // TWO PASSES, AND source_key GOES FIRST. One pass in row order let a
+  // goal matched only by TITLE claim a type before the goal that names
+  // that type outright — which is the whole point of migration 211
+  // undone. Caught by the test that was written for it.
+  //
+  // Within a pass the first one wins, so two goals claiming one finding
+  // type cannot make "which goal does this serve" a question nobody can
+  // answer. 211's unique index stops that for drafted goals; a
+  // hand-written goal could still collide.
+  const goalIdByType = new Map<string, string>();
+  for (const g of goals as any[]) {
+    const type = g.source_key ? String(g.source_key) : null;
+    if (type && !goalIdByType.has(type)) goalIdByType.set(type, String(g.id));
+  }
+  for (const g of goals as any[]) {
+    if (g.source_key) continue;
+    const type = typeByTitle.get(String(g.title).trim());
+    if (type && !goalIdByType.has(type)) goalIdByType.set(type, String(g.id));
+  }
+  if (!goalIdByType.size) return { linked: 0 };
+
+  let linked = 0;
+  for (const [type, goalId] of goalIdByType.entries()) {
     const { error: updateError } = await supabase
       .from("opportunities")
       .update({ goal_id: goalId })

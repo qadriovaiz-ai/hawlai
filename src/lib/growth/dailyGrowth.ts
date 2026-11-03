@@ -199,7 +199,10 @@ export async function runDailyGrowth(
   // owner's decision sitting in the middle, which is the point.
   const drafts = await writeSetupGoalDrafts(supabase, dealershipId, setupGoals);
 
-  await linkFindingsToGoals(supabase, dealershipId, new Map(setupGoals.map((g) => [g.key, g.title])));
+  // NO MAP FROM TODAY'S FINDINGS. Linking reads the goals on record, so
+  // a finding type that is not re-detected today — M9's copy findings,
+  // which only run on a named day — still links to its approved goal.
+  await linkFindingsToGoals(supabase, dealershipId);
 
   const maturity = maturityOf(
     { firstAt: tracking.siteEvents.firstAt, events: tracking.siteEvents.visitorEvents30d },
