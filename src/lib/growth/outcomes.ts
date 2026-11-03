@@ -110,12 +110,20 @@ export function whyOutcomeIsNotWritable(row: OutcomeRow): string | null {
  * real AND unattributable, and the honest row says both. Folding
  * attribution into the verdict would turn "it went up, and nothing ties
  * that to this" into either a false claim or a thrown-away measurement.
+ *
+ * `direction` IS a parameter, because "fewer" is better for some
+ * measures and worse for others — see the note inside.
  */
-export function verdictFor(before: number, after: number): Verdict {
+export function verdictFor(before: number, after: number, direction: "up" | "down"): Verdict {
   if (!Number.isFinite(before) || !Number.isFinite(after)) return "not_measurable";
-  if (after > before) return "improved";
-  if (after < before) return "worsened";
-  return "unchanged";
+  if (after === before) return "unchanged";
+  // DIRECTION IS NOT OPTIONAL, and leaving it out was a real trap. The
+  // first version compared the two numbers alone, so a goal that closed
+  // five findings down to two — the thing working exactly as intended —
+  // would have been recorded as "worsened", and every month's review
+  // would have read as failure.
+  const rose = after > before;
+  return direction === "up" ? (rose ? "improved" : "worsened") : rose ? "worsened" : "improved";
 }
 
 /**

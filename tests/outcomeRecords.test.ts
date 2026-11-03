@@ -145,13 +145,17 @@ describe("3. ATTRIBUTION IS NOT PART OF THE VERDICT", () => {
     // Folding attribution in would turn "it went up, and nothing ties
     // that to this" into either a false claim or a thrown-away
     // measurement. A change can be real AND unattributable.
-    expect(verdictFor(10, 14)).toBe("improved");
-    expect(verdictFor(14, 10)).toBe("worsened");
-    expect(verdictFor(10, 10)).toBe("unchanged");
-    expect(verdictFor(0, 0)).toBe("unchanged");
-    // verdictFor takes two numbers. If attribution were part of it,
-    // this signature could not be two numbers.
-    expect(verdictFor.length).toBe(2);
+    expect(verdictFor(10, 14, "up")).toBe("improved");
+    expect(verdictFor(14, 10, "up")).toBe("worsened");
+    expect(verdictFor(10, 10, "up")).toBe("unchanged");
+    expect(verdictFor(0, 0, "down")).toBe("unchanged");
+    // NO ATTRIBUTION PARAMETER. The first version of this asserted the
+    // arity instead, which was a proxy that broke the moment `direction`
+    // was added for a real reason — and arity says nothing about WHICH
+    // arguments. The source says it outright.
+    const src = code("src/lib/growth/outcomes.ts");
+    const fn = src.slice(src.indexOf("export function verdictFor"));
+    expect(fn.slice(0, fn.indexOf(")"))).not.toMatch(/attribution/i);
   });
 
   it("AND AN IMPROVEMENT NOBODY CAN ATTRIBUTE IS STILL WRITABLE", () => {
@@ -160,9 +164,21 @@ describe("3. ATTRIBUTION IS NOT PART OF THE VERDICT", () => {
     expect(ATTRIBUTION).toContain("none");
   });
 
+  it("AND WHICH WAY IS BETTER IS PART OF THE QUESTION", () => {
+    // THE TRAP THIS CLOSES. "open findings" is a measure where FEWER is
+    // better. Comparing the numbers alone would have recorded a goal
+    // that closed five findings down to two — the thing working exactly
+    // as intended — as "worsened", and every month's review would have
+    // read as failure.
+    expect(verdictFor(5, 2, "down")).toBe("improved");
+    expect(verdictFor(2, 5, "down")).toBe("worsened");
+    expect(verdictFor(5, 2, "up")).toBe("worsened");
+    expect(verdictFor(2, 5, "up")).toBe("improved");
+  });
+
   it("and an unreadable number is not a verdict", () => {
-    expect(verdictFor(NaN, 10)).toBe("not_measurable");
-    expect(verdictFor(10, Infinity)).toBe("not_measurable");
+    expect(verdictFor(NaN, 10, "up")).toBe("not_measurable");
+    expect(verdictFor(10, Infinity, "down")).toBe("not_measurable");
   });
 });
 

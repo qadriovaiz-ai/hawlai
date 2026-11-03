@@ -2,6 +2,7 @@
 // the run order is decided by cronGroups.ts and nothing else.
 
 import { runDailyAutopilot } from "@/lib/agents/autopilotAgent";
+import { runResultsJob } from "@/lib/growth/resultsJob";
 import { runEmailAutomation } from "@/lib/automation/emailAutomation";
 import { runWorkflows } from "@/lib/automation/workflowEngine";
 import { checkCompetitorAlerts } from "@/lib/automation/competitorMonitor";
@@ -23,6 +24,9 @@ import { runStrategySignals } from "@/lib/strategy/strategySignals";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
+  // S5/P2 — measures decisions whose check date has passed. Model-free,
+  // so it belongs in `signals` with the other database-only work.
+  decision_results: (s, id) => runResultsJob(s, id),
   daily_autopilot: (s, id) => runDailyAutopilot(s, id),
   content_autopilot: (s, id) => runContentAutopilot(s, id),
   report_snapshots: (s, id, category) => runReportSnapshots(s, id, category),
