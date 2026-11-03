@@ -272,3 +272,122 @@ describe("4. T — the tracking check", () => {
     expect(line).not.toMatch(/candle|ghee|salon|dairy|paneer/i);
   });
 });
+
+describe("EVERY NUMBER A FINDING STATES IS A NUMBER THE AUDIT DECLARED", () => {
+  // WHAT THIS COST, 3 November 2026. The daily report's digit walk
+  // refuses any figure it cannot trace to something counted. The
+  // founder confirmed two goals, suggestions became renderable for the
+  // first time, and the whole email was dropped over the "5" in "5
+  // pages have no search title" — because the audit had counted those
+  // five pages and declared only the COMPLEMENT, "pages with a search
+  // title: 1". The number every finding talks about was the one number
+  // nobody declared.
+  //
+  // TWO MORE WERE ASLEEP BEHIND IT: pages_without_meta_description and
+  // products_priced_zero state counts that were not declared either,
+  // and would each have dropped an email the day their goal went
+  // active.
+  //
+  // So this test is about the CLASS, not the instance: it walks every
+  // digit of every finding title and requires it in counted ∪
+  // alsoCounted. A new finding whose title states an undeclared count
+  // fails here rather than silencing somebody's morning email.
+
+  const digitsIn = (text: string) => (text.match(/\d[\d,.]*/g) ?? []).map((d) => d.replace(/[.,]+$/, ""));
+
+  function assertEveryTitleNumberDeclared(result: { findings: any[]; counted: any[]; alsoCounted?: any[] }) {
+    const declared = new Set(
+      [...result.counted, ...(result.alsoCounted ?? [])].flatMap((c) => [String(c.value), c.value.toLocaleString("en-IN")])
+    );
+    const offenders: string[] = [];
+    for (const finding of result.findings) {
+      for (const digit of digitsIn(String(finding.title))) {
+        if (!declared.has(digit)) offenders.push(`${finding.type}: "${finding.title}" has ${digit}`);
+      }
+    }
+    expect(offenders, `undeclared numbers in finding titles:\n${offenders.join("\n")}`).toEqual([]);
+  }
+
+  it("THE SITE AUDIT, on the exact shape that dropped the email", async () => {
+    // Six pages, five with no search title — candle_by_qaaf on 3 Nov.
+    const pages = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`,
+      website_id: "w1",
+      slug: `page-${i}`,
+      title: "T",
+      seo_title: i === 0 ? "A title" : null,
+      meta_description: "d",
+      is_fallback: false,
+    }));
+    const result = await auditSite(
+      db({ websites: [{ id: "w1", slug: "s", published: true, dealership_id: "d1" }], website_pages: pages }).client,
+      "d1"
+    );
+    expect(result.findings.find((f) => f.type === "pages_without_search_title")!.title).toMatch(/^5 pages have/);
+    assertEveryTitleNumberDeclared(result);
+  });
+
+  it("AND WITH EVERY SITE FINDING AT ONCE, including the two that were asleep", async () => {
+    const pages = Array.from({ length: 7 }, (_, i) => ({
+      id: `p${i}`,
+      website_id: "w1",
+      slug: `page-${i}`,
+      title: "T",
+      seo_title: i < 2 ? "A title" : null,
+      meta_description: i < 4 ? "d" : null,
+      is_fallback: i === 6,
+    }));
+    const result = await auditSite(
+      db({ websites: [{ id: "w1", slug: "s", published: false, dealership_id: "d1" }], website_pages: pages }).client,
+      "d1"
+    );
+    // 5 with no title, 3 with no description, 1 placeholder, plus the
+    // unpublished finding, which states no number at all.
+    expect(result.findings.length).toBeGreaterThanOrEqual(4);
+    assertEveryTitleNumberDeclared(result);
+  });
+
+  it("THE CATALOGUE AUDIT, with all three of its findings", async () => {
+    // NINE PRODUCTS, AND EVERY COUNT DISTINCT. The first version of
+    // this used three products, where the deficits happened to equal
+    // the complements — so removing a deficit from the declared set
+    // changed nothing and two mutations survived. The fixture, not the
+    // guard, was the hole: 4 with no description, 6 with no image, 7
+    // priced at zero, against totals of 9, 5 and 3.
+    const products = Array.from({ length: 9 }, (_, i) => ({
+      id: `x${i}`,
+      dealership_id: "d1",
+      name: "P",
+      description: i < 4 ? null : "d",
+      price: i < 7 ? 0 : 700,
+      images: i < 6 ? [] : ["u"],
+    }));
+    const result = await auditCatalogue(db({ products }).client, "d1");
+    // Each number a title states is in exactly one place.
+    expect(result.findings.find((f) => f.type === "products_without_description")!.title).toMatch(/^4 of 9 /);
+    expect(result.findings.find((f) => f.type === "products_without_image")!.title).toMatch(/^6 of 9 /);
+    expect(result.findings.find((f) => f.type === "products_priced_zero")!.title).toMatch(/^7 products/);
+    expect(result.findings.map((f) => f.type).sort()).toEqual([
+      "products_priced_zero",
+      "products_without_description",
+      "products_without_image",
+    ]);
+    assertEveryTitleNumberDeclared(result);
+  });
+
+  it("AND AN EMPTY SITE AND AN EMPTY CATALOGUE STATE NO UNDECLARED NUMBER EITHER", async () => {
+    assertEveryTitleNumberDeclared(await auditSite(db({ websites: [] }).client, "d1"));
+    assertEveryTitleNumberDeclared(await auditCatalogue(db({ products: [] }).client, "d1"));
+  });
+
+  it("and the check itself would have caught the old behaviour", () => {
+    // A path mistake or a too-generous `declared` set would make every
+    // assertion above pass on nothing. This proves the walk bites.
+    const broken = {
+      findings: [{ type: "t", title: "5 pages have no search title" }],
+      counted: [{ label: "pages with a search title", value: 1, source: "s" }],
+      alsoCounted: [],
+    };
+    expect(() => assertEveryTitleNumberDeclared(broken)).toThrow();
+  });
+});

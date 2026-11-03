@@ -104,6 +104,9 @@ export async function runDailyGrowth(
 
   const findings: AuditFinding[] = [...site.findings, ...catalogue.findings];
   const counted: Counted[] = [...site.counted, ...catalogue.counted];
+  // Counted and traceable, but not shown as lines of their own — the
+  // numbers the findings themselves state. See AuditResult.alsoCounted.
+  const alsoCounted: Counted[] = [...(site.alsoCounted ?? []), ...(catalogue.alsoCounted ?? [])];
 
   // ---- M9, only when asked -------------------------------------------
   //
@@ -153,6 +156,8 @@ export async function runDailyGrowth(
         logContext: { supabase, dealershipId },
       });
       findings.push(...copy.findings);
+      // The copy audit declares its deficits directly, so everything it
+      // counts is both shown and printable.
       counted.push(...copy.counted);
       copyAuditCostInr = copy.costInr;
       // ARMED AND INCOMPLETE IS WORTH SAYING. Silence here would read
@@ -204,6 +209,7 @@ export async function runDailyGrowth(
     tracking,
     maturity,
     counted,
+    declared: [...counted, ...alsoCounted],
     suggestions,
     setupGoals: hasNoPlan(maturity, activeGoals) ? setupGoals : [],
     activeGoals,

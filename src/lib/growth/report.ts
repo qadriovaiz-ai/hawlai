@@ -152,6 +152,18 @@ export function buildDailyReport(input: {
   tracking: TrackingState;
   maturity: Maturity;
   counted: Counted[];
+  /**
+   * Every number the report may legitimately print, which is a SUPERSET
+   * of what it shows as lines.
+   *
+   * 3 November 2026: the digit walk dropped an entire email over the
+   * "5" in "5 pages have no search title". The audit had counted those
+   * five pages and declared only the complement, so the number the
+   * finding talks about was the one nobody declared. Defaults to
+   * `counted`, so a caller that has nothing extra behaves exactly as
+   * before.
+   */
+  declared?: Counted[];
   /** Today's picks, already capped and gated by the Strategist. */
   suggestions: { row: StrategistRow; goalTitle: string }[];
   /** Setup steps, shown whenever there is no plan to score against. */
@@ -189,6 +201,8 @@ export function buildDailyReport(input: {
   pendingSetupDrafts?: number;
 }): DailyReport {
   const byLabel = new Map(input.counted.map((c) => [c.label, c]));
+  // WHAT MAY BE PRINTED, as against what is shown. See `declared`.
+  const declared = input.declared ?? input.counted;
   const blocks: ReportBlock[] = [];
 
   // FIRST, ALWAYS. Nothing below it matters as much.
@@ -257,7 +271,7 @@ export function buildDailyReport(input: {
       // search title" — and that number must be one this report
       // counted, or the digit walk refuses it.
       //
-      // THE REPORT'S WHOLE COUNTED SET, not a filter on the title's own
+      // THE REPORT'S WHOLE DECLARED SET, not a filter on the title's own
       // numbers. My first version filtered, which LOOKED stricter and
       // was behaviourally identical: the digit walk only asks whether a
       // number is declared, so a value present in `counted` passes
@@ -265,7 +279,7 @@ export function buildDailyReport(input: {
       // check caught that the filter guarded nothing, and a narrower
       // expression that implies a guarantee it does not give is worse
       // than the plain one.
-      numbers: input.counted,
+      numbers: declared,
     });
   }
 

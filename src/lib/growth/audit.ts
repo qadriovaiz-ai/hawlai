@@ -34,9 +34,34 @@ export type AuditFinding = {
 /** Numbers the report may print, each already counted. */
 export type Counted = { label: string; value: number; source: string };
 
-export type AuditResult = { findings: AuditFinding[]; counted: Counted[] };
+export type AuditResult = {
+  findings: AuditFinding[];
+  /** The headline numbers, each of which the daily report prints as a line. */
+  counted: Counted[];
+  /**
+   * Counted, traceable, and NOT worth a line of its own.
+   *
+   * WHY THIS EXISTS, 3 November 2026. The report's digit walk refuses
+   * any number it cannot trace to something counted, and it dropped a
+   * whole email over the "5" in "5 pages have no search title". The
+   * audit had computed that 5 — it filtered for those pages — but
+   * declared only its COMPLEMENT, "pages with a search title: 1". So
+   * the number every finding talks about was the one number nobody
+   * declared.
+   *
+   * Putting the deficits into `counted` would have fixed it and taken
+   * the owner's email from six stat lines to eleven, half of them the
+   * same fact twice ("1 page has a title", "5 pages have no title").
+   * So the two questions are separated instead: what the owner is
+   * SHOWN, and what the report may legitimately PRINT.
+   *
+   * copyAudit never had this bug — it declares its deficits directly,
+   * which is what made the mismatch visible when the two were compared.
+   */
+  alsoCounted?: Counted[];
+};
 
-const EMPTY: AuditResult = { findings: [], counted: [] };
+const EMPTY: AuditResult = { findings: [], counted: [], alsoCounted: [] };
 
 /**
  * M1 — is there a site, is it published, and does each page have the
@@ -139,6 +164,14 @@ export async function auditSite(supabase: any, dealershipId: string): Promise<Au
       { label: "pages with a search title", value: rows.length - noTitle.length, source: "website_pages.seo_title" },
       { label: "pages still on the placeholder", value: fallback.length, source: "website_pages.is_fallback" },
     ],
+    // THE NUMBERS THE FINDINGS ABOVE ACTUALLY STATE. Each one is the
+    // length of a list this function filtered, so it is as counted as
+    // anything in `counted` — it simply does not deserve its own line
+    // next to the figure it is the other half of.
+    alsoCounted: [
+      { label: "pages with no search title", value: noTitle.length, source: "website_pages.seo_title" },
+      { label: "pages with no search description", value: noDescription.length, source: "website_pages.meta_description" },
+    ],
   };
 }
 
@@ -219,6 +252,12 @@ export async function auditCatalogue(supabase: any, dealershipId: string): Promi
       { label: "products", value: rows.length, source: "products" },
       { label: "products with a description", value: rows.length - noDescription.length, source: "products.description" },
       { label: "products with an image", value: rows.length - noImage.length, source: "products.images" },
+    ],
+    // As above: what the findings state, rather than its complement.
+    alsoCounted: [
+      { label: "products with no description", value: noDescription.length, source: "products.description" },
+      { label: "products with no image", value: noImage.length, source: "products.images" },
+      { label: "products priced at zero", value: freePrice.length, source: "products.price" },
     ],
   };
 }

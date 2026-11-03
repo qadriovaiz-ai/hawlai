@@ -543,3 +543,64 @@ describe("8. S4/P6 — the setup step reaches a page where it can be approved", 
     expect(sends[0].body).toMatch(new RegExp(`${r.goalDraftsPending} setup step`));
   });
 });
+
+describe("9. the email that was dropped on 3 November 2026", () => {
+  // END TO END, because every layer was individually fine. The audit
+  // counted correctly, the Strategist picked correctly, the report built
+  // correctly and its subject said "2 suggestions for today" — and then
+  // the digit walk refused the whole thing over the "5" in "5 pages have
+  // no search title", because the audit declared only the complement.
+  // The owner got silence and the reason was a line in a Vercel log.
+
+  /** Six pages, five with no search title: candle_by_qaaf that morning. */
+  function sixPagesFiveUntitled() {
+    const pages = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`,
+      website_id: "w1",
+      slug: i === 0 ? "home" : `page-${i}`,
+      title: "T",
+      seo_title: i === 0 ? "A title" : null,
+      meta_description: "d",
+      is_fallback: false,
+      content_source: "generated",
+      sections: [],
+    }));
+    return db({
+      website_pages: pages,
+      // An active goal whose title matches the setup step, so the
+      // finding links and becomes a suggestion — the state the
+      // founder's two confirmations put the business into.
+      goals: [
+        { id: "g1", dealership_id: "d1", title: "Give every page a search title", source_key: "pages_without_search_title", status: "active" },
+      ],
+    });
+  }
+
+  it("A SUGGESTION WHOSE TITLE STATES A DEFICIT IS SENT, not dropped", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = sixPagesFiveUntitled();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.reportSound).toBe(true);
+    expect(r.notSentBecause).toBeNull();
+    expect(r.sent).toBe(true);
+    expect(sends).toHaveLength(1);
+  });
+
+  it("AND THE NUMBER THAT DROPPED IT IS IN THE EMAIL", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = sixPagesFiveUntitled();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    expect(sends[0].body).toMatch(/5 pages have no search title/);
+    expect(sends[0].body).toMatch(/Give every page a search title/);
+  });
+
+  it("AND THE EXTRA DECLARED NUMBERS ARE NOT PRINTED AS LINES", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = sixPagesFiveUntitled();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    expect(sends[0].body).not.toMatch(/pages with no search title:/);
+  });
+});

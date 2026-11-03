@@ -491,3 +491,83 @@ describe("6. nothing in the report names a trade", () => {
     });
   }
 });
+
+describe("10. the declared set is wider than the shown set, and that is what sends the email", () => {
+  // 3 NOVEMBER 2026, THE REAL ONE. The founder confirmed two goals,
+  // suggestions became renderable for the first time, and the whole
+  // email was dropped over the "5" in "5 pages have no search title" —
+  // the audit had counted those five pages and declared only the
+  // complement, "pages with a search title: 1".
+
+  const SHOWN: Counted[] = [
+    { label: "pages", value: 6, source: "website_pages" },
+    { label: "pages with a search title", value: 1, source: "website_pages.seo_title" },
+    { label: "products", value: 2, source: "products" },
+    { label: "products with an image", value: 1, source: "products.images" },
+  ];
+  const ALSO: Counted[] = [
+    { label: "pages with no search title", value: 5, source: "website_pages.seo_title" },
+    { label: "products with no image", value: 1, source: "products.images" },
+  ];
+  const suggestion = {
+    row: row({ type: "pages_without_search_title", title: "5 pages have no search title", evidence: [{ kind: "website_page", id: "p1" }] }),
+    goalTitle: "Give every page a search title",
+  };
+
+  it("WITHOUT THE DEFICIT DECLARED, THE REPORT IS REFUSED — which is what happened", () => {
+    const report = build({ counted: SHOWN, suggestions: [suggestion], setupGoals: [], activeGoals: 2, findingCount: 3 });
+    const check = everyNumberIsCounted(report);
+    expect(check.ok).toBe(false);
+    expect(check.offenders).toEqual([{ block: "suggestion", found: "5" }]);
+  });
+
+  it("AND WITH IT DECLARED, THE SAME REPORT PASSES", () => {
+    const report = build({
+      counted: SHOWN,
+      declared: [...SHOWN, ...ALSO],
+      suggestions: [suggestion],
+      setupGoals: [],
+      activeGoals: 2,
+      findingCount: 3,
+    });
+    expect(everyNumberIsCounted(report).ok).toBe(true);
+    expect(report.subject).toBe("A Business — 1 suggestion for today");
+  });
+
+  it("AND THE EXTRA NUMBERS ARE NOT SHOWN AS LINES OF THEIR OWN", () => {
+    // Putting them in `counted` would also have fixed the drop, and
+    // taken a six-line email to eleven, half of them the same fact
+    // twice. The owner sees the shown set; the walk uses both.
+    const report = build({
+      counted: SHOWN,
+      declared: [...SHOWN, ...ALSO],
+      suggestions: [suggestion],
+      setupGoals: [],
+      activeGoals: 2,
+      findingCount: 3,
+    });
+    expect(report.blocks.filter((b) => b.kind === "stat")).toHaveLength(SHOWN.length);
+    expect(renderText(report)).not.toMatch(/pages with no search title/);
+  });
+
+  it("AND A CALLER THAT PASSES NO DECLARED SET STILL HAS ITS NUMBERS ACCEPTED", () => {
+    // COMPARING RENDERED TEXT WAS NOT ENOUGH. The first version of this
+    // did exactly that, and renderText does not depend on the declared
+    // set at all — so a mutation defaulting `declared` to [] passed it
+    // and was caught by some other test instead. What matters is that
+    // the fallback is `counted`, which only a soundness check shows.
+    const suggestion = {
+      row: row({ title: "2 of 6 products have no description" }),
+      goalTitle: "Describe every product",
+    };
+    const shown: Counted[] = [
+      { label: "products", value: 6, source: "products" },
+      { label: "products with no description", value: 2, source: "products.description" },
+    ];
+    const without = build({ counted: shown, suggestions: [suggestion], setupGoals: [], activeGoals: 1, findingCount: 1 });
+    expect(everyNumberIsCounted(without).ok).toBe(true);
+    const withSame = build({ counted: shown, declared: shown, suggestions: [suggestion], setupGoals: [], activeGoals: 1, findingCount: 1 });
+    expect(renderText(without)).toBe(renderText(withSame));
+    expect(everyNumberIsCounted(withSame).ok).toBe(true);
+  });
+});
