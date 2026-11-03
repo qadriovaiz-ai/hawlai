@@ -82,6 +82,9 @@ describe("1. a claim nothing can license is refused", () => {
     const note = editRefusalNote({
       ok: false,
       unverified: false,
+      // Required since 3 November: every path states why, or that
+      // there is no why. The reason used to be computed and discarded.
+      why: null,
       costInr: 0,
       refused: [{ text: "Your home will feel calmer.", why: "nothing on record can support a benefit claim" }],
     });
@@ -174,7 +177,7 @@ describe("3. it fails closed", () => {
   });
 
   it("and says so plainly rather than blaming the wording", () => {
-    const note = editRefusalNote({ ok: false, unverified: true, costInr: 0, refused: [] });
+    const note = editRefusalNote({ ok: false, unverified: true, why: "the model did not use the tool", costInr: 0, refused: [] });
     expect(note).toMatch(/couldn't check that wording/);
     expect(note).not.toMatch(/don't back it up/);
   });
@@ -218,5 +221,42 @@ describe("4. one enumeration, and one flag", () => {
     const gate = brain.slice(brain.indexOf("const modelWritten ="), brain.indexOf("const result = applyEdits"));
     expect(gate).toMatch(/Do not simply resend the same wording/);
     expect(gate).toMatch(/writtenByOwner/);
+  });
+});
+
+describe("3 November 2026: a paid failure that explained nothing", () => {
+  // The founder's copy check came back "could not finish" over four
+  // PAID claim_extraction calls and Rs 3.21. extractClaims returns
+  // `ok: false` WITH A REASON — "the model did not use the tool", "the
+  // tool call carried no claims array" — and this function discarded
+  // it. Nobody, not even the Vercel log, was told why.
+  //
+  // And the cost line counted a failed pass as zero, although two of
+  // those three failure paths happen AFTER the call is billed. So the
+  // run also reported less than it had spent.
+
+  it("THE VERDICT CARRIES WHY IT COULD NOT VERIFY", () => {
+    const src = code("src/lib/content/verifyEditedText.ts");
+    expect(src).toMatch(/why: string \| null;/);
+    expect(src).toMatch(/why: firstPass\.reason/);
+    // And it is said out loud, not just returned.
+    expect(src).toMatch(/\[verifyEditedText\] the claim extractor could not be read/);
+    expect(src).toMatch(/\[verifyEditedText\] the judge degraded/);
+  });
+
+  it("AND EVERY PATH STATES IT, or states that there is none", () => {
+    // A path that forgot would be a verdict nobody could explain. The
+    // type makes it required; this proves no path routes around it.
+    const src = code("src/lib/content/verifyEditedText.ts");
+    const returns = src.match(/return \{ ok: [^}]*\}/g) ?? [];
+    expect(returns.length).toBeGreaterThanOrEqual(4);
+    for (const r of returns) expect(r, r).toMatch(/why:/);
+  });
+
+  it("A PAID CALL IS COUNTED WHETHER ITS REPLY COULD BE READ OR NOT", () => {
+    const src = code("src/lib/content/verifyEditedText.ts");
+    expect(src).toMatch(/let costInr = firstPass\.costInr \+ secondNet\.costInr;/);
+    // The old line counted a failed pass as nothing.
+    expect(src).not.toMatch(/firstPass\.ok \? firstPass\.costInr : 0/);
   });
 });

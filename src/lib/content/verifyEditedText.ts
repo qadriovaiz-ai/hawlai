@@ -65,6 +65,21 @@ export type EditedTextVerdict = {
    * to a live page.
    */
   unverified: boolean;
+  /**
+   * WHY it could not be verified, in the extractor's or judge's own
+   * words. Null when the check ran.
+   *
+   * WHY THIS EXISTS, 3 November 2026. extractClaims returns `ok:
+   * false` WITH A REASON — "the model did not use the tool", "the tool
+   * call carried no claims array" — and this function threw that reason
+   * away. So the owner's email said "I could not finish checking your
+   * page copy" and NOBODY, not even the Vercel log, was told why. Four
+   * paid calls, Rs 3.21, and no explanation anywhere in the system.
+   *
+   * It is logged rather than shown: it is a model's own wording and
+   * does not belong in a customer-facing email.
+   */
+  why: string | null;
   costInr: number;
 };
 
@@ -78,7 +93,7 @@ export async function verifyEditedText(opts: {
   logContext?: { supabase: any; dealershipId: string } | null;
 }): Promise<EditedTextVerdict> {
   const texts = opts.texts.map((t) => String(t ?? "").trim()).filter(Boolean);
-  if (!texts.length) return { ok: true, refused: [], unverified: false, costInr: 0 };
+  if (!texts.length) return { ok: true, refused: [], unverified: false, why: null, costInr: 0 };
 
   // THE DOOR'S OWN ENUMERATION, not a second one. copySentences is what
   // splits a generated piece into the numbered sentences the extractor
@@ -86,7 +101,7 @@ export async function verifyEditedText(opts: {
   // B18 fault this codebase has paid for four times - the grading
   // sheet, the output gate, the records box, the estimator.
   const sentences = copySentences({ text: texts } as any);
-  if (!sentences.length) return { ok: true, refused: [], unverified: false, costInr: 0 };
+  if (!sentences.length) return { ok: true, refused: [], unverified: false, why: null, costInr: 0 };
 
   const ctx = contextFromFacts(opts.dealershipId, opts.facts, { kind: "page_text", topic: opts.topic });
 
@@ -102,11 +117,25 @@ export async function verifyEditedText(opts: {
     ),
   ]);
 
-  let costInr = (firstPass.ok ? firstPass.costInr : 0) + (secondNet.ok ? secondNet.costInr : 0);
+  // A PAID CALL IS PAID WHETHER ITS REPLY COULD BE READ OR NOT. This
+  // line used to count a failed pass as costing zero — and two of
+  // extractClaims' three failure paths ("the model did not use the
+  // tool", "the tool call carried no claims array") happen AFTER the
+  // call has been made and billed, and return a real costInr. So on 3
+  // November the run reported less than it had spent. That is the
+  // instrument telling a false story, which this project has now paid
+  // for six times.
+  let costInr = firstPass.costInr + secondNet.costInr;
   if (!firstPass.ok) {
     // The net alone reads four classes out of fourteen, so on its own it
     // would mean "nothing else was checked".
-    return { ok: false, refused: [], unverified: true, costInr };
+    //
+    // AND THE REASON IS SAID OUT LOUD. It existed and was discarded
+    // here, which is why the email could only say "could not finish".
+    console.error(
+      `[verifyEditedText] the claim extractor could not be read for ${opts.dealershipId}, so nothing was verified: ${firstPass.reason}`
+    );
+    return { ok: false, refused: [], unverified: true, why: firstPass.reason, costInr };
   }
   const claims = secondNet.ok ? [...firstPass.claims, ...secondNet.claims] : firstPass.claims;
 
@@ -116,11 +145,16 @@ export async function verifyEditedText(opts: {
   // was made and must have produced something; here there is no
   // selection to compare against, so an empty extraction on ordinary
   // wording is taken at face value.
-  if (!claims.length) return { ok: true, refused: [], unverified: false, costInr };
+  if (!claims.length) return { ok: true, refused: [], unverified: false, why: null, costInr };
 
   const verified = await verifyClaims(claims, [], { logContext: log, records: ctx.records });
   costInr += verified.costInr;
-  if (verified.degraded) return { ok: false, refused: [], unverified: true, costInr };
+  if (verified.degraded) {
+    // The judge was reached and gave up. Same rule as above: said out
+    // loud rather than folded into a silent "could not finish".
+    console.error(`[verifyEditedText] the judge degraded for ${opts.dealershipId}, so nothing was verified`);
+    return { ok: false, refused: [], unverified: true, why: "the judge could not reach a verdict", costInr };
+  }
 
   const refused: { text: string; why: string }[] = [];
   for (const index of [...new Set(verified.unsupportedSentences)]) {
@@ -133,7 +167,7 @@ export async function verifyEditedText(opts: {
     refused.push({ text: sentence.text, why: why || "nothing on record supports it" });
   }
 
-  return { ok: refused.length === 0, refused, unverified: false, costInr };
+  return { ok: refused.length === 0, refused, unverified: false, why: null, costInr };
 }
 
 /** What the owner is told when an edit was refused. */
