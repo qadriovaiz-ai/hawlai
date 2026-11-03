@@ -313,3 +313,65 @@ describe("5. THE MEASURE IS HONEST ABOUT WHAT THIS PRODUCT DOES NOT COLLECT", ()
     expect(confirm).toMatch(/source: null/);
   });
 });
+
+describe("6. a finding with no evidence still records a decision", () => {
+  // THE FOUNDER FOUND THIS, 3 November 2026, and I had told him to
+  // expect evidence — having established hours earlier that
+  // syncOpportunities writes none. Two producers fill `opportunities`:
+  // the growth audit (strategist.ts:134) writes `evidence`, and
+  // opportunityAgent does not. So stuck_leads and the other seven
+  // arrive with the column at its default '[]'.
+  //
+  // `why: []` is therefore CORRECT rather than a bug: there was nothing
+  // to point at. The decision is still anchored, by opportunity_id,
+  // which is the same fact and already has a column — putting it in
+  // `why` as well would be one fact in two places, which is what this
+  // codebase has paid for six times.
+
+  const noEvidence = {
+    dealershipId: "d1",
+    kind: "suggestion_acted_on" as const,
+    what: "Acted on: 5 leads waiting 2+ days with no follow-up",
+    why: [] as { kind: string; id: string }[],
+    measure: measureForFindingType("stuck_leads"),
+    opportunityId: "o_stuck",
+    goalId: null,
+    decidedBy: "owner",
+    now: NOW,
+  };
+
+  it("THE ROW IS WRITTEN, WITH why EMPTY AND THE ANCHOR IN opportunity_id", async () => {
+    const { client, inserts } = db();
+    const r = await recordDecision(client, noEvidence);
+    expect(r.ok).toBe(true);
+    expect(inserts[0].why).toEqual([]);
+    expect(inserts[0].opportunity_id).toBe("o_stuck");
+    expect(inserts[0].measure).toBe("open findings of type stuck_leads");
+  });
+
+  it("AND IT IS STILL RECORDED ONLY ONCE", async () => {
+    // THE BRANCH I HAD NOT TESTED. Approval idempotency matches on a
+    // single `why` pointer; with `why` empty that branch cannot fire,
+    // so this relies entirely on opportunity_id — which was true but
+    // unproven until the founder's test made it worth proving.
+    const { client, inserts } = db();
+    await recordDecision(client, noEvidence);
+    const second = await recordDecision(client, noEvidence);
+    expect(second.ok && second.created).toBe(false);
+    expect(inserts).toHaveLength(1);
+  });
+
+  it("and a finding that DOES carry evidence keeps it", async () => {
+    const { client, inserts } = db();
+    await recordDecision(client, {
+      ...noEvidence,
+      opportunityId: "o_pages",
+      why: [
+        { kind: "website_page", id: "p1" },
+        { kind: "website_page", id: "p2" },
+      ],
+      measure: measureForFindingType("pages_without_search_title"),
+    });
+    expect(inserts[0].why).toHaveLength(2);
+  });
+});
