@@ -154,6 +154,7 @@ export async function runDailyGrowth(
   const allowCopyAudit = opts.allowCopyAudit ?? armedForThis;
   let copyAuditCostInr = 0;
   let copyAuditUnverified = false;
+  let copyLinesSeen = 0;
   if (allowCopyAudit) {
     const { gatherBusinessFacts } = await import("@/lib/claims/businessFacts");
     const facts = await gatherBusinessFacts(supabase, dealershipId);
@@ -169,6 +170,9 @@ export async function runDailyGrowth(
       // counts is both shown and printable.
       counted.push(...copy.counted);
       copyAuditCostInr = copy.costInr;
+      // What the FREE layer looked at, so the alert below can say which
+      // check did not finish rather than implying none ran.
+      copyLinesSeen = copy.counted.find((c) => c.label === "lines of page copy")?.value ?? 0;
       // ARMED AND INCOMPLETE IS WORTH SAYING. Silence here would read
       // as "your copy is fine", which is what nobody checked.
       copyAuditUnverified = copy.freeLayerOnly;
@@ -228,6 +232,7 @@ export async function runDailyGrowth(
       ? { label: aiFailureLabel(opts.aiFailure.kind as any), message: opts.aiFailure.message }
       : null,
     copyAuditUnverified,
+    copyLinesSeen,
   });
 
   const check = everyNumberIsCounted(report);

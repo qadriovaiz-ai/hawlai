@@ -557,7 +557,17 @@ describe("3c. the owner is told when the AI could not work", () => {
     try {
       const { client } = db();
       await runDailyGrowth(client, "d1", { now: NOW });
-      expect(sends[0].body).toMatch(/could not finish checking your page copy/);
+      // THE WORDING CHANGED ON 3 NOVEMBER 2026 and the test with it.
+      // It used to assert "could not finish checking your page copy",
+      // which the email said while ALSO carrying a suggestion reading
+      // "9 lines use wording your records do not support" with five
+      // evidence ids. The copy audit has two layers; only the deeper
+      // one had failed. The alert was describing the whole audit as
+      // having failed and contradicted the body of its own email.
+      expect(sends[0].body).toMatch(/could not finish the deeper check/);
+      expect(sends[0].body).toMatch(/placeholders and for wording your records do not support/);
+      // AND IT NO LONGER CLAIMS NOTHING WAS CHECKED.
+      expect(sends[0].body).not.toMatch(/nothing below says anything about it/);
     } finally {
       if (ORIGINAL === undefined) delete process.env.GROWTH_COPY_AUDIT_ON;
       else process.env.GROWTH_COPY_AUDIT_ON = ORIGINAL;

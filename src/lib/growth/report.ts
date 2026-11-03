@@ -49,7 +49,31 @@ export type ReportBlock =
    * place for "the AI is not working", and it was the one place not
    * saying it.
    */
-  | { kind: "alert"; text: string; numbers: Counted[] }
+  | {
+      kind: "alert";
+      text: string;
+      numbers: Counted[];
+      /**
+       * A few words for the subject line, when this alert takes it.
+       *
+       * WHY, 3 November 2026: `subjectFor` took the alert's text up to
+       * its first " — ", and the copy-audit note has no " — " in it. So
+       * the whole sentence became the subject — "candle_by_qaaf — I
+       * could not finish checking your page copy against your records
+       * this time, so nothing below says anything about it." — and it
+       * buried the three suggestions the email was actually carrying.
+       */
+      headline?: string;
+      /**
+       * Whether this is the most important thing in the email.
+       *
+       * TRUE FOR A DEAD AI, FALSE FOR A HALF-FINISHED CHECK. "Your AI is
+       * not working" belongs in the subject; "the deeper copy check did
+       * not finish" is a footnote next to three usable suggestions, and
+       * on 3 November it took the subject from them.
+       */
+      ownsSubject?: boolean;
+    }
   /** Prose. Any digit in it must be a declared number. */
   | { kind: "line"; text: string; numbers: Counted[] }
   /** One counted figure, labelled. */
@@ -288,6 +312,14 @@ export function buildDailyReport(input: {
   /** True when M9 was armed but its deep check could not complete. */
   copyAuditUnverified?: boolean;
   /**
+   * How many lines of page copy the audit actually looked at.
+   *
+   * Decides what the copy-audit alert may claim: with lines seen, the
+   * FREE layer ran and its findings are below, so the alert may only
+   * say the deeper check did not finish.
+   */
+  copyLinesSeen?: number;
+  /**
    * How many findings the audit made.
    *
    * CARRIED SO THE REPORT CANNOT SAY "NOTHING TO FLAG" WHILE FINDINGS
@@ -326,12 +358,29 @@ export function buildDailyReport(input: {
       // depend on a number.
       text: `${input.aiFailure.label} — ${stripDigits(input.aiFailure.message)} Everything below was worked out without it, from your own records.`,
       numbers: [],
+      headline: input.aiFailure.label,
+      ownsSubject: true,
     });
   } else if (input.copyAuditUnverified) {
+    // IT SAYS WHICH CHECK DID NOT FINISH, NOT THAT NOTHING WAS CHECKED.
+    //
+    // 3 November 2026: this alert said "nothing below says anything
+    // about it" while the email carried a suggestion reading "9 lines
+    // use wording your records do not support", with five evidence
+    // ids. The copy audit has TWO layers — a free one for placeholders
+    // and unsupported wording, and a paid one for the claims a line
+    // makes — and `freeLayerOnly` means only the SECOND did not
+    // finish. The alert was describing the whole audit as having
+    // failed, and contradicted the body of its own email.
+    const looked = Math.max(0, Math.floor(input.copyLinesSeen ?? 0));
     blocks.push({
       kind: "alert",
-      text: "I could not finish checking your page copy against your records this time, so nothing below says anything about it.",
+      text: looked
+        ? "I checked your page copy for placeholders and for wording your records do not support, but could not finish the deeper check of the claims those lines make. Nothing below is about those claims."
+        : "I could not finish checking your page copy against your records this time, so nothing below says anything about it.",
       numbers: [],
+      // A footnote, not the headline: see ownsSubject.
+      ownsSubject: false,
     });
   }
 
@@ -443,12 +492,17 @@ export function buildDailyReport(input: {
 
 /** Says what the email contains, and nothing it does not. */
 function subjectFor(businessName: string, blocks: ReportBlock[], findingCount: number): string {
-  // AN ALERT OWNS THE SUBJECT LINE. "2 setup steps" over a dead AI
-  // tells the owner the wrong thing first, which is exactly what nine
-  // days of reports did.
-  const alert = blocks.find((b) => b.kind === "alert");
+  // AN ALERT OWNS THE SUBJECT LINE ONLY IF IT SAYS SO. "2 setup steps"
+  // over a dead AI tells the owner the wrong thing first, which is
+  // exactly what nine days of reports did — so the AI-failure alert
+  // takes the subject.
+  //
+  // A HALF-FINISHED COPY CHECK DOES NOT. On 3 November it did, and the
+  // subject became the whole of that sentence while three usable
+  // suggestions went unmentioned.
+  const alert = blocks.find((b) => b.kind === "alert" && b.ownsSubject);
   if (alert && alert.kind === "alert") {
-    const headline = alert.text.split(" — ")[0].trim();
+    const headline = (alert.headline ?? alert.text.split(" — ")[0]).trim();
     return `${businessName} — ${headline}`;
   }
   const suggestions = blocks.filter((b) => b.kind === "suggestion").length;

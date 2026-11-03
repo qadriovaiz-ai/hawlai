@@ -462,6 +462,36 @@ describe("9. an AI failure owns the top of the email and the subject line", () =
     expect(renderText(report)).toMatch(/could not finish checking your page copy/);
   });
 
+  it("AND SAYS WHICH CHECK DID NOT FINISH WHEN IT LOOKED AT SOMETHING", () => {
+    // 3 NOVEMBER 2026. The copy audit has a free layer (placeholders
+    // and unsupported wording) and a paid one (the claims a line
+    // makes). `copyAuditUnverified` means only the SECOND did not
+    // finish — and the alert said "nothing below says anything about
+    // it" over an email carrying a copy suggestion with five evidence
+    // ids. It was contradicting its own body.
+    const report = build({ copyAuditUnverified: true, copyLinesSeen: 96 });
+    const text = renderText(report);
+    expect(text).toMatch(/could not finish the deeper check/);
+    expect(text).not.toMatch(/nothing below says anything about it/);
+  });
+
+  it("AND A HALF-FINISHED COPY CHECK DOES NOT TAKE THE SUBJECT", () => {
+    // It took it, and took it as a whole sentence: subjectFor read the
+    // alert's text up to its first " — ", and that text has none. So
+    // the subject became the entire apology while three usable
+    // suggestions went unmentioned.
+    const report = build({ copyAuditUnverified: true, copyLinesSeen: 96 });
+    expect(report.subject).toBe("A Business — 1 suggestion for today");
+    expect(report.subject).not.toMatch(/could not finish/);
+    // The note is still there, and still first.
+    expect(report.blocks[0].kind).toBe("alert");
+  });
+
+  it("A DEAD AI STILL TAKES THE SUBJECT, by a short headline", () => {
+    const report = build({ aiFailure: { label: "AI unavailable (credits)", message: "m" } });
+    expect(report.subject).toBe("A Business — AI unavailable (credits)");
+  });
+
   it("THE AI FAILURE WINS over the copy-audit note, because it is the bigger fact", () => {
     const report = build({
       aiFailure: { label: "AI unavailable (credits)", message: "m" },
