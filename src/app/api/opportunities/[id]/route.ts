@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { recordDecisionQuietly } from "@/lib/growth/recordDecision";
+import { measureForFindingType } from "@/lib/growth/measures";
 
 export async function PATCH(
   request: Request,
@@ -23,5 +25,24 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // S5/P1 — ONLY "completed" IS A DECISION. "dismissed" is the owner
+  // clearing something off a list, which is not an action whose effect
+  // there is any reason to measure; recording it would fill the table
+  // with decisions that can only ever come back not_measurable and make
+  // the first monthly review read as noise.
+  if (status === "completed") {
+    await recordDecisionQuietly(supabase, {
+      dealershipId: String(data.dealership_id),
+      kind: "suggestion_acted_on",
+      what: `Acted on: ${data.title}`,
+      why: Array.isArray(data.evidence) ? (data.evidence as { kind: string; id: string }[]) : [],
+      measure: measureForFindingType(String(data.type)),
+      opportunityId: String(data.id),
+      goalId: data.goal_id ? String(data.goal_id) : null,
+      decidedBy: "owner",
+    });
+  }
+
   return NextResponse.json(data);
 }

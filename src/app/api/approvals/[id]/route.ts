@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { recordDecisionQuietly } from "@/lib/growth/recordDecision";
+import { measureForAction } from "@/lib/growth/measures";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
@@ -430,6 +432,35 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // S5/P1 — AN APPROVAL GRANTED IS A DECISION, so it goes on record
+  // with a date to look at it. Only "approved": a rejection is the
+  // owner declining to act, and there is no effect to measure in 28
+  // days.
+  //
+  // AFTER the status write and beside logAuditEvent, deliberately. This
+  // is bookkeeping about something that has already happened, and
+  // recordDecisionQuietly never lets its own failure reach the owner —
+  // his approval stands either way, and the log says loudly when a
+  // decision row is missing, because a missing decision row is a
+  // missing outcome row.
+  //
+  // THE MEASURE COMES FROM measures.ts, WHICH IS HONEST ABOUT WHAT
+  // THIS PRODUCT DOES NOT COLLECT. For a good share of the 33 action
+  // types nothing records the consequence, so the measure names what a
+  // person would look at and the outcome will come back
+  // not_measurable with the reason. A share of the first month's
+  // outcomes saying "could not tell" is the system working.
+  if (status === "approved") {
+    await recordDecisionQuietly(service, {
+      dealershipId: approval.dealership_id,
+      kind: "approval_granted",
+      what: `Approved: ${humanizeActionType(approval.action_type)}`,
+      why: [{ kind: "pending_approval", id: String(id) }],
+      measure: measureForAction(String(approval.action_type)),
+      decidedBy: `user:${user.id}`,
+    });
+  }
 
   await logAuditEvent(service, {
     dealershipId: approval.dealership_id,

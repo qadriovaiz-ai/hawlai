@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { recordDecisionQuietly } from "@/lib/growth/recordDecision";
+import { measureForFindingType } from "@/lib/growth/measures";
 
 // P2 28a — this is where a draft goal's proposed_tasks actually
 // become real tasks/agent_tasks rows. Same owner-only resolution as
@@ -18,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!dealership) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const service = createServiceClient();
-  const { data: goal } = await service.from("goals").select("id, status, proposed_tasks").eq("id", id).eq("dealership_id", dealership.id).maybeSingle();
+  const { data: goal } = await service.from("goals").select("id, status, proposed_tasks, title, source_key").eq("id", id).eq("dealership_id", dealership.id).maybeSingle();
   if (!goal) return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   if (goal.status !== "draft") return NextResponse.json({ error: "This goal isn't a pending draft" }, { status: 400 });
 
@@ -59,6 +61,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { error: activateError } = await service.from("goals").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", goal.id);
   if (activateError) return NextResponse.json({ error: activateError.message }, { status: 500 });
+
+  // S5/P1 — the owner decided something, so it is on record with a date
+  // to look at it. AFTER the activation, never before: a decision row
+  // for a goal that failed to activate would be a record of something
+  // that did not happen.
+  //
+  // MEASURED BY WHETHER THE THING THE GOAL IS ABOUT GOES AWAY. For a
+  // goal drafted from the audit that is the one measure always
+  // available and always relevant, needing no new collection and no
+  // attribution. A goal the owner wrote himself has no source_key, so
+  // there is nothing counted to point at and its outcome will say so.
+  await recordDecisionQuietly(service, {
+    dealershipId: dealership.id,
+    kind: "goal_confirmed",
+    what: `Confirmed the goal "${goal.title}"`,
+    why: [{ kind: "goal", id: String(goal.id) }],
+    measure: goal.source_key
+      ? measureForFindingType(String(goal.source_key))
+      : { metric: `progress on "${goal.title}"`, source: null, direction: "up" },
+    goalId: String(goal.id),
+    decidedBy: "owner",
+  });
 
   return NextResponse.json({ success: true, humanCreated, agentCreated, skipped });
 }
