@@ -51,6 +51,20 @@ export type ResultsRun = {
   /** Of those written, how many could not be measured. */
   notMeasurable: number;
   failed: number;
+  /**
+   * SET WHENEVER THIS RUN DID NOT DO ITS WORK, because that is the only
+   * thing the dispatcher looks at.
+   *
+   * WHAT THIS COST, 3 November 2026. dailyJobs.ts:154 marks a job
+   * failed only when its runner returns an object with a truthy
+   * `error`. This type had `failed: number` and no `error`, so the
+   * first live run reported every decision as failed, wrote nothing,
+   * and the Automation Health card said `done` — the silent failure
+   * this whole stage exists to stop, in the stage's own code.
+   *
+   * `failed` counts; `error` is what makes the count visible.
+   */
+  error?: string;
 };
 
 /**
@@ -196,21 +210,31 @@ export async function runResultsJob(
     .eq("dealership_id", dealershipId)
     .lte("check_date", day);
   if (error || !Array.isArray(decisions)) {
-    console.error(`[results] could not read decisions for ${dealershipId}: ${error?.message ?? "no rows"}`);
-    return empty;
+    const why = `could not read decisions: ${error?.message ?? "no rows"}`;
+    console.error(`[results] ${why} for ${dealershipId}`);
+    return { ...empty, error: why };
   }
+
+  // NOTHING DUE IS NOT A FAILURE, and it is also the reason the first
+  // version of this broke. It passed a "none" sentinel into the `.in()`
+  // list to avoid an empty one — and `decision_id` is a uuid, so
+  // Postgres refused the whole query with "invalid input syntax for
+  // type uuid". Every run failed, wrote nothing, and reported done. The
+  // empty case is handled by returning, not by inventing a value.
+  if (!decisions.length) return empty;
 
   const { data: already, error: outcomeError } = await supabase
     .from("outcomes")
     .select("decision_id")
-    .in("decision_id", decisions.map((d: any) => d.id).concat(["none"]));
+    .in("decision_id", decisions.map((d: any) => String(d.id)));
   // A FAILED READ IS NOT "NONE WRITTEN YET". Treating it as that would
   // try to write a second outcome for decisions that already have one —
   // refused by the unique index, so the damage would be a run reporting
   // work it did not do.
   if (outcomeError) {
-    console.error(`[results] could not read existing outcomes for ${dealershipId}: ${outcomeError.message}`);
-    return { ...empty, due: decisions.length, failed: decisions.length };
+    const why = `could not read existing outcomes: ${outcomeError.message}`;
+    console.error(`[results] ${why} for ${dealershipId}`);
+    return { ...empty, due: decisions.length, failed: decisions.length, error: why };
   }
   const done = new Set((already ?? []).map((o: any) => String(o.decision_id)));
 
@@ -255,5 +279,15 @@ export async function runResultsJob(
     if (row.verdict === "not_measurable") notMeasurable += 1;
   }
 
-  return { day, due: pending.length, written, notMeasurable, failed };
+  return {
+    day,
+    due: pending.length,
+    written,
+    notMeasurable,
+    failed,
+    // A RUN THAT COULD NOT MEASURE SOME OF WHAT CAME DUE IS A FAILED
+    // RUN, and the health card has to say so. `failed` on its own is a
+    // number nobody looks at.
+    ...(failed ? { error: `${failed} of ${pending.length} due decisions could not be given an outcome` } : {}),
+  };
 }

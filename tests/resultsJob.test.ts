@@ -338,3 +338,89 @@ describe("5. the job's own shape", () => {
     expect(src).toMatch(/whyOutcomeIsNotWritable\(row\)/);
   });
 });
+
+describe("6. the live failure of 3 November 2026", () => {
+  // The job answered 202, daily_jobs said status=done, error=null — and
+  // `outcomes` was empty with a decision sitting there due. Two faults,
+  // and the second is the one that mattered.
+
+  it("THE OUTCOMES QUERY CARRIES ONLY REAL DECISION IDS", async () => {
+    // FAULT ONE. It passed a "none" sentinel into the `.in()` list to
+    // avoid an empty one, and decision_id is a uuid — so Postgres
+    // refused the whole query with "invalid input syntax for type
+    // uuid", every run failed, and nothing was ever written. A guess
+    // about an empty list broke every real one.
+    const src = code("src/lib/growth/resultsJob.ts");
+    expect(src).not.toMatch(/concat\(\["none"\]\)/);
+    expect(src).toMatch(/\.in\("decision_id", decisions\.map\(\(d: any\) => String\(d\.id\)\)\)/);
+    // The empty case is handled by returning, not by inventing a value.
+    expect(src).toMatch(/if \(!decisions\.length\) return empty;/);
+  });
+
+  it("AND NOTHING DUE IS NOT A FAILURE", async () => {
+    const { client, inserts } = db({ decisions: [] });
+    const r = await runResultsJob(client, "d1", { now: NOW });
+    expect(r.due).toBe(0);
+    expect(r.error).toBeUndefined();
+    expect(inserts).toHaveLength(0);
+  });
+
+  it("A RUN THAT COULD NOT DO ITS WORK RETURNS error, so the dispatcher marks it FAILED", async () => {
+    // FAULT TWO, AND THE ONE THAT MATTERED. dailyJobs.ts:154 marks a
+    // job failed only when its runner returns an object with a truthy
+    // `error`. ResultsRun had `failed: number` and no `error`, so the
+    // run reported every decision as failed and the Automation Health
+    // card said "done" — the silent failure this whole stage exists to
+    // stop, in the stage's own code.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { client } = db(
+      { decisions: [decision()], opportunities: fiveThenTwo() },
+      { "outcomes:select": "connection reset" }
+    );
+    const r = await runResultsJob(client, "d1", { now: NOW });
+    expect(r.failed).toBe(1);
+    expect(r.error).toMatch(/could not read existing outcomes/);
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("AND SO DOES AN UNREADABLE DECISIONS TABLE", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { client } = db({}, { "decisions:select": "connection reset" });
+    const r = await runResultsJob(client, "d1", { now: NOW });
+    expect(r.error).toMatch(/could not read decisions/);
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("AND SO DOES A RUN WHERE SOME OUTCOMES COULD NOT BE WRITTEN", async () => {
+    // `failed` on its own is a number nobody looks at.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { client } = db(
+      { decisions: [decision()], opportunities: fiveThenTwo() },
+      { "outcomes:insert": "permission denied" }
+    );
+    const r = await runResultsJob(client, "d1", { now: NOW });
+    expect(r.written).toBe(0);
+    expect(r.failed).toBe(1);
+    expect(r.error).toMatch(/could not be given an outcome/);
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("AND A RUN THAT DID ITS WORK RETURNS NO error", async () => {
+    // The other direction: a healthy run must not be marked failed.
+    const { client } = db({ decisions: [decision()], opportunities: fiveThenTwo() });
+    const r = await runResultsJob(client, "d1", { now: NOW });
+    expect(r.written).toBe(1);
+    expect(r.failed).toBe(0);
+    expect(r.error).toBeUndefined();
+  });
+
+  it("AND THE SHAPE IS THE ONE THE DISPATCHER READS", () => {
+    // Not a convention: dailyJobs.ts looks for exactly this key and
+    // nothing else. A runner that reports failure any other way is a
+    // runner whose failures are invisible.
+    const jobs = code("src/lib/automation/dailyJobs.ts");
+    expect(jobs).toMatch(/"error" in result && result\.error/);
+    const src = code("src/lib/growth/resultsJob.ts");
+    expect(src).toMatch(/error\?: string;/);
+  });
+});
