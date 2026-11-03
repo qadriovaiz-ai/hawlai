@@ -184,22 +184,153 @@ describe("1. the loop runs and sends", () => {
   });
 });
 
-describe("2. THE PRECONDITION — a report that fails its own check is not sent", () => {
-  it("DROPS THE EMAIL WHEN A NUMBER IS NOT COUNTED", async () => {
-    // The failing case this whole stage exists to prevent: an owner
-    // acting on a figure that came from nowhere, with no outcome loop
-    // until S5 to catch it.
+describe("2. THE PRECONDITION — the BLOCK is refused, not the email", () => {
+  // THIS TEST CHANGED ON 3 NOVEMBER 2026, with the founder's explicit
+  // approval, and it was NOT loosened.
+  //
+  // It used to assert the whole email was dropped. That is what
+  // happened to him that morning: one suggestion said "5 pages have no
+  // search title" against an audit that had declared only the
+  // complement, and he got SILENCE — no email, no reason, and the
+  // explanation in a Vercel log he has never read. The figure was
+  // refused in the safe direction; the silence was not safe, and
+  // October's nine dead days taught the same lesson.
+  //
+  // The guarantee it protects is unchanged and still asserted below: a
+  // figure nobody counted NEVER REACHES HIM. What changed is that the
+  // rest of the email now does, and says how much was left out.
+
+  /** A site whose finding states a figure the audit never declares. */
+  function withAnUndeclaredFigure() {
+    const pages = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, website_id: "w1", slug: i === 0 ? "home" : `page-${i}`, title: "T",
+      seo_title: i === 0 ? "A title" : null, meta_description: "d",
+      is_fallback: false, content_source: "generated", sections: [],
+    }));
+    return db({
+      website_pages: pages,
+      goals: [{ id: "g1", dealership_id: "d1", title: "Give every page a search title", source_key: "pages_without_search_title", status: "active" }],
+    });
+  }
+
+  it("THE FIGURE NOBODY COUNTED NEVER REACHES HIM", async () => {
+    // The guarantee, stated as the guarantee. 300 is in no counted set.
     sends.length = 0;
     forbidModelCalls();
-    const report = await import("@/lib/growth/report");
-    const spy = vi.spyOn(report, "everyNumberIsCounted").mockReturnValue({ ok: false, offenders: [{ block: "line", found: "300" }] });
-    const { client } = db();
+    const reportModule = await import("@/lib/growth/report");
+    const spy = vi.spyOn(reportModule, "buildDailyReport").mockImplementation(((input: any) => {
+      const built = (spy as any).getMockImplementation && null;
+      void built;
+      return {
+        dealershipId: input.dealershipId, day: input.day,
+        subject: `${input.businessName} — your daily check, nothing to flag`,
+        counted: input.counted,
+        blocks: [
+          { kind: "line", text: "Traffic is up 300 percent.", numbers: [] },
+          { kind: "line", text: "Nothing else to report.", numbers: [] },
+        ],
+      };
+    }) as any);
+    const { client } = withAnUndeclaredFigure();
     const r = await runDailyGrowth(client, "d1", { now: NOW });
-    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+
     expect(r.reportSound).toBe(false);
-    expect(r.sent).toBe(false);
-    expect(r.notSentBecause).toBe("the report failed its own number check");
-    expect(sends).toEqual([]);
+    expect(sends).toHaveLength(1);
+    expect(sends[0].body).not.toMatch(/300/);
+    expect(sends[0].body).not.toMatch(/Traffic is up/);
+  });
+
+  it("AND THE EMAIL STILL GOES, saying how much was left out", async () => {
+    // Silence is the one outcome the owner cannot act on.
+    sends.length = 0;
+    forbidModelCalls();
+    const reportModule = await import("@/lib/growth/report");
+    const spy = vi.spyOn(reportModule, "buildDailyReport").mockImplementation(((input: any) => ({
+      dealershipId: input.dealershipId, day: input.day,
+      subject: `${input.businessName} — your daily check, nothing to flag`,
+      counted: input.counted,
+      blocks: [
+        { kind: "line", text: "Traffic is up 300 percent.", numbers: [] },
+        { kind: "line", text: "Nothing else to report.", numbers: [] },
+      ],
+    })) as any);
+    const { client } = withAnUndeclaredFigure();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    spy.mockRestore();
+
+    expect(r.sent).toBe(true);
+    expect(r.notSentBecause).toBeNull();
+    expect(r.blocksLeftOut).toBe(1);
+    expect(sends[0].body).toMatch(/left 1 thing out of this email/);
+    expect(sends[0].body).toMatch(/Nothing else to report/);
+  });
+
+  it("AND A FINDING THAT WAS NOT SHOWN IS NOT LEFT MARKED AS SHOWN", async () => {
+    // pickToday writes last_surfaced_on BEFORE the report is built, so
+    // on 3 November both findings were recorded as surfaced on a day
+    // nothing was surfaced — the record saying he had seen something he
+    // never saw.
+    sends.length = 0;
+    forbidModelCalls();
+    const reportModule = await import("@/lib/growth/report");
+    const spy = vi.spyOn(reportModule, "buildDailyReport").mockImplementation(((input: any) => ({
+      dealershipId: input.dealershipId, day: input.day,
+      subject: `${input.businessName} — 1 suggestion for today`,
+      counted: input.counted,
+      blocks: [
+        // A suggestion block whose figure nothing declared, carrying the
+        // real finding's title so the un-marking can match it.
+        { kind: "suggestion", title: "5 pages have no search title", evidence: [{ kind: "website_page", id: "p1" }], goal: "Give every page a search title", numbers: [] },
+      ],
+    })) as any);
+    const { client, tables } = withAnUndeclaredFigure();
+    await runDailyGrowth(client, "d1", { now: NOW });
+    spy.mockRestore();
+
+    const surfaced = tables.opportunities.filter((o: any) => o.last_surfaced_on === TODAY);
+    expect(surfaced).toEqual([]);
+  });
+
+  it("AND THE ONES HE DID SEE STAY MARKED AS SEEN", async () => {
+    // The un-marking must take back only what was pruned. Clearing all
+    // of them would put today's suggestions back into tomorrow's pool
+    // on top of tomorrow's three, and the cap would be spent twice. The
+    // first version of this guard had no test that reached the case:
+    // one block kept, one block dropped.
+    sends.length = 0;
+    forbidModelCalls();
+    const reportModule = await import("@/lib/growth/report");
+    const spy = vi.spyOn(reportModule, "buildDailyReport").mockImplementation(((input: any) => ({
+      dealershipId: input.dealershipId, day: input.day,
+      subject: `${input.businessName} — 1 suggestion for today`,
+      counted: input.counted,
+      blocks: [
+        // Kept: its figure is declared.
+        { kind: "suggestion", title: "5 pages have no search title", evidence: [{ kind: "website_page", id: "p1" }], goal: "Give every page a search title", numbers: input.declared ?? input.counted },
+        // Dropped: 300 is in no counted set.
+        { kind: "suggestion", title: "300 pages have no search title", evidence: [{ kind: "website_page", id: "p2" }], goal: "Give every page a search title", numbers: input.declared ?? input.counted },
+      ],
+    })) as any);
+    const { client, tables } = withAnUndeclaredFigure();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    spy.mockRestore();
+
+    expect(r.blocksLeftOut).toBe(1);
+    // The one real finding was shown, so its mark stands.
+    const shown = tables.opportunities.filter((o: any) => o.last_surfaced_on === TODAY);
+    expect(shown.map((o: any) => o.type)).toContain("pages_without_search_title");
+  });
+
+  it("and a sound report is sent whole, with nothing left out", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = withAnUndeclaredFigure();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.reportSound).toBe(true);
+    expect(r.blocksLeftOut).toBe(0);
+    expect(r.sent).toBe(true);
+    expect(sends[0].body).not.toMatch(/left \d+ thing/);
   });
 });
 
@@ -385,6 +516,25 @@ describe("3c. the owner is told when the AI could not work", () => {
     expect(sends[0].subject).toBe("A Business — AI unavailable (credits)");
     expect(sends[0].body).toMatch(/AI unavailable \(credits\)/);
     expect(sends[0].body).toMatch(/worked out without it, from your own records/);
+  });
+
+  it("AND AN AI FAILURE WITH A NUMBER IN IT IS STILL NOT DROPPED", async () => {
+    // A provider's error text carries digits — "try again in 42
+    // seconds" — and nothing counted them. Since the block is now what
+    // gets refused rather than the email, this is the ONE block that
+    // must never be refused: "the AI is not working" does not depend on
+    // a number. Its digits are stripped at build time instead.
+    sends.length = 0;
+    forbidModelCalls();
+    const { client } = db();
+    const r = await runDailyGrowth(client, "d1", {
+      now: NOW,
+      aiFailure: { kind: "rate_limited", message: "Too many requests — try again in 42 seconds." },
+    });
+    expect(r.sent).toBe(true);
+    expect(r.blocksLeftOut).toBe(0);
+    expect(sends[0].body).toMatch(/Too many requests/);
+    expect(sends[0].body).not.toMatch(/42/);
   });
 
   it("AND A HEALTHY RUN SAYS NOTHING ABOUT IT", async () => {

@@ -80,6 +80,16 @@ export type DailyReport = {
 /** Digits, with thousands separators and decimals kept together. */
 const NUMBER_IN_TEXT = /\d[\d,.]*/g;
 
+/**
+ * A provider's message with its numbers taken out.
+ *
+ * Only used on the AI-failure alert, which must survive the number
+ * check under every circumstance — see where it is called.
+ */
+export function stripDigits(text: string): string {
+  return String(text ?? "").replace(NUMBER_IN_TEXT, "").replace(/\s{2,}/g, " ").trim();
+}
+
 /** The strings a declared counted value may legitimately render as. */
 function renderingsOf(value: number): Set<string> {
   const out = new Set<string>([String(value)]);
@@ -114,6 +124,104 @@ export function everyNumberIsCounted(report: DailyReport): NumberCheck {
     }
   }
   return { ok: offenders.length === 0, offenders };
+}
+
+/**
+ * The report with any block that fails the number check taken out.
+ *
+ * WHY THIS EXISTS, 3 November 2026. The precondition was all or
+ * nothing: a report carrying one untraceable figure was NOT SENT. On
+ * the first morning suggestions were renderable, one of them said "5
+ * pages have no search title" against an audit that had declared only
+ * the complement — and the owner got SILENCE. The number was wrong in
+ * the safe direction and the SILENCE was not: he had no email, no
+ * reason, and the explanation was a line in a Vercel log he has never
+ * read.
+ *
+ * Nine days of a dead product taught the same lesson in October. A
+ * guard whose failure mode is "say nothing" hands the owner the one
+ * outcome he cannot act on.
+ *
+ * SO THE RULE IS NARROWED, NOT WEAKENED. A figure nobody counted still
+ * never reaches him. It is now the BLOCK that is refused rather than
+ * the email, and the email says how many were left out — which is
+ * itself a counted number.
+ */
+export type PrunedReport = {
+  report: DailyReport;
+  /** What was taken out, and the figure that took it out. */
+  removed: { block: string; found: string }[];
+};
+
+export function withoutUncountedBlocks(report: DailyReport): PrunedReport {
+  const removed: { block: string; found: string }[] = [];
+  const kept: ReportBlock[] = [];
+
+  for (const block of report.blocks) {
+    const offender = firstUncountedIn(block);
+    if (offender) removed.push({ block: block.kind, found: offender });
+    else kept.push(block);
+  }
+
+  if (!removed.length) return { report, removed };
+
+  // THE LINE THAT EXPLAINS THE PRUNING IS ITSELF CHECKED. It is added
+  // after the walk, so without this it would be the one block in the
+  // email that bypassed the rule — and it states a number. A mutation
+  // that stripped its declaration survived the first run precisely
+  // because nothing looked at it.
+  const n = removed.length;
+  const explanation: ReportBlock = {
+    kind: "line",
+    text: `I left ${n} ${n === 1 ? "thing" : "things"} out of this email, because ${n === 1 ? "a figure in it" : "a figure in each"} did not trace back to anything I counted. Everything else here is sound.`,
+    numbers: [{ label: "things left out of this email", value: n, source: "the report's own number check" }],
+  };
+  kept.push(
+    firstUncountedIn(explanation)
+      ? // Cannot happen with the line above, and if it ever does the
+        // owner is told WITHOUT a figure rather than with a bad one.
+        { kind: "line", text: "I left something out of this email, because a figure in it did not trace back to anything I counted. Everything else here is sound.", numbers: [] }
+      : explanation
+  );
+
+  const pruned: DailyReport = { ...report, blocks: kept };
+  // THE SUBJECT IS RECOMPUTED, because it counts what is in the email
+  // and the email just changed. A subject promising two suggestions
+  // over one is the same fault in a smaller place.
+  return { report: { ...pruned, subject: subjectFor(businessNameFrom(report.subject), kept, findingCountFrom(kept)) }, removed };
+}
+
+/** The first figure in this block that nothing declared, or null. */
+function firstUncountedIn(block: ReportBlock): string | null {
+  const declared = new Set<string>();
+  for (const n of declaredNumbers(block)) for (const r of renderingsOf(n.value)) declared.add(r);
+  for (const match of textOf(block).match(NUMBER_IN_TEXT) ?? []) {
+    const cleaned = match.replace(/[.,]+$/, "");
+    if (!declared.has(cleaned) && !declared.has(match)) return cleaned;
+  }
+  return null;
+}
+
+/**
+ * The business's name back out of the subject it was put into.
+ *
+ * NOT A SECOND SOURCE OF TRUTH: the subject was built as
+ * `${businessName} — ...` moments ago, so this reads back what was
+ * written rather than looking the name up again. Passing the name
+ * through would mean threading it into a function whose only job is to
+ * prune.
+ */
+function businessNameFrom(subject: string): string {
+  const at = subject.indexOf(" — ");
+  return at === -1 ? subject : subject.slice(0, at);
+}
+
+/** What the kept blocks still say was found, for the subject's wording. */
+function findingCountFrom(blocks: ReportBlock[]): number {
+  const line = blocks.find((b) => b.kind === "line" && /^I found \d/.test(b.text));
+  if (!line || line.kind !== "line") return 0;
+  const first = line.numbers.find((n) => n.label === "findings the audit made");
+  return first?.value ?? 0;
 }
 
 function declaredNumbers(block: ReportBlock): Counted[] {
@@ -209,7 +317,14 @@ export function buildDailyReport(input: {
   if (input.aiFailure) {
     blocks.push({
       kind: "alert",
-      text: `${input.aiFailure.label} — ${input.aiFailure.message} Everything below was worked out without it, from your own records.`,
+      // THE MESSAGE'S DIGITS ARE STRIPPED, and that is not tidiness.
+      // Since 3 November a block that fails the number check is dropped
+      // rather than taking the email down with it — and this is the one
+      // block that must never be dropped. The message comes from a
+      // provider's error text ("try again in 42 seconds"), so it can
+      // carry digits nothing counted. "The AI is not working" does not
+      // depend on a number.
+      text: `${input.aiFailure.label} — ${stripDigits(input.aiFailure.message)} Everything below was worked out without it, from your own records.`,
       numbers: [],
     });
   } else if (input.copyAuditUnverified) {

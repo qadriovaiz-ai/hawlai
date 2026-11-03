@@ -21,7 +21,7 @@
 
 import { auditCatalogue, auditSite, type AuditFinding, type Counted } from "@/lib/growth/audit";
 import { auditLiveCopy, type CopyLine } from "@/lib/growth/copyAudit";
-import { buildDailyReport, everyNumberIsCounted, renderText, type DailyReport } from "@/lib/growth/report";
+import { buildDailyReport, everyNumberIsCounted, renderText, withoutUncountedBlocks, type DailyReport } from "@/lib/growth/report";
 import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
 import { writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
@@ -46,8 +46,16 @@ export type GrowthRunResult = {
   findings: number;
   suggestions: number;
   setupSteps: number;
-  /** False when the report failed its own number check and was not sent. */
+  /** False when the report failed its own number check. */
   reportSound: boolean;
+  /**
+   * Blocks taken out because a figure in them traced to nothing.
+   *
+   * The email still goes, and says how many were left out — see
+   * withoutUncountedBlocks. Before 3 November the whole email was
+   * dropped instead, and the owner was told nothing at all.
+   */
+  blocksLeftOut: number;
   sent: boolean;
   /** Why nothing was sent, when nothing was. */
   notSentBecause: string | null;
@@ -89,6 +97,7 @@ export async function runDailyGrowth(
     suggestions: 0,
     setupSteps: 0,
     reportSound: false,
+    blocksLeftOut: 0,
     sent: false,
     notSentBecause: null,
     copyAuditCostInr: 0,
@@ -222,25 +231,56 @@ export async function runDailyGrowth(
   });
 
   const check = everyNumberIsCounted(report);
+
+  // THE PRECONDITION, NARROWED ON 3 NOVEMBER 2026. It used to be all or
+  // nothing: one untraceable figure and the email was NOT SENT. That
+  // morning a suggestion said "5 pages have no search title" against an
+  // audit that had declared only the complement, and the owner got
+  // SILENCE — no email, no reason, and the explanation in a Vercel log
+  // he has never read. The figure was refused in the safe direction;
+  // the silence was not safe at all, and October's nine dead days
+  // taught the same lesson.
+  //
+  // So a figure nobody counted still never reaches him, and it is the
+  // BLOCK that is refused rather than the email.
+  const { report: sendable, removed } = withoutUncountedBlocks(report);
+  if (removed.length) {
+    console.error(
+      `[growth] report for ${dealershipId} on ${day} had numbers nobody counted; those blocks were left out and the rest was sent: ${JSON.stringify(check.offenders)}`
+    );
+  }
+
   const result: GrowthRunResult = {
     ...empty,
     findings: findings.length,
-    suggestions: report.blocks.filter((b) => b.kind === "suggestion").length,
-    setupSteps: report.blocks.filter((b) => b.kind === "setup").length,
+    suggestions: sendable.blocks.filter((b) => b.kind === "suggestion").length,
+    setupSteps: sendable.blocks.filter((b) => b.kind === "setup").length,
     reportSound: check.ok,
+    blocksLeftOut: removed.length,
     copyAuditCostInr,
     goalsDrafted: drafts.drafted,
     goalDraftsPending: drafts.pending,
-    report,
+    report: sendable,
   };
 
-  // THE PRECONDITION. A report carrying a number nobody counted does
-  // not go out, and the offenders are logged so the cause is findable.
-  if (!check.ok) {
-    console.error(
-      `[growth] report for ${dealershipId} on ${day} had numbers nobody counted, so it was NOT sent: ${JSON.stringify(check.offenders)}`
-    );
-    return { ...result, notSentBecause: "the report failed its own number check" };
+  // AND A FINDING THAT WAS NOT SHOWN IS NOT MARKED AS SHOWN. pickToday
+  // writes last_surfaced_on BEFORE the report is built, so on 3
+  // November both findings were recorded as surfaced on a day nothing
+  // was surfaced — the record saying the owner had seen something he
+  // never saw. Put back here, so tomorrow's cap and tomorrow's report
+  // are working from what actually happened.
+  if (removed.length) {
+    const shown = new Set(sendable.blocks.filter((b) => b.kind === "suggestion").map((b: any) => b.title));
+    const unshown = picks.picked.filter((row) => !shown.has(row.title)).map((row) => row.id);
+    if (unshown.length) {
+      const { error: unmarkError } = await supabase
+        .from("opportunities")
+        .update({ last_surfaced_on: null })
+        .in("id", unshown);
+      if (unmarkError) {
+        console.error(`[growth] could not un-mark ${unshown.length} unshown findings for ${dealershipId}: ${unmarkError.message}`);
+      }
+    }
   }
 
   if (opts.dryRun) return { ...result, notSentBecause: "dry run" };
@@ -251,7 +291,7 @@ export async function runDailyGrowth(
   const to = await ownerEmail(dealership?.owner_id ?? null);
   if (!to) return { ...result, notSentBecause: "no owner email on record" };
 
-  const sent = await sendDealerEmail(supabase, dealershipId, to, report.subject, renderText(report), {
+  const sent = await sendDealerEmail(supabase, dealershipId, to, sendable.subject, renderText(sendable), {
     // ONE EMAIL PER BUSINESS PER DAY. The dispatcher really re-enters a
     // run whose invocation ran out of time (dailyJobs.ts), so a retry
     // must not be a second email.
