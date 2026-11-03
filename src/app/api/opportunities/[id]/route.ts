@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { recordDecisionQuietly } from "@/lib/growth/recordDecision";
 import { measureForFindingType } from "@/lib/growth/measures";
+import { openFindingsOfType } from "@/lib/growth/recordDecision";
 
 export async function PATCH(
   request: Request,
@@ -16,6 +17,24 @@ export async function PATCH(
   if (!status || !["completed", "dismissed"].includes(status)) {
     return NextResponse.json({ error: "status must be 'completed' or 'dismissed'" }, { status: 400 });
   }
+
+  // THE BASELINE IS READ BEFORE THE UPDATE, and that is the whole point
+  // of migration 216. Resolving this row changes the very measure the
+  // decision will be scored against, so nothing after this line can see
+  // the state the owner decided against. The results job used to try,
+  // and got the wrong side of a fifty-millisecond gap.
+  //
+  // The row is read first for its type: the decision needs that anyway,
+  // and it is the only way to count the right findings before changing
+  // one of them.
+  const { data: before } = await supabase
+    .from("opportunities")
+    .select("type, dealership_id")
+    .eq("id", id)
+    .maybeSingle();
+  const baseline = before?.type
+    ? await openFindingsOfType(supabase, String(before.dealership_id), String(before.type))
+    : null;
 
   const { data, error } = await supabase
     .from("opportunities")
@@ -40,6 +59,7 @@ export async function PATCH(
       measure: measureForFindingType(String(data.type)),
       opportunityId: String(data.id),
       goalId: data.goal_id ? String(data.goal_id) : null,
+      baseline,
       decidedBy: "owner",
     });
   }

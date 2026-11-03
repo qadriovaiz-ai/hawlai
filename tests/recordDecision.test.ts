@@ -27,7 +27,7 @@ import {
   notCollectedActionTypes,
 } from "@/lib/growth/measures";
 import { STANDARD_CHECK_DAYS } from "@/lib/growth/outcomes";
-import { code } from "./helpers/source";
+import { code, sql } from "./helpers/source";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -373,5 +373,80 @@ describe("6. a finding with no evidence still records a decision", () => {
       measure: measureForFindingType("pages_without_search_title"),
     });
     expect(inserts[0].why).toHaveLength(2);
+  });
+});
+
+describe("7. the baseline is captured before the action, not after", () => {
+  // S5/P2b, migration 216. The results job used to reconstruct "before"
+  // from timestamps and could not: a suggestion's own resolution
+  // changes the measure about fifty milliseconds before the decision
+  // row is written, so the state the owner decided against is already
+  // gone. The founder's first live check showed it in one run.
+
+  it("THE SUGGESTION ROUTE READS THE COUNT BEFORE IT UPDATES THE ROW", () => {
+    // THE ORDER IS THE PROPERTY. Nothing after the update can see what
+    // the owner decided against.
+    const src = code("src/app/api/opportunities/[id]/route.ts");
+    const reads = src.indexOf("openFindingsOfType(");
+    const updates = src.indexOf('.update({ status, resolved_at');
+    expect(reads, "the baseline read went away").toBeGreaterThan(-1);
+    expect(updates, "the update went away").toBeGreaterThan(-1);
+    expect(reads).toBeLessThan(updates);
+  });
+
+  it("AND THE GOAL ROUTE READS IT BEFORE IT ACTIVATES", () => {
+    // Confirming a goal does not itself close a finding, so this would
+    // read the same a moment later — but a rule that holds only where
+    // it happens not to matter is not a rule.
+    const src = code("src/app/api/goals/[id]/confirm/route.ts");
+    const reads = src.indexOf("openFindingsOfType(");
+    const activates = src.indexOf('status: "active"');
+    expect(reads, "the baseline read went away").toBeGreaterThan(-1);
+    expect(activates, "the activation went away").toBeGreaterThan(-1);
+    expect(reads).toBeLessThan(activates);
+  });
+
+  it("AND AN APPROVAL SENDS null RATHER THAN A NUMBER IT DOES NOT HAVE", () => {
+    // An approval's measure is about a page, a customer or a campaign
+    // the decision row does not identify, so there is nothing to count.
+    const src = code("src/app/api/approvals/[id]/route.ts");
+    expect(src).toMatch(/baseline: null,/);
+  });
+
+  it("THE WRITER STORES IT, AND null WHEN THERE IS NONE", async () => {
+    const { client, inserts } = db();
+    await recordDecision(client, { ...goalDecision, baseline: 5 });
+    expect(inserts[0].baseline).toBe(5);
+    const second = db();
+    await recordDecision(second.client, goalDecision);
+    expect(second.inserts[0].baseline).toBeNull();
+  });
+
+  it("AND A BASELINE OF ZERO IS A BASELINE, not a missing one", async () => {
+    // `?? null` would keep 0; `|| null` would throw it away and turn a
+    // real "there were none open" into "nothing was recorded".
+    const { client, inserts } = db();
+    await recordDecision(client, { ...goalDecision, baseline: 0 });
+    expect(inserts[0].baseline).toBe(0);
+  });
+
+  it("THE COLUMN IS NULLABLE, because plenty of decisions have nothing to measure", () => {
+    // `not null default 0` would turn every approval and every
+    // owner-written goal into a decision claiming a baseline of zero —
+    // and zero is a real measurement, so the outcome would read
+    // "unchanged" or "worsened" against a number nobody took.
+    const migration = sql("supabase/migrations/216_decision_baseline.sql");
+    expect(migration).toMatch(/add column if not exists baseline numeric;/);
+    expect(migration).not.toMatch(/baseline numeric not null/);
+    expect(migration).not.toMatch(/baseline numeric default/);
+  });
+
+  it("and one count serves both sides, so they cannot disagree", () => {
+    // The caller reads it before acting and the job reads it at the
+    // check date, through the same function.
+    const job = code("src/lib/growth/resultsJob.ts");
+    expect(job).toMatch(/openFindingsOfType\(/);
+    const route = code("src/app/api/opportunities/[id]/route.ts");
+    expect(route).toMatch(/openFindingsOfType\(/);
   });
 });

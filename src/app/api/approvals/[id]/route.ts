@@ -458,6 +458,12 @@ export async function PATCH(
       what: `Approved: ${humanizeActionType(approval.action_type)}`,
       why: [{ kind: "pending_approval", id: String(id) }],
       measure: measureForAction(String(approval.action_type)),
+      // NO BASELINE, AND SAYING SO RATHER THAN SENDING A NUMBER. An
+      // approval's measure is about a page, a customer or a campaign
+      // that the decision row does not identify, so there is nothing to
+      // count here. Its outcome says that, which is the honest answer
+      // and points at the next piece of work.
+      baseline: null,
       decidedBy: `user:${user.id}`,
     });
   }

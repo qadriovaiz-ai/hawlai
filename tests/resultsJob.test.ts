@@ -13,7 +13,8 @@
 // tell" is a different outcome from "it had no effect".
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { openFindingsAsOf, outcomeFor, runResultsJob, type DueDecision } from "@/lib/growth/resultsJob";
+import { outcomeFor, runResultsJob, type DueDecision } from "@/lib/growth/resultsJob";
+import { openFindingsOfType } from "@/lib/growth/recordDecision";
 import { code } from "./helpers/source";
 
 afterEach(() => vi.restoreAllMocks());
@@ -28,6 +29,10 @@ function decision(over: Partial<DueDecision> = {}): DueDecision {
     kind: "suggestion_acted_on",
     what: "Acted on: 5 pages have no search title",
     measure: "open findings of type pages_without_search_title",
+    // WHAT THE CALLER SAW BEFORE ACTING — migration 216. The job used
+    // to work this out from timestamps and could not: see the module's
+    // header.
+    baseline: 5,
     check_date: TODAY,
     created_at: "2026-11-03T04:00:00.000Z",
     goal_id: null,
@@ -91,39 +96,70 @@ function db(
   return { client, tables, inserts };
 }
 
-/** Five findings open on 3 November, three of them closed since. */
-function fiveThenTwo() {
+/**
+ * Two of that type still open, three since closed.
+ *
+ * STATUS, NOT TIMESTAMPS. The history mattered when the job
+ * reconstructed "before"; now the baseline is recorded and the only
+ * question left is what is open at the check date.
+ */
+function twoStillOpen() {
   return [
-    { id: "o1", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-10-20T00:00:00Z", resolved_at: null },
-    { id: "o2", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-10-20T00:00:00Z", resolved_at: null },
-    { id: "o3", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-10-20T00:00:00Z", resolved_at: "2026-11-10T00:00:00Z" },
-    { id: "o4", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-10-20T00:00:00Z", resolved_at: "2026-11-11T00:00:00Z" },
-    { id: "o5", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-10-20T00:00:00Z", resolved_at: "2026-11-12T00:00:00Z" },
+    { id: "o1", dealership_id: "d1", type: "pages_without_search_title", status: "open" },
+    { id: "o2", dealership_id: "d1", type: "pages_without_search_title", status: "open" },
+    { id: "o3", dealership_id: "d1", type: "pages_without_search_title", status: "completed" },
+    { id: "o4", dealership_id: "d1", type: "pages_without_search_title", status: "completed" },
+    { id: "o5", dealership_id: "d1", type: "pages_without_search_title", status: "completed" },
   ];
 }
 
-describe("1. 'before' is reconstructed from the rows, not stored", () => {
-  it("COUNTS WHAT WAS OPEN ON A GIVEN DAY", async () => {
-    const { client } = db({ opportunities: fiveThenTwo() });
-    expect(await openFindingsAsOf(client, "d1", "pages_without_search_title", "2026-11-03")).toBe(5);
-    expect(await openFindingsAsOf(client, "d1", "pages_without_search_title", TODAY)).toBe(2);
-  });
+describe("1. 'before' is what the caller recorded, not what the job can reconstruct", () => {
+  // THESE TESTS REPLACED THE RECONSTRUCTION ONES, with the founder's
+  // approval, after his first live check found the bug they were
+  // guarding the wrong side of.
+  //
+  // openFindingsAsOf is gone. It read "how many were open at the end of
+  // a given day", which on a same-day check made `before` and `after`
+  // the SAME INSTANT — delta 0 was guaranteed rather than measured. And
+  // no timestamp could have fixed it: a suggestion's own resolution
+  // changes the measure about fifty milliseconds before the decision
+  // row is written, so the earlier state is already gone.
+  //
+  // What is left is one count, read twice: by the caller before acting,
+  // and by this job at the check date.
 
-  it("AND A ROW CREATED AFTER THAT DAY IS NOT COUNTED ON IT", async () => {
+  it("ONE COUNT, AND IT COUNTS WHAT IS OPEN NOW, FOR THIS BUSINESS, OF THIS TYPE", async () => {
+    // ANOTHER BUSINESS'S ROW IS IN THE FIXTURE ON PURPOSE. Without one,
+    // dropping the dealership filter changed nothing and that mutation
+    // survived — the guard was unreachable, not strong.
     const { client } = db({
       opportunities: [
-        { id: "late", dealership_id: "d1", type: "t", created_at: "2026-11-20T00:00:00Z", resolved_at: null },
+        { id: "o1", dealership_id: "d1", type: "t", status: "open" },
+        { id: "o2", dealership_id: "d1", type: "t", status: "open" },
+        { id: "o3", dealership_id: "d1", type: "t", status: "completed" },
+        { id: "o4", dealership_id: "d1", type: "other", status: "open" },
+        { id: "o5", dealership_id: "d2", type: "t", status: "open" },
+        { id: "o6", dealership_id: "d2", type: "t", status: "open" },
       ],
     });
-    expect(await openFindingsAsOf(client, "d1", "t", "2026-11-03")).toBe(0);
-    expect(await openFindingsAsOf(client, "d1", "t", TODAY)).toBe(1);
+    expect(await openFindingsOfType(client, "d1", "t")).toBe(2);
+    expect(await openFindingsOfType(client, "d2", "t")).toBe(2);
   });
 
-  it("A FAILED READ IS NOT A ZERO", async () => {
-    // Zero would read as "there is nothing wrong", which is the most
-    // expensive wrong answer in this loop.
+  it("A FAILED READ IS NULL, NEVER ZERO", async () => {
+    // Zero reads as "there is nothing wrong", which is the most
+    // expensive wrong answer in this loop — and as a baseline it would
+    // make every later measurement a fiction.
     const { client } = db({}, { "opportunities:select": "connection reset" });
-    expect(await openFindingsAsOf(client, "d1", "t", TODAY)).toBeNull();
+    expect(await openFindingsOfType(client, "d1", "t")).toBeNull();
+  });
+
+  it("A DECISION WITH NO BASELINE IS NOT MEASURED, and says why", async () => {
+    const { client } = db({ opportunities: [{ id: "o1", dealership_id: "d1", type: "pages_without_search_title", status: "open" }] });
+    const row = await outcomeFor(client, decision({ baseline: null }), TODAY);
+    expect(row.verdict).toBe("not_measurable");
+    expect(row.whyNotMeasurable).toMatch(/nothing recorded what this measure read before/);
+    expect(row.measuredBefore).toBeNull();
   });
 });
 
@@ -133,32 +169,48 @@ describe("2. THE VERDICT GOES THE RIGHT WAY", () => {
     // better. Comparing the numbers alone would have recorded the thing
     // working exactly as intended as "worsened", and every month's
     // review would have read as failure.
-    const { client } = db({ opportunities: fiveThenTwo() });
-    const row = await outcomeFor(client, decision(), TODAY);
+    const { client } = db({ opportunities: twoStillOpen() });
+    const row = await outcomeFor(client, decision({ baseline: 5 }), TODAY);
     expect(row.measuredBefore).toBe(5);
     expect(row.measuredAfter).toBe(2);
     expect(row.verdict).toBe("improved");
   });
 
   it("AND IT IS COUNTED AND DIRECTLY ATTRIBUTED, because the finding IS the subject", async () => {
-    const { client } = db({ opportunities: fiveThenTwo() });
-    const row = await outcomeFor(client, decision(), TODAY);
+    const { client } = db({ opportunities: twoStillOpen() });
+    const row = await outcomeFor(client, decision({ baseline: 5 }), TODAY);
     expect(row.confidence).toBe("counted");
     expect(row.attribution).toBe("direct");
     expect(row.whyNotMeasurable).toBeNull();
   });
 
   it("and more findings than before is worse", async () => {
-    const { client } = db({
-      opportunities: [
-        { id: "o1", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-10-01T00:00:00Z", resolved_at: null },
-        { id: "o2", dealership_id: "d1", type: "pages_without_search_title", created_at: "2026-11-20T00:00:00Z", resolved_at: null },
-      ],
-    });
-    const row = await outcomeFor(client, decision(), TODAY);
+    const { client } = db({ opportunities: twoStillOpen() });
+    const row = await outcomeFor(client, decision({ baseline: 1 }), TODAY);
     expect(row.measuredBefore).toBe(1);
     expect(row.measuredAfter).toBe(2);
     expect(row.verdict).toBe("worsened");
+  });
+
+  it("AND THE FOUNDER'S OWN CASE READS HONESTLY NOW", async () => {
+    // 3 November. He marked the stuck_leads finding done; syncOpportunities
+    // raised a fresh one eleven minutes later because the leads are still
+    // waiting. Baseline 1, open now 1 — genuinely unchanged, and for a
+    // reason, rather than because both numbers came from one instant.
+    const { client } = db({
+      opportunities: [
+        { id: "old", dealership_id: "d1", type: "stuck_leads", status: "completed" },
+        { id: "new", dealership_id: "d1", type: "stuck_leads", status: "open" },
+      ],
+    });
+    const row = await outcomeFor(
+      client,
+      decision({ kind: "suggestion_acted_on", opportunity_id: "old", baseline: 1, measure: "open findings of type stuck_leads" }),
+      TODAY
+    );
+    expect(row.measuredBefore).toBe(1);
+    expect(row.measuredAfter).toBe(1);
+    expect(row.verdict).toBe("unchanged");
   });
 });
 
@@ -225,7 +277,7 @@ describe("4. ON A FROZEN CLOCK: what is due, and what is not", () => {
   it("A DECISION DUE TODAY IS MEASURED", async () => {
     const { client, inserts } = db({
       decisions: [decision({ check_date: TODAY })],
-      opportunities: fiveThenTwo(),
+      opportunities: twoStillOpen(),
     });
     const r = await runResultsJob(client, "d1", { now: NOW });
     expect(r.due).toBe(1);
@@ -238,7 +290,7 @@ describe("4. ON A FROZEN CLOCK: what is due, and what is not", () => {
   it("AND ONE DUE IN THE FUTURE IS LEFT ALONE", async () => {
     const { client, inserts } = db({
       decisions: [decision({ check_date: "2026-12-29" })],
-      opportunities: fiveThenTwo(),
+      opportunities: twoStillOpen(),
     });
     const r = await runResultsJob(client, "d1", { now: NOW });
     expect(r.due).toBe(0);
@@ -250,7 +302,7 @@ describe("4. ON A FROZEN CLOCK: what is due, and what is not", () => {
     // day it missed — and the dispatcher does miss days.
     const { client, inserts } = db({
       decisions: [decision({ check_date: "2026-11-20" })],
-      opportunities: fiveThenTwo(),
+      opportunities: twoStillOpen(),
     });
     const r = await runResultsJob(client, "d1", { now: NOW });
     expect(r.due).toBe(1);
@@ -262,7 +314,7 @@ describe("4. ON A FROZEN CLOCK: what is due, and what is not", () => {
     // of time.
     const { client, inserts } = db({
       decisions: [decision()],
-      opportunities: fiveThenTwo(),
+      opportunities: twoStillOpen(),
     });
     await runResultsJob(client, "d1", { now: NOW });
     const second = await runResultsJob(client, "d1", { now: NOW });
@@ -277,7 +329,7 @@ describe("4. ON A FROZEN CLOCK: what is due, and what is not", () => {
     // the damage would be a run reporting work it did not do.
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { client, inserts } = db(
-      { decisions: [decision()], opportunities: fiveThenTwo() },
+      { decisions: [decision()], opportunities: twoStillOpen() },
       { "outcomes:select": "connection reset" }
     );
     const r = await runResultsJob(client, "d1", { now: NOW });
@@ -316,6 +368,14 @@ describe("5. the job's own shape", () => {
     expect(src).toMatch(/decision\.opportunity_id/);
     expect(src).toMatch(/decision\.goal_id/);
     expect(src).not.toMatch(/measure\.(match|split|replace)/);
+    // AND IT NO LONGER TRIES TO RECONSTRUCT THE BASELINE.
+    expect(src).toMatch(/decision\.baseline/);
+    expect(src).not.toMatch(/openFindingsAsOf/);
+    // AND IT ASKS FOR THE COLUMN. The test double returns whole rows
+    // whatever the select says, so dropping `baseline` from the query
+    // changed nothing in any test — a gap in the double, not in the
+    // code, and worth closing where it can be: at the query string.
+    expect(src).toMatch(/measure, baseline, check_date/);
   });
 
   it("AND IT IS A SUBSYSTEM, NOT A NEW CRON ENTRY", () => {
@@ -374,7 +434,7 @@ describe("6. the live failure of 3 November 2026", () => {
     // stop, in the stage's own code.
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { client } = db(
-      { decisions: [decision()], opportunities: fiveThenTwo() },
+      { decisions: [decision()], opportunities: twoStillOpen() },
       { "outcomes:select": "connection reset" }
     );
     const r = await runResultsJob(client, "d1", { now: NOW });
@@ -395,7 +455,7 @@ describe("6. the live failure of 3 November 2026", () => {
     // `failed` on its own is a number nobody looks at.
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { client } = db(
-      { decisions: [decision()], opportunities: fiveThenTwo() },
+      { decisions: [decision()], opportunities: twoStillOpen() },
       { "outcomes:insert": "permission denied" }
     );
     const r = await runResultsJob(client, "d1", { now: NOW });
@@ -407,7 +467,7 @@ describe("6. the live failure of 3 November 2026", () => {
 
   it("AND A RUN THAT DID ITS WORK RETURNS NO error", async () => {
     // The other direction: a healthy run must not be marked failed.
-    const { client } = db({ decisions: [decision()], opportunities: fiveThenTwo() });
+    const { client } = db({ decisions: [decision()], opportunities: twoStillOpen() });
     const r = await runResultsJob(client, "d1", { now: NOW });
     expect(r.written).toBe(1);
     expect(r.failed).toBe(0);

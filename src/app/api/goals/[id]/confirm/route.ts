@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { recordDecisionQuietly } from "@/lib/growth/recordDecision";
 import { measureForFindingType } from "@/lib/growth/measures";
+import { openFindingsOfType } from "@/lib/growth/recordDecision";
 
 // P2 28a — this is where a draft goal's proposed_tasks actually
 // become real tasks/agent_tasks rows. Same owner-only resolution as
@@ -59,6 +60,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
   }
 
+  // BEFORE THE ACTIVATION, by the same rule as the suggestion route.
+  // Confirming a goal does not itself close a finding, so this would
+  // read the same a moment later — but "capture the baseline before the
+  // action" is the rule, and a rule that holds only where it happens
+  // not to matter is not a rule.
+  const baseline = goal.source_key
+    ? await openFindingsOfType(service, dealership.id, String(goal.source_key))
+    : null;
+
   const { error: activateError } = await service.from("goals").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", goal.id);
   if (activateError) return NextResponse.json({ error: activateError.message }, { status: 500 });
 
@@ -81,6 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? measureForFindingType(String(goal.source_key))
       : { metric: `progress on "${goal.title}"`, source: null, direction: "up" },
     goalId: String(goal.id),
+    baseline,
     decidedBy: "owner",
   });
 

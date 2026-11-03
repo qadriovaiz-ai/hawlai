@@ -32,6 +32,21 @@ export type DecisionInput = {
   goalId?: string | null;
   opportunityId?: string | null;
   decidedBy: string;
+  /**
+   * What the measure read immediately BEFORE this took effect.
+   *
+   * CAPTURED BY THE CALLER, NOT BY THIS FUNCTION, because only the
+   * caller is on the right side of the action. The results job used to
+   * reconstruct it from timestamps and could not: a suggestion's own
+   * resolution changes the measure about fifty milliseconds before the
+   * decision row is written, so by the time anything here could look,
+   * the earlier state is gone. Migration 216's header has the whole of
+   * it.
+   *
+   * Null when there is no counted measure to read, which produces a
+   * not_measurable outcome with its reason rather than a guess.
+   */
+  baseline?: number | null;
   /** Days until the check date. The standard wait unless told otherwise. */
   checkInDays?: number;
   now?: Date;
@@ -99,6 +114,7 @@ export async function recordDecision(supabase: any, input: DecisionInput): Promi
       // NULL, ALWAYS, FOR NOW. See the note on this function.
       expected_effect: null,
       measure: input.measure.metric,
+      baseline: input.baseline ?? null,
       check_date: checkDate,
       decided_by: input.decidedBy,
     })
@@ -131,6 +147,35 @@ export async function recordDecisionQuietly(supabase: any, input: DecisionInput)
       `[decisions] threw while recording "${input.what}" (${input.kind}) for ${input.dealershipId}: ${err?.message}. There will be no outcome row for it.`
     );
   }
+}
+
+/**
+ * How many findings of this type are open right now.
+ *
+ * ONE DESCRIPTION, READ TWICE: the caller reads it before the action to
+ * record the baseline, and the results job reads it at the check date
+ * to get the after. The as-of-a-date reconstruction this replaces was
+ * the bug of 3 November — it counted the end of the decision's day for
+ * "before" and the end of today for "after", which on a same-day check
+ * is the same instant twice.
+ *
+ * NULL, NEVER ZERO, ON A FAILED READ. Zero reads as "there is nothing
+ * wrong", which is the most expensive wrong answer in this loop — and
+ * as a baseline it would make every later measurement a fiction.
+ */
+export async function openFindingsOfType(
+  supabase: any,
+  dealershipId: string,
+  findingType: string
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("opportunities")
+    .select("id")
+    .eq("dealership_id", dealershipId)
+    .eq("type", findingType)
+    .eq("status", "open");
+  if (error || !Array.isArray(data)) return null;
+  return data.length;
 }
 
 /** The measure for a decision about a finding, by its type. */
