@@ -92,10 +92,27 @@ describe("1. THERE IS NO UNDO, AND IT IS SAID BEFORE THE OWNER APPROVES", () => 
     // Not "this action is irreversible". A person approving a call
     // should read that the person will have been called.
     for (const [key, d] of Object.entries(DISPATCHERS)) {
-      expect(d.cannotBeTakenBack.length, key).toBeGreaterThan(60);
+      expect(d.cannotBeTakenBack.length, key).toBeGreaterThan(40);
       expect(d.cannotBeTakenBack, key).toMatch(/cannot be unmade|not unseen|cannot be undone/i);
-      expect(d.cannotBeTakenBack, key).toMatch(/right now/);
     }
+  });
+
+  it("AND IT DOES NOT RESTATE THE ACTION, which the tool's own line already does", () => {
+    // The first version of these sentences began "This places a real
+    // phone call…" — which the trigger_call tool also says, so the card
+    // read the same thing twice. The split is the point: the TOOL says
+    // what and to whom, the DECLARATION says what cannot be taken back.
+    for (const [key, d] of Object.entries(DISPATCHERS)) {
+      expect(d.cannotBeTakenBack, key).not.toMatch(/^This (places|publishes|sends|posts)/);
+    }
+  });
+
+  it("AND THE TOOLS NO LONGER WRITE THAT CLAUSE THEMSELVES", () => {
+    // One source for it. A tool keeping its own copy is how the two
+    // come to disagree, and how a card ends up saying it twice.
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    expect(brain).not.toMatch(/can't be unplaced/);
+    expect(brain).toMatch(/This places a real phone call to \$\{lead\.name\} now\.`/);
   });
 
   it("THE CARD CARRIES IT, COMPOSED FROM THE DECLARATION rather than remembered", async () => {

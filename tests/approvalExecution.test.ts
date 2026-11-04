@@ -70,6 +70,7 @@ vi.mock("@/lib/usage/generationLimits", async (orig) => ({
 }));
 
 import { executeTool } from "@/lib/agents/masterBrainV2";
+import { DISPATCHERS } from "@/lib/dispatch/registry";
 
 const CTX = {
   id: "d1", name: "Gupta Sweets", category: "Sweet shop", city: "Kanpur",
@@ -108,7 +109,13 @@ describe("trigger_call", () => {
     expect(result.needsApproval).toBe(true);
     expect(result.risk).toBe("high");
     expect(result.confirm).toMatch(/places a real phone call to Asha/);
-    expect(result.confirm).toMatch(/can't be unplaced/);
+    // THE "CANNOT BE TAKEN BACK" CLAUSE, READ FROM THE DISPATCHER
+    // rather than typed here — S6/P1. It used to live in the tool as
+    // "It can't be unplaced", and this asserted that exact string; it
+    // now lives in one place, so this reads it from there. Pinning the
+    // words again here would be a second copy of the thing P1 moved
+    // into one.
+    expect(result.confirm).toContain(DISPATCHERS.place_outbound_call.cannotBeTakenBack);
     // The row the approvals route will read.
     const row = inserted.find((i) => i.table === "pending_approvals")!;
     expect(row.values.action_type).toBe("place_outbound_call");

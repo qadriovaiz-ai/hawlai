@@ -33,8 +33,11 @@ async function videoFor(ctx: DispatchContext, videoId: string) {
 export const videoDispatcher: Dispatcher = {
   key: "publish_video",
   undoable: false,
+  // WHAT CANNOT BE TAKEN BACK, AND NOTHING ELSE — see the call
+  // dispatcher's note. The wording is `publicPostConfirm`'s, which has
+  // said this about a public post since September.
   cannotBeTakenBack:
-    "This publishes the video on your YouTube channel right now, where anyone can watch it. It can be deleted afterwards, but not unseen.",
+    "It can be deleted afterwards, but not unseen.",
 
   async preview(ctx, details): Promise<DispatchPreview | { error: string }> {
     const video = await videoFor(ctx, String(details?.video_id ?? ""));

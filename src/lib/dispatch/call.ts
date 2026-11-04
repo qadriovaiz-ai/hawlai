@@ -22,8 +22,12 @@ async function leadFor(ctx: DispatchContext, leadId: string) {
 export const callDispatcher: Dispatcher = {
   key: "place_outbound_call",
   undoable: false,
+  // WHAT CANNOT BE TAKEN BACK, AND NOTHING ELSE. The tool's own confirm
+  // line says what is being sent and to whom — it is the only thing
+  // that knows. This sentence is appended to it, so restating the
+  // action here made the card say the same thing twice.
   cannotBeTakenBack:
-    "This places a real phone call to this person right now. A call cannot be unmade — if it is the wrong number or the wrong moment, they have still been called.",
+    "A call cannot be unmade — if it is the wrong number or the wrong moment, they have still been called.",
 
   async preview(ctx, details): Promise<DispatchPreview | { error: string }> {
     const lead = await leadFor(ctx, String(details?.lead_id ?? ""));

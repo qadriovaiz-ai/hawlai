@@ -2944,6 +2944,8 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // itself waits for the owner.
         const title = input.title || video.prompt.slice(0, 90);
         const { requestApproval } = await import("../chat/requestApproval");
+        // The "cannot be taken back" half comes from the dispatcher now
+        // (S6/P1), appended by requestApproval.
         const videoConfirm = `This publishes the video publicly to your YouTube channel as "${title}". Anyone with the link can watch it.`;
         return await requestApproval(supabase, ctx.id, {
           actionType: "publish_video",
@@ -3137,7 +3139,12 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
       // number on file, not opted out); none of them was the owner
       // saying yes to this particular call.
       const { requestApproval } = await import("../chat/requestApproval");
-      const callConfirm = `This places a real phone call to ${lead.name} now. It can't be unplaced.`;
+      // "It can't be unplaced" IS NO LONGER WRITTEN HERE — S6/P1.
+      // requestApproval appends the dispatcher's own sentence, so the
+      // clause lives in one place and a new send cannot ship a card
+      // that forgets it. This line says what and to whom, which is the
+      // part only this tool knows.
+      const callConfirm = `This places a real phone call to ${lead.name} now.`;
       return await requestApproval(supabase, ctx.id, {
         actionType: "place_outbound_call",
         requestedBy: "master_chat:trigger_call",
