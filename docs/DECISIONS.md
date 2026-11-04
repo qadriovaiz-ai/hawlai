@@ -303,6 +303,35 @@ nothing it did made any difference. That is the same shape as the bug
 the founder's first P2 live check found, caught here by a test instead
 of by him.
 
+### The 30-day cycle, and the four tests of my own that were asleep
+
+The founder answered the one open question the same day: the same step
+comes back after 30 days, whatever became of the last offer, because the
+funnel may have moved. Built as `TARGET_CYCLE_DAYS`, counted per step,
+with **no migration** — the day goes in the key, which is what migration
+211's status-blind unique index already allows.
+
+**16 mutation checks for the cycle; the first run killed 12.** All four
+survivors were defects in my tests, the same shape as the twenty before
+them: the test never reached the branch it was about.
+
+- the unreadable-age branch (`age === null`) had no fixture with an
+  unreadable date, so flipping it to "old enough" changed nothing
+- `lastOfferedOn` picks the newest offer, and every fixture had exactly
+  one offer per step — so taking the OLDEST survived, which in a
+  year-old account would re-offer every step every morning
+- the "thin reason beats the schedule" test had one thin funnel and no
+  recently-offered step, so only one of the two sentences existed and
+  the ORDER it asserts was unreachable
+- the reader's `dealership_id` filter had no second business in the
+  fixture, so dropping it changed nothing
+
+Two more came back SUSPECT — "red, but a different test failed" — and
+both were my runner's expected-name matching, not a surviving guard;
+re-run by hand, each died to exactly the test it should have. Recorded
+because an instrument that misreports a kill as a suspect is one step
+from misreporting a survivor as a kill.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

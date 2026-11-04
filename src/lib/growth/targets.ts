@@ -36,6 +36,24 @@ export const TARGET_KEY_PREFIX = "target:";
 /** At most this many target goals at once, whatever the funnels say. */
 export const MAX_TARGET_GOALS = 3;
 
+/**
+ * How long before the same step is looked at again — the founder's
+ * answer, 4 November 2026: *"30 din baad naya target offer karo — chahe
+ * purana poora hua ho ya nahi, system dobara dekhe aur naya target
+ * suggest kare (funnel badal chuka ho sakta hai)."*
+ *
+ * WHATEVER HAPPENED TO THE LAST ONE. Not "if it was completed", not "if
+ * it was discarded" — the funnel is re-read and the step is offered
+ * again. A target he approved and finished is the clearest case for
+ * looking again; a target he ignored is a target whose numbers are now
+ * a month stale.
+ *
+ * A DIFFERENT STEP IS NOT ON THIS CLOCK. If the weakest step changes
+ * tomorrow, that is a different key and it is offered tomorrow. This
+ * number only governs how often the SAME step comes back.
+ */
+export const TARGET_CYCLE_DAYS = 30;
+
 /** A slug that survives a label change: the machine's name for the step. */
 function slug(text: string): string {
   return String(text ?? "")
@@ -44,22 +62,91 @@ function slug(text: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-export function targetKeyFor(funnelName: string, fromKey: string, toKey: string): string {
-  return `${TARGET_KEY_PREFIX}${slug(funnelName)}:${slug(fromKey)}_to_${slug(toKey)}`;
+/**
+ * The step a key names, without the day it was offered on.
+ *
+ * TWO OFFERS OF ONE STEP ARE TWO KEYS, because migration 211's unique
+ * index on `goals.source_key` has no status predicate — deliberately,
+ * so a discarded step does not come back tomorrow. That same index is
+ * what makes a second offer of the same step impossible unless the key
+ * differs, so the day goes IN the key and the step id is what the
+ * 30-day rule is counted against.
+ */
+export function targetStepId(funnelName: string, fromKey: string, toKey: string): string {
+  return `${slug(funnelName)}:${slug(fromKey)}_to_${slug(toKey)}`;
+}
+
+export function targetKeyFor(funnelName: string, fromKey: string, toKey: string, day?: string | null): string {
+  const step = `${TARGET_KEY_PREFIX}${targetStepId(funnelName, fromKey, toKey)}`;
+  return day ? `${step}:${String(day).slice(0, 10)}` : step;
 }
 
 export function isTargetKey(key: string | null | undefined): boolean {
   return String(key ?? "").startsWith(TARGET_KEY_PREFIX);
 }
 
-/** The funnel and step a target key names, or null when it is not one. */
-export function parseTargetKey(key: string | null | undefined): { funnel: string; fromKey: string; toKey: string } | null {
+/**
+ * The funnel, the step and the day a target key names, or null when it
+ * is not a target key.
+ *
+ * `offeredOn` IS OPTIONAL ON PURPOSE. The first version of this key had
+ * three segments and no day; a goal written under it must keep
+ * resolving to its step, or its decisions would stop being measurable
+ * the moment this shipped. A key with no day parses with
+ * `offeredOn: null`.
+ */
+export function parseTargetKey(
+  key: string | null | undefined
+): { funnel: string; fromKey: string; toKey: string; offeredOn: string | null } | null {
   const raw = String(key ?? "");
   if (!isTargetKey(raw)) return null;
-  const [funnel, step] = raw.slice(TARGET_KEY_PREFIX.length).split(":", 2);
-  const match = /^(.+)_to_(.+)$/.exec(String(step ?? ""));
+  const parts = raw.slice(TARGET_KEY_PREFIX.length).split(":");
+  const funnel = parts[0];
+  const match = /^(.+)_to_(.+)$/.exec(String(parts[1] ?? ""));
   if (!funnel || !match) return null;
-  return { funnel, fromKey: match[1], toKey: match[2] };
+  return { funnel, fromKey: match[1], toKey: match[2], offeredOn: parts[2] ? String(parts[2]) : null };
+}
+
+/** The step part of a key, so two offers of one step compare equal. */
+export function stepIdOf(key: string | null | undefined): string | null {
+  const parsed = parseTargetKey(key);
+  return parsed ? `${parsed.funnel}:${parsed.fromKey}_to_${parsed.toKey}` : null;
+}
+
+/** A target goal already on record, whatever became of it. */
+export type TargetOffer = { sourceKey: string; createdAt: string | null };
+
+/** Whole days from one YYYY-MM-DD to another, or null if unreadable. */
+function daysBetween(fromDay: string, toDay: string): number | null {
+  const a = Date.parse(`${String(fromDay).slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${String(toDay).slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.floor((b - a) / 86_400_000);
+}
+
+/**
+ * The day this step was last offered, or null if it never was.
+ *
+ * `created_at` FIRST, the key's own day second. The column is what
+ * actually happened; the key's day is what the run intended, and it is
+ * the only thing a legacy three-segment key has.
+ *
+ * AN OFFER WITH NO READABLE DATE COUNTS AS TODAY, which means "do not
+ * offer it again". Postgres always sets created_at, so this is close to
+ * impossible — and if it ever happens, a step missed for a month is a
+ * smaller fault than the same step on the Tasks page every morning.
+ */
+export function lastOfferedOn(offers: TargetOffer[], stepId: string, today: string): string | null {
+  let latest: string | null = null;
+  for (const offer of offers) {
+    if (stepIdOf(offer.sourceKey) !== stepId) continue;
+    const day =
+      (offer.createdAt ? String(offer.createdAt).slice(0, 10) : null) ??
+      parseTargetKey(offer.sourceKey)?.offeredOn ??
+      today;
+    if (!latest || day > latest) latest = day;
+  }
+  return latest;
 }
 
 /** The step this key names, inside a diagnosis, or null. */
@@ -109,7 +196,12 @@ export type TargetDraft = {
  * also "improvable", and offering five of them would be the suggestion
  * cap's problem all over again — the owner gets a list, not a plan.
  */
-export function targetGoalsFrom(diagnosis: Diagnosis, maturity: Maturity): TargetDraft {
+export function targetGoalsFrom(
+  diagnosis: Diagnosis,
+  maturity: Maturity,
+  offers: TargetOffer[] = [],
+  today: string = diagnosis.window.to
+): TargetDraft {
   // THE THIN BRANCH STILL OWNS ITS OWN CASE. Setup steps, not targets,
   // and S4's own sentence for it.
   if (maturity.kind !== "ready") return { goals: [], declared: [], why: maturity.why };
@@ -117,6 +209,7 @@ export function targetGoalsFrom(diagnosis: Diagnosis, maturity: Maturity): Targe
   const goals: DraftGoal[] = [];
   const declared: Counted[] = [];
   const thinReasons: string[] = [];
+  const waiting: string[] = [];
 
   for (const funnel of diagnosis.funnels) {
     if (goals.length >= MAX_TARGET_GOALS) break;
@@ -125,8 +218,25 @@ export function targetGoalsFrom(diagnosis: Diagnosis, maturity: Maturity): Targe
       continue;
     }
     const w = funnel.weakest;
+
+    // THIRTY DAYS SINCE THE LAST TIME THIS STEP WAS OFFERED, whatever
+    // became of that offer. See TARGET_CYCLE_DAYS.
+    const stepId = targetStepId(funnel.name, w.fromKey, w.toKey);
+    const last = lastOfferedOn(offers, stepId, today);
+    if (last) {
+      const age = daysBetween(last, today);
+      if (age === null || age < TARGET_CYCLE_DAYS) {
+        // NOT EMAIL COPY — it states a number and nothing declares it.
+        // This reaches the run result and the logs only.
+        waiting.push(
+          `the weakest step in "${funnel.name}" was offered ${age ?? "an unreadable number of"} days ago, and the same step is offered again after ${TARGET_CYCLE_DAYS}`
+        );
+        continue;
+      }
+    }
+
     goals.push({
-      key: targetKeyFor(funnel.name, w.fromKey, w.toKey),
+      key: targetKeyFor(funnel.name, w.fromKey, w.toKey, today),
       title: `Improve ${w.from} to ${w.to}`,
       description: `Of the ${w.entered} who reached ${w.from.toLowerCase()} in the last ${diagnosis.window.days} days, ${w.rate}% went on to ${w.to.toLowerCase()}. That is the narrowest step in "${funnel.name}".`,
       // THE STEP IS THE METRIC; THERE IS NO TARGET NUMBER. See the
@@ -148,6 +258,13 @@ export function targetGoalsFrom(diagnosis: Diagnosis, maturity: Maturity): Targe
   return {
     goals: [],
     declared: [],
-    why: thinReasons[0] ?? "There is enough history to set targets, but no funnel has a step with enough traffic to name yet.",
+    // THE THIN REASON FIRST. "No step has enough traffic" is a fact
+    // about the business; "offered recently" is a fact about this
+    // product's own schedule, and the first is the more useful one to
+    // read when both are true.
+    why:
+      thinReasons[0] ??
+      waiting[0] ??
+      "There is enough history to set targets, but no funnel has a step with enough traffic to name yet.",
   };
 }

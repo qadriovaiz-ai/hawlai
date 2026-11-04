@@ -256,14 +256,37 @@ November entry has the whole of it.
 | The draft, on the Tasks page by the same writer as a setup step | `dailyGrowth.ts` — the `ready` branch |
 | The email: "TARGET — ...", every figure declared, subject counts them apart | `report.ts`, `strategy.ts` — `planLine` |
 
-**Not done, and deliberately:** "re-planned every 30 days", which the
-§5 row claimed. A target offered once is offered once — the unique index
-on `goals.source_key` sees to that — and re-planning means deciding what
-to do with a target the owner approved, which is a decision about his
-plan rather than about this code. It needs his answer, not a default.
+**Re-planned every 30 days — the founder's answer, 4 November 2026:**
+*"30 din baad naya target offer karo — chahe purana poora hua ho ya
+nahi, system dobara dekhe aur naya target suggest kare (funnel badal
+chuka ho sakta hai)."*
 
-**Verified:** 31 new tests, 22 mutation checks all killed, `tsc` 0,
-5,351 tests green, `next build` 0. **Unverified:** everything on a live
+So `TARGET_CYCLE_DAYS = 30`, counted **per step** from the day it was
+last offered, whatever became of that offer — completed, discarded,
+still a draft, still active. A step whose offer is 29 days old waits;
+at 30 it comes back with today's rate and today's key.
+
+**No migration, and that is the design.** Migration 211's unique index
+on `goals.source_key` has no status predicate, so a second offer needs a
+different key — the day it was offered on goes in the key
+(`target:<funnel>:<from>_to_<to>:<YYYY-MM-DD>`) and the 30-day rule is
+counted against the step part. `parseTargetKey` still reads a key
+written without a day, so nothing already on record stops being
+measurable.
+
+**A DIFFERENT step is not on that clock.** If the weakest step moves,
+that is a different key and it is offered the next morning. The 30 days
+only governs how often the SAME step comes back.
+
+**One consequence worth saying out loud:** because status is ignored, a
+step the owner is already working on can be offered again a month later,
+so the Tasks page can hold a target beside an active goal for the same
+step. That is what "chahe purana poora hua ho ya nahi" asks for, and it
+is the right default — a month-old target carries month-old numbers —
+but it is a judgment he should see rather than discover.
+
+**Verified:** 46 new tests, 38 mutation checks all killed, `tsc` 0,
+5,366 tests green, `next build` 0. **Unverified:** everything on a live
 business. candle_by_qaaf has 45 days and 55 events, so the branch will
 fire on the next daily run — that is P6's job to watch.
 

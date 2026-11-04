@@ -17,11 +17,15 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   MAX_TARGET_GOALS,
+  TARGET_CYCLE_DAYS,
   TARGET_KEY_PREFIX,
   isTargetKey,
+  lastOfferedOn,
   parseTargetKey,
+  stepIdOf,
   targetGoalsFrom,
   targetKeyFor,
+  targetStepId,
   weakestStepFor,
 } from "@/lib/growth/targets";
 import { measureForTarget } from "@/lib/growth/measures";
@@ -112,7 +116,7 @@ describe("2. THE KEY SURVIVES A LABEL CHANGE", () => {
     // the business model changes that label — the goal stays, its
     // decisions stay, and nothing can be measured against it again.
     const { goals } = targetGoalsFrom(diagnosis(), READY);
-    expect(goals[0].key).toBe(`${TARGET_KEY_PREFIX}website_to_enquiry:product_view_to_enquiry`);
+    expect(goals[0].key).toBe(`${TARGET_KEY_PREFIX}website_to_enquiry:product_view_to_enquiry:${DAY}`);
     expect(goals[0].key).not.toContain("looked");
     expect(goals[0].key).not.toContain("asked");
   });
@@ -137,10 +141,11 @@ describe("2. THE KEY SURVIVES A LABEL CHANGE", () => {
   });
 
   it("round-trips through parseTargetKey, and refuses a key that is not one", () => {
-    expect(parseTargetKey(targetKeyFor("Website to enquiry", "product_view", "enquiry"))).toEqual({
+    expect(parseTargetKey(targetKeyFor("Website to enquiry", "product_view", "enquiry", DAY))).toEqual({
       funnel: "website_to_enquiry",
       fromKey: "product_view",
       toKey: "enquiry",
+      offeredOn: DAY,
     });
     expect(isTargetKey("pages_without_search_title")).toBe(false);
     expect(parseTargetKey("pages_without_search_title")).toBeNull();
@@ -154,7 +159,7 @@ describe("2. THE KEY SURVIVES A LABEL CHANGE", () => {
     const d = diagnosis({
       funnels: [funnel({ steps: [step("visit", "Visited", 0, null), step("product_view", "Looked", 0, null), step("enquiry", "Asked", 0, null)] })],
     });
-    expect(weakestStepFor(d, `${TARGET_KEY_PREFIX}website_to_enquiry:product_view_to_enquiry`)).toBeNull();
+    expect(weakestStepFor(d, `${TARGET_KEY_PREFIX}website_to_enquiry:product_view_to_enquiry:${DAY}`)).toBeNull();
   });
 });
 
@@ -187,6 +192,147 @@ describe("3. NO INVENTED TARGET WHEN THERE IS NOTHING TO MEASURE", () => {
     const { goals } = targetGoalsFrom(many, READY);
     expect(goals).toHaveLength(MAX_TARGET_GOALS);
     expect(new Set(goals.map((g) => g.key)).size).toBe(MAX_TARGET_GOALS);
+  });
+});
+
+describe("3b. THE SAME STEP COMES BACK AFTER 30 DAYS", () => {
+  // The founder's answer, 4 November 2026: offer it again after 30
+  // days, whatever became of the last one, because the funnel may have
+  // moved. Everything here is about the SAME step — a different weakest
+  // step is a different key and is offered the next morning.
+
+  const STEP = targetStepId("Website to enquiry", "product_view", "enquiry");
+  const offer = (day: string, status = "completed") => ({
+    sourceKey: `${TARGET_KEY_PREFIX}${STEP}:${day}`,
+    createdAt: `${day}T06:00:00.000Z`,
+    status,
+  });
+
+  it("NOT OFFERED AGAIN THE NEXT MORNING", () => {
+    const { goals, why } = targetGoalsFrom(diagnosis(), READY, [offer("2026-11-03")], DAY);
+    expect(goals).toEqual([]);
+    expect(String(why)).toMatch(/offered 1 days ago/);
+  });
+
+  it("NOT OFFERED ON DAY 29, AND OFFERED ON DAY 30", () => {
+    // The boundary is the whole rule. An off-by-one here is either a
+    // step that comes back a day early every month, or one that never
+    // comes back at all.
+    const day29 = targetGoalsFrom(diagnosis(), READY, [offer("2026-10-06")], DAY);
+    expect(day29.goals).toEqual([]);
+    const day30 = targetGoalsFrom(diagnosis(), READY, [offer("2026-10-05")], DAY);
+    expect(day30.goals).toHaveLength(1);
+  });
+
+  it("OFFERED AGAIN WHATEVER BECAME OF THE LAST ONE", () => {
+    // completed, abandoned, still a draft, still active — the founder
+    // said all four, in those words: "chahe purana poora hua ho ya
+    // nahi". A rule that only re-offered finished goals would go quiet
+    // about a step he ignored, which is the step most worth raising.
+    for (const status of ["completed", "abandoned", "draft", "active"]) {
+      const { goals } = targetGoalsFrom(diagnosis(), READY, [offer("2026-09-01", status)], DAY);
+      expect(goals, status).toHaveLength(1);
+    }
+  });
+
+  it("THE NEW OFFER CARRIES TODAY'S KEY AND TODAY'S RATE, not the old one's", () => {
+    // A re-offer whose numbers were a month old would be worse than no
+    // re-offer: he would approve a target against a rate that has
+    // already moved, and its baseline would be wrong from the start.
+    const { goals, declared } = targetGoalsFrom(diagnosis(), READY, [offer("2026-09-01")], DAY);
+    expect(goals[0].key).toBe(`${TARGET_KEY_PREFIX}${STEP}:${DAY}`);
+    expect(goals[0].key).not.toContain("2026-09-01");
+    expect(goals[0].description).toContain("12.5%");
+    expect(declared.some((c) => c.value === 12.5)).toBe(true);
+  });
+
+  it("A DIFFERENT STEP IS NOT MADE TO WAIT 30 DAYS", () => {
+    // The clock is per step, not per business and not per funnel. If
+    // the weakest step moved yesterday, the owner hears about the new
+    // one this morning.
+    const moved = diagnosis({
+      funnels: [
+        funnel({
+          weakest: { from: "Visited the site", to: "Looked at a product", fromKey: "visit", toKey: "product_view", rate: 30, entered: 400 },
+        }),
+      ],
+    });
+    const { goals } = targetGoalsFrom(moved, READY, [offer("2026-11-03")], DAY);
+    expect(goals).toHaveLength(1);
+    expect(goals[0].key).toContain("visit_to_product_view");
+  });
+
+  it("AND THE THIN REASON STILL WINS over 'offered recently'", () => {
+    // Two true sentences; the one about the business is more use than
+    // the one about this product's schedule.
+    //
+    // TWO FUNNELS, ON PURPOSE. The first version of this test had one
+    // thin funnel and no step that had been offered, so only one
+    // sentence existed and the ORDER was unreachable — a mutation that
+    // put the schedule first survived. A thin funnel skips before the
+    // cycle is ever consulted, so the recently-offered step has to be
+    // a different funnel.
+    const thin = "No step has 10 people entering it yet, so none can be called the weakest.";
+    const { goals, why } = targetGoalsFrom(
+      diagnosis({ funnels: [funnel({ name: "Thin funnel", weakest: null, thin }), funnel()] }),
+      READY,
+      [offer("2026-11-03")],
+      DAY
+    );
+    expect(goals).toEqual([]);
+    expect(why).toBe(thin);
+  });
+
+  it("the cycle is thirty days, and stepIdOf ignores the day", () => {
+    expect(TARGET_CYCLE_DAYS).toBe(30);
+    expect(stepIdOf(`${TARGET_KEY_PREFIX}${STEP}:${DAY}`)).toBe(STEP);
+    expect(stepIdOf(`${TARGET_KEY_PREFIX}${STEP}`)).toBe(STEP);
+    expect(stepIdOf("pages_without_search_title")).toBeNull();
+  });
+
+  it("A KEY FROM BEFORE THE DAY EXISTED STILL COUNTS AS AN OFFER", () => {
+    // The first shape of this key had three segments. A goal written
+    // under it must keep resolving to its step, or the day this shipped
+    // its decisions would have stopped being measurable and it would
+    // have been offered again immediately.
+    const legacy = { sourceKey: `${TARGET_KEY_PREFIX}${STEP}`, createdAt: "2026-11-03T06:00:00.000Z" };
+    expect(parseTargetKey(legacy.sourceKey)?.offeredOn).toBeNull();
+    expect(lastOfferedOn([legacy], STEP, DAY)).toBe("2026-11-03");
+    expect(targetGoalsFrom(diagnosis(), READY, [legacy], DAY).goals).toEqual([]);
+  });
+
+  it("AND AN OFFER WITH NO DATE AT ALL IS NOT RE-OFFERED", () => {
+    // created_at is set by Postgres, so this is close to impossible.
+    // If it ever happens, a step missed for a month is a smaller fault
+    // than the same step on the Tasks page every morning.
+    const dateless = { sourceKey: `${TARGET_KEY_PREFIX}${STEP}`, createdAt: null };
+    expect(lastOfferedOn([dateless], STEP, DAY)).toBe(DAY);
+    expect(targetGoalsFrom(diagnosis(), READY, [dateless], DAY).goals).toEqual([]);
+  });
+
+  it("AN OFFER WHOSE DATE CANNOT BE READ IS NOT RE-OFFERED EITHER", () => {
+    // `age === null` was unreachable in the first version of these
+    // tests: every fixture had a readable date, so a mutation flipping
+    // the unreadable case to "old enough" survived. A row whose date
+    // nobody can read is not a row from a month ago.
+    const broken = { sourceKey: `${TARGET_KEY_PREFIX}${STEP}:2026-11-03`, createdAt: "not a date at all" };
+    expect(targetGoalsFrom(diagnosis(), READY, [broken], DAY).goals).toEqual([]);
+  });
+
+  it("THE NEWEST OFFER IS THE ONE THE CLOCK RUNS FROM", () => {
+    // With one offer per step in every fixture, the comparison that
+    // picks the latest was never exercised — a mutation taking the
+    // OLDEST survived, which in a year-old account would re-offer
+    // every step every morning.
+    const offers = [offer("2026-09-01"), offer("2026-11-03"), offer("2026-06-15")];
+    expect(lastOfferedOn(offers, STEP, DAY)).toBe("2026-11-03");
+    expect(targetGoalsFrom(diagnosis(), READY, offers, DAY).goals).toEqual([]);
+  });
+
+  it("and another step's offers do not hold this one back", () => {
+    const other = { sourceKey: `${TARGET_KEY_PREFIX}other_funnel:a_to_b:2026-11-03`, createdAt: "2026-11-03T06:00:00.000Z" };
+    expect(lastOfferedOn([other], STEP, DAY)).toBeNull();
+    expect(targetGoalsFrom(diagnosis(), READY, [other], DAY).goals).toHaveLength(1);
   });
 });
 

@@ -27,6 +27,7 @@
 // the database, where a second code path cannot get around it.
 
 import type { DraftGoal } from "@/lib/growth/strategy";
+import { isTargetKey, type TargetOffer } from "@/lib/growth/targets";
 
 /** What the manager writes a setup goal as. Never 'active'. */
 export const DRAFT_STATUS = "draft";
@@ -53,6 +54,42 @@ export type GoalDraftResult = {
 };
 
 const NOTHING: GoalDraftResult = { drafted: 0, alreadyOffered: 0, failed: 0, pending: 0 };
+
+/**
+ * Every target goal already on record, with the day it was written.
+ *
+ * READ BEFORE DRAFTING, because S5/P4's 30-day rule is about a step
+ * that was offered before — and unlike a setup step, a target is MEANT
+ * to come back. The writer below only knows "this exact key exists";
+ * deciding whether a month has passed needs the dates, and that
+ * decision is made in targets.ts where it can be tested without a
+ * database.
+ *
+ * NULL ON A FAILED READ, never an empty list. An unreadable goals table
+ * treated as "nothing has been offered" would draft a fresh target for
+ * every funnel every single morning.
+ */
+export async function existingTargetOffers(
+  supabase: any,
+  dealershipId: string
+): Promise<TargetOffer[] | null> {
+  const { data, error } = await supabase
+    .from("goals")
+    .select("source_key, created_at")
+    .eq("dealership_id", dealershipId)
+    .not("source_key", "is", null);
+
+  if (error || !Array.isArray(data)) {
+    console.error(
+      `[growth] could not read existing target goals for ${dealershipId}, so none were drafted: ${error?.message ?? "no rows returned"}`
+    );
+    return null;
+  }
+
+  return (data as any[])
+    .filter((g) => isTargetKey(g.source_key))
+    .map((g) => ({ sourceKey: String(g.source_key), createdAt: g.created_at ? String(g.created_at) : null }));
+}
 
 /**
  * Write each setup step the owner has not already been offered.

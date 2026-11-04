@@ -540,6 +540,11 @@ describe("3a. an unreadable plan is no plan", () => {
     // false story.
     expect(r.goalsDrafted).toBe(0);
     expect(r.goalDraftsPending).toBe(0);
+    // S5/P4: AND NO TARGET EITHER, with the reason said. An unreadable
+    // goals table read as "nothing has been offered" would draft a
+    // fresh target for every funnel every single morning.
+    expect(r.targetsDrafted).toBe(0);
+    expect(r.noTargetsBecause).toMatch(/could not be read/);
   });
 });
 
@@ -898,6 +903,81 @@ describe("10. S5/P4 — the ready branch, which said nothing for a month", () =>
     expect(r.targetsDrafted).toBe(0);
     expect(r.noTargetsBecause).toMatch(/could not be read/);
     expect(r.sent).toBe(true);
+  });
+
+  it("THE SAME STEP COMES BACK AFTER 30 DAYS, AND NOT BEFORE", async () => {
+    // The founder's answer, 4 November 2026. End to end, because the
+    // date comes from a real `goals` row here rather than a fixture
+    // handed to a pure function.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const old = {
+      id: "g_old",
+      dealership_id: "d1",
+      source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-09-23",
+      status: "completed",
+      created_at: "2026-09-23T06:00:00.000Z",
+      title: "Improve Looked at a product to Asked a question",
+    };
+    const thirtyDays = db({ goals: [old] });
+    const again = await runDailyGrowth(thirtyDays.client, "d1", { now: NOW, dryRun: true });
+    expect(again.targetsDrafted).toBe(1);
+    expect(thirtyDays.tables.goals.some((g: any) => g.source_key.endsWith(":2026-10-23"))).toBe(true);
+
+    const yesterday = db({ goals: [{ ...old, source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-10-22", created_at: "2026-10-22T06:00:00.000Z" }] });
+    const tooSoon = await runDailyGrowth(yesterday.client, "d1", { now: NOW, dryRun: true });
+    expect(tooSoon.targetsDrafted).toBe(0);
+    expect(String(tooSoon.noTargetsBecause)).toMatch(/offered 1 days ago/);
+    expect(yesterday.tables.goals).toHaveLength(1 + tooSoon.goalsDrafted);
+  });
+
+  it("AND A COMPLETED TARGET IS NO DIFFERENT FROM AN IGNORED ONE", async () => {
+    // "chahe purana poora hua ho ya nahi". A draft he never acted on is
+    // the step most worth raising again, and its numbers are a month
+    // stale by then.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db({
+      goals: [
+        {
+          id: "g_old",
+          dealership_id: "d1",
+          source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-09-01",
+          status: "draft",
+          created_at: "2026-09-01T06:00:00.000Z",
+          title: "Improve Looked at a product to Asked a question",
+        },
+      ],
+    });
+    const r = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    expect(r.targetsDrafted).toBe(1);
+  });
+
+  it("ANOTHER BUSINESS'S TARGET DOES NOT HOLD THIS ONE BACK", async () => {
+    // The reader filters by dealership_id, and without a second
+    // business in the fixture that filter is unreachable: dropping it
+    // changed nothing and the mutation survived. With it dropped, this
+    // business is told its step was offered yesterday — by somebody
+    // else's account.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db({
+      goals: [
+        {
+          id: "g_other",
+          dealership_id: "d2",
+          source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-10-22",
+          status: "draft",
+          created_at: "2026-10-22T06:00:00.000Z",
+          title: "Somebody else's target",
+        },
+      ],
+    });
+    const r = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    expect(r.targetsDrafted).toBe(1);
   });
 
   it("and the daily run reads the funnel rather than counting again", () => {

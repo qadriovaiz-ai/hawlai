@@ -23,7 +23,7 @@ import { auditCatalogue, auditSite, type AuditFinding, type Counted } from "@/li
 import { auditLiveCopy, type CopyLine } from "@/lib/growth/copyAudit";
 import { buildDailyReport, everyNumberIsCounted, renderText, withoutUncountedBlocks, type DailyReport } from "@/lib/growth/report";
 import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
-import { writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
+import { existingTargetOffers, writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { checkTracking } from "@/lib/growth/tracking";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
@@ -210,10 +210,18 @@ export async function runDailyGrowth(
     try {
       const { loadDiagnosis } = await import("@/lib/strategy/diagnosis");
       const { targetGoalsFrom } = await import("@/lib/growth/targets");
-      const drafted = targetGoalsFrom(await loadDiagnosis(supabase, dealershipId, day), maturityNow);
-      targetGoals = drafted.goals;
-      targetNumbers = drafted.declared;
-      noTargetsBecause = drafted.why;
+      // WHAT HAS ALREADY BEEN OFFERED, AND WHEN. The same step comes
+      // back after 30 days — the founder's answer of 4 November — so
+      // "already offered" is a date here, not a yes or no.
+      const offers = await existingTargetOffers(supabase, dealershipId);
+      if (offers === null) {
+        noTargetsBecause = "the goals already on record could not be read, so no targets were drafted";
+      } else {
+        const drafted = targetGoalsFrom(await loadDiagnosis(supabase, dealershipId, day), maturityNow, offers, day);
+        targetGoals = drafted.goals;
+        targetNumbers = drafted.declared;
+        noTargetsBecause = drafted.why;
+      }
     } catch (err: any) {
       // SAID, NOT SWALLOWED. A funnel that could not be read is not a
       // funnel with no weakest step, and the difference has cost this
