@@ -959,6 +959,72 @@ and the real shape is `{description, categories, postIdeas}` — now used
 verbatim, because a key strip that deleted `categories` would be a
 silent data loss and that test is where it would show.
 
+## 5 November 2026 — S6/P6, the exit test, and the measure's own limit
+
+**S6 closes.** The criterion the founder restated on 4 November —
+*"nothing that changes state is reachable except through an Action"* — is
+measured by `stateChangeDoor.test.ts`, and the copy half
+(`oneDoorForCopy.test.ts`) has a **shorter backlog**: four entries on 11
+October, three now, each one deferred by his own decision.
+
+**The exit test does not re-prove the other files.** It asserts the four
+things nothing else states, and the first two are the ones that matter:
+
+### 1. The clause covers the CHAT SURFACE, and that is a limit of the instrument
+
+I tried to extend the walk to API routes. It reported **147 of 273
+routes** as reaching every sender in the product — including
+`/api/admin/invoices` placing a phone call. **None of it was true.**
+
+Traced rather than guessed: the walk resolves calls by NAME, and `POST`
+is declared in **145 files**. Walking from one route arrives at every
+other route's handler and from there at everything. The instrument is
+sound from a tool, whose body calls distinctive names, and useless from
+a route.
+
+So the clause is tested where the measure works — and that is also
+where all five audited incidents came from: a real email, a real call, a
+public video, a live discount code and the unattended-posting toggles
+were each reachable **from one chat sentence**. Extending it needs a
+type-aware call graph, which is work, not a gap nobody noticed.
+
+### 2. A green result from a blind measure looks exactly like a green result from a guarded product
+
+So the exit test asserts both directions: **doors open, the walk DOES
+arrive at the live Meta call; doors closed, it does not.** And the
+conflation above is additive by construction — a name with many bodies
+walks all of them — so it can raise a false alarm and cannot produce a
+quiet pass. P0's zero-offence result is therefore robust against the
+very weakness that made the route attempt useless, which is the
+opposite of what I expected when I started measuring.
+
+**And a stronger result for the sends:** `trigger_call` cannot reach
+`triggerVapiCall` even with every door open. The tool raises an
+approval and returns; the call is placed later by the dispatcher, from
+the approvals route. There is no path to wall off, which is the
+strongest form of the clause and it is what S6/P1 built.
+
+**11 mutation checks, 11 killed — and six needed fixing first, all
+mine.** Worth listing, because the pattern is the same one as yesterday:
+
+- two anchors matched text that earlier phases had already changed
+- one anchor was not unique (`const created = await
+  createPublishAction(...)` appears three times) and landed in the wrong
+  function
+- one mutation replaced an import and left the CALL standing, so the
+  walk still saw the name
+- **two assertions were satisfiable by any occurrence**: "the plan says
+  unverified live" matched any of five places in the file, so deleting
+  the exit section's own statement left it green. Both now read the
+  EXIT SECTION, which is where somebody reads the stage's result.
+- and one regex failed against wrapped prose — the sentence it asked
+  for crosses a line break.
+
+**One process miss worth recording:** I reported a single-file test run
+as passing when the output I grepped did not contain the `Tests` line at
+all. The run had failed. A grep that finds nothing is not a pass, and I
+now confirm that line is present before saying so.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

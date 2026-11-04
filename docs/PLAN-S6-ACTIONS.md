@@ -214,7 +214,14 @@ tools with the most importers last.
 | **P3b** | The registry's chat-tool parameter SHAPE derived from the schemas, wording kept as a per-channel override — **DONE 4 Nov**, see §14. Voice output pinned identical before and after | **M** |
 | **P4** | The 4 approved retirements — **ALL FOUR WITHDRAWN 4 Nov: none is a duplicate.** Checked by reading what each file does; evidence in PLAN-CORE-ARCHITECTURE.md §4.2a. One real find: `/api/growth-report` has no callers | **L → S** |
 | **P5** | `seoToolkitAgent`'s two customer-facing tasks through the door, entry deleted — **DONE 4 Nov**, see §16. The other three entries stay by the founder's decision | **S** |
-| **P6** | Exit test: nothing that changes state is reachable outside an Action; the copy door's list is shorter; the tool COUNT is reported but not targeted | **S** |
+| **P6** | Exit test — **DONE 5 Nov**, see §17. Also the first honest measurement of what the clause does NOT cover, and why the instrument cannot | **S** |
+
+**S6 CLOSED 5 November 2026.** P4 turned out to be empty — all four
+approved retirements were not duplicates — so the stage's real weight
+was P0–P3b: a measure, an envelope, one writer, one definition. Two live
+faults were found and fixed on the way (a card approved twice carried
+the action out twice; two tools wrote their own approval row and sent
+the owner to another page), and one dead route was deleted.
 
 **Overall: L**, and P4 is most of it. P0–P3 are structural and testable
 offline; P4 is eight production route changes that need a person.
@@ -528,6 +535,56 @@ entries remain by the founder's own decision (`brandBuildingAgent`,
 `chatbotAgent`, `websiteBuilderAgent`), and the four unchecked rows in
 `PLAN-CORE-ARCHITECTURE.md` §4.2 are marked unverified rather than
 promised.
+
+## 17. P6 — the exit test, and what the clause covers — 5 November 2026
+
+**The criterion:** *"Nothing that changes state is reachable except
+through an Action"*, measured by `tests/stateChangeDoor.test.ts`. The
+second half — no surface writes copy outside C2 — is
+`tests/oneDoorForCopy.test.ts`, which predates this stage, and its
+backlog is **shorter**: four entries on 11 October, three now.
+
+### The scope, stated plainly: the CHAT SURFACE
+
+The clause is tested over what a chat sentence can reach — the 59 tools
+and everything they delegate to. **It is not tested over every API
+route or cron subsystem**, and that is a limit of the instrument rather
+than a decision to look away.
+
+**Measured on 5 November 2026, by trying it.** Extending the same walk
+to routes reported **147 of 273 API routes** as reaching every sender in
+the product — including `/api/admin/invoices` placing a phone call. None
+of it was true. The cause, traced rather than guessed: the walk resolves
+calls BY NAME, and `POST` is declared in **145 files**, so walking from
+one route arrives at every other route's handler and from there at
+everything.
+
+**Why the chat surface is nonetheless the right first scope:** all five
+actions the A-to-Z audit found reachable with no approval — a real
+email, a real phone call, a public video, a live discount code, and the
+toggles that switch on unattended posting — were reachable **from one
+chat sentence**. That is where the incidents came from.
+
+**Extending it needs a different instrument** — a type-aware call graph
+that resolves imports rather than names. Recorded as work, not as a
+gap nobody noticed.
+
+### What makes the green result mean something
+
+A measure that found nothing because it cannot see would report exactly
+what a guarded product reports. So the exit test asserts both
+directions: with the doors removed, the walk **does** arrive at the live
+Meta call; with them closed, it does not. And the conflation above is
+additive by construction — a name with many bodies walks all of them —
+so it can raise a false alarm and cannot produce a quiet pass.
+
+### Unverified live
+
+Nothing in S6 was rehearsed against a real customer, a real call or a
+real upload. What the founder will see first, in the ordinary course of
+using it: an inline Approve/Reject on a campaign-budget card (P2a), the
+"cannot be unmade" sentence on a call card (P1/P1b), and a refusal
+instead of a silent repeat if a decided card is approved twice (P1a).
 
 ## 7. What I need decided
 
