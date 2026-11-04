@@ -126,6 +126,42 @@ export async function PATCH(
     }
   }
 
+  // ONE DECISION PER CARD, AND IT IS CARRIED OUT ONCE.
+  //
+  // REPRODUCED 4 NOVEMBER 2026, S6/P1: approving the same call card
+  // twice placed TWO REAL PHONE CALLS, and both requests answered 200.
+  // A video card uploaded to YouTube twice. Internal mail sent twice.
+  // The branches below each protect themselves or do not: the discount
+  // code re-checks whether the code now exists, a customer email takes
+  // migration 208's idempotency claim — and a call, an upload and a
+  // team email had nothing at all.
+  //
+  // THE CODE ALREADY KNEW. src/lib/publish/release.ts says it in its own
+  // comment — "The route has no already-approved guard, and the inline
+  // card's state is local to the component, so a page reload genuinely
+  // does offer the button again" — and defends itself with a
+  // compare-and-set on `publish_actions`. That defence protects the
+  // publish family only. This is the same idea one level up, where it
+  // covers every branch at once.
+  //
+  // WHY IT DOES NOT BLOCK A LEGITIMATE RETRY. Every branch that fails
+  // returns an error WITHOUT marking the row, and the marking happens
+  // after all of them. So a card whose send genuinely failed is still
+  // `pending` and can be approved again; only a card that was already
+  // decided is refused.
+  if (approval.status !== "pending") {
+    return NextResponse.json(
+      {
+        error:
+          approval.status === "approved"
+            ? "You already approved this one and it was carried out then, so nothing was done again."
+            : `This card was already ${approval.status}, so nothing was done.`,
+        already: approval.status,
+      },
+      { status: 409 }
+    );
+  }
+
   // If this is approving a budget change, actually apply it on Meta —
   // approving a request should mean it happens, not just change a label.
   if (status === "approved") {

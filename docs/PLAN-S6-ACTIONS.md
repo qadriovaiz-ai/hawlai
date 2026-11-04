@@ -206,6 +206,7 @@ tools with the most importers last.
 | Phase | What | Size |
 |---|---|---|
 | **P0** | The reachability test for the restated clause, with an allowlist carrying today's reality and dated reasons. **The measure, before any of the work it measures** — **DONE 4 Nov**, see §8 | **M** |
+| **P1a** | **DONE 4 Nov.** A live fault found while reading the paths P1 restructures: approving a card twice carried the action out twice — two real phone calls off one decision. One guard in the approvals route, before any branch runs. See §9 | **S** |
 | **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card**. The existing senders move onto it; `approvalCoverage`'s grep becomes a property of the envelope | **M** |
 | **P2** | `BUSINESS_BRAIN_TOOLS` gains `family` and grows from 18 entries to every state-changing tool. The registry becomes what the P0 test reads | **M** |
 | **P3** | The 59 schemas move out of `masterBrainV2.ts` into the registry, in batches, each with set-equality. The brain keeps dispatch only | **M** |
@@ -282,6 +283,32 @@ mutation checks all killed, `tsc` 0, 5,439 tests green, `next build` 0.
 **Unverified:** nothing here changes runtime behaviour, so there is
 nothing live to check — the split is covered by the three test files
 that run those functions against a fake Meta and a database double.
+
+## 9. P1a — the fault, and why it came first
+
+**Reproduced before it was claimed.** A `place_outbound_call` card
+approved twice placed two real calls; a video card uploaded twice; team
+mail sent twice. Both requests answered 200.
+
+**`src/lib/publish/release.ts` already said so in a comment** and
+defended the publish family with a compare-and-set. The Dispatch paths
+had no equivalent — which is the argument for the envelope, stated by
+the bug rather than by me.
+
+**The guard:** a card whose status is not `pending` is refused (409,
+with a reason the owner can read) before any branch runs. It does not
+block a retry after a genuine failure, because a failed branch returns
+without marking the row.
+
+**Why before P1 and not inside it:** the S6 plan's own rule — a fault on
+a live surface is fixed before that surface is rebuilt. The envelope will
+add a per-dispatch idempotency key on top, as defence in depth, but the
+broad fix belongs where every branch passes.
+
+**Verified:** 3 new tests, 5 mutation checks all killed, `tsc` 0, 5,442
+tests green, `next build` 0. **Unverified live** — but the owner can see
+it: approving an already-decided card now answers with a reason instead
+of a silent repeat.
 
 ## 7. What I need decided
 

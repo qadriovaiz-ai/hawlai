@@ -508,6 +508,52 @@ caught a literal backspace my patch script wrote into a comment where a
 regex word-boundary escape was meant. That test's name says *"a \b
 eaten by a script is the reason"*. It was.
 
+## 4 November 2026 — S6/P1, and a live fault found by reading the code it was about to restructure
+
+**Approving the same card twice carried the action out twice.** I
+reproduced it before claiming it: a `place_outbound_call` card approved
+twice placed **two real phone calls**, and both requests answered 200. A
+video card uploaded to YouTube twice. Internal mail sent twice.
+
+**The code already knew, in writing.** `src/lib/publish/release.ts`
+says in its own comment: *"The route has no already-approved guard, and
+the inline card's state is local to the component, so a page reload
+genuinely does offer the button again"* — and defends itself with a
+compare-and-set on `publish_actions`. That defence covers the publish
+family only. The sends had nothing: the discount code re-checks whether
+the code now exists, a customer email takes migration 208's idempotency
+claim, and a call, an upload and a team email were unprotected.
+
+**So the fix went in before the restructuring**, which is the rule I
+argued for in the S6 plan: a fault on a live surface is fixed before
+that surface is rebuilt. One guard in `/api/approvals/[id]`, covering
+every branch at once: a card whose status is not `pending` is refused
+with 409 and a reason, before anything runs.
+
+**It does not block a legitimate retry**, and that is why it reads the
+ROW rather than remembering the click. Every branch that fails returns
+without marking the row, and the marking happens after all of them, so a
+card whose send genuinely failed is still pending and can be approved
+again. A test asserts exactly that, because a guard that stranded a
+failed send would be worse than the bug.
+
+**One existing test restated, and its property kept.**
+`activationCardEndToEnd.test.ts` documented this scenario already —
+"a page reload can offer Reject on a card that already went through" —
+and expected 200. That 200 answered the owner *"Rejected — nothing was
+changed"* about a campaign that was running on Meta. It now expects 409
+with the reason, and the assertion that mattered — the executed record
+is not rewritten — is unchanged. Recorded because this is the third test
+restatement today and each one needs a reason that is not "it was
+failing".
+
+**5 mutation checks, 5 killed**, including the live fault itself and the
+"guard placed after the action instead of before it" variant. A sixth
+was removed rather than contrived into a kill: adding
+`|| approval.reviewed_at` to the guard is an **equivalent mutant** —
+`reviewed_at` is written in the same update as the status and nowhere
+else, so it changes nothing in the test or in production.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

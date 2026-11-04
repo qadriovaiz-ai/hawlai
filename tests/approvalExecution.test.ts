@@ -214,6 +214,54 @@ const approve = (id: string) =>
   );
 
 describe("approving is what performs the action", () => {
+  it("APPROVING THE SAME CARD TWICE PLACES ONE CALL, NOT TWO", async () => {
+    // FOUND BY RUNNING IT, 4 November 2026 (S6/P1). Before the guard in
+    // the route, this test's `calls` was 2: two real phone calls to a
+    // customer off one decision, and both requests answered 200. A
+    // double click, a page reload — the card's state is local to the
+    // component — or a retried request was enough.
+    tables.pending_approvals = [{
+      id: "ap-twice", dealership_id: "d1", status: "pending",
+      action_type: "place_outbound_call", action_details: { lead_id: "lead-1", lead_name: "Asha" }, amount: null,
+    }];
+    triggerVapiCall.mockClear();
+    expect((await approve("ap-twice")).status).toBe(200);
+    // Production after the first approve: the row is marked.
+    tables.pending_approvals[0].status = "approved";
+    const again = await approve("ap-twice");
+    expect(again.status).toBe(409);
+    expect(triggerVapiCall.mock.calls).toHaveLength(1);
+    expect((await again.json()).error).toMatch(/already approved/i);
+  });
+
+  it("AND A CARD WHOSE SEND FAILED CAN STILL BE APPROVED AGAIN", async () => {
+    // THE OTHER HALF, and the reason the guard reads the ROW rather
+    // than remembering the click. Every branch that fails returns
+    // without marking the row, so a genuine failure leaves it pending —
+    // and a guard that refused on "has been attempted" would strand it.
+    tables.pending_approvals = [{
+      id: "ap-retry", dealership_id: "d1", status: "pending",
+      action_type: "place_outbound_call", action_details: { lead_id: "lead-1", lead_name: "Asha" }, amount: null,
+    }];
+    triggerVapiCall.mockClear();
+    triggerVapiCall.mockImplementationOnce(async () => ({ success: false, error: "Vapi timed out" }) as any);
+    expect((await approve("ap-retry")).status).toBe(500);
+    expect(tables.pending_approvals[0].status).toBe("pending");
+    expect((await approve("ap-retry")).status).toBe(200);
+    expect(triggerVapiCall.mock.calls).toHaveLength(2);
+  });
+
+  it("AND A REJECTED CARD IS NOT APPROVED AFTERWARDS", async () => {
+    tables.pending_approvals = [{
+      id: "ap-rejected", dealership_id: "d1", status: "rejected",
+      action_type: "place_outbound_call", action_details: { lead_id: "lead-1", lead_name: "Asha" }, amount: null,
+    }];
+    triggerVapiCall.mockClear();
+    const res = await approve("ap-rejected");
+    expect(res.status).toBe(409);
+    expect(triggerVapiCall.mock.calls).toHaveLength(0);
+  });
+
   it("A CALL IS PLACED ONLY AFTER APPROVAL", async () => {
     tables.pending_approvals = [{
       id: "ap-1", dealership_id: "d1", status: "pending",

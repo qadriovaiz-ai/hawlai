@@ -446,10 +446,18 @@ describe("asking twice is still one decision", () => {
 
 describe("a rejection never rewrites what already happened", () => {
   it("rejecting an approval whose action already ran leaves it 'executed'", async () => {
-    // The approve route has no already-decided guard, and the inline
-    // card's state is local to the component, so a page reload can offer
-    // Reject on a card that already went through. The record must still
-    // say it went through: the campaign IS running on Meta.
+    // The inline card's state is local to the component, so a page
+    // reload can offer Reject on a card that already went through. The
+    // record must still say it went through: the campaign IS running on
+    // Meta.
+    //
+    // RESTATED 4 NOVEMBER 2026, AND THE PROPERTY IS UNCHANGED (S6/P1).
+    // This used to expect 200 — and 200 meant the owner was answered
+    // "Rejected — nothing was changed" about a campaign that was
+    // running. The route now refuses a decided card outright, so
+    // nothing is rewritten AND he is told the truth. The assertion that
+    // mattered, `action.status === "executed"`, is kept; the response
+    // is now a refusal with a reason, which is asserted too.
     seedPreFixCard("pending");
     const action = store.rows("publish_actions").find((a) => a.id === "pa-old")!;
     action.status = "executed";
@@ -459,7 +467,8 @@ describe("a rejection never rewrites what already happened", () => {
       new Request("https://hawlai.online/api/approvals/ap-old", { method: "PATCH", body: JSON.stringify({ status: "rejected" }) }),
       { params: Promise.resolve({ id: "ap-old" }) }
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/already approved .* carried out/i);
     expect(action.status).toBe("executed");
   });
 });
