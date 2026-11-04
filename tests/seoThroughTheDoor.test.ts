@@ -1,230 +1,205 @@
-// PHASE 3.5, STEP 6: the pages and posts a search engine shows people.
+// THE TWO SEO TASKS A STRANGER READS — S6/P5.
 //
-// generateBlogPost and generateSeoPage had NO check on their output at
-// all. Both put the business's facts in the prompt and neither looked
-// at what came back. seoPageAgent's own prompt even said "never invent
-// statistics, prices, or claims that aren't reasonable for this
-// business type" - an instruction, with nothing behind it.
+// `oneDoorForCopy.test.ts` carried `seoToolkitAgent.ts` on its
+// MIGRATING list from 2026-10-11 with the debt written out: it HAD
+// claims and provenance (`guardOrMark`), and it was MISSING "the
+// genericness verdict and the key strip for its two customer-facing
+// tasks, meta_tags and gbp_optimization". That entry is deleted now,
+// which is what makes this file the thing that holds the claim up.
 //
-// THE SIGNATURE WAS THE BUG AGAIN, the same shape as step 2: both took
-// their facts as a pre-built prompt string. A string can be put in a
-// prompt but it cannot be checked against.
+// WHAT A STRANGER READS. `meta_tags` writes the title and description
+// in a search result; `gbp_optimization` writes what appears on Google
+// Maps. Both are copy in front of a customer.
 //
-// AND A THIRD LIVE F-01, found in the survey for this step:
+// AND THE EIGHT THAT STAY OUT, by the entry's own words: a keyword
+// list, a technical audit, a competitor read — owner-facing advice. A
+// door built for customer copy would put a customer-first ordering and
+// a word cap on a table of keywords. So this file asserts the BOUNDARY
+// as well as the migration: two tasks in, eight tasks out, and the
+// difference visible in what the model is actually sent.
 //
-//     // seoToolkitAgent
-//     facts ? guardGenerated(generated, facts, "draft")
-//           : { output: generated, removed: [] }
-//
-// after factsPrompt (commit 0) and adEngine (step 5). Fixed here;
-// pinned in tests/seoClaimsGuard.test.ts, which now also asserts the
-// shape cannot come back.
-//
-// TWO ENTRIES I HAD WRONG, corrected rather than migrated:
-//   aeoAgent     I called it "published answers". It runs a web search
-//                and returns a visibility score, a breakdown, which
-//                competitors were mentioned and recommendations. A
-//                check, for the owner.
-//   croAgentV2   I called it unguarded. scrubCroOutput calls
-//                findUnsupportedClaims, so it already gets every claim
-//                rule - including the comparative, performance and
-//                benefit classes - and drops a whole suggestion rather
-//                than half of one.
+// WHY THESE ARE BEHAVIOURAL AND NOT GREPS: the key strip is the guard
+// that failed in public on 11 October, when a Facebook caption carried
+// the words "Concrete_details_used" — a key the MODEL invented. The
+// only convincing test is to have a model invent one and watch it not
+// come out.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { BusinessFacts } from "@/lib/claims/businessFacts";
+import { code } from "./helpers/source";
 
-let prompts: string[];
-function anthropic(...outputs: any[]) {
-  const replies = [...outputs];
-  const last = outputs[outputs.length - 1];
-  prompts = [];
-  vi.stubGlobal("fetch", vi.fn(async (_u: string, init: any) => {
-    prompts.push(String(JSON.parse(init.body).messages[0].content));
-    const next = replies.length ? replies.shift() : last;
-    const payload = { content: [{ type: "text", text: JSON.stringify(next) }], usage: {} };
-    return { ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload), headers: { get: () => null } };
-  }));
-}
-
-import { generateBlogPost } from "@/lib/agents/seoAgent";
-import { generateSeoPage } from "@/lib/agents/seoPageAgent";
-
-function facts(): BusinessFacts {
-  return {
-    businessName: "Candle by Qaaf",
-    category: "Home fragrance",
-    categoryKnown: true,
-    city: "Shahjahanpur",
-    products: [{ name: "Lavender candle", price: 550, description: "Soy wax, 40 hour burn", images: [] }],
-    offers: [], pillars: [], site: null, home: null,
-    links: { store: null, booking: null, products: [] },
-    brand: { description: null, pillars: [], language: null, tone: "warm" } as any,
-    last30: { views: 0, chatOpens: 0, leads: 0, orders: 0, abandonedCarts: 0, conversionRate: null, cartAbandonmentRate: null },
-    allTime: { paidOrders: 2, leads: 1 },
-    ownerFacts: [] as any,
-    businessModels: { models: ["products"], inferred: false },
-    shipping: { mode: "flat", rate: 60, freeThreshold: null },
-    season: { today: "2026-10-11", now: [], launchNow: [], planAhead: [], justEnded: [], monthGuide: "", datesKnownUntil: null, outOfSeason: [] } as any,
-    unreadable: [],
-  } as unknown as BusinessFacts;
-}
-
-beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
-});
-
-describe("1. the blog post", () => {
-  const POST = {
-    title: "Choosing a lavender candle",
-    metaDescription: "What to look for in a soy wax candle.",
-    targetIntent: "informational",
-    headingOutline: [{ level: "H2", heading: "How long it burns" }],
-    content: "Evenings get loud. The Lavender candle is soy wax with a 40 hour burn, 550.",
-    internalLinkSuggestions: [],
-  };
-
-  it("THE TRUTH RULES AND THE RECORDS REACH THE PROMPT", async () => {
-    anthropic(POST);
-    await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts());
-    expect(prompts[0]).toMatch(/NEVER invent numbers/);
-    expect(prompts[0]).toContain("Lavender candle");
-  });
-
-  it("AN INVENTED STATISTIC IS NOW REMOVED — nothing checked this before", async () => {
-    anthropic({ ...POST, content: "Over 500 happy customers have bought this one. Soy wax, 40 hour burn." });
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts());
-    expect(r.content).not.toMatch(/500 happy customers/i);
-    expect(r.claimsRemoved.length).toBeGreaterThan(0);
-  });
-
-  it("A COMPARATIVE CLAIM IN THE BODY GOES TOO", async () => {
-    anthropic({ ...POST, content: "Unlike the standard candles on the shelf, ours is steady. Soy wax, 40 hour burn." });
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts());
-    expect(r.content).not.toMatch(/Unlike the standard candles/);
-  });
-
-  it("A BLOG POST HAS NO WORD CAP — absent from the table is not a cap of zero", async () => {
-    // 400-600 words is the brief, and nothing should tighten it.
-    const long = ["Evenings get loud.", ...Array(60).fill("The Lavender candle is soy wax with a 40 hour burn and it costs 550."), "Order on the store page."].join(" ");
-    anthropic({ ...POST, content: long });
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts());
-    expect(r.content.trim().split(/\s+/).length).toBeGreaterThan(300);
-  });
-
-  it("THE SLUG CHECK STILL RUNS — an invented internal link is dropped", async () => {
-    // Defence in depth that predates this phase and must survive it.
-    anthropic({ ...POST, internalLinkSuggestions: [{ anchorText: "our candles", linksToSlug: "made-up-page", why: "fits" }] });
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts(), [
-      { slug: "real-page", title: "Real page" },
-    ]);
-    expect(r.internalLinkSuggestions).toEqual([]);
-  });
-
-  it("a real slug survives", async () => {
-    anthropic({ ...POST, internalLinkSuggestions: [{ anchorText: "our candles", linksToSlug: "real-page", why: "fits" }] });
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts(), [
-      { slug: "real-page", title: "Real page" },
-    ]);
-    expect(r.internalLinkSuggestions).toHaveLength(1);
-  });
-
-  it("an honest post keeps its title, meta description and intent", async () => {
-    anthropic(POST);
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, facts());
-    expect(r.title).toBe(POST.title);
-    expect(r.metaDescription).toBe(POST.metaDescription);
-    expect(r.targetIntent).toBe("informational");
-    expect(r.headingOutline).toHaveLength(1);
-  });
-
-  it("WITH NO RECORDS, the rules still reach the prompt and the claim still goes", async () => {
-    anthropic({ ...POST, content: "We are India's number 1 candle brand." });
-    const r: any = await generateBlogPost("lavender candles", "Shahjahanpur", "Home fragrance", undefined, null);
-    expect(prompts[0]).toMatch(/could not be read/i);
-    expect(r.content).not.toMatch(/number 1/i);
-  });
-});
-
-describe("2. the SEO landing page", () => {
-  const PAGE = {
-    title: "Lavender candles in Shahjahanpur",
-    metaDescription: "Soy wax candles, 40 hour burn.",
-    h1: "Lavender candles",
-    sections: [{ heading: "What it is", body: "The Lavender candle is soy wax, 40 hour burn. 550." }],
-    slug: "lavender-candles-shahjahanpur",
-  };
-
-  it("THE RECORDS AND THE RULES REACH THE PROMPT", async () => {
-    anthropic(PAGE);
-    await generateSeoPage("lavender candles", "Candle by Qaaf", "Home fragrance", "Shahjahanpur", undefined, facts());
-    expect(prompts[0]).toMatch(/NEVER invent numbers/);
-    expect(prompts[0]).toContain("Lavender candle");
-  });
-
-  it("AN INVENTED PRICE CLAIM IN A SECTION IS REMOVED", async () => {
-    anthropic({ ...PAGE, sections: [{ heading: "Offer", body: "Everything is 50% off this week." }] });
-    const r: any = await generateSeoPage("lavender candles", "Candle by Qaaf", "Home fragrance", "Shahjahanpur", undefined, facts());
-    expect(JSON.stringify(r.output.sections)).not.toMatch(/50% off/);
-    expect(r.claimsRemoved.length).toBeGreaterThan(0);
-  });
-
-  it("A SAFETY CLAIM GOES IN BOTH MODES", async () => {
-    anthropic({ ...PAGE, sections: [{ heading: "Safe", body: "Non-toxic and safe for babies." }] });
-    const r: any = await generateSeoPage("lavender candles", "Candle by Qaaf", "Home fragrance", "Shahjahanpur", undefined, facts());
-    expect(JSON.stringify(r.output.sections)).not.toMatch(/safe for babies/);
-  });
-
-  it("the slug and the h1 survive an honest page", async () => {
-    anthropic(PAGE);
-    const r: any = await generateSeoPage("lavender candles", "Candle by Qaaf", "Home fragrance", "Shahjahanpur", undefined, facts());
-    expect(r.output.slug).toBe(PAGE.slug);
-    expect(r.output.h1).toBe(PAGE.h1);
-    expect(r.publishable).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------
-// 3. THE TOOLKIT'S F-01, DRIVEN rather than grepped
-// ---------------------------------------------------------------------
-//
-// A mutation that restored the fail-open as `facts ? guardOrMark(...)`
-// left every assertion above green, including the source grep that
-// says the shape must not come back - it looked for the OLD function
-// name. That is the lesson from the whole phase in one line: a source
-// grep proves less than running the thing.
+const claudeCall = vi.fn();
+vi.mock("@/lib/ai/claude", () => ({
+  callClaude: (...args: any[]) => claudeCall(...args),
+  withAiFailure: (fallback: any) => fallback,
+  aiFailureMessage: () => "AI unavailable",
+}));
+vi.mock("@/lib/seo/searchQueries", () => ({ formatQueriesForPrompt: () => "" }));
 
 import { generateSeoTask } from "@/lib/agents/seoToolkitAgent";
 
-describe("3. the SEO toolkit does not fail open", () => {
-  it("AN UNSUPPORTED CLAIM IS STRIPPED WITH NO RECORDS AT ALL", async () => {
-    // Until 2026-10-11 this returned the output unchecked and unmarked
-    // whenever a records read failed. A meta description is read by
-    // more strangers than most captions.
-    anthropic({ metaTitle: "Candle by Qaaf", metaDescription: "India's number 1 candle brand." });
-    const { output }: any = await generateSeoTask("meta_tags", "Candle by Qaaf", "Shahjahanpur", "Home fragrance");
-    expect(String(output.metaDescription ?? "")).not.toMatch(/number 1/i);
+function claudeReturns(json: object) {
+  claudeCall.mockResolvedValue({ ok: true, text: JSON.stringify(json), data: { content: [] } });
+}
+
+/** The prompt text the model was actually sent. */
+function promptSent(): string {
+  const call = claudeCall.mock.calls.at(-1);
+  return String(call?.[0]?.messages?.[0]?.content ?? "");
+}
+
+const run = (taskKey: string) =>
+  generateSeoTask(taskKey, "Candle by Qaaf", "Shahjahanpur", "candles", null, undefined, undefined, []);
+
+describe("1. THE KEY STRIP NOW RUNS ON WHAT A STRANGER READS", () => {
+  beforeEach(() => claudeCall.mockReset());
+
+  it("AN INVENTED KEY DOES NOT COME OUT OF meta_tags", async () => {
+    // The 11 October leak, in this surface's shape. The key is not "_"
+    // prefixed and is not on any denylist — it is refused by SHAPE,
+    // because nobody can enumerate what a model will call a field it
+    // made up for its own bookkeeping.
+    claudeReturns({
+      metaTitle: "Candle by Qaaf — Hand-poured soy candles in Shahjahanpur",
+      metaDescription: "Soy candles poured by hand in small batches in Shahjahanpur.",
+      Concrete_details_used: "small batches, Shahjahanpur",
+    });
+    const { output } = await run("meta_tags");
+    expect(output).not.toHaveProperty("Concrete_details_used");
+    expect(JSON.stringify(output)).not.toContain("Concrete_details_used");
+    // And the real copy survived, which is the half a strip can break.
+    expect(output.metaTitle).toContain("Candle by Qaaf");
+    expect(output.metaDescription).toContain("Shahjahanpur");
   });
 
-  it("AND THE STATE IS NAMED, so nothing reads as a checked draft", async () => {
-    anthropic({ metaTitle: "Candle by Qaaf", metaDescription: "Soy wax candles in Shahjahanpur." });
-    const { output }: any = await generateSeoTask("meta_tags", "Candle by Qaaf", "Shahjahanpur", "Home fragrance");
-    expect(output._factsState).toBe("FACTS_UNAVAILABLE");
+  it("AND NOT OUT OF gbp_optimization EITHER", async () => {
+    // The task's REAL shape, from SEO_TASKS: {description, categories,
+    // postIdeas}. Worth using verbatim, because a key strip that
+    // deleted `categories` or `postIdeas` would be a silent data loss
+    // and this is where it would show.
+    claudeReturns({
+      description: "Hand-poured soy candles made in Shahjahanpur.",
+      categories: ["Candle store"],
+      postIdeas: ["A new scent this week"],
+      Invented_Bookkeeping_Key: "x",
+    });
+    const { output } = await run("gbp_optimization");
+    expect(output).not.toHaveProperty("Invented_Bookkeeping_Key");
+    expect(output.description).toContain("Shahjahanpur");
+    expect(output.categories).toEqual(["Candle store"]);
+    expect(output.postIdeas).toEqual(["A new scent this week"]);
   });
 
-  it("with records, the full guard runs and says so", async () => {
-    anthropic({ metaTitle: "Candle by Qaaf", metaDescription: "Soy wax candles, 40 hour burn, 550." });
-    const { output }: any = await generateSeoTask(
-      "meta_tags", "Candle by Qaaf", "Shahjahanpur", "Home fragrance", null, undefined, undefined, [], undefined, facts()
-    );
-    expect(output._factsState).toBe("FACTS_AVAILABLE");
-    expect(output.metaDescription).toContain("40 hour burn");
+  it("A SNAKE_CASE CONTENT KEY IS KEPT, because the rule is shape and not punctuation", async () => {
+    // The correction of 11 October: the first version of the rule
+    // rejected every underscore and silently deleted a video script's
+    // real fields. Lowercase snake_case is content.
+    claudeReturns({ metaTitle: "T", metaDescription: "D", suggested_keywords: "soy candles shahjahanpur" });
+    const { output } = await run("meta_tags");
+    expect(output.suggested_keywords).toBe("soy candles shahjahanpur");
+  });
+});
+
+describe("2. AND THE EIGHT OWNER-FACING TASKS STAY OUT", () => {
+  beforeEach(() => claudeCall.mockReset());
+
+  it("AN OWNER-FACING TASK IS NOT SENT THROUGH THE DOOR", async () => {
+    // Observable in the PROMPT: the door always appends the copy truth
+    // rules, and this agent's own path never did.
+    claudeReturns({ keywords: [{ keyword: "soy candles shahjahanpur", intent: "transactional", note: "ready to buy" }] });
+    await run("competitor_keywords");
+    expect(promptSent()).toContain("You are an SEO specialist working on an Indian");
+    expect(promptSent()).not.toContain("TRUTH RULES");
   });
 
-  it("an honest meta description with no records is left alone", async () => {
-    anthropic({ metaTitle: "Candle by Qaaf", metaDescription: "Soy wax candles in Shahjahanpur." });
-    const { output }: any = await generateSeoTask("meta_tags", "Candle by Qaaf", "Shahjahanpur", "Home fragrance");
-    expect(output.metaDescription).toBe("Soy wax candles in Shahjahanpur.");
+  it("AND A CUSTOMER-FACING ONE IS", async () => {
+    claudeReturns({ metaTitle: "T", metaDescription: "D" });
+    await run("meta_tags");
+    expect(promptSent()).toContain("TRUTH RULES");
+  });
+
+  it("an owner-facing task keeps every field it was given", async () => {
+    // The boundary matters in both directions: stripping a field from a
+    // keyword table would delete the owner's data, not protect a
+    // customer.
+    claudeReturns({ keywords: [{ keyword: "a", intent: "informational", note: "n" }], Volume_Estimates: "made up" });
+    const { output } = await run("competitor_keywords");
+    expect(output).toHaveProperty("Volume_Estimates");
+  });
+});
+
+describe("3. THE COST OF THIS PATH DID NOT CHANGE", () => {
+  beforeEach(() => claudeCall.mockReset());
+
+  it("ONE MODEL CALL, NOT TWO — the genericness repair is not armed here", async () => {
+    // The door's anti-generic step is a VERDICT in pure code plus a
+    // repair that is a second model call, gated behind `revise`. This
+    // path passes revise: false, so a generic verdict is reported and
+    // never retried — the entry asked for the verdict, not for a new
+    // bill on every SEO task.
+    // A WORN OPENER, so the verdict genuinely fires. The first version
+    // of this test used bland-but-unworn copy, nothing was judged
+    // generic, and it passed without exercising the retry gate at all
+    // — a mutation arming `revise: true` survived it.
+    claudeReturns({
+      metaTitle: "Candle by Qaaf",
+      metaDescription: "Are you tired of candles that do not last? Shop with us today.",
+    });
+    const result: any = await run("meta_tags");
+    expect(claudeCall.mock.calls, "a retry was billed on a path that must not retry").toHaveLength(1);
+    // AND THE VERDICT IS REPORTED RATHER THAN SWALLOWED, which is what
+    // the MIGRATING entry actually asked for.
+    expect(result._generic).toBe(true);
+  });
+
+  it("AND THE RECORDS ARE PASSED, so the guard has something to check against", () => {
+    // `facts: null` is a STATE in this codebase, not an absence: the
+    // guard then runs its fact-independent subset. Passing null here
+    // would quietly downgrade every SEO draft's check, and nothing in
+    // this file would have noticed.
+    const src = code("src/lib/agents/seoToolkitAgent.ts");
+    const call = src.slice(src.indexOf("await generateCopy({"), src.indexOf("});", src.indexOf("await generateCopy({")));
+    expect(call).toMatch(/^\s*facts,$/m);
+    expect(call).not.toMatch(/facts: null/);
+  });
+
+  it("AND NO WORD CAP IS APPLIED, because a meta description has a character limit", () => {
+    // `contentTypeKey` absent means no cap — "absent means no cap,
+    // which is NOT a cap of zero" (CopyRequest). A word cap on a meta
+    // description would be the wrong unit entirely.
+    const src = code("src/lib/agents/seoToolkitAgent.ts");
+    const call = src.slice(src.indexOf("await generateCopy({"), src.indexOf("});", src.indexOf("await generateCopy({")));
+    expect(call.length).toBeGreaterThan(200);
+    expect(call).not.toMatch(/contentTypeKey/);
+    expect(call).toMatch(/revise: false/);
+  });
+});
+
+describe("4. the debt is paid, and the list says so", () => {
+  it("THE MIGRATING ENTRY IS DELETED — the backlog only shrinks", () => {
+    // oneDoorForCopy.test.ts fails for a file that is through the door
+    // and still listed, which is what forced this. Asserted here too so
+    // the deletion is not undone quietly.
+    const door = code("tests/oneDoorForCopy.test.ts");
+    expect(door).not.toMatch(/agents\/seoToolkitAgent\.ts":/);
+  });
+
+  it("AND THE FILE IS GENUINELY THROUGH THE DOOR, by a static import", () => {
+    // A dynamic import would work at runtime and read as unguarded to
+    // the suite, which is how the first version of this change looked:
+    // genuinely through the door, and reported as not.
+    const src = code("src/lib/agents/seoToolkitAgent.ts");
+    expect(src).toMatch(/import \{ generateCopy \} from "@\/lib\/content\/generateCopy";/);
+    expect(src).toMatch(/taskKey === "meta_tags" \|\| taskKey === "gbp_optimization"/);
+  });
+
+  it("and the owner's own words are still restored AFTER the guard", () => {
+    // Decision C of 2026-09-29, unchanged by the move: the guard runs
+    // on what Hawlai wrote, and a claim the owner typed is his to make.
+    // seoOwnerWords.test.ts proves the behaviour; this pins the ORDER,
+    // which the move could have inverted.
+    const src = code("src/lib/agents/seoToolkitAgent.ts");
+    const call = src.indexOf("await generateCopy({");
+    const restore = src.indexOf("keepOwnerWords(taskKey, copy.output", call);
+    expect(restore).toBeGreaterThan(call);
   });
 });

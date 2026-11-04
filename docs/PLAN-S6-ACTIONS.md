@@ -213,7 +213,7 @@ tools with the most importers last.
 | **P3a** | The 59 schemas moved out of `masterBrainV2.ts` byte for byte into `businessBrain/toolSchemas.ts`; the brain keeps dispatch — **DONE 4 Nov**, see §13 | **M** |
 | **P3b** | The registry's chat-tool parameter SHAPE derived from the schemas, wording kept as a per-channel override — **DONE 4 Nov**, see §14. Voice output pinned identical before and after | **M** |
 | **P4** | The 4 approved retirements — **ALL FOUR WITHDRAWN 4 Nov: none is a duplicate.** Checked by reading what each file does; evidence in PLAN-CORE-ARCHITECTURE.md §4.2a. One real find: `/api/growth-report` has no callers | **L → S** |
-| **P5** | `oneDoorForCopy`'s remaining `MIGRATING` entries: `seoToolkitAgent`'s two customer-facing tasks, and `websiteBuilderAgent` **only if** the owner answers the block-door question (§7.3) | **S** |
+| **P5** | `seoToolkitAgent`'s two customer-facing tasks through the door, entry deleted — **DONE 4 Nov**, see §16. The other three entries stay by the founder's decision | **S** |
 | **P6** | Exit test: nothing that changes state is reachable outside an Action; the copy door's list is shorter; the tool COUNT is reported but not targeted | **S** |
 
 **Overall: L**, and P4 is most of it. P0–P3 are structural and testable
@@ -499,6 +499,35 @@ this phase is his to check.
 `MIGRATING` entry (`seoToolkitAgent`'s two customer-facing tasks — the
 other three are deferred by his decision) and P6's exit test. The four
 unchecked rows in §4.2 need the same read before anyone promises them.
+
+## 16. P5, as built — 4 November 2026
+
+`meta_tags` and `gbp_optimization` go through `generateCopy`, so they
+now get the two steps they were missing: the **internal-key strip** —
+the guard that failed in public on 11 October when a Facebook caption
+carried the words "Concrete_details_used", a key the MODEL invented —
+and the **genericness verdict**. The MIGRATING entry is deleted, which
+is the only way that list is allowed to shrink.
+
+**The eight owner-facing tasks stay out**, and the boundary is
+asserted both ways: a customer-facing task's prompt now carries the
+copy truth rules, an owner-facing one's does not, and an owner-facing
+task keeps every field it was given — stripping a field from a keyword
+table would delete the owner's data, not protect a customer.
+
+**Cost unchanged:** no word cap (wrong unit for a meta description) and
+no retry (`revise: false`), so the verdict is reported rather than
+billed.
+
+**Verified:** 12 new assertions, 10 mutation checks all killed, `tsc`
+0, 5,509 tests green, `next build` 0. **Unverified live** — the next
+`generate_seo` run for meta tags will be the first through the door.
+
+**S6 now has one phase left: P6, the exit test.** Three MIGRATING
+entries remain by the founder's own decision (`brandBuildingAgent`,
+`chatbotAgent`, `websiteBuilderAgent`), and the four unchecked rows in
+`PLAN-CORE-ARCHITECTURE.md` §4.2 are marked unverified rather than
+promised.
 
 ## 7. What I need decided
 

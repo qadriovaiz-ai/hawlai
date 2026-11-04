@@ -24,6 +24,11 @@ import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from 
 import { formatQueriesForPrompt } from "@/lib/seo/searchQueries";
 import { flattenResultText } from "./brandVoiceValidation";
 import { guardOrMark } from "@/lib/claims/factsGate";
+// STATICALLY, like every other caller of the door. The check in
+// oneDoorForCopy.test.ts reads the import line, and a dynamic import is
+// not one — so a file could be genuinely through the door and still
+// look unguarded to the suite.
+import { generateCopy } from "@/lib/content/generateCopy";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import type { QueryRow } from "@/lib/seo/searchConsole";
 import { parseModelJson } from "@/lib/ai/modelJson";
@@ -106,6 +111,79 @@ export async function generateSeoTask(
     output: { text: aiFailureMessage("bad_request") },
     _fallback: true,
   };
+
+  // THE TWO CUSTOMER-FACING TASKS GO THROUGH THE DOOR — S6/P5, and
+  // this is what oneDoorForCopy.test.ts's MIGRATING entry for this file
+  // was owed since 2026-10-11.
+  //
+  // `meta_tags` writes the title and description a stranger reads in a
+  // search result. `gbp_optimization` writes what a stranger reads on
+  // Google Maps. Both are copy in front of a customer, and both had
+  // claims and provenance (guardOrMark) but NOT the two steps the door
+  // owns at 4 and 5: the internal-key strip —
+  // "Concrete_details_used" once reached a live caption — and the
+  // genericness verdict.
+  //
+  // THE OTHER EIGHT STAY OUT, by the entry's own words: they are
+  // owner-facing SEO advice — a keyword list, a technical audit, a
+  // competitor read — and running them through a door built for
+  // customer copy would apply a customer-first ordering and a word cap
+  // to a table of keywords. That is why this file still calls the model
+  // directly below, which oneDoorForCopy's header already names as the
+  // one thing its import check cannot see: a file that is through the
+  // door for one piece of text and not for another. Deliberate here,
+  // and written down.
+  //
+  // NO WORD CAP AND NO RETRY. `contentTypeKey` is absent because a meta
+  // description has a CHARACTER limit of its own, not a word cap
+  // ("absent means no cap, which is NOT a cap of zero"), and
+  // `revise: false` keeps this path's cost exactly what it was — the
+  // genericness verdict is REPORTED rather than retried, which is what
+  // the entry asked for.
+  if (taskKey === "meta_tags" || taskKey === "gbp_optimization") {
+    const copy = await generateCopy({
+      topic: `${meta.label} for ${dealershipName}`,
+      businessName: dealershipName,
+      businessCategory,
+      facts,
+      mode: "draft",
+      revise: false,
+      language: (brandProfile as any)?.preferred_language ?? facts?.brand?.language ?? null,
+      operation: "seo_task",
+      logContext,
+      brief: {
+        label: meta.label,
+        instructions: requirements,
+        brandContext: `You are an SEO specialist working on an Indian ${businessCategory} business${city ? ` based in ${city}` : ""}.${brandProfile?.tone_of_voice ? `\nBrand tone: ${brandProfile.tone_of_voice}.` : ""}`,
+        grounding: [groundingContext ?? "", searchSection ?? ""].filter(Boolean).join("\n\n") || undefined,
+        shapeHint: `Return JSON only, no markdown, no preamble. Shape the JSON to match the requirements exactly (use the field names implied above). Be specific to this business type and city — never generic filler, and never invent fake statistics or ranking data.${
+          exactText?.trim()
+            ? `
+
+THE OWNER HAS GIVEN YOU THEIR OWN WORDING. Use it exactly as written, character for character, in the field it belongs to:
+"""
+${exactText.trim()}
+"""
+Do not shorten it, rewrite it, translate it, tidy its punctuation, or swap any word in it. If it is genuinely longer than the field allows, still return it unchanged and add a "lengthNote" field saying the real count and the real limit. Never claim a limit forced a change.`
+            : ""
+        }`,
+      },
+    });
+
+    if (copy._aiFailure) return withAiFailure(fallback, copy._aiFailure);
+    if (copy._fallback) return fallback;
+
+    // THE OWNER'S WORDS ARE RESTORED AFTER THE GUARD, which is decision
+    // C of 2026-09-29 and unchanged by this move: the guard runs on
+    // what HAWLAI wrote, and a claim the owner typed himself is his to
+    // make — the card warns instead of stripping it.
+    const output = keepOwnerWords(taskKey, copy.output, exactText);
+    return {
+      output,
+      ...(copy.removed.length ? { claimsRemoved: copy.removed } : {}),
+      ...(copy.generic ? { _generic: true } : {}),
+    };
+  }
 
   try {
     const r = await callClaude({

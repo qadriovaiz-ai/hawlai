@@ -128,7 +128,6 @@ const MIGRATING: Record<string, string> = {
   // door's. paidAdsAgent still calls the model directly for its
   // owner-facing planning tasks.
   // step 6 — SEO, AEO and CRO
-  "src/lib/agents/seoToolkitAgent.ts": "2026-10-11, step 6. HAS: guardOrMark, claims and provenance, and its F-01 fail-open was fixed today. MISSING: the genericness verdict and the key strip for its two customer-facing tasks, meta_tags and gbp_optimization. The other eight tasks are owner-facing SEO advice and must not go through the door",
   // step 7 — websites and long-form shapes
   "src/lib/agents/websiteBuilderAgent.ts": "2026-10-11, step 7. HAS: guardBlockTree, which runs claims and provenance over every block's text, plus its own invented-contact scrub and slug check. MISSING: the genericness verdict. The door writes a JSON piece; this writes a tree of typed blocks, so a block-aware door is a design decision for the owner rather than a mechanical move",
   "src/lib/agents/brandBuildingAgent.ts": "2026-10-11, step 7. HAS: guardDepartmentOutput, so claims and provenance run over the taglines and positioning lines. MISSING: the genericness verdict, which is the measure that matters most for a tagline - and the one case where a fixed word cap would be wrong",

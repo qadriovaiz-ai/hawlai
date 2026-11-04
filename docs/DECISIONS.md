@@ -901,6 +901,64 @@ where the snapshot came from. A chat-only tool with PARTIAL overrides is
 what tells the two paths apart, and `send_email` (two overrides, eight
 arguments) is now asserted.
 
+## 4 November 2026 — S6/P5, the last door entry that was owed
+
+`oneDoorForCopy.test.ts` carried `seoToolkitAgent.ts` on MIGRATING from
+11 October with the debt written out: it HAD claims and provenance
+(`guardOrMark`) and was MISSING *"the genericness verdict and the key
+strip for its two customer-facing tasks, meta_tags and
+gbp_optimization"*. **That entry is deleted.** The two tasks go through
+`generateCopy`, and the eight owner-facing ones deliberately do not.
+
+**Why the eight stay out, in the entry's own words:** a keyword list, a
+technical audit, a competitor read are advice for the owner. A door
+built for customer copy would put a customer-first ordering and a word
+cap on a table of keywords. So this file is now through the door for one
+kind of text and not for another — which `oneDoorForCopy`'s own header
+names as the one thing its import check cannot see. Deliberate, and
+written down in both places.
+
+**Three judgment calls inside the migration:**
+
+1. **No word cap.** `contentTypeKey` is absent, because a meta
+   description has a CHARACTER limit of its own and a word cap would be
+   the wrong unit. "Absent means no cap, which is NOT a cap of zero" is
+   the door's own rule.
+2. **No retry — `revise: false`.** The genericness VERDICT is pure code
+   and runs either way; the repair is a second model call. The entry
+   asked for the verdict, not for a new bill on every SEO task, so the
+   verdict travels out as `_generic` and nothing is retried. This path's
+   cost is exactly what it was.
+3. **The owner's words are restored AFTER the guard**, unchanged from
+   decision C of 2026-09-29: the guard runs on what Hawlai wrote, and a
+   claim the owner typed himself is his to make — the card warns instead
+   of stripping it.
+
+**The first version used a dynamic import** and was genuinely through
+the door while reading as unguarded to the suite, because the check
+looks at the import line. Static now, like the other five callers — and
+a test pins that, because "works at runtime, looks broken to the guard"
+is a state worth never being in twice.
+
+**10 mutation checks, 10 killed.** Two were weak assertions of mine,
+both found by writing their mutations:
+
+- the "one model call, not two" test used bland-but-unworn copy, so
+  nothing was judged generic and the retry gate was never exercised — it
+  passed while a mutation arming `revise: true` survived. It now uses a
+  worn opener ("Are you tired of…"), which the verdict genuinely fires
+  on, and also asserts the verdict reaches the caller.
+- nothing asserted that the records are passed at all. `facts: null` is
+  a STATE in this codebase, not an absence, so passing null would have
+  quietly downgraded every SEO draft's check with no test noticing.
+
+**And one thing I had wrong about the product:** I wrote the first
+tests against invented task keys (`keyword_research`) and an invented
+output shape for `gbp_optimization`. The real keys are in `SEO_TASKS`,
+and the real shape is `{description, categories, postIdeas}` — now used
+verbatim, because a key strip that deleted `categories` would be a
+silent data loss and that test is where it would show.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
