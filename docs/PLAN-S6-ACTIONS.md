@@ -212,7 +212,7 @@ tools with the most importers last.
 | **P2a** | The two campaign-edit tools routed through `requestApproval` — inline cards, policy and risk applied — **DONE 4 Nov**, see §12. It also closed a hole P1 had opened: the row stored different words from the card | **S** |
 | **P3a** | The 59 schemas moved out of `masterBrainV2.ts` byte for byte into `businessBrain/toolSchemas.ts`; the brain keeps dispatch — **DONE 4 Nov**, see §13 | **M** |
 | **P3b** | The registry's chat-tool parameter SHAPE derived from the schemas, wording kept as a per-channel override — **DONE 4 Nov**, see §14. Voice output pinned identical before and after | **M** |
-| **P4** | The 8 retirements. One agent, one commit, one live check, in the §4.1 order | **L** |
+| **P4** | The 4 approved retirements — **ALL FOUR WITHDRAWN 4 Nov: none is a duplicate.** Checked by reading what each file does; evidence in PLAN-CORE-ARCHITECTURE.md §4.2a. One real find: `/api/growth-report` has no callers | **L → S** |
 | **P5** | `oneDoorForCopy`'s remaining `MIGRATING` entries: `seoToolkitAgent`'s two customer-facing tasks, and `websiteBuilderAgent` **only if** the owner answers the block-door question (§7.3) | **S** |
 | **P6** | Exit test: nothing that changes state is reachable outside an Action; the copy door's list is shorter; the tool COUNT is reported but not targeted | **S** |
 
@@ -466,6 +466,39 @@ touching a path that runs on real calls.
 commit had left red** are fixed here — they read `git show HEAD:`, so
 they went red one commit after the schemas moved and my pre-commit
 gates could not see them.
+
+## 15. P4 — what the verification found, 4 November 2026
+
+**All four approved retirements are withdrawn, and nothing was
+deleted.** Each pair was checked by reading what the two files DO:
+
+- **growthAdvisor** — `generateGrowthReport` is a shared service with
+  **five** importers (the overview page, the report bundle, the chat
+  tool, `/api/growth-report`, and V2's own `expansion_strategy` task,
+  which passes its health score in as context). One is an INPUT to the
+  other; they share a route for that reason.
+- **cro** — `croAgent.analyzeCro` is the model-free Page Health Check
+  (`/api/cro`); V2 is the model path (`/api/cro/generate`). Retiring the
+  first deletes the free half.
+- **video** — `videoAgent` is the Veo API transport; `videoMarketingAgent`
+  is the department. A driver and a department.
+- **strategy** — two routes, two output shapes, two products.
+
+**How the plan got it wrong**, mine included: §4.2's table was built
+from **file-name similarity and importer counts**. A pair differing by
+`V2` or `deep` was read as one job done twice. An importer count says
+how many files reach a module and nothing about what it does.
+
+**The one real find:** `/api/growth-report` has **no callers**. The
+function behind it is alive — the overview page imports it directly as
+a server component — so this is a dead HTTP surface, not a capability.
+Offered to the founder rather than deleted, because every retirement in
+this phase is his to check.
+
+**S6's remaining real work is therefore small:** P5's one open
+`MIGRATING` entry (`seoToolkitAgent`'s two customer-facing tasks — the
+other three are deferred by his decision) and P6's exit test. The four
+unchecked rows in §4.2 need the same read before anyone promises them.
 
 ## 7. What I need decided
 

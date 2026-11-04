@@ -477,7 +477,23 @@ not a change. They collapse into one `report` Action:
   without me" the same audit record.
 - **Dispatch vs ResourceEdit is a real split, not tidiness.** See §4.2.
 
-#### 4.2 Duplicate agents to retire
+#### 4.2 Duplicate agents to retire — **FOUR OF EIGHT CHECKED AND WITHDRAWN, 4 November 2026**
+
+> **Read this before acting on the table below.** S6/P4 set out to retire
+> the four pairs the founder approved as unambiguous — the ones with one
+> importer each side. **All four turned out not to be duplicates.** Each
+> was checked by reading what the two files DO, not by comparing their
+> names or counting their importers, and the evidence is in §4.2a. The
+> table's remaining four rows have NOT been checked and should be
+> treated as unverified until they are.
+>
+> **The error is visible in how the table was built:** a pair of files
+> whose names differ by `V2` or `deep` was read as two files doing one
+> job. In every case checked, the second file was a different job —
+> a transport, a deterministic check, an input to the other, or a
+> second product the owner can ask for.
+
+
 
 67 agent files. These are duplicated *jobs*, and each has only one or two
 importing routes, so retiring one is a route consolidation rather than a
@@ -493,6 +509,26 @@ dead-code deletion:
 | `videoMarketingAgent.ts` | `videoAgent.ts` | 1 vs 1; `videoAgent` is only reached via `veoDirectAdapter` | `draft_copy` |
 | `websiteBuilderAgent.ts` | `websiteAgent.ts` | 4 vs 1 | `edit_page_text` |
 | `deepStrategyAgent.ts` | `strategyAgent.ts` | 1 vs 1 | `report` |
+
+#### 4.2a What the four approved retirements actually were — 4 November 2026
+
+| Pair | What was claimed | What it is |
+|---|---|---|
+| `growthAdvisorAgent` / `growthAdvisorV2` | *"both are imported by the same route — the clearest duplicate in the repo"* | **One is an INPUT to the other.** `generateGrowthReport` is a shared service: the dashboard **overview page**, `reports/reportBundle.ts`, the `get_growth_advice` chat tool, `/api/growth-report` and — inside `/api/growth-advisor/generate` — V2's `expansion_strategy` task, which passes its health score and risks in as context. **Five importers.** V2 is four separate advisory generators (forecast, opportunities, budget, expansion). They share a route because one feeds the other |
+| `croAgentV2` / `croAgent` | *"V2 already runs findUnsupportedClaims via scrubCroOutput"* — true, and beside the point | **One is model-free.** `croAgent.analyzeCro` is the Page Health Check: deterministic structural checks over `gatherCroFacts` plus a counted conversion rate, no model call, serving `/api/cro`. V2 is the model path on `/api/cro/generate`. Retiring `croAgent` would delete the FREE half and leave only the paid one |
+| `videoMarketingAgent` / `videoAgent` | *"videoAgent is only reached via veoDirectAdapter"* | **That was the evidence it is a TRANSPORT, read as evidence of redundancy.** `videoAgent` is the Veo API driver — `startVideoGeneration`, `checkVideoOperation`. `videoMarketingAgent` is the department: `generateVideoTask` + `VIDEO_TASKS`. A driver and a department |
+| `deepStrategyAgent` / `strategyAgent` | 1 vs 1 importers | **Two products, two routes, two output shapes.** `generateMarketingStrategy` returns a `MarketingPlan` on `/api/strategy`; `generateDeepStrategy` returns a `DeepStrategy` with personas on `/api/strategy/deep`. Both reachable, both asked for by name |
+
+**What the check did find:** `/api/growth-report` has **no callers at
+all**. The overview page imports `generateGrowthReport` directly as a
+server component, so the function is alive and the HTTP route around it
+is not. That is a real retirement — a dead surface, not a capability —
+and it is the only one of the four this exercise produced.
+
+**The lesson for the remaining four rows**, which involve 4–5 importers
+each: an importer count says how many files reach a module, and nothing
+about whether two modules do the same job. Each remaining row needs the
+same read before anyone promises it.
 
 Not a duplicate, but the largest consolidation target:
 `masterBrainV2.ts` at **4,899 lines**, which holds all 58 tool schemas
