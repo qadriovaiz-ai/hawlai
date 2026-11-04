@@ -17,7 +17,7 @@
 // — a double click, a retried request — must not produce two decisions
 // and two outcomes for one action.
 
-import { checkDateFrom, STANDARD_CHECK_DAYS, type DecisionKind } from "@/lib/growth/outcomes";
+import { checkDateFrom, checkDaysFor, type DecisionKind } from "@/lib/growth/outcomes";
 import { measureForAction, measureForFindingType, type Measure } from "@/lib/growth/measures";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 
@@ -68,7 +68,12 @@ export type DecisionResult =
  */
 export async function recordDecision(supabase: any, input: DecisionInput): Promise<DecisionResult> {
   const day = indiaToday(input.now ?? new Date());
-  const checkDate = checkDateFrom(day, input.checkInDays ?? STANDARD_CHECK_DAYS);
+  // THE WAIT IS DECIDED HERE, FOR ALL THREE CALLERS. S5/P6's short
+  // check is armed per business and expires by itself — see
+  // checkDaysFor. An explicit `checkInDays` still wins, for a caller
+  // that knows exactly what it is asking for (a test, or a run
+  // somebody is watching).
+  const checkDate = checkDateFrom(day, input.checkInDays ?? checkDaysFor(input.dealershipId, day));
 
   // ALREADY RECORDED? A double click is one decision. Matched on the
   // thing the decision is ABOUT — the approval or the finding — rather

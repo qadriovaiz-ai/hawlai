@@ -171,7 +171,7 @@ it may claim more than it knows.
 | ~~**P3**~~ | ~~`outcomeInsights.ts`'s three kinds write Outcome rows~~ — **SKIPPED, mis-planned. See §6a** | — | — |
 | **P4** | The 90-day strategy's `ready` branch: targets from this business's own funnel — **DONE 4 Nov**, with no target number, see §6b | **M** | — |
 | **P5** | The monthly review email, on the daily report's rails — **DONE 4 Nov**, see §6c | **M** | — |
-| **P6** | Exit test, and the short-check-date run that makes it visible this week | **S** | — |
+| **P6** | Exit test, and the short-check-date run that makes it visible this week — **DONE 4 Nov**, see §6d | **S** | — |
 
 **Overall: L**, and the longest-running thing this project has built —
 not because the code is large but because its exit test takes a month.
@@ -347,6 +347,66 @@ review would have gone out titled "your daily check, nothing to flag".
 5,407 tests green, `next build` 0. **Unverified:** nothing has run
 live. The first real review goes out on **1 December**, which is also
 when P6's 28-day exit test comes due.
+
+## 6d. P6, as built — 4 November 2026
+
+### The exit test
+
+`tests/s5ExitTest.test.ts` drives the whole chain on a frozen clock,
+through ONE in-memory database so the rows one stage writes are the
+rows the next one reads: an action recorded → a check date → the
+results job → exactly one outcome row → the monthly review reporting
+it.
+
+**What it shows:** every decision that came due has an outcome row,
+across all three kinds; nothing is written before the check date; a
+second run of the job adds nothing; a second click is still one
+decision; a decision nobody could measure gets a row WITH its reason;
+and another business's due decision is not answered by this business's
+run.
+
+**What it cannot show, and this is the honest part:** that the
+production cron fires on day 28 and writes that row against the live
+database. Nothing can until 28 days elapse. The first decisions were
+recorded on 3 November 2026, so **the live 28-day run is UNVERIFIED
+until 1 December** — and a test in that file asserts this plan still
+says so, because a limit that lives only in a commit message is a limit
+somebody later assumes was lifted.
+
+### The short check date
+
+`GROWTH_SHORT_CHECK_UNTIL=<date>:<dealership_id>` puts ONE business on a
+3-day check instead of 28, so the loop can be watched closing this week.
+The shape is copied from `GROWTH_COPY_AUDIT_ON`, which learned both
+lessons the hard way:
+
+- **it names the business**, because `dailyJobs.ts` runs every subsystem
+  once per dealership — a bare date would put every business on a 3-day
+  check, measuring outcomes before the thing measured has had time to
+  move, and this product would then report those as results. A bare date
+  arms nothing and says so in the log.
+- **it expires by itself** on the date given, because "remember to turn
+  it off" is not a safeguard.
+- **no business name in the code.** The id comes from the environment
+  (CLAUDE.md rule 3).
+
+`recordDecision` applies it for all three callers, who pass no wait of
+their own; an explicit `checkInDays` still wins, for a caller that knows
+what it is asking for.
+
+**To arm it**, set the variable in Vercel to tomorrow-or-later and the
+business's id. Decisions recorded while it is armed get a 3-day check;
+ones already written keep the date they were given, because a check date
+is a record of what was decided, not a setting.
+
+**Verified:** 16 new tests, 13 mutation checks all killed, `tsc` 0,
+5,423 tests green, `next build` 0. Two guards of this project's own
+caught the work: `.env.example`'s completeness test (the new variable
+was undocumented) and, in P5, the signup placeholder allowlist.
+
+**Unverified:** the live 28-day run (1 December), the first real monthly
+review (1 December), and the short check against the live database —
+which needs the variable set and three days.
 
 ## 7. What I need decided
 

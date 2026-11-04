@@ -153,6 +153,67 @@ export const SHORT_CHECK_DAYS = 3;
 /** The standard wait, which is what the exit test is about. */
 export const STANDARD_CHECK_DAYS = 28;
 
+/**
+ * How many days until the check date, for THIS business, TODAY.
+ *
+ * THE FOUNDER APPROVED A SHORT CHECK FOR ONE BUSINESS so the loop could
+ * be watched closing this week rather than in December (S5, decision 1
+ * of 4). This is how it is armed, and the shape is copied deliberately
+ * from `GROWTH_COPY_AUDIT_ON` in dailyGrowth.ts, which learned both of
+ * its lessons the hard way:
+ *
+ *   GROWTH_SHORT_CHECK_UNTIL=2026-11-30:ba79191a-...   one business, until that day
+ *   GROWTH_SHORT_CHECK_UNTIL=2026-11-30                arms NOTHING
+ *
+ * 1. IT NAMES THE BUSINESS, because dailyJobs.ts runs every subsystem
+ *    once per dealership. A bare date would put every business in the
+ *    product on a three-day check — their outcomes measured three days
+ *    after a decision, when the thing being measured has barely had
+ *    time to move — against an approval for one. A bare date therefore
+ *    arms nothing and says so in the log.
+ *
+ * 2. IT EXPIRES BY ITSELF. "Remember to turn it off" is not a
+ *    safeguard, and a short check left on is worse than an unbudgeted
+ *    spend: it is a permanent stream of outcomes measured too early,
+ *    which this product would then report as results.
+ *
+ * NO BUSINESS NAME ANYWHERE HERE. The id comes from the environment, so
+ * nothing about one business is written into the code (CLAUDE.md rule
+ * 3) — the same reason the copy audit is armed this way.
+ *
+ * AND IT DOES NOT SHORTEN THE EXIT TEST. The exit criterion is 28 days
+ * and cannot be hurried; this is a second, visible check for one
+ * business, and the 28-day version stays labelled unverified until it
+ * elapses.
+ */
+export function checkDaysFor(
+  dealershipId: string,
+  day: string,
+  armed: string | undefined = process.env.GROWTH_SHORT_CHECK_UNTIL
+): number {
+  const raw = String(armed ?? "").trim();
+  if (!raw) return STANDARD_CHECK_DAYS;
+
+  const [untilRaw, businessRaw] = raw.includes(":") ? raw.split(":", 2) : [raw, ""];
+  const until = untilRaw.trim();
+  const business = businessRaw.trim();
+
+  if (!business) {
+    console.error(
+      `[decisions] GROWTH_SHORT_CHECK_UNTIL is set to a bare date, which would put EVERY business on a ${SHORT_CHECK_DAYS}-day check. It was ignored. Use "${until}:<dealership_id>".`
+    );
+    return STANDARD_CHECK_DAYS;
+  }
+  if (business !== dealershipId) return STANDARD_CHECK_DAYS;
+
+  // PAST ITS DATE IS OFF. Compared as the daily job's own day strings,
+  // which are what both sides of this already are.
+  const today = String(day).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || today > until) return STANDARD_CHECK_DAYS;
+
+  return SHORT_CHECK_DAYS;
+}
+
 /** A check date, N days from a given day, in the daily job's own terms. */
 export function checkDateFrom(day: string, days: number): string {
   const at = Date.parse(`${String(day).slice(0, 10)}T00:00:00Z`);

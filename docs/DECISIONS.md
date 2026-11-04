@@ -396,6 +396,52 @@ unfaithful mutation (deleting a property left a syntax error, which is a
 crash and not a test of anything) and was rewritten to a subject that
 counts the wrong blocks; the other was the boundary bug above.
 
+## 4 November 2026 — S5/P6, the exit test and what it cannot prove
+
+**The exit criterion is "after 28 days, each executed action has an
+outcome row", and 28 days have not passed.** So the test does the one
+honest thing available: it drives the whole chain on a frozen clock
+through a single in-memory database — decision → check date → results
+job → one outcome row → the monthly review reporting it — and then says
+in its own header, at the top, that the live 28-day run is unverified
+until 1 December. A test in it asserts the PLAN still says so too,
+because a limit recorded only in a commit message is a limit somebody
+later assumes was lifted.
+
+**The short check date is armed by the environment, not by code.**
+`GROWTH_SHORT_CHECK_UNTIL=<date>:<dealership_id>`, the same shape as
+`GROWTH_COPY_AUDIT_ON`: it names the business (a bare date would put
+every business in the product on a 3-day check, and dailyJobs.ts runs
+once per dealership), and it expires by itself. No business name
+anywhere in the code — rule 3 — and "remember to turn it off" is not a
+safeguard. Measuring an outcome three days after a decision is not
+wrong for a business somebody is watching; it is wrong as a default,
+because this product would report those early numbers as results.
+
+**13 mutation checks, 13 killed — but the first run killed 11, and one
+survivor was a real hole in the test rather than a cosmetic one.**
+
+Replacing the writer's `checkDaysFor(...)` call with a hardcoded 28
+survived, because every test in the file handed `checkInDays` in
+explicitly. The feature exists precisely because the three real callers
+pass NOTHING — so the only path that matters in production was the one
+path no test took. Fixed by arming the environment variable and calling
+the writer the way the routes do. The other survivor was the usual
+shape: no second business in the fixture, so the results job's
+`dealership_id` filter could not fail.
+
+**And three of my own test mistakes, found by running them:**
+
+- `due` on the results job means "came due and still has no outcome"
+  (`pending.length`), so a second run reports 0 — the stronger
+  statement, which my assertion had backwards.
+- 4 November plus 28 days is 2 December, so the outcome fell outside the
+  November review. The arithmetic was mine, not the product's — and the
+  fix is the short check, which is exactly what it is for.
+- a grep asserting "no real clock in this file" failed on the in-memory
+  double's own `created_at` stamp, which no assertion depends on. Scoped
+  to exclude the double rather than deleted.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
