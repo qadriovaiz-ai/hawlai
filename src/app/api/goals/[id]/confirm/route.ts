@@ -2,8 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { recordDecisionQuietly } from "@/lib/growth/recordDecision";
-import { measureForFindingType } from "@/lib/growth/measures";
-import { openFindingsOfType } from "@/lib/growth/recordDecision";
+import { measureForFindingType, measureForTarget } from "@/lib/growth/measures";
+import { isTargetKey } from "@/lib/growth/targets";
+import { funnelRateFor, openFindingsOfType } from "@/lib/growth/recordDecision";
 
 // P2 28a — this is where a draft goal's proposed_tasks actually
 // become real tasks/agent_tasks rows. Same owner-only resolution as
@@ -21,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!dealership) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
   const service = createServiceClient();
-  const { data: goal } = await service.from("goals").select("id, status, proposed_tasks, title, source_key").eq("id", id).eq("dealership_id", dealership.id).maybeSingle();
+  const { data: goal } = await service.from("goals").select("id, status, proposed_tasks, title, source_key, target_metric").eq("id", id).eq("dealership_id", dealership.id).maybeSingle();
   if (!goal) return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   if (goal.status !== "draft") return NextResponse.json({ error: "This goal isn't a pending draft" }, { status: 400 });
 
@@ -65,9 +66,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // read the same a moment later — but "capture the baseline before the
   // action" is the rule, and a rule that holds only where it happens
   // not to matter is not a rule.
-  const baseline = goal.source_key
-    ? await openFindingsOfType(service, dealership.id, String(goal.source_key))
-    : null;
+  // A GOAL IS ABOUT A FINDING OR ABOUT A FUNNEL STEP, and the two are
+  // counted from different places. S5/P4's target goals carry a
+  // `target:` key; everything the audit drafts carries a finding type.
+  const targetGoal = isTargetKey(goal.source_key);
+  const baseline = !goal.source_key
+    ? null
+    : targetGoal
+      ? await funnelRateFor(service, dealership.id, String(goal.source_key))
+      : await openFindingsOfType(service, dealership.id, String(goal.source_key));
 
   const { error: activateError } = await service.from("goals").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", goal.id);
   if (activateError) return NextResponse.json({ error: activateError.message }, { status: 500 });
@@ -87,9 +94,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     kind: "goal_confirmed",
     what: `Confirmed the goal "${goal.title}"`,
     why: [{ kind: "goal", id: String(goal.id) }],
-    measure: goal.source_key
-      ? measureForFindingType(String(goal.source_key))
-      : { metric: `progress on "${goal.title}"`, source: null, direction: "up" },
+    measure: !goal.source_key
+      ? { metric: `progress on "${goal.title}"`, source: null, direction: "up" }
+      : targetGoal
+        ? measureForTarget(String(goal.target_metric ?? goal.title))
+        : measureForFindingType(String(goal.source_key)),
     goalId: String(goal.id),
     baseline,
     decidedBy: "owner",

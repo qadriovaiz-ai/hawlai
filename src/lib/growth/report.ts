@@ -88,8 +88,28 @@ export type ReportBlock =
       goal: string;
       numbers: Counted[];
     }
-  /** A setup step while there is not enough history for a target. */
-  | { kind: "setup"; title: string; description: string; target: Counted | null };
+  /**
+   * A setup step while there is not enough history for a target — or,
+   * past that point, a target drawn from this business's own funnel.
+   *
+   * ONE BLOCK KIND FOR BOTH, because they render the same way and go to
+   * the same place: a draft goal on the Tasks page. `isTarget` changes
+   * the word in front of it and the subject line, not the machinery.
+   *
+   * `declared` exists because a target's own sentence states counted
+   * figures — how many entered the step, what share got through — and
+   * the digit walk reads the block's own declarations, not the
+   * report's. Without it the target blocks would be pruned, by exactly
+   * the rule that is there to catch invented numbers.
+   */
+  | {
+      kind: "setup";
+      title: string;
+      description: string;
+      target: Counted | null;
+      declared?: Counted[];
+      isTarget?: boolean;
+    };
 
 export type DailyReport = {
   dealershipId: string;
@@ -250,7 +270,7 @@ function findingCountFrom(blocks: ReportBlock[]): number {
 
 function declaredNumbers(block: ReportBlock): Counted[] {
   if (block.kind === "stat") return [block.number];
-  if (block.kind === "setup") return block.target ? [block.target] : [];
+  if (block.kind === "setup") return [...(block.declared ?? []), ...(block.target ? [block.target] : [])];
   return block.numbers;
 }
 
@@ -302,6 +322,13 @@ export function buildDailyReport(input: {
   setupGoals: DraftGoal[];
   /** Active goals on record. Zero means there is no plan yet. */
   activeGoals: number;
+  /**
+   * Targets drawn from this business's own funnel, waiting for approval
+   * — S5/P4. Shown under the same no-plan condition as setup steps.
+   */
+  targetGoals?: DraftGoal[];
+  /** The counted figures those targets' own sentences print. */
+  targetNumbers?: Counted[];
   /**
    * What the AI could not do during this run, if anything.
    *
@@ -394,7 +421,7 @@ export function buildDailyReport(input: {
 
   blocks.push({
     kind: "line",
-    text: planLine(input.maturity, input.activeGoals),
+    text: planLine(input.maturity, input.activeGoals, (input.targetGoals ?? []).length),
     numbers: maturityCounted(input.maturity),
   });
 
@@ -414,6 +441,22 @@ export function buildDailyReport(input: {
           goal.targetValue === null || goal.targetMetric === null
             ? null
             : { label: goal.targetMetric, value: goal.targetValue, source: basisSource(goal) },
+      });
+    }
+
+    // TARGETS AFTER SETUP STEPS, and under the same no-plan condition:
+    // both are drafts waiting for the same decision. A target goal
+    // carries NO target number — see targets.ts's header; any number
+    // there would be a forecast — so `target` is null and the figures
+    // in its sentence are declared instead.
+    for (const goal of input.targetGoals ?? []) {
+      blocks.push({
+        kind: "setup",
+        isTarget: true,
+        title: goal.title,
+        description: goal.description,
+        target: null,
+        declared: input.targetNumbers ?? [],
       });
     }
   }
@@ -506,8 +549,15 @@ function subjectFor(businessName: string, blocks: ReportBlock[], findingCount: n
     return `${businessName} — ${headline}`;
   }
   const suggestions = blocks.filter((b) => b.kind === "suggestion").length;
-  const setup = blocks.filter((b) => b.kind === "setup").length;
+  // SETUP AND TARGETS ARE COUNTED APART, though they share a block
+  // kind. "3 setup steps to get started" over three targets would be
+  // wrong about a business that is past getting started — and the
+  // subject is the one line he reads before deciding to open it.
+  const setupBlocks = blocks.filter((b) => b.kind === "setup");
+  const targets = setupBlocks.filter((b) => b.kind === "setup" && b.isTarget).length;
+  const setup = setupBlocks.length - targets;
   if (suggestions) return `${businessName} — ${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"} for today`;
+  if (targets) return `${businessName} — ${targets} ${targets === 1 ? "target" : "targets"} to approve`;
   if (setup) return `${businessName} — ${setup} setup ${setup === 1 ? "step" : "steps"} to get started`;
   // "NOTHING TO FLAG" REQUIRES THAT NOTHING WAS FOUND. The first dry
   // run said it over two findings that had nowhere to go.
@@ -557,7 +607,7 @@ export function renderText(report: DailyReport): string {
       case "setup":
         lines.push(
           "",
-          `SETUP STEP — ${block.title}`,
+          `${block.isTarget ? "TARGET" : "SETUP STEP"} — ${block.title}`,
           `  ${block.description}`,
           ...(block.target ? [`  Target: ${block.target.label} — ${block.target.value}`] : [])
         );

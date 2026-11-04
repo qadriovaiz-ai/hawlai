@@ -168,8 +168,8 @@ it may claim more than it knows.
 | **P0** | Migration 215: `decisions` + `outcomes`, with the CHECKs. SQL + live `pg_get_constraintdef` pre-check + verify query | **S** | **215** |
 | **P1** | Decision rows written where decisions already happen: `requestApproval` (granted), goal confirm, a surfaced suggestion the owner acts on. Read-only elsewhere | **M** | — |
 | **P2** | The results job: a `signals` subsystem, frozen-clock tested, writing one outcome per due decision including `not_measurable` | **M** | — |
-| **P3** | `outcomeInsights.ts`'s three kinds write Outcome rows as well as prose; `business_memory` untouched | **S** | — |
-| **P4** | The 90-day strategy's `ready` branch: targets from this business's own funnel, re-planned every 30 days | **M** | — |
+| ~~**P3**~~ | ~~`outcomeInsights.ts`'s three kinds write Outcome rows~~ — **SKIPPED, mis-planned. See §6a** | — | — |
+| **P4** | The 90-day strategy's `ready` branch: targets from this business's own funnel — **DONE 4 Nov**, with no target number, see §6b | **M** | — |
 | **P5** | The monthly review email, on the daily report's rails | **M** | — |
 | **P6** | Exit test, and the short-check-date run that makes it visible this week | **S** | — |
 
@@ -195,6 +195,77 @@ Each phase: tests with mutation checks, `npx tsc --noEmit`,
   counted values substituted in, as the daily report's is.
 
 ---
+
+## 6a. P3 was mis-planned, and is skipped — 3 November 2026
+
+**The premise in §5's P3 row is wrong, and I should have checked it
+before writing it.** It said `outcomeInsights.ts`'s three kinds would
+"write Outcome rows as well as prose". They cannot.
+
+`outcomes.decision_id` is NOT NULL and UNIQUE — an outcome hangs off a
+decision. Those three writers fire on EVENTS, not decisions:
+
+| Writer | Fires when | Called from |
+|---|---|---|
+| `recordLeadOutcomeInsight` | a lead converts or is lost | the lead routes |
+| `recordCallOutcomeInsight` | a call completes | the Vapi webhook |
+| `recordCampaignPauseInsight` | a campaign auto-pauses | `autopilotAgent` |
+
+None of them has a decision behind it. A lead converting is not the
+record of anybody's choice.
+
+**What is true** is that these events could be the OUTCOME OF a
+decision — if the decision recorded which lead, which call, which
+campaign it was about. It does not. `decisions` carries `goal_id`,
+`opportunity_id` and `why` pointers, but no general subject.
+
+**And that is the same missing piece P2's own `not_measurable` reasons
+already name**, in those words: *"the decision does not record which
+thing this was about, so its effect cannot be found"*. Unblocking P3
+means giving decisions a subject — a migration plus a per-action-type
+map of which field in `action_details` is the subject. That is the same
+shape of work as the dropped fix 1 (the eight opportunityAgent finding
+types), which the founder stopped on size and risk.
+
+**So P3 is skipped, not dropped, and it comes AFTER that piece.** It is
+not blocked on anything in P4 or P5, and neither of those needs it:
+both work off goals and the finding-count outcomes, which are verified
+working as of 3 November.
+
+Written down because a phase that quietly disappears from a plan is a
+phase somebody later assumes was done.
+
+## 6b. P4, as built — 4 November 2026
+
+**What §3 asked for does not exist, and the phase is better for it.**
+"Targets from this business's own baseline" reads as one thing and is
+two: the baseline is today's number, counted; the target is tomorrow's,
+and nothing here can know it. So a target goal names the step and the
+rate it runs at, and `target_value` stays null. `docs/DECISIONS.md`'s 4
+November entry has the whole of it.
+
+**What landed:**
+
+| Piece | Where |
+|---|---|
+| `targetKeyFor` / `parseTargetKey` / `weakestStepFor` / `targetGoalsFrom` | `src/lib/growth/targets.ts` (new) |
+| The step's machine keys, so a goal survives a label change | `diagnosis.ts` — `weakest.fromKey` / `toKey` |
+| The measure: the step's rate, direction up | `measures.ts` — `measureForTarget` |
+| The baseline, read before the goal is activated | `funnelRateFor`, and the confirm route's target branch |
+| The outcome, measured by the rate, `attribution: "partial"` | `resultsJob.ts` |
+| The draft, on the Tasks page by the same writer as a setup step | `dailyGrowth.ts` — the `ready` branch |
+| The email: "TARGET — ...", every figure declared, subject counts them apart | `report.ts`, `strategy.ts` — `planLine` |
+
+**Not done, and deliberately:** "re-planned every 30 days", which the
+§5 row claimed. A target offered once is offered once — the unique index
+on `goals.source_key` sees to that — and re-planning means deciding what
+to do with a target the owner approved, which is a decision about his
+plan rather than about this code. It needs his answer, not a default.
+
+**Verified:** 31 new tests, 22 mutation checks all killed, `tsc` 0,
+5,351 tests green, `next build` 0. **Unverified:** everything on a live
+business. candle_by_qaaf has 45 days and 55 events, so the branch will
+fire on the next daily run — that is P6's job to watch.
 
 ## 7. What I need decided
 

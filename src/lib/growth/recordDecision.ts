@@ -178,5 +178,33 @@ export async function openFindingsOfType(
   return data.length;
 }
 
+/**
+ * The pass-through rate of the step a target key names, right now.
+ *
+ * THE SIBLING OF openFindingsOfType, and read the same two times: by
+ * the caller before acting, and by the results job at the check date.
+ * One description of one fact, so the two sides cannot disagree.
+ *
+ * NULL, NEVER ZERO, when it cannot be read. Zero is a real rate — "none
+ * of them got through" — so returning it on a failure would turn an
+ * unreadable funnel into a measured disaster.
+ */
+export async function funnelRateFor(
+  supabase: any,
+  dealershipId: string,
+  targetKey: string
+): Promise<number | null> {
+  try {
+    const { loadDiagnosis } = await import("@/lib/strategy/diagnosis");
+    const { weakestStepFor } = await import("@/lib/growth/targets");
+    const diagnosis = await loadDiagnosis(supabase, dealershipId);
+    const step = weakestStepFor(diagnosis, targetKey);
+    return step ? step.rate : null;
+  } catch (err: any) {
+    console.error(`[decisions] could not read the funnel rate for ${targetKey} (${dealershipId}): ${err?.message}`);
+    return null;
+  }
+}
+
 /** The measure for a decision about a finding, by its type. */
 export { measureForAction, measureForFindingType };

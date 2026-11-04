@@ -37,7 +37,8 @@
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { verdictFor, whyOutcomeIsNotWritable, type OutcomeRow } from "@/lib/growth/outcomes";
 import { measureForAction, measureForFindingType, type Measure } from "@/lib/growth/measures";
-import { openFindingsOfType } from "@/lib/growth/recordDecision";
+import { funnelRateFor, openFindingsOfType } from "@/lib/growth/recordDecision";
+import { isTargetKey } from "@/lib/growth/targets";
 
 export type DueDecision = {
   id: string;
@@ -76,6 +77,13 @@ export type ResultsRun = {
    */
   error?: string;
 };
+
+/** The goal's own key, when this decision is about a goal. */
+async function goalKeyFor(supabase: any, decision: DueDecision): Promise<string | null> {
+  if (!decision.goal_id) return null;
+  const { data } = await supabase.from("goals").select("source_key").eq("id", decision.goal_id).maybeSingle();
+  return data?.source_key ? String(data.source_key) : null;
+}
 
 /** What this decision is about, as a finding type, or null. */
 async function findingTypeFor(supabase: any, decision: DueDecision): Promise<string | null> {
@@ -128,6 +136,34 @@ export async function outcomeFor(
     measuredAfter: null,
     whyNotMeasurable: why,
   });
+
+  // A TARGET GOAL IS MEASURED BY ITS STEP'S RATE, not by a finding
+  // count — S5/P4. Without this branch its source_key would be read as
+  // a finding type, `open findings of type target:...` would be zero
+  // both times, and every target would come back "unchanged". That is
+  // the shape of the bug the founder's first P2 check found, so it is
+  // checked for here rather than discovered there.
+  const goalKey = await goalKeyFor(supabase, decision);
+  if (isTargetKey(goalKey)) {
+    if (decision.baseline === null || decision.baseline === undefined) {
+      return unmeasured("nothing recorded what this step's rate was before the decision, so there is nothing to compare");
+    }
+    const rateNow = await funnelRateFor(supabase, decision.dealership_id, String(goalKey));
+    if (rateNow === null) {
+      return unmeasured("this step no longer has enough traffic to read a rate, so nothing was counted");
+    }
+    return {
+      verdict: verdictFor(Number(decision.baseline), rateNow, "up"),
+      confidence: "counted",
+      // PARTIAL, NOT DIRECT. A funnel rate moves for every reason a
+      // business moves — season, price, somebody else's campaign. The
+      // goal is about this step, but the step is not about the goal.
+      attribution: "partial",
+      measuredBefore: Number(decision.baseline),
+      measuredAfter: rateNow,
+      whyNotMeasurable: null,
+    };
+  }
 
   const findingType = await findingTypeFor(supabase, decision);
   const measure = measureFor(decision, findingType);

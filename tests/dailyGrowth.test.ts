@@ -24,6 +24,7 @@ import { code } from "./helpers/source";
 const ORIGINAL = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = ORIGINAL;
+  funnelsNow = [];
   vi.restoreAllMocks();
 });
 
@@ -36,8 +37,52 @@ vi.mock("@/lib/email/sendDealerEmail", () => ({
   },
 }));
 
+/**
+ * The funnel the ready branch reads — S5/P4.
+ *
+ * DEFAULTS TO NO FUNNELS, so every test written before P4 behaves
+ * exactly as it did: no weakest step, no targets, nothing added to the
+ * email. Section 10 sets it, and only section 10.
+ *
+ * `null` makes the read THROW, which is the unreadable-funnel case
+ * rather than a funnel with nothing in it.
+ */
+let funnelsNow: any[] | null = [];
+vi.mock("@/lib/strategy/diagnosis", async (orig) => ({
+  ...(await orig<any>()),
+  loadDiagnosis: async () => {
+    if (funnelsNow === null) throw new Error("page_events is down");
+    return {
+      window: { days: 90, from: "2026-07-25", to: "2026-10-23", label: "the last 90 days" },
+      models: [],
+      funnels: funnelsNow,
+      sources: [],
+      sourcesThin: null,
+      atRisk: { count: 0, total: 0, names: [] },
+      paid: null,
+      gaps: [],
+    };
+  },
+}));
+
 const NOW = new Date("2026-10-23T04:00:00.000Z");
 const TODAY = "2026-10-23";
+
+/** One funnel whose weakest step is "looked at a product -> asked". */
+function oneWeakStep() {
+  return [
+    {
+      name: "Website to enquiry",
+      steps: [
+        { key: "visit", label: "Visited the site", count: 400, fromPrevious: null },
+        { key: "product_view", label: "Looked at a product", count: 120, fromPrevious: 30 },
+        { key: "enquiry", label: "Asked a question", count: 15, fromPrevious: 12.5 },
+      ],
+      weakest: { from: "Looked at a product", to: "Asked a question", fromKey: "product_view", toKey: "enquiry", rate: 12.5, entered: 120 },
+      thin: null,
+    },
+  ];
+}
 
 /** The real tables, in the shapes the real code reads. Writes recorded. */
 function db(over: Record<string, any[]> = {}) {
@@ -762,5 +807,104 @@ describe("9. the email that was dropped on 3 November 2026", () => {
     const { client } = sixPagesFiveUntitled();
     await runDailyGrowth(client, "d1", { now: NOW });
     expect(sends[0].body).not.toMatch(/pages with no search title:/);
+  });
+});
+
+describe("10. S5/P4 — the ready branch, which said nothing for a month", () => {
+  // `maturityOf` has returned "ready" past 14 days and 20 events since
+  // S4. Until now a business past that line with no approved goal was
+  // told "no plan is approved yet, so the steps below are setup, not
+  // targets" every morning — true, and permanent, because nothing ever
+  // offered a target.
+  //
+  // THE FIXTURE IS ALREADY READY: 55 events over 45 days, like the real
+  // business. See db().
+
+  it("DRAFTS THE WEAKEST STEP AS A TARGET GOAL, AND NEVER ACTIVATES IT", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client, tables } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    expect(r.targetsDrafted).toBe(1);
+    expect(r.noTargetsBecause).toBeNull();
+    const target = tables.goals.find((g: any) => String(g.source_key).startsWith("target:"));
+    expect(target).toBeTruthy();
+    expect(target.status).toBe("draft");
+    // NO TARGET NUMBER. The baseline is today's figure; a target would
+    // be a forecast. See targets.ts's header.
+    expect(target.target_value ?? null).toBeNull();
+    expect(target.target_metric).toBe("Looked at a product to Asked a question");
+  });
+
+  it("AND THE EMAIL CALLS IT A TARGET, WITH EVERY FIGURE IN IT COUNTED", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.sent).toBe(true);
+    // THE REPORT PASSED ITS OWN NUMBER CHECK. A target's sentence
+    // states three counted figures, and if they stopped being declared
+    // the digit walk would prune the target out of the email — the
+    // exact silence of 3 November, in a new place.
+    expect(r.reportSound).toBe(true);
+    expect(r.blocksLeftOut).toBe(0);
+    // COUNTED APART from the setup steps beside it, so "2 setup steps"
+    // and "1 target" stay two different statements about the morning.
+    expect(r.setupSteps).toBe(2);
+    expect(r.targetsDrafted).toBe(1);
+    expect(sends[0].body).toMatch(/TARGET — Improve Looked at a product to Asked a question/);
+    expect(sends[0].body).toMatch(/12\.5%/);
+    expect(sends[0].subject).toMatch(/1 target to approve/);
+  });
+
+  it("AND A SECOND RUN OFFERS IT ONCE, not again", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client, tables } = db();
+    await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    const after = tables.goals.length;
+    const second = await runDailyGrowth(client, "d1", { now: NOW, dryRun: true });
+    expect(second.goalsDrafted).toBe(0);
+    expect(tables.goals).toHaveLength(after);
+  });
+
+  it("A LEARNING BUSINESS IS OFFERED NO TARGET, whatever the funnel says", async () => {
+    // Fewer than 14 days of data. The thin branch owns this case, and
+    // a target drawn from a week of traffic would be the invented
+    // number this phase exists to refuse.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client, tables } = db({
+      page_events: Array.from({ length: 55 }, () => ({ dealership_id: "d1", is_internal: false, created_at: "2026-10-22T10:00:00Z" })),
+    });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.targetsDrafted).toBe(0);
+    expect(tables.goals.some((g: any) => String(g.source_key).startsWith("target:"))).toBe(false);
+    expect(sends[0].subject).not.toMatch(/target/);
+  });
+
+  it("AN UNREADABLE FUNNEL SAYS SO AND DOES NOT STOP THE RUN", async () => {
+    // A funnel that could not be read is not a funnel with no weakest
+    // step, and the difference has cost this project an email already.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = null;
+    const { client } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.targetsDrafted).toBe(0);
+    expect(r.noTargetsBecause).toMatch(/could not be read/);
+    expect(r.sent).toBe(true);
+  });
+
+  it("and the daily run reads the funnel rather than counting again", () => {
+    // loadDiagnosis is the one place that puts page_events and leads
+    // together. A second count here would be a second answer.
+    const src = code("src/lib/growth/dailyGrowth.ts");
+    expect(src).toMatch(/loadDiagnosis/);
+    expect(src).toMatch(/targetGoalsFrom/);
   });
 });

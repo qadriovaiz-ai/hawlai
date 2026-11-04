@@ -64,6 +64,10 @@ export type GrowthRunResult = {
   goalsDrafted: number;
   /** Setup goals waiting on the Tasks page for the owner to confirm. */
   goalDraftsPending: number;
+  /** Target goals the ready branch offered this run. */
+  targetsDrafted: number;
+  /** Why there were none, when there were none. */
+  noTargetsBecause: string | null;
   report: DailyReport | null;
 };
 
@@ -103,6 +107,8 @@ export async function runDailyGrowth(
     copyAuditCostInr: 0,
     goalsDrafted: 0,
     goalDraftsPending: 0,
+    targetsDrafted: 0,
+    noTargetsBecause: null,
     report: null,
   };
 
@@ -184,6 +190,39 @@ export async function runDailyGrowth(
 
   const setupGoals = setupGoalsFrom(findings, counted);
 
+  // THE READY BRANCH — S5/P4. `maturityOf` has returned "ready" past 14
+  // days and 20 events since S4 built the thin branch, and nothing has
+  // ever acted on it. A target goal names the narrowest step in this
+  // business's own funnel and the rate it is running at; it carries NO
+  // target number, because any number there would be a forecast
+  // (targets.ts's header).
+  //
+  // READ-ONLY AND MODEL-FREE. loadDiagnosis counts rows; it costs
+  // nothing and calls nothing.
+  let targetGoals: typeof setupGoals = [];
+  let targetNumbers: Counted[] = [];
+  let noTargetsBecause: string | null = null;
+  const maturityNow = maturityOf(
+    { firstAt: tracking.siteEvents.firstAt, events: tracking.siteEvents.visitorEvents30d },
+    now
+  );
+  if (maturityNow.kind === "ready") {
+    try {
+      const { loadDiagnosis } = await import("@/lib/strategy/diagnosis");
+      const { targetGoalsFrom } = await import("@/lib/growth/targets");
+      const drafted = targetGoalsFrom(await loadDiagnosis(supabase, dealershipId, day), maturityNow);
+      targetGoals = drafted.goals;
+      targetNumbers = drafted.declared;
+      noTargetsBecause = drafted.why;
+    } catch (err: any) {
+      // SAID, NOT SWALLOWED. A funnel that could not be read is not a
+      // funnel with no weakest step, and the difference has cost this
+      // project an email already.
+      noTargetsBecause = "the funnel could not be read this time, so no targets were drafted";
+      console.error(`[growth] could not draft targets for ${dealershipId}: ${err?.message}`);
+    }
+  }
+
   // PUT THEM WHERE THEY CAN BE APPROVED — S4/P6.
   //
   // A setup step existed only inside the email until now. A finding may
@@ -197,17 +236,17 @@ export async function runDailyGrowth(
   // active goals, so a step drafted this morning starts serving
   // findings the morning after the owner confirms it. That delay is the
   // owner's decision sitting in the middle, which is the point.
-  const drafts = await writeSetupGoalDrafts(supabase, dealershipId, setupGoals);
+  // ONE WRITER FOR BOTH KINDS. A target goal is a draft goal with a
+  // `target:` key, so it goes on the Tasks page by the same route and
+  // is offered once by the same unique index.
+  const drafts = await writeSetupGoalDrafts(supabase, dealershipId, [...setupGoals, ...targetGoals]);
 
   // NO MAP FROM TODAY'S FINDINGS. Linking reads the goals on record, so
   // a finding type that is not re-detected today — M9's copy findings,
   // which only run on a named day — still links to its approved goal.
   await linkFindingsToGoals(supabase, dealershipId);
 
-  const maturity = maturityOf(
-    { firstAt: tracking.siteEvents.firstAt, events: tracking.siteEvents.visitorEvents30d },
-    now
-  );
+  const maturity = maturityNow;
   const picks = await pickToday(supabase, dealershipId, tracking, now);
   const activeGoals = await countActiveGoals(supabase, dealershipId);
 
@@ -228,6 +267,8 @@ export async function runDailyGrowth(
     declared: [...counted, ...alsoCounted],
     suggestions,
     setupGoals: hasNoPlan(maturity, activeGoals) ? setupGoals : [],
+    targetGoals: hasNoPlan(maturity, activeGoals) ? targetGoals : [],
+    targetNumbers,
     activeGoals,
     findingCount: findings.length,
     pendingSetupDrafts: drafts.pending,
@@ -260,9 +301,11 @@ export async function runDailyGrowth(
 
   const result: GrowthRunResult = {
     ...empty,
+    targetsDrafted: targetGoals.length,
+    noTargetsBecause,
     findings: findings.length,
     suggestions: sendable.blocks.filter((b) => b.kind === "suggestion").length,
-    setupSteps: sendable.blocks.filter((b) => b.kind === "setup").length,
+    setupSteps: sendable.blocks.filter((b) => b.kind === "setup" && !b.isTarget).length,
     reportSound: check.ok,
     blocksLeftOut: removed.length,
     copyAuditCostInr,

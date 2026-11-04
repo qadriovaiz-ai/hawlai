@@ -308,9 +308,16 @@ describe("5. THE MEASURE IS HONEST ABOUT WHAT THIS PRODUCT DOES NOT COLLECT", ()
   it("and a goal the owner wrote himself has nothing counted to point at", () => {
     // No source_key, so no finding type, so the outcome will say so
     // rather than claim a measurement.
+    //
+    // THE SHAPE OF THIS GREP CHANGED ON 4 NOVEMBER 2026, not the rule
+    // it protects. S5/P4 made the route branch three ways — no key, a
+    // target key, a finding type — so a two-way ternary no longer
+    // appears anywhere in the file. What is asserted is the same
+    // property, stated against the branch that owns it: with no
+    // source_key the measure has no source.
     const confirm = code("src/app/api/goals/[id]/confirm/route.ts");
-    expect(confirm).toMatch(/goal\.source_key\s*\?\s*measureForFindingType/);
-    expect(confirm).toMatch(/source: null/);
+    expect(confirm).toMatch(/!goal\.source_key\s*\?\s*\{[\s\S]{0,120}?source: null/);
+    expect(confirm).toMatch(/measureForFindingType\(String\(goal\.source_key\)\)/);
   });
 });
 

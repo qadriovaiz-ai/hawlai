@@ -45,7 +45,7 @@ describe("step 1 — the funnel, with the weakest step named", () => {
       ["Visit booked", 10, 50],
       ["Purchased", 6, 60],
     ]);
-    expect(f.weakest).toEqual({ from: "Site visits", to: "Leads", rate: 10, entered: 400 });
+    expect(f.weakest).toEqual({ from: "Site visits", to: "Leads", fromKey: "views", toKey: "leads", rate: 10, entered: 400 });
   });
 
   it("stage names follow the business model — a B2B funnel ends in 'Deal won'", () => {
@@ -53,6 +53,17 @@ describe("step 1 — the funnel, with the weakest step named", () => {
     expect(d.funnels[0].steps.map((s) => s.label)).toEqual(["Site visits", "Leads", "Contacted", "Meeting booked", "Deal won"]);
     // No store funnel for a business with nothing to sell online.
     expect(d.funnels).toHaveLength(1);
+  });
+
+  it("THE WEAKEST STEP CARRIES THE MACHINE'S KEYS AS WELL AS THE OWNER'S WORDS", () => {
+    // S5/P4. `from`/`to` are labels and change with the business model
+    // — a clinic's "booked" is not a shop's. A goal filed under a label
+    // would be orphaned by a rename, with its decisions still pointing
+    // at it and nothing left to measure.
+    const f = buildDiagnosis(base({ events: views(400), leads: leads(40, "converted") })).funnels[0];
+    expect(f.weakest!.fromKey).toBe("views");
+    expect(f.weakest!.toKey).toBe("leads");
+    expect(f.weakest!.fromKey).not.toBe(f.weakest!.from);
   });
 
   it("a step with too few people entering it is never called the weakest", () => {
@@ -66,7 +77,7 @@ describe("step 1 — the funnel, with the weakest step named", () => {
     const d = buildDiagnosis(base({ events: views(200), orders: [{ status: "delivered" }, { status: "confirmed" }, { status: "cancelled" }], abandonedCarts: 38 }));
     const store = d.funnels.find((f) => f.name === "Online store")!;
     expect(store.steps.map((s) => [s.label, s.count])).toEqual([["Site visits", 200], ["Checkouts started", 40], ["Paid orders", 2]]);
-    expect(store.weakest).toEqual({ from: "Checkouts started", to: "Paid orders", rate: 5, entered: 40 });
+    expect(store.weakest).toEqual({ from: "Checkouts started", to: "Paid orders", fromKey: "checkouts", toKey: "paid", rate: 5, entered: 40 });
   });
 });
 
@@ -343,7 +354,7 @@ describe("thin data: the Candle by Qaaf shape", () => {
   it("the diagnosis itself handles all the zeros", () => {
     const d = thin();
     expect(d.funnels[0].steps.map((s) => s.count)).toEqual([28, 5, 0, 0, 0]);
-    expect(d.funnels[0].weakest).toEqual({ from: "Site visits", to: "Leads", rate: 17.9, entered: 28 });
+    expect(d.funnels[0].weakest).toEqual({ from: "Site visits", to: "Leads", fromKey: "views", toKey: "leads", rate: 17.9, entered: 28 });
     // 0 of 0 at risk, and a store funnel where nobody has checked out.
     expect(d.atRisk).toEqual({ count: 0, total: 0, names: [] });
     expect(d.funnels[1].steps.map((s) => s.count)).toEqual([28, 0, 0]);

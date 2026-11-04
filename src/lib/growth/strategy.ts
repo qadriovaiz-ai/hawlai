@@ -240,12 +240,28 @@ export function hasNoPlan(m: Maturity, activeGoals: number): boolean {
   return m.kind === "learning" || activeGoals < 1;
 }
 
-/** What the report says about the plan, and it never claims one that does not exist. */
-export function planLine(m: Maturity, activeGoals: number): string {
+/**
+ * What the report says about the plan, and it never claims one that does
+ * not exist.
+ *
+ * `targetsOffered` is S5/P4: ready, no plan approved, but targets drawn
+ * from this business's own funnel are now waiting on the Tasks page.
+ * Saying "the steps below are setup, not targets" in that case would be
+ * false in the other direction — which is the same fault the 23 October
+ * dry run found, pointing the other way.
+ *
+ * NO FIGURE IN THIS SENTENCE beyond `m.why`'s, which maturityCounted
+ * declares. A count of waiting targets here would need declaring too,
+ * and the sentence does not need it.
+ */
+export function planLine(m: Maturity, activeGoals: number, targetsOffered = 0): string {
   if (m.kind === "learning") {
     return `Still learning: ${m.why}. Until then the steps below are setup, not targets.`;
   }
   if (activeGoals < 1) {
+    if (targetsOffered > 0) {
+      return `There is enough history to set targets now: ${m.why}. The targets below come from your own funnel and are waiting on your Tasks page for you to approve.`;
+    }
     // READY, AND NO PLAN. Saying "working to your plan" here was false
     // and it shipped into the first dry run.
     return `There is enough history to set targets now: ${m.why}. No plan is approved yet, so the steps below are setup, not targets.`;

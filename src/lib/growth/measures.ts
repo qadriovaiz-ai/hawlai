@@ -121,6 +121,22 @@ export function measureForFindingType(findingType: string): Measure {
   };
 }
 
+/**
+ * What a goal about a funnel step is measured by — S5/P4.
+ *
+ * THE RATE, NOT A TARGET. The goal carries no target number because any
+ * number would be a forecast (targets.ts's header has the whole of
+ * it), and measuring needs a measure and a baseline, not a target.
+ *
+ * `source` is the diagnosis rather than a table, because the rate is a
+ * ratio of two counts from two tables — page_events and leads — and
+ * diagnosis.ts is the one place that puts them together. Naming either
+ * table would be naming half of it.
+ */
+export function measureForTarget(stepLabel: string): Measure {
+  return { metric: `the rate from ${stepLabel}`, source: "diagnosis", direction: "up" };
+}
+
 /** Can the results job read this, or will the outcome be not_measurable? */
 export function isMeasurable(measure: Measure): boolean {
   return measure.source !== null;

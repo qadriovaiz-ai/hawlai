@@ -37,8 +37,17 @@ export type FunnelStep = {
 export type Funnel = {
   name: string;
   steps: FunnelStep[];
-  /** The step with the lowest pass-through among those with enough people entering it. */
-  weakest: { from: string; to: string; rate: number; entered: number } | null;
+  /**
+   * The step with the lowest pass-through among those with enough
+   * people entering it.
+   *
+   * `from`/`to` are the OWNER'S WORDS and change with the business
+   * model (a clinic's "booked" is not a shop's). `fromKey`/`toKey` are
+   * the machine's, added for S5/P4 so a goal about this step keeps a
+   * stable key when the labels change — the same division the results
+   * job draws between `measure` (a sentence) and its foreign keys.
+   */
+  weakest: { from: string; to: string; fromKey: string; toKey: string; rate: number; entered: number } | null;
   /** Said when no step has enough traffic to judge. */
   thin: string | null;
 };
@@ -95,7 +104,15 @@ function funnelOf(name: string, steps: { key: string; label: string; count: numb
     const entered = out[i - 1].count;
     const rate = out[i].fromPrevious;
     if (entered < MIN_STEP_ENTRY || rate === null) continue;
-    if (!weakest || rate < weakest.rate) weakest = { from: out[i - 1].label, to: out[i].label, rate, entered };
+    if (!weakest || rate < weakest.rate)
+      weakest = {
+        from: out[i - 1].label,
+        to: out[i].label,
+        fromKey: out[i - 1].key,
+        toKey: out[i].key,
+        rate,
+        entered,
+      };
   }
   const thin = weakest ? null : `Not enough traffic yet to name a weakest step — no step has had ${MIN_STEP_ENTRY} or more people reach it in this window.`;
   return { name, steps: out, weakest, thin };

@@ -234,6 +234,75 @@ first version let Python decode it as cp1252, threw, and reported every
 verdict as suspect. An instrument that cannot read its own output is
 worth less than no instrument.
 
+## 4 November 2026 — S5/P4, and the number that does not exist
+
+### The plan's own words were loose, and I did not build what they said
+
+§3 of `docs/PLAN-S5-OUTCOMES.md` says the ready branch sets "targets
+from **this business's own baseline**". Read closely that sentence does
+not survive: **a baseline is today's number and a target is
+tomorrow's.** "Take this step from 12% to 30%" — the 30 comes from
+nowhere. It is a forecast, and a forecast is the one thing this product
+must not invent, which is the whole reason `expected_effect` was made
+nullable in the same plan.
+
+**So a target goal carries no target number.** It names the step, states
+the rate that step is running at now — counted, from this business's own
+funnel — and leaves `target_value` null. It is still measurable, which
+is the part worth being explicit about: measuring needs a MEASURE and a
+BASELINE, not a target. The number would only be needed to say "hit" or
+"missed", and nothing here is entitled to say that.
+
+Three mutation checks hold it down, including one that reads the source
+for `targetValue: null` and fails on any digit in that position.
+
+### Three smaller calls inside the same phase
+
+**1. A target renders as a `setup` block with `isTarget: true`, not as a
+new block kind.** They render the same way and go to the same place — a
+draft goal on the Tasks page. What the flag changes is the word in front
+of it ("TARGET —", not "SETUP STEP —") and the subject line, which now
+counts targets apart from setup steps: "1 target to approve" rather than
+"1 setup step to get started" to a business that is a month past getting
+started.
+
+**2. A target's figures are declared on its own block.** The digit walk
+reads each block's own declarations, not the report's whole set, and a
+target's sentence states three counted numbers — who entered the step,
+what share got through, over how many days. Without `declared` the
+target blocks would have been pruned out of the email by the rule that
+exists to catch invented numbers: 3 November's silence, in a new place.
+
+**3. `attribution: "partial"` for every target outcome, never
+"direct".** A funnel rate moves for every reason a business moves —
+season, price, somebody else's campaign. The goal is about the step; the
+step is not about the goal. The finding-count outcomes stay "direct",
+because there the thing measured IS the thing decided about.
+
+### Two existing test files changed, and neither was loosened
+
+`strategyDiagnosis.test.ts` compares the whole `weakest` object with
+`toEqual`, so adding `fromKey`/`toKey` made three assertions fail —
+correctly, which is what an exact-match assertion is for. Each gained
+the keys it should carry, and a fourth assertion was added for the
+property those keys exist for: a goal filed under a LABEL is orphaned
+the day the business model renames it.
+
+`recordDecision.test.ts` grepped the confirm route for a two-way
+ternary that P4 turned into a three-way branch. The grep's shape
+changed; the rule it protects — with no `source_key`, the measure has no
+source — is asserted against the branch that now owns it. Recorded here
+because "the test was failing so I changed the test" is exactly the
+sentence CLAUDE.md rule 7 exists to make someone justify.
+
+**22 mutation checks, 22 killed, no survivors.** The one worth naming:
+removing the target branch from the results job makes it read "open
+findings of type `target:...`" — zero before, zero after, verdict
+"unchanged" — so every target this product ever sets would report that
+nothing it did made any difference. That is the same shape as the bug
+the founder's first P2 live check found, caught here by a test instead
+of by him.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
