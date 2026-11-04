@@ -32,14 +32,21 @@ export type SubsystemKey =
   // exactly two and both are used, which is why this file exists at
   // all. In `signals` because it reads and writes rows and calls no
   // model, so it never queues behind LLM work.
-  | "decision_results";
+  | "decision_results"
+  // S5/P5. ALSO A SUBSYSTEM AND NOT A CRON ENTRY, for the same reason,
+  // and it runs on the 1st only — it decides that itself rather than
+  // having a schedule of its own, because there is no third cron entry
+  // to give it. In `signals` and AFTER decision_results, so the
+  // outcomes measured this morning are in the review that goes out
+  // this morning.
+  | "monthly_review";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
   // Database-only and fast, and what surfaces work waiting on a human —
   // so it runs FIRST and never queues behind LLM calls.
   // The export email first: it's the one that reaches a person.
-  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance", "strategy_signals", "decision_results"],
+  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance", "strategy_signals", "decision_results", "monthly_review"],
   // Everything slow: LLM-backed work plus third-party APIs. Emails and
   // workflow steps (a lead is waiting) and auto-posting (customers see it)
   // before monitoring and reports; daily_autopilot's per-campaign AI work

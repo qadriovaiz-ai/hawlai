@@ -197,7 +197,23 @@ export type PrunedReport = {
   removed: { block: string; found: string }[];
 };
 
-export function withoutUncountedBlocks(report: DailyReport): PrunedReport {
+export function withoutUncountedBlocks(
+  report: DailyReport,
+  opts: {
+    /**
+     * How to write the subject for what is LEFT — S5/P5.
+     *
+     * The default is the daily report's own `subjectFor`, which counts
+     * suggestions and setup steps. The monthly review's subject counts
+     * results, and without this hook pruning one of its blocks would
+     * have rewritten its subject as "your daily check, nothing to
+     * flag". The rule the recompute exists for — the subject describes
+     * what is in the email, after pruning — is the same either way,
+     * which is why this is a hook and not a bypass.
+     */
+    resubject?: (kept: ReportBlock[]) => string;
+  } = {}
+): PrunedReport {
   const removed: { block: string; found: string }[] = [];
   const kept: ReportBlock[] = [];
 
@@ -232,7 +248,10 @@ export function withoutUncountedBlocks(report: DailyReport): PrunedReport {
   // THE SUBJECT IS RECOMPUTED, because it counts what is in the email
   // and the email just changed. A subject promising two suggestions
   // over one is the same fault in a smaller place.
-  return { report: { ...pruned, subject: subjectFor(businessNameFrom(report.subject), kept, findingCountFrom(kept)) }, removed };
+  const subject = opts.resubject
+    ? opts.resubject(kept)
+    : subjectFor(businessNameFrom(report.subject), kept, findingCountFrom(kept));
+  return { report: { ...pruned, subject }, removed };
 }
 
 /** The first figure in this block that nothing declared, or null. */

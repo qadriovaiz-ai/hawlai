@@ -332,6 +332,70 @@ re-run by hand, each died to exactly the test it should have. Recorded
 because an instrument that misreports a kill as a suspect is one step
 from misreporting a survivor as a kill.
 
+## 4 November 2026 — S5/P5, the monthly review
+
+**The one line a monthly review obviously wants, and cannot have.**
+"Your weakest step was 12% a month ago and is 18% now" — nothing in
+this product records what the funnel was a month ago.
+`fileDiagnosisSignals` files the weakest step into `business_signals`
+and `recordSignal` upserts on its fingerprint, so there is one row per
+topic and no history. Reconstructing it is the mistake S5/P2b already
+paid for.
+
+So the review reports the only month-ago numbers that exist:
+`decisions.baseline` and `outcomes.measured_before` — the steps the
+owner actually acted on. A comparison nobody recorded is not in the
+email, and §6c of the plan says so where the next person will look.
+
+**Judgment calls:**
+
+1. **A subsystem, not a cron entry, and it decides the date itself.**
+   Vercel Hobby allows exactly two cron entries and both are used. It
+   goes at the END of `signals`, after `decision_results`, so the
+   outcomes measured this morning are in the review that goes out this
+   morning.
+2. **`withoutUncountedBlocks` gained a `resubject` hook** instead of
+   the review getting its own copy of the pruning. The prune rewrites
+   the subject because the subject describes what is in the email —
+   true for both emails — and without the hook a pruned review would
+   have gone out titled "your daily check, nothing to flag". A hook,
+   not a bypass.
+3. **The owner's own words, without their figures.** `decisions.what`
+   can carry a number from the moment it was recorded ("Acted on: 5
+   pages have no search title"). This email did not count that 5, and
+   the digit walk compares by value, so printing it would prune the
+   whole result — the owner losing a result to a rule meant to protect
+   him. `stripDigits` is the same answer the AI-failure alert already
+   uses.
+4. **No year in the body.** Same rule: a year is a digit nothing
+   counted. The month is named, the email is dated.
+5. **`prunedReview` is its own exported function.** Nothing this
+   product can produce today puts an untraceable figure in this email,
+   so the pruning path is defensive — and a defensive path reachable
+   only through the job is a path no test can reach. Exported, it is
+   tested directly; the mutation that dropped the subject hook dies to
+   a fixture rather than surviving.
+
+**One real fault, caught by a mutation that survived.** The month
+window compared ISO timestamps against date strings. That is out by
+five and a half hours at each end: a decision taken at 02:00 IST on the
+1st is stored as 20:30 UTC on the last day of the previous month, and
+would have been reported in the wrong month's review. The boundary is
+now an IST instant, pinned at both ends of both months. The mutation
+that found it (`<` to `<=`) could not fail against string comparison,
+which is how the bug was visible at all.
+
+**One guard of this project's own caught me.** `signupPlaceholder.test.ts`
+failed because the new file typed out "Your business" — a Q1 guard
+catching a second copy of the string it exists to keep in one place.
+Fixed by importing `PLACEHOLDER_BUSINESS_NAME`, not by adding an
+allowlist entry, which is what that allowlist is for.
+
+**25 mutation checks, 25 killed.** Two needed work: one was my own
+unfaithful mutation (deleting a property left a syntax error, which is a
+crash and not a test of anything) and was rewritten to a subject that
+counts the wrong blocks; the other was the boundary bug above.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -3,6 +3,7 @@
 
 import { runDailyAutopilot } from "@/lib/agents/autopilotAgent";
 import { runResultsJob } from "@/lib/growth/resultsJob";
+import { runMonthlyReview } from "@/lib/growth/monthlyReview";
 import { runEmailAutomation } from "@/lib/automation/emailAutomation";
 import { runWorkflows } from "@/lib/automation/workflowEngine";
 import { checkCompetitorAlerts } from "@/lib/automation/competitorMonitor";
@@ -27,6 +28,10 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // S5/P2 — measures decisions whose check date has passed. Model-free,
   // so it belongs in `signals` with the other database-only work.
   decision_results: (s, id) => runResultsJob(s, id),
+  // S5/P5 — the monthly review, which returns a skip on the other
+  // thirty days of the month. Model-free and read-only apart from the
+  // send, so it belongs here rather than in the heavy group.
+  monthly_review: (s, id) => runMonthlyReview(s, id),
   daily_autopilot: (s, id) => runDailyAutopilot(s, id),
   content_autopilot: (s, id) => runContentAutopilot(s, id),
   report_snapshots: (s, id, category) => runReportSnapshots(s, id, category),

@@ -170,7 +170,7 @@ it may claim more than it knows.
 | **P2** | The results job: a `signals` subsystem, frozen-clock tested, writing one outcome per due decision including `not_measurable` | **M** | — |
 | ~~**P3**~~ | ~~`outcomeInsights.ts`'s three kinds write Outcome rows~~ — **SKIPPED, mis-planned. See §6a** | — | — |
 | **P4** | The 90-day strategy's `ready` branch: targets from this business's own funnel — **DONE 4 Nov**, with no target number, see §6b | **M** | — |
-| **P5** | The monthly review email, on the daily report's rails | **M** | — |
+| **P5** | The monthly review email, on the daily report's rails — **DONE 4 Nov**, see §6c | **M** | — |
 | **P6** | Exit test, and the short-check-date run that makes it visible this week | **S** | — |
 
 **Overall: L**, and the longest-running thing this project has built —
@@ -289,6 +289,64 @@ but it is a judgment he should see rather than discover.
 5,366 tests green, `next build` 0. **Unverified:** everything on a live
 business. candle_by_qaaf has 45 days and 55 events, so the branch will
 fire on the next daily run — that is P6's job to watch.
+
+## 6c. P5, as built — 4 November 2026
+
+An email on the 1st, **alongside** the daily report, saying what was
+decided and what came of it. `src/lib/growth/monthlyReview.ts`, and a
+`monthly_review` subsystem at the END of the `signals` group — after
+`decision_results`, so the outcomes measured that morning are in the
+review that goes out that morning. **No third cron entry**: Vercel
+Hobby allows exactly two and both are used, so the job decides for
+itself that it is the 1st and returns a skip on the other thirty days.
+
+**What it says:** decisions recorded in the month, results measured,
+how many came out better / unchanged / worse / **could not be
+measured**, how many are still waiting for an answer — then up to five
+results written out one by one, and up to three of the unmeasurable
+ones with their reasons.
+
+**What it refuses to say, and this is most of the design:**
+
+1. **No causation.** Where `attribution` is not `direct` the sentence
+   carries "This measure moves for other reasons too, so this is not
+   proof that the work caused it." Every S5/P4 target outcome is
+   `partial`, so this is the common case, not the rare one.
+2. **No funnel comparison.** The obvious monthly line — "your weakest
+   step was 12% a month ago and is 18% now" — **cannot be written
+   honestly: nothing records what the funnel was a month ago.**
+   `recordSignal` upserts on its fingerprint, so `business_signals`
+   holds one row per topic and no history. The only month-ago numbers
+   this product has are `decisions.baseline` and
+   `outcomes.measured_before`, which is exactly what the email reports.
+3. **No model.** Templates with counted values put in, pinned by a test
+   that greps the file for any model call.
+4. **No year in the body.** Every digit in a block has to be a declared
+   counted value, and a year is neither counted nor about the business.
+   The month is named; the email is dated.
+
+**Two things it reuses rather than reinvents:** the digit walk
+(`everyNumberIsCounted`) and the pruning (`withoutUncountedBlocks`).
+The prune rewrites the subject, because the subject describes what is
+in the email — so it gained a `resubject` hook, or the first pruned
+review would have gone out titled "your daily check, nothing to flag".
+
+**Two faults found while building it:**
+
+- the month window compared ISO timestamps against date strings, which
+  is out by five and a half hours at each end — a decision taken at
+  02:00 IST on the 1st is stored as 20:30 UTC on the last day of the
+  month before, and would have been filed under the wrong month. The
+  boundary is now an IST instant, pinned at both ends.
+- `signupPlaceholder.test.ts` caught the new file typing out "Your
+  business" — a guard built in Q1 catching a second copy of a string it
+  exists to keep in one place. Fixed by importing the constant, not by
+  an allowlist entry.
+
+**Verified:** 41 new tests, 25 mutation checks all killed, `tsc` 0,
+5,407 tests green, `next build` 0. **Unverified:** nothing has run
+live. The first real review goes out on **1 December**, which is also
+when P6's 28-day exit test comes due.
 
 ## 7. What I need decided
 
