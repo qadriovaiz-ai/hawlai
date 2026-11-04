@@ -60,7 +60,7 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({ from: (
 
 import { POST as statusColumn } from "@/app/api/ads/campaign-status/route";
 import { PATCH as onOffSwitch } from "@/app/api/ads/[id]/status/route";
-import { switchMetaCampaign } from "@/lib/agents/masterBrainV2";
+import { pauseMetaCampaign } from "@/lib/agents/masterBrainV2";
 import { createMetaPlatform } from "@/lib/publish/platforms/meta";
 
 const C = "120254652336640260", S = "120254652336770260", A = "120254652337290260";
@@ -120,7 +120,7 @@ async function tokensUsedByEveryPath() {
   used.onOffSwitch = t;
 
   t = graph();
-  await switchMetaCampaign("pause", { id: "d1" }, store, { campaign_description: "lavender" });
+  await pauseMetaCampaign({ id: "d1" }, store, { campaign_description: "lavender" });
   used.chatPause = t;
 
   t = graph();

@@ -70,32 +70,70 @@ describe("the two directions are gated differently, on purpose", () => {
     expect(ACTION_RISK.activate_ad_campaign).toBe("critical");
   });
 
+  // RESTATED 4 NOVEMBER 2026, NOT LOOSENED (S6/P0). These three used to
+  // slice ONE function and grep a branch out of it, because both
+  // directions lived in `switchMetaCampaign` behind `if (kind ===
+  // "pause")`. That shared body is why no call graph could tell the
+  // money step from the free one — see pauseMetaCampaign's header — so
+  // the function was split and these now slice the direction they are
+  // about. Each assertion below is the same claim about a smaller piece
+  // of code, which makes it stronger: a `createPublishAction` appearing
+  // anywhere in the pause function now fails, where before only its
+  // appearance inside one grepped-out branch did.
+  function fnBody(name: string): string {
+    const brain = committed("src/lib/agents/masterBrainV2.ts");
+    const at = brain.indexOf(`async function ${name}(`);
+    expect(at, `${name} is gone`).toBeGreaterThan(-1);
+    const open = brain.indexOf("{", at);
+    let depth = 0;
+    for (let i = open; i < brain.length; i += 1) {
+      if (brain[i] === "{") depth += 1;
+      else if (brain[i] === "}") {
+        depth -= 1;
+        if (depth === 0) return brain.slice(open, i + 1);
+      }
+    }
+    throw new Error(`${name} has no closing brace`);
+  }
+
   it("STOPPING does not go through the approval spine", () => {
     // Gating a pause would leave someone watching money burn while
     // waiting on a click. Same policy stance as auto_paused_campaign.
     expect(getActionPolicy("auto_paused_campaign")?.requiresApproval).toBe(false);
-    const brain = committed("src/lib/agents/masterBrainV2.ts");
-    const fn = brain.slice(brain.indexOf("async function switchMetaCampaign"), brain.indexOf("export function extractArtifact"));
-    const pauseBranch = fn.slice(fn.indexOf('if (kind === "pause")'), fn.indexOf("const { createMetaPlatform }"));
-    expect(pauseBranch.length).toBeGreaterThan(200);
-    expect(pauseBranch).not.toMatch(/createPublishAction/);
-    expect(pauseBranch).toMatch(/status: "PAUSED"/);
+    const pause = fnBody("pauseMetaCampaign");
+    expect(pause.length).toBeGreaterThan(200);
+    expect(pause).not.toMatch(/createPublishAction/);
+    expect(pause).toMatch(/status: "PAUSED"/);
   });
 
-  it("the start branch goes through createPublishAction with the activation key", () => {
+  it("the start path goes through createPublishAction with the activation key", () => {
+    const activate = fnBody("activateMetaCampaign");
+    expect(activate).toMatch(/actionKey: "activate_ad_campaign"/);
+    expect(activate).not.toMatch(/matchCampaign/);
+    // AND IT DOES NOT TOUCH META ITSELF. The approvals executor does
+    // that, after the owner approves. This is what the reachability
+    // test can now see, and could not while the two shared a body.
+    expect(activate).not.toMatch(/setCampaignStatus|setStatus\(/);
+  });
+
+  it("AND THE TWO DIRECTIONS ARE SEPARATE FUNCTIONS, so a call graph can tell them apart", () => {
+    // The property the split exists for. One function serving both
+    // meant anything following activate_meta_campaign arrived at the
+    // pause path's direct Meta call and read the money step as ungated
+    // — and the only way to quieten that would have been to allowlist
+    // the money step, which is the one entry such a list must never
+    // carry.
     const brain = committed("src/lib/agents/masterBrainV2.ts");
-    const fn = brain.slice(brain.indexOf("async function switchMetaCampaign"), brain.indexOf("export function extractArtifact"));
-    expect(fn).toMatch(/actionKey: "activate_ad_campaign"/);
-    expect(fn).not.toMatch(/matchCampaign/);
+    expect(brain).not.toMatch(/switchMetaCampaign/);
+    expect(brain).toMatch(/case "activate_meta_campaign":\s*\n\s*return activateMetaCampaign\(/);
+    expect(brain).toMatch(/case "pause_meta_campaign":\s*\n\s*return pauseMetaCampaign\(/);
   });
 
   it("does not filter candidates on the stale local status", () => {
     // Rows activated via the old ad-only path say ACTIVE locally while
     // Meta has them paused — filtering on the column would hide exactly
     // the campaigns that need fixing.
-    const brain = committed("src/lib/agents/masterBrainV2.ts");
-    const fn = brain.slice(brain.indexOf("async function switchMetaCampaign"), brain.indexOf("export function extractArtifact"));
-    expect(fn).not.toMatch(/\.eq\("meta_status"/);
+    expect(fnBody("resolveCampaignForSwitch")).not.toMatch(/\.eq\("meta_status"/);
   });
 });
 

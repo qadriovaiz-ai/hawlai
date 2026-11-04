@@ -31,7 +31,7 @@ vi.mock("@/lib/publish/create", () => ({
 }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({}) }));
 
-import { switchMetaCampaign } from "@/lib/agents/masterBrainV2";
+import { activateMetaCampaign } from "@/lib/agents/masterBrainV2";
 import { resolveCampaign } from "@/lib/ads/resolveCampaign";
 
 /** The columns the migrations actually create on ad_creatives. */
@@ -84,7 +84,7 @@ beforeEach(() => { created.length = 0; });
 
 describe("the failing request, exactly", () => {
   it("finds the lavender campaign and raises its approval — among several campaigns", async () => {
-    const r = await switchMetaCampaign("activate", { id: "d1" }, db([DIYA, LAVENDER]), { campaign_description: "lavender candle wala campaign" });
+    const r = await activateMetaCampaign({ id: "d1" }, db([DIYA, LAVENDER]), { campaign_description: "lavender candle wala campaign" });
     expect(r.error).toBeUndefined();
     expect(r.activation).toBe(true);
     expect(created).toHaveLength(1);
@@ -93,7 +93,7 @@ describe("the failing request, exactly", () => {
   });
 
   it("finds it when it is the only campaign", async () => {
-    const r = await switchMetaCampaign("activate", { id: "d1" }, db([LAVENDER]), { campaign_description: "lavender candle wala" });
+    const r = await activateMetaCampaign({ id: "d1" }, db([LAVENDER]), { campaign_description: "lavender candle wala" });
     expect(r.approval_id).toBe("ap-1");
     expect(created[0].targetRef).toBe(LAVENDER.id);
   });
@@ -101,7 +101,7 @@ describe("the failing request, exactly", () => {
 
 describe("a failed read is never reported as 'no campaigns'", () => {
   it("says it couldn't load, and does not invite a duplicate launch", async () => {
-    const r = await switchMetaCampaign("activate", { id: "d1" }, db([LAVENDER], { failWith: "canceling statement due to statement timeout" }), { campaign_description: "lavender" });
+    const r = await activateMetaCampaign({ id: "d1" }, db([LAVENDER], { failWith: "canceling statement due to statement timeout" }), { campaign_description: "lavender" });
     expect(r.error).toMatch(/couldn't load your campaigns/i);
     expect(r.error).toMatch(/do NOT offer to create a new campaign/);
     expect(r.error).not.toMatch(/don't have any campaigns/i);
@@ -109,7 +109,7 @@ describe("a failed read is never reported as 'no campaigns'", () => {
   });
 
   it("a genuinely empty account still says so", async () => {
-    const r = await switchMetaCampaign("activate", { id: "d1" }, db([]), { campaign_description: "lavender" });
+    const r = await activateMetaCampaign({ id: "d1" }, db([]), { campaign_description: "lavender" });
     expect(r.error).toMatch(/don't have any campaigns on Meta yet/);
   });
 });

@@ -2782,9 +2782,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     }
 
     case "activate_meta_campaign":
-      return switchMetaCampaign("activate", ctx, supabase, input);
+      return activateMetaCampaign(ctx, supabase, input);
     case "pause_meta_campaign":
-      return switchMetaCampaign("pause", ctx, supabase, input);
+      return pauseMetaCampaign(ctx, supabase, input);
     case "update_website_url": {
       // An ordinary field on the business's own row, written under the
       // same session the rest of chat already writes under. There is no
@@ -3944,7 +3944,24 @@ async function campaignsUnreadable(dealershipId: string, err: { message?: string
 
 // Exported for tests: the lookup has to be exercised against a
 // database that rejects unknown columns, which is how this broke.
-export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, supabase: any, input: any) {
+/**
+ * WHICH CAMPAIGN, AND THE TOKEN TO TOUCH IT WITH — the half both
+ * directions share.
+ *
+ * Exported for tests: the lookup has to be exercised against a database
+ * that rejects unknown columns, which is how this broke.
+ *
+ * IT CHANGES NOTHING. Every return is either a terminal answer for the
+ * owner (no campaigns, ambiguous, unreadable) or the campaign itself.
+ * That is what lets the two directions below be separate functions
+ * rather than two branches of one.
+ */
+export async function resolveCampaignForSwitch(
+  kind: "activate" | "pause",
+  ctx: any,
+  supabase: any,
+  input: any
+): Promise<any> {
   const { adsTokenFor } = await import("../ads/metaToken");
   const { resolveCampaign } = await import("../ads/resolveCampaign");
   const { metaLog: mlog } = await import("../ads/metaLog");
@@ -4000,48 +4017,81 @@ export async function switchMetaCampaign(kind: "activate" | "pause", ctx: any, s
       })),
     };
   }
-  const campaign = res.campaign;
+  return { campaign: res.campaign, token };
 
-  if (kind === "pause") {
-    const { setCampaignStatus: setStatus } = await import("../ads/campaignStatus");
-    const result = await setStatus({
-      objects: { campaignId: campaign.meta_campaign_id ?? null, adsetId: campaign.meta_adset_id ?? null, adId: campaign.meta_ad_id ?? null },
-      token,
-      status: "PAUSED",
-      dealershipId: ctx.id,
-    });
-    // A pause Meta ACCEPTED but that couldn't be read back is not a
-    // failed pause. Both "couldn't confirm" reports in one evening were
-    // exactly that — the pause had worked, only the read-back failed —
-    // and chat called it a network problem. Reported as sent-but-
-    // unconfirmed instead.
-    if (!result.ok && !result.unconfirmed) return { error: result.reason };
-    const confirmed = result.ok;
+}
 
-    const { createServiceClient: makeService } = await import("../supabase/service");
-    const { error: saveErr } = await makeService()
-      .from("ad_creatives")
-      // meta_status only. external_status is not read on the Meta path.
-      // Written when unconfirmed too: Meta accepted the pause, and this
-      // column is only ever the last RECORDED status.
-      .update({ meta_status: "PAUSED" })
-      .eq("id", campaign.id)
-      .eq("dealership_id", ctx.id);
-    mlog("chat.paused", { dealership: ctx.id, campaign: campaign.meta_campaign_id, effective: result.ok ? result.effectiveStatus : null, confirmed, row_saved: !saveErr });
+/**
+ * STOP A CAMPAIGN. No approval, by policy — CLAUDE.md rule 6: the safe
+ * direction must not be the slow one, and gating a pause would leave
+ * someone watching money burn while waiting on a click.
+ *
+ * SPLIT FROM THE START PATH ON 4 NOVEMBER 2026 (S6/P0), and the reason
+ * is the reason S6 exists. Both directions used to live in one function
+ * behind `if (kind === "pause")`. The money step was gated and the pause
+ * was not — correctly — but no test could tell them apart, because a
+ * call graph cannot see which branch a caller takes: anything that
+ * followed `activate_meta_campaign` arrived at this `setCampaignStatus`
+ * call and read the start path as ungated. Allowlisting the money step
+ * to quieten that would have been the one entry such a list must never
+ * carry, so the function was split instead.
+ */
+export async function pauseMetaCampaign(ctx: any, supabase: any, input: any) {
+  const { metaLog: mlog } = await import("../ads/metaLog");
+  const resolved = await resolveCampaignForSwitch("pause", ctx, supabase, input);
+  if (!resolved?.campaign) return resolved;
+  const { campaign, token } = resolved;
 
-    return {
-      success: true,
-      paused: true,
-      confirmed,
-      headline: campaign.headline,
-      effective_status: result.ok ? result.effectiveStatus : null,
-      image_url: campaign.generated_image_url,
-      note: result.ok
-        ? "Paused on Meta and confirmed — it has stopped spending. Ask me any time to start it again."
-        : result.reason,
-    };
-  }
+  const { setCampaignStatus: setStatus } = await import("../ads/campaignStatus");
+  const result = await setStatus({
+    objects: { campaignId: campaign.meta_campaign_id ?? null, adsetId: campaign.meta_adset_id ?? null, adId: campaign.meta_ad_id ?? null },
+    token,
+    status: "PAUSED",
+    dealershipId: ctx.id,
+  });
+  // A pause Meta ACCEPTED but that couldn't be read back is not a
+  // failed pause. Both "couldn't confirm" reports in one evening were
+  // exactly that — the pause had worked, only the read-back failed —
+  // and chat called it a network problem. Reported as sent-but-
+  // unconfirmed instead.
+  if (!result.ok && !result.unconfirmed) return { error: result.reason };
+  const confirmed = result.ok;
 
+  const { createServiceClient: makeService } = await import("../supabase/service");
+  const { error: saveErr } = await makeService()
+    .from("ad_creatives")
+    // meta_status only. external_status is not read on the Meta path.
+    // Written when unconfirmed too: Meta accepted the pause, and this
+    // column is only ever the last RECORDED status.
+    .update({ meta_status: "PAUSED" })
+    .eq("id", campaign.id)
+    .eq("dealership_id", ctx.id);
+  mlog("chat.paused", { dealership: ctx.id, campaign: campaign.meta_campaign_id, effective: result.ok ? result.effectiveStatus : null, confirmed, row_saved: !saveErr });
+
+  return {
+    success: true,
+    paused: true,
+    confirmed,
+    headline: campaign.headline,
+    effective_status: result.ok ? result.effectiveStatus : null,
+    image_url: campaign.generated_image_url,
+    note: result.ok
+      ? "Paused on Meta and confirmed — it has stopped spending. Ask me any time to start it again."
+      : result.reason,
+  };
+}
+
+/**
+ * START A CAMPAIGN — THE MONEY STEP, and it never acts.
+ *
+ * It creates an approval through `createPublishAction` and returns the
+ * card. Nothing spends until the owner approves, and the approvals
+ * executor is what carries it out.
+ */
+export async function activateMetaCampaign(ctx: any, supabase: any, input: any) {
+  const resolved = await resolveCampaignForSwitch("activate", ctx, supabase, input);
+  if (!resolved?.campaign) return resolved;
+  const { campaign } = resolved;
   const { createMetaPlatform } = await import("../publish/platforms/meta");
   const { createPublishAction } = await import("../publish/create");
   const { createServiceClient: makeService } = await import("../supabase/service");

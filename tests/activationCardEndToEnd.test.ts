@@ -142,7 +142,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { switchMetaCampaign, extractArtifact } from "@/lib/agents/masterBrainV2";
+import { activateMetaCampaign, pauseMetaCampaign, extractArtifact } from "@/lib/agents/masterBrainV2";
 import { intentKey } from "@/lib/publish/create";
 import { PATCH } from "@/app/api/approvals/[id]/route";
 
@@ -294,7 +294,7 @@ function seedPreFixCard(approvalStatus: "pending" | "rejected") {
 // ---------------------------------------------------------------------
 
 async function askToActivate() {
-  const result = await switchMetaCampaign("activate", { id: DEALERSHIP }, store, { campaign_description: "lavender candle wala campaign" });
+  const result = await activateMetaCampaign({ id: DEALERSHIP }, store, { campaign_description: "lavender candle wala campaign" });
   const card = result.error ? null : extractArtifact("activate_meta_campaign", {}, result);
   return { result, card };
 }
@@ -559,7 +559,7 @@ describe("'already running' is said only when Meta says every level is deliverin
     // is the local column, and must not read as "is running".
     store.rows("ad_creatives").push({ ...store.rows("ad_creatives")[0], id: "row-2", headline: "Diwali diyas", plan_json: { car_type: "Diya set" }, meta_status: "ACTIVE" });
     graph({ adset: ADSET_100_A_DAY, campaign: {} });
-    const result = await switchMetaCampaign("activate", { id: DEALERSHIP }, store, { campaign_description: "campaign activate karo" });
+    const result = await activateMetaCampaign({ id: DEALERSHIP }, store, { campaign_description: "campaign activate karo" });
     expect(result.needs_clarification).toBe(true);
     expect(result.candidates![0]).toHaveProperty("last_recorded_status");
     expect(result.candidates![0]).not.toHaveProperty("status");
@@ -585,7 +585,7 @@ describe("one transient Meta error is retried, not reported", () => {
 
   it("pause: the read-back fails once → retried, and it reports paused AND confirmed", async () => {
     graph({ adset: ADSET_100_A_DAY, campaign: {}, flakyReads: 1 });
-    const result = await switchMetaCampaign("pause", { id: DEALERSHIP }, store, { campaign_description: "lavender" });
+    const result = await pauseMetaCampaign({ id: DEALERSHIP }, store, { campaign_description: "lavender" });
 
     expect(result.error).toBeUndefined();
     expect(result.paused).toBe(true);
@@ -596,7 +596,7 @@ describe("one transient Meta error is retried, not reported", () => {
 
   it("pause: Meta accepts it but no read-back ever lands → 'sent, not yet confirmed', never 'failed'", async () => {
     const calls = graph({ adset: ADSET_100_A_DAY, campaign: {}, readsFailAfterPost: true });
-    const result = await switchMetaCampaign("pause", { id: DEALERSHIP }, store, { campaign_description: "lavender" });
+    const result = await pauseMetaCampaign({ id: DEALERSHIP }, store, { campaign_description: "lavender" });
 
     expect(result.error).toBeUndefined();
     expect(result.paused).toBe(true);

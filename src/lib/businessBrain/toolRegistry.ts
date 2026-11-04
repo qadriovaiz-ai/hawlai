@@ -86,7 +86,7 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     // CHAT ONLY: the person is approving real spend and should see the
     // campaign, its creative and its budget, not hear them read out.
     channels: ["chat"],
-    handlerRef: "lib/agents/masterBrainV2.ts:switchMetaCampaign",
+    handlerRef: "lib/agents/masterBrainV2.ts:activateMetaCampaign",
     status: "live",
   },
   {
@@ -100,7 +100,7 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     // Voice too: "pause my ad" on a call should work, and nothing about
     // stopping spend needs to be seen.
     channels: ["chat", "call"],
-    handlerRef: "lib/agents/masterBrainV2.ts:switchMetaCampaign",
+    handlerRef: "lib/agents/masterBrainV2.ts:pauseMetaCampaign",
     status: "live",
   },
   {
