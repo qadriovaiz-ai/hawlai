@@ -135,7 +135,12 @@ describe("nothing tells the model to send someone to a page for a Meta launch", 
   const brain = committed("src/lib/agents/masterBrainV2.ts");
 
   it("the generate_ad_plan description points at the tool, not a page", () => {
-    const start = brain.indexOf('name: "generate_ad_plan"');
+    // THE SCHEMAS MOVED, NOT THE RULE — S6/P3a: the 59 tool schemas
+    // live in lib/businessBrain/toolSchemas.ts now, byte for byte. This
+    // read follows them. `committed()` reads git HEAD, which is why this
+    // only went red one commit AFTER the move.
+    const schemas = committed("src/lib/businessBrain/toolSchemas.ts");
+    const start = schemas.indexOf('name: "generate_ad_plan"');
     const desc = brain.slice(start, brain.indexOf("input_schema", start));
     expect(desc).toContain("launch_meta_campaign");
     // It may still NAME Ads Manager in order to forbid it; what it must

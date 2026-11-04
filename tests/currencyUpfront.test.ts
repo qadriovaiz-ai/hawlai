@@ -115,7 +115,12 @@ describe("all three stages state the currency before any amount", () => {
     // The model composes the confirmation sentence. Without this
     // instruction it would happily write "change to 799?" with no
     // currency at all — the gap this whole change exists to close.
-    const description = brain.slice(brain.indexOf('name: "propose_price_change"'), brain.indexOf('input_schema', brain.indexOf('name: "propose_price_change"')));
+    // THE SCHEMAS MOVED, NOT THE RULE — S6/P3a: the 59 tool schemas
+    // live in lib/businessBrain/toolSchemas.ts now, byte for byte. This
+    // read follows them. `committed()` reads git HEAD, which is why this
+    // only went red one commit AFTER the move.
+    const schemas = committed("src/lib/businessBrain/toolSchemas.ts");
+    const description = schemas.slice(schemas.indexOf('name: "propose_price_change"'), schemas.indexOf('input_schema', schemas.indexOf('name: "propose_price_change"')));
     expect(description).toMatch(/state the store's currency/i);
     expect(description).toMatch(/BEFORE the amounts/i);
   });

@@ -337,9 +337,14 @@ describe("update_lead call tool writes the generic fields", () => {
   });
 
   it("the tool offered to the AI no longer asks about vehicles", async () => {
-    const { BUSINESS_BRAIN_TOOLS } = await import("@/lib/businessBrain/toolRegistry");
+    const { BUSINESS_BRAIN_TOOLS, callParametersFor } = await import("@/lib/businessBrain/toolRegistry");
     const tool = BUSINESS_BRAIN_TOOLS.find((t) => t.name === "update_lead")!;
-    expect(Object.keys(tool.parameters)).toEqual(expect.arrayContaining(["interest", "company", "preferredDate", "currentSolution"]));
+    // THROUGH THE RESOLVER — S6/P3b. "The tool offered to the AI" is
+    // what callParametersFor answers: for a call-only tool like this
+    // one it is the registry's own map, and for a tool that also has a
+    // chat schema it is the schema's shape. Reading the field directly
+    // would stop being the thing the test is named after.
+    expect(Object.keys(callParametersFor(tool))).toEqual(expect.arrayContaining(["interest", "company", "preferredDate", "currentSolution"]));
     expect(JSON.stringify(tool)).not.toMatch(/vehicle|purchase/i);
   });
 });

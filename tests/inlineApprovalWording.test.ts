@@ -38,8 +38,13 @@ const SENDS_THEM_AWAY = [
 function priceChangeInputs(): { name: string; text: string }[] {
   const brain = committed("src/lib/agents/masterBrainV2.ts");
 
-  const toolStart = brain.indexOf('name: "propose_price_change"');
-  const toolDescription = brain.slice(toolStart, brain.indexOf("input_schema", toolStart));
+  // THE SCHEMAS MOVED, NOT THE RULE — S6/P3a: the 59 tool schemas live
+  // in lib/businessBrain/toolSchemas.ts now, byte for byte. This read
+  // follows them. `committed()` reads git HEAD, which is why this only
+  // went red one commit AFTER the move.
+  const schemas = committed("src/lib/businessBrain/toolSchemas.ts");
+  const toolStart = schemas.indexOf('name: "propose_price_change"');
+  const toolDescription = schemas.slice(toolStart, schemas.indexOf("input_schema", toolStart));
 
   const handler = brain.slice(
     brain.indexOf('case "propose_price_change": {'),

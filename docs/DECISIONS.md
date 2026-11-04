@@ -843,6 +843,64 @@ now. The rules they assert — `generate_seo` has somewhere to put the
 owner's exact line, `undo_page_edit` can be told which edit — are
 unchanged.
 
+## 4 November 2026 — S6/P3b, and the duplicate that was not one
+
+**What P3b was supposed to do:** stop the registry keeping a second
+copy of chat-tool parameters, so the four measured drifts become
+impossible.
+
+**What measuring first changed about it.** I snapshotted the live voice
+tool list before touching anything, then compared the registry's
+entries to their schemas for the two call-enabled tools. The keys, the
+types and `required` **matched**. The DESCRIPTIONS did not — and they
+differ on purpose:
+
+| | wording |
+|---|---|
+| schema (chat model) | *"Only on a FOLLOW-UP call, after a numbered list was shown. Pass it exactly. Never invent one."* |
+| registry (voice) | *"Only on a follow-up, after a numbered list was shown"* |
+
+Deriving everything from the schema — the obvious reading of "stop the
+duplicate" — would have pushed chat-prompt shouting into a live voice
+assistant's function list. **So the duplicate was only half a
+duplicate**, and the design changed: **the SHAPE has one source, the
+WORDING has two audiences.** Keys, types and `required` come from the
+schema and cannot disagree with it; a description may be overridden per
+channel, and that is now a decision rather than an accident.
+
+**The four drifts are gone by construction**, and the two overrides
+that named arguments the tools do not take (`trigger_call`'s `leadId`,
+`send_email`'s `to`) were deleted rather than left to be ignored — an
+override for a non-existent argument is a wrong word in a file the next
+person will trust. A test refuses a new one.
+
+**The snapshot is the justification for touching a live path at all:**
+the two call-enabled tools send byte-identical JSON after the change. A
+refactor of a voice path proves itself by not moving.
+
+### The miss worth recording: P3a's commit left three tests red
+
+Three tests slice a tool's description out of `masterBrainV2.ts` through
+`committed()`, which reads `git show HEAD:`. While P3a was uncommitted,
+HEAD still had the schemas, so all three were green through every gate I
+ran — and went red the moment P3a landed. **I found them in P3b's gates,
+not P3a's.** Fixed here, pointed at the schemas' new home.
+
+That is the second time today a HEAD-reading test has moved a failure
+one commit later (the first was `campaignSwitchTools` in P0). The
+pattern is worth naming: **a gate run before a commit cannot see a test
+that reads the commit.** The fix is not to stop reading HEAD — that
+property is deliberate — but to re-run the suite after a commit that
+moves code, which is now what I do.
+
+**10 mutation checks, 10 killed.** One survived first and it was a real
+gap: reverting the renderer to read `tool.parameters` directly left the
+snapshot green, because the two call-enabled tools have their own
+override maps and those maps produce exactly the snapshot — which is
+where the snapshot came from. A chat-only tool with PARTIAL overrides is
+what tells the two paths apart, and `send_email` (two overrides, eight
+arguments) is now asserted.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

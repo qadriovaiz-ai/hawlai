@@ -22,6 +22,8 @@
 // so wiring a new channel onto an existing action is "call the same
 // function from a new place," not "write new business logic."
 
+import { TOOLS } from "@/lib/businessBrain/toolSchemas";
+
 export interface BusinessBrainToolParam {
   type: "string" | "number" | "boolean";
   description: string;
@@ -31,7 +33,26 @@ export interface BusinessBrainToolParam {
 export interface BusinessBrainTool {
   name: string;
   description: string;
-  parameters: Record<string, BusinessBrainToolParam>;
+  /**
+   * For a CALL-ONLY tool: its definition. There is no chat schema, so
+   * this is the only place the arguments exist.
+   *
+   * For a tool that ALSO has a chat schema: WORDING OVERRIDES ONLY —
+   * S6/P3b. The keys, the types and which are required come from
+   * `toolSchemas.ts` and cannot disagree with it. What may differ is a
+   * DESCRIPTION, because the two have different audiences: the
+   * schema's is written for the chat model and shouts at it ("USE THIS
+   * when…", "Pass it exactly. Never invent one."), and this one is
+   * read by a voice assistant in a function list.
+   *
+   * Four of these maps had already drifted into naming arguments the
+   * tools do not take — `leadId` for a tool that takes `leadName`,
+   * `to` for one that takes `recipient` — and none of the four was
+   * call-enabled, so none had broken a call yet. `callParametersFor`
+   * is why that can no longer happen, and a test refuses an override
+   * for an argument that does not exist.
+   */
+  parameters?: Record<string, BusinessBrainToolParam>;
   channels: ("chat" | "call")[];
   handlerRef: string; // file:function pointer to the real, reusable handler
   status: "live" | "planned"; // planned = handler doesn't exist yet, tracked for Phase 2
@@ -284,9 +305,10 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   {
     name: "trigger_call",
     description: "Trigger an outbound AI phone call to a lead.",
-    parameters: {
-      leadId: { type: "string", description: "The lead to call", required: true },
-    },
+    // NO OVERRIDE. `leadId` used to be declared here for a tool that
+    // takes `leadName` (S6/P3b) — an argument that does not exist. The
+    // schema's own wording is used instead.
+    parameters: {},
     channels: ["chat"],
     handlerRef: "vapiCallAgent.ts:triggerVapiCall",
     status: "live",
@@ -319,10 +341,14 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   {
     name: "send_email",
     description: "Send an email on the business's behalf.",
+    // `to` USED TO BE DECLARED HERE for a tool that takes `recipient`
+    // (S6/P3b) — an argument that does not exist, and the kind of thing
+    // a second copy of a definition grows. The shape comes from the
+    // chat schema now; `required` comes from there too, so it is not
+    // repeated.
     parameters: {
-      to: { type: "string", description: "Recipient email", required: true },
-      subject: { type: "string", description: "Email subject", required: true },
-      body: { type: "string", description: "Email body", required: true },
+      subject: { type: "string", description: "Email subject" },
+      body: { type: "string", description: "Email body" },
     },
     channels: ["chat"],
     handlerRef: "sendDealerEmail.ts:sendDealerEmail",
@@ -474,10 +500,47 @@ export interface VapiFunctionToolDefinition {
   };
 }
 
+/**
+ * The arguments a voice assistant is told this tool takes.
+ *
+ * THE SHAPE COMES FROM THE CHAT SCHEMA when there is one — keys, types
+ * and which are required — so the registry cannot describe a tool that
+ * does not exist. THE WORDING comes from the registry when it offers
+ * one, because a voice function list and a chat prompt are read by
+ * different audiences (see BusinessBrainTool.parameters).
+ *
+ * A CALL-ONLY TOOL KEEPS ITS OWN. Seven tools exist only on the call
+ * channel and have no chat schema; for them this map IS the definition.
+ *
+ * AN ENUM OR AN ARRAY NARROWS TO `string`, and that is a known loss
+ * rather than a silent one: `BusinessBrainToolParam` has no way to
+ * express either, which is also why the definition can only ever flow
+ * schema -> here and never back (toolSchemas.ts's header).
+ */
+export function callParametersFor(tool: BusinessBrainTool): Record<string, BusinessBrainToolParam> {
+  const schema = (TOOLS as any[]).find((t) => t.name === tool.name);
+  if (!schema) return tool.parameters ?? {};
+
+  const properties: Record<string, any> = schema.input_schema?.properties ?? {};
+  const required: string[] = schema.input_schema?.required ?? [];
+  const out: Record<string, BusinessBrainToolParam> = {};
+  for (const [key, prop] of Object.entries(properties)) {
+    const declared = String((prop as any)?.type ?? "string");
+    const type: BusinessBrainToolParam["type"] =
+      declared === "number" || declared === "integer" ? "number" : declared === "boolean" ? "boolean" : "string";
+    out[key] = {
+      type,
+      description: tool.parameters?.[key]?.description ?? String((prop as any)?.description ?? ""),
+      ...(required.includes(key) ? { required: true } : {}),
+    };
+  }
+  return out;
+}
+
 export function toVapiFunctionDefinition(tool: BusinessBrainTool): VapiFunctionToolDefinition {
   const properties: Record<string, { type: string; description: string }> = {};
   const required: string[] = [];
-  for (const [key, param] of Object.entries(tool.parameters)) {
+  for (const [key, param] of Object.entries(callParametersFor(tool))) {
     properties[key] = { type: param.type, description: param.description };
     if (param.required) required.push(key);
   }

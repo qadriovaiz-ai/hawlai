@@ -211,7 +211,7 @@ tools with the most importers last.
 | **P2** | All 59 tools classified by family, re-checked against the call graph — **DONE 4 Nov**, see §11. **Deviation:** the 41 missing SCHEMAS are left to P3 rather than hand-copied here | **M** |
 | **P2a** | The two campaign-edit tools routed through `requestApproval` — inline cards, policy and risk applied — **DONE 4 Nov**, see §12. It also closed a hole P1 had opened: the row stored different words from the card | **S** |
 | **P3a** | The 59 schemas moved out of `masterBrainV2.ts` byte for byte into `businessBrain/toolSchemas.ts`; the brain keeps dispatch — **DONE 4 Nov**, see §13 | **M** |
-| **P3b** | The registry stops keeping a second copy of chat-tool parameters: derived from the schemas, so the four measured drifts cannot exist. Voice output for the two call-enabled tools pinned identical first | **M** |
+| **P3b** | The registry's chat-tool parameter SHAPE derived from the schemas, wording kept as a per-channel override — **DONE 4 Nov**, see §14. Voice output pinned identical before and after | **M** |
 | **P4** | The 8 retirements. One agent, one commit, one live check, in the §4.1 order | **L** |
 | **P5** | `oneDoorForCopy`'s remaining `MIGRATING` entries: `seoToolkitAgent`'s two customer-facing tasks, and `websiteBuilderAgent` **only if** the owner answers the block-door question (§7.3) | **S** |
 | **P6** | Exit test: nothing that changes state is reachable outside an Action; the copy door's list is shorter; the tool COUNT is reported but not targeted | **S** |
@@ -438,6 +438,34 @@ derivation changes how they are built.
 **Verified:** 9 new assertions, 8 mutation checks all killed, `tsc` 0,
 5,497 tests green, `next build` 0. Nothing here changes runtime
 behaviour.
+
+## 14. P3b, as built — 4 November 2026
+
+**The shape has one source; the wording has two audiences.**
+`callParametersFor(entry)` takes the keys, the types and `required`
+from `toolSchemas.ts` when the tool has a chat schema, and the
+description from the registry when it offers one. A call-only tool
+(seven of them) keeps its own map, because there is no schema and that
+map IS the definition.
+
+**Why not derive the descriptions too**, which is what "stop the
+duplicate" first looked like: the schema's wording is written for the
+chat model and shouts at it; the registry's is read by a voice
+assistant in a function list. Same argument, two audiences. Measuring
+before building is what caught it.
+
+**The four drifts cannot exist now**, and the two overrides that named
+arguments the tools do not take were deleted. A test refuses a new one.
+
+**The live voice list is byte-identical** before and after — the
+snapshot was taken first, and it is the only thing that justifies
+touching a path that runs on real calls.
+
+**Verified:** 10 new assertions, 10 mutation checks all killed, `tsc`
+0, 5,507 tests green, `next build` 0. **And three tests that P3a's
+commit had left red** are fixed here — they read `git show HEAD:`, so
+they went red one commit after the schemas moved and my pre-commit
+gates could not see them.
 
 ## 7. What I need decided
 
