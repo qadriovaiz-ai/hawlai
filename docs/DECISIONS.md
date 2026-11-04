@@ -690,6 +690,52 @@ gaps in my own assertions, found by writing the mutation for them:
 rather than being copied into the second one. Two lists in two files is
 two lists that drift, and a mutation that copies them back now fails.
 
+## 4 November 2026 — the auto-reply surface: audited, deferred, and one flag left standing
+
+The founder asked whether Instagram/WhatsApp auto-reply and auto-calling
+actually work or are only built. Audited from the code and from his own
+database, then **deferred by his decision** (S5/S6/S7 first). Recorded
+here because the next person to open this will otherwise re-discover it.
+
+**His production row says everything is connected and ON** — Facebook
+Page, Instagram, `dm_auto_reply_enabled`, `comment_auto_reply_enabled`,
+`auto_call_new_leads`, all true. **`auto_reply_log` has 0 rows, ever.**
+
+**That proves the handler never reached its own insert.** The write is
+inside the DM loop, after the attempt, and records `success: false` on
+failure — so this is not "it tried and could not send". Nothing was ever
+attempted.
+
+**And `autoReplyHandler.ts` cannot say why: four silent early returns**
+(no entry id, no dealership matched, no reply token, both toggles off)
+and exactly one `console.error` in 236 lines. The candidates, none
+resolved: the Callback URL not registered or `messages` not subscribed;
+`FACEBOOK_APP_SECRET` unset, which fails closed by design; the Instagram
+webhook sitting on the **separate Instagram app**, whose secret is not
+the one `verifyMetaSignature` uses; or `fb_page_id` null — the lookup
+matches that column, and the first query I gave him checked the TOKEN
+instead, which was my mistake and would have left this hidden.
+
+**Two things are not built, as distinct from not configured:** Instagram
+COMMENT replies (`channel === "facebook"` only; the handler's own
+comment says the Instagram endpoint is not built), and any
+customer-facing WhatsApp auto-reply at all — `/api/webhooks/whatsapp` is
+the owner controlling Hawlai over WhatsApp, not customers being
+answered. Both would be new surfaces and need his written reason
+(rule 5).
+
+**THE FLAG, AND IT IS HIS DECISION TO LEAVE IT:** both toggles are ON
+while the plumbing is broken. So the day anyone fixes the webhook or
+sets the env var, **unattended replies to real customers begin at that
+moment** — not at a moment he chose. I recommended switching them off
+(ungated, instant, rule 6); he chose to note it and carry on with S5/S6.
+Not re-litigated here; this paragraph is the note he asked for.
+
+**When it resumes, the agreed first step is visibility, not plumbing:**
+make the handler say where it stopped (S-sized). Fixing the webhook
+first would mean the next live test produces another round of "0 rows,
+and nobody can say why".
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
