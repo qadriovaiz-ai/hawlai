@@ -21,6 +21,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { ACTION_POLICIES, AUTOMATION_TOGGLES, getActionPolicy, toggleRisk } from "@/lib/executionPolicy";
 import { ALWAYS_REQUIRES_APPROVAL, ACTION_RISK } from "@/lib/publish/types";
+import { dispatchedActionTypes } from "@/lib/dispatch/registry";
 
 const BRAIN = "src/lib/agents/masterBrainV2.ts";
 
@@ -169,9 +170,29 @@ describe("every outbound action is gated", () => {
   it("the approvals route can actually carry out everything the tools raise", () => {
     // A tool that raises an approval nobody executes is a dead end: the
     // owner presses Approve and nothing happens.
+    //
+    // RESTATED 4 NOVEMBER 2026, AND THE PROPERTY IS UNCHANGED (S6/P1).
+    // It used to require an `action_type === …` branch IN THIS ROUTE,
+    // which was the only way an approval could be carried out. The
+    // Dispatch envelope is now a second way, so the question is no
+    // longer "is there a branch" but "is there anything at all" — and
+    // an action with NEITHER still fails, which is the dead end this
+    // test exists to catch.
     const route = readFileSync("src/app/api/approvals/[id]/route.ts", "utf8");
+    const dispatched = new Set<string>(dispatchedActionTypes());
     for (const actionType of ["place_outbound_call", "publish_video", "create_discount_code", "set_automation_toggle"]) {
-      expect(route, `the approvals route has no branch for ${actionType}`).toContain(`action_type === "${actionType}"`);
+      const carriedOut =
+        route.includes(`action_type === "${actionType}"`) || dispatched.has(actionType);
+      expect(carriedOut, `nothing carries out ${actionType}: no branch in the approvals route and no dispatcher`).toBe(true);
+    }
+    // AND NOT BOTH, for the ones the envelope owns. Two paths for one
+    // action is how one of them comes to disagree with the other, and
+    // the branch would be the one nobody notices is still there.
+    for (const actionType of dispatched) {
+      expect(
+        route.includes(`action_type === "${actionType}"`),
+        `${actionType} has a dispatcher AND a branch in the route — delete the branch`
+      ).toBe(false);
     }
   });
 

@@ -27,6 +27,7 @@
 // the approvals route, which re-reads the row and checks who is asking.
 
 import { getActionPolicy, type RiskLevel } from "@/lib/executionPolicy";
+import { dispatcherFor } from "@/lib/dispatch/registry";
 
 export type ApprovalRequest = {
   /** A key in ACTION_POLICIES. Refused if it isn't. */
@@ -105,6 +106,23 @@ export async function requestApproval(
     return { error: `Couldn't create the approval, so nothing was done: ${error?.message ?? "no row returned"}` };
   }
 
+  // THE "THIS CANNOT BE TAKEN BACK" SENTENCE COMES FROM THE DISPATCHER,
+  // NOT FROM THE CALLER — S6/P1.
+  //
+  // Every caller writes its own `confirm` line, which is right: only the
+  // caller knows what is being sent. But whether it can be UNDONE is a
+  // property of the action, not of the sentence somebody remembered to
+  // write — and a send never can be. Composing it here means a new
+  // dispatcher cannot ship a card that quietly omits it.
+  //
+  // Appended only when the caller has not already said it, so a line
+  // written by hand before this existed does not get a duplicate.
+  const dispatcher = dispatcherFor(req.actionType);
+  const confirm =
+    dispatcher && !req.confirm.includes(dispatcher.cannotBeTakenBack)
+      ? `${req.confirm} ${dispatcher.cannotBeTakenBack}`.trim()
+      : req.confirm;
+
   // The more severe of the two, so an override can raise the level and
   // never quietly lower it.
   const risk =
@@ -114,7 +132,7 @@ export async function requestApproval(
     needsApproval: true,
     approvalId: data.id,
     risk,
-    confirm: req.confirm,
+    confirm,
     // The model is told, in the words the system prompt already binds to,
     // that NOTHING has happened yet. Without this it narrates a draft row
     // as a completed action, which is finding F-X1.

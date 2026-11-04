@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { applyTargetingChange } from "@/lib/agents/campaignEditAgent";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
+import { dispatcherFor } from "@/lib/dispatch/registry";
 import { releaseApprovedAction } from "@/lib/publish/release";
 import { rejectPublishAction } from "@/lib/publish/reject";
 import { createPlatformRegistry } from "@/lib/publish/registry";
@@ -162,6 +163,32 @@ export async function PATCH(
     );
   }
 
+  // THE DISPATCH ENVELOPE — S6/P1.
+  //
+  // A registered send is carried out by its dispatcher and by nothing
+  // else. Before this, each one was an `if (action_type === …)` branch
+  // in this file: ten contracts nobody could compare, and the one that
+  // mattered most — re-read the subject before acting — was true in
+  // some and absent in others.
+  //
+  // The branches below are the ones that have NOT moved yet, each for a
+  // reason written down in lib/dispatch/registry.ts. They move one at a
+  // time, because this route carries out everything the owner approves.
+  if (status === "approved") {
+    const dispatcher = dispatcherFor(approval.action_type);
+    if (dispatcher) {
+      const done = await dispatcher.execute(
+        { service, dealershipId: approval.dealership_id },
+        approval.action_details,
+        // THE CLAIM THIS SEND IS MADE UNDER: the approval's own id. See
+        // Dispatcher.execute — the route's refusal of a decided card is
+        // what holds for the platforms that offer no idempotency key.
+        String(id)
+      );
+      if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status });
+    }
+  }
+
   // If this is approving a budget change, actually apply it on Meta —
   // approving a request should mean it happens, not just change a label.
   if (status === "approved") {
@@ -311,63 +338,6 @@ export async function PATCH(
             { status: sent.status }
           );
         }
-      }
-    }
-
-    if (approval?.action_type === "place_outbound_call") {
-      const d = approval.action_details as any;
-      // Re-read the lead rather than trusting the row: a number may have
-      // changed, or they may have opted out since the card was made.
-      const { data: lead } = await service
-        .from("leads")
-        .select("id, name, phone, dealership_id, dnd_opt_out")
-        .eq("id", d.lead_id)
-        .eq("dealership_id", approval.dealership_id)
-        .maybeSingle();
-      if (!lead) return NextResponse.json({ error: "That lead is no longer on file, so no call was placed." }, { status: 400 });
-      if (!lead.phone) return NextResponse.json({ error: `${lead.name} has no phone number on file, so no call was placed.` }, { status: 400 });
-      if (lead.dnd_opt_out) return NextResponse.json({ error: `${lead.name} has opted out of contact, so no call was placed.` }, { status: 400 });
-      const { triggerVapiCall } = await import("@/lib/agents/vapiCallAgent");
-      const called = await triggerVapiCall(service, lead);
-      if (!called.success) {
-        return NextResponse.json({ error: called.error ?? "The call didn't go through, so nothing was approved." }, { status: 500 });
-      }
-    }
-
-    if (approval?.action_type === "publish_video") {
-      const d = approval.action_details as any;
-      const { data: dealership } = await service
-        .from("dealerships")
-        .select("youtube_access_token, youtube_refresh_token, youtube_access_token_encrypted, youtube_refresh_token_encrypted, youtube_token_expiry")
-        .eq("id", approval.dealership_id)
-        .maybeSingle();
-      const { readToken, tokenWrite } = await import("@/lib/crypto/oauthSecrets");
-      const refresh = readToken(dealership, "youtube", "refresh_token");
-      if (!refresh) return NextResponse.json({ error: "YouTube isn't connected any more, so nothing was published." }, { status: 400 });
-      const { data: video } = await service
-        .from("video_generations")
-        .select("id, video_url, prompt")
-        .eq("id", d.video_id)
-        .eq("dealership_id", approval.dealership_id)
-        .maybeSingle();
-      if (!video?.video_url) return NextResponse.json({ error: "That video is no longer available, so nothing was published." }, { status: 400 });
-      const { getValidYoutubeAccessToken, uploadVideoToYouTube } = await import("@/lib/agents/youtubeAgent");
-      const { accessToken, refreshed } = await getValidYoutubeAccessToken({
-        accessToken: readToken(dealership, "youtube", "access_token") ?? "",
-        refreshToken: refresh,
-        tokenExpiry: dealership?.youtube_token_expiry,
-      });
-      if (refreshed) {
-        await service
-          .from("dealerships")
-          .update({ ...tokenWrite("youtube", "access_token", refreshed.accessToken), youtube_token_expiry: refreshed.expiry })
-          .eq("id", approval.dealership_id);
-      }
-      try {
-        const uploaded = await uploadVideoToYouTube(accessToken, video.video_url, d.title, d.description ?? video.prompt);
-        await service.from("video_generations").update({ youtube_video_id: uploaded.videoId, youtube_url: uploaded.url }).eq("id", video.id);
-      } catch (err: any) {
-        return NextResponse.json({ error: err?.message ?? "YouTube refused the upload, so nothing was published." }, { status: 500 });
       }
     }
 

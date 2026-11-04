@@ -207,7 +207,7 @@ tools with the most importers last.
 |---|---|---|
 | **P0** | The reachability test for the restated clause, with an allowlist carrying today's reality and dated reasons. **The measure, before any of the work it measures** — **DONE 4 Nov**, see §8 | **M** |
 | **P1a** | **DONE 4 Nov.** A live fault found while reading the paths P1 restructures: approving a card twice carried the action out twice — two real phone calls off one decision. One guard in the approvals route, before any branch runs. See §9 | **S** |
-| **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card**. The existing senders move onto it; `approvalCoverage`'s grep becomes a property of the envelope | **M** |
+| **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card** — **DONE 4 Nov**, two dispatchers moved, see §10 | **M** |
 | **P2** | `BUSINESS_BRAIN_TOOLS` gains `family` and grows from 18 entries to every state-changing tool. The registry becomes what the P0 test reads | **M** |
 | **P3** | The 59 schemas move out of `masterBrainV2.ts` into the registry, in batches, each with set-equality. The brain keeps dispatch only | **M** |
 | **P4** | The 8 retirements. One agent, one commit, one live check, in the §4.1 order | **L** |
@@ -309,6 +309,35 @@ broad fix belongs where every branch passes.
 tests green, `next build` 0. **Unverified live** — but the owner can see
 it: approving an already-decided card now answers with a reason instead
 of a silent repeat.
+
+## 10. P1, as built — 4 November 2026
+
+`src/lib/dispatch/`: `types.ts` (the envelope), `call.ts`, `video.ts`,
+`registry.ts`. The approvals route asks the registry and deletes the two
+branches it used to carry out itself.
+
+| Property | How it is held |
+|---|---|
+| There is no undo | `undoable` is the literal `false` — the compiler refuses `true`, and the mutation check for it runs against `tsc` |
+| The owner is told before he approves | `requestApproval` composes the dispatcher's `cannotBeTakenBack` onto the card, so a new dispatcher cannot omit it |
+| One action, one path | a registered send has no branch left in the route, asserted both ways |
+| The subject is re-read before the send | a test on the ORDER in each dispatcher, plus behavioural tests for an opt-out, a missing number, a deleted video, a disconnected channel |
+| A preview reads, it never sends | P0's own call-graph walk, applied to each `preview` body |
+| What it cannot claim | neither Vapi nor YouTube takes an idempotency key, so `once` cannot be handed on; each dispatcher says so, and the no-repeat rule is P1a's route guard |
+
+**Two moved, eight to go**, each with its reason in `registry.ts`.
+`send_email` is last on purpose: two paths (team and customer) and
+migration 208's idempotency claim. The resource edits — discount code,
+page meta, budget, targeting, activation — are not sends and belong to
+`publish/`; wrapping them in this envelope would be the
+one-type-for-everything mistake §4.2 rejected.
+
+**Verified:** 22 new assertions, 17 mutation checks all killed (one by
+the compiler), `tsc` 0, 5,464 tests green, `next build` 0. The old
+`approvalExecution` tests pass unchanged, which is what shows the move
+did not change behaviour. **Unverified live** — approving a real call or
+a real upload is a real call and a real upload, so this is covered by
+tests and by the owner's next genuine approval, not by a rehearsal.
 
 ## 7. What I need decided
 

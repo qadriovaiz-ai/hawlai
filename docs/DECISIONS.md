@@ -554,6 +554,63 @@ was removed rather than contrived into a kill: adding
 `reviewed_at` is written in the same update as the status and nowhere
 else, so it changes nothing in the test or in production.
 
+## 4 November 2026 — S6/P1, the Dispatch envelope
+
+**Two families, not one Action type**, which the architecture doc's §4.2
+settled and this builds: `publish/` is for edits to a resource — there
+is a `before`, execution re-verifies against it, undo is real — and a
+send has none of that. So `src/lib/dispatch/` has its own shape, and
+`undoable` is the **literal `false`**, not a boolean. A future
+dispatcher cannot quietly grow an undo; the compiler refuses it, which
+is where the mutation check for that property had to be aimed too.
+
+**The honest sentence is composed, not remembered.** Every tool wrote
+its own `confirm` line, and whether it mentioned that a send cannot be
+taken back was down to whoever typed it. `requestApproval` now appends
+the dispatcher's own `cannotBeTakenBack` sentence when the caller has
+not already said it. A new dispatcher cannot ship a card that omits it,
+and a test asserts the sentence is in the owner's terms — "they have
+still been called", "not unseen" — rather than "this action is
+irreversible".
+
+**Two dispatchers moved, not ten.** `place_outbound_call` and
+`publish_video`, each lifted out of the approvals route unchanged. The
+registry writes down why each remaining send has not moved, and a test
+asserts those reasons exist, because a list of "not yet" with no reasons
+is a list on which the next person moves the easy one rather than the
+right one. `send_email` is deliberately last: two paths and migration
+208's claim.
+
+**The evidence the move was faithful is the OLD tests.**
+`approvalExecution.test.ts` asserted all of this before the move — a
+call placed only after approval, the lead re-read so an opt-out is
+honoured, a video published only after approval — and passes unchanged
+after it. A new test written alongside a refactor proves the new code,
+not the sameness.
+
+**One test restated, property strengthened.** `approvalCoverage`
+required an `action_type === …` branch in the route for every gated
+action — the dead-end check. The envelope is now a second way to carry
+one out, so it asks "is there anything at all" and **also** refuses
+BOTH at once: a dispatcher plus a leftover branch is two paths for one
+action, and the branch would be the one nobody notices.
+
+**A real bug, found by my own test's last line.** `dispatcherFor`
+indexed the registry object directly, so `dispatcherFor("toString")`
+returned `Object.prototype.toString` — and the route would have called
+`.execute()` on it. `action_type` is a free-text column and
+`requestApproval` is not the only thing that inserts into
+`pending_approvals`, so "nothing would put that string there" was not a
+guarantee to rely on. One `hasOwnProperty` line.
+
+**17 mutation checks, 17 killed**, one of them against `tsc` rather
+than vitest because a literal type is checked by the compiler. Three
+needed work and two were mine: a grep for the idempotency claim that
+matched `String(id)` somewhere ELSE in the route (the decision row at
+the bottom), and a "preview sends" mutation that only imported the
+sender without calling it — a mutation that does not do the thing is not
+a test of whether the thing is caught.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
