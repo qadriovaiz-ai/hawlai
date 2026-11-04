@@ -166,45 +166,6 @@ describe("1. EVERY TOOL IS CLASSIFIED, AND EVERY CLASSIFICATION IS A TOOL", () =
   });
 });
 
-/**
- * TOOLS THAT WRITE THEIR OWN APPROVAL ROW — A DEFECT, NOT A DECISION.
- *
- * FOUND BY THIS FILE, 4 November 2026. Both campaign-edit tools insert
- * into `pending_approvals` directly instead of going through
- * `requestApproval`, whose own header says why there is one writer:
- * "so the three places a decision happens cannot each invent their own
- * shape".
- *
- * WHAT BYPASSING IT COSTS, read off the two code paths:
- *
- *   1. no ACTION_POLICIES check. requestApproval refuses an action
- *      nobody has classified, because "absence is not safe by
- *      default"; a direct insert writes the row regardless and the
- *      route still carries it out.
- *   2. no risk level, so the card cannot show one.
- *   3. no approvalId back, so the chat card has no inline
- *      Approve/Reject — which is why these two tools END BY SENDING
- *      THE OWNER TO /dashboard/approvals. Every other card is decided
- *      in the message it appears in, and the tool registry's own
- *      entries say "Never directs them to a separate page."
- *   4. none of requestApproval's note, which is what stops the model
- *      narrating a draft row as a completed action.
- *
- * NOT an authority hole: the budget insert does set `amount`, so the
- * approval threshold still sees the number. Checked, because that
- * would have been the serious version of this.
- *
- * THIS LIST IS A DEFECT LIST, and it is deliberately NOT the
- * ungated-by-decision list — that one records choices. An entry here
- * is work owed, the fix is S6/P2a, and the test below fails if the
- * list grows or if an entry is fixed without being deleted.
- */
-const RAISES_ITS_OWN_APPROVAL: Record<string, string> = {
-  propose_campaign_budget_change:
-    "2026-11-04, S6/P2: inserts into pending_approvals directly with action_type change_campaign_budget. Fix is P2a — route it through requestApproval and return the card inline.",
-  propose_campaign_targeting_change:
-    "2026-11-04, S6/P2: the same body, action_type change_campaign_targeting, same direct insert. Fix is P2a.",
-};
 
 describe("2. A LABEL IS CHECKED AGAINST THE CODE, NOT TRUSTED", () => {
   const cases = toolCases();
@@ -269,8 +230,6 @@ describe("2. A LABEL IS CHECKED AGAINST THE CODE, NOT TRUSTED", () => {
     const offences: string[] = [];
     for (const tool of [...toolsInFamily("ResourceEdit"), ...toolsInFamily("Dispatch")]) {
       if (SHARE_A_BODY[tool]) continue;
-      // Recorded defects, with the fix named. Not exemptions.
-      if (RAISES_ITS_OWN_APPROVAL[tool]) continue;
       const body = bodyFor(cases, tool);
       const doors = reachable(body, DOORS, [], { index });
       if (doors.found.length) continue;
@@ -280,33 +239,85 @@ describe("2. A LABEL IS CHECKED AGAINST THE CODE, NOT TRUSTED", () => {
     expect(offences, offences.join("\n")).toEqual([]);
   });
 
-  it("THE TOOLS THAT WRITE THEIR OWN APPROVAL ROW ARE EXACTLY THE TWO ON RECORD", () => {
-    // SHRINK-ONLY, the rule oneDoorForCopy.test.ts already runs on:
-    // a third tool doing this fails here, and a fixed one fails until
-    // its entry is deleted. The list cannot quietly become normal.
+  it("NO TOOL WRITES ITS OWN APPROVAL ROW", () => {
+    // S6/P2a. This started as a DEFECT LIST with two entries and a
+    // named fix, on the shrink-only rule oneDoorForCopy.test.ts
+    // already runs: a fixed entry fails the suite until it is deleted.
+    // The fix landed, both entries went, and the rule is now universal
+    // — which is the end state that list existed to reach.
+    //
+    // WHY IT MATTERS, from requestApproval's own header: one writer,
+    // "so the three places a decision happens cannot each invent their
+    // own shape". A direct insert skips the ACTION_POLICIES check
+    // (which refuses an action nobody classified), the risk level, and
+    // the approval id the inline card needs.
     const direct: string[] = [];
     for (const [tool] of cases) {
-      const body = bodyFor(cases, tool);
-      if (/from\("pending_approvals"\)\s*\.insert/.test(body)) direct.push(tool);
+      if (/from\("pending_approvals"\)\s*\.insert/.test(bodyFor(cases, tool))) direct.push(tool);
     }
-    expect(direct.sort(), "a tool writes its own approval row and is not on the defect list").toEqual(
-      Object.keys(RAISES_ITS_OWN_APPROVAL).sort()
-    );
-    for (const [tool, why] of Object.entries(RAISES_ITS_OWN_APPROVAL)) {
-      expect(why, `${tool} needs the date`).toMatch(/20\d\d-\d\d-\d\d/);
-      expect(why, `${tool} needs the fix named`).toMatch(/P2a/);
-    }
+    expect(
+      direct,
+      `These tools write an approval row themselves. Route them through requestApproval instead:\n${direct.join("\n")}`
+    ).toEqual([]);
   });
 
-  it("AND THEY ARE THE ONLY TOOLS THAT SEND THE OWNER TO ANOTHER PAGE", () => {
-    // The owner-visible half of the same defect: every other card is
-    // decided in the message it appears in.
+  it("AND NO TOOL SENDS THE OWNER TO ANOTHER PAGE TO APPROVE SOMETHING", () => {
+    // The owner-visible half of the same thing. Every card is decided
+    // in the message it appears in — the tool registry's own entries
+    // say "Never directs them to a separate page", and before P2a the
+    // two campaign tools did exactly that because they had no approval
+    // id to put on a card.
     const offenders: string[] = [];
     for (const [tool] of cases) {
-      const body = bodyFor(cases, tool);
-      if (/dashboard\/approvals/.test(body)) offenders.push(tool);
+      if (/dashboard\/approvals/.test(bodyFor(cases, tool))) offenders.push(tool);
     }
-    expect(offenders.sort()).toEqual(Object.keys(RAISES_ITS_OWN_APPROVAL).sort());
+    expect(offenders, offenders.join("; ")).toEqual([]);
+  });
+
+  it("AND THE TWO CAMPAIGN TOOLS NOW REACH THE ONE WRITER", () => {
+    // Named, because they are what P2a was: a general rule that is
+    // true because nothing currently breaks it is weaker than a rule
+    // plus the case it was written for.
+    // EACH NAMES ITS OWN ACTION TYPE. A pattern matching either one
+    // passed when they were swapped, which would route a targeting
+    // change through the budget policy — a different risk level and a
+    // different threshold.
+    const expected: Record<string, string> = {
+      propose_campaign_budget_change: "change_campaign_budget",
+      propose_campaign_targeting_change: "change_campaign_targeting",
+    };
+    for (const [tool, actionType] of Object.entries(expected)) {
+      const body = bodyFor(cases, tool);
+      expect(body, tool).toMatch(/requestApproval\(/);
+      // The two branches live in one body, so each is sliced by its own
+      // `toolName ===` test rather than searched for in the whole.
+      const branch = tool.includes("budget")
+        ? body.slice(body.indexOf('if (toolName === "propose_campaign_budget_change")'), body.indexOf("} else {"))
+        : body.slice(body.indexOf("} else {"));
+      expect(branch.length, `${tool}: the branch could not be sliced`).toBeGreaterThan(200);
+      expect(branch, `${tool} must name ${actionType}`).toContain(`actionType: "${actionType}"`);
+      expect(branch, `${tool} must not name the other action type`).not.toContain(
+        `actionType: "${actionType === "change_campaign_budget" ? "change_campaign_targeting" : "change_campaign_budget"}"`
+      );
+    }
+    // AND THE BUDGET ONE STILL SENDS THE AMOUNT, which is what the
+    // approval threshold reads. Losing it would let any budget pass a
+    // manager's ceiling.
+    expect(bodyFor(cases, "propose_campaign_budget_change")).toMatch(/amount: proposal\.new_budget/);
+  });
+
+  it("AND THEIR CARD CARRIES THE APPROVAL, so Approve is in the message", () => {
+    // The owner-visible half of P2a. A grep for `confirm: result.confirm`
+    // anywhere in the file passed while THIS card lost its id — the
+    // string appears in three other branches.
+    const brain = code("src/lib/agents/masterBrainV2.ts");
+    const at = brain.indexOf('case "propose_campaign_budget_change":', brain.indexOf("export function extractArtifact"));
+    expect(at, "the card branch is gone").toBeGreaterThan(-1);
+    const branch = brain.slice(at, brain.indexOf('case "manage_watch"', at));
+    expect(branch).toMatch(/approval: \{ id: result\.approvalId \}/);
+    expect(branch).toMatch(/confirm: result\.confirm/);
+    // And it no longer tells him it is merely waiting.
+    expect(branch).not.toMatch(/Waiting for approval/);
   });
 
   it("THE TOOLS THAT SHARE A BODY ARE EXACTLY THE ONES ON RECORD", () => {

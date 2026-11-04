@@ -2856,32 +2856,63 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         return { error: (campaigns ?? []).length === 0 ? "You don't have any launched campaigns yet." : "Couldn't tell which campaign you meant — can you name it more specifically?" };
       }
 
-      const { createServiceClient } = await import("../supabase/service");
-      const serviceClient = createServiceClient();
+      // THROUGH THE ONE WRITER — S6/P2a. These two branches used to
+      // insert into `pending_approvals` themselves, which cost three
+      // things that requestApproval does for every other gated action:
+      // the ACTION_POLICIES check (it refuses an action nobody has
+      // classified, because absence is not safe by default), the risk
+      // level, and the approval id — and without an id there is no
+      // inline Approve/Reject, which is why both branches used to end
+      // by sending the owner to /dashboard/approvals. Every other card
+      // is decided in the message it appears in.
+      //
+      // Found by tests/toolFamilies.test.ts: labelled ResourceEdit,
+      // reached no Action at all.
+      const { requestApproval } = await import("../chat/requestApproval");
 
       if (toolName === "propose_campaign_budget_change") {
         const proposal = await proposeBudgetChange(campaign, input.change_request, { supabase, dealershipId: ctx.id });
         if (!proposal) return { error: "Couldn't work out the new budget from that — try giving a specific number, e.g. 'change it to ₹2000/day'." };
-        const { error } = await serviceClient.from("pending_approvals").insert({
-          dealership_id: ctx.id,
-          requested_by_agent: "master_chat_campaign_edit",
-          action_type: "change_campaign_budget",
-          action_details: { campaign_id: campaign.id, campaign_name: campaign.headline, old_budget: campaign.daily_budget, new_budget: proposal.new_budget },
+        const budgetConfirm = `This changes the daily budget on "${campaign.headline}" from ₹${campaign.daily_budget} to ₹${proposal.new_budget} a day.`;
+        const asked = await requestApproval(supabase, ctx.id, {
+          actionType: "change_campaign_budget",
+          requestedBy: "master_chat_campaign_edit",
+          details: { campaign_id: campaign.id, campaign_name: campaign.headline, old_budget: campaign.daily_budget, new_budget: proposal.new_budget },
+          // THE AMOUNT IS WHAT THE APPROVAL THRESHOLD READS. The old
+          // insert set it too; losing it here would let any budget pass
+          // a manager's ceiling.
           amount: proposal.new_budget,
+          confirm: budgetConfirm,
         });
-        if (error) return { error: error.message };
-        return { success: true, campaign: campaign.headline, summary: proposal.summary, note: "Sent to Approvals — go to /dashboard/approvals to review and approve it." };
+        if ("error" in asked) return { error: asked.error };
+        return {
+          success: true,
+          campaign: campaign.headline,
+          summary: proposal.summary,
+          approvalId: asked.approvalId,
+          confirm: asked.confirm,
+          note: asked.note,
+        };
       } else {
         const proposal = await proposeTargetingChange(campaign, input.change_request, { supabase, dealershipId: ctx.id });
         if (!proposal) return { error: "Couldn't work out the targeting change from that — try being more specific about age range or gender." };
-        const { error } = await serviceClient.from("pending_approvals").insert({
-          dealership_id: ctx.id,
-          requested_by_agent: "master_chat_campaign_edit",
-          action_type: "change_campaign_targeting",
-          action_details: { campaign_id: campaign.id, campaign_name: campaign.headline, age_min: proposal.age_min, age_max: proposal.age_max, genders: proposal.genders, estimated_impact: proposal.estimated_impact },
+        const targetingConfirm = `This changes who "${campaign.headline}" is shown to: ${proposal.summary}`;
+        const asked = await requestApproval(supabase, ctx.id, {
+          actionType: "change_campaign_targeting",
+          requestedBy: "master_chat_campaign_edit",
+          details: { campaign_id: campaign.id, campaign_name: campaign.headline, age_min: proposal.age_min, age_max: proposal.age_max, genders: proposal.genders, estimated_impact: proposal.estimated_impact },
+          confirm: targetingConfirm,
         });
-        if (error) return { error: error.message };
-        return { success: true, campaign: campaign.headline, summary: proposal.summary, impact: proposal.estimated_impact, note: "Sent to Approvals — go to /dashboard/approvals to review and approve it." };
+        if ("error" in asked) return { error: asked.error };
+        return {
+          success: true,
+          campaign: campaign.headline,
+          summary: proposal.summary,
+          impact: proposal.estimated_impact,
+          approvalId: asked.approvalId,
+          confirm: asked.confirm,
+          note: asked.note,
+        };
       }
     }
     case "get_follow_up_reminders": {
@@ -4479,7 +4510,16 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       };
     case "propose_campaign_budget_change":
     case "propose_campaign_targeting_change":
-      return { kind: "record", label: `Change requested: ${result.campaign}`, summary: `${result.summary}${result.impact ? ` ${result.impact}` : ""} Waiting for approval.`, departmentHref };
+      // S6/P2a: an approval id means Approve/Reject in THIS message.
+      // Before it, this card said "Waiting for approval" and the tool
+      // told the owner to go to another page to give it.
+      return {
+        kind: "record",
+        label: `Change requested: ${result.campaign}`,
+        summary: `${result.summary}${result.impact ? ` ${result.impact}` : ""}`.trim(),
+        departmentHref,
+        ...(result.approvalId ? { approval: { id: result.approvalId }, confirm: result.confirm } : {}),
+      };
     case "manage_watch":
       return { kind: "record", label: "Watch added", departmentHref };
     case "remember_insight":

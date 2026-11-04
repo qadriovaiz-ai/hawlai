@@ -246,17 +246,56 @@ describe("EVERY approval card stores the words it showed", () => {
       // conditional `{ depiction_note }` inside its details, and a
       // brace-free pattern could not find the object at all.
       const details = body.match(/details:\s*\{(?:[^{}]|\{[^{}]*\})*\}/)?.[0] ?? "";
-      // It must be passed as the confirm AND stored in the details.
+      // IT MUST PASS A CONFIRM. Whether that sentence reaches the ROW
+      // is no longer each caller's job — see the next test: S6/P2a
+      // moved it into requestApproval, which spreads the composed
+      // sentence onto action_details. Asserting it per call site was
+      // the weaker version of the same rule, and it could not see that
+      // the stored words had stopped matching the shown ones.
       if (!/confirm:/.test(body)) missing.push(`${action}: no confirm passed at all`);
       else if (!details) missing.push(`${action}: could not find its details object`);
-      else if (!/confirm/.test(details)) missing.push(`${action}: confirm shown but not stored on the row`);
+      void details;
     }
     expect(missing, missing.join("\n")).toEqual([]);
   });
 
+  it("THE ROW STORES THE WORDS THAT WILL BE SHOWN, in one place", () => {
+    // S6/P2a. The sentence is composed (S6/P1 appends the dispatcher's
+    // "cannot be taken back" clause) and THEN written, so the row and
+    // the card cannot disagree. Before this, P1's composition reached
+    // the card and the row kept the caller's shorter version.
+    const writer = code("src/lib/chat/requestApproval.ts");
+    expect(writer).toMatch(/action_details: \{ \.\.\.req\.details, confirm \}/);
+    // And composed BEFORE the insert, or `confirm` would not exist yet.
+    expect(writer.indexOf("const confirm =")).toBeLessThan(writer.indexOf("action_details:"));
+  });
+
+  it("AND THE STORED SENTENCE REALLY IS THE COMPOSED ONE", async () => {
+    // Run, not grepped: the dispatcher's clause must be on the row.
+    const { requestApproval } = await import("@/lib/chat/requestApproval");
+    const { DISPATCHERS } = await import("@/lib/dispatch/registry");
+    let stored: any = null;
+    const supabase = {
+      from: () => ({
+        insert: (row: any) => {
+          stored = row;
+          return { select: () => ({ single: async () => ({ data: { id: "ap-1" }, error: null }) }) };
+        },
+      }),
+    };
+    const result: any = await requestApproval(supabase, "d1", {
+      actionType: "place_outbound_call",
+      details: { lead_id: "lead-1" },
+      confirm: "This places a real phone call to Asha now.",
+      requestedBy: "test",
+    });
+    expect(stored.action_details.confirm).toBe(result.confirm);
+    expect(stored.action_details.confirm).toContain(DISPATCHERS.place_outbound_call.cannotBeTakenBack);
+    // The caller's own details survive beside it.
+    expect(stored.action_details.lead_id).toBe("lead-1");
+  });
+
   it("and the card renders the stored words rather than its own copy", () => {
-    // The artifact carries `confirm` straight from requestApproval's
-    // return, which is the same string written to the row.
     const brain = code("src/lib/agents/masterBrainV2.ts");
     expect(brain).toMatch(/confirm: result\.confirm/);
     expect(brain).toMatch(/confirm: asked\.confirm/);

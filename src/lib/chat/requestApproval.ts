@@ -90,22 +90,6 @@ export async function requestApproval(
     return { error: `"${req.actionType}" is not approval-gated, so it should not be routed through here.` };
   }
 
-  const { data, error } = await supabase
-    .from("pending_approvals")
-    .insert({
-      dealership_id: dealershipId,
-      requested_by_agent: req.requestedBy,
-      action_type: req.actionType,
-      action_details: req.details,
-      amount: req.amount ?? null,
-    })
-    .select("id")
-    .single();
-
-  if (error || !data?.id) {
-    return { error: `Couldn't create the approval, so nothing was done: ${error?.message ?? "no row returned"}` };
-  }
-
   // THE "THIS CANNOT BE TAKEN BACK" SENTENCE COMES FROM THE DISPATCHER,
   // NOT FROM THE CALLER — S6/P1.
   //
@@ -122,6 +106,37 @@ export async function requestApproval(
     dispatcher && !req.confirm.includes(dispatcher.cannotBeTakenBack)
       ? `${req.confirm} ${dispatcher.cannotBeTakenBack}`.trim()
       : req.confirm;
+
+  const { data, error } = await supabase
+    .from("pending_approvals")
+    .insert({
+      dealership_id: dealershipId,
+      requested_by_agent: req.requestedBy,
+      action_type: req.actionType,
+      // THE WORDS THE OWNER WILL READ, ON THE ROW — and composed, not
+      // the caller's raw line.
+      //
+      // S6/P2a, fixing something S6/P1 broke quietly. P1 made this
+      // function APPEND the dispatcher's "cannot be taken back"
+      // sentence to what the caller wrote, and returned the composed
+      // string for the card — while the row went on storing the
+      // caller's version. So a call card showed one sentence and the
+      // record kept a shorter one, which is exactly what
+      // sitePublishGuard.test.ts's invariant exists to prevent: "a card
+      // that shows words it did not store leaves 'who approved this and
+      // what did it say' answerable only from a client string".
+      //
+      // Stored here rather than left to each caller, so no caller can
+      // get it wrong and none has to remember.
+      action_details: { ...req.details, confirm },
+      amount: req.amount ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    return { error: `Couldn't create the approval, so nothing was done: ${error?.message ?? "no row returned"}` };
+  }
 
   // The more severe of the two, so an override can raise the level and
   // never quietly lower it.

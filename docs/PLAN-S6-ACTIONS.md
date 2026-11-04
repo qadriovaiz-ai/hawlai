@@ -209,7 +209,7 @@ tools with the most importers last.
 | **P1a** | **DONE 4 Nov.** A live fault found while reading the paths P1 restructures: approving a card twice carried the action out twice — two real phone calls off one decision. One guard in the approvals route, before any branch runs. See §9 | **S** |
 | **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card** — **DONE 4 Nov**, two dispatchers moved, see §10 | **M** |
 | **P2** | All 59 tools classified by family, re-checked against the call graph — **DONE 4 Nov**, see §11. **Deviation:** the 41 missing SCHEMAS are left to P3 rather than hand-copied here | **M** |
-| **P2a** | The two campaign-edit tools write their own `pending_approvals` row instead of going through `requestApproval`, so their cards are not inline and send the owner to another page. Found by P2's measure | **S** |
+| **P2a** | The two campaign-edit tools routed through `requestApproval` — inline cards, policy and risk applied — **DONE 4 Nov**, see §12. It also closed a hole P1 had opened: the row stored different words from the card | **S** |
 | **P3** | The 59 schemas move out of `masterBrainV2.ts` into the registry, in batches, each with set-equality. The brain keeps dispatch only | **M** |
 | **P4** | The 8 retirements. One agent, one commit, one live check, in the §4.1 order | **L** |
 | **P5** | `oneDoorForCopy`'s remaining `MIGRATING` entries: `seoToolkitAgent`'s two customer-facing tasks, and `websiteBuilderAgent` **only if** the owner answers the block-door question (§7.3) | **S** |
@@ -375,6 +375,38 @@ properly. P2 did the classification; P3 moves the definitions.
 **Verified:** 18 new assertions, 12 mutation checks all killed, `tsc`
 0, 5,484 tests green, `next build` 0. Nothing here changes runtime
 behaviour.
+
+## 12. P2a, as built — 4 November 2026
+
+**What the owner sees:** asking chat to change a campaign's budget or
+targeting now produces a card with **Approve and Reject in the same
+message**. Before this, both tools ended by telling him to go to
+`/dashboard/approvals`, because they had no approval id to put on a
+card — they wrote the row themselves.
+
+**What it gains underneath:** the `ACTION_POLICIES` check (which refuses
+an action nobody has classified), the risk level, and
+`requestApproval`'s note that stops the model narrating a draft as done.
+The budget call still passes `amount`, which the approval threshold
+reads.
+
+**The defect list deleted itself**, which is what a shrink-only list is
+for: the fix landed, the list went stale, the suite went red, and the
+two entries were removed. Both assertions are now universal — no tool
+writes its own approval row, no tool sends the owner elsewhere to
+approve.
+
+**And it closed a hole P1 had opened.** P1's composed "cannot be taken
+back" sentence reached the card but not the row, so the record kept
+different words from the card. `requestApproval` now composes BEFORE the
+insert and stores the composed sentence, and the guard was restated to
+assert the one place that holds it — with a test that runs the writer
+rather than grepping for a key.
+
+**Verified:** 3 new assertions, 8 mutation checks all killed, `tsc` 0,
+5,488 tests green, `next build` 0. **Unverified live** — the next real
+campaign-budget request will show the inline card; nothing here was
+rehearsed against Meta.
 
 ## 7. What I need decided
 

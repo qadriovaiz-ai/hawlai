@@ -736,6 +736,55 @@ make the handler say where it stopped (S-sized). Fixing the webhook
 first would mean the next live test produces another round of "0 rows,
 and nobody can say why".
 
+## 4 November 2026 — S6/P2a, and a hole S6/P1 had quietly opened
+
+**The fix P2's measure asked for.** Both campaign-edit tools now go
+through `requestApproval`, so they get the `ACTION_POLICIES` check, the
+risk level (`change_campaign_budget` is high, `change_campaign_targeting`
+medium) and an approval id — which means **Approve and Reject are in the
+chat message now**, where every other card already was. The two
+`/dashboard/approvals` dead ends are gone, and the budget call still
+sends `amount`, which is what the approval threshold reads.
+
+**The defect list did its job and then deleted itself.** P2 recorded
+these two on a shrink-only list with the fix named; when the fix landed,
+the suite went RED because the list was stale — exactly as designed —
+and the two entries went. The two assertions that guarded them are now
+universal: **no tool writes its own approval row**, and **no tool sends
+the owner to another page to approve something.** That is the end state
+the list existed to reach.
+
+### And the hole P1 had opened, found by a guard I did not know about
+
+`sitePublishGuard.test.ts` holds an invariant: *"the sentence the owner
+reads has to be on the row"*, because *"a card that shows words it did
+not store leaves 'who approved this and what did it say' answerable only
+from a client string"*.
+
+**S6/P1 broke it.** P1 made `requestApproval` APPEND the dispatcher's
+"cannot be taken back" sentence and return the composed string for the
+card — while the row went on storing the caller's shorter version. So a
+call card showed one sentence and the record kept another.
+
+**And the guard did not catch it**, because it only checked that a
+`confirm` key existed in each call's details, not that it matched what
+was shown. One hole, two lessons: the composition now happens BEFORE the
+insert and `action_details` carries it (`{ ...req.details, confirm }`),
+so there is one sentence and one place that writes it; and the guard was
+restated from "twenty call sites each remembered to" to "the one place
+that guarantees it", with a test that RUNS the writer and compares the
+stored string to the returned one rather than grepping for a key.
+
+**8 mutation checks, 8 killed**, including the old fault put back. Two
+needed work and both were loose assertions of mine, found by writing
+their mutations: a pattern matching `change_campaign_(budget|targeting)`
+passed when the two action types were SWAPPED — which would route a
+targeting change through the budget policy, a different risk level and a
+different threshold — and a grep for `confirm: result.confirm` anywhere
+in the file passed while this particular card lost its approval id,
+because that string appears in three other branches. Both are now sliced
+to the branch they are about.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
