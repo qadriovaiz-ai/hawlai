@@ -205,7 +205,7 @@ tools with the most importers last.
 
 | Phase | What | Size |
 |---|---|---|
-| **P0** | The reachability test for the restated clause, with an allowlist carrying today's reality and dated reasons. **The measure, before any of the work it measures.** | **M** |
+| **P0** | The reachability test for the restated clause, with an allowlist carrying today's reality and dated reasons. **The measure, before any of the work it measures** — **DONE 4 Nov**, see §8 | **M** |
 | **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card**. The existing senders move onto it; `approvalCoverage`'s grep becomes a property of the envelope | **M** |
 | **P2** | `BUSINESS_BRAIN_TOOLS` gains `family` and grows from 18 entries to every state-changing tool. The registry becomes what the P0 test reads | **M** |
 | **P3** | The 59 schemas move out of `masterBrainV2.ts` into the registry, in batches, each with set-equality. The brain keeps dispatch only | **M** |
@@ -242,6 +242,46 @@ not financial — the opposite of S2's.
   comes back to the owner as a question before any SQL.
 
 ---
+
+## 8. P0, as built — 4 November 2026
+
+All four decisions came back as recommended: the new clause; both
+deferred agents stay deferred; `websiteBuilderAgent`'s door is left for
+later with its reason; and only the four unambiguous retirements are in
+scope.
+
+**What landed:**
+
+| Piece | Where |
+|---|---|
+| The walk, with what it can and cannot see written down | `tests/helpers/reachability.ts` |
+| The measure: no tool reaches the outside world without an Action | `tests/stateChangeDoor.test.ts` — 15 assertions |
+| The money path split from the free one | `masterBrainV2.ts` — `resolveCampaignForSwitch` / `pauseMetaCampaign` / `activateMetaCampaign` |
+| The clause itself, withdrawn and replaced with his date | `PLAN-CORE-ARCHITECTURE.md` §3 and §4.3 |
+
+**Doors are walls.** The walk never enters an Action, so a sender it can
+still reach is a sender reachable without one. The platform factories
+are walls too, and a separate assertion licenses that: a platform's
+`preview`/`execute` is invoked ONLY inside `src/lib/publish/`. Without
+that invariant the walls would hide the very call this is for.
+
+**Two ungated paths, both by a recorded decision**, and the list is
+frozen so a third is a visible edit: `pause_meta_campaign` (rule 6) and
+`send_email`'s team path (approved 2026-09-14). An entry whose path
+closes **fails the suite until it is deleted**, the same rule
+`oneDoorForCopy.test.ts` has, so the list can only shrink. The money
+step is not on it and a test asserts it never will be.
+
+**The split was not in the plan**, and it is the one deviation: without
+it the walk could not tell `activate_meta_campaign` from
+`pause_meta_campaign`, and the only alternative was allowlisting the
+money step. `docs/DECISIONS.md` has the whole of it.
+
+**Verified:** 18 new assertions across a new test and a new helper, 11
+mutation checks all killed, `tsc` 0, 5,439 tests green, `next build` 0.
+**Unverified:** nothing here changes runtime behaviour, so there is
+nothing live to check — the split is covered by the three test files
+that run those functions against a fake Meta and a database double.
 
 ## 7. What I need decided
 

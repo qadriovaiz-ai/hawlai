@@ -442,6 +442,72 @@ shape: no second business in the fixture, so the results job's
   double's own `created_at` stamp, which no assertion depends on. Scoped
   to exclude the double rather than deleted.
 
+## 4 November 2026 — S6/P0, and what the measure found before it was finished
+
+**The founder replaced S6's exit clause** (decision 1 of 4): *"nothing
+that changes state is reachable except through an Action"*, and
+*"tool count falls"* is withdrawn. The architecture doc's §3 row and
+§4.3 now say so with his date. The old clause could be satisfied by
+deleting the analytics tool.
+
+**Building the measure found two things, and one of them needed fixing
+before the measure could be honest.**
+
+**1. `approvalCoverage.test.ts` is one hop deep.** It greps each tool's
+`case` body for the symbols that reach the outside world. Two tools'
+bodies were one line, delegating to `switchMetaCampaign`. The money step
+behind that call WAS gated — I checked, it goes through
+`createPublishAction` — but that grep could not see it, so the grep was
+not what kept it gated. Both tests are kept: the grep asserts the SHAPE
+of each gate (that `send_email` proposes, that the five audited actions
+name their action type), the new walk asserts reachability.
+
+**2. One function served both campaign directions.** Starting a
+campaign is approval-gated; pausing is direct by policy (rule 6, the
+safe direction must not be the slow one). Both correct, both in one body
+behind `if (kind === "pause")`. **A call graph cannot see which branch a
+caller takes**, so anything following `activate_meta_campaign` arrived
+at the pause path's direct Meta call and read the money step as
+ungated. The only way to quieten that would have been to allowlist the
+money step — the one entry such a list must never carry — so the
+function was split into `resolveCampaignForSwitch` /
+`pauseMetaCampaign` / `activateMetaCampaign`. No behaviour change;
+three test files that CALL it now call the direction they test, and four
+source-grep assertions were restated against the split and are stronger
+for it.
+
+**A guard that reads `git show HEAD:` cannot be green in the commit that
+changes what it guards.** `campaignSwitchTools.test.ts` does that
+deliberately, so its four assertions were red for exactly one commit and
+green immediately after. Recorded because the alternative — making
+`committed()` fall back to the working tree — would have destroyed the
+property that file exists for. The same assertion now also exists
+against the working tree in `stateChangeDoor.test.ts`, so a merge of the
+two directions fails before it is committed as well as after.
+
+**11 mutation checks, 11 killed.** Four needed work, and three of those
+were my own:
+
+- a mutation deleting the walker's property-call sweep survived, because
+  a word boundary matches after a dot: the plain-identifier regex
+  already collected `client.sendWhatsAppText(`. **The line was removed**
+  rather than kept as insurance no test could hold.
+- a mutation that returned early from the pause path survived, because
+  the walk reads CALLS, not control flow, and the call stood below it as
+  dead code. Rewritten to what "the path closed" actually looks like:
+  the call going away.
+- one mutation left a syntax error behind, which is a crash and not a
+  test of anything; and one expected the wrong test name, which it
+  reached by a different assertion that was a genuine kill.
+
+**And two of this project's own guards caught me inside one hour:** the
+drift check I had just written matched the words "sends" and "posts" out
+of prose and nothing else — vacuous and green, the exact failure its own
+section 2 exists to prevent — and `noControlCharsInSource.test.ts`
+caught a literal backspace my patch script wrote into a comment where a
+regex word-boundary escape was meant. That test's name says *"a \b
+eaten by a script is the reason"*. It was.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

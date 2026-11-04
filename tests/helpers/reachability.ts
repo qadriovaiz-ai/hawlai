@@ -137,10 +137,11 @@ export function functionIndex(root = "src"): FunctionIndex {
 export function callsIn(body: string): string[] {
   const names = new Set<string>();
   for (const m of body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) names.add(m[1]);
-  // Property calls — `supabase.from(...)`, `platform.execute(...)` —
-  // are collected by their property name too, so a door or a sender
-  // reached as a method is still seen.
-  for (const m of body.matchAll(/\.\s*([A-Za-z_$][\w$]*)\s*\(/g)) names.add(m[1]);
+  // A METHOD CALL NEEDS NO SECOND PASS. a word boundary matches after the dot, so
+  // the regex above already collects `client.sendWhatsAppText(` as
+  // `sendWhatsAppText`. The first version of this file had a separate
+  // property-call sweep here; a mutation deleting it survived, because
+  // it never added a name the line above had not already found.
 
   // `{ realName: localName }` inside a destructure, in either a
   // `const { … } =` or an import. The value side is what the body

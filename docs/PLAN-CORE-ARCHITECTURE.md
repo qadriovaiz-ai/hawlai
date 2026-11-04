@@ -598,7 +598,7 @@ run by hand.
 | **S3 — PLANNED ([PLAN-S3-RESOURCE-EDIT.md](PLAN-S3-RESOURCE-EDIT.md))** C4 Actions for site edits + C6 levels (L0/L1) | **M** | **`undo()` for page text.** `publish/types.ts:74-79` records that `website_pages` IS what `/site/{slug}` renders — there is no draft layer, so an approved edit is public the moment it saves. Undo must restore a stored previous version, which means storing one | *"Approve in UI -> change live -> verify -> undo works, on candle_by_qaaf"* |
 | **S4** C3 Growth Manager v1 + daily report | **L** | **Self-calls.** A seven-stage loop built as route-to-route calls hits the Vercel 508 at ~4 hops, and `/api/autopilot/daily-run` is the exact route that did it before | *"Daily email arrives with only counted numbers; each suggestion cites evidence and the goal it serves"* |
 | **S5** C5 outcome records + results job; 90-day strategy; monthly review | **M** | **The 28-day wait is unfalsifiable until it elapses.** Nothing can be verified live for a month, so the check-date job needs its own test with a frozen clock | *"After 28 days, each executed action has an outcome row"* |
-| **S6** Remaining tools into Actions; retire duplicate agents; autopilot through C2+C6 | **L** | **Retiring an agent whose route is still live.** Each duplicate has one or two importing routes (§4.2), so each retirement is a production route change, not a deletion | *"Tool count falls; no surface writes copy outside C2 (test that greps for direct model calls in customer-copy paths)"* — the second half already exists, see §4.4 |
+| **S6 — IN PROGRESS ([PLAN-S6-ACTIONS.md](PLAN-S6-ACTIONS.md))** Remaining tools into Actions; retire duplicate agents; autopilot through C2+C6 | **L** | **Retiring an agent whose route is still live.** Each duplicate has one or two importing routes (§4.2), so each retirement is a production route change, not a deletion | **RESTATED 4 Nov 2026 by the founder:** *"Nothing that changes state is reachable except through an Action"* — [tests/stateChangeDoor.test.ts](../tests/stateChangeDoor.test.ts), live. Plus *"no surface writes copy outside C2"*, which already exists (§4.4). The original first clause, *"tool count falls"*, is **withdrawn** — see §4.3 |
 | **S7** Autonomy promotion from data; experiments; local/GBP and AI-visibility | **M** | **Promotion to L2.** Demotion must be automatic and must fire on the first unsupported claim reaching the public, which means C7's online monitor has to exist first | *"Promotion and demotion both tested; spend never auto (test)"* |
 
 ---
@@ -740,6 +740,29 @@ and buys no safety.
 **Recommendation:** replace S6's first clause with *"nothing that changes
 state is reachable except through an Action"* — testable, and it is the
 property that actually matters.
+
+**ACCEPTED 4 November 2026** by the founder, and built the same day as
+S6/P0: [tests/stateChangeDoor.test.ts](../tests/stateChangeDoor.test.ts)
+walks the call graph from every chat tool with the Actions treated as
+walls, so a sender it can still reach is a sender reachable without one.
+The old clause is withdrawn from the S6 row in §3.
+
+Building it found two things worth recording here, since this section is
+where the next person will look:
+
+1. **`tests/approvalCoverage.test.ts` is one hop deep.** It greps each
+   tool's `case` body, and `activate_meta_campaign`'s body was one line
+   delegating to `switchMetaCampaign`. The money step behind it was
+   gated — through `createPublishAction` — but that grep could not see
+   it, so the grep was not what kept it gated. Both tests are kept: the
+   grep asserts the SHAPE of each gate, the walk asserts reachability.
+2. **One function served both campaign directions**, gated and ungated,
+   behind `if (kind === "pause")`. A call graph cannot see which branch
+   a caller takes, so the money step read as ungated, and the only way
+   to quieten that would have been to allowlist it — the one entry such
+   a list must never carry. The function was split into
+   `resolveCampaignForSwitch` / `pauseMetaCampaign` /
+   `activateMetaCampaign` instead.
 
 ### 4.4 S6's exit test already exists
 
