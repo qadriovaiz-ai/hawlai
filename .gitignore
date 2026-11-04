@@ -33,3 +33,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Probe output from a one-off classification sweep (S6/P2). Never a deliverable.
+classify.txt
+probe*.txt
+paths.txt
+card.txt
+armcheck.txt
+sample-monthly-review.txt
