@@ -208,7 +208,8 @@ tools with the most importers last.
 | **P0** | The reachability test for the restated clause, with an allowlist carrying today's reality and dated reasons. **The measure, before any of the work it measures** — **DONE 4 Nov**, see §8 | **M** |
 | **P1a** | **DONE 4 Nov.** A live fault found while reading the paths P1 restructures: approving a card twice carried the action out twice — two real phone calls off one decision. One guard in the approvals route, before any branch runs. See §9 | **S** |
 | **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card** — **DONE 4 Nov**, two dispatchers moved, see §10 | **M** |
-| **P2** | `BUSINESS_BRAIN_TOOLS` gains `family` and grows from 18 entries to every state-changing tool. The registry becomes what the P0 test reads | **M** |
+| **P2** | All 59 tools classified by family, re-checked against the call graph — **DONE 4 Nov**, see §11. **Deviation:** the 41 missing SCHEMAS are left to P3 rather than hand-copied here | **M** |
+| **P2a** | The two campaign-edit tools write their own `pending_approvals` row instead of going through `requestApproval`, so their cards are not inline and send the owner to another page. Found by P2's measure | **S** |
 | **P3** | The 59 schemas move out of `masterBrainV2.ts` into the registry, in batches, each with set-equality. The brain keeps dispatch only | **M** |
 | **P4** | The 8 retirements. One agent, one commit, one live check, in the §4.1 order | **L** |
 | **P5** | `oneDoorForCopy`'s remaining `MIGRATING` entries: `seoToolkitAgent`'s two customer-facing tasks, and `websiteBuilderAgent` **only if** the owner answers the block-door question (§7.3) | **S** |
@@ -338,6 +339,42 @@ the compiler), `tsc` 0, 5,464 tests green, `next build` 0. The old
 did not change behaviour. **Unverified live** — approving a real call or
 a real upload is a real call and a real upload, so this is covered by
 tests and by the owner's next genuine approval, not by a rehearsal.
+
+## 11. P2, as built — 4 November 2026
+
+All 59 chat tools now carry a family in
+`src/lib/businessBrain/toolRegistry.ts`, and
+`tests/toolFamilies.test.ts` re-checks every label against the call
+graph rather than trusting it.
+
+| Family | Count | Means |
+|---|---|---|
+| `read` | 23 | returns information; changes nothing outside |
+| `Internal` | 22 | only this product's own rows |
+| `ResourceEdit` | 11 | a platform or site resource, through `publish/` |
+| `Dispatch` | 3 | a one-shot send; no undo |
+
+**A tool with no family fails the suite by default.** That is the hole
+the old clause left open: a tool nobody classified was invisible to the
+exit check, and the next one added in a hurry is exactly the one that
+would be.
+
+**What the measure found** (both recorded, neither fixed in this
+commit): the two campaign-edit tools raise their own approval rows and
+therefore send the owner to `/dashboard/approvals` instead of showing
+the card in chat — **P2a**; and `read_page` shares one body with
+`edit_page_text`, so its label is asserted by reading rather than by
+walking, recorded with its reason.
+
+**The deviation, again, because it matters:** the plan said this
+registry would grow to hold every state-changing tool's definition.
+Hand-copying 41 schemas that `masterBrainV2.ts` already holds would
+have created a second place to be wrong, two days before P3 moves them
+properly. P2 did the classification; P3 moves the definitions.
+
+**Verified:** 18 new assertions, 12 mutation checks all killed, `tsc`
+0, 5,484 tests green, `next build` 0. Nothing here changes runtime
+behaviour.
 
 ## 7. What I need decided
 

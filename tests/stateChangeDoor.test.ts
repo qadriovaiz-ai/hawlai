@@ -28,6 +28,8 @@
 import { describe, it, expect } from "vitest";
 import { code } from "./helpers/source";
 import { functionIndex, reachable } from "./helpers/reachability";
+// ONE COPY OF THE EXEMPTIONS, shared with toolFamilies.test.ts (S6/P2).
+import { UNGATED_BY_DECISION } from "./helpers/ungatedByDecision";
 
 const BRAIN = "src/lib/agents/masterBrainV2.ts";
 
@@ -78,24 +80,6 @@ const DOORS = [
   "createPlatformRegistry",
 ];
 
-/**
- * The paths that are ungated on purpose. Each carries the decision and
- * its date, and NOTHING NEW GOES ON THIS LIST — the test below asserts
- * its exact membership, so adding an entry is a visible edit to a
- * frozen set rather than a line in a diff nobody reads.
- */
-const UNGATED_BY_DECISION: Record<string, { symbols: string[]; why: string }> = {
-  pause_meta_campaign: {
-    symbols: ["setCampaignStatus"],
-    why:
-      "2026-11-04, recorded: stopping spend is never gated — CLAUDE.md rule 6, the safe direction must not be the slow one. Gating a pause would leave someone watching money burn while waiting on a click. The policy agrees: auto_paused_campaign is requiresApproval: false, and pauseMetaCampaign's own header carries the reason.",
-  },
-  send_email: {
-    symbols: ["sendDealerEmail"],
-    why:
-      "2026-09-14, approved by the founder (Part 1 step 3): mail to a TEAM MEMBER of the same business sends directly. No customer sees it, nothing is published, nothing is spent. Mail to a lead or customer from the same tool is NOT exempt and is gated by a preview card, which approvalCoverage.test.ts asserts.",
-  },
-};
 
 /** The body of one `case "<tool>":` block inside executeTool. */
 function toolCases(): { tool: string; body: string }[] {

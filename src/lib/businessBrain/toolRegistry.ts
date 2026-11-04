@@ -37,6 +37,156 @@ export interface BusinessBrainTool {
   status: "live" | "planned"; // planned = handler doesn't exist yet, tracked for Phase 2
 }
 
+// ------------------------------------------------------------------
+// WHAT EACH CHAT TOOL CHANGES — S6/P2.
+// ------------------------------------------------------------------
+//
+// S6's exit clause, restated by the founder on 4 November 2026, is
+// "nothing that changes state is reachable except through an Action".
+// To test that over all 59 tools, something has to say which tools
+// change anything AT ALL — otherwise a new tool nobody classified is
+// invisible to the check, which is the hole "tool count falls" left
+// wide open.
+//
+// THE FOUR FAMILIES, and the question each answers is "what does this
+// change OUTSIDE this product?":
+//
+//   read          nothing. It returns information.
+//   Internal      only this product's own rows: a draft, a goal, a
+//                 task, a setting, a memory. Nothing a customer or a
+//                 platform can see.
+//   ResourceEdit  a resource on a platform or on the business's own
+//                 site or store. There is a `before`, and undo is
+//                 real. These go through src/lib/publish/.
+//   Dispatch      a one-shot send: an email, a call, an upload, a
+//                 post. There is no `before` and NO UNDO, which is
+//                 why src/lib/dispatch/ exists.
+//
+// THE SCHEMAS ARE NOT DUPLICATED HERE, deliberately. The plan's P2 row
+// said this registry would grow from 18 entries to every
+// state-changing tool — which would mean hand-copying 41 parameter
+// schemas that masterBrainV2.ts already holds, and P3's whole job is
+// to move those ONCE. So P2 does the part the exit test needs (which
+// family each tool is in) and P3 moves the definitions.
+//
+// EVERY LABEL BELOW WAS MEASURED, not guessed: the call graph was
+// walked out of each tool's own case body with the Actions treated as
+// walls (tests/helpers/reachability.ts), and the non-obvious ones were
+// read by hand. tests/toolFamilies.test.ts re-checks the labels
+// against that walk on every run, so a tool that grows a send stops
+// matching its label.
+
+export type ToolFamily = "read" | "Internal" | "ResourceEdit" | "Dispatch";
+
+export const TOOL_FAMILIES: Record<string, ToolFamily> = {
+  // ---- read: returns information, changes nothing ------------------
+  read_page: "read",
+  generate_seo: "read",
+  generate_social_management: "read",
+  generate_email: "read",
+  generate_whatsapp: "read",
+  generate_ad_plan: "read",
+  generate_video_task: "read",
+  research_competitor: "read",
+  research_market: "read",
+  generate_cro_suggestions: "read",
+  get_growth_advice: "read",
+  generate_influencer_outreach: "read",
+  generate_retargeting_copy: "read",
+  generate_seo_keywords: "read",
+  get_analytics_summary: "read",
+  get_customer_sentiment: "read",
+  get_follow_up_reminders: "read",
+  get_website_analytics: "read",
+  diagnose_business: "read",
+  plan_budget: "read",
+  competitor_positioning: "read",
+  business_story: "read",
+  // Produces a CSV for the owner and hands it back. The SCHEDULED
+  // export emails it, which is why schedule_lead_export is not here.
+  export_leads: "read",
+
+  // ---- Internal: this product's own rows, and nothing else ---------
+  generate_brand_kit: "Internal",
+  generate_logo: "Internal",
+  generate_marketing_strategy: "Internal",
+  remember_insight: "Internal",
+  create_workflow: "Internal",
+  manage_watch: "Internal",
+  assign_task: "Internal",
+  set_goal: "Internal",
+  assign_lead: "Internal",
+  add_lead: "Internal",
+  save_business_story: "Internal",
+  schedule_lead_export: "Internal",
+  edit_canvas_design: "Internal",
+  generate_3d_scene: "Internal",
+  // A draft content piece. It can also OFFER to post it, which raises
+  // an approval for publish_social_post — raising an approval changes
+  // nothing by itself, so it does not make this a Dispatch.
+  generate_content: "Internal",
+  // An ad_creative row in draft. Launching it is launch_meta_campaign.
+  create_product_ad: "Internal",
+  // Writes the business's own website address into its settings,
+  // confirmed in two steps by the tool itself.
+  update_website_url: "Internal",
+  // GATED FOR SPEND, NOT FOR REACH. It asks before generating because
+  // the image costs money — nothing leaves the product. The families
+  // answer "what does this change outside", and "what does this cost"
+  // is a separate axis that executionPolicy's riskLevel already holds.
+  generate_graphic: "Internal",
+  // GATED FOR WHAT IT ENABLES. Switching an automation on changes
+  // future behaviour rather than a resource — and switching it OFF is
+  // never gated (rule 6).
+  set_automation_toggle: "Internal",
+  // Writes a booking slug the first time it is asked for, so the
+  // /book/<slug> address is stable. Derived, not authored.
+  get_booking_link: "Internal",
+  get_report_links: "Internal",
+  // Writes a new product into the business's own catalogue. CREATING
+  // is direct; EDITING an existing product's price, name or
+  // description is approval-gated through publish/ (migration-era
+  // ActionKeys). Worth a look in a later phase, recorded here rather
+  // than changed in a classification commit.
+  add_product: "Internal",
+
+  // ---- ResourceEdit: a platform or site resource, through publish/ --
+  build_website: "ResourceEdit",
+  propose_page_meta: "ResourceEdit",
+  edit_page_text: "ResourceEdit",
+  undo_page_edit: "ResourceEdit",
+  propose_price_change: "ResourceEdit",
+  launch_meta_campaign: "ResourceEdit",
+  activate_meta_campaign: "ResourceEdit",
+  // Ungated by decision (rule 6): see tests/helpers/ungatedByDecision.
+  pause_meta_campaign: "ResourceEdit",
+  propose_campaign_budget_change: "ResourceEdit",
+  propose_campaign_targeting_change: "ResourceEdit",
+  create_discount_code: "ResourceEdit",
+
+  // ---- Dispatch: one-shot, no undo --------------------------------
+  trigger_call: "Dispatch",
+  publish_to_youtube: "Dispatch",
+  send_email: "Dispatch",
+};
+
+/** The family a tool belongs to, or null when nobody has classified it. */
+export function familyOf(tool: string): ToolFamily | null {
+  return Object.prototype.hasOwnProperty.call(TOOL_FAMILIES, tool)
+    ? TOOL_FAMILIES[tool]
+    : null;
+}
+
+/** Every tool in one family. */
+export function toolsInFamily(family: ToolFamily): string[] {
+  return Object.keys(TOOL_FAMILIES).filter((t) => TOOL_FAMILIES[t] === family);
+}
+
+/** The tools that change something outside this product. */
+export function stateChangingTools(): string[] {
+  return Object.keys(TOOL_FAMILIES).filter((t) => TOOL_FAMILIES[t] !== "read");
+}
+
 export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
   {
     name: "propose_price_change",

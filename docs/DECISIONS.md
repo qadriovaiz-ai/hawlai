@@ -611,6 +611,85 @@ the bottom), and a "preview sends" mutation that only imported the
 sender without calling it — a mutation that does not do the thing is not
 a test of whether the thing is caught.
 
+## 4 November 2026 — S6/P2, and the two tools that write their own approval
+
+**A deviation from the plan, stated first.** P2's row said this registry
+would grow from 18 entries to every state-changing tool. That would mean
+hand-copying **41 parameter schemas** that `masterBrainV2.ts` already
+holds — and **P3's whole job is to move those once**. So P2 did the part
+the exit clause needs (which family each of the 59 tools is in) and left
+the definitions to P3. Writing them twice would have been work whose
+only output is a second place to be wrong.
+
+**Four families, and the question each answers is "what does this change
+OUTSIDE this product?"**: `read` (nothing), `Internal` (only our own
+rows — a draft, a goal, a setting), `ResourceEdit` (a platform or site
+resource, through `publish/`), `Dispatch` (a one-shot send, no undo).
+
+**Every label was measured, then re-checked by a test.** The call graph
+is walked out of each tool's own case body with the Actions as walls, so
+a tool that grows a send stops matching "read" and the suite names it.
+A tool with no family fails by default — which is the hole "tool count
+falls" left open: a tool nobody classified was invisible to the check.
+
+### The finding: two tools write their own approval row
+
+`propose_campaign_budget_change` and `propose_campaign_targeting_change`
+insert into `pending_approvals` **directly**, bypassing
+`requestApproval` — whose own header says why there is one writer: *"so
+the three places a decision happens cannot each invent their own
+shape"*. What that costs, read off the code:
+
+1. **no `ACTION_POLICIES` check.** `requestApproval` refuses an action
+   nobody classified, because absence is not safe by default. A direct
+   insert writes the row regardless, and the route still carries it out.
+2. **no risk level**, so the card cannot show one.
+3. **no approvalId back**, so there is no inline Approve/Reject — which
+   is why these two tools end by telling the owner to go to
+   `/dashboard/approvals`. Every other card is decided in the message it
+   appears in, and the tool registry's own entries say *"Never directs
+   them to a separate page."*
+4. **none of `requestApproval`'s note**, which is what stops the model
+   narrating a draft row as a completed action.
+
+**Not an authority hole** — the budget insert does set `amount`, so the
+approval threshold still sees the number. Checked, because that would
+have been the serious version.
+
+**Recorded as a DEFECT, not as a decision**, on its own list separate
+from the ungated-by-decision one: that list records choices; this one
+records work owed, names the fix (P2a) and shrinks only. A third tool
+doing it fails the suite, and so does a fixed one whose entry was not
+deleted.
+
+### And one thing the walk cannot see, written down rather than assumed
+
+`read_page` and `edit_page_text` **share one body**, branching on the
+tool name inside — so the walk cannot tell them apart, exactly as
+`switchMetaCampaign` could not be told from its pause path in P0. There
+the answer was to split the function; here the body is long and page
+text is live, so the pair is **recorded** with its reason and
+`read_page`'s label is asserted by reading rather than by walking. Found
+by listing every case whose own slice holds nothing but its label — not
+one at a time, which is how the first one surfaced.
+
+**12 mutation checks, 12 killed.** Two needed work and both were real
+gaps in my own assertions, found by writing the mutation for them:
+
+- relabelling `send_email` as `Internal` SURVIVED, because the
+  exemption list is per tool and per symbol and was therefore also
+  excusing a wrong family. Now a tool that reaches a sender by decision
+  cannot be labelled `read` or `Internal`.
+- relabelling `propose_price_change` as `Internal` SURVIVED, because
+  the Internal check only asked whether it reaches a SENDER — and a
+  price change reaches none, it goes through `createPublishAction`. Now
+  a `read` or `Internal` tool may not reach the resource-edit machinery
+  either.
+
+**And the exemptions moved into one file** shared by both door tests,
+rather than being copied into the second one. Two lists in two files is
+two lists that drift, and a mutation that copies them back now fails.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
