@@ -125,7 +125,11 @@ describe("what chat is allowed to claim about an SEO draft", () => {
   });
 
   it("gives the tool somewhere to put the owner's line", () => {
-    const tool = brain.slice(brain.indexOf('name: "generate_seo"'), brain.indexOf('name: "generate_social_management"'));
+    // THE SCHEMAS MOVED, NOT THE RULE — S6/P3a. The 59 tool schemas
+    // now live in lib/businessBrain/toolSchemas.ts, byte for byte;
+    // this reads them there. What is asserted is unchanged.
+    const schemas = readFileSync("src/lib/businessBrain/toolSchemas.ts", "utf8");
+    const tool = schemas.slice(schemas.indexOf('name: "generate_seo"'), schemas.indexOf('name: "generate_social_management"'));
     expect(tool).toContain("exactText");
     expect(tool).toMatch(/DRAFTS/);
     expect(tool).toMatch(/does not set what Google reads/i);

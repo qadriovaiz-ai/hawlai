@@ -317,7 +317,10 @@ describe("6. S3/P2 — an id beats a guess", () => {
   const caseBody = src.slice(src.indexOf('case "undo_page_edit"'), src.indexOf('case "read_page"'));
 
   it("THE TOOL CAN BE TOLD EXACTLY WHICH EDIT", () => {
-    const schema = src.slice(src.indexOf('name: "undo_page_edit"'), src.indexOf('name: "generate_social_management"'));
+    // THE SCHEMAS MOVED, NOT THE RULE — S6/P3a: they are in
+    // lib/businessBrain/toolSchemas.ts now, byte for byte.
+    const schemas = code("src/lib/businessBrain/toolSchemas.ts");
+    const schema = schemas.slice(schemas.indexOf('name: "undo_page_edit"'), schemas.indexOf('name: "generate_social_management"'));
     expect(schema).toMatch(/edit_id/);
     expect(schema).toMatch(/action_id/);
   });

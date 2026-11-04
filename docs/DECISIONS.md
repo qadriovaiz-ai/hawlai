@@ -785,6 +785,64 @@ in the file passed while this particular card lost its approval id,
 because that string appears in three other branches. Both are now sliced
 to the branch they are about.
 
+## 4 November 2026 — S6/P3a, and the direction a definition can flow
+
+**The 59 chat tool schemas moved out of `masterBrainV2.ts`** into
+`businessBrain/toolSchemas.ts`, **byte for byte** — 658 lines, verified
+against the committed file before the move was made, and the file went
+from 5,180 lines to 4,522. `TOOLS` is re-exported from its old home, so
+every caller and all ten test files that import it are untouched.
+
+**Byte-identity is load-bearing here, not tidiness.** `cachedTools()`
+marks the last entry with `cache_control: ephemeral`, which makes this
+array the Anthropic **prompt-cache prefix** — and a prefix must be
+byte-identical every request or the cache misses and every chat turn
+pays full price. So `toolSchemas.test.ts` carries a SHA-256 fingerprint
+of the array: a schema change is allowed and sometimes necessary, and it
+has to be deliberate, with the fingerprint updated in the same commit
+and the reason in the message. This project has already spent nine days
+of unattended credit on a change nobody was watching.
+
+### Measured before deciding: the plan's P3 would have been lossy
+
+The plan said the registry would hold the definitions. **It cannot hold
+these ones.** `BusinessBrainToolParam` is `string | number | boolean`
+with a description; **24 of the 59 schemas constrain a choice with an
+`enum`** and four use an array with `items`. Moving the definitions into
+that shape would delete the constraints the model relies on.
+
+So the direction is fixed, and written into the new file's header: the
+definition lives as the Anthropic schema, and anything simpler —
+including the Vapi/voice shape — is DERIVED from it. A definition can
+only flow in the direction that loses nothing.
+
+### And a drift that was already there, measured rather than assumed
+
+Four of the registry's 18 entries already disagree with the chat schema:
+`trigger_call` says `leadId` where the tool takes `leadName`,
+`send_email` says `to` where it takes `recipient`, and
+`propose_price_change` and `launch_meta_campaign` are each missing a
+field. **None of the four is call-enabled** — the two that are
+(`pause_meta_campaign`, `update_website_url`) match — so this is latent
+debt and not a live fault, and saying which it is matters. P3b is where
+the second copy stops existing.
+
+**8 mutation checks, 8 killed.** One was mine twice over and worth
+recording: the assertion that the drift note exists read the file
+through `code()`, **which strips comments** — and every string it looked
+for (`trigger_call`, `leadName`, `send_email`, `recipient`) also appears
+in the schema data below the note. So it passed on the data while the
+note it was about could have been deleted. Now it reads the header only,
+through `sourceWithComments`, which is exactly what CLAUDE.md rule 8
+says to do when the comment IS the thing under test.
+
+**Two existing tests re-pointed, nothing loosened:**
+`seoOwnerWords.test.ts` and `undoOnTheContract.test.ts` each slice a
+tool's schema out of source text, and that text is in a different file
+now. The rules they assert — `generate_seo` has somewhere to put the
+owner's exact line, `undo_page_edit` can be told which edit — are
+unchanged.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -210,7 +210,8 @@ tools with the most importers last.
 | **P1** | The `Dispatch` envelope: `preview` / `execute(idempotencyKey)` / `verify` / **no undo, said on the card** — **DONE 4 Nov**, two dispatchers moved, see §10 | **M** |
 | **P2** | All 59 tools classified by family, re-checked against the call graph — **DONE 4 Nov**, see §11. **Deviation:** the 41 missing SCHEMAS are left to P3 rather than hand-copied here | **M** |
 | **P2a** | The two campaign-edit tools routed through `requestApproval` — inline cards, policy and risk applied — **DONE 4 Nov**, see §12. It also closed a hole P1 had opened: the row stored different words from the card | **S** |
-| **P3** | The 59 schemas move out of `masterBrainV2.ts` into the registry, in batches, each with set-equality. The brain keeps dispatch only | **M** |
+| **P3a** | The 59 schemas moved out of `masterBrainV2.ts` byte for byte into `businessBrain/toolSchemas.ts`; the brain keeps dispatch — **DONE 4 Nov**, see §13 | **M** |
+| **P3b** | The registry stops keeping a second copy of chat-tool parameters: derived from the schemas, so the four measured drifts cannot exist. Voice output for the two call-enabled tools pinned identical first | **M** |
 | **P4** | The 8 retirements. One agent, one commit, one live check, in the §4.1 order | **L** |
 | **P5** | `oneDoorForCopy`'s remaining `MIGRATING` entries: `seoToolkitAgent`'s two customer-facing tasks, and `websiteBuilderAgent` **only if** the owner answers the block-door question (§7.3) | **S** |
 | **P6** | Exit test: nothing that changes state is reachable outside an Action; the copy door's list is shorter; the tool COUNT is reported but not targeted | **S** |
@@ -407,6 +408,36 @@ rather than grepping for a key.
 5,488 tests green, `next build` 0. **Unverified live** — the next real
 campaign-budget request will show the inline card; nothing here was
 rehearsed against Meta.
+
+## 13. P3a, as built — 4 November 2026
+
+658 lines of schema out of a 5,180-line file, **byte for byte**,
+verified against the committed version before the move. `TOOLS` is
+re-exported from `masterBrainV2.ts`, so nothing that imports it changed.
+
+**The fingerprint.** These schemas are the Anthropic prompt-cache
+prefix. `toolSchemas.test.ts` holds a SHA-256 of the array, so a change
+is deliberate rather than accidental — and the test says, in its
+failure message, what changing it costs and what to do about it.
+
+**The plan's P3 would have been lossy, and this is the deviation.** The
+registry's parameter shape is `string | number | boolean`; 24 of the 59
+schemas use an `enum` and four use an array. The definition therefore
+lives as the Anthropic schema, and the simpler shapes are derived from
+it — never the reverse. Written into the new file's header so the next
+person does not have to re-derive it.
+
+**What P3b now has to do**, with the measurement already taken: four
+registry entries disagree with their schema today (`trigger_call`'s
+`leadId` vs `leadName`, `send_email`'s `to` vs `recipient`, and a
+missing field each on `propose_price_change` and `launch_meta_campaign`).
+None is call-enabled, so none is live — but the voice definitions for
+the two that ARE call-enabled must be pinned identical before the
+derivation changes how they are built.
+
+**Verified:** 9 new assertions, 8 mutation checks all killed, `tsc` 0,
+5,497 tests green, `next build` 0. Nothing here changes runtime
+behaviour.
 
 ## 7. What I need decided
 
