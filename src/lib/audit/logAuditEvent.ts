@@ -3,7 +3,7 @@
 // in this codebase: a logging failure must never break the real
 // action it's describing.
 //
-// IT RETURNS WHETHER IT WROTE — 6 November 2026, and the swallow is
+// IT RETURNS WHETHER IT WROTE — 5 November 2026, and the swallow is
 // unchanged: this still never throws, and the ten call sites that
 // ignore the return behave exactly as before. It threw the REASON away
 // as well, which is a different thing from not throwing. A caller whose

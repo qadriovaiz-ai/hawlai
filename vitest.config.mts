@@ -42,7 +42,16 @@ export default defineConfig({
     // `tests/**` glob picks them up and they fail against a port with
     // nothing on it — which would look like a broken app rather than a
     // misconfigured runner.
-    exclude: ["node_modules/**", "tests/smoke/**"],
+    // AND an OPEN STAGE'S EXIT TEST — 5 November 2026. S7's exit test
+    // was written FIRST, at the founder's request, so it is RED for the
+    // length of the stage. Rule 1 is "real exit codes, pasted"; a
+    // default suite carrying one known-red file means every commit for
+    // weeks pastes "1 failed" and asks the reader to remember which
+    // failure was expected, which is how a red suite stops meaning
+    // anything. It runs under `npm run test:open`, and
+    // tests/stageOpen.test.ts — in THIS suite — holds the arrangement
+    // down so "excluded" never quietly becomes "never run".
+    exclude: ["node_modules/**", "tests/smoke/**", "tests/open/**"],
     // Zeroes the Meta retry waits (attempts unchanged) so retry tests
     // don't sleep. Not a *.test.ts file, so `include` never runs it as one.
     setupFiles: ["tests/setup/metaRetryTiming.ts"],

@@ -212,7 +212,7 @@ export async function runDailyGrowth(
   let targetGoals: typeof setupGoals = [];
   let targetNumbers: Counted[] = [];
   let noTargetsBecause: string | null = null;
-  // THE REASON'S OWN FIGURES — 6 November 2026. The sentence goes in
+  // THE REASON'S OWN FIGURES — 5 November 2026. The sentence goes in
   // the email now, so the digit walk reads it; see targets.ts's
   // `whyCounted`. The two sentences written here state no figure, which
   // is why both are declared as nothing.
@@ -291,7 +291,7 @@ export async function runDailyGrowth(
     declared: [...counted, ...alsoCounted],
     suggestions,
     setupGoals: hasNoPlan(maturity, activeGoals) ? setupGoals : [],
-    // NOT GATED ON hasNoPlan — 6 November 2026. The gate was here AND
+    // NOT GATED ON hasNoPlan — 5 November 2026. The gate was here AND
     // in report.ts, and both had to come off: a business with an
     // approved plan had two targets drafted into `goals` on 5 November
     // and read an email that mentioned neither. See report.ts's

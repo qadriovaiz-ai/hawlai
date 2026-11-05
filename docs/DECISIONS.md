@@ -1025,7 +1025,7 @@ as passing when the output I grepped did not contain the `Tests` line at
 all. The run had failed. A grep that finds nothing is not a pass, and I
 now confirm that line is present before saying so.
 
-## 6 November 2026 — the target the owner never saw
+## 5 November 2026 — the target the owner never saw
 
 **Found from the outside, by the owner.** candle_by_qaaf's email of
 5 November carried two suggestions and said nothing about targets, while
@@ -1089,7 +1089,7 @@ dryRunReport.ts` never passed `targetGoals` at all, so the dry run has
 never shown a target and still does not. It would need a diagnosis to
 read, which is a different job from this fix.
 
-## 6 November 2026 — which block was left out, and over which figure
+## 5 November 2026 — which block was left out, and over which figure
 
 **The founder's second request the same day.** Since 3 November a report
 block whose figures nobody counted is pruned rather than taking the
@@ -1150,6 +1150,63 @@ site reaches it**. A mutation removing the call, or passing the wrong
 surface, is killed.
 
 **18 mutation checks, 18 killed.**
+
+## 5 November 2026 — S7/P0, and a correction to the plan it follows
+
+**The founder approved all six questions in PLAN-S7-AUTONOMY.md §12
+with the recommended answers**, including the one that matters most:
+promotion **asks once** with the evidence on the card, and the product
+never writes its own permission.
+
+### I was wrong about this repo's own history, in the plan he approved
+
+The P0 row said *"the exit test first, red, as S5 and S6 both did"*.
+`git log --diff-filter=A` on the two files says otherwise: `010e12f`
+S5/**P6** and `ea8e7e7` S6/**P6** — both wrote their exit test **last**.
+S6/P0 was the measure, not the exit test.
+
+Corrected in the plan rather than quietly dropped, because he approved
+the plan partly on that sentence. Writing it first is a **new** practice
+here, and the reason stands on its own: written last, an exit test is
+shaped by what was built, and S6's own exit test records two of its
+assertions being satisfiable by any occurrence in the file.
+
+### And a day's drift in every date I wrote today
+
+Every new comment I added in the two S6 fixes earlier today said
+**6 November 2026**. Today is the **5th**. Caught by my own new test —
+the one asserting a `STAGE_OPEN` marker's date is not in the future —
+which failed on its first run. Fixed in 16 files.
+
+Worth recording rather than quietly correcting: the dated incident
+comment above a guard is the thing that stops a later tidy-up removing
+it, and a guard dated a day after the incident it describes is a guard
+whose own account is wrong. The test that caught it was written for a
+different purpose entirely.
+
+### A quarantine, and the price of it
+
+An exit test written first is red for the stage's length, and rule 1 is
+"real exit codes, pasted". A default suite with one known-red file means
+every commit for weeks pastes "1 failed" and asks the reader to remember
+which failure was expected — which is how a red suite stops meaning
+anything.
+
+So: `tests/open/`, its own config, its own `npm run test:open`, and
+`tests/stageOpen.test.ts` in the **default** suite holding the whole
+arrangement down — the exclusion and its reason, the config, the script,
+a dated `STAGE_OPEN` marker per file saying RED is expected, and a
+refusal to let the directory sit there empty with the machinery still
+around it.
+
+**"Excluded" must never quietly become "never run".** That is the exact
+shape of the auto-reply fault still open in production: a switch that
+says on, over a path that does nothing.
+
+**18 assertions, 1 green on purpose, 17 red. 13 mutation checks against
+the guard, 13 killed.** One mutation of mine named the wrong guard: a
+marker reading `2026-13-45` still matches the date pattern, so the DATE
+assertion is what catches it.
 
 ## Forward-looking checklist — pause and ask vs. proceed
 

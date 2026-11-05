@@ -1,6 +1,6 @@
 # S7 — Autonomy levels, promotion from data, automatic demotion
 
-Written 6 November 2026, at the founder's request, while S6's fixes wait
+Written 5 November 2026, at the founder's request, while S6's fixes wait
 on tomorrow morning's email.
 
 **What this plan covers:** the autonomy half of the S7 row in
@@ -45,7 +45,7 @@ Three sentences, so the rest can be skipped if they are enough.
 
 ## 2. What already exists, and it is more than the §3 row suggests
 
-Measured in the repo on 6 November 2026, not recalled.
+Measured in the repo on 5 November 2026, not recalled.
 
 | Piece | Where | State |
 |---|---|---|
@@ -238,7 +238,7 @@ threshold, **demotes**. Silence is not evidence.
 
 | Phase | What | Size |
 |---|---|---|
-| **P0** | **The exit test first**, red, as S5 and S6 both did. It asserts promotion, demotion, and "spend is never auto" — and it fails until P5 | S |
+| **P0 — DONE 6 Nov, see §16** | **The exit test first**, red. It asserts promotion, demotion, "spend is never auto", and that the instrument exists | S |
 | **P1** | **M0: `claim_checks`** — migration, writer, wired into the send/publish paths that already go through one door. Nothing reads it yet | M |
 | **P2** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
 | **P3** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
@@ -433,6 +433,119 @@ in the next email too.
 action, for the first month.* A cap that turns out to be too low is a
 line in one file; a cap that turns out to be too high is a morning you
 read about afterwards.
+
+---
+
+## 12a. ANSWERED — all six, 5 November 2026
+
+The founder approved every recommendation in §12 as written:
+
+| | Answer |
+|---|---|
+| 1 | The database learns L2, **with an allowlist rule in SQL** that refuses it for everything else. Both tests restated |
+| 2 | **Promotion asks once**, with the evidence on the card. The product never writes its own permission |
+| 3 | First and only L2 candidate: **`update_page_meta`** |
+| 4 | **10** as-requested approvals, **0** rejections, **0** modifications, **30+** days, **≥1** outcome that is neither `worsened` nor `not_measurable`. In one file, with a test |
+| 5 | Offending action → L0 instantly; **if the output was PUBLIC, every L2 on that business → L0** |
+| 6 | **3** unattended actions per business per day |
+
+Each of the six is now a number or a list in `tests/open/s7ExitTest.test.ts`
+that cannot be edited without failing a test.
+
+---
+
+## 15. P0 — the exit test, written first — 5 November 2026
+
+**Done.** `tests/open/s7ExitTest.test.ts`: 18 assertions, **1 green and
+17 red**, run with `npm run test:open`.
+
+### A correction to this plan, before anything else
+
+The P0 row used to read *"The exit test first, red, **as S5 and S6 both
+did**"*. That is **wrong about this repository's own history**, and I
+wrote it. Checked after the founder approved the plan on the strength of
+it:
+
+```
+ea8e7e7  S6/P6: the exit test, and the measure's own limit
+010e12f  S5/P6: the exit test, and what it cannot prove
+```
+
+Both stages wrote their exit test at **P6 — last**. S6/P0 was the
+*measure* (`stateChangeDoor.test.ts`), not the exit test. So writing it
+first is a **new** practice in this codebase, not a continuation of one,
+and the reason to do it stands on its own: written last, an exit test is
+shaped by what was built. S6's own exit test records me finding that two
+of its assertions were satisfiable by any occurrence in the file.
+
+### The cost of writing it first, and what was done about it
+
+An exit test written first is red for the length of the stage, and rule
+1 is *"real exit codes, pasted"*. A default suite carrying one known-red
+file means every commit for weeks pastes "1 failed" and asks the reader
+to remember which failure was expected. **That is how a red suite stops
+meaning anything.**
+
+So it lives in `tests/open/` and runs under its own command — the same
+arrangement the smoke tests have, for a related reason — and
+`tests/stageOpen.test.ts` runs in the **default** suite to hold that
+arrangement down:
+
+- the exclusion exists and names that directory, **with its reason
+  beside it**
+- `vitest.open.config.mts` exists, covers exactly that directory, and
+  refuses to pass on an empty run
+- `npm run test:open` exists and points at that config
+- every file in there carries a dated **`STAGE_OPEN`** marker naming the
+  stage, the day it opened and the phase that closes it, and saying that
+  **RED is the expected state**
+- `tests/open` is not empty — if a stage closes and nothing replaces it,
+  the config, the script and the guard should all be deleted rather than
+  inherited
+
+**"Excluded from the suite" must never quietly become "nobody runs it".**
+That is the shape of the auto-reply fault still open in production: a
+switch that says on, over a path that does nothing.
+
+### One assertion is green, deliberately
+
+*"THE REGISTRY STILL CONTAINS SPEND AND CRITICAL ACTIONS TO PIN"* passes
+today. A file that is red from top to bottom proves nothing about
+whether its assertions can ever pass, and a walk over an empty list is
+the shape of a guard that has stopped guarding.
+
+**And its number was wrong first.** I wrote "more than 8" and the real
+count is **4** — `activate_ad_campaign`, `change_campaign_budget`,
+`refund_approve` spend; `update_product_price` is critical; nothing
+deletes yet. Counted now, and all four named, so an action losing its
+classification fails rather than passing a loose threshold.
+
+### 13 mutation checks, 13 killed
+
+Against `tests/stageOpen.test.ts`, since the exit test itself cannot be
+mutation-checked while it is red — that happens at P7. One of mine was
+wrong first and the guard was right: a marker reading `2026-13-45` still
+matches the date pattern, so the DATE assertion catches it, not the
+marker assertion. The mutation named the wrong guard.
+
+### What the exit test now fixes, that P1-P6 must satisfy
+
+| Module | What it must export |
+|---|---|
+| `src/lib/autonomy/policy.ts` | `PROMOTION_EVIDENCE`, `L2_ALLOWLIST`, `L2_DAILY_CAP` |
+| `src/lib/autonomy/promotion.ts` | `earnsL2`, `proposePromotion` — and it may **not** write `action_levels` |
+| `src/lib/autonomy/demotion.ts` | `demoteAfter` — and it may **not** create an approval |
+| `src/lib/autonomyLevels.ts` | `maxLevelFor`, `canHoldL2` (extends the existing file; no new door) |
+| `src/lib/claims/claimChecks.ts` | `recordClaimCheck` |
+| `src/lib/claims/outputMonitor.ts` | `runOutputMonitor`, `MONITOR_BLIND_DAYS` |
+| a migration | `claim_checks`, with `published` and `claims_unsupported` and RLS |
+| a migration | 209's CHECK widened to `L2`, plus the allowlist rule naming `update_page_meta` |
+| `cronGroups.ts` | `output_monitor` in the `signals` group |
+| this plan | a section headed **`### S7 EXIT — what this stage did not prove`** |
+
+That last row is deliberate: the exit test reads the plan's exit section
+by **heading**, not by section number, because this plan gains a section
+per phase the way S6's gained §8 to §17.
 
 ---
 

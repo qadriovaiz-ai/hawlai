@@ -126,7 +126,7 @@ function db(over: Record<string, any[]> = {}) {
       created_at: i === 0 ? "2026-09-08T10:00:00Z" : "2026-10-22T10:00:00Z",
     })),
     dealerships: [{ id: "d1", dealership_name: "A Business", owner_id: "u1" }],
-    // SO THE RECORD OF A PRUNED BLOCK IS OBSERVABLE — 6 November 2026.
+    // SO THE RECORD OF A PRUNED BLOCK IS OBSERVABLE — 5 November 2026.
     // See section 2b: without this table the write lands nowhere and
     // the test can only assert a log line.
     audit_log: [],
@@ -383,7 +383,7 @@ describe("2. THE PRECONDITION — the BLOCK is refused, not the email", () => {
   });
 });
 
-describe("2b. AND THE RECORD SAYS WHICH BLOCK — 6 November 2026", () => {
+describe("2b. AND THE RECORD SAYS WHICH BLOCK — 5 November 2026", () => {
   // The founder's request. The email has said "I left 1 thing out of
   // this email" since 3 November, and the answer to "which thing" was a
   // `console.error` in Vercel's logs: a product that knew and said so
@@ -996,7 +996,7 @@ describe("10. S5/P4 — the ready branch, which said nothing for a month", () =>
     const yesterday = db({ goals: [{ ...old, source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-10-22", created_at: "2026-10-22T06:00:00.000Z" }] });
     const tooSoon = await runDailyGrowth(yesterday.client, "d1", { now: NOW, dryRun: true });
     expect(tooSoon.targetsDrafted).toBe(0);
-    // "1 day", not "1 days": since 6 November this sentence is shown to
+    // "1 day", not "1 days": since 5 November this sentence is shown to
     // the owner rather than logged, and section 10b asserts it in the
     // email body itself.
     expect(String(tooSoon.noTargetsBecause)).toMatch(/offered 1 day ago/);

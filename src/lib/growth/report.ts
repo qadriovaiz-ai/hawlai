@@ -362,7 +362,7 @@ export function buildDailyReport(input: {
   targetNumbers?: Counted[];
   /**
    * Why there is no target this morning, in the words of whoever
-   * decided — 6 November 2026.
+   * decided — 5 November 2026.
    *
    * THE OTHER HALF OF THE SAME SILENCE. `targetGoalsFrom` has always
    * returned a sentence for the empty case, and `runDailyGrowth` has
@@ -510,7 +510,7 @@ export function buildDailyReport(input: {
 
   }
 
-  // TARGETS AFTER SETUP STEPS AND OUTSIDE THAT GATE — 6 November 2026.
+  // TARGETS AFTER SETUP STEPS AND OUTSIDE THAT GATE — 5 November 2026.
   //
   // They were inside it until today, which meant a business with an
   // approved plan never saw one. See `targetGoals` in the input above
@@ -628,7 +628,7 @@ function subjectFor(businessName: string, blocks: ReportBlock[], findingCount: n
   const setupBlocks = blocks.filter((b) => b.kind === "setup");
   const targets = setupBlocks.filter((b) => b.kind === "setup" && b.isTarget).length;
   const setup = setupBlocks.length - targets;
-  // BOTH, WHEN THERE ARE BOTH — 6 November 2026. Once targets stopped
+  // BOTH, WHEN THERE ARE BOTH — 5 November 2026. Once targets stopped
   // being gated on having no plan, the ordinary morning for a running
   // business is suggestions AND targets, and suggestions won the
   // subject outright. A suggestion is something to read; a target is a

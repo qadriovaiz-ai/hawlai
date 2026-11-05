@@ -212,7 +212,7 @@ describe("3b. THE SAME STEP COMES BACK AFTER 30 DAYS", () => {
   it("NOT OFFERED AGAIN THE NEXT MORNING", () => {
     const { goals, why } = targetGoalsFrom(diagnosis(), READY, [offer("2026-11-03")], DAY);
     expect(goals).toEqual([]);
-    // "1 day", not "1 days": since 6 November this sentence is email
+    // "1 day", not "1 days": since 5 November this sentence is email
     // copy rather than a log line, and the owner reads it.
     expect(String(why)).toMatch(/offered 1 day ago/);
     expect(String(why)).not.toMatch(/1 days/);
@@ -510,7 +510,7 @@ describe("5. EVERY FIGURE A TARGET PRINTS IS DECLARED", () => {
   });
 });
 
-describe("6. WHEN THERE IS NO TARGET, THE OWNER IS TOLD WHY — 6 November 2026", () => {
+describe("6. WHEN THERE IS NO TARGET, THE OWNER IS TOLD WHY — 5 November 2026", () => {
   // THE OTHER HALF OF THE SAME SILENCE. `targetGoalsFrom` has returned
   // a sentence for the empty case since S5/P4, `runDailyGrowth` has put
   // it in its result, and the call site dropped it. So an owner whose

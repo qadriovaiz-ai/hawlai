@@ -484,7 +484,7 @@ describe("7. the run, and the three ways it must not go quiet", () => {
   });
 
   it("A PRUNED BLOCK WOULD BE RECORDED, AND THIS IS A SOURCE ASSERTION ON PURPOSE", () => {
-    // THE SAME REQUEST AS THE DAILY REPORT'S, 6 November 2026, and this
+    // THE SAME REQUEST AS THE DAILY REPORT'S, 5 November 2026, and this
     // email needs it more: it goes out once a month, so there is no
     // next morning to notice something was quietly dropped.
     //

@@ -1,4 +1,4 @@
-// WHICH BLOCK WAS LEFT OUT, AND OVER WHICH FIGURE — 6 November 2026.
+// WHICH BLOCK WAS LEFT OUT, AND OVER WHICH FIGURE — 5 November 2026.
 //
 // Since 3 November a report block whose figures nobody counted is
 // pruned rather than taking the email down with it, and the email says

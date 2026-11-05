@@ -188,7 +188,7 @@ export type TargetDraft = {
    */
   why: string | null;
   /**
-   * The figures `why` itself prints — 6 November 2026.
+   * The figures `why` itself prints — 5 November 2026.
    *
    * THIS SENTENCE IS NOW EMAIL COPY. Until today it reached the run
    * result and the Vercel log and stopped there, so it could state a

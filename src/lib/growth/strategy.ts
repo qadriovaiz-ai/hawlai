@@ -266,7 +266,7 @@ export function planLine(m: Maturity, activeGoals: number, targetsOffered = 0): 
     // and it shipped into the first dry run.
     return `There is enough history to set targets now: ${m.why}. No plan is approved yet, so the steps below are setup, not targets.`;
   }
-  // WORKING TO A PLAN, AND STILL OFFERED A TARGET — 6 November 2026.
+  // WORKING TO A PLAN, AND STILL OFFERED A TARGET — 5 November 2026.
   //
   // This branch ignored `targetsOffered` entirely, so on the one
   // morning a target reached a business with an approved plan the

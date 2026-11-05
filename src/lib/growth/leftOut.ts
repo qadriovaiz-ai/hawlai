@@ -1,6 +1,6 @@
 // WHICH BLOCK WAS LEFT OUT OF AN EMAIL, AND OVER WHICH FIGURE.
 //
-// 6 November 2026, the founder's request. Since 3 November a report
+// 5 November 2026, the founder's request. Since 3 November a report
 // block whose figures nobody counted is pruned rather than taking the
 // whole email down with it, and the email says so: "I left 1 thing out
 // of this email, because a figure in it did not trace back to anything
