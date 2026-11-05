@@ -928,7 +928,10 @@ describe("10. S5/P4 — the ready branch, which said nothing for a month", () =>
     const yesterday = db({ goals: [{ ...old, source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-10-22", created_at: "2026-10-22T06:00:00.000Z" }] });
     const tooSoon = await runDailyGrowth(yesterday.client, "d1", { now: NOW, dryRun: true });
     expect(tooSoon.targetsDrafted).toBe(0);
-    expect(String(tooSoon.noTargetsBecause)).toMatch(/offered 1 days ago/);
+    // "1 day", not "1 days": since 6 November this sentence is shown to
+    // the owner rather than logged, and section 10b asserts it in the
+    // email body itself.
+    expect(String(tooSoon.noTargetsBecause)).toMatch(/offered 1 day ago/);
     expect(yesterday.tables.goals).toHaveLength(1 + tooSoon.goalsDrafted);
   });
 
@@ -986,5 +989,168 @@ describe("10. S5/P4 — the ready branch, which said nothing for a month", () =>
     const src = code("src/lib/growth/dailyGrowth.ts");
     expect(src).toMatch(/loadDiagnosis/);
     expect(src).toMatch(/targetGoalsFrom/);
+  });
+});
+
+describe("10b. THE TARGET THE OWNER NEVER SAW — 5 November 2026", () => {
+  // WHAT HE REPORTED, AND IT WAS RIGHT. candle_by_qaaf's email of
+  // 5 November carried two suggestions and no target, while `goals`
+  // held two target drafts written that morning at 14:37 UTC.
+  //
+  // THE CAUSE WAS A GATE IN TWO PLACES. Targets were rendered inside
+  // `hasNoPlan(maturity, activeGoals)` — in report.ts and again in
+  // dailyGrowth.ts — and he has an approved plan, so neither the target
+  // blocks nor any sentence about them reached him. The drafting was
+  // never gated, so the rows went to the Tasks page regardless: the
+  // email and the database disagreed, which is the worst of the three
+  // possible behaviours.
+  //
+  // THE FIXTURE HERE HAS AN ACTIVE GOAL, which is what every section
+  // above lacks. That is why none of them could catch this.
+
+  const ACTIVE = {
+    id: "g_active",
+    dealership_id: "d1",
+    status: "active",
+    title: "Describe every product",
+    source_key: "products_without_description",
+    created_at: "2026-10-01T00:00:00.000Z",
+  };
+
+  it("A BUSINESS WITH AN APPROVED PLAN IS SHOWN ITS TARGET", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client, tables } = db({ goals: [ACTIVE] });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+
+    expect(r.sent).toBe(true);
+    expect(r.targetsDrafted).toBe(1);
+    // THE ROW AND THE EMAIL AGREE. On 5 November the row existed and
+    // the email did not mention it, so both halves are asserted here
+    // rather than in two tests that could pass apart.
+    const target = tables.goals.find((g: any) => String(g.source_key ?? "").startsWith("target:"));
+    expect(target).toBeTruthy();
+    expect(target.status).toBe("draft");
+    expect(sends[0].body).toContain(`TARGET — ${target.title}`);
+    // AND NO SETUP STEPS BESIDE IT. Those keep the gate: "getting
+    // started" is only true while there is nothing to score against.
+    expect(r.setupSteps).toBe(0);
+    expect(sends[0].body).not.toMatch(/SETUP STEP —/);
+    // The number check still passes on a branch the gate used to make
+    // unreachable.
+    expect(r.reportSound).toBe(true);
+    expect(r.blocksLeftOut).toBe(0);
+  });
+
+  it("AND THE SENTENCE ABOVE IT SAYS A TARGET IS WAITING", async () => {
+    // planLine's with-plan branch ignored `targetsOffered` entirely, so
+    // even with the blocks shown the email would have introduced them
+    // with "Working to your plan." and nothing else.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db({ goals: [ACTIVE] });
+    await runDailyGrowth(client, "d1", { now: NOW });
+    expect(sends[0].body).toContain("Working to your plan:");
+    expect(sends[0].body).toContain("waiting on your Tasks page for you to approve");
+  });
+
+  it("AND THE SUBJECT SAYS SO TOO", async () => {
+    // The one line he reads before deciding to open it. A decision
+    // waiting on him must not be the thing that goes unmentioned there.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db({ goals: [ACTIVE] });
+    await runDailyGrowth(client, "d1", { now: NOW });
+    expect(sends[0].subject).toMatch(/1 target to approve/);
+  });
+
+  it("AND WHEN THERE IS NO TARGET, THE EMAIL SAYS WHY INSTEAD OF NOTHING", async () => {
+    // The funnel is too thin to name a weakest step. The sentence for
+    // that case has existed since S5/P4 and was dropped by the call
+    // site, so an owner read an email that did not mention targets at
+    // all — indistinguishable from a product that had forgotten them.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = [
+      {
+        name: "Website to enquiry",
+        steps: [
+          { key: "visit", label: "Visited the site", count: 4, fromPrevious: null },
+          { key: "enquiry", label: "Asked a question", count: 1, fromPrevious: 25 },
+        ],
+        weakest: null,
+        thin: "Not enough traffic yet to name a weakest step — no step has had 10 or more people reach it in this window.",
+      },
+    ];
+    const { client } = db({ goals: [ACTIVE] });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+
+    expect(r.targetsDrafted).toBe(0);
+    expect(sends[0].body).toContain("No new target for you to approve today.");
+    expect(sends[0].body).toContain("no step has had 10 or more people reach it");
+    // AND THE LINE SURVIVED THE DIGIT WALK. Its "10" is MIN_STEP_ENTRY,
+    // declared beside it; without that declaration he would read
+    // "I left 1 thing out of this email" in place of the reason.
+    expect(r.blocksLeftOut).toBe(0);
+    expect(r.reportSound).toBe(true);
+  });
+
+  it("AND THE 30-DAY WAIT IS EXPLAINED TO HIM, NOT ONLY TO THE LOG", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db({
+      goals: [
+        ACTIVE,
+        {
+          id: "g_old",
+          dealership_id: "d1",
+          source_key: "target:website_to_enquiry:product_view_to_enquiry:2026-10-22",
+          status: "draft",
+          created_at: "2026-10-22T06:00:00.000Z",
+          title: "Improve Looked at a product to Asked a question",
+        },
+      ],
+    });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.targetsDrafted).toBe(0);
+    expect(sends[0].body).toContain("offered 1 day ago");
+    expect(sends[0].body).toContain("after 30 days");
+    expect(r.blocksLeftOut).toBe(0);
+  });
+
+  it("AND AN UNREADABLE FUNNEL REACHES HIM AS A SENTENCE", async () => {
+    // Said, not swallowed. A funnel that could not be read is not a
+    // funnel with no weakest step, and until today that difference
+    // reached the run result and stopped there.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = null;
+    const { client } = db({ goals: [ACTIVE] });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.sent).toBe(true);
+    expect(sends[0].body).toContain("Your funnel could not be read this time");
+    expect(r.blocksLeftOut).toBe(0);
+  });
+
+  it("and a still-learning business is told that instead, not both", async () => {
+    // The plan line already says "still learning", and a second
+    // sentence explaining the absence of a target would be telling him
+    // the same thing twice in two voices.
+    sends.length = 0;
+    forbidModelCalls();
+    funnelsNow = oneWeakStep();
+    const { client } = db({
+      goals: [ACTIVE],
+      page_events: Array.from({ length: 55 }, () => ({ dealership_id: "d1", is_internal: false, created_at: "2026-10-22T10:00:00Z" })),
+    });
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.targetsDrafted).toBe(0);
+    expect(r.noTargetsBecause).toBeNull();
+    expect(sends[0].body).not.toContain("No new target");
+    expect(sends[0].body).toContain("Still learning:");
   });
 });

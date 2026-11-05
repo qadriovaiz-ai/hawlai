@@ -83,6 +83,38 @@ describe("1. is there enough of this business's own history?", () => {
     expect(planLine(ready, 2)).toMatch(/^Working to your plan:/);
     expect(planLine(maturityOf({ firstAt: daysAgo(2), events: 3 }, NOW), 0)).toMatch(/^Still learning:/);
   });
+
+  it("AND IT MENTIONS A WAITING TARGET WHETHER OR NOT THERE IS A PLAN", () => {
+    // 6 NOVEMBER 2026. `targetsOffered` was read in the no-plan branch
+    // only, so on the one morning a target reached a business with an
+    // approved plan — candle_by_qaaf, 5 November, two of them drafted —
+    // the sentence above it said nothing about either.
+    //
+    // ASSERTED AS WHOLE STRINGS. The two branches end in the same
+    // clause on purpose (one voice, and a count there would be a figure
+    // the sentence has to declare), so a regex for the clause alone
+    // cannot tell them apart and would pass with either branch gone.
+    const ready = maturityOf({ firstAt: daysAgo(44), events: 55 }, NOW);
+    const clause = "The targets below come from your own funnel and are waiting on your Tasks page for you to approve.";
+    expect(planLine(ready, 3, 1)).toBe(`Working to your plan: ${ready.why}. ${clause}`);
+    expect(planLine(ready, 0, 1)).toBe(`There is enough history to set targets now: ${ready.why}. ${clause}`);
+    // And with none offered, neither branch mentions one.
+    expect(planLine(ready, 3, 0)).toBe(`Working to your plan: ${ready.why}.`);
+    expect(planLine(ready, 3, 0)).not.toMatch(/Tasks page/);
+    // STILL LEARNING OUTRANKS BOTH. A target drawn from a week of
+    // traffic is the invented number S5/P4 exists to refuse, so this
+    // branch must not start talking about targets because a count
+    // reached it.
+    expect(planLine(maturityOf({ firstAt: daysAgo(2), events: 3 }, NOW), 3, 2)).toMatch(/^Still learning:/);
+  });
+
+  it("and no figure is printed in it, however many targets are waiting", () => {
+    // The sentence says "targets" for one and for three. A count here
+    // would be a figure the digit walk has to trace, and the sentence
+    // does not need it — so one target and three read the same.
+    const ready = maturityOf({ firstAt: daysAgo(44), events: 55 }, NOW);
+    expect(planLine(ready, 3, 1)).toBe(planLine(ready, 3, 3));
+  });
 });
 
 describe("2. setup goals are DERIVED from the audit, never a starter list", () => {

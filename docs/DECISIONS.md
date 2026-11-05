@@ -1025,6 +1025,70 @@ as passing when the output I grepped did not contain the `Tests` line at
 all. The run had failed. A grep that finds nothing is not a pass, and I
 now confirm that line is present before saying so.
 
+## 6 November 2026 — the target the owner never saw
+
+**Found from the outside, by the owner.** candle_by_qaaf's email of
+5 November carried two suggestions and said nothing about targets, while
+`goals` held two target drafts written that morning at 14:37 UTC
+(`online_store:views_to_checkouts` and
+`from_visit_to_customer:views_to_leads`, both `draft`).
+
+**The cause was one gate in two places.** Target blocks were rendered
+inside `hasNoPlan(maturity, activeGoals)` — in `report.ts` and again in
+`dailyGrowth.ts` — so only a business with NO approved plan ever saw
+one. A target is about the narrowest step in a funnel that is already
+running, which is to say about a business that HAS a plan, so the gate
+hid the feature from every business it was built for. Drafting was never
+gated, so the rows reached the Tasks page anyway: **the email and the
+database disagreed**, which is worse than either silence or noise.
+
+**And the other half was quieter.** `targetGoalsFrom` has returned a
+sentence for the empty case since S5/P4 and `runDailyGrowth` has put it
+in its result, where the call site dropped it. So an owner whose funnel
+was too thin, or whose step was offered three weeks ago, read an email
+with no mention of targets at all — indistinguishable from a product
+that had forgotten about them. That sentence is now a line in the email.
+
+### Three judgment calls, none of them asked for
+
+**1. The subject names both.** The rule in `subjectFor` is that the
+subject promises what is in the email, and suggestions won it outright.
+Now that targets are shown to a running business, the ordinary morning
+is both — and a suggestion is something to read while a target is a
+decision waiting on him. "2 suggestions and 1 target to approve". The
+thing that needs him is not the thing that goes unmentioned on the one
+line he reads before opening it.
+
+**2. A test that asserted the bug was RESTATED, not deleted.**
+`growthTargets.test.ts` carried *"A BUSINESS WITH AN APPROVED PLAN IS
+NOT OFFERED DRAFTS AT ALL"*, which is exactly the behaviour he asked to
+remove. CLAUDE.md rule 7 says bring it to the owner rather than weaken
+it — he decided this one in the instruction itself, so it is restated
+and **stricter**: it now holds down both halves, that setup steps keep
+the gate and targets do not.
+
+**3. The reason sentence became email copy, so its figures are
+declared.** `targets.ts` said in a comment that the 30-day sentence was
+"NOT EMAIL COPY — it states a number and nothing declares it". The
+moment it goes in an email the digit walk reads it, so `TargetDraft`
+now returns `whyCounted` beside `why` — **together, in one return**,
+because picking a sentence in one place and its declarations in another
+is how a line ends up declaring the figures of a sentence it is not. An
+unreadable date prints no figure and therefore declares none.
+
+Its grammar changed with it: "offered 1 day ago", not "1 days". Two
+assertions were restated for that, and they are the only two.
+
+**18 mutation checks, 18 killed.** One of mine was invalid first: it
+opened a brace it never closed, so the file did not parse and the run
+died with no failing test. A mutation that breaks the build tests
+nothing, and "non-zero exit" is not the same as "the guard is tested".
+
+**Left alone, and said rather than fixed:** `scripts/growth/
+dryRunReport.ts` never passed `targetGoals` at all, so the dry run has
+never shown a target and still does not. It would need a diagnosis to
+read, which is a different job from this fix.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

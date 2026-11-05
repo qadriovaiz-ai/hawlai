@@ -266,6 +266,20 @@ export function planLine(m: Maturity, activeGoals: number, targetsOffered = 0): 
     // and it shipped into the first dry run.
     return `There is enough history to set targets now: ${m.why}. No plan is approved yet, so the steps below are setup, not targets.`;
   }
+  // WORKING TO A PLAN, AND STILL OFFERED A TARGET — 6 November 2026.
+  //
+  // This branch ignored `targetsOffered` entirely, so on the one
+  // morning a target reached a business with an approved plan the
+  // sentence above it said nothing about it. That was half of the
+  // 5 November silence; the other half was report.ts's gate.
+  if (targetsOffered > 0) {
+    // THE SAME CLAUSE AS THE NO-PLAN BRANCH, word for word, and it
+    // says "targets" whether there is one or three: a count here would
+    // be a figure this sentence has to declare, and the sentence does
+    // not need it. The two branches are told apart in the tests by the
+    // whole string, not by a distinctive phrase inside it.
+    return `Working to your plan: ${m.why}. The targets below come from your own funnel and are waiting on your Tasks page for you to approve.`;
+  }
   return `Working to your plan: ${m.why}.`;
 }
 

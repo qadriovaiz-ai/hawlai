@@ -31,7 +31,8 @@ import {
 import { measureForTarget } from "@/lib/growth/measures";
 import { buildDailyReport, everyNumberIsCounted, renderText, withoutUncountedBlocks } from "@/lib/growth/report";
 import { draftTargetsAreOwn, maturityOf, planLine } from "@/lib/growth/strategy";
-import type { Diagnosis, Funnel, FunnelStep } from "@/lib/strategy/diagnosis";
+import { MIN_STEP_ENTRY, buildDiagnosis, type Diagnosis, type Funnel, type FunnelStep } from "@/lib/strategy/diagnosis";
+import type { Counted } from "@/lib/growth/audit";
 import type { TrackingState } from "@/lib/growth/tracking";
 import { code } from "./helpers/source";
 
@@ -211,7 +212,10 @@ describe("3b. THE SAME STEP COMES BACK AFTER 30 DAYS", () => {
   it("NOT OFFERED AGAIN THE NEXT MORNING", () => {
     const { goals, why } = targetGoalsFrom(diagnosis(), READY, [offer("2026-11-03")], DAY);
     expect(goals).toEqual([]);
-    expect(String(why)).toMatch(/offered 1 days ago/);
+    // "1 day", not "1 days": since 6 November this sentence is email
+    // copy rather than a log line, and the owner reads it.
+    expect(String(why)).toMatch(/offered 1 day ago/);
+    expect(String(why)).not.toMatch(/1 days/);
   });
 
   it("NOT OFFERED ON DAY 29, AND OFFERED ON DAY 30", () => {
@@ -425,7 +429,199 @@ describe("5. EVERY FIGURE A TARGET PRINTS IS DECLARED", () => {
     expect(planLine(LEARNING, 0, 3)).toMatch(/^Still learning:/);
   });
 
-  it("A BUSINESS WITH AN APPROVED PLAN IS NOT OFFERED DRAFTS AT ALL", () => {
+  it("A BUSINESS WITH AN APPROVED PLAN IS SHOWN ITS TARGET, AND NO SETUP STEPS", () => {
+    // THIS TEST ASSERTED THE BUG UNTIL 6 NOVEMBER 2026, and the founder
+    // found it from the outside: candle_by_qaaf had two targets drafted
+    // into `goals` at 14:37 UTC on 5 November and read an email that
+    // mentioned neither. Both blocks sat inside `hasNoPlan`, so a
+    // business with an approved plan — which is every business a target
+    // is FOR, since a target is about a funnel that is already running
+    // — never saw one.
+    //
+    // RESTATED RATHER THAN DELETED, and it is stricter now: it holds
+    // down both halves of the decision. Setup steps keep the gate,
+    // because "getting started" is only true while there is nothing to
+    // score against; targets do not.
+    const { goals, declared } = targetGoalsFrom(diagnosis(), READY);
+    const report = buildDailyReport({
+      dealershipId: "d1",
+      day: DAY,
+      businessName: "A Business",
+      tracking: tracking(),
+      maturity: READY,
+      counted: [],
+      suggestions: [],
+      setupGoals: [{ key: "k", title: "Publish the website", description: "d", targetMetric: null, targetValue: null, basis: [] }],
+      targetGoals: goals,
+      targetNumbers: declared,
+      activeGoals: 2,
+      findingCount: 0,
+    });
+    const setupBlocks = report.blocks.filter((b) => b.kind === "setup");
+    expect(setupBlocks).toHaveLength(1);
+    expect(setupBlocks.every((b: any) => b.isTarget)).toBe(true);
+    const text = renderText(report);
+    expect(text).toContain("TARGET — Improve Looked at a product to Asked a question");
+    expect(text).not.toContain("Publish the website");
+    // AND THE DIGIT WALK STILL PASSES on this branch, which the gate
+    // used to make unreachable: the target's three figures were never
+    // walked in a with-plan report before today.
+    expect(withoutUncountedBlocks(report).removed).toEqual([]);
+  });
+
+  it("AND THE SUBJECT NAMES THE TARGET EVEN WHEN THERE ARE SUGGESTIONS", () => {
+    // The ordinary morning for a running business is both, and
+    // suggestions won the subject outright. A suggestion is something
+    // to read; a target is a decision waiting on him, and the subject
+    // is the only line he reads before deciding to open it.
+    const { goals, declared } = targetGoalsFrom(diagnosis(), READY);
+    const shown: Counted[] = [{ label: "products with no description", value: 1, source: "products.description" }];
+    const report = buildDailyReport({
+      dealershipId: "d1",
+      day: DAY,
+      businessName: "A Business",
+      tracking: tracking(),
+      maturity: READY,
+      counted: [],
+      declared: shown,
+      suggestions: [
+        {
+          row: {
+            id: "o1",
+            dealership_id: "d1",
+            type: "products_without_description",
+            title: "1 product has no description",
+            evidence: [{ kind: "product", id: "x1" }],
+            goal_id: "g1",
+            rejected_at: null,
+            last_surfaced_on: null,
+            status: "open",
+          } as any,
+          goalTitle: "Describe every product",
+        },
+      ],
+      setupGoals: [],
+      targetGoals: goals,
+      targetNumbers: declared,
+      activeGoals: 2,
+      findingCount: 1,
+    });
+    expect(report.subject).toBe("A Business — 1 suggestion and 1 target to approve");
+  });
+});
+
+describe("6. WHEN THERE IS NO TARGET, THE OWNER IS TOLD WHY — 6 November 2026", () => {
+  // THE OTHER HALF OF THE SAME SILENCE. `targetGoalsFrom` has returned
+  // a sentence for the empty case since S5/P4, `runDailyGrowth` has put
+  // it in its result, and the call site dropped it. So an owner whose
+  // funnel was too thin, or whose step was offered three weeks ago,
+  // read an email with no mention of targets at all — identical, from
+  // where he sits, to a product that had forgotten about them.
+  //
+  // THE SENTENCE STATES FIGURES, which is why `whyCounted` exists. A
+  // line whose numbers nothing declares is pruned, and he would be told
+  // "I left 1 thing out" instead of being told the reason.
+
+  function tracking(): TrackingState {
+    return {
+      siteEvents: { firing: true, lastAt: "2026-11-03T10:00:00Z", visitorEvents30d: 55, firstAt: "2026-09-01T10:00:00Z" },
+      searchConsole: { connected: true, siteUrl: "https://example.test" },
+      adsConversions: { verified: true, why: "a campaign has run and a paid order has been recorded in the last 30 days" },
+      health: "ok",
+    };
+  }
+
+  function reportFor(why: string | null, whyCounted: Counted[], targetGoals: any[] = []) {
+    return buildDailyReport({
+      dealershipId: "d1",
+      day: DAY,
+      businessName: "A Business",
+      tracking: tracking(),
+      maturity: READY,
+      counted: [],
+      suggestions: [],
+      setupGoals: [],
+      targetGoals,
+      targetNumbers: [],
+      noTargetsBecause: why,
+      noTargetsNumbers: whyCounted,
+      activeGoals: 2,
+      findingCount: 0,
+    });
+  }
+
+  it("THE REAL 'TOO THIN' SENTENCE REACHES HIM AND SURVIVES THE DIGIT WALK", () => {
+    // BUILT BY diagnosis.ts, not typed into this file. That sentence
+    // states MIN_STEP_ENTRY, and targets.ts declares exactly that one
+    // figure — so if diagnosis ever puts a second number in it, this
+    // test fails here rather than the owner losing the line from his
+    // email.
+    const thinFunnel = buildDiagnosis({
+      models: ["ecommerce" as any],
+      from: "2026-08-06",
+      to: DAY,
+      businessStart: null,
+      events: Array.from({ length: MIN_STEP_ENTRY - 1 }, () => ({ event_type: "page_view" })),
+      leads: [{ id: "l1", source: null, status: "new" }],
+      firstTouch: {},
+      orders: [],
+      abandonedCarts: 0,
+      atRisk: [],
+      paid: null,
+    });
+    const realThin = thinFunnel.funnels[0].thin;
+    expect(realThin, "diagnosis stopped saying why a funnel is too thin").toMatch(/Not enough traffic yet/);
+
+    const { goals, why, whyCounted } = targetGoalsFrom(thinFunnel, READY, [], DAY);
+    expect(goals).toEqual([]);
+    expect(why).toBe(realThin);
+
+    const report = reportFor(why, whyCounted);
+    const text = renderText(report);
+    expect(text).toContain("No new target for you to approve today.");
+    expect(text).toContain(String(realThin));
+    expect(withoutUncountedBlocks(report).removed, JSON.stringify(everyNumberIsCounted(report).offenders)).toEqual([]);
+  });
+
+  it("AND SO DOES THE 30-DAY WAIT, WITH BOTH OF ITS FIGURES DECLARED", () => {
+    const { why, whyCounted } = targetGoalsFrom(
+      diagnosis(),
+      READY,
+      [{ sourceKey: `${TARGET_KEY_PREFIX}${targetStepId("Website to enquiry", "product_view", "enquiry")}:2026-10-20`, createdAt: "2026-10-20T06:00:00.000Z" }],
+      DAY
+    );
+    expect(String(why)).toMatch(/offered 15 days ago/);
+    expect(String(why)).toMatch(/after 30 days/);
+    // BOTH, not one. A line declaring only the cycle would be pruned
+    // over the age, and declaring only the age would be pruned over the
+    // cycle — and either way he reads "I left 1 thing out".
+    expect(whyCounted.map((c) => c.value).sort((a, b) => a - b)).toEqual([15, 30]);
+    const report = reportFor(why, whyCounted);
+    expect(withoutUncountedBlocks(report).removed, JSON.stringify(everyNumberIsCounted(report).offenders)).toEqual([]);
+    expect(renderText(report)).toContain("offered 15 days ago");
+  });
+
+  it("AN UNREADABLE DATE PRINTS NO FIGURE, SO IT DECLARES NONE", () => {
+    // The dangerous shape. `age` is null here, and a sentence that
+    // printed "null days ago" — or a declaration of a figure the
+    // sentence never printed — is the invented number this file exists
+    // to refuse.
+    const { why, whyCounted } = targetGoalsFrom(
+      diagnosis(),
+      READY,
+      [{ sourceKey: `${TARGET_KEY_PREFIX}${targetStepId("Website to enquiry", "product_view", "enquiry")}:2026-10-20`, createdAt: "not a date at all" }],
+      DAY
+    );
+    expect(String(why)).toMatch(/on a date I cannot read/);
+    expect(String(why)).not.toMatch(/null/);
+    expect(whyCounted.map((c) => c.value)).toEqual([TARGET_CYCLE_DAYS]);
+    expect(withoutUncountedBlocks(reportFor(why, whyCounted)).removed).toEqual([]);
+  });
+
+  it("AND THE LINE IS NOT SHOWN ABOVE A TARGET", () => {
+    // targetGoalsFrom returns goals or a reason, never both, so this is
+    // belt and braces — but "no new target today" printed above a
+    // target is the 23 October fault in a smaller place.
     const { goals, declared } = targetGoalsFrom(diagnosis(), READY);
     const report = buildDailyReport({
       dealershipId: "d1",
@@ -438,9 +634,22 @@ describe("5. EVERY FIGURE A TARGET PRINTS IS DECLARED", () => {
       setupGoals: [],
       targetGoals: goals,
       targetNumbers: declared,
+      noTargetsBecause: "Something that should never be shown.",
+      noTargetsNumbers: [],
       activeGoals: 2,
       findingCount: 0,
     });
-    expect(report.blocks.filter((b) => b.kind === "setup")).toEqual([]);
+    expect(renderText(report)).not.toContain("No new target");
+    expect(renderText(report)).toContain("TARGET — Improve");
+  });
+
+  it("and a blank reason adds no line at all", () => {
+    // Every pre-P4 caller passes nothing, and a report that printed
+    // "No new target for you to approve today. " with nothing after it
+    // would be worse than silence.
+    for (const blank of [null, undefined, "", "   "]) {
+      const report = reportFor(blank as any, []);
+      expect(renderText(report), String(blank)).not.toContain("No new target");
+    }
   });
 });

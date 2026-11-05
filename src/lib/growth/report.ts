@@ -343,11 +343,40 @@ export function buildDailyReport(input: {
   activeGoals: number;
   /**
    * Targets drawn from this business's own funnel, waiting for approval
-   * — S5/P4. Shown under the same no-plan condition as setup steps.
+   * — S5/P4.
+   *
+   * SHOWN WHENEVER THERE ARE ANY, SINCE 6 NOVEMBER 2026. They used to
+   * sit inside the same `hasNoPlan` branch as setup steps, and that was
+   * the bug the owner found on 5 November: two targets were drafted for
+   * candle_by_qaaf at 14:37 UTC, written to `goals` as drafts, and the
+   * email said nothing about either one. A target is about the narrowest
+   * step in a funnel that is already running — which is to say about a
+   * business that HAS a plan — so gating it on having no plan hid it
+   * from every business it was built for.
+   *
+   * Setup steps keep that gate. "Getting started" is genuinely a thing
+   * to say only while there is nothing to score against.
    */
   targetGoals?: DraftGoal[];
   /** The counted figures those targets' own sentences print. */
   targetNumbers?: Counted[];
+  /**
+   * Why there is no target this morning, in the words of whoever
+   * decided — 6 November 2026.
+   *
+   * THE OTHER HALF OF THE SAME SILENCE. `targetGoalsFrom` has always
+   * returned a sentence for the empty case, and `runDailyGrowth` has
+   * always put it in its result — where the call site dropped it. So an
+   * owner whose funnel was too thin, or whose step was offered three
+   * weeks ago, read an email that did not mention targets at all and
+   * could not tell that from a product that had forgotten about them.
+   *
+   * Only set once there is enough history to set targets: while the
+   * business is still learning, the plan line already says so.
+   */
+  noTargetsBecause?: string | null;
+  /** The figures that sentence prints — targets.ts's `whyCounted`. */
+  noTargetsNumbers?: Counted[];
   /**
    * What the AI could not do during this run, if anything.
    *
@@ -444,6 +473,22 @@ export function buildDailyReport(input: {
     numbers: maturityCounted(input.maturity),
   });
 
+  // AND WHY THERE IS NO TARGET, WHEN THERE IS NONE. See
+  // `noTargetsBecause`: the sentence existed, and nobody showed it.
+  //
+  // NOT WHEN THERE ARE TARGETS. targetGoalsFrom returns a reason or
+  // goals, never both, so this is belt and braces — but a report that
+  // printed "no new target today" above two targets would be the 23
+  // October fault again, in a smaller place.
+  const noTargets = String(input.noTargetsBecause ?? "").trim();
+  if (noTargets && !(input.targetGoals ?? []).length) {
+    blocks.push({
+      kind: "line",
+      text: `No new target for you to approve today. ${noTargets}`,
+      numbers: input.noTargetsNumbers ?? [],
+    });
+  }
+
   for (const c of input.counted) blocks.push({ kind: "stat", number: c });
 
   // SHOWN WHENEVER THERE IS NO PLAN, not only when the data is thin.
@@ -463,21 +508,29 @@ export function buildDailyReport(input: {
       });
     }
 
-    // TARGETS AFTER SETUP STEPS, and under the same no-plan condition:
-    // both are drafts waiting for the same decision. A target goal
-    // carries NO target number — see targets.ts's header; any number
-    // there would be a forecast — so `target` is null and the figures
-    // in its sentence are declared instead.
-    for (const goal of input.targetGoals ?? []) {
-      blocks.push({
-        kind: "setup",
-        isTarget: true,
-        title: goal.title,
-        description: goal.description,
-        target: null,
-        declared: input.targetNumbers ?? [],
-      });
-    }
+  }
+
+  // TARGETS AFTER SETUP STEPS AND OUTSIDE THAT GATE — 6 November 2026.
+  //
+  // They were inside it until today, which meant a business with an
+  // approved plan never saw one. See `targetGoals` in the input above
+  // for what that cost on 5 November. The drafting itself was never
+  // gated — writeSetupGoalDrafts writes both kinds — so the rows went
+  // to the Tasks page and the email stayed quiet about them, which is
+  // the worst of the three possible behaviours.
+  //
+  // A target goal carries NO target number — see targets.ts's header;
+  // any number there would be a forecast — so `target` is null and the
+  // figures in its sentence are declared instead.
+  for (const goal of input.targetGoals ?? []) {
+    blocks.push({
+      kind: "setup",
+      isTarget: true,
+      title: goal.title,
+      description: goal.description,
+      target: null,
+      declared: input.targetNumbers ?? [],
+    });
   }
 
   for (const s of input.suggestions) {
@@ -575,8 +628,17 @@ function subjectFor(businessName: string, blocks: ReportBlock[], findingCount: n
   const setupBlocks = blocks.filter((b) => b.kind === "setup");
   const targets = setupBlocks.filter((b) => b.kind === "setup" && b.isTarget).length;
   const setup = setupBlocks.length - targets;
-  if (suggestions) return `${businessName} — ${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"} for today`;
-  if (targets) return `${businessName} — ${targets} ${targets === 1 ? "target" : "targets"} to approve`;
+  // BOTH, WHEN THERE ARE BOTH — 6 November 2026. Once targets stopped
+  // being gated on having no plan, the ordinary morning for a running
+  // business is suggestions AND targets, and suggestions won the
+  // subject outright. A suggestion is something to read; a target is a
+  // decision waiting on him. The one that needs him must not be the one
+  // that goes unmentioned on the only line he reads before opening it.
+  const suggestionWords = `${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"}`;
+  const targetWords = `${targets} ${targets === 1 ? "target" : "targets"} to approve`;
+  if (suggestions && targets) return `${businessName} — ${suggestionWords} and ${targetWords}`;
+  if (suggestions) return `${businessName} — ${suggestionWords} for today`;
+  if (targets) return `${businessName} — ${targetWords}`;
   if (setup) return `${businessName} — ${setup} setup ${setup === 1 ? "step" : "steps"} to get started`;
   // "NOTHING TO FLAG" REQUIRES THAT NOTHING WAS FOUND. The first dry
   // run said it over two findings that had nowhere to go.

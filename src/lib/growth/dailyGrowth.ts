@@ -202,6 +202,11 @@ export async function runDailyGrowth(
   let targetGoals: typeof setupGoals = [];
   let targetNumbers: Counted[] = [];
   let noTargetsBecause: string | null = null;
+  // THE REASON'S OWN FIGURES — 6 November 2026. The sentence goes in
+  // the email now, so the digit walk reads it; see targets.ts's
+  // `whyCounted`. The two sentences written here state no figure, which
+  // is why both are declared as nothing.
+  let noTargetsNumbers: Counted[] = [];
   const maturityNow = maturityOf(
     { firstAt: tracking.siteEvents.firstAt, events: tracking.siteEvents.visitorEvents30d },
     now
@@ -215,18 +220,19 @@ export async function runDailyGrowth(
       // "already offered" is a date here, not a yes or no.
       const offers = await existingTargetOffers(supabase, dealershipId);
       if (offers === null) {
-        noTargetsBecause = "the goals already on record could not be read, so no targets were drafted";
+        noTargetsBecause = "The goals already on record could not be read, so I could not tell which steps you have been offered before.";
       } else {
         const drafted = targetGoalsFrom(await loadDiagnosis(supabase, dealershipId, day), maturityNow, offers, day);
         targetGoals = drafted.goals;
         targetNumbers = drafted.declared;
         noTargetsBecause = drafted.why;
+        noTargetsNumbers = drafted.whyCounted;
       }
     } catch (err: any) {
       // SAID, NOT SWALLOWED. A funnel that could not be read is not a
       // funnel with no weakest step, and the difference has cost this
       // project an email already.
-      noTargetsBecause = "the funnel could not be read this time, so no targets were drafted";
+      noTargetsBecause = "Your funnel could not be read this time, so there is nothing here about the narrowest step in it.";
       console.error(`[growth] could not draft targets for ${dealershipId}: ${err?.message}`);
     }
   }
@@ -275,8 +281,15 @@ export async function runDailyGrowth(
     declared: [...counted, ...alsoCounted],
     suggestions,
     setupGoals: hasNoPlan(maturity, activeGoals) ? setupGoals : [],
-    targetGoals: hasNoPlan(maturity, activeGoals) ? targetGoals : [],
+    // NOT GATED ON hasNoPlan — 6 November 2026. The gate was here AND
+    // in report.ts, and both had to come off: a business with an
+    // approved plan had two targets drafted into `goals` on 5 November
+    // and read an email that mentioned neither. See report.ts's
+    // `targetGoals` input for the whole account.
+    targetGoals,
     targetNumbers,
+    noTargetsBecause,
+    noTargetsNumbers,
     activeGoals,
     findingCount: findings.length,
     pendingSetupDrafts: drafts.pending,

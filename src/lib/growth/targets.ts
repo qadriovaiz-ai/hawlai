@@ -26,7 +26,7 @@
 // rather than a goal. The honest "no target yet" was already written;
 // it did not need inventing either.
 
-import type { Diagnosis, Funnel } from "@/lib/strategy/diagnosis";
+import { MIN_STEP_ENTRY, type Diagnosis, type Funnel } from "@/lib/strategy/diagnosis";
 import type { DraftGoal, Maturity } from "@/lib/growth/strategy";
 import type { Counted } from "@/lib/growth/audit";
 
@@ -187,6 +187,18 @@ export type TargetDraft = {
    * the same time: a caller showing nothing has a sentence to show.
    */
   why: string | null;
+  /**
+   * The figures `why` itself prints — 6 November 2026.
+   *
+   * THIS SENTENCE IS NOW EMAIL COPY. Until today it reached the run
+   * result and the Vercel log and stopped there, so it could state a
+   * number nothing declared and no harm came of it. The owner's email
+   * of 5 November said nothing at all about targets — neither the two
+   * that were drafted nor a reason — and the fix puts this sentence in
+   * front of him. The moment it goes in an email the digit walk reads
+   * it, and an undeclared figure costs him the whole line.
+   */
+  whyCounted: Counted[];
 };
 
 /**
@@ -204,12 +216,17 @@ export function targetGoalsFrom(
 ): TargetDraft {
   // THE THIN BRANCH STILL OWNS ITS OWN CASE. Setup steps, not targets,
   // and S4's own sentence for it.
-  if (maturity.kind !== "ready") return { goals: [], declared: [], why: maturity.why };
+  // `maturity.why` states its own counts — days of data, events — and
+  // maturityCounted declares them in the report's plan line. This
+  // branch is not reached by the email's reason line (dailyGrowth only
+  // asks for a reason once maturity is ready), so it declares nothing
+  // and says so rather than looking as if it had been forgotten.
+  if (maturity.kind !== "ready") return { goals: [], declared: [], why: maturity.why, whyCounted: [] };
 
   const goals: DraftGoal[] = [];
   const declared: Counted[] = [];
   const thinReasons: string[] = [];
-  const waiting: string[] = [];
+  const waiting: { text: string; counted: Counted[] }[] = [];
 
   for (const funnel of diagnosis.funnels) {
     if (goals.length >= MAX_TARGET_GOALS) break;
@@ -226,11 +243,20 @@ export function targetGoalsFrom(
     if (last) {
       const age = daysBetween(last, today);
       if (age === null || age < TARGET_CYCLE_DAYS) {
-        // NOT EMAIL COPY — it states a number and nothing declares it.
-        // This reaches the run result and the logs only.
-        waiting.push(
-          `the weakest step in "${funnel.name}" was offered ${age ?? "an unreadable number of"} days ago, and the same step is offered again after ${TARGET_CYCLE_DAYS}`
-        );
+        // EMAIL COPY SINCE 6 NOVEMBER, so every figure in it is
+        // declared beside it. An unreadable date prints no number and
+        // therefore declares none — a `null` age declared as a figure
+        // would be the invented number this whole file exists to avoid.
+        waiting.push({
+          text:
+            age === null
+              ? `The weakest step in "${funnel.name}" was offered before, on a date I cannot read, and the same step is offered again after ${TARGET_CYCLE_DAYS} days.`
+              : `The weakest step in "${funnel.name}" was offered ${age} ${age === 1 ? "day" : "days"} ago, and the same step is offered again after ${TARGET_CYCLE_DAYS} days.`,
+          counted: [
+            { label: "days before the same step is offered again", value: TARGET_CYCLE_DAYS, source: "TARGET_CYCLE_DAYS" },
+            ...(age === null ? [] : [{ label: `days since the last offer in "${funnel.name}"`, value: age, source: "goals.created_at" }]),
+          ],
+        });
         continue;
       }
     }
@@ -254,17 +280,35 @@ export function targetGoalsFrom(
     );
   }
 
-  if (goals.length) return { goals, declared, why: null };
+  if (goals.length) return { goals, declared, why: null, whyCounted: [] };
+
+  // THE THIN REASON FIRST. "No step has enough traffic" is a fact
+  // about the business; "offered recently" is a fact about this
+  // product's own schedule, and the first is the more useful one to
+  // read when both are true.
+  //
+  // THE SENTENCE AND ITS FIGURES ARE RETURNED TOGETHER, which is the
+  // only safe shape: picking the sentence in one place and its
+  // declarations in another is how a line ends up declaring the figures
+  // of a sentence it is not.
+  if (thinReasons.length) {
+    return {
+      goals: [],
+      declared: [],
+      why: thinReasons[0],
+      // diagnosis.ts writes that sentence and MIN_STEP_ENTRY is the one
+      // figure in it. If it ever states a second one, this line is
+      // pruned from the email and the owner is told one thing was left
+      // out — the safe direction, and `whyLineIsDeclared` in
+      // tests/growthTargets.test.ts fails on the real sentence first.
+      whyCounted: [{ label: "people a step needs before it can be judged", value: MIN_STEP_ENTRY, source: "MIN_STEP_ENTRY (funnel diagnosis)" }],
+    };
+  }
+  if (waiting.length) return { goals: [], declared: [], why: waiting[0].text, whyCounted: waiting[0].counted };
   return {
     goals: [],
     declared: [],
-    // THE THIN REASON FIRST. "No step has enough traffic" is a fact
-    // about the business; "offered recently" is a fact about this
-    // product's own schedule, and the first is the more useful one to
-    // read when both are true.
-    why:
-      thinReasons[0] ??
-      waiting[0] ??
-      "There is enough history to set targets, but no funnel has a step with enough traffic to name yet.",
+    why: "There is enough history to set targets, but no funnel has a step with enough traffic to name yet.",
+    whyCounted: [],
   };
 }
