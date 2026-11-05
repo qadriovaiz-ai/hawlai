@@ -13,6 +13,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { executePublishAction, isClearedToExecute, toRecord, CLAIM_TTL_MS } from "@/lib/publish/executor";
 import type { PublishPlatform } from "@/lib/publish/types";
+import { code } from "./helpers/source";
 
 const NOW = Date.UTC(2026, 8, 6, 12, 0, 0);
 
@@ -39,8 +40,12 @@ function actionRow(over: Record<string, any> = {}) {
  * A minimal Supabase double. Records every update so the test can
  * assert what was written, which is the whole contract of an executor.
  */
-function fakeDb(opts: { action: Record<string, any> | null; approval: Record<string, any> | null; claimSucceeds?: boolean }) {
+function fakeDb(opts: { action: Record<string, any> | null; approval: Record<string, any> | null; claimSucceeds?: boolean; insertFails?: string }) {
   const updates: Record<string, any>[] = [];
+  // S7/P1: what went out is recorded here, so the double has to be able
+  // to take a row. Without an `insert` the write threw, was swallowed,
+  // and every assertion about it would have been about nothing.
+  const inserts: Record<string, any>[] = [];
   const claimSucceeds = opts.claimSucceeds ?? true;
 
   const from = (table: string) => {
@@ -49,6 +54,11 @@ function fakeDb(opts: { action: Record<string, any> | null; approval: Record<str
       select: () => api,
       eq: () => api,
       or: () => api,
+      insert: (values: Record<string, any>) => {
+        if (opts.insertFails) return Promise.resolve({ data: null, error: { message: opts.insertFails } });
+        inserts.push({ table, ...values });
+        return Promise.resolve({ data: null, error: null });
+      },
       maybeSingle: async () => {
         if (api._update) {
           updates.push({ table, ...api._update });
@@ -70,7 +80,21 @@ function fakeDb(opts: { action: Record<string, any> | null; approval: Record<str
     return api;
   };
 
-  return { client: { from }, updates };
+  return { client: { from }, updates, inserts };
+}
+
+/** An action whose change is COPY, which is the case S7 cares about. */
+function copyAction(over: Record<string, any> = {}) {
+  return actionRow({
+    platform: "hawlai_site",
+    action_key: "update_page_meta",
+    requested_changes: {
+      seoTitle: "Hand-poured soy candles",
+      claimWarnings: ["Taken out: burns 40% longer."],
+      claimCheck: { text: "Hand-poured soy candles", removed: 1, keptUnsupported: 0, ownerWords: false },
+    },
+    ...over,
+  });
 }
 
 const platform = (impl: Partial<PublishPlatform> = {}): PublishPlatform => ({
@@ -213,5 +237,97 @@ describe("toRecord", () => {
     expect(r.targetRef).toBe("gid://shopify/ProductVariant/1");
     expect(r.idempotencyKey).toBe("k1");
     expect(r.preview?.changes[0].before).toBe("1299");
+  });
+});
+
+describe("WHAT WENT OUT IS RECORDED HERE, AND NOWHERE ELSE — S7/P1", () => {
+  // THIS IS THE ONLY PLACE THAT KNOWS A CHANGE LANDED, which is why the
+  // record is written here rather than where the copy was drafted.
+  // Migration 216 paid for that distinction about baselines: an action
+  // and the record of it happen in the same instant, and anything
+  // reconstructed afterwards is a guess.
+  //
+  // Before this, nothing in the product recorded what reached the
+  // public — so S7's demotion rule, which has to fire on an unsupported
+  // claim reaching a customer, had nothing to fire on.
+
+  const site = (impl: Partial<PublishPlatform> = {}): PublishPlatform => ({
+    id: "hawlai_site",
+    supports: ["update_page_meta"],
+    isConnected: async () => true,
+    preview: async () => ({ ok: false, reason: "not used" }),
+    execute: async () => ({ ok: true, platformResponse: { done: true } }),
+    ...impl,
+  });
+  const siteDeps = (db: any, p: PublishPlatform = site()) => ({
+    supabase: db.client,
+    platforms: { hawlai_site: p },
+    now: () => NOW,
+  });
+
+  it("AN EXECUTED EDIT WRITES ONE claim_checks ROW, published", async () => {
+    const db = fakeDb({ action: copyAction(), approval: { id: "app-1", status: "approved" } });
+    const result = await executePublishAction(siteDeps(db), "act-1");
+    expect(result.status).toBe("executed");
+
+    const rows = db.inserts.filter((r) => r.table === "claim_checks");
+    expect(rows, "nothing recorded what went out").toHaveLength(1);
+    expect(rows[0].published).toBe(true);
+    expect(rows[0].action_id).toBe("act-1");
+    expect(rows[0].surface).toBe("page_meta");
+    expect(rows[0].text).toBe("Hand-poured soy candles");
+    expect(rows[0].claims_removed).toBe(1);
+  });
+
+  it("AND A FAILED OR STALE ONE WRITES NOTHING", async () => {
+    // published MEANS WENT OUT. A row for a change that did not land
+    // would make the monitor count an escape that never happened, and
+    // the demotion rule fire on its own successes.
+    const failed = fakeDb({ action: copyAction(), approval: { id: "app-1", status: "approved" } });
+    await executePublishAction(siteDeps(failed, site({ execute: async () => ({ ok: false, reason: "Shopify said no" }) })), "act-1");
+    expect(failed.inserts.filter((r) => r.table === "claim_checks")).toEqual([]);
+
+    const stale = fakeDb({ action: copyAction(), approval: { id: "app-1", status: "approved" } });
+    await executePublishAction(siteDeps(stale, site({ execute: async () => ({ ok: false, stale: true, changed: [{ field: "seoTitle", before: "ours", after: "someone else" }] }) })), "act-1");
+    expect(stale.inserts.filter((r) => r.table === "claim_checks")).toEqual([]);
+
+    const threw = fakeDb({ action: copyAction(), approval: { id: "app-1", status: "approved" } });
+    await executePublishAction(siteDeps(threw, site({ execute: async () => { throw new Error("network"); } })), "act-1");
+    expect(threw.inserts.filter((r) => r.table === "claim_checks")).toEqual([]);
+  });
+
+  it("AN ACTION WITH NO COPY IN IT RECORDS NOTHING, AND IS NOT AN ERROR", async () => {
+    // A price change has no sentences. A row with no text would be one
+    // the monitor can never check — counted unchecked for ever, which
+    // is what suspends promotion.
+    const db = fakeDb({ action: actionRow(), approval: { id: "app-1", status: "approved" } });
+    const result = await executePublishAction(deps(db), "act-1");
+    expect(result.status).toBe("executed");
+    expect(db.inserts.filter((r) => r.table === "claim_checks")).toEqual([]);
+  });
+
+  it("AND A RECORD THAT COULD NOT BE WRITTEN DOES NOT FAIL THE EDIT", async () => {
+    // The merchant's page edit is the real work; this row is
+    // bookkeeping for S7's monitor. A bookkeeping failure that undid a
+    // successful platform write would be a far worse fault than the one
+    // it records.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const db = fakeDb({
+      action: copyAction(),
+      approval: { id: "app-1", status: "approved" },
+      insertFails: 'relation "claim_checks" does not exist',
+    });
+    const result = await executePublishAction(siteDeps(db), "act-1");
+    expect(result.status).toBe("executed");
+    // And the action is still recorded as executed, which is the truth.
+    expect(db.updates.some((u) => u.status === "executed")).toBe(true);
+  });
+
+  it("the row is written AFTER the action is marked executed", () => {
+    // Order matters: a slow or refused insert must not sit between a
+    // successful platform write and the row that says so.
+    const src = code("src/lib/publish/executor.ts");
+    const branch = src.slice(src.indexOf('if (result.ok) {'));
+    expect(branch.indexOf('finish(supabase, actionId, "executed"')).toBeLessThan(branch.indexOf("recordExecutedPublish"));
   });
 });

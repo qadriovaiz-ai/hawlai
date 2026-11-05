@@ -57,8 +57,26 @@ const LEVELS = "@/lib/autonomyLevels";
 const RECORD = "@/lib/claims/claimChecks";
 const MONITOR = "@/lib/claims/outputMonitor";
 
-/** Where the plan has to write what the stage did NOT prove. P7 adds it. */
-const EXIT_HEADING = "### S7 EXIT — what this stage did not prove";
+/**
+ * Where the plan has to write what the stage did NOT prove. P7 adds it.
+ *
+ * MATCHED AS A HEADING AT THE START OF A LINE, and that is not
+ * fussiness. The first version used `plan.indexOf(heading)`, and at P1
+ * both assertions below went GREEN without the section existing —
+ * because §15's contract table has a row that NAMES this heading, and a
+ * plain indexOf cannot tell a heading from a sentence about one.
+ *
+ * The same fault S6's exit test recorded twice: an assertion satisfiable
+ * by any occurrence. It took three weeks to surface there; here it took
+ * one phase, because the exit test was written before the plan grew.
+ */
+const EXIT_HEADING = /^### S7 EXIT — what this stage did not prove$/m;
+
+/** The plan from its exit heading onward, or "" when there is no such heading. */
+function exitSectionOf(plan: string): string {
+  const at = plan.search(EXIT_HEADING);
+  return at < 0 ? "" : plan.slice(at);
+}
 
 async function load(path: string): Promise<any> {
   return await import(/* @vite-ignore */ path);
@@ -334,8 +352,7 @@ describe("5. WHAT S7 DID NOT PROVE, written down rather than assumed", () => {
     // ANCHORED ON A STABLE HEADING, not a section number. This plan
     // gains a section per phase, the way S6's did (§8 to §17), so a
     // number fixed today is a number that moves.
-    const plan = code("docs/PLAN-S7-AUTONOMY.md");
-    const exitSection = plan.slice(plan.indexOf(EXIT_HEADING));
+    const exitSection = exitSectionOf(code("docs/PLAN-S7-AUTONOMY.md"));
     expect(exitSection.length, "the plan has no exit section yet").toBeGreaterThan(400);
     expect(exitSection).toMatch(/[Uu]nverified live/);
     expect(exitSection).toMatch(/unattended/);
@@ -346,8 +363,8 @@ describe("5. WHAT S7 DID NOT PROVE, written down rather than assumed", () => {
     // extractor sees; a vague claim riding on a true fact still needs a
     // person." An exit test that implied otherwise would be claiming
     // the product is safer than it is.
-    const plan = code("docs/PLAN-S7-AUTONOMY.md");
-    const exitSection = plan.slice(plan.indexOf(EXIT_HEADING));
+    const exitSection = exitSectionOf(code("docs/PLAN-S7-AUTONOMY.md"));
+    expect(exitSection.length, "the plan has no exit section yet").toBeGreaterThan(400);
     expect(exitSection).toMatch(/extractor/i);
   });
 });

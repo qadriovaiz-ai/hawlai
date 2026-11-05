@@ -239,7 +239,7 @@ threshold, **demotes**. Silence is not evidence.
 | Phase | What | Size |
 |---|---|---|
 | **P0 — DONE 6 Nov, see §16** | **The exit test first**, red. It asserts promotion, demotion, "spend is never auto", and that the instrument exists | S |
-| **P1** | **M0: `claim_checks`** — migration, writer, wired into the send/publish paths that already go through one door. Nothing reads it yet | M |
+| **P1 — DONE 5 Nov, see §16** | **M0: `claim_checks`** — migration 217, writer, wired at the publish door. Nothing reads it yet. One-shot sends are P1b | M |
 | **P2** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
 | **P3** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
 | **P4** | **L2 in the type and in the database** — migration widens 209's CHECK, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
@@ -546,6 +546,123 @@ marker assertion. The mutation named the wrong guard.
 That last row is deliberate: the exit test reads the plan's exit section
 by **heading**, not by section number, because this plan gains a section
 per phase the way S6's gained §8 to §17.
+
+---
+
+## 16. P1 — the record of what went out — 5 November 2026
+
+**Done.** Migration **217** (`claim_checks`), `src/lib/claims/
+claimChecks.ts`, and one call site: `executePublishAction`, on
+`executed`.
+
+### Why the executor and not the tool
+
+The counts come from the claim guard, which runs in the tool, hours or
+days before anything goes live. `published` is only knowable in the
+executor, which is *the only thing that runs a publish action*.
+
+So the counts **ride on the action row**, in
+`requested_changes.claimCheck`, and the executor writes the row.
+Migration 216's lesson applied rather than re-learned: an action and the
+record of it happen in the same instant, and anything reconstructed
+afterwards is a guess.
+
+**Structured, not prose.** `claimWarnings` already rides on the same row
+and is sentences for the owner to read. Counting those would be a reader
+grepping its own copy — CLAUDE.md rule 8's subject. The numbers travel
+as numbers.
+
+**After `finish`, not before.** The merchant's page edit is the real
+work; the row is bookkeeping for P2's monitor. A slow or refused insert
+must not sit between a successful platform write and the row that says
+so, and a bookkeeping failure must never undo an edit that landed. Both
+are tested.
+
+### THE COLUMN THE PLAN DID NOT HAVE: `owner_words`
+
+Found while reading the page tools rather than designing from the plan,
+and without it **the demotion rule would have been wrong**.
+
+Both page tools already have this branch: when the owner says he wrote
+the line himself (`writtenByOwner`), an unsupported claim is **kept** and
+he is told plainly that he is the one standing behind it. That is an
+unsupported claim reaching the public — and it is **his sentence, not
+ours**. Demoting an autonomy level for it would take away a permission
+he never misused.
+
+So the row carries two counts that mean opposite things, and a flag for
+whose words they were:
+
+| Column | Meaning |
+|---|---|
+| `claims_removed` | the guard took it out. It reached nobody. **A high number here is the system working** |
+| `claims_unsupported` | kept and published. Expected 0, except the case above |
+| `owner_words` | true only when something was kept AND it was his wording |
+
+`owner_words` is forced false when nothing was kept. The dangerous
+direction is the other one: a clean row marked as the owner's
+responsibility would excuse a later escape that was ours.
+
+### The text is stored, and the plan was wrong to say `text_hash`
+
+The monitor's whole job is to read the surviving sentences back and ask
+the extractor about them again from scratch. **A hash cannot be
+re-read.** So `text` holds the copy as it went out, and P2 clears it once
+a verdict exists, keeping only the sentences that were refused.
+
+**And a question for the founder rather than a decision made for him.**
+For the page surfaces this is the business's own marketing copy and
+nothing about any person. When P1b widens it to emails and WhatsApp
+replies, **the text will contain a customer's name**, and the retention
+rule becomes a DPDP question rather than a tidiness one. Written into
+migration 217's header so it cannot be lost.
+
+### Unverified live
+
+Migration 217 **has not been run** — the owner runs all SQL by hand.
+Until he does, `recordClaimCheck` fails on every executed page edit and
+says so, naming the migration, and **the edit still lands**: the row is
+bookkeeping and cannot fail the work. The first live check is one page
+edit in chat, approved, followed by one `select` on `claim_checks`.
+
+### AND THE EXIT TEST ITSELF HAD THE FAULT IT WAS WRITTEN TO PREVENT
+
+Two of its assertions went **green at P1 without the thing they assert
+existing**. They look for the plan's exit section with
+`plan.indexOf("### S7 EXIT — …")`, and §15's contract table above has a
+row that NAMES that heading. A plain `indexOf` cannot tell a heading
+from a sentence about one.
+
+This is the same fault S6's exit test recorded twice — an assertion
+satisfiable by any occurrence — and it is the reason writing the exit
+test first is worth the quarantine: **it surfaced after one phase
+instead of at the end of the stage**, because the plan grew underneath
+it while it was still red. Anchored on a heading at the start of a line
+now, and both are red again.
+
+### 24 mutation checks, 24 killed — and one survived first
+
+**M8 survived**: replacing `claims_unsupported: field.keptUnsupported`
+with a hard `0` changed nothing any test could see, because **every
+fixture had a kept count of zero**. The column that stops S7 demoting
+for the owner's own sentences was unobserved by the whole file. The
+assertion that catches it had to be written with a non-zero value.
+
+**And one branch was unreachable.** `recordExecutedPublish` checked the
+surface map before the registry, and since every mapped key is in
+`ACTION_POLICIES` — pinned by its own test — nothing could ever arrive
+mapped-but-unclassified. The test I wrote for that branch passed on the
+*surface* check and proved nothing. The two checks are now in the other
+order, so both are reachable with real keys: a key in neither place
+lands on the registry check, and a key the registry knows but nobody
+mapped (`update_product_name`) lands on the surface check.
+
+**One test fixture was a test of nothing**, too: `tests/
+pageClaimCheckField.test.ts` first mocked the facts gatherer, and
+`factsFor` returns `ctx.facts` before it ever reaches the database — so
+the guard was skipped and every assertion was about a path that did not
+run. The log said `couldn't gather facts` and the tests failed for the
+right reason by luck. Facts go on the context now.
 
 ---
 

@@ -1208,6 +1208,48 @@ the guard, 13 killed.** One mutation of mine named the wrong guard: a
 marker reading `2026-13-45` still matches the date pattern, so the DATE
 assertion is what catches it.
 
+## 5 November 2026 — S7/P1, and a column the plan did not have
+
+**`owner_words`, and it is not a detail.** Both page tools keep an
+unsupported claim when the owner says he wrote the line himself, and
+tell him he is standing behind it. That is an unsupported claim reaching
+the public, and S7's demotion rule would have fired on it — taking away
+a permission he never misused, for his own sentence.
+
+Found by reading the tools rather than by designing from the plan. The
+row now carries two counts that mean opposite things (`claims_removed`
+is the system working; `claims_unsupported` is the system failing) and a
+flag for whose words they were, forced false when nothing was kept.
+
+**The plan said `text_hash`; that was wrong.** The monitor re-reads the
+surviving sentences and asks the extractor about them from scratch. A
+hash cannot be re-read. So the copy is stored, and P2 clears it once a
+verdict exists.
+
+**Raised, not decided:** for the page surfaces the stored text is the
+business's own marketing copy. When P1b widens this to emails and
+WhatsApp replies it will carry a customer's name, and retention becomes
+a DPDP question. In migration 217's header, for him.
+
+**Written at the executor, not at the tool.** The counts come from the
+guard in the tool; `published` is only knowable where the change lands.
+So the counts ride on the action row as NUMBERS — not counted out of
+`claimWarnings`, which is prose for the owner and would be a reader
+grepping its own copy (rule 8) — and the executor writes the row, after
+the action is marked executed, where a bookkeeping failure cannot undo
+an edit that worked.
+
+**24 mutation checks, 24 killed. One survived first and the gap was
+real:** every fixture had a kept-unsupported count of zero, so hard-
+coding that column to 0 was invisible to the entire suite. The column
+that stops S7 punishing the owner for his own words was unobserved.
+
+**And two tests were tests of nothing until they were fixed** — the same
+shape twice: a branch that could not be reached (the registry check sat
+behind a surface check that always matched first) and a fixture whose
+guard was skipped (`factsFor` returns `ctx.facts` before it reaches the
+database, so mocking the gatherer did nothing).
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

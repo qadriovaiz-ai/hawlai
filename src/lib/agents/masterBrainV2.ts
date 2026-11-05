@@ -20,6 +20,7 @@
 // review and approve.
 // ------------------------------------------------------------------
 
+import { claimCheckField } from "@/lib/claims/claimChecks";
 import { generateBrandKit } from "./brandBuildingAgent";
 import { recentCopy } from "@/lib/content/recentCopy";
 import { generateLogoConcept } from "./brandKitAgent";
@@ -944,7 +945,19 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         actionKey: "update_page_text",
         targetRef: target.id,
         targetLabel: `${target.title ?? target.slug} (/site/${pageSite.slug}${target.slug === "home" ? "" : `/${target.slug}`})`,
-        requestedChanges: { edits: result.applied, claimWarnings },
+        requestedChanges: {
+          edits: result.applied,
+          claimWarnings,
+          // S7/P1, the same field as the search-listing tool above.
+          // Nothing is kept-unsupported on this path: applyEdits drops
+          // the line rather than publishing it, which is why
+          // keptUnsupported is 0 and ownerWords is false here and not a
+          // copy of the meta tool's branch.
+          claimCheck: claimCheckField({
+            text: result.applied.map((e: any) => String(e?.text ?? "")).filter(Boolean).join(" "),
+            removed: result.removed,
+          }),
+        },
         requestedBy: null,
         resolutionPath: "exact",
         resolutionDetail: { query: askedFor, candidateCount: sitePages.length, matchType: "exact" },
@@ -995,6 +1008,11 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const metaFacts = await factsFor(supabase, ctx);
       const ownWords = new Set((Array.isArray(input.writtenByOwner) ? input.writtenByOwner : []).map((f: any) => String(f)));
       const claimWarnings: string[] = [];
+      // S7/P1: what the guard took out, and what was kept because the
+      // owner wrote it himself. Two counts, because they mean opposite
+      // things to the demotion rule — see migration 217's owner_words.
+      const metaRemoved: string[] = [];
+      let metaKeptByOwner = 0;
 
       function checkedCopy(field: "title" | "metaDescription", value: string | undefined): string | undefined {
         if (value === undefined || !metaFacts) return value;
@@ -1002,10 +1020,14 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         if (verdict.removed.length === 0) return value;
         const what = field === "title" ? "search title" : "description";
         if (ownWords.has(field)) {
+          // KEPT, UNSUPPORTED, AND HIS. Counted apart from `removed`
+          // because the two mean opposite things to S7's demotion rule.
+          metaKeptByOwner += verdict.removed.length;
           claimWarnings.push(`Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`);
           return value;
         }
         const kept = String((verdict.output as any).value ?? "").trim();
+        metaRemoved.push(...verdict.removed);
         claimWarnings.push(`Taken out of the ${what}, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`);
         return kept || undefined;
       }
@@ -1060,7 +1082,29 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // tidy-up: the card warns about length and they decide.
         // claimWarnings ride along so the preview can show them — the
         // platform reads the facts of the page, not of the business.
-        requestedChanges: { seoTitle: safeTitle, metaDescription: safeDescription, ogImageUrl: shareImageUrl, claimWarnings },
+        requestedChanges: {
+          seoTitle: safeTitle,
+          metaDescription: safeDescription,
+          ogImageUrl: shareImageUrl,
+          claimWarnings,
+          // WHAT THE GUARD DID, AS NUMBERS — S7/P1. It rides on the
+          // action because the executor is the one place that knows the
+          // change landed, and this tool is the one place that knows
+          // what the guard took out. `claimWarnings` beside it is
+          // sentences for the owner; counting those would be a reader
+          // grepping its own copy, which rule 8 exists about.
+          claimCheck: claimCheckField({
+            text: [safeTitle, safeDescription].filter(Boolean).join(" — "),
+            removed: metaRemoved,
+            // THE OWNER'S OWN WORDING IS KEPT, UNSUPPORTED AND ON
+            // PURPOSE — see `checkedCopy` above, which tells him he is
+            // the one standing behind it. That is a claim reaching the
+            // public, and S7 must not demote anything for it: it is his
+            // sentence, not ours. Migration 217's `owner_words`.
+            keptUnsupported: metaKeptByOwner,
+            ownerWords: metaKeptByOwner > 0,
+          }),
+        },
         requestedBy: null,
         resolutionPath: "exact",
         resolutionDetail: { query: asked, candidateCount: allPages.length, matchType: "exact" },

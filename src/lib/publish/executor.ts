@@ -11,6 +11,7 @@
 //   3. A crash mid-execute must not wedge an action forever.
 
 import { getActionPolicy } from "@/lib/executionPolicy";
+import { recordExecutedPublish } from "@/lib/claims/claimChecks";
 import { publishLog, publishError } from "./log";
 import type { PublishPlatform, PublishActionRecord, PublishStatus } from "./types";
 
@@ -210,6 +211,29 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
       platform_response: result.platformResponse ?? null,
       executed_at: new Date(now()).toISOString(),
     });
+
+    // WHAT WENT OUT, RECORDED HERE AND NOWHERE ELSE — S7/P1.
+    //
+    // This is the only place in the product that knows a change
+    // actually landed, which is why the record is written here rather
+    // than where the copy was drafted. Migration 216 paid for that
+    // distinction already: an action and the record of it happen in the
+    // same instant, and anything reconstructed afterwards is a guess.
+    //
+    // AFTER `finish`, ON PURPOSE. The merchant's page edit is the real
+    // work; this row is bookkeeping for S7's monitor. If the order were
+    // reversed, a slow or refused insert would sit between a successful
+    // platform write and the row that says so.
+    //
+    // It cannot fail the execution. recordExecutedPublish reports every
+    // failure and throws none — and an action with no copy in it, like
+    // a price change, is not an error, it simply has no sentences for a
+    // monitor to read.
+    const recorded = await recordExecutedPublish(supabase, toRecord(action));
+    if (!recorded.recorded && recorded.why && recorded.why !== "this action carries no copy to check") {
+      publishError("execute.claim_check_not_recorded", { action: actionId, detail: recorded.why });
+    }
+
     publishLog("execute.done", { action: actionId });
     return { status: "executed", platformResponse: result.platformResponse };
   }
