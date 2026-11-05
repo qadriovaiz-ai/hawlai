@@ -1089,6 +1089,68 @@ dryRunReport.ts` never passed `targetGoals` at all, so the dry run has
 never shown a target and still does not. It would need a diagnosis to
 read, which is a different job from this fix.
 
+## 6 November 2026 — which block was left out, and over which figure
+
+**The founder's second request the same day.** Since 3 November a report
+block whose figures nobody counted is pruned rather than taking the
+email down with it, and the email says so: *"I left 1 thing out of this
+email, because a figure in it did not trace back to anything I
+counted."* He was told something was missing and given no way to find
+it. `blocksLeftOut` was a count in a run result the call site dropped,
+and `removed` — the block kinds and the offending figures — was a
+`console.error` in Vercel's logs, which he has never read.
+
+**That is the same shape as the fault the pruning rule exists to fix:**
+the product knew, and said so where nobody was looking.
+
+### Where the record goes, and why there is no migration
+
+`audit_log` (migration 128) already has exactly this shape: the owner
+may SELECT his own rows, nothing may UPDATE or DELETE them, and
+`event_type` is free text *"so a new source shouldn't need a migration
+to log a new event type"* — written in 2024 for this case. Event type
+`report_blocks_left_out`, actor `cron:daily_report` or
+`cron:monthly_review`, the blocks in `details`. **No SQL for the owner
+to run.**
+
+**Both records stay.** The log line is written BEFORE the row is
+attempted and is not redundant: the row needs the database to be
+reachable and the line does not. The one thing this must not be is the
+only record AND a silent one.
+
+### logAuditEvent now returns whether it wrote
+
+It swallowed the exception by design — ten call sites depend on it never
+throwing — and it threw the REASON away as well, which is a different
+thing. It never looked at the insert's own `error` either, so a refused
+insert and a successful one were indistinguishable to every caller. It
+returns `{ ok, error }` now; the swallow is unchanged and the ten
+callers that ignore the return behave exactly as before.
+
+### One test is a source assertion, deliberately, and here is the measure
+
+The monthly review's call site is asserted with `code()` rather than end
+to end. I tried the real route first: a decision whose own words carry a
+figure — *'Give all 7 pages a search title'* — and it did **not** prune,
+because `readable()` strips digits out of the two strings the owner's
+routes wrote before they reach a block. `prunedReview`'s own header
+already said the rest: nothing this product can produce today puts an
+untraceable figure in that email, so the path is **defensive**.
+
+And the seam the daily report's tests use is not available: the daily
+report is pruned in `dailyGrowth.ts` and built in `report.ts`, so a spy
+on the export intercepts the cross-module call — while
+`buildMonthlyReview` and `runMonthlyReview` are in the same file, where
+a spy cannot reach an internal call. Faking a prune would have meant
+adding a seam to production code for a logging commit.
+
+So the recorder's behaviour is tested directly, with that surface among
+its cases, and what the source assertion holds down is that **this call
+site reaches it**. A mutation removing the call, or passing the wrong
+surface, is killed.
+
+**18 mutation checks, 18 killed.**
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

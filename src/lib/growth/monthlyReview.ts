@@ -51,6 +51,7 @@ import {
   type ReportBlock,
 } from "@/lib/growth/report";
 import type { Counted } from "@/lib/growth/audit";
+import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
 
 /** Month names, written out because a date library is not needed for twelve words. */
 const MONTH_NAMES = [
@@ -345,6 +346,8 @@ export type MonthlyReviewRun = {
   notMeasurable: number;
   waiting: number;
   blocksLeftOut: number;
+  /** Which blocks, and the figure that took each one out. */
+  leftOut: LeftOutBlock[];
   reviewSound: boolean;
   sent: boolean;
   /** Why it did not run or did not send. Never a silent nothing. */
@@ -380,6 +383,7 @@ export async function runMonthlyReview(
     notMeasurable: 0,
     waiting: 0,
     blocksLeftOut: 0,
+    leftOut: [],
     reviewSound: true,
     sent: false,
     skipped: null,
@@ -440,10 +444,11 @@ export async function runMonthlyReview(
   // untraceable "5" meant the owner got silence and the reason went to
   // a Vercel log he has never read.
   const { report: sendable, removed } = prunedReview(review, businessName, window);
+  // THE SAME RECORD AS THE DAILY REPORT'S, through the same writer.
+  // This email prunes by the same rule, so it goes quiet in the same
+  // way — and once a month there is no next morning to notice it.
   if (removed.length) {
-    console.error(
-      `[review] the ${window.label} review for ${dealershipId} had numbers nobody counted; those blocks were left out and the rest was sent: ${JSON.stringify(check.offenders)}`
-    );
+    await recordBlocksLeftOut(supabase, { dealershipId, surface: "monthly_review", day, removed });
   }
 
   const result: MonthlyReviewRun = {
@@ -454,6 +459,7 @@ export async function runMonthlyReview(
     notMeasurable: (review.counted.find((c) => c.label === "that could not be measured")?.value ?? 0) as number,
     waiting: (review.counted.find((c) => c.label === "still waiting for an answer")?.value ?? 0) as number,
     blocksLeftOut: removed.length,
+    leftOut: removed,
     reviewSound: check.ok,
     review: sendable,
   };

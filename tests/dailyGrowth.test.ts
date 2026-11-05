@@ -126,6 +126,10 @@ function db(over: Record<string, any[]> = {}) {
       created_at: i === 0 ? "2026-09-08T10:00:00Z" : "2026-10-22T10:00:00Z",
     })),
     dealerships: [{ id: "d1", dealership_name: "A Business", owner_id: "u1" }],
+    // SO THE RECORD OF A PRUNED BLOCK IS OBSERVABLE — 6 November 2026.
+    // See section 2b: without this table the write lands nowhere and
+    // the test can only assert a log line.
+    audit_log: [],
     ad_creatives: [],
     orders: [],
     goals: [],
@@ -376,6 +380,70 @@ describe("2. THE PRECONDITION — the BLOCK is refused, not the email", () => {
     expect(r.blocksLeftOut).toBe(0);
     expect(r.sent).toBe(true);
     expect(sends[0].body).not.toMatch(/left \d+ thing/);
+  });
+});
+
+describe("2b. AND THE RECORD SAYS WHICH BLOCK — 6 November 2026", () => {
+  // The founder's request. The email has said "I left 1 thing out of
+  // this email" since 3 November, and the answer to "which thing" was a
+  // `console.error` in Vercel's logs: a product that knew and said so
+  // where nobody looks, which is the same shape as the fault the
+  // pruning rule exists to fix.
+
+  /** A report with one block stating a figure nothing counted. */
+  async function withAPrunedBlock(client: any) {
+    const reportModule = await import("@/lib/growth/report");
+    const spy = vi.spyOn(reportModule, "buildDailyReport").mockImplementation(((input: any) => ({
+      dealershipId: input.dealershipId,
+      day: input.day,
+      subject: `${input.businessName} — your daily check, nothing to flag`,
+      counted: input.counted,
+      blocks: [
+        { kind: "line", text: "Traffic is up 300 percent.", numbers: [] },
+        { kind: "line", text: "Nothing else to report.", numbers: [] },
+      ],
+    })) as any);
+    try {
+      return await runDailyGrowth(client, "d1", { now: NOW });
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it("THE ROW NAMES THE BLOCK AND THE FIGURE THAT TOOK IT OUT", async () => {
+    sends.length = 0;
+    forbidModelCalls();
+    const { client, tables } = db();
+    const r = await withAPrunedBlock(client);
+
+    expect(r.blocksLeftOut).toBe(1);
+    // CARRIED OUT OF THE FUNCTION, not only counted. `blocksLeftOut`
+    // told a caller something was missing and gave it no way to say
+    // what.
+    expect(r.leftOut).toEqual([{ block: "line", found: "300" }]);
+
+    const row = tables.audit_log.find((a: any) => a.event_type === "report_blocks_left_out");
+    expect(row, "nothing recorded which block was left out").toBeTruthy();
+    expect(row.dealership_id).toBe("d1");
+    expect(row.details.blocks).toEqual([{ block: "line", found: "300" }]);
+    expect(row.details.day).toBe(TODAY);
+    expect(row.summary).toContain('"300"');
+    // AND THE EMAIL STILL WENT. The record is bookkeeping; it must not
+    // have become a new way for the send to fail.
+    expect(sends).toHaveLength(1);
+    expect(sends[0].body).not.toMatch(/300/);
+  });
+
+  it("AND AN ORDINARY MORNING WRITES NO SUCH ROW", async () => {
+    // Every run goes through this call. A row a day saying nothing was
+    // left out would bury the mornings that matter.
+    sends.length = 0;
+    forbidModelCalls();
+    const { client, tables } = db();
+    const r = await runDailyGrowth(client, "d1", { now: NOW });
+    expect(r.blocksLeftOut).toBe(0);
+    expect(r.leftOut).toEqual([]);
+    expect(tables.audit_log.filter((a: any) => a.event_type === "report_blocks_left_out")).toEqual([]);
   });
 });
 

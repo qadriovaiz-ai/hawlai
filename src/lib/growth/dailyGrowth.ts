@@ -25,6 +25,7 @@ import { buildDailyReport, everyNumberIsCounted, renderText, withoutUncountedBlo
 import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
 import { existingTargetOffers, writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
+import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
 import { checkTracking } from "@/lib/growth/tracking";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { aiFailureLabel } from "@/lib/ai/claude";
@@ -56,6 +57,14 @@ export type GrowthRunResult = {
    * dropped instead, and the owner was told nothing at all.
    */
   blocksLeftOut: number;
+  /**
+   * Which blocks, and the figure that took each one out.
+   *
+   * CARRIED OUT OF HERE, not only counted. `blocksLeftOut` told a
+   * caller that something was missing and gave it no way to say what,
+   * which is the owner's position when he reads "I left 1 thing out".
+   */
+  leftOut: LeftOutBlock[];
   sent: boolean;
   /** Why nothing was sent, when nothing was. */
   notSentBecause: string | null;
@@ -102,6 +111,7 @@ export async function runDailyGrowth(
     setupSteps: 0,
     reportSound: false,
     blocksLeftOut: 0,
+    leftOut: [],
     sent: false,
     notSentBecause: null,
     copyAuditCostInr: 0,
@@ -314,14 +324,17 @@ export async function runDailyGrowth(
   // So a figure nobody counted still never reaches him, and it is the
   // BLOCK that is refused rather than the email.
   const { report: sendable, removed } = withoutUncountedBlocks(report);
+  // WHICH BLOCK, AND OVER WHICH FIGURE, WHERE HE CAN FIND IT — 6
+  // November 2026. The email has said "I left 1 thing out" since 3
+  // November and the answer to "which thing" lived only in this log
+  // line. See src/lib/growth/leftOut.ts.
   if (removed.length) {
-    console.error(
-      `[growth] report for ${dealershipId} on ${day} had numbers nobody counted; those blocks were left out and the rest was sent: ${JSON.stringify(check.offenders)}`
-    );
+    await recordBlocksLeftOut(supabase, { dealershipId, surface: "daily_report", day, removed });
   }
 
   const result: GrowthRunResult = {
     ...empty,
+    leftOut: removed,
     targetsDrafted: targetGoals.length,
     noTargetsBecause,
     findings: findings.length,

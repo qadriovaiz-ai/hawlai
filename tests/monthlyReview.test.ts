@@ -384,6 +384,11 @@ describe("7. the run, and the three ways it must not go quiet", () => {
       decisions: seed.decisions ?? [],
       outcomes: seed.outcomes ?? [],
       dealerships: [{ id: "d1", dealership_name: "A Business", owner_id: "u1" }],
+      // 6 NOVEMBER 2026: a pruned block is recorded here, so the
+      // harness has to be able to take a write. Without it the review
+      // still sends — the record is best-effort by design — and this
+      // file could only have asserted a log line.
+      audit_log: [],
     };
     const client = {
       from(table: string) {
@@ -401,6 +406,11 @@ describe("7. the run, and the three ways it must not go quiet", () => {
           gte: () => chain,
           in(c: string, v: any[]) { inList = { col: c, values: v }; return chain; },
           maybeSingle: () => { const r = apply(); return Promise.resolve({ data: (r.data as any[] | null)?.[0] ?? null, error: r.error }); },
+          insert(values: any) {
+            if (errors[`${table}:insert`]) return Promise.resolve({ data: null, error: { message: errors[`${table}:insert`] } });
+            (tables[table] ??= []).push({ ...values });
+            return Promise.resolve({ data: null, error: null });
+          },
           then: (resolve: any) => resolve(apply()),
         };
         return chain;
@@ -471,6 +481,46 @@ describe("7. the run, and the three ways it must not go quiet", () => {
     expect(r.review?.blocks.some(isResultBlock)).toBe(true);
     expect(r.reviewSound).toBe(true);
     expect(sends).toEqual([]);
+  });
+
+  it("A PRUNED BLOCK WOULD BE RECORDED, AND THIS IS A SOURCE ASSERTION ON PURPOSE", () => {
+    // THE SAME REQUEST AS THE DAILY REPORT'S, 6 November 2026, and this
+    // email needs it more: it goes out once a month, so there is no
+    // next morning to notice something was quietly dropped.
+    //
+    // WHY THIS IS NOT AN END-TO-END TEST, measured rather than assumed.
+    // I tried the real route first: a decision whose own words carry a
+    // figure — 'Give all 7 pages a search title'. It did not prune,
+    // because `readable()` strips digits out of the two strings the
+    // owner's routes wrote, before they ever reach a block. That is
+    // deliberate, and prunedReview's own header says the rest: nothing
+    // this product can produce today puts an untraceable figure in this
+    // email, so the pruning path is DEFENSIVE.
+    //
+    // And the seam the daily report's tests use is not here either:
+    // `buildMonthlyReview` is called from inside its own module, so a
+    // spy on the export cannot intercept it. Faking a prune would mean
+    // adding a seam to production code for a logging commit.
+    //
+    // So: the behaviour of the recorder is tested in
+    // tests/blocksLeftOut.test.ts, with this surface among its cases,
+    // and what is asserted here is that THIS CALL SITE reaches it.
+    const src = code("src/lib/growth/monthlyReview.ts");
+    const prune = src.slice(src.indexOf("const { report: sendable, removed } = prunedReview"));
+    expect(prune).toMatch(/if \(removed\.length\) \{\s*await recordBlocksLeftOut\(supabase, \{/);
+    expect(prune).toMatch(/surface: "monthly_review"/);
+    // AND THE NAMES LEAVE THE FUNCTION, not only the count. That was
+    // the whole fault: `blocksLeftOut` told a caller something was
+    // missing and gave it no way to say what.
+    expect(src).toMatch(/leftOut: removed,/);
+  });
+
+  it("AND AN ORDINARY MONTH RECORDS NOTHING", async () => {
+    const { client, tables } = db({ decisions: [row()], outcomes: [{ ...outcome() }] });
+    const r = await runMonthlyReview(client, "d1", { now: NOW });
+    expect(r.blocksLeftOut).toBe(0);
+    expect(r.leftOut).toEqual([]);
+    expect(tables.audit_log).toEqual([]);
   });
 
   it("A MONTH WITH NO DECISIONS AT ALL STILL SENDS, and never reads outcomes", async () => {

@@ -2,6 +2,19 @@
 // Best-effort, same principle as emitNotification/runAndLog elsewhere
 // in this codebase: a logging failure must never break the real
 // action it's describing.
+//
+// IT RETURNS WHETHER IT WROTE — 6 November 2026, and the swallow is
+// unchanged: this still never throws, and the ten call sites that
+// ignore the return behave exactly as before. It threw the REASON away
+// as well, which is a different thing from not throwing. A caller whose
+// row is the only record of something — see
+// src/lib/growth/leftOut.ts — now has something to say when it is not
+// there.
+//
+// The insert's own `error` was never looked at either: a refused insert
+// and a successful one were indistinguishable to every caller.
+
+export type AuditWrite = { ok: boolean; error?: string };
 
 export async function logAuditEvent(
   supabase: any,
@@ -17,9 +30,9 @@ export async function logAuditEvent(
     summary: string;
     details?: Record<string, any>;
   }
-) {
+): Promise<AuditWrite> {
   try {
-    await supabase.from("audit_log").insert({
+    const { error } = await supabase.from("audit_log").insert({
       dealership_id: params.dealershipId,
       actor: params.actor,
       event_type: params.eventType,
@@ -28,7 +41,11 @@ export async function logAuditEvent(
       summary: params.summary,
       details: params.details ?? {},
     });
-  } catch {
-    // swallow — see file header
+    if (error) return { ok: false, error: String(error.message ?? error) };
+    return { ok: true };
+  } catch (err: any) {
+    // STILL SWALLOWED — see the file header. Reported to the caller
+    // rather than thrown at it.
+    return { ok: false, error: String(err?.message ?? err) };
   }
 }
