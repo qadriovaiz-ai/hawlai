@@ -1340,6 +1340,71 @@ that did not parse, so the run died with no failing test.
 
 **31 mutation checks, 31 killed** once they were faithful.
 
+## 6 November 2026 — a dead connection that says so, and a helper I should have used
+
+**Two small fixes, one fault.** candle_by_qaaf's Search Console
+connection died on 4 November; the only trace was an error string on a
+job row, and the owner found out on the 6th by asking why an email was
+missing. That subsystem is the instrument the whole local-search plan
+depends on.
+
+**1. The message named the status and not the cause.** It preferred
+`error_description`, and for this failure that is the LESS useful field:
+Google answers `{"error":"invalid_grant","error_description":"Bad
+Request"}`. So three days of rows read *"(Bad Request)"*, which names no
+cause and rules nothing out. `invalid_grant` is what says the refresh
+token is dead at Google's end — the thing that decides whether
+reconnecting is the whole fix. Both fields now, code first.
+
+**2. Nobody was told.** A notification now, with Google's own reason
+quoted and the consequence stated ("your real search terms have stopped
+updating"), **once** — only when the previous run succeeded, because a
+notification a day about the same dead connection is one he learns to
+ignore, which ends where not telling him ends. **And it still throws**,
+so the health panel cannot go green on a morning that read nothing.
+
+Migration **219** adds the kind, and it is **generic**
+(`integration_disconnected`): Gmail, YouTube and Ads hold refresh tokens
+from the same Google app and can die the same way, and a kind per
+integration means a migration per integration. It also **supersedes 218**
+— running 219 alone is enough.
+
+### THE HELPER I SHOULD HAVE USED, AND IT IS RULE 8'S OWN SUBJECT
+
+`tests/helpers/source.ts` has had an `sql()` function all along, for
+precisely this: **`code()` strips `//` and `/* */` and leaves every SQL
+`--` comment standing.** Today's migrations carry long headers that
+quote their own clauses, so a structural assertion read through `code()`
+passes on the comment. I used `code()` and `sourceWithComments()` on
+migrations in three test files written today and only noticed when an
+assertion contradicted itself: 219's header explains why the kind is
+*not* `search_console_disconnected`, naming the string, so the file both
+contained and did not contain it.
+
+Switched to `sql()` in `claimChecks`, `autonomyDemotion` and
+`searchConsoleDeath`, with the one assertion that **is** about a comment
+(217's DPDP note) left reading the raw file on purpose.
+
+**This is rule 8 exactly, in a file type its helper does not cover by
+default** — and the reason the suite has 1,128 raw-source assertions on
+an allowlist is that this keeps happening.
+
+### And one test was naming a migration where it should have found one
+
+The "declared kinds and the database cannot drift apart" assertion named
+218. It broke the moment 219 added a kind, because the constraint is
+drop-and-recreate and only the **highest-numbered** migration describes
+what the database accepts. It now finds the newest migration that
+touches `notifications_kind_check` — six have so far, and there will be
+a seventh.
+
+**17 mutation checks, 17 killed.** One survived first: a mutation making
+the telling rethrow was invisible, because every failure case I had
+written returns an error *object* rather than throwing, so the catch
+inside the telling was never entered. The case that catches it is now
+its own test — and the fault it guards against is this commit's own
+fault in miniature: an error that hides the thing it is about.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

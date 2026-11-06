@@ -72,7 +72,19 @@ export async function validAccessToken(
     // the owner nothing about what to do. The commonest cause is that
     // they removed Hawlai's access at Google, and the only fix is to
     // connect again.
-    const why = data?.error_description ?? data?.error ?? "the refresh was refused";
+    //
+    // BOTH FIELDS, AND THE CODE FIRST — 6 November 2026. This preferred
+    // `error_description`, and for the failure that actually happened
+    // that is the LESS useful field: Google answers
+    // {"error":"invalid_grant","error_description":"Bad Request"}. So
+    // three days of job rows read "Couldn't refresh Search Console
+    // access (Bad Request)" — which names no cause and rules nothing
+    // out. `invalid_grant` says the refresh token itself is dead at
+    // Google's end, which is what decides whether reconnecting is the
+    // whole fix.
+    const code = String(data?.error ?? "").trim();
+    const detail = String(data?.error_description ?? "").trim();
+    const why = [code, detail].filter(Boolean).join(": ") || "the refresh was refused";
     throw new Error(`Couldn't refresh Search Console access (${why}) — reconnect it in Integrations.`);
   }
   const accessToken = String(data.access_token);

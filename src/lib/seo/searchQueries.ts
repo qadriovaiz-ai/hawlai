@@ -48,6 +48,54 @@ export function windowFor(now: Date = new Date()): { from: string; to: string } 
  * most businesses have not connected Search Console, and that is not a
  * failure of anything.
  */
+/**
+ * Tell the owner once, on the day it breaks, and not every morning
+ * after.
+ *
+ * ONLY WHEN THE LAST RUN SUCCEEDED. A notification a day about the same
+ * dead connection is a notification he learns to ignore, which is the
+ * same end state as not telling him. `automation_run_log` already holds
+ * one row per subsystem per run — written by runAndLog AFTER the runner
+ * returns, so the newest row is the PREVIOUS run — which makes "is this
+ * break new" a single read.
+ *
+ * AND AN UNREADABLE HISTORY TELLS HIM ANYWAY. If that read fails there
+ * is no way to know whether he has been told, and the cost of one extra
+ * notification is nothing beside the cost of silence.
+ */
+async function tellOwnerItDied(service: any, dealershipId: string, reason: string): Promise<void> {
+  try {
+    const { data, error } = await service
+      .from("automation_run_log")
+      .select("success")
+      .eq("dealership_id", dealershipId)
+      .eq("subsystem", "search_console_sync")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const previous = Array.isArray(data) ? data[0] : null;
+    if (!error && previous && previous.success === false) return;
+
+    const { emitNotification } = await import("@/lib/notifications/emit");
+    await emitNotification(service, {
+      dealershipId,
+      kind: "integration_disconnected",
+      title: "Search Console needs reconnecting",
+      // THE PROVIDER'S OWN REASON, QUOTED. "invalid_grant" means the
+      // permission was withdrawn or expired at Google's end, and that
+      // is the difference between "press reconnect" and "something is
+      // wrong with Hawlai".
+      body: `I can't read your Google Search Console data any more, so your real search terms have stopped updating. Google said: ${reason}`,
+      href: "/dashboard/settings/integrations",
+    });
+    console.error(`[search-queries] told ${dealershipId} that Search Console needs reconnecting: ${reason}`);
+  } catch (err: any) {
+    // NEVER THE REASON A JOB FAILS DIFFERENTLY. The throw this rides
+    // beside is the real failure; this is the telling, and a telling
+    // that changed the error would hide the thing it is about.
+    console.error(`[search-queries] could not tell ${dealershipId} that Search Console died: ${err?.message ?? err}`);
+  }
+}
+
 export async function syncSearchQueries(service: any, dealershipId: string, now: Date = new Date()): Promise<SyncResult> {
   const window = windowFor(now);
   const { data: row } = await service
@@ -81,7 +129,27 @@ export async function syncSearchQueries(service: any, dealershipId: string, now:
     pageFilter = sitePageFilter(slug);
   }
 
-  const { accessToken, refreshed } = await validAccessToken(conn);
+  // A DEAD CONNECTION REACHES THE OWNER — 6 November 2026.
+  //
+  // This threw, `runAndLog` recorded the failure, and that was the end
+  // of it: the only trace was an error string on a row nobody reads.
+  // candle_by_qaaf's Search Console died on 4 November and he found out
+  // on the 6th, by asking why an email was missing — and this is the
+  // subsystem that measures everything the local-search plan is about.
+  //
+  // IT STILL THROWS. The job must stay red, or the health panel starts
+  // reporting a clean run for a subsystem that read nothing. What is
+  // added is the telling.
+  let accessToken: string;
+  let refreshed: { accessToken: string; expiry: string } | undefined;
+  try {
+    const valid = await validAccessToken(conn);
+    accessToken = valid.accessToken;
+    refreshed = valid.refreshed;
+  } catch (err: any) {
+    await tellOwnerItDied(service, dealershipId, String(err?.message ?? err));
+    throw err;
+  }
   if (refreshed) await saveRefreshed(service, dealershipId, refreshed);
 
   const rows = await fetchQueries(accessToken, conn.siteUrl, window, pageFilter);

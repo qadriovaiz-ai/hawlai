@@ -22,9 +22,10 @@
 //      slow one.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
+import fs from "fs";
 import { applyDemotion, demoteAfter, demoteFromRun, reachFor } from "@/lib/autonomy/demotion";
 import { MONITOR_BLIND_DAYS } from "@/lib/claims/outputMonitor";
-import { code, sourceWithComments } from "./helpers/source";
+import { code, sourceWithComments, sql as sqlOf } from "./helpers/source";
 
 const decisions: any[] = [];
 vi.mock("@/lib/growth/recordDecision", () => ({
@@ -350,7 +351,11 @@ describe("7. IT IS WIRED, AND THE DATABASE WILL TAKE THE TELLING", () => {
     // notifications.kind is CHECK-constrained and emitNotification
     // swallows a refused insert, so without this the brake would work,
     // write its decision row, and tell him nothing.
-    const sql = sourceWithComments("supabase/migrations/218_notification_kind_autonomy_lowered.sql");
+    // THROUGH sql(), which strips `--`. `code()` does not, and these
+    // migrations carry headers that quote the very clauses a test looks
+    // for — the hiding place rule 8 is about, in a file type the
+    // default helper does not cover.
+    const sql = sqlOf("supabase/migrations/218_notification_kind_autonomy_lowered.sql");
     expect(sql).toMatch(/notifications_kind_check/);
     expect(sql).toMatch(/'autonomy_lowered'/);
     // AND IT KEEPS EVERY KIND THAT WAS ALREADY THERE. The pattern is
@@ -359,6 +364,9 @@ describe("7. IT IS WIRED, AND THE DATABASE WILL TAKE THE TELLING", () => {
     for (const kind of ["competitor_alert", "goal_completed", "email_delivery_problem", "platform_ai_unavailable"]) {
       expect(sql, `${kind} would stop being writable`).toContain(`'${kind}'`);
     }
+    // AND THE HEADER STILL CARRIES THE REASON, a separate assertion
+    // because it is about the comment on purpose.
+    expect(sourceWithComments("supabase/migrations/218_notification_kind_autonomy_lowered.sql")).toMatch(/rule 6/);
   });
 
   it("and the type and the constraint cannot drift apart", () => {
@@ -376,7 +384,19 @@ describe("7. IT IS WIRED, AND THE DATABASE WILL TAKE THE TELLING", () => {
     const declared = (union.match(/"([a-z_]+)"/g) ?? []).map((m) => m.replace(/"/g, ""));
     expect(declared.length, "the NotificationKind union was not found").toBeGreaterThan(15);
 
-    const sql = code("supabase/migrations/218_notification_kind_autonomy_lowered.sql");
+    // THE NEWEST MIGRATION THAT TOUCHES THE CONSTRAINT, found rather
+    // than named. Naming 218 broke the moment 219 added a kind: the
+    // constraint is drop-and-recreate, so only the highest-numbered one
+    // describes what the database actually accepts. Six migrations have
+    // rewritten it so far, and there will be a seventh.
+    const dir = "supabase/migrations";
+    const latest = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".sql") && sqlOf(`${dir}/${f}`).includes("notifications_kind_check"))
+      .sort()
+      .pop();
+    expect(latest, "no migration defines notifications_kind_check").toBeTruthy();
+    const sql = sqlOf(`${dir}/${latest}`);
     const clause = sql.slice(sql.indexOf("check (kind in ("), sql.indexOf("));", sql.indexOf("check (kind in (")));
     const inSql = (clause.match(/'([a-z_]+)'/g) ?? []).map((m) => m.replace(/'/g, ""));
     expect(inSql.length, "the CHECK clause was not found").toBeGreaterThan(15);

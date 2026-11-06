@@ -37,7 +37,11 @@ export type NotificationKind =
   // S7/P3 (migration 218): the product has stopped doing something on
   // its own, because a claim nothing supports went out or because
   // nothing could be checked for days.
-  | "autonomy_lowered";
+  | "autonomy_lowered"
+  // A connected account stopped working and needs reconnecting
+  // (migration 219). Generic: Gmail, YouTube and Ads hold refresh
+  // tokens from the same Google app and can die the same way.
+  | "integration_disconnected";
 
 export interface EmitNotificationInput {
   dealershipId: string;

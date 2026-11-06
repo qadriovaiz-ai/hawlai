@@ -36,7 +36,7 @@ import {
   surfaceFor,
 } from "@/lib/claims/claimChecks";
 import { ACTION_POLICIES } from "@/lib/executionPolicy";
-import { code, sourceWithComments } from "./helpers/source";
+import { code, sourceWithComments, sql as sqlOf } from "./helpers/source";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -285,7 +285,12 @@ describe("5. AN EXECUTED ACTION, RECORDED AS PUBLISHED", () => {
 });
 
 describe("6. the migration says what the code says", () => {
-  const sql = sourceWithComments("supabase/migrations/217_claim_checks.sql");
+  // THROUGH sql(), NOT sourceWithComments. 217's header explains at
+  // length what the table is for and quotes its own column names, so
+  // the raw file would satisfy every assertion below even if the DDL
+  // were deleted. tests/helpers/source.ts's `sql()` exists for exactly
+  // this, and the first version of this file did not use it.
+  const sql = sqlOf("supabase/migrations/217_claim_checks.sql");
 
   it("THE TWO COUNTS ARE SEPARATE COLUMNS, and so is whose words they were", () => {
     expect(sql).toMatch(/claims_removed integer/);
@@ -319,6 +324,9 @@ describe("6. the migration says what the code says", () => {
     // The founder should know this is a question rather than an
     // oversight: page copy is the business's own words, but an email or
     // a WhatsApp reply carries a customer's name.
-    expect(sql).toMatch(/DPDP/);
+    // THE ONE ASSERTION HERE THAT IS ABOUT THE COMMENT, so it reads the
+    // raw file on purpose — which is what sourceWithComments is named
+    // for. The rest of this section reads the DDL.
+    expect(sourceWithComments("supabase/migrations/217_claim_checks.sql")).toMatch(/DPDP/);
   });
 });
