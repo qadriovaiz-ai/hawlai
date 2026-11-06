@@ -1625,6 +1625,68 @@ rule 8's exact shape, pointing at itself.
 
 **7 mutation checks, 7 killed.**
 
+## 6 November 2026 — S7 closes, and its exit test failed its own audit
+
+**The autonomy half of S7 is closed.** The exit test is green and has
+moved out of `tests/open/` into the default suite; the quarantine
+machinery that carried it while it was red is **deleted**, because the
+guard holding it said what to do when a stage closes and nothing
+replaces it: *"the next person should delete the lot rather than inherit
+it."*
+
+### Writing the exit test first paid for itself three times
+
+At **P1** it caught its own false green — two assertions went green
+because §15's contract table quotes the heading they look for. At **P4**
+it found two real faults in the code it describes: `set_automation_toggle`
+was not pinned, and a positional boolean silently un-gated an action. At
+**P7** it failed its own audit.
+
+### THE AUDIT: five of its assertions were satisfied by a comment
+
+Mutation-checking the exit test was only possible once it was green, and
+it found five assertions that something other than their subject
+satisfied:
+
+- "the database names which keys may be L2" — satisfied by migration
+  220's **header**, which explains the allowlist and names the key. So
+  replacing the real constraint with `action_key is not null` left it
+  green.
+- "`claim_checks` has a `published` column" and the same for
+  `claims_unsupported` — satisfied by 217's header, which explains every
+  column. Renaming the column left it green.
+- "the monitor reuses the eval gate's own refused set" — satisfied by
+  the monitor's header naming `outputGate.eval.ts`. Replacing its
+  imports with local stubs, **a second differently-written judge, the
+  exact thing that test forbids**, left it green.
+- "the plan admits nothing ran unattended" — satisfied by the word
+  "unattended" appearing several times in the section.
+
+**All five now read the thing instead of a word about it.** SQL through
+`sql()` and scoped to its own constraint; columns as declarations; the
+monitor's actual import line through `code()`; the plan's admission as
+its own sentence. Where an assertion genuinely IS about a comment, it
+reads the raw file on purpose and says so.
+
+**This is rule 8, in the file whose job is to say what is true** — the
+fifth time in this stage. The pattern is not carelessness about one
+file: a grep for a word is the easiest assertion to write and the
+easiest to satisfy.
+
+**Four of my own mutations were aimed at S6's exit test** (the
+reachability walk and the copy door's backlog live there), and two more
+edited something the assertion did not read. Corrected, then **25 of 25
+killed**.
+
+### What S7 did not prove, and it is in the plan rather than here
+
+Nothing has ever run unattended: no L2 row, no promotion card, no
+demotion, the cap never reached. That is arithmetic, not an omission —
+the threshold is ten approvals over thirty days. The full account,
+including which migrations are still unconfirmed and the two things
+flagged rather than fixed, is PLAN-S7-AUTONOMY.md's
+`### S7 EXIT — what this stage did not prove`.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

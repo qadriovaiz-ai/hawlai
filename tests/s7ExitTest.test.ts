@@ -1,10 +1,18 @@
 // S7's EXIT TEST — WRITTEN FIRST, AND RED ON PURPOSE.
 //
-// STAGE_OPEN: S7, opened 2026-11-05, closes at P7.
-//   Expected state while open: RED. Run it with `npm run test:open`.
-//   This marker is what keeps the file out of the default suite, and
-//   tests/stageOpen.test.ts fails if the marker and the exclusion ever
-//   disagree.
+// CLOSED AT P7 ON 6 NOVEMBER 2026, and this file moved out of
+// tests/open/ into the default suite, where it runs on every commit.
+//
+// It carried a STAGE_OPEN marker while it was red, and the machinery
+// that kept it out of the suite — vitest.open.config.mts, the
+// tests/open/** exclusion, the test:open script and
+// tests/stageOpen.test.ts — was deleted with the move, because that
+// guard said what to do when a stage closes and nothing replaces it:
+// "the next person should delete the lot rather than inherit it." It is
+// in git history for whoever opens S8.
+//
+// Relative imports changed with the directory: ./helpers, not
+// ../helpers.
 //
 // The criterion, from docs/PLAN-CORE-ARCHITECTURE.md §3, unchanged:
 //
@@ -46,7 +54,7 @@
 // stage is open this run is a ledger of what is left.
 
 import { describe, it, expect } from "vitest";
-import { code, sourceWithComments } from "../helpers/source";
+import { code, sourceWithComments, sql as sqlOf } from "./helpers/source";
 import { ACTION_POLICIES, getActionPolicy } from "@/lib/executionPolicy";
 
 /** The modules S7 is contracted to produce. Named here, before they exist. */
@@ -133,18 +141,32 @@ describe("1. SPEND IS NEVER AUTO — the clause, in the code and in the database
     // refuses L2 for anything not on the allowlist — which is stricter
     // than today, because today nothing in SQL knows about allowlists
     // at all.
+    // READ THROUGH sql(), AND THE FIRST VERSION DID NOT — found on
+    // 6 November 2026 by mutation-checking this file. It read the
+    // migration with `sourceWithComments`, and 220's header explains
+    // the allowlist at length while naming `update_page_meta`. So
+    // replacing the actual constraint with `action_key is not null`
+    // left this green: the assertion was satisfied by the explanation
+    // of the rule rather than by the rule.
+    //
+    // tests/helpers/source.ts's `sql()` strips `--`, which `code()`
+    // does not. Rule 8, in the file whose job is to say what is true.
     const migrations = await import("node:fs");
     const files = migrations.readdirSync("supabase/migrations").filter((f: string) => f.endsWith(".sql"));
-    const widening = files.filter((f: string) => code(`supabase/migrations/${f}`).includes("'L2'"));
+    const widening = files.filter((f: string) => sqlOf(`supabase/migrations/${f}`).includes("'L2'"));
     expect(widening.length, "no migration teaches action_levels about L2").toBeGreaterThan(0);
 
-    const sql = widening.map((f: string) => sourceWithComments(`supabase/migrations/${f}`)).join("\n");
+    const ddl = widening.map((f: string) => sqlOf(`supabase/migrations/${f}`)).join("\n");
     // The CHECK admits L2 …
-    expect(sql).toMatch(/check\s*\(\s*level\s+in\s*\(\s*'L0'\s*,\s*'L1'\s*,\s*'L2'\s*\)/i);
-    // … and a second rule refuses it per action, in the database.
-    expect(sql, "nothing in SQL restricts which actions may be L2").toMatch(/update_page_meta/);
-    // The reason is written beside it, like every other guard here.
-    expect(sql).toMatch(/allowlist|earned/i);
+    expect(ddl).toMatch(/check\s*\(\s*level\s+in\s*\(\s*'L0'\s*,\s*'L1'\s*,\s*'L2'\s*\)/i);
+    // … and a second rule names the keys it may be written for,
+    // SCOPED TO THAT CONSTRAINT so the whole file cannot satisfy it.
+    const allowlist = ddl.slice(ddl.indexOf("action_levels_l2_allowlist"));
+    expect(allowlist.length, "no allowlist constraint in the DDL").toBeGreaterThan(40);
+    expect(allowlist, "the allowlist constraint names no action key").toMatch(/action_key in \('update_page_meta'\)/);
+    // The reason is written beside it, like every other guard here —
+    // and THIS one is about the comment, so it reads the raw file.
+    expect(sourceWithComments(`supabase/migrations/${widening[0]}`)).toMatch(/allowlist|earned/i);
   });
 
   it("and an unattended level is never what switches an automation ON", async () => {
@@ -329,14 +351,20 @@ describe("4. THE INSTRUMENT EXISTS — without it, 2 and 3 are decoration", () =
     expect(typeof record.recordClaimCheck).toBe("function");
     const migrations = await import("node:fs");
     const files = migrations.readdirSync("supabase/migrations").filter((f: string) => f.endsWith(".sql"));
-    const table = files.filter((f: string) => code(`supabase/migrations/${f}`).includes("create table if not exists claim_checks"));
+    // THROUGH sql() AND AS COLUMN DECLARATIONS — 6 November 2026.
+    // These read `code()` and matched the words anywhere, and 217's
+    // header explains every column it creates: renaming `published` to
+    // `went_out` in the DDL left this green, because the explanation
+    // still said "published". The same fault as the one above, in the
+    // same file, found by the same mutation run.
+    const table = files.filter((f: string) => sqlOf(`supabase/migrations/${f}`).includes("create table if not exists claim_checks"));
     expect(table.length, "no migration creates claim_checks").toBe(1);
-    const sql = code(`supabase/migrations/${table[0]}`);
-    // THE LOAD-BEARING COLUMN. Caught-and-removed is the system
-    // working; published is the system failing.
-    expect(sql).toMatch(/\bpublished\b/);
-    expect(sql).toMatch(/claims_unsupported/);
-    expect(sql).toMatch(/row level security/i);
+    const ddl = sqlOf(`supabase/migrations/${table[0]}`);
+    // THE LOAD-BEARING COLUMN, as a declaration. Caught-and-removed is
+    // the system working; published is the system failing.
+    expect(ddl, "no `published` column").toMatch(/^\s*published boolean/m);
+    expect(ddl, "no `claims_unsupported` column").toMatch(/^\s*claims_unsupported integer/m);
+    expect(ddl).toMatch(/row level security/i);
   });
 
   it("AND SOMETHING READS THOSE ROWS, ON A SCHEDULE, WITHOUT BEING ASKED", async () => {
@@ -372,8 +400,20 @@ describe("4. THE INSTRUMENT EXISTS — without it, 2 and 3 are decoration", () =
     // RUN CANNOT BE THE JUDGE OF THE RUN" — for about ₹3 a run. The
     // monitor is that pass pointed at live rows. A second, differently
     // written judge would give two answers to one question.
-    const src = sourceWithComments("src/lib/claims/outputMonitor.ts");
-    expect(src).toMatch(/outputGate|findUnsupportedClaims|extractor/i);
+    // THE IMPORT, NOT THE WORD — 6 November. This matched
+    // `/outputGate|findUnsupportedClaims|extractor/i` against the raw
+    // file, and the monitor's header names outputGate.eval.ts while
+    // explaining where the instrument came from. So replacing the
+    // imports with local stubs — a second, differently-written judge,
+    // exactly what this test is against — left it green.
+    const src = code("src/lib/claims/outputMonitor.ts");
+    expect(src, "the refused types are no longer the gate's own").toMatch(
+      /import \{[^}]*UNLICENSABLE_TYPES[^}]*\} from "@\/lib\/facts\/extractClaims"/
+    );
+    expect(src).toMatch(/NEEDS_RECIPIENT_RECORD/);
+    // AND THE FILE STILL SAYS WHERE THE INSTRUMENT CAME FROM, which IS
+    // about the comment and so reads the raw file.
+    expect(sourceWithComments("src/lib/claims/outputMonitor.ts")).toMatch(/outputGate\.eval\.ts/);
   });
 });
 
@@ -389,7 +429,15 @@ describe("5. WHAT S7 DID NOT PROVE, written down rather than assumed", () => {
     const exitSection = exitSectionOf(code("docs/PLAN-S7-AUTONOMY.md"));
     expect(exitSection.length, "the plan has no exit section yet").toBeGreaterThan(400);
     expect(exitSection).toMatch(/[Uu]nverified live/);
-    expect(exitSection).toMatch(/unattended/);
+    // THE CLAIM, NOT THE WORD — 6 November. `/unattended/` appears
+    // several times in the section, so deleting the sentence that makes
+    // the admission left this green. The sentence a person reads first
+    // is the one that has to be there.
+    expect(exitSection, "the section no longer says nothing ran unattended").toMatch(
+      /\*\*Nothing has ever run unattended\.\*\*/
+    );
+    // And the reason it is arithmetic rather than an omission.
+    expect(exitSection).toMatch(/proved by test and \*\*none by a morning\*\*/);
   });
 
   it("AND THAT THE MONITOR ONLY SEES WHAT THE EXTRACTOR CAN SEE", () => {
@@ -397,8 +445,19 @@ describe("5. WHAT S7 DID NOT PROVE, written down rather than assumed", () => {
     // extractor sees; a vague claim riding on a true fact still needs a
     // person." An exit test that implied otherwise would be claiming
     // the product is safer than it is.
+    // ASSERTED AS THE SECTION'S OWN CLAIM, NOT AS THE WORD
+    // "EXTRACTOR" — 6 November 2026, found by mutation-checking this
+    // file for the first time. `toMatch(/extractor/i)` was satisfied by
+    // any of several occurrences, so deleting the sentence that makes
+    // the point left it green. It is the fifth time in this stage that
+    // an assertion has been satisfiable by any occurrence of its own
+    // subject, and the fix is the same every time: assert the claim.
     const exitSection = exitSectionOf(code("docs/PLAN-S7-AUTONOMY.md"));
     expect(exitSection.length, "the plan has no exit section yet").toBeGreaterThan(400);
-    expect(exitSection).toMatch(/extractor/i);
+    // The limit, stated as a limit.
+    expect(exitSection).toMatch(/only sees what the extractor sees/i);
+    // AND WHAT A CLEAN VERDICT IS NOT. A section naming the limit and
+    // still implying a certificate would be worse than silence.
+    expect(exitSection).toMatch(/not a certificate/i);
   });
 });

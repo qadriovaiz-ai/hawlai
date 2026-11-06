@@ -245,7 +245,7 @@ threshold, **demotes**. Silence is not evidence.
 | **P4 — DONE 6 Nov, see §19** | **L2 in the type and in the database** — migration 220 widens 209's CHECK and adds the allowlist constraint, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
 | **P5 — DONE 6 Nov, see §20** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
 | **P6 — DONE 6 Nov, see §21** | **The cap**, per business per day, the owner's screen, and the morning that asks | S |
-| **P7** | **Exit test green**, and the honest account of what is unverified live — an L2 action has by definition not run unattended for long when the stage closes | S |
+| **P7 — DONE 6 Nov, see §22** | **Exit test green**, and the honest account of what is unverified live — an L2 action has by definition not run unattended for long when the stage closes | S |
 
 **P3 before P5 is the whole shape of this plan.** Build the thing that
 takes permission away before the thing that grants it.
@@ -1153,6 +1153,136 @@ And **nothing is at L2**, so the screen currently reads "Asks you first"
 with a reason, and the cap has never been reached. The first real
 exercise needs the first granted permission, which needs ten
 as-requested approvals.
+
+---
+
+## 22. P7 — the stage closes — 6 November 2026
+
+**The exit test is green**, and it has moved out of `tests/open/` into
+the default suite, where it runs on every commit from now on. The
+quarantine machinery that carried it while it was red —
+`vitest.open.config.mts`, the `tests/open/**` exclusion, the
+`test:open` script and `tests/stageOpen.test.ts` — is **deleted**,
+because that guard said in its own words what to do when a stage closes
+and nothing replaces it: *"the next person should delete the lot rather
+than inherit it."* It is in git history if S8 wants it.
+
+### What the criterion was, and what makes the green mean something
+
+> *"Promotion and demotion both tested; spend never auto (test)"*
+
+**Spend is never auto** is walked over the whole registry, in the code
+AND in the database: every action that spends, deletes or cannot be
+taken back is refused L2 by `canHoldL2`, and migration 220's
+`action_levels_l2_allowlist` refuses it at the row.
+
+**Promotion and demotion are both tested** — and the test asserts the
+shape that matters about each: promotion never writes a level (the
+owner's click does), and demotion asks nobody.
+
+**And the measure can see.** The walk that reports no sender reachable
+outside an Action is the same walk that, with the doors removed, *does*
+arrive at the live Meta call. A green result from a blind instrument
+looks exactly like a green result from a guarded product, so the exit
+test asserts both directions.
+
+### 25 MUTATION CHECKS AGAINST THE EXIT TEST ITSELF, AND IT FAILED FIVE
+
+This is the first time it could be mutation-checked — a red test tells
+you nothing when you break the thing it is about — and it was the most
+useful hour of the stage. **Five of its own assertions were satisfiable
+by something other than the thing they claimed**, all the same shape:
+
+| What it asserted | What satisfied it |
+|---|---|
+| the database names which keys may be L2 | migration 220's **header comment**, which explains the allowlist and names the key |
+| `claim_checks` has a `published` column | 217's header, which explains every column it creates |
+| the same for `claims_unsupported` | the same header |
+| the monitor reuses the eval gate's own set | the monitor's header, which names `outputGate.eval.ts` |
+| the plan admits nothing ran unattended | the word "unattended", which appears several times in the section |
+
+So: replacing the actual SQL constraint with `action_key is not null`
+left it green. Renaming the `published` column left it green. Replacing
+the monitor's imports with local stubs — **a second, differently-written
+judge, which is exactly what that test exists to forbid** — left it
+green.
+
+**All five now read the thing rather than a word about it:** the SQL
+through `sql()` and scoped to its own constraint, the columns as
+declarations (`^\s*published boolean`), the monitor's actual import
+line through `code()`, and the plan's admission as its own sentence.
+Where an assertion really IS about a comment — "the reason is written
+beside it" — it reads the raw file on purpose, and says so.
+
+**This is rule 8's subject, in the file whose job is to say what is
+true.** It is the fifth time in this stage, and the sixth counting S6's
+exit test. The pattern is not carelessness about a particular file; it
+is that a grep for a word is the easiest thing to write and the easiest
+thing to satisfy.
+
+**Four of my own mutations were aimed at S6's exit test rather than
+this one** — the reachability walk and the copy door's backlog live
+there, not here — and two more edited something the assertion did not
+read. Corrected, and then 25 of 25 killed.
+
+---
+
+### S7 EXIT — what this stage did not prove
+
+**Nothing has ever run unattended.** No `action_levels` row has been
+written at L2, no promotion card has been raised, no demotion has
+fired, and the daily cap has never been reached. Every rule in this
+stage is proved by test and **none by a morning**.
+
+That is not a gap to be closed before the stage shuts — it is
+arithmetic. Promotion needs **ten** as-requested approvals of
+`update_page_meta` over **thirty** days with a measured outcome, and
+that threshold is the point. The first real card is weeks away by
+design, and the first demotion needs something to go wrong after it.
+
+**The monitor has not yet checked anything.** `claim_checks` holds its
+first rows — written 6 November, verified by the founder — and
+`monitor_verdict` is null on both, correctly: the monitor runs the
+morning after. Its first real verdict is tomorrow.
+
+**And it only sees what the extractor sees.** `outputGate.eval.ts`'s own
+header says it plainly: *"It can only catch what the extractor sees; a
+vague claim riding on a true fact still needs a person."* A clean
+verdict is one mechanical reader finding nothing it can name — **it is
+not a certificate.** The demotion rule is therefore only as sharp as claim
+enumeration on Hinglish marketing copy, which S2 measured and did not
+make perfect.
+
+**The record covers the publish door, not every send.** S7/P1 records
+page surfaces, because that is where the one allowlisted action writes.
+Emails, WhatsApp replies, lead messages and social posts are **P1b and
+not built** — so for those surfaces there is still no record of what
+went out, and the demotion rule has nothing to fire on. The clause
+"nothing acts unattended without a check behind it" is true of the only
+action that can act unattended, and of nothing else yet.
+
+**Unverified live, in full:**
+
+| | |
+|---|---|
+| Migration **217** | run, confirmed by the founder |
+| Migrations **219** and **220** | written and **not confirmed run**. Until 220 is run no row can say L2 at all; until 219 is run a demotion's notification lands nowhere, and its decision row and log line still happen |
+| The owner's card on `/dashboard/autopilot` | opened, broken, fixed, re-opened, **confirmed working** |
+| `proposePromotion` on the cron | wired and **never yet had evidence to act on** |
+| The monitor against live rows | **tomorrow morning** |
+| An L2 action acting alone | **never** |
+
+**Two things stay flagged rather than fixed**, both recorded earlier:
+`ALWAYS_REQUIRES_APPROVAL` names `update_page_meta`, which may now run
+unattended — nothing is contradictory but the name is stronger than the
+rule; and the stored copy in `claim_checks.text` becomes a DPDP question
+the day P1b widens it to a surface carrying a customer's name.
+
+**And one fault is still open in production, unrelated to this stage
+and worth not losing:** `dm_auto_reply` and `comment_auto_reply` are ON
+for candle_by_qaaf and `auto_reply_log` has never had a row. The toggles
+say on over a path that does nothing. Deferred by the founder on
+4 November; the standing flag stands.
 
 ---
 
