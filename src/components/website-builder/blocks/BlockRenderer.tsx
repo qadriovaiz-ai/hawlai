@@ -159,6 +159,48 @@ export default function BlockRenderer({ block, ctx }: { block: Block; ctx: Block
         </div>
       );
 
+    // A QUESTION AND ITS ANSWER, BOTH VISIBLE.
+    //
+    // No accordion, deliberately. An answer hidden behind a click is
+    // still in the DOM, so a crawler can read it — but the whole point
+    // of A2 is extractability, the storefront renderer has no other
+    // interactive disclosure anywhere, and a <details> adds a way for
+    // the answer to be the thing nobody sees. The question is an h3
+    // because that is what it is: a heading whose section is the answer.
+    case "faq":
+      return (
+        <div className={`w-full flex flex-col gap-5 ${hiddenOnMobile(block)}`}>
+          {block.props.heading && <h2 className={`${HEADING_SIZE[2]} text-center`}>{stripTags(String(block.props.heading))}</h2>}
+          {/* Every child renders, pair or not. `allowedChildren` is
+              advisory (see lib/blocks/types.ts), and silently hiding a
+              block the owner dragged in here would be a page that does
+              not match the editor. */}
+          {(block.children ?? []).map((child) => (
+            <BlockRenderer key={child.id} block={child} ctx={ctx} />
+          ))}
+        </div>
+      );
+
+    // A heading and a paragraph, NOT <dt>/<dd>.
+    //
+    // A definition pair is only valid markup inside a <dl>, and a pair
+    // can sit anywhere: the palette offers it on its own, and
+    // `allowedChildren` does not stop the owner dropping one into a
+    // plain stack. Orphan <dt> elements would be invalid HTML on a page
+    // whose whole purpose is being read by a machine. An h3 question
+    // followed by its answer is also the shape Google's own FAQ
+    // guidance shows.
+    case "faq_item": {
+      const question = stripTags(String(block.props.heading ?? "")).trim();
+      if (!question) return null;
+      return (
+        <div className={`w-full ${hiddenOnMobile(block)}`}>
+          <h3 className={HEADING_SIZE[3]}>{question}</h3>
+          {block.props.html ? <div className="leading-relaxed mt-1">{renderRichText(block.props.html)}</div> : null}
+        </div>
+      );
+    }
+
     // Never AI-authored, never hand-filled — always the real live
     // catalog, same principle as the old "product_catalog" section.
     case "product_grid":

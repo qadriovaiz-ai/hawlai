@@ -10,6 +10,8 @@ import {
   Video as VideoIcon,
   ClipboardList,
   Package,
+  HelpCircle,
+  MessageSquare,
 } from "lucide-react";
 import type { Block, BlockDefinition } from "./types";
 
@@ -135,6 +137,48 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
     isContainer: false,
     defaultProps: { heading: "Get in Touch" },
     propFields: [{ key: "heading", label: "Heading", type: "text" }],
+  },
+  // A QUESTION AND ITS ANSWER, kept as a pair in the data.
+  //
+  // THE GAP THIS CLOSES (A2 of docs/PLAN-AEO-GEO.md): there was no
+  // block whose shape is "a question and its answer". A legacy `faq`
+  // section was converted into a column of generic heading + text
+  // pairs, so the words survived and the machine-readable fact that
+  // one is a question and the other is its answer did not. Nothing
+  // downstream could emit FAQPage schema, because nothing downstream
+  // could tell.
+  //
+  // WHY THE PROPS ARE CALLED `heading` AND `html` AND NOT `question`
+  // AND `answer`. Four separate systems are keyed on that exact set of
+  // prop names — `TEXT_PROPS` in lib/pages/provenance.ts (who wrote
+  // this line), `BLOCK_TEXT_KEYS` in lib/claims/guardBlocks.ts (the
+  // claims guard), `LEGACY_FIELDS` in lib/claims/siteClaimsReview.ts
+  // (the owner's claims review) and the Properties Panel's own marking
+  // of the owner's edits. A prop named `answer` would be invisible to
+  // all four, so an AI-written FAQ answer would reach a live page
+  // UNGUARDED — which is precisely the 2026-09-30 incident that put
+  // the guard on the builder in the first place. The names are poor
+  // and they are load-bearing; the owner sees "Question" and "Answer"
+  // because that is what the field LABELS say.
+  faq: {
+    label: "FAQ",
+    icon: HelpCircle,
+    category: "content",
+    isContainer: true,
+    allowedChildren: ["faq_item"],
+    defaultProps: { heading: "Common questions" },
+    propFields: [{ key: "heading", label: "Heading", type: "text" }],
+  },
+  faq_item: {
+    label: "Question & Answer",
+    icon: MessageSquare,
+    category: "content",
+    isContainer: false,
+    defaultProps: { heading: "", html: "" },
+    propFields: [
+      { key: "heading", label: "Question", type: "text" },
+      { key: "html", label: "Answer", type: "richtext" },
+    ],
   },
   // Never AI-authored and never hand-filled with fake products — always
   // resolved server-side against the real products table at render

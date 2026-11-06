@@ -88,11 +88,23 @@ function convertPricing(s: any): Block {
 }
 
 function convertFaq(s: any): Block {
-  // A vertical list, not a grid — matches the old faq section, which
-  // never wrapped its items in a multi-column layout.
+  // ONTO THE FAQ BLOCK, not flattened into headings and paragraphs.
+  //
+  // This function used to produce a column of generic heading + text
+  // pairs. It read correctly to a visitor and threw away the one thing
+  // a machine needs: which string is the question and which is its
+  // answer. Every legacy `faq` section in the database now becomes a
+  // real pair on the way out, which is what `faqPairsFromBlocks` reads
+  // and what FAQPage schema is built from.
+  //
+  // A pair with no question is dropped rather than carried with an
+  // empty heading — an answer to nothing is not a question, and the
+  // schema would have to invent the question to publish it.
+  const items = (s.items ?? [])
+    .filter((item: any) => String(item?.question ?? "").trim())
+    .map((item: any) => createBlock("faq_item", { props: { heading: String(item.question), html: String(item.answer ?? "") } }));
   return section({ background: "none" }, [
-    s.heading && heading(s.heading, 2, "center"),
-    stack({ direction: "column" }, (s.items ?? []).map((item: any) => stack({ direction: "column" }, [heading(item.question ?? "", 3), text(item.answer ?? "")]))),
+    createBlock("faq", { props: { heading: s.heading || "Common questions" }, children: items }),
   ]);
 }
 

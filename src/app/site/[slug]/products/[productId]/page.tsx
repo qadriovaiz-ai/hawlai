@@ -7,6 +7,9 @@ import { STOREFRONT_COLUMNS, toStorefrontProduct } from "@/lib/catalog/storefron
 import { formatDuration } from "@/lib/catalog/catalogItem";
 import ProductAddToCart from "@/components/website/ProductAddToCart";
 import ProductReviews from "@/components/website/ProductReviews";
+import { productPageJsonLd } from "@/lib/seo/structuredData";
+import { loadSiteIdentity } from "@/lib/seo/siteIdentity";
+import StructuredData from "@/components/website/StructuredData";
 
 // Same stale-cache risk as the other public site routes (see
 // src/app/site/[slug]/page.tsx) — extra important here specifically
@@ -31,13 +34,28 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const theme = getTheme(website.theme_key);
   const service = product.kind === "service";
   const outOfStock = !service && product.inventory_count != null && product.inventory_count <= 0;
-  const bookHref = service
-    ? toStorefrontProduct(product, (await supabase.from("dealerships").select("booking_slug").eq("id", website.dealership_id).maybeSingle()).data?.booking_slug).book_href
-    : null;
+
+  // STRUCTURED DATA ON THE PAGE THAT HAS THE MOST TO SAY (A2 of
+  // docs/PLAN-AEO-GEO.md).
+  //
+  // This page carries a name, a price, a stock state and a description,
+  // and it emitted nothing — while the home page published a list of all
+  // of them. The item node here is the same `itemNode` the home page's
+  // ItemList uses, so one product cannot be described two ways on two
+  // pages.
+  //
+  // ONE READ, NOT TWO: the booking slug used to be read inline, right
+  // here, for services only. loadSiteIdentity reads that same row and
+  // hands the slug back.
+  const loaded = await loadSiteIdentity(supabase, { dealershipId: website.dealership_id, slug });
+  const storefrontProduct = toStorefrontProduct(product, loaded?.bookingSlug);
+  const bookHref = service ? storefrontProduct.book_href : null;
   const duration = service ? formatDuration(product.duration_minutes) : null;
+  const jsonLd = loaded ? productPageJsonLd(loaded.identity, storefrontProduct) : null;
 
   return (
     <section className="px-6 py-10 max-w-4xl mx-auto">
+      <StructuredData node={jsonLd} />
       <div className="grid sm:grid-cols-2 gap-8">
         <div className="rounded-xl overflow-hidden border border-neutral-200">
           <ProductImageGallery images={product.images ?? []} alt={product.name} />

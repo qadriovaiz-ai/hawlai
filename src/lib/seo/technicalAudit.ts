@@ -76,6 +76,24 @@ export function pageText(sections: unknown): string {
   return parts.join(" ");
 }
 
+/**
+ * Whether this page states a question and answers it.
+ *
+ * A PAGE, NOT A PAGE TYPE. The `no_faq` finding below used to look only
+ * at `page_type` and the slug, so a business that put an FAQ block on
+ * its home page — which is what A2 made possible, and what the SEO
+ * toolkit itself recommends — was still told every day that it has no
+ * FAQ. A finding that fires against work the owner has already done
+ * teaches them to ignore findings.
+ */
+function hasFaqBlock(sections: unknown): boolean {
+  let found = false;
+  walk(sections, (b) => {
+    if (b?.type === "faq_item" && String(b.props?.heading ?? "").trim() && String(b.props?.html ?? "").trim()) found = true;
+  });
+  return found;
+}
+
 function headings(sections: unknown): { level: number; text: string }[] {
   const out: { level: number; text: string }[] = [];
   walk(sections, (b) => {
@@ -278,7 +296,7 @@ export function auditSite(input: AuditInput): SiteAudit {
     where: noAltOn,
   });
 
-  if (pages.length > 0 && !pages.some((p) => p.page_type === "faq" || /faq|questions/i.test(p.slug))) {
+  if (pages.length > 0 && !pages.some((p) => p.page_type === "faq" || /faq|questions/i.test(p.slug) || hasFaqBlock(p.sections))) {
     findings.push({
       code: "no_faq",
       problem: "There's no FAQ page.",

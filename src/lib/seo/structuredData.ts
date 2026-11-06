@@ -18,6 +18,7 @@
 
 import { stripTags } from "@/lib/richText";
 import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
+import type { FaqPair } from "@/lib/blocks/utils";
 
 export type SiteIdentity = {
   businessName: string;
@@ -116,12 +117,56 @@ export function businessNode(identity: SiteIdentity): Json {
 }
 
 /**
+ * The page's own questions and answers, as a machine reads them.
+ *
+ * THE HONEST LIMIT, and it is in docs/PLAN-AEO-GEO.md too: Google
+ * narrowed FAQPage's rich-result eligibility in 2023, so this is not a
+ * dropdown in a search result and nothing here should be sold as one.
+ * What it is: the page saying, in a form that needs no parsing, "this
+ * string is a question customers ask and that string is our answer" —
+ * which is what an answer engine quotes.
+ *
+ * ONLY WHAT THE PAGE ACTUALLY SAYS. Every pair comes from a `faq_item`
+ * block that is rendered, visibly, on the same page as this script tag.
+ * Structured data describing content a visitor cannot find is the one
+ * thing Google calls out as a violation, and it is also just a lie.
+ *
+ * Returns null for an empty list, so a page with no questions publishes
+ * no FAQPage rather than an empty one.
+ */
+export function faqPageNode(pairs: FaqPair[]): Json | null {
+  const items = (pairs ?? []).filter((p) => p?.question?.trim() && p?.answer?.trim());
+  if (items.length === 0) return null;
+  return {
+    "@type": "FAQPage",
+    mainEntity: items.map((p) => ({
+      "@type": "Question",
+      // The answer is stored as the markdown subset lib/richText renders,
+      // so plain() takes the ** and the [link](url) out. A machine
+      // reading "**Yes**" learns the asterisks are part of the answer.
+      name: plain(p.question, 300),
+      acceptedAnswer: { "@type": "Answer", text: plain(p.answer, 2000) },
+    })),
+  };
+}
+
+/**
  * The whole graph for a storefront page.
  *
  * Returns null when there isn't enough to say anything true — a business
  * with no name publishes no structured data rather than an empty shell.
  */
-export function storefrontJsonLd(identity: SiteIdentity, products: StorefrontProduct[]): Json | null {
+export function storefrontJsonLd(
+  identity: SiteIdentity,
+  products: StorefrontProduct[],
+  /**
+   * The page's question-and-answer pairs, if it has any.
+   *
+   * Optional and defaulted, because three routes call this and only the
+   * ones that have read the page's blocks can pass them.
+   */
+  faqPairs: FaqPair[] = []
+): Json | null {
   if (!identity?.businessName?.trim() || !identity.siteUrl) return null;
   const items = (products ?? []).filter((p) => p?.name);
 
@@ -136,7 +181,28 @@ export function storefrontJsonLd(identity: SiteIdentity, products: StorefrontPro
       })),
     });
   }
+  const faq = faqPageNode(faqPairs);
+  if (faq) graph.push(faq);
   return { "@context": "https://schema.org", "@graph": graph };
+}
+
+/**
+ * The graph for one catalogue item's own page.
+ *
+ * THE GAP THIS CLOSES (A2): the product page emitted nothing. A
+ * storefront's most specific page — the one with a price, a stock state
+ * and a description — was the one page no machine could read, while the
+ * home page carried a list of all of them.
+ *
+ * The item node is the same one the home page's ItemList uses, so a
+ * product cannot be described two different ways on two pages.
+ */
+export function productPageJsonLd(identity: SiteIdentity, product: StorefrontProduct | null): Json | null {
+  if (!identity?.businessName?.trim() || !identity.siteUrl || !product?.name) return null;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [itemNode(product, identity), businessNode(identity)],
+  };
 }
 
 /**

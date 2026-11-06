@@ -1771,6 +1771,148 @@ three as dynamic routes and the middleware test proves they are not
 redirected, but **no crawler has been observed reading them**, and no
 claim is made about ranking or about being cited by any answer engine.
 
+## 6 November 2026 — AEO/A2, and two bad prop names kept on purpose
+
+**A `faq` block, an `faq_item` block, FAQPage schema, and JSON-LD on the
+two page kinds that had none.** A2 of PLAN-AEO-GEO.md.
+
+### The decision: the props are called `heading` and `html`
+
+An `faq_item` holds its question on `heading` and its answer on `html`.
+Those names are bad. I kept them, and this is why.
+
+Four separate systems are keyed on that exact set of four prop names:
+
+| Where | What it does with the list |
+|---|---|
+| `TEXT_PROPS` — lib/pages/provenance.ts | which props hold words, so it can record who wrote each line |
+| `BLOCK_TEXT_KEYS` — lib/claims/guardBlocks.ts | which props the claims guard checks |
+| `LEGACY_FIELDS` — lib/claims/siteClaimsReview.ts | which field a claim in the owner's review belongs to |
+| `TEXT_PROPS` — the Properties Panel | which edits mark a line as the OWNER's, not the machine's |
+
+A prop named `answer` would be invisible to all four. The claims guard
+would not read it, so **an AI-written FAQ answer would reach a live page
+unguarded** — exactly the 2026-09-30 incident that put the guard on the
+builder. The review would not list it. And the Properties Panel would
+not mark the owner's own typing as theirs, so the guard would rewrite
+the owner's words.
+
+The alternative was to add two names to four lists, three of which are
+copies of each other. I considered consolidating them into one import
+and decided against it inside A2: it would have forced a restatement of
+an existing assertion in `tests/contentSourceScope.test.ts` that pins
+the literal list, and the guard-coverage test below gets the same
+protection without touching it. **The consolidation is still worth
+doing, as its own change, and provenance.ts already asks for it in its
+own header ("One definition, no bundle").**
+
+**What keeps this from rotting:** a test walks the whole registry and
+fails if any propField of type text/textarea/richtext is a key the
+claims system does not read. One exemption, dated, with a reason:
+`alt`, because an image's alt text describes a picture rather than
+making a claim, and guarding it would change what the guard rewrites on
+every existing page — a different decision from this one.
+
+### Two faults found on the way
+
+**`LocalBusiness { name: "the business" }`.** `businessDisplayName`
+falls back to the words "the business" for a missing name *and* for the
+signup placeholder, and the home page called it with that default. So a
+business that had not yet typed its name was publishing that stand-in as
+its name — in JSON-LD, the one format designed to be believed without
+being read by a person. Found by writing the test for
+`loadSiteIdentity`, which asked for an empty fallback and then failed
+because the old behaviour was still there. It now publishes **no
+structured data at all** for a business with no name, which is this
+file's rule everywhere else.
+
+**The audit asked for an FAQ the page already had.** `no_faq` looked at
+`page_type` and the slug only, so a business that put an FAQ block on
+its home page — the thing A2 exists to make possible — was still told
+every morning that it has no FAQ. It now counts a real pair anywhere in
+a page's blocks. A finding that fires against work the owner has already
+done teaches them to ignore findings.
+
+### What the schema will and will not do
+
+Google narrowed FAQPage's rich-result eligibility in 2023. **This is not
+a dropdown under a search result and nothing in the product says it
+is.** What it is: the page stating, in a form that needs no parsing,
+which string is a question customers ask and which is the answer. A test
+asserts the plan and the schema file both still say so.
+
+The pairs also only ever come from `faq_item` blocks that are **rendered
+visibly on the same page** as the script tag. Structured data describing
+content a visitor cannot find is both the one thing Google calls out as
+a violation and, more simply, a lie. For the same reason the inner page
+passes an ItemList only when a block on it actually shows products — an
+About page carrying the catalogue would be describing something it does
+not display.
+
+### The honest gap, and the read query that sizes it
+
+A page the owner has opened in the block editor and saved is stored as a
+block tree, and `convertFaq` **flattened** the pairs on the way in. For
+those pages there is no pair left in the database, so they gain nothing
+from A2 until something rebuilds them. Pages still in the legacy shape
+convert at render time and gain the schema immediately, with no write.
+
+Nothing is guessed about how many there are. **The read query first, as
+always — it confirms the ids before any SQL keys on them:**
+
+```sql
+-- How many saved pages lost their FAQ pairs to the old conversion?
+-- A page in the NEW shape (top-level items are type 'section') whose
+-- tree holds no 'faq_item' but does hold a heading that reads like a
+-- question. Read-only; nothing is changed by this.
+select
+  w.slug          as site_slug,
+  p.slug          as page_slug,
+  p.content_source,
+  p.updated_at
+from website_pages p
+join websites w on w.id = p.website_id
+where p.sections::text like '%"type":"section"%'
+  and p.sections::text not like '%"type":"faq_item"%'
+  and p.sections::text ~ '"text":"[^"]*\?"'
+order by p.updated_at desc;
+```
+
+If that returns rows, the fix is a one-off re-pairing pass, and it needs
+the owner's eyes on each page rather than a blind write — a heading
+ending in a question mark is a strong hint and not a fact.
+
+### Mutations: 34 of 34 killed
+
+Four did not die on the first pass and all four were real test gaps, not
+false alarms:
+
+- **The reader's own `&&`.** Changing `question && answer` to
+  `question || answer` in `faqPairsFromBlocks` changed nothing, because
+  every assertion reached the reader through `legacyToBlocks` (which
+  already drops a question-less item) or through `faqPageNode` (which
+  filters again). The reader is what the pages call, so it is now tested
+  directly.
+- **`dangerouslySetInnerHTML` on the answer.** The test asserted the
+  answer does not reach the page as `&lt;p&gt;` — which passes happily
+  when the string is injected as live markup instead. That is the other
+  half of the 2026-09-21 misnamed-prop bug and the worse half. Both are
+  now asserted.
+- **Filtering the FAQ block's children to pairs.** Every fixture held
+  only pairs, so dropping everything else changed nothing measured.
+  `allowedChildren` is advisory, and a page that silently drops a block
+  the owner placed does not match the editor they placed it in.
+- **A mutation of mine that did not parse.** Swapping `<div>` for
+  `<details>` while leaving `</div>` meant the file never compiled, no
+  test ran, and the harness reported a suspect rather than a survivor.
+  Rewritten balanced, and it dies.
+
+### Unverified live
+
+No page has been fetched and no structured data validated in Google's
+Rich Results Test. The build compiles all three routes and the tests
+assert the graph; **a machine outside this repo has not read any of it.**
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

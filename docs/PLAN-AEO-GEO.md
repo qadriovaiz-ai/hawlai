@@ -218,6 +218,9 @@ ranking or citation claim is made.
 
 ### A2 — an FAQ block, and FAQPage schema from it — **M**
 
+**BUILT — 6 November 2026.** What shipped is below, under *A2 as
+built*.
+
 The structural core, and the one with a dependency the others do not
 have: **the block must exist before the schema can be real.** A `faq`
 block in the registry holding question/answer pairs, `convertLegacy`
@@ -233,6 +236,64 @@ has narrowed since 2023. The reason to do it is **extractability** — it
 labels the content for whatever reads the page — not a rich result in
 search. A plan promising stars and dropdowns would be promising
 something Google has already taken away.
+
+#### A2 as built
+
+| File | What it does |
+|---|---|
+| `src/lib/blocks/registry.ts` | `faq` (a container) and `faq_item` (a question and its answer). |
+| `src/lib/blocks/convertLegacy.ts` | `convertFaq` maps onto them instead of flattening into headings. |
+| `src/lib/blocks/utils.ts` | `faqPairsFromBlocks` — every pair on a page, in page order. |
+| `src/lib/seo/structuredData.ts` | `faqPageNode` and `productPageJsonLd`. |
+| `src/lib/seo/siteIdentity.ts` | the three identity reads, once, for all three routes. |
+| `src/app/site/[slug]/[page]/page.tsx` | JSON-LD on an inner page, which had none. |
+| `src/app/site/[slug]/products/[productId]/page.tsx` | JSON-LD on the product page, which had none. |
+| `src/lib/seo/technicalAudit.ts` | `no_faq` now counts an FAQ **block**, not only an FAQ page. |
+
+**The prop names are `heading` and `html`, not `question` and `answer`,
+and that is the decision in this phase that matters.** Four systems are
+keyed on that exact set of prop names — `TEXT_PROPS`
+(lib/pages/provenance.ts: who wrote this line), `BLOCK_TEXT_KEYS`
+(lib/claims/guardBlocks.ts: the claims guard), `LEGACY_FIELDS`
+(lib/claims/siteClaimsReview.ts: the owner's claims review) and the
+Properties Panel's own marking of the owner's edits. A prop called
+`answer` would have been invisible to all four, so **an AI-written FAQ
+answer would have reached a live page unguarded** — the 2026-09-30
+incident that put the guard on the builder in the first place. The owner
+sees "Question" and "Answer" because that is what the field labels say,
+and a test fails if a future block adds a text prop none of those
+systems reads.
+
+**And because the registry drives the AI author** (see
+`AI_BLOCK_TYPES` — "adding a new block type there automatically becomes
+something the AI can use"), the website builder can now write an FAQ
+section itself, guarded, with no prompt change. That is most of A3's
+plumbing, arriving early.
+
+**Two faults found on the way:**
+
+1. **`LocalBusiness { name: "the business" }`.** The home page called
+   `businessDisplayName` with its default fallback, so a business that
+   had not yet typed its name — or still had the signup placeholder —
+   was publishing that placeholder as its name, in the one format built
+   to be believed without being read. The reader now asks for an empty
+   fallback and publishes nothing instead.
+2. **The audit asked for an FAQ the page already had.** `no_faq` looked
+   only at `page_type` and the slug, so an FAQ block on the home page
+   still produced the finding every day. A finding that fires against
+   work the owner has already done teaches them to ignore findings.
+
+**The honest gap, and it needs one read query to size:** a page the
+owner has opened in the block editor and saved was stored as a block
+tree — with the legacy FAQ **already flattened** into headings and
+paragraphs. Those pages gain nothing here, because there is no pair left
+in the database to read. Pages still in the legacy shape convert at
+render time and gain the schema immediately, with no write. The query to
+count the affected pages is in docs/DECISIONS.md under this date.
+
+**Unverified live:** no page has been fetched and no structured data
+validated in Google's Rich Results Test. The schema is built and
+asserted in tests; it has not been read by a machine outside this repo.
 
 ### A3 — answers written from the business's own facts — **M**
 
