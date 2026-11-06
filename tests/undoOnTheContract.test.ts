@@ -91,7 +91,7 @@ describe("1. the contract carries it", () => {
   it("AND IT IS OPTIONAL, WHICH IS WHAT TIES P1 TO P0", () => {
     // A platform with no undo cannot hold L1. That is the whole reason
     // optionality is safe: absence refuses rather than permits.
-    expect(canHoldL1("update_page_text", false).ok).toBe(false);
+    expect(canHoldL1("update_page_text", { hasUndo: false }).ok).toBe(false);
     expect(effectiveLevel("update_page_text", { stored: "L1", hasUndo: false })).toBe("L0");
     expect(effectiveLevel("update_page_text", { stored: "L1", hasUndo: true })).toBe("L1");
   });

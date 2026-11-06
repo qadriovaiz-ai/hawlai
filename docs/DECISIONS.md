@@ -1405,6 +1405,68 @@ inside the telling was never entered. The case that catches it is now
 its own test — and the fault it guards against is this commit's own
 fault in miniature: an error that hides the thing it is about.
 
+## 6 November 2026 — S7/P4, and the two things the exit test found
+
+**L2 exists in the type and in the database, and nothing can grant it.**
+The allowlist holds one key (`update_page_meta`, the founder's decision
+3), no row has been written, and promotion is P5. A test asserts
+`promotion.ts` is absent, which goes red the moment P5 starts.
+
+### Two tests restated, both stricter (rule 7)
+
+The founder decided this on 5 November with both tests in front of him.
+
+*"AND THE DATABASE CANNOT EVEN SAY L2"* protected an invariant that was
+never "L2 cannot exist" — it was "a level cannot be written that the
+code has not earned the right to honour". It now walks **every** spend,
+delete and critical action and asserts the DATABASE refuses L2 for each,
+and a new test pins the code's allowlist against the SQL one.
+
+*"THE TYPE AND THE CONSTRAINT CANNOT DRIFT APART"* named migration 209
+and broke when 220 widened the check. It now FINDS the newest migration
+defining the constraint. Naming a file means editing the test every time
+the thing it guards changes, and that is the edit made carelessly.
+
+**And two fixtures stopped being hypothetical:** both
+`autonomyLevels.test.ts` and `approvalCoverage.test.ts` used `"L2"` as
+their example of a level the build does not understand. Now `"L3"` — and
+the second also asserts a KNOWN level comes back, because "everything
+reads as null" would have passed the old version while making every
+level unreachable.
+
+### THE EXIT TEST FOUND TWO REAL THINGS
+
+**`set_automation_toggle` was not pinned.** Classified edit / high, so
+every rule let it reach L1 — while its own policy comment reads "THE ONE
+THAT TURNS OFF EVERY OTHER GATE. After this runs, content publishes and
+emails send with nobody looking." Four of six toggles are critical. An
+action whose effect is to start one of those cannot be less gated than
+the thing it starts.
+
+**A positional boolean silently un-gated an action.** P4 wrote
+`canHoldL2(key, hasUndo: boolean)`; the exit test, written first, called
+it with `{ hasUndo: false }`. The boolean parameter took the object,
+read it as truthy, and said `ok: true` for an action with no undo. The
+failure mode of a bare boolean there is a silent un-gating. Both
+functions take an object now.
+
+**This is the return on writing the exit test first**, and it is the
+second time this stage: at P1 it caught its own false-green, and here it
+caught two faults in the code it was written to describe.
+
+### 21 mutation checks, 21 killed, one equivalent mutant recorded
+
+Two survived first and the gap was real: the only assertion pinning the
+toggle lived in `tests/open/`, which the default suite does not run — so
+a guard the exit test found would have been unprotected until P7.
+Asserted in the default suite now, with a check that the REASON stays
+true.
+
+One is recorded rather than fixed: `!["L1","L2"].includes(level)` and
+`level === "L0"` are the same function while three levels exist. No test
+can tell them apart, and contorting one would be testing the shape of an
+expression rather than its behaviour.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -15,8 +15,16 @@
 
 import type { AutonomyLevel } from "@/lib/autonomyLevels";
 
-/** The levels this build understands. A row saying anything else is ignored. */
-const KNOWN: AutonomyLevel[] = ["L0", "L1"];
+/**
+ * The levels this build understands. A row saying anything else is
+ * ignored — which means L0, which means ask.
+ *
+ * L2 ADDED BY S7/P4. Until migration 220 it could not be written at
+ * all; now it can, for the keys on the allowlist, and this file is the
+ * reason an older build reading a newer database stays safe: a level it
+ * does not recognise reads as nothing.
+ */
+const KNOWN: AutonomyLevel[] = ["L0", "L1", "L2"];
 
 /**
  * What `action_levels` holds for this business and action, or null.

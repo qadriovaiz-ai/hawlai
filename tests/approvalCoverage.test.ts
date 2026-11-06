@@ -291,11 +291,20 @@ describe("S3/P3 — a LEVEL can never become a bypass", () => {
     const { readStoredLevel } = await import("@/lib/autonomyLevelsStore");
     const dead = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "boom" } }) }) }) }) }) };
     const throws = { from: () => { throw new Error("no such table"); } };
-    const unknown = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { level: "L2" }, error: null }) }) }) }) }) };
+    // "L2" WAS THE UNKNOWN LEVEL HERE UNTIL S7/P4 MADE IT REAL
+    // (6 November 2026). The fixture moved to one that is still
+    // unknown, which is the test this always was: a level this build
+    // does not understand is not a level, whatever it says.
+    const unknown = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { level: "L3" }, error: null }) }) }) }) }) };
+    const real = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { level: "L2" }, error: null }) }) }) }) }) };
     expect(await readStoredLevel(dead, "d1", "update_page_text")).toBeNull();
     expect(await readStoredLevel(throws, "d1", "update_page_text")).toBeNull();
-    // A level this build does not understand is not a level.
     expect(await readStoredLevel(unknown, "d1", "update_page_text")).toBeNull();
+    // AND STRICTER THAN IT WAS: a level this build DOES understand must
+    // come back, or "everything reads as null" would pass this test
+    // while making every level unreachable — a gate that is always on
+    // looks safe and is a product that never acts.
+    expect(await readStoredLevel(real, "d1", "update_page_text")).toBe("L2");
   });
 
   it("and a stored L1 that cannot be honoured is logged rather than silently dropped", () => {

@@ -242,7 +242,7 @@ threshold, **demotes**. Silence is not evidence.
 | **P1 — DONE 5 Nov, see §16** | **M0: `claim_checks`** — migration 217, writer, wired at the publish door. Nothing reads it yet. One-shot sends are P1b | M |
 | **P2 — DONE 6 Nov, see §17** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
 | **P3 — DONE 6 Nov, see §18** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
-| **P4** | **L2 in the type and in the database** — migration widens 209's CHECK, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
+| **P4 — DONE 6 Nov, see §19** | **L2 in the type and in the database** — migration 220 widens 209's CHECK and adds the allowlist constraint, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
 | **P5** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
 | **P6** | **The cap**, per action per day, and the owner's screen: what is at which level, why, and what it has done unattended | S |
 | **P7** | **Exit test green**, and the honest account of what is unverified live — an L2 action has by definition not run unattended for long when the stage closes | S |
@@ -832,6 +832,105 @@ The first real exercise needs an L2 row to take away.
 
 **Migration 218 is not run yet.** Until it is, the notification lands
 nowhere; the decision row and the log line still happen.
+
+---
+
+## 19. P4 — L2 exists, and nothing can grant it — 6 November 2026
+
+**Done.** Migration **220**, `src/lib/autonomy/policy.ts`, and
+`canHoldL2` / `maxLevelFor` in `autonomyLevels.ts`.
+
+**Nothing is at L2.** The allowlist holds one key, no row has been
+written, and promotion does not exist — so the type can express L2 and
+nothing in the product can grant it. `tests/autonomyLevels.test.ts`
+asserts `src/lib/autonomy/promotion.ts` is absent, which goes red the
+moment P5 starts, deliberately.
+
+### Two constraints, not one
+
+Widening the level check alone would let any action key hold L2 the
+moment the code allowed it. So migration 220 also adds
+`action_levels_l2_allowlist`, naming the keys that may — and the
+database refuses L2 for everything else: not by a bug, not by a
+migration that forgets, not by an admin script.
+
+**This does not contradict 209's "action_key has no CHECK
+constraint".** 209 refused to enumerate every action key because the
+policy table is code and moves faster than migrations — still true, and
+L0 and L1 remain open to any key. What 220 enumerates is the far smaller
+set **allowed to run with nobody watching**. That is a safety boundary,
+not a catalogue, and it is meant to move slowly.
+
+### The two tests, restated and stricter
+
+**`"AND THE DATABASE CANNOT EVEN SAY L2"`** asserted 209's CHECK allowed
+`L0` and `L1` only. The invariant it protected was never "L2 cannot
+exist" — it was *"a level cannot be written that the code has not earned
+the right to honour"*, and that was the strongest statement available
+while L2 was unreachable. There is a stronger one now: the test walks
+**every** spend, delete and critical action in the registry and asserts
+the **database** refuses L2 for each, plus a new test pinning the code's
+allowlist against the SQL one so they cannot drift.
+
+**`"THE TYPE AND THE CONSTRAINT CANNOT DRIFT APART"`** named migration
+209 and broke the moment 220 widened it. It now **finds** the newest
+migration defining `action_levels_level_check` — the check is
+drop-and-recreate, so only the highest-numbered one describes what the
+database accepts, and naming a file means editing this test every time
+the thing it guards changes. That is the edit that gets made carelessly.
+
+**And two fixtures stopped being hypothetical.** Both
+`autonomyLevels.test.ts` and `approvalCoverage.test.ts` used `"L2"` as
+their example of *a level this build does not understand*. They now use
+`"L3"`, which is the test they always were — and `approvalCoverage`'s is
+stricter: it also asserts a level the build **does** understand comes
+back, because "everything reads as null" would pass the old version
+while making every level unreachable.
+
+### THE EXIT TEST FOUND TWO REAL THINGS, which is why it was written first
+
+**1. `set_automation_toggle` was not pinned.** It is classified `edit` /
+`high` — not spend, not delete, not critical — so every rule let it
+reach L1. ACTION_POLICIES' own comment says what it is: *"THE ONE THAT
+TURNS OFF EVERY OTHER GATE. After this runs, content publishes and
+emails send with nobody looking."* Four of the six `AUTOMATION_TOGGLES`
+are critical. **An action whose effect is to start one of those cannot
+be less gated than the thing it starts.** Now pinned by key, with the
+reason recorded, and switching OFF is unaffected — rule 6 returns before
+any of it.
+
+**2. A positional boolean silently un-gated an action.** P4 wrote
+`canHoldL2(key, hasUndo: boolean)` to match `canHoldL1`'s shape. The
+exit test, written first, called it as `canHoldL2(key, { hasUndo: false
+})`. The boolean parameter accepted that object, read it as **truthy**,
+and answered `ok: true` for an action with no undo.
+
+The failure mode of a bare boolean here is a **silent un-gating** — the
+one direction this file exists to make impossible. Both functions now
+take `{ hasUndo }`, so there is no caller it can be passed wrongly from.
+
+### 21 mutation checks, 21 killed — and one equivalent mutant recorded
+
+**Two survived first, and the gap was real:** the only assertion pinning
+`set_automation_toggle` lived in `tests/open/`, which the default suite
+does not run. A guard the exit test found would have gone unprotected
+until P7 closed the stage. It is now asserted in the default suite too,
+with a check that the REASON stays true: pinned because what it switches
+on is critical, so if no toggle were critical any more the pinning would
+need re-arguing rather than silently surviving.
+
+**And one is recorded rather than fixed.** `!["L1","L2"].includes(level)`
+and `level === "L0"` are the same function today, because those are the
+only three levels. No test can tell them apart, and contorting one to
+try would be testing the shape of an expression rather than its
+behaviour. The list form becomes wrong the day an L3 exists; the comment
+in `autonomyLevels.ts` says why the identity form is the one to keep.
+
+### Unverified live
+
+**Migration 220 is not run yet.** Until it is, nothing changes: the code
+can express L2, `action_levels` is empty, and a row cannot be written at
+L2 by anything. No action has ever held L2 anywhere.
 
 ---
 
