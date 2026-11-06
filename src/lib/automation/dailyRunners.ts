@@ -22,6 +22,7 @@ import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
 import { runStrategySignals } from "@/lib/strategy/strategySignals";
+import { runOutputMonitor } from "@/lib/claims/outputMonitor";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -32,6 +33,10 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // thirty days of the month. Model-free and read-only apart from the
   // send, so it belongs here rather than in the heavy group.
   monthly_review: (s, id) => runMonthlyReview(s, id),
+  // S7/P2 — reads claim_checks rows that went out and asks the
+  // extractor about them again. Costs money, so it is capped per
+  // business per run inside the function rather than by a flag here.
+  output_monitor: (s, id) => runOutputMonitor(s, id),
   daily_autopilot: (s, id) => runDailyAutopilot(s, id),
   content_autopilot: (s, id) => runContentAutopilot(s, id),
   report_snapshots: (s, id, category) => runReportSnapshots(s, id, category),

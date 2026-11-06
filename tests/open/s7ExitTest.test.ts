@@ -326,10 +326,30 @@ describe("4. THE INSTRUMENT EXISTS — without it, 2 and 3 are decoration", () =
   });
 
   it("AND SOMETHING READS THOSE ROWS, ON A SCHEDULE, WITHOUT BEING ASKED", async () => {
+    // THE TARGET MOVED, AND HERE IS WHY — 6 November 2026, at P2.
+    //
+    // P0 wrote `GROUPS.signals` because the plan said "a daily
+    // subsystem in the signals group". Reading cronGroups.ts settles
+    // it the other way: signals is "database-only and fast… so it runs
+    // FIRST and never queues behind LLM calls", and the monitor calls a
+    // model on every row. Putting it in signals would have broken that
+    // file's own rule, which exists because one post reached Facebook
+    // in 28 days while a group full of LLM work ran ahead of it.
+    //
+    // Changing an exit test's expectation is the thing writing it first
+    // was meant to prevent, so it is changed in ONE direction only: the
+    // assertion is now STRICTER than it was. It pins the group AND the
+    // position, because where it sits is the decision that matters.
     const monitor = await load(MONITOR);
     expect(typeof monitor.runOutputMonitor).toBe("function");
     const { GROUPS } = await import("@/lib/automation/cronGroups");
-    expect(GROUPS.signals, "the monitor is not in the daily run").toContain("output_monitor");
+    expect(GROUPS.heavy, "the monitor is not in the daily run").toContain("output_monitor");
+    expect(GROUPS.signals, "a model-calling subsystem is in the database-only group").not.toContain("output_monitor");
+    // BEFORE THE EMAIL THAT TELLS HIM. daily_autopilot sends the daily
+    // report, so a monitor running after it reports today's escape
+    // tomorrow. It is also the entry that went unreached for two days
+    // when the dispatcher's secret went stale.
+    expect(GROUPS.heavy.indexOf("output_monitor")).toBeLessThan(GROUPS.heavy.indexOf("daily_autopilot"));
   });
 
   it("and it is the gate that already exists, not a second judge of the same thing", () => {

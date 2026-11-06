@@ -1250,6 +1250,48 @@ behind a surface check that always matched first) and a fixture whose
 guard was skipped (`factsFor` returns `ctx.facts` before it reaches the
 database, so mocking the gatherer did nothing).
 
+## 6 November 2026 — S7/P2, and an exit test that was wrong about the cron
+
+**The monitor is the eval gate pointed at live rows.** Same refused set
+(imported, not re-listed), same splitter with hashtags opened out, same
+free code-only checks first. A second, differently-written judge would
+give one question two answers.
+
+**THE EXIT TEST'S EXPECTATION WAS WRONG, and I changed it.** P0 asserted
+`GROUPS.signals` contains `output_monitor`, because this plan said "a
+daily subsystem in the signals group". `cronGroups.ts` says signals is
+*"database-only and fast… never queues behind LLM calls"*, and the
+monitor calls a model on every row.
+
+Changing an exit test's expectation is the thing writing it first was
+meant to prevent, so it moved in **one direction**: stricter. It now
+pins the group, pins that signals does not contain it, and pins the
+POSITION — before `daily_autopilot`, which is the subsystem that sends
+the daily email, so a monitor running after it would report today's
+escape tomorrow. That is also the entry that went unreached for two days
+when the dispatcher's secret went stale.
+
+**A cap, not a flag.** 20 rows and ₹2 per business per run. A switch
+defaulting to off would be `dm_auto_reply` all over again with the sides
+swapped — a monitor that says it is running while it checks nothing. And
+the cap is not a pass: the rows it skips keep ageing, so the blindness
+P3 reads grows.
+
+**Blindness is measured from the oldest thing still waiting**, not from
+when the monitor last ran. A monitor that runs daily and fails daily has
+run recently and seen nothing. `null` (nothing published) is kept
+distinct from `0` (published today, checked today).
+
+**The plan's retention rule changed on contact.** It said to clear the
+copy and keep only refused sentences. The copy of a row that was WRONG
+is the evidence behind a demotion the owner will be told about, and a
+row that could not be checked must stay readable. So only clean rows
+lose their copy.
+
+**26 mutation checks, 26 killed, no survivors on the first pass** — the
+first time in this project. The reason is not that I was more careful:
+this file had a worked example to copy instead of a design to invent.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

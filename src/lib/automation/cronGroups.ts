@@ -39,7 +39,20 @@ export type SubsystemKey =
   // to give it. In `signals` and AFTER decision_results, so the
   // outcomes measured this morning are in the review that goes out
   // this morning.
-  | "monthly_review";
+  | "monthly_review"
+  // S7/P2 — the second judge: re-reads what actually went out and asks
+  // the extractor about it again. In `heavy` and NOT in signals, which
+  // this file's own rule settles: signals is "database-only and fast",
+  // and this one calls a model.
+  //
+  // AND BEFORE daily_autopilot, which is the decision worth stating.
+  // The owner hears about a demotion in the daily email, and
+  // daily_autopilot is the subsystem that sends it — so a monitor
+  // running after it would report today's escape tomorrow. It is also
+  // the entry that went unreached on 4 and 5 November when the
+  // dispatcher's secret went stale, and "the monitor never ran" is the
+  // one state S7 must not produce quietly.
+  | "output_monitor";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
@@ -56,6 +69,7 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     "content_autopilot",
     "google_reviews", "competitor_alerts", "topic_alerts",
     "report_snapshots",
+    "output_monitor",
     "search_console_sync",
     "daily_autopilot",
   ],

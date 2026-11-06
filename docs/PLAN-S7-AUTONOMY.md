@@ -240,7 +240,7 @@ threshold, **demotes**. Silence is not evidence.
 |---|---|---|
 | **P0 — DONE 6 Nov, see §16** | **The exit test first**, red. It asserts promotion, demotion, "spend is never auto", and that the instrument exists | S |
 | **P1 — DONE 5 Nov, see §16** | **M0: `claim_checks`** — migration 217, writer, wired at the publish door. Nothing reads it yet. One-shot sends are P1b | M |
-| **P2** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
+| **P2 — DONE 6 Nov, see §17** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
 | **P3** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
 | **P4** | **L2 in the type and in the database** — migration widens 209's CHECK, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
 | **P5** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
@@ -663,6 +663,87 @@ pageClaimCheckField.test.ts` first mocked the facts gatherer, and
 the guard was skipped and every assertion was about a path that did not
 run. The log said `couldn't gather facts` and the tests failed for the
 right reason by luck. Facts go on the context now.
+
+---
+
+## 17. P2 — the second judge — 6 November 2026
+
+**Done.** `src/lib/claims/outputMonitor.ts`, wired as the
+`output_monitor` subsystem.
+
+### It is the eval gate, pointed at live rows
+
+`scripts/eval/outputGate.eval.ts` already re-asks the extractor about a
+finished run's surviving sentences, from scratch, and flags any claim of
+a type nothing can license. The monitor reuses **its set** — imported,
+not re-listed — **its splitter** (`copySentences`, with hashtags opened
+out, which is the mistake that cleared a run on 20 October) and **its
+free checks** (`notCopySentences`, so a placeholder costs nothing). Two
+differently-worded judges would give one question two answers.
+
+### Three decisions worth reading
+
+**1. `heavy`, not `signals` — and the exit test was wrong.** P0 wrote
+`GROUPS.signals` because this plan said so. `cronGroups.ts` settles it
+the other way in its own words: signals is *"database-only and fast… so
+it runs FIRST and never queues behind LLM calls"*, and the monitor calls
+a model on every row.
+
+Changing an exit test's expectation is exactly what writing it first was
+meant to prevent, so it changed in **one direction only**: the assertion
+is now **stricter**. It pins the group, pins that signals does *not*
+contain it, and pins the **position** — `output_monitor` must come
+before `daily_autopilot`, because `daily_autopilot` sends the daily
+email and a monitor running after it would report today's escape
+tomorrow. That entry is also the one that went unreached on 4 and 5
+November when the dispatcher's secret went stale.
+
+**2. A cap, not a flag.** A switch defaulting to off would recreate the
+fault still open in production — `dm_auto_reply` reading "on" over a
+path that does nothing — with the sides swapped: a monitor that says it
+is running while it checks nothing. So it always runs and what bounds it
+is arithmetic: **20 rows and ₹2** per business per run, a **14-day**
+lookback, and a free code-only check first so a placeholder is never
+paid for.
+
+**And the cap is not a pass.** The rows it skips keep ageing, so
+`blindDays` grows and P3 sees it. A budget that could quietly certify a
+product as safe would be the worst kind of saving.
+
+**3. Blindness is measured from the oldest thing still waiting**, not
+from when the monitor last ran. A monitor that runs every morning and
+fails every morning has run recently and seen nothing — measuring its
+own activity would report that as healthy. `MONITOR_BLIND_DAYS = 2`,
+because the dispatcher sent a stale secret for exactly two days and
+nobody knew until the owner noticed a missing email.
+
+**`null` is not zero.** A business that published nothing is not a
+business whose monitor is working; it is one with nothing to monitor,
+and P3 must not read the two the same way.
+
+### What is kept, and the plan said otherwise
+
+The plan said to clear `text` and keep only the refused sentences. On
+building it: the copy of a row that was **wrong** is the evidence behind
+a demotion the owner will be told about, and a row that **could not be
+checked** has to be readable to be checked again. So the only copy
+dropped is the copy nothing was wrong with, and `could_not_check` stays
+in the monitor's own query beside `null` — writing it as a final verdict
+would retire a row nobody has actually read.
+
+### Unverified live
+
+The monitor has **never run against the live database**. `claim_checks`
+has 0 rows, so there is nothing for it to read until a page edit goes
+through — and the first thing to check is not the monitor but P1: one
+edit, one row. The monitor's first real run will be the morning after
+that, inside the heavy group, and its cost will show in the usage log
+like every other model call (it passes `logContext`).
+
+**26 mutation checks, 26 killed**, with no survivors on the first pass —
+the first stage in this project where that happened, and the reason is
+that this file had a worked example to copy rather than a design to
+invent.
 
 ---
 
