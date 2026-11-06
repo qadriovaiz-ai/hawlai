@@ -32,6 +32,37 @@
  */
 export const L2_ALLOWLIST: readonly string[] = ["update_page_meta"];
 
+/**
+ * How much evidence earns an action the right to run alone.
+ *
+ * THE FOUNDER'S DECISION 4, 5 November 2026, in his numbers: ten
+ * approvals as requested, no rejections, no modifications, over at
+ * least thirty days, with at least one measured outcome that is neither
+ * `worsened` nor `not_measurable`.
+ *
+ * ONE FILE, so changing the rule is one visible edit. A threshold
+ * buried in a query is a threshold nobody can find and nobody can
+ * argue with.
+ *
+ * EVERY NUMBER IS A COUNT OF HIS OWN ROWS. pending_approvals has
+ * carried status, reviewed_at and modified_details all along, and S5's
+ * outcomes carry whether the work helped — so nothing new is collected
+ * for promotion. S7's new collection (claim_checks) is for the
+ * DEMOTION side, which is the half that had no instrument.
+ */
+export const PROMOTION_EVIDENCE = {
+  /** Approved exactly as asked. A modification is not one of these. */
+  approvalsAsRequested: 10,
+  /** How many rejections are tolerated. None. */
+  rejections: 0,
+  /** How many approve-with-changes are tolerated. None — see promotion.ts. */
+  modifications: 0,
+  /** And over at least this long, so volume cannot buy time. */
+  days: 30,
+  /** With at least this many outcomes that were actually measurable. */
+  measuredOutcomes: 1,
+} as const;
+
 /** Is this action one the owner's product is allowed to run on its own? */
 export function isAllowlistedForL2(actionKey: string): boolean {
   return L2_ALLOWLIST.includes(String(actionKey ?? ""));

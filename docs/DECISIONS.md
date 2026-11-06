@@ -1467,6 +1467,51 @@ One is recorded rather than fixed: `!["L1","L2"].includes(level)` and
 can tell them apart, and contorting one would be testing the shape of an
 expression rather than its behaviour.
 
+## 6 November 2026 — S7/P5, promotion that asks
+
+**The product earns the permission and asks once, with the numbers on
+the card.** `promotion.ts` never writes `action_levels` — a test asserts
+it never will — and the only path from "earned" to "granted" is the
+owner pressing Approve, where the route re-checks the allowlist and
+re-checks the undo at the moment of granting.
+
+**Nothing new is collected for promotion.** The evidence is rows that
+already existed: `pending_approvals.modified_details` (migration 127),
+status, and S5's outcomes. S7's new collection is for the demotion side,
+which is the half that had no instrument.
+
+**The four wrong readings, each refused and each tested:** a modified
+approval is us being inaccurate, not him agreeing; one ignored card
+disqualifies, because a row he never touched is not consent;
+`not_measurable` is not a pass; and evidence from before a demotion does
+not count, or an action taken away for a real escape is re-promoted the
+same week.
+
+### Three test gaps the mutation run found, all one shape
+
+Each assertion reached a refusal — just not the one it was named for.
+The mock's `.in()` was a no-op, so the "whose decisions are these"
+filter was invisible. And the undo check, in both `proposePromotion` and
+the route, was unreachable because the only allowlisted action's
+platform *does* implement undo: the honest fix was to mock the registry
+and take it away, in both places.
+
+**And one "survivor" was my harness:** vitest's verbose reporter
+truncates a long `file > describe > name` path, so matching on the full
+test name reports a killed mutant as a survivor. Worth remembering for
+every mutation run here.
+
+**32 mutation checks, 32 killed** once all four were honest.
+
+### An existing test caught the new action
+
+`recordDecision.test.ts` requires every action type to be named in one
+of `measures.ts`'s lists. `grant_autonomy` went in the NOT COLLECTED
+one: what a granted permission did for the business is not one number.
+`claim_checks` records what it published while running alone, but the
+results job cannot read that table — naming it as a source would claim
+a measurability that does not exist.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

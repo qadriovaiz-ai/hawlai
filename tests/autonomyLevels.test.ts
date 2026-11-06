@@ -373,12 +373,32 @@ describe("8. L2 — RUNNING WITH NOBODY WATCHING — S7/P4", () => {
     expect(String(note)).not.toMatch(/L[012]/);
   });
 
-  it("and nothing in the product can grant it yet", () => {
-    // P4 teaches the type and the database. Promotion is P5, and until
-    // it exists the only way a row reaches L2 is somebody writing one
-    // by hand — which is the state this phase is meant to be in.
-    const files = fs.readdirSync("src/lib/autonomy");
-    expect(files).not.toContain("promotion.ts");
+  it("AND NOTHING IN THE PRODUCT GRANTS IT — ONLY THE OWNER'S CLICK DOES", () => {
+    // WRITTEN AT P4 AS "promotion.ts does not exist", DELIBERATELY SO
+    // THAT IT WOULD GO RED THE MOMENT P5 STARTED. It did, on the same
+    // day, and this is the restatement — the same invariant stated
+    // against a product that now has a promotion path:
+    //
+    //   the product may PROPOSE, and only the owner's approval GRANTS.
+    //
+    // src/lib/autonomy/promotion.ts gathers the evidence and raises an
+    // ordinary card; /api/approvals/[id] writes the row when he presses
+    // Approve. A promotion that wrote action_levels itself would be the
+    // product widening its own permissions because a counter moved.
+    const promotion = code("src/lib/autonomy/promotion.ts");
+    expect(promotion, "promotion writes a level itself").not.toMatch(/from\("action_levels"\)[\s\S]{0,40}\.(insert|update|upsert)/);
+    expect(promotion).toMatch(/requestApproval/);
+
+    // AND THE ROUTE IS THE ONE PLACE THAT DOES WRITE IT.
+    const route = code("src/app/api/approvals/[id]/route.ts");
+    expect(route).toMatch(/grant_autonomy/);
+    expect(route).toMatch(/from\("action_levels"\)/);
+    // Re-checked against the allowlist there rather than trusted from
+    // the row — the lesson the toggle branch beside it records.
+    const branch = route.slice(route.indexOf('approval?.action_type === "grant_autonomy"'));
+    expect(branch).toMatch(/isAllowlistedForL2/);
+    expect(branch).toMatch(/canHoldL2/);
+
     expect(pinnedToL0("update_page_meta")).toBeNull();
   });
 });

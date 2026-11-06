@@ -422,6 +422,50 @@ export async function PATCH(
         .eq("id", approval.dealership_id);
       if (toggleError) return NextResponse.json({ error: toggleError.message }, { status: 500 });
     }
+
+    // GRANTING THE PRODUCT PERMISSION TO ACT ALONE — S7/P5.
+    //
+    // THIS IS THE ONLY PLACE A LEVEL IS RAISED. src/lib/autonomy/
+    // promotion.ts gathers the evidence and writes the card, and a test
+    // asserts it never writes `action_levels` — so the only path from
+    // "earned" to "granted" is the owner pressing this button.
+    //
+    // THE ACTION KEY IS RE-CHECKED AGAINST THE ALLOWLIST, never trusted
+    // from the row. The toggle branch above records the same lesson: a
+    // stored action_details is still a value the server should not act
+    // on blindly. The database refuses it too (migration 220), so this
+    // is the second of three gates rather than the only one.
+    if (approval?.action_type === "grant_autonomy") {
+      const wanted = String((approval.action_details as any)?.action_key ?? "");
+      const { isAllowlistedForL2 } = await import("@/lib/autonomy/policy");
+      const { canHoldL2 } = await import("@/lib/autonomyLevels");
+      const { undoExistsFor } = await import("@/lib/autonomy/promotion");
+      if (!isAllowlistedForL2(wanted)) {
+        return NextResponse.json(
+          { error: "That isn't something Hawlai may do on its own, so nothing was changed." },
+          { status: 400 }
+        );
+      }
+      // AND THE PLATFORM MUST STILL BE ABLE TO PUT IT BACK. Checked at
+      // the moment of granting, not at the moment of asking: the card
+      // may have been sitting there for a week.
+      const eligible = canHoldL2(wanted, { hasUndo: await undoExistsFor(service, wanted) });
+      if (!eligible.ok) {
+        return NextResponse.json({ error: `Nothing was changed: ${eligible.why}` }, { status: 400 });
+      }
+      const { error: levelError } = await service.from("action_levels").upsert(
+        {
+          dealership_id: approval.dealership_id,
+          action_key: wanted,
+          level: "L2",
+          set_by: user.id,
+          note: "Approved from the card that showed the evidence for it.",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "dealership_id,action_key" }
+      );
+      if (levelError) return NextResponse.json({ error: levelError.message }, { status: 500 });
+    }
   }
 
   const { data, error } = await service

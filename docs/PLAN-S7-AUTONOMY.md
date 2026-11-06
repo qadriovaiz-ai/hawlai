@@ -243,7 +243,7 @@ threshold, **demotes**. Silence is not evidence.
 | **P2 — DONE 6 Nov, see §17** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
 | **P3 — DONE 6 Nov, see §18** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
 | **P4 — DONE 6 Nov, see §19** | **L2 in the type and in the database** — migration 220 widens 209's CHECK and adds the allowlist constraint, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
-| **P5** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
+| **P5 — DONE 6 Nov, see §20** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
 | **P6** | **The cap**, per action per day, and the owner's screen: what is at which level, why, and what it has done unattended | S |
 | **P7** | **Exit test green**, and the honest account of what is unverified live — an L2 action has by definition not run unattended for long when the stage closes | S |
 
@@ -931,6 +931,114 @@ in `autonomyLevels.ts` says why the identity form is the one to keep.
 **Migration 220 is not run yet.** Until it is, nothing changes: the code
 can express L2, `action_levels` is empty, and a row cannot be written at
 L2 by anything. No action has ever held L2 anywhere.
+
+---
+
+## 20. P5 — the product asks, the owner grants — 6 November 2026
+
+**Done.** `src/lib/autonomy/promotion.ts`, `PROMOTION_EVIDENCE` in
+`policy.ts`, the `grant_autonomy` action, and the one branch in
+`/api/approvals/[id]` that writes the level.
+
+### Nothing new is collected for this
+
+Promotion reads rows that already existed: `pending_approvals` has
+carried status, `reviewed_at` and (since migration 127)
+`modified_details` all along, and S5's `decisions`/`outcomes` carry
+whether the work helped. **S7's new collection — `claim_checks` — is
+for the demotion side**, which is the half that had no instrument.
+
+### The four readings that would each be wrong in the same direction
+
+| Reading | Why it is refused |
+|---|---|
+| A **modified** approval | Migration 127 exists because he sometimes approves ₹3,000 where we asked ₹5,000. That is us being wrong, not him agreeing |
+| An **ignored** card | A row nobody touched is him not looking. **One is enough to disqualify** — not a threshold |
+| `not_measurable` | S5 made it a first-class verdict so "we could not tell" would stop being filed as "it was fine" |
+| Evidence from **before a demotion** | §9's rule: the counter restarts, or an action taken away for a real escape is re-promoted the same week on the approvals that preceded it |
+
+And **volume cannot buy time**: forty approvals in three days is one
+afternoon's enthusiasm, not a month of this working.
+
+**Eligibility is checked before the evidence**, so the reason is the most
+specific true one — "money is always a human decision" for an action no
+amount of evidence could ever promote, rather than "not enough approvals
+yet".
+
+### The card, and the one thing it is for
+
+```
+You have approved "change a page's search title and description" 14
+times over 46 days without changing what I asked for, none were turned
+down, and the 2 times I could measure the result, none went backwards.
+Shall I start doing this on my own? I will tell you every time I do, and
+I will stop and ask again the moment anything I publish does not match
+your records.
+```
+
+Every figure is a count of his own rows. **It never says "L2"** — he is
+not choosing a letter — and it promises the two things that make the
+answer safe, both of which are built: he is told each time, and S7/P3
+takes it back by itself.
+
+**The evidence goes on the row, not only in the sentence**, so "what did
+this card claim" is answerable from the record rather than from a string
+the browser once held — `sitePublishGuard`'s invariant, applied.
+
+**And it does not ask twice.** A pending `grant_autonomy` card is
+already the question; an action already at L2 does not need asking for.
+
+### THE ONE PLACE A LEVEL IS RAISED is the approvals route
+
+`promotion.ts` never writes `action_levels`, and a test asserts it never
+will. The route re-checks the action key **against the allowlist** and
+**re-checks the undo at the moment of granting** — the card may have sat
+there a week, and a platform can lose its undo in a deploy. With
+migration 220's constraint that is three gates, not one.
+
+### Three test gaps the mutation checks found, all the same shape
+
+Each assertion reached a refusal, but **not the refusal it was named
+for**:
+
+1. **The outcome filter.** The mock's `.in()` was a no-op, so every
+   call got the same outcomes back and "is this decision about MY
+   approvals" was invisible. Outcomes are keyed by decision now, with
+   another business's among them.
+2. **The undo check in `proposePromotion`.** The test used
+   `update_product_name`, which the *evidence* rule refuses anyway, so
+   the undo check was never reached. The only allowlisted action's
+   platform *does* implement undo — so the only honest way to exercise
+   it is to mock the registry and take the undo away.
+3. **The same check in the route**, for the same reason, isolated the
+   same way.
+
+**And one "survivor" was my harness, not the guard:** vitest's verbose
+reporter truncates a long `file > describe > name` path, so matching on
+the full test name reported a killed mutant as a survivor. Worth knowing
+for every mutation run in this project.
+
+**32 mutation checks, 32 killed** once all four were honest.
+
+### An existing test caught the new action, which is the rule working
+
+`recordDecision.test.ts` asserts every action type is named in one of
+`measures.ts`'s two lists. `grant_autonomy` is in the **not collected**
+one, with its reason: what a granted permission did for the business is
+not one number. The product *does* record what the action published
+while running alone (`claim_checks`) — but the results job cannot read
+that table, and naming it as a source would claim a measurability that
+does not exist. P6 puts those counts on the owner's screen instead,
+where they are read rather than scored.
+
+### Unverified live
+
+**No card has ever been raised**, because no business has ten
+as-requested approvals of `update_page_meta` since its last demotion
+with a measured outcome — which is the point of the threshold. The first
+real card is weeks away by design, and nothing calls
+`proposePromotion` on a schedule yet: **P6 wires it**, along with the
+cap and the owner's screen.
 
 ---
 

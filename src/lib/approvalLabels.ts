@@ -17,6 +17,9 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   // they are approving; this is the line strangers read in Google.
   update_page_meta: "Change a page's search title & description",
   update_page_text: "Change the words on a page",
+  // S7/P5. "Grant Autonomy" title-cased is machine language for the one
+  // card whose subject is a permission rather than a thing.
+  grant_autonomy: "Let Hawlai do this on its own from now on",
 };
 
 const AGENT_LABELS: Record<string, string> = {

@@ -83,6 +83,15 @@ const NOT_COLLECTED: Record<string, Measure> = {
   update_product_description: { metric: "paid orders of this product", source: null, direction: "up" },
   refund_approve: { metric: "refunds issued", source: null, direction: "down" },
   set_automation_toggle: { metric: "what this automation did while it was on", source: null, direction: "up" },
+  // S7/P5. NOT COLLECTED, and the honest reason is worth stating: what
+  // a granted permission did for the business is not one number. The
+  // product does record what the action published while running alone
+  // (claim_checks, migration 217) and whether any of it failed a check
+  // — but the results job cannot read that table, so naming it as a
+  // source here would claim a measurability that does not exist. S7/P6
+  // puts those counts on the owner's screen instead, where they are
+  // read rather than scored.
+  grant_autonomy: { metric: "what this did while it was running on its own", source: null, direction: "up" },
   auto_reply_dm: { metric: "replies this automation sent", source: null, direction: "up" },
   dm_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },
   comment_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },

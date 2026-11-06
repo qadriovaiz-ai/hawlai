@@ -26,6 +26,10 @@ function db() {
       select: () => api, eq: (k: string, v: any) => (filters.push([k, v]), api),
       gte: () => api, lt: () => api, order: () => api, limit: () => api, not: () => api, is: () => api, in: () => api, ilike: () => api,
       insert: (v: Row) => ((op = "insert"), (values = v), inserted.push({ table, values: v }), api),
+      // S7/P5 writes the granted level with an upsert, so the double
+      // has to take one. Recorded as an insert, because what the test
+      // asks is "what row did approving produce".
+      upsert: (v: Row) => ((op = "insert"), (values = v), inserted.push({ table, values: v }), api),
       update: (v: Row) => ((op = "update"), (values = v), updated.push({ table, values: v }), api),
       single: async () => ({ data: op === "insert" ? { id: "approval-1", ...values } : rows()[0] ?? null, error: null }),
       maybeSingle: async () => ({ data: op === "insert" ? { id: "approval-1", ...values } : rows()[0] ?? null, error: null }),
@@ -55,6 +59,15 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => db() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => db() }));
 vi.mock("@/lib/usage/logUsage", () => ({ logClaudeUsage: async () => {}, logGeminiImageUsage: async () => {} }));
 vi.mock("@/lib/audit/logAuditEvent", () => ({ logAuditEvent: async () => {} }));
+// S7/P5: the route re-checks, at the moment of granting, that the
+// platform can still put the change back. The only allowlisted action's
+// platform does implement undo, so the refusal is unreachable through
+// real data — this flag is the only honest way to exercise it.
+let grantUndo = true;
+vi.mock("@/lib/autonomy/promotion", async (orig) => ({
+  ...(await orig<any>()),
+  undoExistsFor: async () => grantUndo,
+}));
 // set_automation_toggle is plan-gated (marketingAutomationWorkflows).
 // Without this the feature gate refuses before the approval code is
 // reached, which is correct behaviour and not what this file tests.
@@ -368,5 +381,91 @@ describe("approving is what performs the action", () => {
     );
     expect(res.status).toBe(200);
     expect(triggerVapiCall).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------
+// S7/P5 — the one card whose subject is a permission.
+// ---------------------------------------------------------------------
+
+describe("granting the product permission to act alone", () => {
+  // THE FOUNDER'S DECISION 2, AS A PROPERTY OF THE ROUTE. The product
+  // earns the permission from measured data and ASKS; this is the only
+  // place the answer becomes a row. src/lib/autonomy/promotion.ts is
+  // tested separately and asserts it never writes a level itself.
+
+  beforeEach(() => {
+    grantUndo = true;
+  });
+
+  const card = (over: Row = {}) => [{
+    id: "ap-grant",
+    dealership_id: "d1",
+    status: "pending",
+    action_type: "grant_autonomy",
+    action_details: { action_key: "update_page_meta", evidence: { approvalsAsRequested: 10 }, confirm: "Shall I?" },
+    amount: null,
+    ...over,
+  }];
+
+  it("APPROVING WRITES THE LEVEL, AND IT IS L2 FOR THE NAMED ACTION", async () => {
+    tables.pending_approvals = card();
+    const res = await approve("ap-grant");
+    expect(res.status).toBe(200);
+
+    const row = inserted.find((i) => i.table === "action_levels");
+    expect(row, "approving granted nothing").toBeTruthy();
+    expect(row!.values.level).toBe("L2");
+    expect(row!.values.action_key).toBe("update_page_meta");
+    expect(row!.values.dealership_id).toBe("d1");
+    // WHO GRANTED IT. A permission whose record cannot say who gave it
+    // is not an audit row — migration 209's own reasoning.
+    expect(row!.values.set_by).toBe("u1");
+  });
+
+  it("AND AN ACTION KEY NOBODY EARNED IS REFUSED, FROM THE ROW", async () => {
+    // The key is re-checked against the allowlist rather than trusted
+    // from action_details — the lesson the toggle branch beside it
+    // records: a stored value is still a value the server should not
+    // act on blindly. The database refuses it too (migration 220), so
+    // this is the second of three gates.
+    tables.pending_approvals = card({ action_details: { action_key: "update_product_price" } });
+    const res = await approve("ap-grant");
+    expect(res.status).toBe(400);
+    expect(String((await res.json()).error)).toMatch(/isn't something Hawlai may do on its own/);
+    expect(inserted.filter((i) => i.table === "action_levels")).toEqual([]);
+  });
+
+  it("AND THE UNDO IS RE-CHECKED AT THE MOMENT OF GRANTING, not of asking", async () => {
+    // The card may have been sitting there for a week, and a platform
+    // can lose its undo in a deploy. Without this a mutation deleting
+    // the check survived: every other refusal in this branch fires
+    // first on the keys a test can reach.
+    grantUndo = false;
+    tables.pending_approvals = card();
+    const res = await approve("ap-grant");
+    expect(res.status).toBe(400);
+    expect(String((await res.json()).error)).toMatch(/Nothing was changed/);
+    expect(inserted.filter((i) => i.table === "action_levels")).toEqual([]);
+  });
+
+  it("AND AN EMPTY OR MISSING KEY GRANTS NOTHING", async () => {
+    for (const details of [{}, { action_key: "" }, { action_key: "   " }]) {
+      inserted.length = 0;
+      tables.pending_approvals = card({ action_details: details });
+      const res = await approve("ap-grant");
+      expect(res.status, JSON.stringify(details)).toBe(400);
+      expect(inserted.filter((i) => i.table === "action_levels")).toEqual([]);
+    }
+  });
+
+  it("AND REJECTING GRANTS NOTHING", async () => {
+    tables.pending_approvals = card();
+    const res = await approvePatch(
+      new Request("https://hawlai.online/api/approvals/ap-grant", { method: "PATCH", body: JSON.stringify({ status: "rejected", rejection_reason: "not yet" }) }),
+      { params: Promise.resolve({ id: "ap-grant" }) } as any
+    );
+    expect(res.status).toBe(200);
+    expect(inserted.filter((i) => i.table === "action_levels")).toEqual([]);
   });
 });

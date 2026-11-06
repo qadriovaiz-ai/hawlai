@@ -146,6 +146,27 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // layer inside a published site — website_pages IS what /site/{slug}
   // renders — so an approved edit is public the moment it saves.
   update_page_text: { actionType: "edit", riskLevel: "medium", description: "Change a heading, paragraph or button label on a page of the merchant's own site — what a visitor reads", requiresApproval: true },
+
+  // ---- Granting the product permission to act alone (S7/P5) --------
+  //
+  // THE ONLY ACTION WHOSE SUBJECT IS A PERMISSION. Approving it does
+  // not publish anything; it writes one `action_levels` row, after
+  // which the named action runs unattended until something it published
+  // fails a check (S7/P3 lowers it again, instantly and ungated).
+  //
+  // `requiresApproval: true` IS THE POINT, not a precaution. The
+  // founder's decision 2 of 5 November: the product earns the
+  // permission from measured data and then ASKS ONCE, with the numbers
+  // on the card. A product that widened its own permissions because a
+  // counter crossed a threshold is a different product from this one.
+  //
+  // "high" and not "critical": `critical` in this file means the
+  // consequence cannot be taken back, and this one can — taking a level
+  // away is a single row and is never gated (CLAUDE.md rule 6). What
+  // makes it serious is its reach, which is why
+  // action_levels_l2_allowlist (migration 220) names the only action it
+  // may ever be granted for.
+  grant_autonomy: { actionType: "edit", riskLevel: "high", description: "Let Hawlai do one named thing on its own from now on, with no approval each time — reversible at any moment", requiresApproval: true },
 };
 
 export function getActionPolicy(actionKey: string): ActionPolicy | null {
