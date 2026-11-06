@@ -23,6 +23,7 @@ import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
 import { runStrategySignals } from "@/lib/strategy/strategySignals";
 import { monitorAndDemote } from "@/lib/autonomy/demotion";
+import { reviewAutonomy } from "@/lib/autonomy/review";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -43,6 +44,9 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // `monitorAndDemote` rather than an inline body here, because this
   // table has one job and every entry in it is one line.
   output_monitor: (s, id) => monitorAndDemote(s, id),
+  // S7/P6 — asks ONCE, when the evidence is there. Raises a card and
+  // nothing else: the level is written only when the owner approves it.
+  autonomy_review: (s, id) => reviewAutonomy(s, id),
   daily_autopilot: (s, id) => runDailyAutopilot(s, id),
   content_autopilot: (s, id) => runContentAutopilot(s, id),
   report_snapshots: (s, id, category) => runReportSnapshots(s, id, category),

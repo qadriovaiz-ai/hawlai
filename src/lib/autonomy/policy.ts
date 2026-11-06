@@ -63,6 +63,21 @@ export const PROMOTION_EVIDENCE = {
   measuredOutcomes: 1,
 } as const;
 
+/**
+ * The most unattended actions one business gets in one day.
+ *
+ * THE FOUNDER'S DECISION 6, 5 November 2026: three, for the first
+ * action and the first month. His words, and his reasoning is the right
+ * one — a cap that turns out to be too low is a line in this file, and
+ * a cap that turns out to be too high is a morning he reads about
+ * afterwards.
+ *
+ * ENFORCED AT THE DOOR, in `publish/create.ts`, where the level is read
+ * — and when it is reached the action does not fail, it ASKS. The safe
+ * direction is the one that already exists.
+ */
+export const L2_DAILY_CAP = 3;
+
 /** Is this action one the owner's product is allowed to run on its own? */
 export function isAllowlistedForL2(actionKey: string): boolean {
   return L2_ALLOWLIST.includes(String(actionKey ?? ""));

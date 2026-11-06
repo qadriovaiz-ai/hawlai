@@ -1512,6 +1512,56 @@ one: what a granted permission did for the business is not one number.
 results job cannot read that table — naming it as a source would claim
 a measurability that does not exist.
 
+## 6 November 2026 — S7/P6: the cap, the screen, the morning that asks
+
+**The cap closes rather than opens.** Three a day, enforced at the door
+that reads the level — a cap checked elsewhere is one something gets
+around by calling a different function. Reaching it **asks**; the work
+still happens on his word and only the autonomy is lost. An unreadable
+count means **no room left**, because a cap that opens on a database
+hiccup is not a cap. An L1 action is not rationed: he asked for each
+one.
+
+**The morning that asks is in `signals`**, the model-free group, so it
+runs before the monitor in `heavy` — which means a card rests on
+**yesterday's** verdicts. That is the honest ordering, not a
+compromise.
+
+**The screen is on `/dashboard/autopilot`, not a new page** (rule 5),
+and it never says a level's name to him: "Runs on its own" or "Asks you
+first". Three counts about what it published, and the middle one —
+**not checked yet** — is never folded into the clean one. The monitor
+runs the morning after, and showing that as nothing-wrong would be S7/P2's
+confusion moved onto a screen.
+
+`/api/autonomy` is read-only on purpose. A level is raised in one place
+and lowered without asking anyone; a PATCH there would be a third way to
+change a permission.
+
+### Four test gaps, all one shape — and it is the fifth time this stage
+
+**The double ignored its filters.** Dropping `.is("approval_id", null)`
+and `.eq("published", true)` changed nothing any test could see, because
+the mock returned the same rows whatever it was asked. Both fixtures now
+carry a row the filter has to exclude.
+
+**And two assertions were satisfiable by an import line.** "The cap
+consults capRemaining" passed on the import after the call was deleted;
+"the card is on the page" passed on `import AutonomyLevelsCard` after
+the JSX was removed. The cap is now tested through the door, and the
+page assertion reads the JSX.
+
+**28 mutation checks, 28 killed** once all four were honest.
+
+### Flagged rather than changed
+
+`ALWAYS_REQUIRES_APPROVAL` lists `update_page_meta`, which may now run
+unattended. Nothing is actually contradictory — the doc comment says
+"whatever the amount", and the coverage test already allowed these keys
+to hold L1 — but the NAME is stronger than the rule and reads as a
+promise S7 breaks. Renaming an exported constant used in several files
+is not this phase's work.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

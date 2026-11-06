@@ -272,7 +272,11 @@ describe("S3/P3 — a LEVEL can never become a bypass", () => {
     // credential tests both record: matching text that is present for
     // an unrelated reason.
     const decision = create.slice(
-      create.indexOf("const needsApproval = requiresApproval("),
+      // ANCHORED ON THE CALL, NOT ON ITS DECLARATION KEYWORD. It read
+      // `const needsApproval = …` and broke on 6 November 2026 when
+      // S7/P6 made it a `let` — the daily cap may raise it after the
+      // fact. The keyword was never what this test is about.
+      create.indexOf("needsApproval = requiresApproval("),
       create.indexOf("if (storedLevel === \"L1\" && needsApproval)")
     );
     expect(decision.length).toBeGreaterThan(0);

@@ -295,11 +295,35 @@ export async function createPublishAction(
   // `undo` being optional on PublishPlatform is load-bearing rather
   // than untidy.
   const storedLevel = await readStoredLevel(supabase, input.dealershipId, input.actionKey);
-  const needsApproval = requiresApproval(input.actionKey, {
+  let needsApproval = requiresApproval(input.actionKey, {
     stored: storedLevel,
     hasUndo: typeof platform.undo === "function",
     direction: null,
   });
+
+  // THE DAILY CAP ON ACTING ALONE — S7/P6.
+  //
+  // The founder's decision 6: three unattended actions per business per
+  // day, for the first action and the first month. Enforced here
+  // because this is where the level is read and where the question is
+  // skipped — a cap checked anywhere else would be a cap something
+  // could get around by calling a different function.
+  //
+  // REACHING IT ASKS, IT DOES NOT FAIL. The owner gets the ordinary
+  // card and the work still happens on his word; nothing is lost but
+  // the autonomy. The safe direction is the one that already exists.
+  //
+  // AND AN UNREADABLE COUNT MEANS NO ROOM LEFT. `capRemaining` returns
+  // 0 when it cannot read, because a cap that opens when the database
+  // hiccups is not a cap.
+  if (!needsApproval && storedLevel === "L2") {
+    const { capRemaining } = await import("@/lib/autonomy/overview");
+    const left = await capRemaining(supabase, input.dealershipId);
+    if (left < 1) {
+      needsApproval = true;
+      publishLog("create.cap_reached", { action: draft.id, actionKey: input.actionKey, left });
+    }
+  }
   if (storedLevel === "L1" && needsApproval) {
     // A level the owner set that could not be honoured is explained,
     // never silently downgraded.

@@ -244,7 +244,7 @@ threshold, **demotes**. Silence is not evidence.
 | **P3 — DONE 6 Nov, see §18** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
 | **P4 — DONE 6 Nov, see §19** | **L2 in the type and in the database** — migration 220 widens 209's CHECK and adds the allowlist constraint, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
 | **P5 — DONE 6 Nov, see §20** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
-| **P6** | **The cap**, per action per day, and the owner's screen: what is at which level, why, and what it has done unattended | S |
+| **P6 — DONE 6 Nov, see §21** | **The cap**, per business per day, the owner's screen, and the morning that asks | S |
 | **P7** | **Exit test green**, and the honest account of what is unverified live — an L2 action has by definition not run unattended for long when the stage closes | S |
 
 **P3 before P5 is the whole shape of this plan.** Build the thing that
@@ -1039,6 +1039,108 @@ with a measured outcome — which is the point of the threshold. The first
 real card is weeks away by design, and nothing calls
 `proposePromotion` on a schedule yet: **P6 wires it**, along with the
 cap and the owner's screen.
+
+---
+
+## 21. P6 — the cap, the screen, and the morning that asks — 6 November 2026
+
+**Done.** `L2_DAILY_CAP` enforced in `publish/create.ts`,
+`autonomy_review` in the daily run, and a card on
+`/dashboard/autopilot` backed by `/api/autonomy`.
+
+### The cap closes rather than opens
+
+Three a day, the founder's decision 6. Enforced **at the door that
+reads the level**, because a cap checked anywhere else is one something
+could get around by calling a different function.
+
+**Reaching it ASKS — it does not fail.** The owner gets the ordinary
+card and the work still happens on his word; nothing is lost but the
+autonomy. And **an unreadable count means no room left**: a cap that
+opens when the database hiccups is not a cap.
+
+**An L1 action is not rationed.** It skips the question on the owner's
+own instruction, and capping that would be rationing what he asked for.
+
+**Counted from midnight IST**, not UTC — a cap that reset at 5:30am
+local is one he would watch break at breakfast.
+
+### The morning that asks
+
+`autonomy_review`, in **`signals`** — it reads rows and writes a card,
+and calls no model, which is that group's rule. The monitor is in
+`heavy` and runs second, so **a card raised this morning rests on
+yesterday's verdicts**. That is the honest ordering rather than a
+compromise: evidence the second judge has checked beats evidence from an
+hour ago that nothing has looked at.
+
+**It says why it did not ask.** "Not approved often enough yet" is every
+morning for weeks and belongs in the result; "the record could not be
+read" is a fault and goes in the log. A subsystem reporting `asked: 0`
+for both would hide the second for weeks.
+
+### The screen, and the word it must not fold away
+
+On `/dashboard/autopilot` — **not a new page**. That file's own header
+calls it *"the one canonical automation control surface instead of one
+of several partial ones"*, and rule 5 is depth over breadth.
+
+It shows, per action: the level (as **"Runs on its own"** or **"Asks you
+first"** — never a letter), why it is not higher, whether a question is
+waiting, how many times it has acted alone today against the cap, and
+what the second judge said about what it published.
+
+**Three counts, and the middle one is not a kind of clean:**
+`checked` · **`not checked yet`** · `did not match your records`. The
+monitor runs the morning after, so today's work has no verdict — and
+showing that as nothing-wrong is the confusion S7/P2 exists to prevent,
+on a screen instead of in a table.
+
+**`/api/autonomy` is read-only, and that is deliberate.** A level is
+raised in exactly one place and lowered without asking anyone; a PATCH
+here would be a third way to change a permission, which is the shape
+every bypass in this codebase has had. It uses the **owner's own
+client**, so RLS is the second gate on whose levels these are.
+
+### 28 mutation checks, 28 killed — and four gaps found, all one shape
+
+**The double ignored the filters it was given.** Dropping
+`.is("approval_id", null)` from the cap's count and `.eq("published",
+true)` from the screen's both changed nothing any test could see. A
+double that returns the same rows whatever it is asked is not testing a
+query — both fixtures now carry a row that the filter must exclude.
+
+**And two assertions were satisfiable by an import.** "The cap consults
+`capRemaining`" passed on the `import` line after the call was deleted;
+"the card is on the page" passed on `import AutonomyLevelsCard` after
+the JSX was removed. The cap is now tested **through the door** —
+under the cap it acts, at the cap it asks, and an L1 action is not
+rationed — and the page assertion reads the JSX.
+
+**That shape has now appeared five times in this stage.** An assertion
+satisfiable by any occurrence of its own subject.
+
+### Flagged rather than changed: a name that is now misleading
+
+`ALWAYS_REQUIRES_APPROVAL` in `publish/types.ts` lists
+`update_page_meta`, which may now run unattended. **Nothing is actually
+contradictory** — its doc comment says what it means ("whatever the
+amount… separate from the rupee threshold") and
+`approvalCoverage.test.ts` already allowed these keys to hold L1. But
+the NAME is stronger than the rule, and it reads as a promise S7 breaks.
+Renaming an exported constant used across several files is not this
+phase's work; it is written here so the next reader is not misled.
+
+### Unverified live
+
+The card renders from `/api/autonomy`, and **neither has been opened in
+a browser** — the one piece of this stage I cannot check from a test.
+Every number behind it is tested; the layout is not.
+
+And **nothing is at L2**, so the screen currently reads "Asks you first"
+with a reason, and the cap has never been reached. The first real
+exercise needs the first granted permission, which needs ten
+as-requested approvals.
 
 ---
 

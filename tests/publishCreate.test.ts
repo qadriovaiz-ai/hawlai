@@ -41,6 +41,10 @@ function fakeDb(opts: {
   /** The linked approval as pending_approvals holds it. Defaults to still pending. */
   approval?: Record<string, any> | null;
   approvalReadFails?: boolean;
+  /** What `action_levels` holds for this action — S7/P4. */
+  level?: string | null;
+  /** How many unattended runs of it are already on record today — S7/P6. */
+  unattendedToday?: number;
 } = {}) {
   const writes: Record<string, any>[] = [];
   let approvalId = "app-1";
@@ -49,18 +53,34 @@ function fakeDb(opts: {
     const api: any = {
       _op: null as string | null,
       _fields: null as Record<string, any> | null,
+      _countingUnattended: false,
       select: () => api,
       eq: () => api,
       in: () => api,
       like: () => api,
+      is: (col: string) => { if (col === "approval_id") api._countingUnattended = true; return api; },
+      gte: () => api,
+      not: () => api,
+      order: () => api,
       insert: (fields: Record<string, any>) => { api._op = "insert"; api._fields = fields; writes.push({ table, op: "insert", ...fields }); return api; },
       update: (fields: Record<string, any>) => { api._op = "update"; api._fields = fields; writes.push({ table, op: "update", ...fields }); return api; },
       // The earlier-attempts lookup is awaited as a list.
       then: (resolve: any) => {
-        if (api._op === null && table === "publish_actions") return resolve({ data: opts.existing ? [opts.existing] : [], error: null });
+        if (api._op === null && table === "publish_actions") {
+          // S7/P6: the cap counts today's unattended runs through this
+          // same table. Told apart from the earlier-attempts lookup by
+          // the `is("approval_id", null)` the cap's query carries.
+          if (api._countingUnattended) {
+            return resolve({ data: Array.from({ length: opts.unattendedToday ?? 0 }, (_, i) => ({ id: `alone-${i}` })), error: null });
+          }
+          return resolve({ data: opts.existing ? [opts.existing] : [], error: null });
+        }
         return resolve({ data: null, error: null });
       },
       maybeSingle: async () => {
+        if (api._op === null && table === "action_levels") {
+          return { data: opts.level ? { level: opts.level } : null, error: null };
+        }
         if (api._op === null && table === "pending_approvals") {
           if (opts.approvalReadFails) return { data: null, error: { message: "connection reset" } };
           return { data: opts.approval === undefined ? { status: "pending" } : opts.approval, error: null };
@@ -245,5 +265,59 @@ describe("refusals happen before anything is recorded", () => {
     const failed = db.writes.find((w) => w.status === "failed");
     expect(failed?.error).toBe("Product was deleted");
     expect(db.writes.some((w) => w.table === "pending_approvals")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------
+// S7/P6 — the daily cap on acting alone.
+// ---------------------------------------------------------------------
+
+describe("the daily cap, at the door that reads the level", () => {
+  // The founder's decision 6: three unattended actions per business per
+  // day. Enforced HERE because this is where the level is read and
+  // where the question is skipped — a cap checked anywhere else is one
+  // something could get around by calling a different function.
+  //
+  // AND REACHING IT ASKS. The owner gets the ordinary card and the work
+  // still happens on his word; nothing is lost but the autonomy.
+
+  const siteInput = () =>
+    input({ platform: "hawlai_site", actionKey: "update_page_meta", requestedChanges: { seoTitle: "A title" } });
+  // THE WHOLE PLATFORM, not just an undo bolted onto the shopify one.
+  // My first version overrode `undo` alone, so `supports` still said
+  // update_product_price and createPublishAction refused before the
+  // level was ever read — three tests failing on the first check in the
+  // function rather than on the cap they were about.
+  const sitePlatform = () =>
+    platform({
+      id: "hawlai_site",
+      supports: ["update_page_meta"],
+      undo: async () => ({ changes: [], summary: "" }) as any,
+    });
+
+  it("UNDER THE CAP, AN L2 ACTION ACTS WITHOUT ASKING", async () => {
+    const db = fakeDb({ existing: null, level: "L2", unattendedToday: 0 });
+    const result = await createPublishAction(db.client, sitePlatform(), siteInput());
+    expect(result.ok).toBe(true);
+    expect((result as any).approvalId).toBeNull();
+    expect(db.writes.some((w) => w.table === "pending_approvals")).toBe(false);
+  });
+
+  it("AT THE CAP IT ASKS — and the work is not refused", async () => {
+    const db = fakeDb({ existing: null, level: "L2", unattendedToday: 3 });
+    const result = await createPublishAction(db.client, sitePlatform(), siteInput());
+    // NOT an error: the card exists and the owner can still approve it.
+    expect(result.ok).toBe(true);
+    expect((result as any).approvalId).toBeTruthy();
+    expect(db.writes.some((w) => w.table === "pending_approvals")).toBe(true);
+  });
+
+  it("AND AN L1 ACTION IS NOT RATIONED, because he asked for each one", async () => {
+    // L1 skips the question on the owner's own instruction. Capping
+    // that would be rationing what he asked for.
+    const db = fakeDb({ existing: null, level: "L1", unattendedToday: 99 });
+    const result = await createPublishAction(db.client, sitePlatform(), siteInput());
+    expect(result.ok).toBe(true);
+    expect((result as any).approvalId).toBeNull();
   });
 });

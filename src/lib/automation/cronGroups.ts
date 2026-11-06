@@ -52,14 +52,24 @@ export type SubsystemKey =
   // the entry that went unreached on 4 and 5 November when the
   // dispatcher's secret went stale, and "the monitor never ran" is the
   // one state S7 must not produce quietly.
-  | "output_monitor";
+  | "output_monitor"
+  // S7/P6 — looks at the approval history and, when an action has
+  // earned it, raises ONE card asking whether it may run unattended.
+  // Model-free and read-only apart from that card, so it belongs in
+  // `signals` with the other database-only work.
+  //
+  // AFTER output_monitor IS NOT POSSIBLE — that one is in `heavy`,
+  // which runs second. So a card raised this morning rests on
+  // yesterday's verdicts, which is the honest ordering anyway: evidence
+  // that has been checked, rather than evidence from an hour ago.
+  | "autonomy_review";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
   // Database-only and fast, and what surfaces work waiting on a human —
   // so it runs FIRST and never queues behind LLM calls.
   // The export email first: it's the one that reaches a person.
-  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance", "strategy_signals", "decision_results", "monthly_review"],
+  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance", "strategy_signals", "decision_results", "monthly_review", "autonomy_review"],
   // Everything slow: LLM-backed work plus third-party APIs. Emails and
   // workflow steps (a lead is waiting) and auto-posting (customers see it)
   // before monitoring and reports; daily_autopilot's per-campaign AI work

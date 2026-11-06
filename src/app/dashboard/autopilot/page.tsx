@@ -4,6 +4,7 @@ import { Zap } from "lucide-react";
 import AutopilotCommandCenter from "@/components/autopilot/AutopilotCommandCenter";
 import ContentQueueView from "@/components/autopilot/ContentQueueView";
 import PersonaSettingsCard from "@/components/autopilot/PersonaSettingsCard";
+import AutonomyLevelsCard from "@/components/autopilot/AutonomyLevelsCard";
 
 export default async function AutopilotPage() {
   const supabase = await createClient();
@@ -22,6 +23,12 @@ export default async function AutopilotPage() {
         </div>
       </div>
       <PersonaSettingsCard />
+      {/* S7/P6 — what Hawlai is allowed to do with nobody watching.
+          HERE AND NOT ON A NEW PAGE: this file's own header calls
+          /dashboard/autopilot "the one canonical automation control
+          surface instead of one of several partial ones", and CLAUDE.md
+          rule 5 is depth over breadth. */}
+      <AutonomyLevelsCard />
       <AutopilotCommandCenter />
       <ContentQueueView />
     </div>
