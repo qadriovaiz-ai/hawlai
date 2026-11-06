@@ -8,6 +8,14 @@ reason:
 > Console 2 din se fail hai, aur sabse badi baat GBP/local-SEO Hawlai
 > mein hai hi nahi.*
 
+**And it covers Google's TRADITIONAL surfaces only** — blue links and
+Maps. Being named when somebody asks an AI is a different question with
+its own plan, [PLAN-AEO-GEO.md](PLAN-AEO-GEO.md), written on 6 November
+on a second written reason. The two share one thing and it is the
+scarce one: both need the owner's own facts on record, so **L1 and
+A3's interview are the same conversation**, and whichever plan runs
+first owns it.
+
 **That sentence is what CLAUDE.md rule 5 asks for.** "No new
 departments, tools or pages… A new tool needs a written reason from the
 owner." This is the reason, on the record, and this plan is scoped
