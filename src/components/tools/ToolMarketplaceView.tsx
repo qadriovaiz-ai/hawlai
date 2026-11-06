@@ -124,7 +124,7 @@ export default function ToolMarketplaceView({ limits }: { limits: PlanLimits }) 
         <button
           onClick={() => setDeptFilter("all")}
           className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-            deptFilter === "all" ? "bg-slate-800 border-slate-800 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
+            deptFilter === "all" ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
           }`}
         >
           All
@@ -134,7 +134,7 @@ export default function ToolMarketplaceView({ limits }: { limits: PlanLimits }) 
             key={dept}
             onClick={() => setDeptFilter(dept)}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              deptFilter === dept ? "bg-slate-800 border-slate-800 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
+              deptFilter === dept ? "bg-brand-600 border-brand-600 text-white" : "bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300"
             }`}
           >
             {dept}
@@ -188,7 +188,7 @@ export default function ToolMarketplaceView({ limits }: { limits: PlanLimits }) 
       )}
 
       {lockedMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 max-w-md">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-brand-600 text-white text-sm rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 max-w-md">
           <Lock className="w-4 h-4 text-amber-400 shrink-0" />
           <span className="flex-1">{lockedMessage}</span>
           <a href="/dashboard/billing/plans" className="text-brand-300 font-semibold hover:underline shrink-0">View plans</a>

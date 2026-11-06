@@ -14,6 +14,17 @@ import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 // `publish_actions`, `claim_checks` and `action_levels`; nothing here
 // estimates, averages or forecasts. Same rule the daily email follows.
 //
+// THE CARD CHROME IS THE SHARED `.card` CLASS, AND THE FIRST VERSION
+// HAND-ROLLED IT — which is how the title came out invisible. This
+// repo's Tailwind slate scale is INVERTED (tailwind.config.ts: 900 is
+// #f2f2f4, 100 is #151519), so `bg-slate-900` is NEAR-WHITE, not
+// near-black. The card had a white background and `text-slate-900`
+// white text on it: the badges and the grey body text showed, and the
+// action's name did not.
+//
+// `.card` is `bg-slate-100` — the near-black surface every other card
+// on this page uses. Writing the chrome by hand is what let it drift.
+//
 // AND "NOT CHECKED YET" IS ITS OWN WORD, never folded into a clean
 // count. The monitor runs the morning after something is published, so
 // today's work has no verdict — and showing that as nothing-wrong would
@@ -49,7 +60,7 @@ export default function AutonomyLevelsCard() {
 
   if (error) {
     return (
-      <div className="bg-slate-900 border border-slate-300 rounded-2xl p-5">
+      <div className="card p-5">
         <h2 className="text-base font-semibold text-slate-900">What Hawlai does on its own</h2>
         {/* SAID, NOT HIDDEN. A card that renders nothing on an error
             reads as "there is nothing to see here", which about
@@ -61,14 +72,14 @@ export default function AutonomyLevelsCard() {
 
   if (!rows) {
     return (
-      <div className="bg-slate-900 border border-slate-300 rounded-2xl p-5 flex items-center gap-2 text-sm text-slate-500">
+      <div className="card p-5 flex items-center gap-2 text-sm text-slate-500">
         <Loader2 className="w-4 h-4 animate-spin" /> Reading what Hawlai is allowed to do…
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-300 rounded-2xl p-5">
+    <div className="card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-slate-900">What Hawlai does on its own</h2>

@@ -320,6 +320,25 @@ describe("3. THE SCREEN, AND THE WORD IT MUST NOT FOLD AWAY", () => {
     expect(route).not.toMatch(/createServiceClient/);
   });
 
+  it("THE CARD USES THE SHARED CHROME, so its background cannot be got wrong", () => {
+    // THE ACTUAL FIX FOR 6 NOVEMBER'S BUG, not the symptom. The title
+    // came out invisible because the card's background was written by
+    // hand as `bg-slate-900` — which in this repo's inverted scale is
+    // near-WHITE — under `text-slate-900` text.
+    //
+    // tests/invertedSlateScale.test.ts catches that exact pair anywhere
+    // in src/. This catches the thing that let it happen: a component
+    // declaring its own card surface instead of using `.card`, which is
+    // `bg-slate-100` and cannot be got wrong.
+    const ui = code("src/components/autopilot/AutonomyLevelsCard.tsx");
+    const containers = [...ui.matchAll(/className="([^"]*p-5[^"]*)"/g)].map((m) => m[1]);
+    expect(containers.length, "the card's containers were not found").toBeGreaterThan(2);
+    for (const list of containers) {
+      expect(list, `"${list}" hand-rolls a surface`).toMatch(/\bcard\b/);
+      expect(list, `"${list}" declares its own background`).not.toMatch(/\bbg-/);
+    }
+  });
+
   it("and it lives on the page that calls itself the one automation surface", () => {
     // CLAUDE.md rule 5: depth over breadth. No new page.
     // THE JSX, NOT THE IMPORT. The first version matched

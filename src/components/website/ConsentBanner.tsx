@@ -81,7 +81,7 @@ export default function ConsentBanner({
           </button>
           <button
             onClick={() => choose("granted")}
-            className="flex-1 sm:flex-none text-xs font-medium px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+            className="flex-1 sm:flex-none text-xs font-medium px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
           >
             Allow
           </button>

@@ -1562,6 +1562,69 @@ to hold L1 — but the NAME is stronger than the rule and reads as a
 promise S7 breaks. Renaming an exported constant used in several files
 is not this phase's work.
 
+## 6 November 2026 — white text on a white card, and the guard for it
+
+**The founder opened the P6 card and the action's NAME was missing** —
+body text, badges and numbers all there, no title. He offered a
+screenshot; the code was enough.
+
+**I wrote the card as `bg-slate-900` with a `text-slate-900` title.**
+`tailwind.config.ts` INVERTS the slate scale for this app's dark theme:
+
+```
+slate-50:  #0b0b0f   (near-black — a BACKGROUND)
+slate-900: #f2f2f4   (near-white — a TEXT colour)
+```
+
+So the card had a near-WHITE background and near-white text. The badges
+(`bg-slate-200 text-slate-600`) and the grey body text showed; the
+title was white on white. No type error, no failing test, no console
+warning — it renders, and the words are not there.
+
+**The fix is the shared `.card` class** (`bg-slate-100`, the near-black
+surface every other card on that page uses). Hand-rolling the card
+chrome is what let it drift, and a test now pins that too.
+
+### The guard, and it found two more
+
+`tests/invertedSlateScale.test.ts` checks one element's own class list
+for a background and a foreground naming the same shade — always a
+mistake, never a style choice — and for `text-white` on the light end.
+It reads the scale FROM the config, so a future re-theme fails the test
+rather than silently making it wrong.
+
+**It found five more instances in two files I did not write**, all the
+same bug:
+
+| Where | What was invisible |
+|---|---|
+| `ConsentBanner.tsx` | the **Accept button's label on the public storefront's cookie banner** |
+| `ToolMarketplaceView.tsx` | the selected department filter (×2) and a toast |
+
+All five fixed with the house pattern for a prominent surface,
+`bg-brand-600 text-white`, copied from `WorkflowBuilder` rather than
+invented. **Not allowlisted:** the test had just proved them, and a
+consent banner with an invisible button is a customer-facing fault, not
+a tidy-up.
+
+### And two of my own tests were wrong on the way
+
+**An eaten backslash, twice in one session.** A patch script wrote
+`\b` into a regex and Python read it as the backspace escape, so
+`/\b(throw|return)\b/` became a literal control character.
+`noControlCharsInSource.test.ts` caught it both times — the test exists
+because this happened before, and it is now the third time. **Patch
+scripts that write regexes go through a file, not a shell heredoc.**
+
+**And `sourceGrepDiscipline.test.ts` caught the new guard reading raw
+source.** Stripping comments is not a formality here: this guard's own
+header names `bg-slate-900` and `text-slate-900` while explaining the
+bug, and so does the comment above the card that caused it. A guard
+reading raw source would report its own explanation as an offence —
+rule 8's exact shape, pointing at itself.
+
+**7 mutation checks, 7 killed.**
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

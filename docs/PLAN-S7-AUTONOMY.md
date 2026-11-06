@@ -1131,11 +1131,23 @@ the NAME is stronger than the rule, and it reads as a promise S7 breaks.
 Renaming an exported constant used across several files is not this
 phase's work; it is written here so the next reader is not misled.
 
-### Unverified live
+### Verified live, and it was broken — 6 November 2026
 
-The card renders from `/api/autonomy`, and **neither has been opened in
-a browser** — the one piece of this stage I cannot check from a test.
-Every number behind it is tested; the layout is not.
+The founder opened it. **The body was right and the action's name was
+missing**: I wrote the card as `bg-slate-900` with a `text-slate-900`
+title, and this repo's slate scale is INVERTED — `bg-slate-900` is
+near-WHITE. White text on a white card.
+
+Fixed by using the shared `.card` class, and
+`tests/invertedSlateScale.test.ts` now catches the pair anywhere in
+`src/`. **It found five more instances in two files**, including the
+Accept button on the public storefront's cookie banner; all fixed.
+
+**This is what "unverified live" was worth.** Every number behind the
+card was tested and correct; the one thing no test covered was the one
+thing that was wrong. The lesson is not "write a renderer test" — it is
+that the layout is exactly the part a browser has to confirm, and
+saying so is what got it confirmed.
 
 And **nothing is at L2**, so the screen currently reads "Asks you first"
 with a reason, and the cap has never been reached. The first real
