@@ -241,7 +241,7 @@ threshold, **demotes**. Silence is not evidence.
 | **P0 — DONE 6 Nov, see §16** | **The exit test first**, red. It asserts promotion, demotion, "spend is never auto", and that the instrument exists | S |
 | **P1 — DONE 5 Nov, see §16** | **M0: `claim_checks`** — migration 217, writer, wired at the publish door. Nothing reads it yet. One-shot sends are P1b | M |
 | **P2 — DONE 6 Nov, see §17** | **M1: the monitor** — the daily subsystem, the verdict column, the "could not check" case, the cost cap | M |
-| **P3** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
+| **P3 — DONE 6 Nov, see §18** | **Demotion** — fires on a published unsupported claim, instant, ungated, and tells the owner. **Built BEFORE promotion exists**, so the brake is in place before the accelerator | S |
 | **P4** | **L2 in the type and in the database** — migration widens 209's CHECK, `AutonomyLevel` gains `"L2"`, `canHoldL2` written with its own refusals. Nothing is promoted | M |
 | **P5** | **Promotion** — the evidence query over `pending_approvals` + `outcomes`, and the proposal (§8) | M |
 | **P6** | **The cap**, per action per day, and the owner's screen: what is at which level, why, and what it has done unattended | S |
@@ -744,6 +744,94 @@ like every other model call (it passes `logContext`).
 the first stage in this project where that happened, and the reason is
 that this file had a worked example to copy rather than a design to
 invent.
+
+---
+
+## 18. P3 — the brake — 6 November 2026
+
+**Done.** `src/lib/autonomy/demotion.ts`, plus migration **218** (one
+notification kind) and `monitorAndDemote` joining it to P2's monitor in
+the daily run.
+
+### The rule, as the founder decided it
+
+| | |
+|---|---|
+| One published unsupported claim | demotes. **Not a rate** — a rate needs a denominator and a window, and both are arguments to have while a wrong claim is live |
+| A claim that was **caught** | demotes nothing. `claims_removed` is the system working |
+| **The owner's own wording** | demotes nothing, ever. P1's `owner_words` |
+| A **public** surface | every raised level on that business → L0 |
+| One person's inbox | that action → L0 |
+| An **unclassified** surface | treated as public. The safe direction is *more* demotion |
+| **Two days** with nothing checked | demotes, business-wide. Silence is not evidence |
+| Nothing published at all | demotes nothing. `null` is not a large number of days |
+| A **failed** monitor run | demotes nothing. A database outage is not an escape |
+
+**And it asks nobody.** Rule 6's shape, and three tests hold it there:
+no `requestApproval`, no `pending_approvals`, and the file never writes
+a level upward.
+
+### The owner is told in three places, which fail in different ways
+
+A `decisions` row (`automation_switched` — its first writer since
+migration 215 declared the kind), a notification, and a log line. The
+notification needs **migration 218**: `notifications.kind` is
+CHECK-constrained and `emitNotification` swallows a refused insert, so
+without it the brake would work, record itself, and tell him nothing.
+The log line depends on no constraint at all.
+
+**P3a** will put the same sentence in the daily email, which is the
+surface he actually reads.
+
+### A REAL BUG, FOUND BY A TEST FAILING FOR THE RIGHT REASON
+
+The monitor's zeroed run was a module-level constant, and **spreading it
+copies the array reference** — so every run pushed its escapes into the
+same array the constant held.
+
+The daily cron runs every subsystem for every business inside one
+invocation. So one business's run would have carried another's escapes,
+and **P3 would have taken a permission away from the second for
+something the first published.** A cross-tenant decision, out of one
+shared literal, and it would have been invisible until it happened.
+
+Found because a test asserting the owner's-words flag on a *second* run
+read the *first* run's escape. It is now a function, and the
+cross-tenant case is a test of its own.
+
+### 31 mutation checks, 31 killed — and five of mine were wrong first
+
+Worth listing, because four are the same mistake:
+
+- **`undefined ?? call()` evaluates `call()`.** Two mutations meant to
+  delete a call left it running and changed nothing. Replacing the
+  *import* with a local stub removes it — and also steps past the
+  module mock.
+- **One inverted a logging branch** and left the `return` it was about
+  standing, so the behaviour was unchanged and a different test failed.
+- **One reintroduced the shared array** by adding the key *before* the
+  original, where the later key wins.
+- **One produced code that did not parse**, so the run died with no
+  failing test. "Non-zero exit" is not "the guard is tested" — the
+  third time that has come up in this stage.
+
+### An existing test caught the wiring, and the code moved
+
+`tests/dailyRunOrder.test.ts` checks every runner entry against one
+shape: `  <key>: (s, `. An inline async body broke it. **That test
+catching this is the test working**, so the join became a named
+function, `monitorAndDemote`, and the runner table went back to one
+line per subsystem — which is what that file says it is for.
+
+### Unverified live
+
+Nothing has been demoted, because nothing can be promoted until P4/P5
+and `action_levels` is empty. The rule, the write, the record and the
+telling are all tested; **none has fired against the live database.**
+The first real exercise needs an L2 row to take away.
+
+**Migration 218 is not run yet.** Until it is, the notification lands
+nowhere; the decision row and the log line still happen.
 
 ---
 

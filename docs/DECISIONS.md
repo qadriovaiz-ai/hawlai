@@ -1292,6 +1292,54 @@ lose their copy.
 first time in this project. The reason is not that I was more careful:
 this file had a worked example to copy instead of a design to invent.
 
+## 6 November 2026 — S7/P3, and a cross-tenant bug a test found
+
+**The brake is built before the accelerator**, which is the whole shape
+of this stage. Nothing can be promoted yet, so nothing has been
+demoted — the rule, the write, the record and the telling are tested and
+none has fired live.
+
+### The bug worth the whole phase
+
+The monitor's zeroed run was a module-level constant and **spreading it
+copies the array reference**, so every run pushed its escapes into the
+same array. The daily cron runs every subsystem for every business
+inside one invocation — so one business's run would have carried
+another's escapes, and the demotion rule would have taken a permission
+away from the second for something the first published. **A cross-tenant
+decision out of one shared literal.**
+
+Found because a test asserting the owner's-words flag on a second run
+read the first run's escape. Now a function, with the cross-tenant case
+pinned by its own test.
+
+### An existing test caught the wiring, and the code moved
+
+`dailyRunOrder.test.ts` checks every runner entry against the shape
+`  <key>: (s, `, and an inline async body broke it. The test catching
+that is the test working, so the join became `monitorAndDemote` and the
+runner table went back to one line an entry.
+
+### Migration 218, for one word
+
+`notifications.kind` is CHECK-constrained and `emitNotification`
+swallows a refused insert. Without the migration the brake would work,
+write its decision row, and tell the owner nothing. There are three
+records on purpose — decision row, notification, log line — because
+they fail in different ways, and a limit that lives in one place is a
+limit that can go quiet.
+
+### Five of my own mutations were wrong before the guards were
+
+Four of them the same mistake in different clothes: `undefined ??
+call()` **evaluates** the call, so two mutations meant to delete one
+changed nothing; one inverted a logging branch and left the `return` it
+was about standing; one reintroduced the shared array by adding the key
+*before* the original, where the later key wins; and one produced code
+that did not parse, so the run died with no failing test.
+
+**31 mutation checks, 31 killed** once they were faithful.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

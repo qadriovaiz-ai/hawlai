@@ -93,18 +93,48 @@ export type MonitorRun = {
   blindDays: number | null;
   /** Set when the run could not do its job. Never swallowed. */
   error: string | null;
+  /**
+   * The rows where something had gone out that nothing can license.
+   *
+   * REPORTED AS DATA, NOT ACTED ON. This file spends money and talks to
+   * a model; the rule that takes a permission away must be testable
+   * without either, so it lives in src/lib/autonomy/demotion.ts and the
+   * daily runner joins the two. `ownerWords` rides along because a
+   * claim the owner wrote himself must not demote anything — migration
+   * 217's own column.
+   */
+  escapes: { id: string; surface: string; published: boolean; unsupported: number; ownerWords: boolean }[];
 };
 
-const EMPTY: MonitorRun = {
-  looked: 0,
-  clean: 0,
-  unsupported: 0,
-  couldNotCheck: 0,
-  costInr: 0,
-  stoppedBecause: null,
-  blindDays: null,
-  error: null,
-};
+/**
+ * A fresh zeroed run.
+ *
+ * A FUNCTION, NOT A CONSTANT, AND THAT WAS A REAL BUG. It used to be a
+ * module-level constant, and spreading it copies the ARRAY REFERENCE —
+ * so every run pushed its escapes into the same array the constant
+ * held. Found by a test asserting the owner's-words flag on a second
+ * run, which read the FIRST run's escape.
+ *
+ * The consequence was not cosmetic. The daily cron runs every
+ * subsystem for every business inside one invocation
+ * (lib/automation/dailyRun.ts), so one business's run would have
+ * carried another's escapes — and S7/P3 would have taken a permission
+ * away from the second for something the first published. A
+ * cross-tenant decision, out of one shared literal.
+ */
+function emptyRun(): MonitorRun {
+  return {
+    looked: 0,
+    clean: 0,
+    unsupported: 0,
+    couldNotCheck: 0,
+    costInr: 0,
+    stoppedBecause: null,
+    blindDays: null,
+    error: null,
+    escapes: [],
+  };
+}
 
 /** Whole days from one YYYY-MM-DD to another, or null if unreadable. */
 function daysBetween(fromDay: string, toDay: string): number | null {
@@ -191,7 +221,9 @@ export async function runOutputMonitor(
 
   const { data, error } = await supabase
     .from("claim_checks")
-    .select("id, text, created_at, monitor_verdict")
+    // `surface` and `owner_words` are read for the demotion rule, which
+    // needs to know how wide an escape reaches and whose words it was.
+    .select("id, text, created_at, monitor_verdict, surface, owner_words")
     .eq("dealership_id", dealershipId)
     .eq("published", true)
     // A ROW THAT COULD NOT BE CHECKED IS TRIED AGAIN, which is why
@@ -208,11 +240,11 @@ export async function runOutputMonitor(
     // is what S7/P3 acts on.
     const why = `${error?.message ?? "no rows returned"}. If migration 217 has not been run, claim_checks does not exist yet.`;
     console.error(`[monitor] could not read what went out for ${dealershipId}: ${why}`);
-    return { ...EMPTY, error: why };
+    return { ...emptyRun(), error: why };
   }
 
-  const waiting = data as { id: string; text: string; created_at: string }[];
-  const run: MonitorRun = { ...EMPTY, blindDays: blindnessOf(waiting, today) };
+  const waiting = data as { id: string; text: string; created_at: string; surface: string; owner_words: boolean }[];
+  const run: MonitorRun = { ...emptyRun(), blindDays: blindnessOf(waiting, today) };
 
   for (const row of waiting) {
     if (run.costInr >= budget) {
@@ -279,8 +311,16 @@ export async function runOutputMonitor(
 
     run.looked += 1;
     if (verdict === "clean") run.clean += 1;
-    else if (verdict === "unsupported") run.unsupported += 1;
-    else run.couldNotCheck += 1;
+    else if (verdict === "unsupported") {
+      run.unsupported += 1;
+      run.escapes.push({
+        id: row.id,
+        surface: String(row.surface ?? ""),
+        published: true,
+        unsupported: findings.length,
+        ownerWords: Boolean(row.owner_words),
+      });
+    } else run.couldNotCheck += 1;
   }
 
   if (run.unsupported > 0) {

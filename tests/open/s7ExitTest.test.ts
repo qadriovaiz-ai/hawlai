@@ -253,8 +253,16 @@ describe("3. DEMOTION IS AUTOMATIC, INSTANT AND UNGATED", () => {
   it("ONE PUBLISHED UNSUPPORTED CLAIM IS ENOUGH — NOT A RATE", async () => {
     // A rate needs a denominator and a window, and both are arguments
     // to have while a wrong claim is live on a customer's screen.
+    //
+    // THE SURFACE NAME IS A REAL ONE — 6 November 2026. P0 wrote
+    // "page", which is not a surface anything produces: migration 217
+    // and claimChecks.ts name them page_meta and page_text. It PASSED
+    // at P3 anyway, because an unclassified surface resolves to the
+    // widest reach — so the assertion was being satisfied by the
+    // fallback it was not about. Third time this exact shape has
+    // appeared in this file; the fixtures are now the real values.
     const { demoteAfter } = await load(DEMOTION);
-    const one = { surface: "page", published: true, unsupported: 1 };
+    const one = { surface: "page_meta", published: true, unsupported: 1 };
     expect(demoteAfter([one]).demote, "one published unsupported claim did not demote").toBe(true);
     // A claim that was CAUGHT is the system working, and must not
     // demote anything. A table that cannot tell those apart makes this
@@ -269,9 +277,15 @@ describe("3. DEMOTION IS AUTOMATIC, INSTANT AND UNGATED", () => {
     // wrong in the next email too; one that went to a single inbox is
     // narrower.
     const { demoteAfter } = await load(DEMOTION);
-    expect(demoteAfter([{ surface: "page", published: true, unsupported: 1 }]).reach).toBe("business");
-    expect(demoteAfter([{ surface: "social", published: true, unsupported: 1 }]).reach).toBe("business");
-    expect(demoteAfter([{ surface: "email", published: true, unsupported: 1 }]).reach).toBe("action");
+    for (const surface of ["page_meta", "page_text", "social", "product_description"]) {
+      expect(demoteAfter([{ surface, published: true, unsupported: 1 }]).reach, surface).toBe("business");
+    }
+    for (const surface of ["email", "whatsapp", "lead_message"]) {
+      expect(demoteAfter([{ surface, published: true, unsupported: 1 }]).reach, surface).toBe("action");
+    }
+    // AND THE OWNER'S OWN WORDS DEMOTE NOTHING AT ALL, which is the
+    // column P1 added and the one way this rule could be cruel.
+    expect(demoteAfter([{ surface: "page_meta", published: true, unsupported: 1, ownerWords: true }]).demote).toBe(false);
   });
 
   it("AND IT ASKS NOBODY — the safe direction is never the slow one", async () => {

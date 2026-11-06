@@ -22,7 +22,7 @@ import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
 import { runStrategySignals } from "@/lib/strategy/strategySignals";
-import { runOutputMonitor } from "@/lib/claims/outputMonitor";
+import { monitorAndDemote } from "@/lib/autonomy/demotion";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
@@ -36,7 +36,13 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // S7/P2 — reads claim_checks rows that went out and asks the
   // extractor about them again. Costs money, so it is capped per
   // business per run inside the function rather than by a flag here.
-  output_monitor: (s, id) => runOutputMonitor(s, id),
+  //
+  // S7/P3 JOINS THE TWO, and not inside either one: the monitor spends
+  // money and talks to a model, and the rule that takes a permission
+  // away must be testable without either. The join is
+  // `monitorAndDemote` rather than an inline body here, because this
+  // table has one job and every entry in it is one line.
+  output_monitor: (s, id) => monitorAndDemote(s, id),
   daily_autopilot: (s, id) => runDailyAutopilot(s, id),
   content_autopilot: (s, id) => runContentAutopilot(s, id),
   report_snapshots: (s, id, category) => runReportSnapshots(s, id, category),

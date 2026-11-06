@@ -33,7 +33,11 @@ export type NotificationKind =
   | "out_of_season_content"
   | "email_delivery_problem"
   // Platform admins only: AI is down for every business (migration 190).
-  | "platform_ai_unavailable";
+  | "platform_ai_unavailable"
+  // S7/P3 (migration 218): the product has stopped doing something on
+  // its own, because a claim nothing supports went out or because
+  // nothing could be checked for days.
+  | "autonomy_lowered";
 
 export interface EmitNotificationInput {
   dealershipId: string;

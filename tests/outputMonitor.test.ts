@@ -64,6 +64,10 @@ function row(over: Record<string, any> = {}) {
     text: "Hand-poured soy candles, made in Srinagar.",
     created_at: "2026-11-05T06:00:00.000Z",
     monitor_verdict: null,
+    // READ FOR THE DEMOTION RULE: how wide an escape reaches, and whose
+    // words it was. See migration 217.
+    surface: "page_meta",
+    owner_words: false,
     ...over,
   };
 }
@@ -175,6 +179,63 @@ describe("2. A ROW THAT COULD NOT BE CHECKED COMES BACK", () => {
     await runOutputMonitor(d.client, "d1", { today: TODAY });
     expect(d.updates[0].monitor_verdict).toBe("clean");
     expect(d.updates[0].text).toBe("");
+  });
+
+  it("AND IT REPORTS THE ESCAPE AS DATA, for the rule that acts on it", async () => {
+    // THREE MUTATIONS SURVIVED WITHOUT THIS. Nothing asserted what
+    // `escapes` carries, so the monitor could have stopped reporting
+    // them, reported the surface as empty, or marked every one as the
+    // owner's own words — and the last of those would have silently
+    // stopped every demotion in the product.
+    //
+    // The demotion rule is pure and lives elsewhere; this is the data
+    // it reads, so it is the seam that has to be checked here.
+    answers = [{ ok: true, claims: [{ claimType: "benefit", canonical: "burns longer" }], costInr: 0.2 }];
+    const d = db([row({ id: "cc-7", surface: "page_meta", owner_words: false })]);
+    const run = await runOutputMonitor(d.client, "d1", { today: TODAY });
+    expect(run.escapes).toHaveLength(1);
+    expect(run.escapes[0].id).toBe("cc-7");
+    expect(run.escapes[0].surface).toBe("page_meta");
+    expect(run.escapes[0].published).toBe(true);
+    expect(run.escapes[0].unsupported).toBe(1);
+    expect(run.escapes[0].ownerWords).toBe(false);
+  });
+
+  it("AND AN ESCAPE THE OWNER WROTE HIMSELF SAYS SO", async () => {
+    // Migration 217's own column, carried through. The demotion rule
+    // refuses to act on it, and if this flag arrived always-true no
+    // demotion would ever happen again.
+    answers = [{ ok: true, claims: [{ claimType: "benefit", canonical: "burns longer" }], costInr: 0.2 }];
+    const d = db([row({ owner_words: true })]);
+    const run = await runOutputMonitor(d.client, "d1", { today: TODAY });
+    expect(run.escapes[0].ownerWords).toBe(true);
+    // Still recorded as unsupported — what changes is what is DONE
+    // about it, which is not this file's decision.
+    expect(run.unsupported).toBe(1);
+  });
+
+  it("AND ONE BUSINESS'S RUN NEVER CARRIES ANOTHER'S ESCAPES", async () => {
+    // A REAL BUG, FOUND BY THE TEST ABOVE FAILING. The zeroed run was a
+    // module-level constant and spreading it copied the ARRAY
+    // REFERENCE, so every run pushed into the same array. The daily
+    // cron runs every subsystem for every business inside one
+    // invocation, so the second business's run carried the first's
+    // escapes — and S7/P3 would have taken a permission away from the
+    // second for something the first published.
+    answers = [{ ok: true, claims: [{ claimType: "benefit", canonical: "a" }], costInr: 0.1 }];
+    const first = await runOutputMonitor(db([row({ id: "a1" })]).client, "d1", { today: TODAY });
+    expect(first.escapes.map((e) => e.id)).toEqual(["a1"]);
+
+    answers = [{ ok: true, claims: [{ claimType: "benefit", canonical: "b" }], costInr: 0.1 }];
+    const second = await runOutputMonitor(db([row({ id: "b1" })]).client, "d2", { today: TODAY });
+    expect(second.escapes.map((e) => e.id), "a second business saw the first's escape").toEqual(["b1"]);
+  });
+
+  it("AND A CLEAN ROW IS NOT AN ESCAPE", async () => {
+    answers = [{ ok: true, claims: [], costInr: 0.2 }];
+    const d = db([row()]);
+    const run = await runOutputMonitor(d.client, "d1", { today: TODAY });
+    expect(run.escapes).toEqual([]);
   });
 
   it("AND AN UNSUPPORTED ROW KEEPS BOTH THE COPY AND THE FINDINGS", async () => {
