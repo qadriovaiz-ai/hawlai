@@ -155,6 +155,9 @@ numbers it cannot trace.
 
 ### A1 — robots.txt, a sitemap, and llms.txt beside them — **S**
 
+**BUILT — 6 November 2026.** What shipped is below the plan text,
+under *A1 as built*.
+
 Three generated routes, no model, no third party. `robots.txt` points at
 the sitemap and states the AI crawlers explicitly — **allowing them, in
 writing, rather than by absence**, so the intention is on record and a
@@ -168,6 +171,50 @@ reads a per-business flag and writes a `Disallow` line; if no, it is a
 static string and simpler. **Recommendation: build the route, default
 everyone in, and leave the flag for when somebody asks** — a column
 nobody sets is cheaper than a static file somebody has to replace.
+
+#### A1 as built
+
+**Three generated routes, and a fourth change that is the reason any of
+them work.**
+
+| File | What it does |
+|---|---|
+| `src/lib/seo/crawlers.ts` | the crawler list, the private paths, the opt-out read, the published-pages read, and the llms.txt text. All of it testable without a route. |
+| `src/app/robots.ts` | Next's `MetadataRoute.Robots`. Names every answer engine and **allows** it, disallows the private paths in every rule, points at the sitemap. |
+| `src/app/sitemap.ts` | `MetadataRoute.Sitemap`. The marketing home, then every published storefront's pages. |
+| `src/app/llms.txt/route.ts` | a plain-text route, because Next has no llms.txt convention to hook into — which is itself a measure of the proposal. |
+| `src/lib/supabase/middleware.ts` | **the load-bearing change.** |
+
+**Without the middleware change all three routes answered a crawler with
+a 307 to `/auth/login`.** The middleware authenticates everything that
+is not on a public prefix list, and these three are exact paths at the
+domain root, not prefixes. A new `PUBLIC_EXACT_PATHS` list carries them.
+This is the same fault migration 168 recorded for
+`/api/events/dispatch`: a route that exists, is correct, and is never
+reached. `tests/crawlerFiles.test.ts` section 1 fails if any of the
+three leaves that list, **and** fails if the exact list is ever loosened
+into a prefix list, which would publish the private half of the app.
+
+**The opt-out, as approved:** the route reads a per-business flag and
+writes `Disallow` lines **into the AI rules only** — an opted-out
+business stays in the wildcard rule, so it is still findable on Google.
+Default is everyone in. **The column does not exist yet**, and the read
+is written so that a missing column excludes nobody and says so in the
+log, rather than erroring the route. The column and the owner-facing
+toggle are a later, smaller piece.
+
+**What A1 refuses to invent:** no `lastModified` unless the owner's own
+edit timestamp is readable; no city in llms.txt unless the business has
+one; a failed sitemap read is `null` (so the route serves just the
+marketing home) rather than `[]`, which would claim the platform is
+empty; and llms.txt's own opening lines say it follows a proposal that
+is not a standard and that nothing has committed to reading.
+
+**Unverified live:** nothing has fetched these three routes on
+hawlai.online yet. The build lists them (`ƒ /robots.txt`,
+`ƒ /sitemap.xml`, `ƒ /llms.txt`) and the middleware test proves they are
+not redirected, but no crawler has been seen reading them, and no
+ranking or citation claim is made.
 
 ### A2 — an FAQ block, and FAQPage schema from it — **M**
 
@@ -296,6 +343,10 @@ and L1**, then A4a and A5 once there is something to measure.
 ---
 
 ## 7. What I need decided
+
+**All four approved as recommended, 6 November 2026.** The founder's
+order: Search Console (done) → the GBP application → **A1 + A2 beside
+the local plan** → the combined A3 + L1 interview → A4a and A5.
 
 1. **May a business opt out of AI crawling of its own storefront?**
    *Recommend: build the generated route, default everyone in, add the

@@ -1687,6 +1687,90 @@ including which migrations are still unconfirmed and the two things
 flagged rather than fixed, is PLAN-S7-AUTONOMY.md's
 `### S7 EXIT — what this stage did not prove`.
 
+## 6 November 2026 — AEO/A1, and a correct route nobody could reach
+
+**Three generated routes: `/robots.txt`, `/sitemap.xml`, `/llms.txt`.**
+A1 of PLAN-AEO-GEO.md, with all four of its decisions approved as
+recommended.
+
+### The change that mattered was not one of the three routes
+
+I wrote `src/app/robots.ts` and `src/app/sitemap.ts` and they were
+correct, and **a crawler fetching either would have been answered with a
+307 to `/auth/login`.** `src/lib/supabase/middleware.ts` authenticates
+everything not on `PUBLIC_PATH_PREFIXES`, and all three of these are
+**exact paths at the domain root**, not prefixes of anything.
+
+This is the fault migration 168 wrote down for `/api/events/dispatch`,
+arriving again in a different shape: a route that exists, is right, and
+is never reached. The fix is a second list, `PUBLIC_EXACT_PATHS`,
+matched with `.includes(pathname)` rather than `startsWith` — because
+`startsWith` on a list containing `/robots.txt` is harmless, but the
+*shape* is the one that published the private half of the app the last
+time somebody reached for it. **The test fails both ways:** if one of
+the three leaves the list, and if the exact list is ever turned into a
+prefix list.
+
+### The opt-out is written for a column that does not exist
+
+Decision 1 was approved as recommended — build the route, default
+everyone in, add the flag when somebody asks. So `optedOutSlugs()`
+queries a column that **is not in the schema yet**, and a Postgres
+"column does not exist" error is treated as *nobody has opted out*,
+logged, and the route answers normally. A thrown read does the same,
+loudly.
+
+That is deliberate and it is the only honest default: the alternative —
+failing the route — hides every business from every answer engine
+because of a missing migration. **And the opt-out excludes a business
+from the AI rules only.** It stays in the wildcard rule, so opting out
+of ChatGPT is not accidentally opting out of Google. A test asserts both
+halves.
+
+### Four things A1 refuses to invent
+
+| Where | What a lazier version would have done |
+|---|---|
+| `sitemap.ts` | `lastModified: new Date()` on every URL. A crawler that reads one made-up date learns to distrust all of them; A1 omits the field unless the owner's own edit timestamp is readable. |
+| `publishedPages` | return `[]` on a failed read. `[]` says "this platform has no pages", which is a claim; `null` says the read failed, and the sitemap then serves just the marketing home. |
+| `llmsTxt` | invent a city for a business that has none. |
+| `llms.txt` route | 500 when the business list cannot be read. It answers, and the body says the list could not be built rather than showing an empty one. |
+
+### My assessment of llms.txt is in the file, not just the plan
+
+The founder asked for an honest read on llms.txt and the answer is that
+it is **a proposal (llmstxt.org), not a standard, that no major answer
+engine has committed to reading.** It shipped anyway because everything
+in it was already in the database and it cost about thirty lines beside
+two routes that do matter — and **the file says this about itself in its
+own opening lines**, so nobody reading it, including a future me, is
+misled about what it is. Nothing in the product claims it helps and
+nothing measures whether it does. A test asserts the honesty lines are
+there, and another asserts the plan still says the same thing.
+
+### Mutations: 23 of 23 killed
+
+And a harness change worth keeping: the mutation runner now reads
+vitest's **json** reporter rather than the verbose one. The verbose
+reporter truncates long test names, and on 6 November a truncated name
+made a killed mutant read as a survivor. The json report carries the
+full name, so the verdict is read from the name itself.
+
+The test file also had a mock bug of exactly the kind this codebase
+keeps finding: `vi.doMock` inside each test, with the route imported
+after it. **The module is cached after the first import, so the mock
+applied once** and every later test ran against the first test's
+database. One module-level `vi.mock` with a mutable `current` fixed it.
+A per-test `doMock` without `resetModules` is a mock that silently
+works for one test.
+
+### Unverified live
+
+Nothing has fetched these routes on hawlai.online. The build lists all
+three as dynamic routes and the middleware test proves they are not
+redirected, but **no crawler has been observed reading them**, and no
+claim is made about ranking or about being cited by any answer engine.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

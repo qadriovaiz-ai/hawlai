@@ -59,13 +59,38 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 
 /**
+ * Files a crawler asks for by exact name, at the domain root.
+ *
+ * AN EXACT LIST AND NOT PREFIXES, which matters here: `/robots.txt` as
+ * a prefix would also make `/robots.txtanything` public. There is no
+ * such route, so it would be harmless and sloppy — and this file is
+ * the one place in the product where sloppy about what is public is
+ * the wrong kind of mistake.
+ *
+ * WHY THESE NEEDED ADDING AT ALL — A1, 6 November 2026. The matcher in
+ * src/middleware.ts excludes `_next/static` and image extensions and
+ * NOT these, so the middleware runs for them; and they were in no
+ * public list, so a crawler fetching /robots.txt got a 307 to
+ * /auth/login. Exactly the fault migration 168 recorded for
+ * /api/events/dispatch: NextResponse.redirect defaults to 307, which
+ * preserves the method, so the request is replayed against a page that
+ * refuses it. A robots.txt that answers with a redirect is a
+ * robots.txt that does not exist — and it would have looked finished.
+ */
+const PUBLIC_EXACT_PATHS = ["/robots.txt", "/sitemap.xml", "/llms.txt"];
+
+/**
  * Whether a path is reachable without a Hawlai session.
  *
  * Exported for tests — this is the predicate that decides whether a
  * request gets redirected to /auth/login.
  */
 export function isPublicPath(pathname: string): boolean {
-  return pathname === "/" || PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return (
+    pathname === "/" ||
+    PUBLIC_EXACT_PATHS.includes(pathname) ||
+    PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
 }
 
 export async function updateSession(request: NextRequest) {
