@@ -19,6 +19,7 @@
 import { stripTags } from "@/lib/richText";
 import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
 import type { FaqPair } from "@/lib/blocks/utils";
+import { openingHoursSpecification, type ListingFacts } from "./listingFacts";
 
 export type SiteIdentity = {
   businessName: string;
@@ -28,6 +29,15 @@ export type SiteIdentity = {
   siteUrl: string;
   logoUrl?: string | null;
   bookingUrl?: string | null;
+  /**
+   * What the owner told the interview and agreed to publish (I1 of
+   * PLAN-AUTO-INTERVIEW.md, migration 221).
+   *
+   * Optional, and absent means exactly what it has always meant: the
+   * city and nothing else. A business that has not answered publishes
+   * what it published before.
+   */
+  listing?: ListingFacts | null;
 };
 
 type Json = Record<string, unknown>;
@@ -100,6 +110,25 @@ export function itemNode(p: StorefrontProduct, identity: SiteIdentity): Json {
 
 /** The business itself. */
 export function businessNode(identity: SiteIdentity): Json {
+  const listing = identity.listing ?? null;
+  // THE STREET LINE JOINS THE CITY, it does not replace it. The old
+  // comment below is still the rule for a business that has not
+  // answered: an addressLocality with no street is honest, and that is
+  // what this node said for every business until migration 221 gave the
+  // street somewhere to live. What changed is that there is now a fact
+  // to add when the owner has given one AND agreed to publish it —
+  // readListingFacts returns null for the street otherwise, so an
+  // address collected is never an address published.
+  const address =
+    identity.city || listing?.streetAddress
+      ? compact({
+          "@type": "PostalAddress",
+          streetAddress: listing?.streetAddress ?? undefined,
+          addressLocality: identity.city ?? undefined,
+          addressCountry: "IN",
+        })
+      : undefined;
+
   return compact({
     "@type": "LocalBusiness",
     name: identity.businessName,
@@ -109,7 +138,21 @@ export function businessNode(identity: SiteIdentity): Json {
     logo: identity.logoUrl ?? undefined,
     // Only the city, because only the city is on record. An addressLocality
     // with no street is honest; an invented street address is not.
-    address: identity.city ? { "@type": "PostalAddress", addressLocality: identity.city, addressCountry: "IN" } : undefined,
+    address,
+    // EMPTY IS DROPPED BY compact(), not by a guard here.
+    //
+    // These four read `?? undefined` and nothing more: compact() above
+    // already removes null, undefined, "" and []. Three of them used to
+    // carry their own `.length ?` test, and a mutation check found that
+    // no mutation of those tests could change the output — redundant
+    // code cannot be guarded, so the one place that decides what an
+    // empty field means keeps deciding it.
+    telephone: listing?.phone ?? undefined,
+    openingHoursSpecification: openingHoursSpecification(listing?.hours ?? []),
+    areaServed: listing?.areasServed ?? undefined,
+    // How a machine learns the site, the Maps listing and the Instagram
+    // account are ONE business rather than three things sharing a name.
+    sameAs: listing?.sameAs ?? undefined,
     // No aggregateRating anywhere in here: Hawlai has no rating data for
     // any business, and a rating is the single most tempting thing to
     // invent and the most damaging to get wrong.

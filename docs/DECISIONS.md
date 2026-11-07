@@ -2072,6 +2072,130 @@ order by category, title;
 
 **The founder's call, not mine** — it changes what the test fixtures see.
 
+## 7 November 2026 — I1: somewhere truthful to put a phone number
+
+**Migration 221, `business_listing_facts`.** I1 of
+PLAN-AUTO-INTERVIEW.md, which is the local plan's L1 with the interview
+automated. The founder asked for the columns now, before any real
+business exists, so the automated interview has somewhere to write.
+
+### The shape: a publish decision beside every value
+
+The table could have been six columns on `dealerships`. It is a table,
+with `publish_phone` next to `public_phone` and `publish_street_address`
+next to `street_address`, because **a fact Hawlai knows is not a fact
+the owner asked to publish** — and there is already a standing example
+of the difference on the row this would have been added to:
+`dealerships.owner_whatsapp_number` exists so Hawlai can message *him*.
+Publishing it because it happened to be in the database would be a
+second use of a fact given for a first one.
+
+Both flags default to `false` in the migration, and `readListingFacts`
+treats a false flag **exactly** like a missing value. Two tests hold
+both halves, because either one alone is a gap: a column defaulting to
+true would publish on the first insert before any flag was read, and a
+reader that checked truthiness rather than `=== true` would accept the
+string `"yes"` — or `"no"`.
+
+### Why this table exists at all, and it is not a feature request
+
+The claims guard's own header records it, dated: *"Nothing in Hawlai
+stores a public contact email, a public phone number or a social handle
+for a business, so there was nothing to check against and the model
+filled the gap the way models do."* What it filled it with was a
+plausible email address on a domain the business did not own, on a live
+contact page.
+
+A column is not the fix for a model inventing things — the guard is. But
+a business that HAS a phone number and no column to keep it in will keep
+having that gap filled for it.
+
+### Three deliberate absences, each asserted
+
+- **No `geo` column.** The local plan says "geo, if the Place record has
+  it", nothing in this product reads a Place's coordinates, and the
+  interview does not ask — an owner typing their own latitude is not a
+  thing that happens. A column nothing can fill is schema without a
+  purpose, which is the criticism I made of L1 as a whole two days ago.
+- **No second home for the Place id or the Facebook page id.** Both are
+  already on `dealerships`, so the Maps and Facebook `sameAs` URLs are
+  derived. Two spellings of one fact is how they come to disagree.
+  Instagram *does* get a column: only `instagram_business_id` is stored
+  and it cannot be turned into a public profile URL.
+- **No `aggregateRating`, and no column for one.** Hawlai reads the
+  Google rating daily, which makes this the field most likely to be
+  added by someone being helpful.
+
+### RLS from the first migration, both halves
+
+Owner select and active-team-member select, and **no client write policy
+at all** — writes go through the service-role client from a route that
+has already checked the caller owns the business. Two new tables shipped
+without RLS during the pricing-tiers work and were caught afterwards;
+four tests assert it here rather than hoping, including one that fails
+if any `for insert/update/delete` policy ever appears.
+
+### `sameAs` is strict, because it is a claim
+
+`sameAs` says *this other page is the same business*, and a reader
+follows it. So a URL with no scheme is refused: `instagram.com/shop` in
+markup is a **relative link** that resolves against the storefront and
+points at a page on the business's own site that does not exist.
+
+### Mutations: 42, then 7, then 2 — and what the survivors were
+
+The first pass killed 37 of 42. All five survivors were worth the time:
+
+**Three were broken mutations of mine, and two of those found real
+redundancy.** `telephone: listing?.phone ?? ""` and
+`areaServed: listing?.areasServed ?? undefined` changed nothing, because
+`compact()` already drops an empty string and an empty array. The
+`.length ?` guards I had written on three fields were **redundant with
+compact**, and redundant code cannot be mutation-tested — so the
+redundancy went and `compact` keeps its one job. The third declared an
+unused `Set` and changed nothing at all; rewritten, it dies.
+
+**One was a real gap with a real attack shape.** Deleting the
+`http:`/`https:` check changed nothing, because `javascript:alert(1)` has
+no hostname and the dot check refused it — for the wrong reason.
+`javascript://www.instagram.com/%0aalert(1)` *has* a hostname with a dot
+in it, so the scheme check is the only thing standing between it and a
+published href. Now tested.
+
+**One was rule 8 arriving in a comment block.** The verify-query
+assertion matched `/relrowsecurity/`, which appears twice in the
+migration — once in the query and once in the sentence saying what it
+should print — so deleting the query left the test passing. It now
+asserts the query.
+
+**And one more gap the re-run found.** With the redundancy gone,
+`compact`'s empty-string branch had no caller in any test. The realistic
+one is `brand_kits.logo_url = ''` — an owner who cleared the field
+rather than never setting it — which without `compact` publishes
+`image: ""`, a machine-readable claim that there is a logo at that
+address. Tested with the empty string, not with a contrived value.
+
+**Final: 42 of 42 killed**, across the three passes.
+
+### The SQL, and it is the founder's to run
+
+```sql
+-- Migration 221. Read the live state first.
+select relname, relrowsecurity from pg_class where relname = 'business_listing_facts';
+```
+
+If that returns no row, the migration has not been run. After running
+it, the three verify queries are in the migration's own footer: RLS
+enabled, exactly two SELECT policies, and both publish flags
+`boolean / NO / false`.
+
+### Unverified live
+
+**Nothing writes this table yet**, which is the point: the columns exist
+so I4 has somewhere truthful to put an answer. No business has listing
+facts, so no page's structured data has changed, and the migration has
+not been run in production.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

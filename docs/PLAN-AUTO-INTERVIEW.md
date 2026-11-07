@@ -147,12 +147,43 @@ addition, not a new system.
 
 | | What | Size |
 |---|---|---|
-| **I1** | **The L1 columns.** A `business_listing_facts` table (phone, hours, areas, address, `sameAs`, geo, and a publish flag beside each value), RLS from the start, a pure validator for hours and URLs, and `businessNode` publishing them. | **S** |
+| **I1** ✅ | **The L1 columns.** A `business_listing_facts` table (phone, hours, areas, address, `sameAs`, geo, and a publish flag beside each value), RLS from the start, a pure validator for hours and URLs, and `businessNode` publishing them. | **S** |
 | **I2** | **The question registry.** The interview as pure data: key, prompt, kind (choice / short text / long text / yes-no), where the answer is written, and whether it needs the falsifiability check. Industry-neutral by construction (rule 3) and asserted so. | **M** |
 | **I3** | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
 | **I4** | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
 | **I5** | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
 | **I6** | **Tier 3, the on-demand ask.** Record which phrase was removed, turn a repeated gap into one question, deliver it through the existing card or email. | **M** |
+
+### I1 as built — 7 November 2026, migration 221
+
+| File | What it does |
+|---|---|
+| `supabase/migrations/221_business_listing_facts.sql` | one row per business: phone, hours, areas served, street address, `instagram_url`, other profile URLs — **each value with the owner's publish decision beside it**. RLS from the first migration. |
+| `src/lib/seo/listingFacts.ts` | the only thing that may read that row, and it refuses a shape it does not recognise instead of publishing it. Pure: no database, no model, no React. |
+| `src/lib/seo/structuredData.ts` | `businessNode` now publishes `telephone`, `openingHoursSpecification`, `areaServed`, `sameAs` and a street line — when, and only when, there is one. |
+| `src/lib/seo/siteIdentity.ts` | reads the row in the same round trip as the other three, and **derives** the Maps and Facebook URLs from ids already on the dealerships row. |
+
+**The shape that matters: a publish decision next to every value.** A
+phone number Hawlai knows is not a phone number the owner asked to
+publish, and `dealerships.owner_whatsapp_number` is the standing example
+— it exists so Hawlai can message *him*. Both flags default to false in
+the migration, and `readListingFacts` treats a false flag exactly like a
+missing value, so "collected" can never quietly become "published".
+
+**A business that has not answered publishes what it always published.**
+No row is the normal case, not an error — a test asserts the node is
+byte-for-byte what it was before this migration existed.
+
+**Three deliberate absences**, each asserted so a later tidy-up has to
+argue with a test rather than a comment: no `geo` column (nothing can
+fill it and an owner does not type their own latitude), no second home
+for the Place id or the Facebook page id (two spellings of one fact is
+how they come to disagree), and no `aggregateRating` anywhere.
+
+**What I1 does NOT do:** nothing writes this table yet. The columns
+exist so that I4 has somewhere truthful to put an answer — which is
+exactly what the founder asked for, and worth saying plainly rather than
+leaving to be discovered.
 
 **I1 and I2 are worth having even alone**: I1 gives every future business
 somewhere truthful to put a phone number, and I2 turns the interview

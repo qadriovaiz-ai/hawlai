@@ -20,6 +20,7 @@ import { businessDisplayName } from "@/lib/business/displayName";
 import { bookingPageUrl } from "@/lib/catalog/catalogItem";
 import { siteBase } from "@/lib/claims/businessFacts";
 import type { SiteIdentity } from "./structuredData";
+import { readListingFacts } from "./listingFacts";
 
 export type LoadedIdentity = {
   identity: SiteIdentity;
@@ -49,12 +50,20 @@ export async function loadSiteIdentity(
   const { dealershipId, slug } = args;
   if (!dealershipId || !slug) return null;
 
-  // The description lives on the profile, the logo on the brand kit —
-  // two tables, as everywhere else that reads them.
-  const [{ data: dealership }, { data: brand }, { data: kit }] = await Promise.all([
-    supabase.from("dealerships").select("dealership_name, business_category, city, booking_slug").eq("id", dealershipId).maybeSingle(),
+  // The description lives on the profile, the logo on the brand kit, the
+  // listing facts on their own table (migration 221) — four tables, as
+  // everywhere else that reads them, in one round trip.
+  //
+  // THE LISTING READ CANNOT FAIL THE PAGE. A business that has not
+  // answered the interview has no row at all, and that is the normal
+  // case rather than an error: readListingFacts turns a missing row into
+  // "the city and nothing else", which is what this node said for every
+  // business before 221 existed.
+  const [{ data: dealership }, { data: brand }, { data: kit }, { data: listingRow }] = await Promise.all([
+    supabase.from("dealerships").select("dealership_name, business_category, city, booking_slug, google_place_id, fb_page_id").eq("id", dealershipId).maybeSingle(),
     supabase.from("brand_profiles").select("business_description").eq("dealership_id", dealershipId).maybeSingle(),
     supabase.from("brand_kits").select("logo_url").eq("dealership_id", dealershipId).maybeSingle(),
+    supabase.from("business_listing_facts").select("*").eq("dealership_id", dealershipId).maybeSingle(),
   ]);
 
   // AN EMPTY FALLBACK, ON PURPOSE.
@@ -90,6 +99,13 @@ export async function loadSiteIdentity(
       siteUrl: `${base}/site/${slug}`,
       logoUrl: kit?.logo_url ?? null,
       bookingUrl: bookingPageUrl(dealership?.booking_slug, siteBase()),
+      // The Maps listing and the Facebook page are DERIVED from the ids
+      // already on the dealerships row rather than stored again — two
+      // spellings of one fact is how they come to disagree.
+      listing: readListingFacts(listingRow, {
+        googlePlaceId: dealership?.google_place_id ?? null,
+        facebookPageId: dealership?.fb_page_id ?? null,
+      }),
     },
     bookingSlug: dealership?.booking_slug ?? null,
   };
