@@ -62,7 +62,19 @@ export type SubsystemKey =
   // which runs second. So a card raised this morning rests on
   // yesterday's verdicts, which is the honest ordering anyway: evidence
   // that has been checked, rather than evidence from an hour ago.
-  | "autonomy_review";
+  | "autonomy_review"
+  // G4 — page speed, measured. In `heavy` and NOT in signals, which this
+  // file's own rule settles twice over: signals is "database-only and
+  // fast", and this one calls a third-party API over the network.
+  //
+  // MONTHLY, AND IT DECIDES THAT ITSELF, the same way monthly_review
+  // does and for the same reason — there is no third cron entry to give
+  // it. A page's weight does not change daily.
+  //
+  // OFF BY DEFAULT. PAGESPEED_ENABLED gates it (the founder's decision,
+  // 7 November 2026): with no real business on the platform, a monthly
+  // run spends quota and attention on test data.
+  | "page_speed";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
@@ -81,6 +93,9 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     "report_snapshots",
     "output_monitor",
     "search_console_sync",
+    // After search_console_sync, so if a run is cut short the searches
+    // are already in — they are what every other piece reads.
+    "page_speed",
     "daily_autopilot",
   ],
 };

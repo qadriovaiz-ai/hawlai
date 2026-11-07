@@ -196,7 +196,7 @@ exist, and three are new.
 | **G2** | **Keyword clusters from the real queries** — group what Search Console actually reports, by shared words and intent. Replaces `competitor_keywords`' invented ten with the owner's own demand. | SEO toolkit | **S/M** |
 | **G3a** ✅ | **A page can be a draft.** The safety foundation G3 cannot be built without — and a fix for a hazard that was already live. | the builder | **S/M** |
 | **G3** ✅ | **Query gap → a page that answers it**, briefing included — the one missing hop in the vision's own chain. The planning step (topic, the queries it answers, the points to cover) is part of this hop, not a separate feature. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
-| **G4** | **Page speed, measured** — the only item with a genuine external dependency. PageSpeed Insights has a free API; it needs a key, a cap, and a decision about cost and cadence. Until then the honest state is "not measured", not "6 suggestions". | the audit | **M**, and a cost decision |
+| **G4** ✅ | **Page speed, measured** — the only item with a genuine external dependency. PageSpeed Insights has a free API; it needs a key, a cap, and a decision about cost and cadence. Until then the honest state is "not measured", not "6 suggestions". | the audit | **M**, and a cost decision |
 | **G5** | **Entity consistency across site, Maps and socials** — name, address and phone compared between `business_listing_facts`, the Place record and what the storefront prints. This is PLAN-LOCAL-SEO's **L2**, already written and unbuilt. | local plan L2 | **S/M** |
 
 ### G1 as built — 7 November 2026
@@ -331,6 +331,65 @@ its baseline on the day it was published.
 
 **Unverified live:** no card has been raised, no page created from one.
 There is no real business with Search Console data to find a gap in.
+
+### G4 as built — 7 November 2026
+
+**Page speed was the one item in the vision nothing measured** — and the
+thing standing in its place was `site_speed` in the SEO department,
+which writes "6 concrete site speed suggestions relevant to a small
+business site" **without looking at the site.** That is this audit's
+central finding in one object, and it is now beside a real measurement
+rather than instead of one.
+
+`src/lib/seo/pageSpeed.ts`, run as the `page_speed` subsystem in the
+`heavy` group — third-party API, so not in `signals`, which this
+codebase's own rule reserves for database-only work.
+
+**OFF BY DEFAULT and MONTHLY WHEN ON**, as decided: `PAGESPEED_ENABLED`
+must be the string `true`, and the run gates itself to the first of the
+month the same way `monthly_review` does. A page's weight does not
+change daily, and with no real business a monthly run spends quota and
+attention on test data.
+
+**The distinction the whole file turns on**, and the reason it was worth
+doing properly:
+
+| | What it is | When it exists |
+|---|---|---|
+| **Field (CrUX)** | what real visitors experienced over 28 days | only once a site has enough traffic |
+| **Lab (Lighthouse)** | one simulated load on Google's hardware | always |
+
+*"Your visitors waited 5.1 seconds"* and *"a test load took 5.1
+seconds"* are different claims, and only one is true when there is no
+field data — which, for every new small business, is the normal case. So
+a reading carries which kind it is, a lab number is never worded as what
+visitors saw, and the absence of field data is **stated**:
+
+> Google has no data from real visitors to this page yet, so these are
+> numbers from a single test load on its hardware — useful for finding
+> what is heavy, not a measurement of what your customers experienced.
+
+**Only what is poor by Google's own thresholds is reported.** Quoted,
+not chosen: a product inventing its own numbers would score the owner
+against a standard nobody else uses. A "needs improvement" page produces
+nothing, by the same rule G1's thresholds were set with.
+
+**There is no lab INP**, so it is null outside field data rather than
+approximated from something else — and the finding that reads it is
+typed to field only.
+
+**The key is optional.** PageSpeed Insights answers without one and
+rate-limits harder; with one the free quota is 25,000 calls a day. A
+missing key is logged and **the call is still made**, because a check
+that silently never ran because an env var was never set is worse than a
+slow one.
+
+**What it records is `observed`, not `counted`** — the signals taxonomy
+reserves `counted` for our own rows, and this is Google's measurement of
+a public page, quoted.
+
+**Unverified live:** nothing has run. The flag is off, nothing has
+called PageSpeed Insights, and no signal has been written.
 
 **And two smaller ones**, both already named in existing plans rather
 than new: the AEO check on a schedule (**A5**, behind a flag) and who

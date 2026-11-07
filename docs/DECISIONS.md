@@ -2929,6 +2929,104 @@ No card has been raised and no page created from one. There is no real
 business with Search Console data to find a gap in, so the thresholds
 and the grouping are reasoned rather than observed.
 
+## 7 November 2026 — G4: page speed, measured instead of advised
+
+**The last of this audit's findings that needed a real measurement.**
+Behind a flag, default off, monthly when on — the founder's decision,
+and the same reasoning that keeps A5 behind one: with no real business
+on the platform, a monthly run spends quota and attention on test data.
+
+### What stood here before, and why it mattered
+
+`site_speed` in the SEO department writes *"6 concrete, prioritized site
+speed improvement suggestions relevant to a small business site"* —
+model-written, generic, **never having looked at the site.** The Growth
+Loop audit's central finding was that the vision asks for measurement
+while several things here carrying the right name are advice, and this
+was the clearest example of it. It is now beside a measurement rather
+than instead of one.
+
+### The decision that shaped the file: field and lab are different claims
+
+PageSpeed Insights returns two kinds of number and treating them as one
+is how a tool like this starts lying.
+
+- **Field data (CrUX)** is what real visitors experienced over 28 days.
+  **A new site with little traffic does not have it** — which is every
+  business this product is for, at the moment they most want to know.
+- **Lab data (Lighthouse)** is one simulated load on Google's hardware,
+  on a connection Google throttled. Useful for "what is heavy on this
+  page"; not a measurement of anybody's experience.
+
+*"Your visitors waited 5.1 seconds"* and *"a test load took 5.1
+seconds"* are different claims. So:
+
+- a reading carries `from: "field" | "lab"`, decided from what Google
+  actually returned;
+- the sentence changes with it — "Visitors to this page waited…" vs "A
+  single test load of this page waited…" — and a test asserts the lab
+  wording never says *visitors*;
+- **the absence of field data is stated**, in its own sentence, rather
+  than quietly substituting the lab figure. Same rule as
+  `could_not_check` in the output monitor and `null` in the sitemap
+  reader: an absence is a fact, not a gap to fill.
+- **there is no lab INP**, so it is null outside field data rather than
+  approximated from the nearest available number, and the finding that
+  reads it is typed field-only.
+
+**And one unit trap worth recording:** CrUX reports CLS multiplied by
+100 while Lighthouse reports the fraction. Converted once, in the
+reader, because the kind of mismatch that silently turns 0.05 into a
+failure is exactly what a "measurement" must not do.
+
+### Google's thresholds, quoted rather than chosen
+
+`GOOD` and `POOR` are the numbers Google publishes. A product inventing
+its own would be scoring the owner against a standard nobody else uses
+— and only what is **poor** produces a finding, because "needs
+improvement" on every page of every site is the same as a finding on
+none (G1's rule, a day old).
+
+### The key is optional, on purpose
+
+PSI answers without a key and rate-limits harder; with one the free
+quota is 25,000 calls a day. A missing key is **logged and the call is
+still made**, because a check that silently never ran because an env var
+was never set is worse than a rate-limited one. `PAGESPEED_API_KEY` and
+`PAGESPEED_ENABLED` are both in `.env.example` with that reasoning.
+
+### Where it runs
+
+`heavy`, not `signals` — `cronGroups.ts`'s own rule is that signals is
+"database-only and fast", and this calls a third-party API over the
+network. **After `search_console_sync`**, so if a run is cut short the
+searches are already in: they are what every other piece reads.
+
+One page per business: the storefront's home. Measuring every page of
+every business monthly is a quota bill for very little, and what is
+heavy on the home page is usually heavy everywhere.
+
+### Mutations: 32, with 30 killed, one hardened and one honest no-op
+
+**M27 was a real weak assertion.** The env-var test matched
+`/PAGESPEED_ENABLED/`, and `code()` strips `//` comments but not `#`
+ones — so **commenting the variable out left the test green**, for a
+variable nobody setting the project up would ever see. It now anchors to
+the start of a line. (It went red through a stricter existing test,
+which is the only reason it did not pass silently.)
+
+**M15 is a no-op and is reported as one.** Removing the `!reading.from`
+guard from `speedFindings` changes no output: with no numbers, every
+individual check is null-guarded anyway. The guard narrows a type rather
+than deciding behaviour, so there is nothing for a test to catch.
+Calling it a kill would have been the dishonest option.
+
+### Unverified live
+
+**Nothing has run.** The flag is off, nothing has called PageSpeed
+Insights, no signal has been written, and the first real measurement
+needs both a real business and the founder turning the flag on.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

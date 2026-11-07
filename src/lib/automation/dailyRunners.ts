@@ -19,6 +19,8 @@ import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
+import { runPageSpeed } from "@/lib/seo/pageSpeed";
+import { siteBase } from "@/lib/claims/businessFacts";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
 import { runStrategySignals } from "@/lib/strategy/strategySignals";
@@ -34,6 +36,9 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // thirty days of the month. Model-free and read-only apart from the
   // send, so it belongs here rather than in the heavy group.
   monthly_review: (s, id) => runMonthlyReview(s, id),
+  // G4. The site address comes from the one place that knows it, rather
+  // than being rebuilt here from an env var.
+  page_speed: (s, id) => runPageSpeed(s, id, { siteBase: siteBase() }),
   // S7/P2 — reads claim_checks rows that went out and asks the
   // extractor about them again. Costs money, so it is capped per
   // business per run inside the function rather than by a flag here.
