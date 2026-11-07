@@ -1,5 +1,27 @@
 # The one interview — A3 (answers) and L1 (listing facts)
 
+> ## PAUSED — 7 November 2026, and not because the questions were wrong
+>
+> **The business this was written for is test data.** candle_by_qaaf is
+> not a real business: no real orders, and a `business_story` whose
+> content — including a customer testimonial — was invented. **There is
+> no real business on Hawlai yet.**
+>
+> So this interview has nobody to interview. Collecting "real facts" for
+> a business that does not exist would put invented facts on record as
+> evidence, which is the one thing `knownText` makes irreversible: a
+> recorded note becomes the proof that approves the same claim
+> everywhere else.
+>
+> **The questions themselves do not expire.** They were derived from the
+> schema and from the nine promises `siteClaimsReview.ts` already
+> watches for, not from any one business. This document waits as it is.
+>
+> **Resume when:** a real business is onboarded. Re-run §0's five read
+> queries against that business before asking anything — they will
+> return different answers, and some of the five facts may already be
+> there.
+
 One sitting, one set of questions, two plans fed:
 [PLAN-AEO-GEO.md](PLAN-AEO-GEO.md) §A3 and
 [PLAN-LOCAL-SEO.md](PLAN-LOCAL-SEO.md) §L1. Both need the owner's own

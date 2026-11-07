@@ -1913,6 +1913,165 @@ No page has been fetched and no structured data validated in Google's
 Rich Results Test. The build compiles all three routes and the tests
 assert the graph; **a machine outside this repo has not read any of it.**
 
+## 7 November 2026 — the only business on the platform is test data
+
+**The founder confirmed that candle_by_qaaf is not a real business.** No
+real orders, and a `business_story` whose content was invented —
+including a customer testimonial. **There is no real business on Hawlai
+yet.**
+
+Four consequences, in the order they matter.
+
+### 1. A fabricated testimonial is live, and A1 pointed crawlers at it
+
+A fabricated personal story and an invented customer message — a
+customer's accident, in the first person — are on a published page. That
+was already wrong. **What changed yesterday is that A1's sitemap started
+actively advertising it**: before, that page could only be found by
+following a link from somewhere, and for this site there was nowhere to
+follow from. A1 removed exactly that obscurity, on purpose, for every
+storefront.
+
+So the risk is mine to name plainly: **the work that shipped on 6
+November made a fabricated testimonial discoverable.** The feature is
+right and the content is not.
+
+**Unpublishing needs three flags, not one.** This is the finding that
+matters operationally:
+
+| Surface | Gate | Covered by the dashboard's Publish toggle? |
+|---|---|---|
+| `/site/{slug}`, its inner pages, the product page | `websites.published` | **yes** |
+| `/sitemap.xml`, `/llms.txt` | `websites.published` (`.eq("published", true)`) | **yes** |
+| `/seo/{slug}` | **`seo_pages.published` — its own column** | **no** |
+| `/p/{slug}` | **`landing_pages.published` — its own column** | **no** |
+
+`setSitePublished` (src/lib/website/setSitePublished.ts) updates
+`websites.published` and nothing else. A business unpublished from the
+dashboard can still be serving an SEO page and a landing page, each
+behind a flag nothing in that flow touches. **That is a product bug
+independent of today's news** and it is recorded here rather than fixed
+in passing.
+
+The cart and checkout routes have no `published` check at all, but they
+are client-only and hold no business copy, so nothing fabricated is
+reachable through them.
+
+**And the removal, once unpublished:** a 404 plus Search Console's
+removal tool, not a `robots.txt` block. Blocking the crawl of an already
+indexed page prevents Google from ever seeing that it is gone.
+
+### 2. A3 and L1 are paused, and the questions are not thrown away
+
+Collecting "real facts" for a business that does not exist would put
+invented facts on record as evidence — and `knownText` treats a recorded
+note as proof, so a generous answer becomes the thing that approves the
+same claim on every other surface. That is the loop this codebase spent
+Stage 1 breaking.
+
+INTERVIEW-A3-L1.md waits as written. The questions came from the schema
+and from the nine promises `siteClaimsReview.ts` already watches for, not
+from any one business, so they do not expire.
+
+**L4's GBP application still goes in**, because it is a queue and the
+wait is the point.
+
+### 3. THE GUARDS STAY. The software failures were real.
+
+This is the part most at risk of being got wrong later, so it is written
+down now: **almost every guard in this codebase carries a dated
+candle_by_qaaf incident as its reason, and those incidents really
+happened.**
+
+- `hello@candlebyqaaf.com` really was generated onto a live contact page
+  for a domain nobody owned.
+- `<p>` tags really did render as visible characters on a live homepage.
+- The white-on-white card really was invisible.
+- The RLS gap, the 307 redirect, the cross-tenant array reference — all
+  real defects in real code.
+
+**What was fake is the business, not the bugs.** A test business is a
+perfectly good place for a real software failure to happen. So nothing
+is relaxed, no allowlist entry is removed, and
+`multiTenantVocabulary.test.ts` keeps its dated entries.
+
+**What IS now known to be unreliable** is any claim about business
+outcomes drawn from this data: order counts, revenue, "one order on
+record", the attribution rows, `aeo_presence` history, the
+`decisions_outcomes` baseline. Those describe a business that was not
+trading. Nothing has ever been promised on them, and nothing should be.
+
+### 4. A5's recommendation changes, and that is a cost decision
+
+PLAN-AEO-GEO's A5 recommends a monthly AEO check per business. Each run
+is a model call with live web search. **With no real business, a monthly
+schedule bills for a business that does not exist** — the same burn that
+paused `POSITIONING_ENABLED` in September. So A5 ships behind a flag,
+default off, and the plan now says so.
+
+### The SQL, read first
+
+Nothing below is keyed on a guessed slug. The founder runs all of it by
+hand.
+
+```sql
+-- 1. READ. Every business and every storefront, so the id is confirmed
+--    rather than assumed. Read-only.
+select d.id as dealership_id, d.dealership_name, d.created_at,
+       w.id as website_id, w.slug as site_slug, w.published
+from dealerships d
+left join websites w on w.dealership_id = d.id
+order by d.created_at;
+```
+
+```sql
+-- 2. READ. Every publicly visible surface for that one business, across
+--    all three tables that have their own `published` flag.
+select 'website'      as surface, w.slug, w.published from websites      w where w.dealership_id = '<id from query 1>'
+union all
+select 'seo_page'     as surface, s.slug, s.published from seo_pages     s where s.dealership_id = '<id from query 1>'
+union all
+select 'landing_page' as surface, l.slug, l.published from landing_pages l where l.dealership_id = '<id from query 1>';
+```
+
+```sql
+-- 3. WRITE. Takes the public visibility away and keeps every row.
+--    Reversible: set published = true to put it back.
+update websites      set published = false where dealership_id = '<id from query 1>';
+update seo_pages     set published = false where dealership_id = '<id from query 1>';
+update landing_pages set published = false where dealership_id = '<id from query 1>';
+```
+
+```sql
+-- 4. VERIFY. Query 2 again. Every row should now read `published = f`.
+```
+
+### One thing flagged rather than done
+
+The invented `business_story` rows stay in the database for testing, as
+the founder decided. **They are still evidence**: `knownText` reads
+`business_knowledge` title and content, so a test run can still produce
+copy that quotes a customer who does not exist — and a guard that
+approves a fabricated testimonial because a fabricated note supports it
+teaches nobody anything.
+
+Retiring just those rows keeps the history (`is_active` exists for
+exactly this) without feeding them to a generator:
+
+```sql
+-- READ FIRST — which rows, and what do they say?
+select id, category, title, is_active, left(content, 120) as starts_with
+from business_knowledge
+where dealership_id = '<id from query 1>'
+order by category, title;
+
+-- Then, only for the invented ones, by id. Not by category: nine of the
+-- business_story rows hold real product facts the tests rely on.
+-- update business_knowledge set is_active = false where id in ('<...>');
+```
+
+**The founder's call, not mine** — it changes what the test fixtures see.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -68,6 +68,19 @@ in Shahjahanpur" is actually won or lost.
 
 ### L1 — The listing's facts, published truthfully on the site — **S**
 
+**PAUSED — 7 November 2026, and the migration with it.** This phase is
+an interview plus a migration that gives the answers somewhere to live
+(phone, hours, areas served, `sameAs`, address). The only business on
+the platform is test data, so the interview has nobody to interview —
+and adding columns before anyone can fill them truthfully is schema
+without a purpose. The questions are written and waiting in
+[INTERVIEW-A3-L1.md](INTERVIEW-A3-L1.md).
+
+**And one consequence worth stating:** L4's GBP application should still
+go in, because it is a queue and the wait is the point. A listing cannot
+be claimed for a business that does not exist, but the API access can be
+waiting when one does.
+
 **No Google API, no approval, no wait.** `businessNode` publishes the
 city and nothing else, with an honest comment saying why: *"an
 addressLocality with no street is honest; an invented street address is

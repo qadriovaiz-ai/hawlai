@@ -297,6 +297,12 @@ asserted in tests; it has not been read by a machine outside this repo.
 
 ### A3 — answers written from the business's own facts — **M**
 
+**PAUSED — 7 November 2026.** The only business on the platform is test
+data, so there are no facts to write answers from. The interview that
+feeds this phase is written and waiting in
+[INTERVIEW-A3-L1.md](INTERVIEW-A3-L1.md); the build resumes when a real
+business is onboarded. Nothing is blocked by code.
+
 An FAQ block full of invented answers is worse than an empty page, and
 this is the phase where that risk lives. The questions come from
 `aeoQuestions` (already derived in code, already fixed) plus the ones
@@ -329,6 +335,13 @@ Incentivised reviews breach Google's policy and a fake mention is a
 claim nothing supports.
 
 ### A5 — the measurement that already exists, on a schedule — **S**
+
+**AMENDED — 7 November 2026.** The recommendation below says "monthly,
+after the local work is live". With no real business on the platform,
+a monthly model call with live web search would bill for a business that
+does not exist — the same burn that paused `POSITIONING_ENABLED` in
+September. **So A5 ships behind a flag, default off**, and the flag is
+turned on when there is a business whose trend means something.
 
 `aeoAgent` runs **on demand only**. It is not in `cronGroups.ts`, so
 unless the owner opens the SEO toolkit there is no trend — and a trend
