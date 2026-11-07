@@ -133,6 +133,12 @@ export async function publishedPages(service: any): Promise<StorefrontPage[] | n
   const { data: pages, error: pageError } = await service
     .from("website_pages")
     .select("website_id, slug, updated_at")
+    // A DRAFT IS NOT ADVERTISED (G3a, migration 223). Before that column
+    // existed this read listed every page of every published site, so an
+    // empty page created in Website Builder went into the sitemap the
+    // moment its row appeared — a crawler invited to an empty page by
+    // this very file.
+    .eq("published", true)
     .in("website_id", ids);
   if (pageError) {
     // The home pages are still worth listing. Said, not swallowed.

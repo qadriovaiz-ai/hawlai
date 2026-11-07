@@ -374,6 +374,40 @@ export default function WebsiteBuilderView() {
     setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, [field]: value } : p)));
   }
 
+  /**
+   * Publishing one page (G3a, migration 223).
+   *
+   * WITHOUT THIS, ADDING A PAGE IS A DEAD END. A new page now starts as
+   * a draft, so there has to be a way to put it up — and this is the
+   * owner's click rather than a side effect of saving, because saving is
+   * something people do halfway through writing.
+   *
+   * Taking a page back down is the same call with `false`, and it is
+   * never harder than putting it up: the safe direction must not be the
+   * slow one (CLAUDE.md rule 6).
+   */
+  async function setPagePublished(pageId: string, published: boolean) {
+    setSaving(pageId);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/website-builder/pages/${pageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ published }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveError(data.error ?? "Couldn't change that — please try again");
+        return;
+      }
+      setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, published } : p)));
+    } catch {
+      setSaveError("Couldn't change that — please try again");
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function savePage(pageId: string) {
     const page = pages.find((p) => p.id === pageId);
     if (!page) return;
@@ -714,9 +748,26 @@ export default function WebsiteBuilderView() {
                 </div>
 
                 {saveError && <p className="text-xs text-red-500">{saveError}</p>}
-                <Button onClick={() => savePage(currentPage.id)}>
-                  {saving === currentPage.id ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />} Save Page
-                </Button>
+                {/* A DRAFT SAYS IT IS ONE. A page the owner cannot see on
+                    the live site, with no explanation, is worse than one
+                    that was published empty — at least that was
+                    visible. */}
+                {(currentPage as any).published === false && (
+                  <p className="text-xs text-amber-500">
+                    This page isn&apos;t live yet. Nobody can reach it and it isn&apos;t in your sitemap.
+                  </p>
+                )}
+                <div className="flex items-center gap-2">
+                  <Button onClick={() => savePage(currentPage.id)}>
+                    {saving === currentPage.id ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />} Save Page
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setPagePublished(currentPage.id, (currentPage as any).published === false)}
+                  >
+                    {(currentPage as any).published === false ? "Publish this page" : "Take this page down"}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

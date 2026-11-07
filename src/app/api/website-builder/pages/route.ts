@@ -49,6 +49,10 @@ export async function POST(request: Request) {
       meta_description: source.meta_description,
       sections: source.sections,
       order_index: maxOrder + 1,
+      // A COPY STARTS AS A DRAFT TOO. Two live pages with the same words
+      // is the `duplicate_body` finding G1 just added, arriving by the
+      // owner's own click.
+      published: false,
     }).select("*").single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -76,6 +80,14 @@ export async function POST(request: Request) {
     // the Phase 10 bulk migration to have to find later.
     sections: legacyToBlocks([{ type: "hero", headline: title.trim(), subheadline: "", ctaText: "" }, { type: "text", heading: "", body: "" }]),
     order_index: maxOrder + 1,
+    // A NEW PAGE STARTS AS A DRAFT (G3a, migration 223).
+    //
+    // The two blocks above are a heading and an EMPTY paragraph. Before
+    // migration 223 this row being inserted put that empty page on the
+    // live site at a real URL, and since A1 added /sitemap.xml it was
+    // advertised to crawlers as well. The owner publishes it when there
+    // is something on it.
+    published: false,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

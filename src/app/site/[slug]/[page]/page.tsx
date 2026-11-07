@@ -27,8 +27,20 @@ export default async function SiteSubPage({ params }: { params: Promise<{ slug: 
   const { data: website } = await supabase.from("websites").select("id, slug, theme_key, published, dealership_id").eq("slug", slug).maybeSingle();
   if (!website || !website.published) notFound();
 
-  const { data: page } = await supabase.from("website_pages").select("sections").eq("website_id", website.id).eq("slug", pageSlug).maybeSingle();
-  if (!page) notFound();
+  // A DRAFT PAGE IS NOT FOUND (G3a, migration 223).
+  //
+  // The site's own `published` flag is checked above, and until this
+  // column existed that was the only check there was: every page of a
+  // published site was reachable the moment its row existed, so Add Page
+  // put an empty page at a real URL. `published` defaults to true, so
+  // every page that was live before the migration stays live.
+  const { data: page } = await supabase
+    .from("website_pages")
+    .select("sections, published")
+    .eq("website_id", website.id)
+    .eq("slug", pageSlug)
+    .maybeSingle();
+  if (!page || page.published === false) notFound();
 
   const sections = page.sections ?? [];
   const blocks = legacyToBlocks(sections);

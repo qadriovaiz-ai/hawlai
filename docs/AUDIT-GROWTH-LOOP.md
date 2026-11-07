@@ -194,6 +194,7 @@ exist, and three are new.
 |---|---|---|---|
 | **G1** ✅ | **Duplicate body text and stale pages** — two more findings beside the nine `technicalAudit.ts` already has: the same paragraph on two pages, and a page nobody has touched in N months. Pure functions over `sections`, no new surface. | the audit | **S** |
 | **G2** | **Keyword clusters from the real queries** — group what Search Console actually reports, by shared words and intent. Replaces `competitor_keywords`' invented ten with the owner's own demand. | SEO toolkit | **S/M** |
+| **G3a** ✅ | **A page can be a draft.** The safety foundation G3 cannot be built without — and a fix for a hazard that was already live. | the builder | **S/M** |
 | **G3** | **Query gap → a page that answers it**, briefing included — the one missing hop in the vision's own chain. The planning step (topic, the queries it answers, the points to cover) is part of this hop, not a separate feature. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
 | **G4** | **Page speed, measured** — the only item with a genuine external dependency. PageSpeed Insights has a free API; it needs a key, a cap, and a decision about cost and cadence. Until then the honest state is "not measured", not "6 suggestions". | the audit | **M**, and a cost decision |
 | **G5** | **Entity consistency across site, Maps and socials** — name, address and phone compared between `business_listing_facts`, the Place record and what the storefront prints. This is PLAN-LOCAL-SEO's **L2**, already written and unbuilt. | local plan L2 | **S/M** |
@@ -239,6 +240,48 @@ paragraph and an FAQ's *question* is never mistaken for its *answer*.
 **Unverified live:** the daily `site_audit` has not run with these two
 findings against a real site, because there is no real site. The
 thresholds are reasoned, not tuned against real pages.
+
+### G3a as built — 7 November 2026, migration 223
+
+**G3 turned out to need a foundation that did not exist, and finding out
+why uncovered a live fault.**
+
+`website_pages` had **no published flag of its own.** A site was
+published or not, and every page on a published site was reachable the
+moment its row existed. So Website Builder's Add Page button put an
+**empty page on the live site, at a real URL**, before the owner had
+written a word of it — a heading and an empty paragraph, live.
+
+**And A1 made it worse, which is mine.** `/sitemap.xml` lists every page
+of every published site, so since 6 November that empty page has been
+**advertised to crawlers** the moment it was created. Before A1 it could
+at least only be found by following a link, and there was no link.
+
+**G3 could not have been built over that.** Approving a proposed page
+would have published an empty page and put it in the sitemap — the
+product doing, on its own initiative, exactly the thing above.
+
+| File | What changed |
+|---|---|
+| `supabase/migrations/223_page_draft.sql` | `website_pages.published`, **default true** |
+| `src/lib/seo/crawlers.ts` | the sitemap's inner-page read filters on it |
+| `src/app/site/[slug]/[page]/page.tsx` | a draft is `notFound()` |
+| `src/app/api/website-builder/pages/route.ts` | a new page — and a duplicated one — starts unpublished |
+| `.../pages/[id]/route.ts` | the owner's publish/unpublish, strictly a boolean |
+| `WebsiteBuilderView.tsx` | the control, and a line saying a draft is a draft |
+
+**`default true` is the important half.** Every page that existed when
+the column was added was already live; a default of false would have
+unpublished a platform's worth of pages the moment the migration ran.
+The migration ships the query that proves it did not.
+
+**Publishing is not a side effect of saving**, because saving is
+something people do halfway through writing — and taking a page down is
+never harder than putting it up (rule 6's reasoning).
+
+**A draft says it is one.** A page the owner cannot find on the live
+site, with no explanation, would be worse than one published empty — at
+least that was visible.
 
 **And two smaller ones**, both already named in existing plans rather
 than new: the AEO check on a schedule (**A5**, behind a flag) and who

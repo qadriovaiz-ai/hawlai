@@ -2725,6 +2725,90 @@ site, because there is no real site. **The thresholds are reasoned, not
 tuned against real pages**, and the first real business is where they
 get tested.
 
+## 7 November 2026 — G3a: a page can be written before it is public
+
+**I set out to build G3 and found it had no foundation — and that the
+missing foundation was a live fault, part of it mine.**
+
+### What was wrong, and what I did to it
+
+`website_pages` had **no published flag of its own.** A site is
+published or not (`websites.published`), and the route that renders an
+inner page checked the site and then found the page by slug. There was
+nothing else to check. So Website Builder's **Add Page** button put an
+empty page — a heading and an empty paragraph — **on the live site at a
+real URL**, immediately.
+
+**And A1 made it worse on 6 November.** `/sitemap.xml` lists every page
+of every published site, so from that day an empty page was advertised
+to crawlers the moment it was created. Before A1 it could only be found
+by following a link and there was no link; A1 removed exactly that
+obscurity, deliberately, for every storefront. The feature is right and
+this was its cost, unnoticed until now.
+
+**G3 could not be built over it.** Approving a proposed page would have
+published an empty page and put it in the sitemap — the product doing,
+unprompted, the thing above. So G3 split: **G3a** is the draft state,
+**G3** is the proposal that uses it.
+
+### `default true` is the important half of the migration
+
+Every page that existed when this column was added was already live. A
+default of `false` would have **unpublished a whole platform's worth of
+pages the moment the migration ran** — a one-line schema change taking
+every customer's site down.
+
+So the new state is opt-in: only a page created from now on, by a path
+that asks for it, starts unpublished. The migration ships the query that
+proves nothing was taken down (`count(*)` against
+`count(*) filter (where published)`, and they must be equal).
+
+**And the render check is `=== false`, not `!page.published`.** A row
+read before the column exists gives `undefined`, which is not false —
+and that page was live, so it stays live. The strict comparison is what
+makes the migration safe to run while the old code is still deployed.
+
+### Publishing is the owner's click, and never a side effect of saving
+
+Saving is something people do halfway through writing. A save that
+published would mean the owner cannot work on a page without it being
+read — which is the problem this piece exists to fix, inverted.
+
+Taking a page down is the same call with `false`, and it is never harder
+than putting it up: **the safe direction must not be the slow one**
+(CLAUDE.md rule 6's reasoning, applied to a page rather than to an
+automation).
+
+**A duplicated page starts unpublished too.** Two live pages with the
+same words is G1's `duplicate_body` finding, arriving by the owner's own
+click a day after G1 shipped.
+
+### A draft says it is one
+
+A page the owner cannot find on the live site, with no explanation, is
+worse than one that was published empty — at least that was visible. The
+builder says it plainly: *"This page isn't live yet. Nobody can reach it
+and it isn't in your sitemap."*
+
+And the publish control is not optional polish: without it, adding a
+page would be a **dead end**, which is a regression on what the owner
+had before. A test asserts it exists.
+
+### Mutations: 17 of 17 killed, first pass
+
+Including the four that matter most: the column defaulting to `false`,
+the sitemap listing drafts again, a save publishing as a side effect,
+and the strict `=== false` becoming a truthiness check.
+
+### Unverified live
+
+Migration 223 is not in production. No page has been created as a draft,
+nothing has been published by that button, and the sitemap has not been
+re-fetched by anything. **And one thing worth the founder's eye:** on a
+real platform I would expect the verify query's two numbers to match
+exactly; if they ever differ, something has written `false` to a page
+that was already public, and that is worth stopping for.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

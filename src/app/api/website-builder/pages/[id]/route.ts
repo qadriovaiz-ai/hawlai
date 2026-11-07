@@ -76,6 +76,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.seoTitle !== undefined) update.seo_title = body.seoTitle || null;
   if (body.metaDescription !== undefined) update.meta_description = body.metaDescription;
   if (body.ogImageUrl !== undefined) update.og_image_url = body.ogImageUrl || null;
+  // PUBLISHING A PAGE IS THE OWNER'S CLICK (G3a, migration 223).
+  //
+  // STRICTLY A BOOLEAN, like every other flag of this kind here: a
+  // page going public is not a truthiness question, and the string
+  // "false" must not publish one. Unpublishing is as freely allowed as
+  // publishing — CLAUDE.md rule 6's reasoning, that the safe direction
+  // must never be the slow one.
+  if (typeof body.published === "boolean") update.published = body.published;
   if (body.sections !== undefined) {
     update.sections = body.sections;
     // ONLY WHEN THE WORDS CHANGED.
