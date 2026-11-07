@@ -110,7 +110,50 @@ function walk(node: unknown, visit: (b: Block) => void): void {
   walk(b.children, visit);
 }
 
-/** Everything a reader would actually read on the page. */
+/**
+ * EVERY word a reader could see on the page, whatever prop holds it.
+ *
+ * NOT A LIST OF PROP NAMES, and that is the whole point. `pageText`
+ * below reads text/html/label/alt and `headings` reads blocks of type
+ * "heading" — and between them they still miss the `heading` PROP that
+ * `faq`, `faq_item` and `product_grid` carry. So "Our Products in A
+ * City", or an FAQ question naming the city, is invisible to both, and a
+ * check asking "does this page say the city" would have answered no
+ * about a page that says it twice.
+ *
+ * This is G1's lesson in its final form: reading prose by prop name
+ * cannot work in a block system where the same words live under
+ * different keys. For a question of the form "does any visible text
+ * contain this", the only safe reader is one that takes all of it.
+ *
+ * WORD COUNTS MUST NOT USE THIS — they are thresholds with history
+ * behind them, and pageText is what they have always measured.
+ */
+export function allText(sections: unknown): string {
+  const parts: string[] = [];
+  walk(sections, (b) => {
+    if (!b.props || typeof b.props !== "object") return;
+    for (const v of Object.values(b.props)) {
+      if (typeof v === "string" && v.trim()) parts.push(v.trim());
+    }
+  });
+  return parts.join(" ");
+}
+
+/**
+ * The page's BODY text — the props named text, html, label and alt.
+ *
+ * NOT THE HEADINGS, and the comment here used to say "everything a
+ * reader would actually read", which is not true and is a trap: a reader
+ * reads the headings first. Found on 7 November 2026 while building G5,
+ * whose "does this page say the city" check would have missed a hero
+ * heading naming it. Use `allText` above for that kind of question.
+ *
+ * THE BEHAVIOUR IS DELIBERATELY UNCHANGED. Every word count in
+ * auditSite reads this, so folding headings in would move the
+ * thin-content threshold for every business at once. That is a product
+ * decision, not a tidy-up, so it is written here rather than done.
+ */
 export function pageText(sections: unknown): string {
   const parts: string[] = [];
   walk(sections, (b) => {

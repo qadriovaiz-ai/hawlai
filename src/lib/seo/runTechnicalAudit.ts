@@ -5,8 +5,10 @@
 // it can run every day for every business. That is why it sits in the
 // daily "signals" group, which is the database-only one.
 
-import { auditSite, type SiteAudit } from "./technicalAudit";
+import { auditSite, allText, type SiteAudit, type Finding } from "./technicalAudit";
 import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
+import { localFindings, localSummary } from "./localPresence";
+import { readListingFacts } from "./listingFacts";
 
 export type AuditRun = SiteAudit & { skipped?: string };
 
@@ -30,7 +32,83 @@ export async function runTechnicalAudit(supabase: any, dealershipId: string): Pr
 
   const audit = auditSite({ published: Boolean(website.published), pages: pages ?? [] });
   await recordAuditSignals(supabase, dealershipId, audit);
+  // G5 — the local half, in the same subsystem on purpose. It reads rows
+  // and runs pure code exactly as the technical half does, so it needs
+  // no cron entry of its own (there is no third one to give it) and no
+  // new screen.
+  await recordLocalPresence(supabase, dealershipId, pages ?? []);
   return audit;
+}
+
+/**
+ * The local-presence half of the daily audit (G5 / local plan L2).
+ *
+ * BEHIND THE SAME "has a Hawlai site" GATE as the technical half, and
+ * that is a real limit worth stating: a business that has not built a
+ * site here gets no local findings, even though its hours would still be
+ * missing. Hawlai cannot publish a fact for a site it does not have, and
+ * a finding nobody can act on is noise.
+ *
+ * ONE SIGNAL, SEPARATE FROM SITE HEALTH. Merging them would dilute a
+ * standing statement that already has its own meaning, and the local one
+ * is read by a different part of the daily email.
+ */
+export async function recordLocalPresence(
+  supabase: any,
+  dealershipId: string,
+  pages: { slug?: string | null; page_type?: string | null; sections?: unknown }[]
+): Promise<{ findings: Finding[]; skipped?: string }> {
+  const [{ data: dealership, error: dealershipError }, { data: factsRow }] = await Promise.all([
+    supabase.from("dealerships").select("city, business_address, google_place_id").eq("id", dealershipId).maybeSingle(),
+    supabase
+      .from("business_listing_facts")
+      .select("public_phone, publish_phone, opening_hours, areas_served, street_address, publish_street_address, instagram_url, other_profile_urls")
+      .eq("dealership_id", dealershipId)
+      .maybeSingle(),
+  ]);
+  // A FAILED READ FINDS NOTHING. Reporting "no phone on record" because
+  // the row could not be read would have the owner fixing something that
+  // was never broken.
+  if (dealershipError) return { findings: [], skipped: `could not read the business: ${dealershipError.message}` };
+
+  const facts = readListingFacts(factsRow, { googlePlaceId: dealership?.google_place_id ?? null });
+
+  // The page a stranger lands on, and EVERY word on it. allText rather
+  // than pageText on purpose: pageText reads four named props and misses
+  // the `heading` prop that faq, faq_item and product_grid carry, so a
+  // page whose section heading names the city would have been told it
+  // never mentions it.
+  const landing = pages.find((p) => p?.slug === "home" || p?.page_type === "home") ?? pages[0];
+  const landingText = landing ? allText(landing.sections) : "";
+
+  const findings = localFindings({
+    facts,
+    emailAddress: dealership?.business_address ?? null,
+    addressOnRecord: factsRow?.street_address ?? null,
+    addressPublished: factsRow?.publish_street_address === true,
+    phoneOnRecord: factsRow?.public_phone ?? null,
+    city: dealership?.city ?? null,
+    landingText,
+    placeId: dealership?.google_place_id ?? null,
+  });
+
+  await recordSignal(supabase, dealershipId, {
+    source: "seo",
+    topic: "local presence",
+    summary: localSummary(findings),
+    // All counted: these are the business's own rows compared with each
+    // other and with its own pages. No model is involved.
+    evidence: {
+      findings: findings.length,
+      high: findings.filter((f) => f.priority === "high").length,
+      codes: findings.map((f) => f.code),
+    },
+    confidence: "counted",
+    // One standing statement, rewritten each run.
+    fingerprint: fingerprintOf(["seo", "local presence"]),
+  });
+
+  return { findings };
 }
 
 /**

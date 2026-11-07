@@ -112,6 +112,32 @@ already does).
 Findings, through the Strategist, into the daily email — the machinery
 S4 and S5 built. No new surface.
 
+**SHIPPED 7 November 2026 as G5, except the Maps leg.** The line above
+calls the site-vs-Place comparison "the one check that needs the Places
+read Hawlai already does" — and that read exists but is **field-masked to
+id, displayName, formattedAddress, rating and userRatingCount**. No phone:
+that is a higher Places (New) billing tier. It is also a *search* run when
+the owner connects reviews, not a stored snapshot — only
+`google_place_id` is kept — so comparing on a schedule means a Place
+Details read per business per run. Both are the founder's cost decision,
+so the Maps leg is **not built**.
+
+**A real mismatch was found that needs no API at all.** Hawlai holds the
+address TWICE, entered by hand on two different screens:
+`dealerships.business_address` (the footer the law puts in every
+marketing email, migration 181) and
+`business_listing_facts.street_address` (the street line in the site's
+structured data, migration 221). Nothing compared them. A customer who
+gets an email and a customer who reads the site can be given two
+different addresses. That is the high-priority finding.
+
+The phone is deliberately **not** compared: `owner_whatsapp_number` is
+the owner's and `public_phone` is the business's, and calling that
+difference a fault would train the owner to ignore the check.
+
+It runs inside the existing `site_audit` subsystem — no new cron entry
+(there is no third one), no new screen.
+
 ### L3 — Pages for the places and things he actually sells — **M**
 
 "Soy candle in Shahjahanpur" has no page to rank. The site has a
@@ -179,7 +205,7 @@ on one setting in Google Cloud.
 | **Search Console back up** | **XS** — a reconnect, plus one small code fix for visibility | nothing |
 | **§1 GBP API application** | **XS** of effort, **weeks** of waiting | the founder, one sitting |
 | **L1** the listing's facts on the site | **S** | the owner answering five questions |
-| **L2** local audit findings | **S/M** | L1's facts being on record |
+| **L2** ✅ (not the Maps leg) | **S/M** | shipped 7 Nov 2026 as G5 |
 | **L3** city and occasion pages | **M** | his own words |
 | **L4** the listing through the API | **L** | §1 being approved |
 

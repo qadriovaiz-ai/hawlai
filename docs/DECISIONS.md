@@ -3297,6 +3297,80 @@ matters — the early return itself — is killed twice over.
 **Unverified live.** Nothing has run on a schedule, because the flag is
 off and there is no business to run it for.
 
+## 7 Nov 2026 — G5: the two addresses nobody was comparing
+
+**The headline check in the plan is not built, and the reason is a bill.**
+Local plan L2 named "the name, address and phone not matching between the
+site and the Place record" as "the one check that needs the Places read
+Hawlai already does". That read exists, and it is field-masked to id,
+displayName, formattedAddress, rating and userRatingCount — Places (New)
+bills by the fields requested and a phone number is a higher tier. It is
+also a search run at connect time, not a stored snapshot: only
+`google_place_id` is kept, so comparing on a schedule means a Place
+Details read per business per run. That is the founder's cost decision,
+the same kind he reserved for G4 and A5, so the Maps leg is written down
+and left out rather than quietly added to the bill.
+
+**And there was a real mismatch to find without it.** Hawlai stores the
+business address TWICE, on two different screens, in two hands:
+`dealerships.business_address` is the postal address the law puts in
+every marketing email's footer (migration 181), and
+`business_listing_facts.street_address` is the street line published in
+the site's structured data (migration 221). Nothing has ever compared
+them. A customer who gets an email and a customer who reads the site can
+be given two different addresses — a local-search problem and a plain
+honesty problem at once. That is the high-priority finding.
+
+**Abbreviations are reported as a mismatch, on purpose.** "Rd" and "Road"
+come back as different. Not a false positive: the fix for a local listing
+is for the two records to be identical, which is what every
+NAP-consistency guide asks for, and a check that quietly treated them as
+the same would hide what it was asked to find. Case, spacing and
+punctuation are normalised; nothing beyond that is guessed.
+
+**The phone is deliberately not compared.** `owner_whatsapp_number` is
+the owner's number and `public_phone` is the business's published one.
+Those are legitimately different, and calling the difference a fault
+would train the owner to ignore the whole check. A missing public phone
+is reported as a fault; a phone on record that he chose not to publish is
+reported as HIS CALL, at low priority, in those words.
+
+**No new subsystem, no new screen.** It runs inside `site_audit`, which
+already reads rows and runs pure code daily — and there is no third cron
+entry to give it anyway. One signal, separate from site health, because
+that standing statement already means something on its own.
+
+**A latent trap found on the way, and only half fixed — deliberately.**
+`pageText`'s comment said it returned "everything a reader would actually
+read". It does not: it reads the props named text, html, label and alt,
+while `faq`, `faq_item` and `product_grid` carry their words under
+`heading`. So a page whose section heading said the city would have been
+told it never mentions one. A new `allText` reads every string prop and
+is what G5 uses. **`pageText`'s behaviour is unchanged on purpose** —
+every word count in `auditSite` reads it, so folding headings in would
+move the thin-content threshold for every business at once. That is a
+product decision, and it is written in the comment rather than done.
+This is G1's lesson in its final form: reading prose by prop name cannot
+work in a block system where the same words live under different keys.
+
+**Mutation score 40/40, and three of the findings came from the
+harness.**
+- Deleting the call from `runTechnicalAudit` left all 35 tests green —
+  every one of them called `recordLocalPresence` directly, so the feature
+  could have shipped **completely unwired**. There is now a test that
+  runs the real subsystem entry point.
+- Every fixture put the home page first, so reading `pages[0]` passed. A
+  page list from the database has no guaranteed order.
+- The wiring fixture's page did not name the city either way, so passing
+  an empty page list looked identical to passing the real one.
+Three of my own mutations were invalid rather than survivors — one
+changed only a comment the test strips, one added a key to a TYPE union
+that changes nothing the daily route dispatches, and one was unreachable
+below an early return. Each was rewritten to mutate what actually runs.
+
+**Unverified live.** No business has a second address on record, because
+there is no real business.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
