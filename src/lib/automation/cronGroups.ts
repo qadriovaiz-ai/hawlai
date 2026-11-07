@@ -74,7 +74,36 @@ export type SubsystemKey =
   // OFF BY DEFAULT. PAGESPEED_ENABLED gates it (the founder's decision,
   // 7 November 2026): with no real business on the platform, a monthly
   // run spends quota and attention on test data.
-  | "page_speed";
+  | "page_speed"
+  // A5 — the AEO check, on a schedule. In `heavy`, and THE PLAN SAID
+  // `signals`: that was wrong and this file's own rule settles it.
+  // signals is "database-only and fast"; this one calls a model WITH
+  // LIVE WEB SEARCH. In signals it would put an LLM call in front of the
+  // export email and the stale-approval sweep — the exact fault the
+  // header of this file records, where Social Media Auto-Posting read
+  // "100% success" because it ran behind work that used the 60 seconds.
+  //
+  // MONTHLY, AND IT DECIDES THAT ITSELF — there is no third cron entry,
+  // the same constraint monthly_review and page_speed work around.
+  //
+  // OFF BY DEFAULT. AEO_SCHEDULE_ENABLED gates it, for the reason G4's
+  // flag exists: each run is four live web searches per business, and
+  // there is no real business yet whose trend would mean anything.
+  //
+  // BEFORE daily_autopilot, and the first attempt had this backwards.
+  // The reasoning was "nothing reads this, so if the 60 seconds run out
+  // it is the right thing to lose". But put after daily_autopilot it
+  // would not lose gracefully — IT WOULD NEVER RUN. On the one day a
+  // month it does any work, every business's per-campaign AI work would
+  // already have spent the budget, and the run that never happened looks
+  // identical to the month the business was simply not named. That is
+  // the exact fault this file's header records about Social Media
+  // Auto-Posting reading "100% success".
+  //
+  // tests/dailyJobs.test.ts caught it: it pins daily_autopilot as the
+  // last entry, which is a decision with an incident behind it.
+  // Corrected 7 November 2026.
+  | "aeo_schedule";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
@@ -96,6 +125,10 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     // After search_console_sync, so if a run is cut short the searches
     // are already in — they are what every other piece reads.
     "page_speed",
+    // A5, beside page_speed: both monthly, both flagged off, both a
+    // third party over the network. BEFORE daily_autopilot, like
+    // everything else here.
+    "aeo_schedule",
     "daily_autopilot",
   ],
 };

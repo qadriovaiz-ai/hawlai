@@ -20,6 +20,7 @@ import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetect
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import { runPageSpeed } from "@/lib/seo/pageSpeed";
+import { runAeoSchedule } from "@/lib/seo/aeoSchedule";
 import { siteBase } from "@/lib/claims/businessFacts";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
@@ -39,6 +40,11 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // G4. The site address comes from the one place that knows it, rather
   // than being rebuilt here from an env var.
   page_speed: (s, id) => runPageSpeed(s, id, { siteBase: siteBase() }),
+  // A5 — the AEO check given the cadence it always needed. The agent
+  // already records every run and derives the trend; all that was
+  // missing was a second run to compare against. Monthly and flagged
+  // off, both decided inside the function.
+  aeo_schedule: (s, id) => runAeoSchedule(s, id),
   // S7/P2 — reads claim_checks rows that went out and asks the
   // extractor about them again. Costs money, so it is capped per
   // business per run inside the function rather than by a flag here.

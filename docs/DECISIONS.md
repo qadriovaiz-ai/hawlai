@@ -3234,6 +3234,69 @@ on the clean path.
 there is not one. The gap counts read `claim_checks`, which has rows only
 from test data.
 
+## 7 Nov 2026 — A5: the AEO check gets the cadence it always needed
+
+**Nothing new is measured.** `generateAeoCheck` has run since A0 and
+already writes every run into `aeo_presence` and derives a trend from it.
+It ran **on demand only**, so unless the owner opened the SEO toolkit
+there was never a second run to compare against — and a trend was the
+entire reason the question set was fixed in code. A5 is a cadence and a
+cost gate. The measuring, recording and trending stay where they are.
+
+**The question set is the load-bearing part.** `recordPresence` writes
+every run into the same table whatever was asked, and `aeoTrend` compares
+the last run with the one before. A scheduled run that passed no question
+set would let the model choose its own — and that row would not merely
+fail to produce a trend, it would land beside the fixed-set runs and
+break the NEXT comparison too. So the scheduled path builds its questions
+through `aeoQuestionsFor(dealership, facts)`, the same call the on-demand
+route makes, and a month with no buildable question set is skipped rather
+than measured loosely. Two tests pin the two paths to the same call.
+
+**The plan said `signals`. That was wrong.** `cronGroups.ts`'s own rule is
+that `signals` is "database-only and fast", and this calls a model with
+live web search. In `signals` it would sit in front of the lead-export
+email and the stale-approval sweep — the fault that file's header records
+about Social Media Auto-Posting reading "100% success" while one post
+reached Facebook in 28 days. It is in `heavy`, beside `page_speed`.
+
+**AND THE FIRST PLACEMENT WITHIN `heavy` WAS ALSO WRONG — an existing
+test caught it.** It went last, on the reasoning that nothing reads it so
+it is the right thing to lose if the 60 seconds run out. But last would
+not have lost it gracefully: on the one day a month it does any work,
+every business's per-campaign AI work would already have spent the
+budget, and a run that never happened looks identical to a month the
+business was simply not named. `tests/dailyJobs.test.ts` pins
+`daily_autopilot` as the last subsystem — a decision with an incident
+behind it — and went red. It now runs before `daily_autopilot`, and the
+corrected reasoning is in the comment beside the key so the plan does not
+talk a future reader back into `signals`.
+
+**Off by default**, the same decision `PAGESPEED_ENABLED` ships under:
+each run is four live web searches per business, monthly, and a trend for
+a business that does not exist is a bill for test data. The flag is read
+strictly — anything other than the exact string `"true"` pauses it, so a
+typo cannot start the spend. The paused message names the on-demand check
+on purpose, because a flag that reads as "the feature is gone" is worse
+than no flag.
+
+**A business with no name is not measured.** The question is "who does X
+here, and is THIS business named" — asking it about a business called
+nothing records an answer about nobody. Same empty-fallback call A2 made
+for the JSON-LD business name.
+
+**A failure records nothing.** `_aiFailure` and the agent's own fallback
+both save no row, because a stored zero reads as "this business is
+invisible" when the truth is "nobody looked".
+
+**Mutation score 33/34, and the 34th is equivalent, not a survivor.**
+`name || "the business"` sits below an early return on an empty name, so
+it is unreachable and the mutation changes nothing. The guard that
+matters — the early return itself — is killed twice over.
+
+**Unverified live.** Nothing has run on a schedule, because the flag is
+off and there is no business to run it for.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

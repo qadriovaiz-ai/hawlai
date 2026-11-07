@@ -354,6 +354,16 @@ other policy numbers rather than in a cron file. **Recommendation:
 monthly, in the `signals` group, after the local work is live** — there
 is no point tracking a number before anything has been done to move it.
 
+**SHIPPED 7 November 2026, and the group above was wrong.** `signals` is
+"database-only and fast" by `cronGroups.ts`'s own rule, and this calls a
+model with live web search — in `signals` it would put an LLM call in
+front of the lead-export email and the stale-approval sweep. It is in
+`heavy`, beside `page_speed`, and **before `daily_autopilot`**: the first
+attempt put it last, which would not have lost it gracefully, it would
+have meant it never ran at all on the one day a month it does any work.
+`tests/dailyJobs.test.ts` caught that. The flag is
+`AEO_SCHEDULE_ENABLED`, default off.
+
 ---
 
 ## 4. What already helps, stated plainly
@@ -398,7 +408,7 @@ it.
 | **A2** FAQ block + FAQPage + inner-page JSON-LD | **M** | nothing |
 | **A3** answers from the business's own facts | **M** | A2, and the owner answering |
 | **A4a** who gets named instead of you | **S** | rows already collected |
-| **A5** the AEO check on a schedule | **S** | a cost decision |
+| **A5** ✅ | **S** | shipped 7 Nov 2026, `AEO_SCHEDULE_ENABLED` off |
 | **A4b** the mentions themselves | **L** | mostly the owner, not code |
 
 **A1 and A2 share nothing with the local plan's L1 and L2** — different
