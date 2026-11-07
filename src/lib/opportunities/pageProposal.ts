@@ -78,21 +78,13 @@ export const PAGE_WORTH_IT = 50;
  */
 export const BUYING_PAGE_NEEDS = ["price_range", "delivery_time", "why_not_cheaper", "enquiry_response"];
 
-/** Words that carry no meaning of their own, so two searches sharing only these share nothing. */
-const STOPWORDS = new Set([
-  "a", "an", "and", "the", "of", "for", "in", "on", "at", "to", "near", "me", "my", "best", "top",
-  "good", "cheap", "cheapest", "affordable", "is", "it", "how", "much", "does", "cost", "price",
-  "where", "buy", "shop", "online", "india", "worth", "which", "what", "who", "are", "you", "your",
-]);
-
-/** The words in a search that actually say what it is about. */
-export function contentWords(query: string): string[] {
-  return String(query ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w && !STOPWORDS.has(w));
-}
+// MOVED TO lib/seo/queryClusters.ts (G2, 7 November 2026), and
+// re-exported here so this file stays the one place a proposal is read
+// from. There is one answer to "what does this search say it is about",
+// and two copies of it would have been the fourth duplicated definition
+// this week — after TEXT_PROPS, the nine promises and the 200.
+export { contentWords } from "@/lib/seo/queryClusters";
+import { contentWords } from "@/lib/seo/queryClusters";
 
 /**
  * A page title, from the search itself.

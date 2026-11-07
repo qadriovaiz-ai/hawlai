@@ -3027,6 +3027,149 @@ Calling it a kill would have been the dishonest option.
 Insights, no signal has been written, and the first real measurement
 needs both a real business and the founder turning the flag on.
 
+## 7 November 2026 — G2: grouping the searches, and a correction I owe
+
+**The last of the Growth Loop audit's five findings.** And it opens with
+a correction, because the founder approved a plan partly on a sentence
+of mine that was too strong.
+
+### The correction
+
+That audit's keyword-clusters row said `competitor_keywords` *"invents
+ten"*. It does — **but only for a business with no Search Console
+connection.** `REAL_DATA_INSTRUCTIONS` in `seoToolkitAgent.ts` already
+swaps the static instruction for the real terms with Google's own counts
+the moment a connection exists, its own comment says *"With Search
+Console connected there is no need to guess"*, and
+`tests/searchQueries.test.ts` has asserted both halves since migration
+201 — including that the word "probably" is gone from the prompt.
+
+I stated the unconnected case as the whole case. **The audit document
+now carries that correction in the row itself**, and a test holds that
+it does, because a plan read six months from now should not repeat my
+overstatement.
+
+**What is genuinely missing stands:** nothing GROUPS the real queries.
+Even with a connection, a model is handed a flat list and returns ten
+individual terms. *"These five searches are the same subject and
+together they are 180 impressions"* is a computed fact nobody computed
+— and it is the fact that tells an owner whether a subject is worth an
+afternoon.
+
+### Deterministic, and that is the point rather than a saving
+
+A model asked to group searches groups them slightly differently each
+time, and **a grouping that moves cannot be compared month to month.**
+That is exactly the reasoning `aeoQuestions.ts` records for fixing its
+four questions in code — *"'not mentioned' last week and 'mentioned'
+this week might be answers to entirely different questions, so the
+movement means nothing"* — applied again.
+
+So: the most common content word becomes a subject, every search
+containing it joins that group, the rest are clustered again on what is
+left. Greedy, because the question an owner is asking is "what is the
+biggest thing I am being searched for", and that is the most common word
+by definition.
+
+**Ties are broken alphabetically, and that is load-bearing.** Without
+it, two runs over the same data could pick different subjects. Three of
+my own test expectations were wrong about which word would win — "soy"
+and "candles" tie at three each, so the subject is "candles" — and the
+tie-break working is what made them wrong. The expectations were
+corrected to what the rule produces, with the tie named in the comment,
+rather than the rule being bent to the expectations.
+
+### A search belongs to one group only
+
+"soy candle gift box" contains both "soy" and "gift". Counting it in
+both groups would make the totals **add up to more demand than Google
+reported**, which is the one thing a counted number must never do. A
+test asserts the grouped total never exceeds the input total.
+
+**And one search is a search, not a subject.** Below two members there
+is no group — and those rows are left out of the clustering rather than
+deleted, so a caller still sees every search.
+
+### One definition of what a search is about
+
+`contentWords` and the stopword list moved into `queryClusters.ts`, and
+`pageProposal.ts` imports them. Two copies would have been the **fourth
+duplicated definition this week** — after `TEXT_PROPS`, the nine
+promises and the 200-character note length. The pattern is clear enough
+now to state as a rule: in this codebase, a list two files both need
+goes in a pure module of its own the first time the second file wants
+it, not the third.
+
+Every stopword is filler **in any trade** (rule 3): "near me" is filler
+everywhere, "candle" would be a leak, and a test sweeps for both.
+
+### A bug a mutation found by hanging, and a harness lesson behind it
+
+`clusterQueries`' `while` loop had exactly one exit: the splice that
+removes a group's members from the work list. A mutation that stopped
+removing them **made it spin forever** — and the first sign of that was
+not a failing test, it was the mutation harness sitting there for three
+minutes before timing out.
+
+That is the failure shape worth naming: this function runs in the daily
+job for every business, and a change that stopped shrinking the list
+would not throw, would not fail a type-check and would not fail a test.
+It would hang the run. **Nothing reports and nothing finishes.**
+
+**And the first fix was worse than the bug.** I added three guards — a
+spin counter, an empty-subject break and an empty-members break — and
+spent four mutation passes watching each of them "survive" in turn,
+because every one covered the other two. **Overlapping guards are
+untestable guards**, which is the same lesson as I1's redundant
+`.length ?` checks and I3's redundant early return, arriving in its most
+expensive form yet.
+
+The loop now has one rule, at the bottom, with no `continue` to skip
+past it: **every pass either shrinks the list or ends the loop.** A
+mutation removing it is reported as `HUNG` — its own verdict, neither a
+kill nor a survivor, because "this one line is the only thing standing
+between the daily run and an infinite loop" is exactly what it proves.
+
+### Three hours of tooling, and what it cost
+
+The mutation run for this piece had to be started five times, and the
+founder asked three times whether it was done. The causes, in order, all
+mine:
+
+1. **The per-mutation test list carried the whole repo.** One pass of
+   `multiTenantVocabulary` + `searchQueries` takes over ten minutes; the
+   three files these mutations are about take six seconds. A
+   per-mutation list should carry the tests that are supposed to catch
+   it — the rest is what the full run afterwards is for.
+2. **I gave an estimate I had not measured** (45 seconds a mutation) and
+   it was wrong by two orders of magnitude.
+3. **Killing a run can leave a mutation on disk.** The harness restores
+   in a `finally` that a kill skips — and the repair script found a live
+   mutation sitting in `queryClusters.ts` twice. Any harness like this
+   needs a repair pass, and it is now written as one.
+4. **Overlapping guards**, above, which turned one survivor into four
+   passes.
+
+### Mutations: 24 killed, 1 HUNG
+
+### Where the grouping is actually used
+
+`marketOpportunities`' "demand without offer" card now says *"it is one
+of 2 searches about 'delivery' that together showed you 150 times"* —
+summed from Google's figures, never estimated, and **said only when the
+clustering found a group.** A sentence that repeats the single search's
+own number in different words is one the owner learns to skip.
+
+The clustering runs once per call rather than per opportunity: it is
+deterministic, so doing it again would be the same answer at more cost.
+
+**And a follow-up worth naming rather than quietly doing:** G3's
+`sameSubject` is a strict containment check, and its own comment says
+real grouping is G2's job. Now that clusters exist, G3's `answers` list
+could use them and would group a little more generously. That changes
+shipped behaviour the founder has already accepted, so it is **his call,
+not a tidy-up** — written here rather than done.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

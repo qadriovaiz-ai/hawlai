@@ -22,6 +22,7 @@
 // true.
 
 import type { QueryRow } from "@/lib/seo/searchConsole";
+import { clusterFor, clusterQueries, type QueryCluster } from "@/lib/seo/queryClusters";
 import type { StoredSignal } from "@/lib/signals/signals";
 import { MIN_IMPRESSIONS, MIN_IMPRESSIONS_NO_CLICKS, NEARLY_THERE } from "@/lib/seo/searchQueries";
 
@@ -92,6 +93,23 @@ const UNKNOWN_RELEVANCE = "Whether your own customers care about this is not som
  * on, and where a dimension of the vision's formula can't be measured it
  * is said to be unknown rather than guessed at.
  */
+/**
+ * The one extra sentence a clustered subject earns (G2).
+ *
+ * EMPTY WHEN THERE IS NO GROUP, rather than repeating the single
+ * search's own number in different words — a sentence that adds nothing
+ * is a sentence the owner learns to skip.
+ */
+function clusterNote(clusters: QueryCluster[], query: string): string {
+  // NO SECOND SIZE CHECK. MIN_CLUSTER_SIZE is 2, so a lone search is in
+  // no cluster at all and clusterFor already returns null for it. A
+  // `queries.length < 2` test here used to sit alongside, and a mutation
+  // proved it could never fire — redundant code cannot be guarded.
+  const cluster = clusterFor(clusters, query);
+  if (!cluster) return "";
+  return ` It is one of ${cluster.queries.length} searches about "${cluster.subject}" that together showed you ${cluster.impressions} times.`;
+}
+
 export function marketOpportunities(input: {
   queries: QueryRow[];
   signals: StoredSignal[];
@@ -100,6 +118,9 @@ export function marketOpportunities(input: {
   const out: MarketOpportunity[] = [];
   const queries = input.queries ?? [];
   const catalogue = input.catalogue ?? [];
+  // Computed once for the whole run: the clustering is deterministic, so
+  // doing it per opportunity would be the same answer at more cost.
+  const clusters = clusterQueries(queries as any);
 
   // 1. Already being found, and nobody clicks. The clearest opportunity
   // there is: the demand is proven and the loss is at our own door.
@@ -137,7 +158,13 @@ export function marketOpportunities(input: {
       type: "demand_without_offer",
       reference_id: q.query,
       title: `People search "${q.query}" ${q.impressions} times and you have nothing named for it`,
-      description: `A buying search with ${q.impressions} impressions, and nothing in your catalogue matches its wording. Either you sell it and haven't named it that way, or it's something to consider offering. ${UNKNOWN_RELEVANCE}`,
+      // THE SUBJECT'S OWN TOTAL, WHERE THERE IS ONE (G2). One search's
+      // impressions understate a subject the owner is being found for
+      // several ways at once — and "together 180 times" is the number
+      // that tells them whether it is worth an afternoon. Summed from
+      // Google's own figures, never estimated, and said only when the
+      // clustering actually found a group.
+      description: `A buying search with ${q.impressions} impressions, and nothing in your catalogue matches its wording.${clusterNote(clusters, q.query)} Either you sell it and haven't named it that way, or it's something to consider offering. ${UNKNOWN_RELEVANCE}`,
       priority: "medium",
       action_href: "/dashboard/website",
     });
