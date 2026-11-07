@@ -151,7 +151,7 @@ addition, not a new system.
 | **I2** ✅ | **The question registry.** The interview as pure data: key, prompt, kind (choice / short text / long text / yes-no), where the answer is written, and whether it needs the falsifiability check. Industry-neutral by construction (rule 3) and asserted so. | **M** |
 | **I3** ✅ | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
 | **I4** ✅ | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
-| **I5** | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
+| **I5** ✅ | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
 | **I6** | **Tier 3, the on-demand ask.** Record which phrase was removed, turn a repeated gap into one question, deliver it through the existing card or email. | **M** |
 
 ### I1 as built — 7 November 2026, migration 221
@@ -310,6 +310,47 @@ explanation. Turning publishing **off** is never refused.
 **What I4 does NOT do:** nothing has run. No owner has walked these two
 screens, because there is no real business to walk them — so the flow is
 asserted, not observed.
+
+### I5 as built — 7 November 2026, migration 222
+
+| File | What it does |
+|---|---|
+| `supabase/migrations/222_interview_progress.sql` | `business_knowledge.is_weak` (I3's flag, finally housed) and `interview_answers` — one row per question per business, RLS from the start. |
+| `src/lib/onboarding/interviewProgress.ts` | the rows read into meaning, and the two sentences the facts layer says. |
+| `src/app/api/interview/route.ts` | the **first caller of `judgeAnswer`**. One answer per request, judged, written, recorded. |
+| `src/lib/claims/businessFacts.ts` | reads the progress, marks thin notes inline, and states the gaps. |
+| `src/components/settings/InterviewCard.tsx` | one question at a time, on the page whose data it fills. |
+
+**The piece that matters is not the progress bar — it is the sentence
+in every prompt.** §2.1 says a half-filled record looks complete to a
+generator, because `knownText` reads what is present and cannot know
+what the owner never reached. So the facts layer now says, in the same
+breath as the notes themselves:
+
+> *The owner has answered 3 of 14 questions about how this business
+> works. 11 are unanswered, so what is recorded above is NOT the whole
+> picture — do not fill the gaps in, and do not imply the business has
+> no answer.*
+
+That is the third of this codebase's three "you cannot see everything"
+disclosures, and all three exist for one reason: a model that cannot see
+something will invent its own version to fill the gap. `rowsForPrompt`
+says how many notes did not fit; `withheldNote` says a story exists and
+is off-limits and not to be substituted; this says how many questions
+have no answer.
+
+**A thin note is marked on its own line**, not in a footnote — a
+warning three lines below a sentence is a warning about some other
+sentence as far as a model is concerned.
+
+**Skipping is recorded as skipped**, which pulls in two directions at
+once and has to: the interview must stop asking (a fact is asked for
+once, ever) while the facts layer must not count it as a fact that
+exists.
+
+**What I5 does NOT do:** nothing has run. Migration 222 is not in
+production, no answer has been judged by a real owner, and the first
+genuine run is still the first real business.
 
 **I1 and I2 are worth having even alone**: I1 gives every future business
 somewhere truthful to put a phone number, and I2 turns the interview

@@ -34,6 +34,7 @@ import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_
 import { TEXT_PROPS, machineWroteProp } from "@/lib/pages/provenance";
 import { countsAsLead } from "@/lib/analytics/orderLinkage";
 import { KNOWLEDGE_NOTE_CHARS, KNOWLEDGE_NOTES_SHOWN } from "@/lib/knowledge/noteShape";
+import { EMPTY_PROGRESS, readProgress, unansweredNote, weakNoteWarning, type InterviewProgress } from "@/lib/onboarding/interviewProgress";
 
 type Row = Record<string, any>;
 
@@ -84,6 +85,17 @@ export type KnowledgeFact = {
    * (src/lib/claims/personalStories.ts).
    */
   consented?: boolean;
+  /**
+   * The interview asked for something checkable, the owner answered
+   * twice without one, and the answer was stored anyway — the founder's
+   * decision of 7 November 2026: store and flag, never block
+   * (business_knowledge.is_weak, migration 222).
+   *
+   * These notes are still shown, because they are still the owner's own
+   * words. What changes is that the prompt is told they are thin, so
+   * they are not repeated as facts or turned into claims.
+   */
+  weak?: boolean;
 };
 
 /** How the business sounds and looks — the owner's own brand decisions. */
@@ -124,6 +136,14 @@ export type BusinessFacts = {
   allTime: { paidOrders: number; leads: number };
   /** Owner-entered Business Knowledge — things the owner states about their own business. */
   ownerFacts: KnowledgeFact[];
+  /**
+   * Which interview questions this business has answered (I5).
+   *
+   * Carried on the facts rather than fetched by each caller, because
+   * the one thing every caller needs to know is how much of what it is
+   * reading is the whole story.
+   */
+  interview?: InterviewProgress;
   brand: BrandIdentity;
   /** Brand messaging pillars, kept at the top level because copy checks read them constantly. */
   pillars: string[];
@@ -211,7 +231,7 @@ export function matchProducts(products: CatalogProduct[], term: string): Catalog
 
 /** The owner's own stated facts (Business Knowledge). */
 export async function fetchKnowledgeFacts(supabase: any, dealershipId: string): Promise<KnowledgeFact[]> {
-  const { data } = await supabase.from("business_knowledge").select("category, title, content, public_use_consent").eq("dealership_id", dealershipId).eq("is_active", true);
+  const { data } = await supabase.from("business_knowledge").select("category, title, content, public_use_consent, is_weak").eq("dealership_id", dealershipId).eq("is_active", true);
   return (data ?? []).filter((k: Row) => k?.title || k?.content).map(toKnowledgeFact);
 }
 
@@ -229,6 +249,10 @@ function toKnowledgeFact(k: Row): KnowledgeFact {
     title: String(k.title ?? ""),
     content: String(k.content ?? ""),
     consented: k.public_use_consent === true,
+    // STRICTLY true, like every other flag of this kind in this
+    // codebase: a missing column on an older row must read as "not
+    // known to be thin", never as thin.
+    weak: k.is_weak === true,
   };
 }
 
@@ -404,7 +428,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
   }
 
   const today = indiaToday();
-  const [dealership, website, products, offers, events, orders, leads, carts, knowledge, brandProfile, brandKit, festivals] = await Promise.all([
+  const [dealership, website, products, offers, events, orders, leads, carts, knowledge, brandProfile, brandKit, interviewRows, festivals] = await Promise.all([
     read<Row | null>("business details", supabase.from("dealerships").select("*").eq("id", dealershipId).maybeSingle(), null),
     read<Row | null>(
       "website",
@@ -417,9 +441,17 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     read<Row[]>("orders", supabase.from("orders").select("status, created_at").eq("dealership_id", dealershipId), []),
     read<Row[]>("leads", supabase.from("leads").select("id, merged_into_lead_id, is_test").eq("dealership_id", dealershipId), []),
     read<Row[]>("abandoned carts", supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", since), []),
-    read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content, public_use_consent").eq("dealership_id", dealershipId).eq("is_active", true), []),
+    read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content, public_use_consent, is_weak").eq("dealership_id", dealershipId).eq("is_active", true), []),
     read<Row | null>("brand profile", supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
     read<Row | null>("brand kit", supabase.from("brand_kits").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
+    // HOW MUCH OF THE INTERVIEW IS ANSWERED (I5, migration 222).
+    //
+    // Read here rather than computed anywhere else, because this is the
+    // only place that knows what a generator is about to be shown. A
+    // half-filled record looks complete from in here — knownText reads
+    // what is present and cannot know what the owner never reached —
+    // and the gaps are exactly where a model invents.
+    read<Row[]>("interview progress", supabase.from("interview_answers").select("question_key, status, attempts, weak").eq("dealership_id", dealershipId), []),
     // Platform-wide, not per business. A window around today is enough
     // for "just ended" through "plan ahead", plus the last loaded date.
     read<SeasonalEventRow[]>(
@@ -523,6 +555,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     // easier to pass (src/lib/analytics/orderLinkage.ts).
     allTime: { paidOrders: orders.filter((o) => PAID_ORDER_STATUSES.has(o.status)).length, leads: leads.filter(countsAsLead).length },
     ownerFacts: knowledge.filter((k) => k?.title || k?.content).map(toKnowledgeFact),
+    interview: readProgress(interviewRows as any),
     // Always the Hawlai address, never websites.custom_domain: nothing in
     // the app routes a custom domain to the site yet, so a link to one
     // would be a link to nothing.
@@ -839,8 +872,25 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
     // splitting at 200 while this sliced at 180 would quietly
     // reintroduce the mid-sentence cut recorded above, and nothing
     // would fail.
-    for (const k of notes.rows.slice(0, KNOWLEDGE_NOTES_SHOWN)) lines.push(`- ${k.title}: ${k.content.slice(0, KNOWLEDGE_NOTE_CHARS)}`);
+    for (const k of notes.rows.slice(0, KNOWLEDGE_NOTES_SHOWN)) {
+      // A THIN NOTE IS MARKED WHERE IT IS SHOWN, not in a footnote. A
+      // warning three lines below a sentence is a warning about some
+      // other sentence as far as a model is concerned.
+      lines.push(`- ${k.title}${k.weak ? " (THIN — the owner's words, nothing checkable in them)" : ""}: ${k.content.slice(0, KNOWLEDGE_NOTE_CHARS)}`);
+    }
+    const thin = weakNoteWarning(notes.rows.slice(0, KNOWLEDGE_NOTES_SHOWN).filter((k) => k.weak).length);
+    if (thin) lines.push(thin);
   }
+  // WHAT NOBODY HAS ANSWERED, said in the same breath as what they have.
+  //
+  // The third of this file's three "you cannot see everything"
+  // disclosures, and all three exist for one reason: a model that
+  // cannot see something will invent its own version to fill the gap.
+  // rowsForPrompt says how many notes did not fit; withheldNote says a
+  // story exists and is off-limits; this says how many questions have
+  // no answer yet and that the gaps are not to be filled.
+  const gaps = unansweredNote(f.interview ?? EMPTY_PROGRESS, (f.businessModels?.models ?? []) as any);
+  if (gaps) lines.push(gaps);
   if (f.brand.description) lines.push(`How the owner describes the business: ${f.brand.description.slice(0, 300)}`);
   if (f.brand.pillars.length) lines.push(`Brand messaging pillars (the owner's own words): ${f.brand.pillars.join("; ")}`);
   if (f.brand.tone) lines.push(`Brand tone: ${f.brand.tone}`);

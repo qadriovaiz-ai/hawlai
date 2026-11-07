@@ -227,7 +227,15 @@ describe("'I have their permission' is the owner's to give", () => {
 
   it("reads the column into the facts, so the gate can see it", () => {
     const facts_ts = readFileSync("src/lib/claims/businessFacts.ts", "utf8");
-    expect(facts_ts).toMatch(/select\("category, title, content, public_use_consent"\)/);
+    // RESTATED 7 Nov 2026 (I5), NOT WEAKENED. This pinned the whole
+    // column list — `select("category, title, content,
+    // public_use_consent")` — so adding is_weak to that read broke a
+    // test whose subject is this ONE column. It now asserts the column
+    // is selected in BOTH reads of business_knowledge, however long the
+    // list gets, which is stronger: the old literal was satisfied by
+    // either read on its own.
+    const selects = facts_ts.match(/select\("[^"]*public_use_consent[^"]*"\)/g) ?? [];
+    expect(selects.length).toBe(2);
     expect(facts_ts).toMatch(/consented: k\.public_use_consent === true/);
   });
 

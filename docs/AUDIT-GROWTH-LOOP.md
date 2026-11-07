@@ -67,7 +67,7 @@ not".
 | "Which searches are valuable for this business?" | ✅ **and counted, not guessed** | `src/lib/seo/searchQueries.ts` reads Google's own impressions (28-day window, 3-day lag), names a query at 10 impressions, flags 20 impressions with no clicks, and calls positions 4–20 "found but below where people click". Its header is explicit: *"Nothing in this file estimates a volume… the reason this exists is that the SEO work it replaces was guessed."* |
 | Keyword clusters | ❌ | Nothing groups the real queries. `competitor_keywords` invents ten. |
 | Better titles / meta | ✅ | `update_page_meta` — chat sets the live search title and description with approval and a live read-back (migration 203) |
-| Content briefs | ❌ | Not built. |
+| Content briefs | ❌ | Not built — **and not its own feature.** Folded into G3 (founder, 7 Nov): when the query-gap hop proposes a page, the topic, the queries it answers and the points it must cover ARE that proposal. A brief with no page to become is a document nobody reads. |
 | Internal linking | ⚠️ | As above: detection yes, suggestion from real pages no |
 | Service / product pages | ⚠️ | `POST /api/website-builder/pages` creates one. **Nothing decides that one is needed.** |
 | Local SEO improvements | ⚠️ | PLAN-LOCAL-SEO.md is written; L1 is paused for want of a real business, L2–L4 unbuilt, L4 waits on the GBP queue |
@@ -194,7 +194,7 @@ exist, and three are new.
 |---|---|---|---|
 | **G1** | **Duplicate body text and stale pages** — two more findings beside the nine `technicalAudit.ts` already has: the same paragraph on two pages, and a page nobody has touched in N months. Pure functions over `sections`, no new surface. | the audit | **S** |
 | **G2** | **Keyword clusters from the real queries** — group what Search Console actually reports, by shared words and intent. Replaces `competitor_keywords`' invented ten with the owner's own demand. | SEO toolkit | **S/M** |
-| **G3** | **Query gap → a page that answers it** — the one missing hop in the vision's own chain. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
+| **G3** | **Query gap → a page that answers it**, briefing included — the one missing hop in the vision's own chain. The planning step (topic, the queries it answers, the points to cover) is part of this hop, not a separate feature. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
 | **G4** | **Page speed, measured** — the only item with a genuine external dependency. PageSpeed Insights has a free API; it needs a key, a cap, and a decision about cost and cadence. Until then the honest state is "not measured", not "6 suggestions". | the audit | **M**, and a cost decision |
 | **G5** | **Entity consistency across site, Maps and socials** — name, address and phone compared between `business_listing_facts`, the Place record and what the storefront prints. This is PLAN-LOCAL-SEO's **L2**, already written and unbuilt. | local plan L2 | **S/M** |
 

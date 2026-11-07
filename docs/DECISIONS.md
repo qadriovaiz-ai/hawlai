@@ -2531,6 +2531,101 @@ observed. Migration 221 is in production, so the first real signup will
 be the first row — and that will be the first genuine test of this
 piece.
 
+## 7 November 2026 — I5: a half-finished interview that says so
+
+**Migration 222, the resumable interview, and the first caller of
+`judgeAnswer`.** I5 of PLAN-AUTO-INTERVIEW.md, carrying the gap I3 left
+in writing: the `weak` flag now has somewhere to live.
+
+### A real bug, found by the test written for it
+
+`contextFrom` merges skipped questions into `answered` on purpose, so
+the **interview** stops re-asking something the owner declined. The gap
+disclosure then counted progress through that same context — so a
+business that **skipped eight of nine questions got no disclosure at
+all**. The facts layer read it as fully answered.
+
+That is precisely the failure this whole piece exists to prevent,
+arriving through the fix for a different one. Two different questions
+now read two different things:
+
+| Question | Reads |
+|---|---|
+| "What do I ask next?" | answered **+** skipped (`contextFrom`) |
+| "How much is on record?" | answered **only** |
+
+Found because the test for "a skipped question does not count towards
+the answered total" failed on the first run. It is the kind of bug that
+would never have shown up in use: everything works, and the prompt is
+quietly confident.
+
+### The decision: where the thin flag lives
+
+On **`business_knowledge`**, beside the text it qualifies — not on the
+progress table. The flag describes a sentence a generator will read, so
+it has to be readable in the same row as the sentence. Keeping it on the
+progress table would have meant joining note titles to question keys,
+and a title is the owner's to edit, which makes it the wrong thing to
+key a join on.
+
+It is also mirrored on `interview_answers.weak`, for the questions whose
+answer is a **column** rather than a note, where there is no row to
+carry it.
+
+**And the progress table holds status, not content.** The answers are
+already in `business_knowledge` or `business_listing_facts`; a third
+home for the same sentence is how two copies of one fact come to
+disagree — the mistake extracted three times this week already.
+
+### A read-then-write, not an upsert, and the reason is the owner's
+
+My first version used `upsert(..., { onConflict: "dealership_id,title" })`
+on `business_knowledge`. **That fails at runtime: there is no unique
+index on those columns.** Postgres needs one for ON CONFLICT.
+
+The fix is not to add the index. That table is the owner's own,
+hand-editable through the Business Knowledge page where any title can be
+typed, so a unique index on user-entered text could fail to create
+against rows that already exist and would later reject a perfectly
+reasonable edit. Two queries instead of one, in a flow where one person
+answers one question at a time.
+
+### Mutations: 45 of 45 killed, and the three survivors were one lesson
+### in its sharpest form yet
+
+All three were assertions that something is **present**, where the thing
+occurs more than once:
+
+- the `business_knowledge` select appears **twice** in
+  `businessFacts.ts`, so dropping the column from one read left the
+  assertion green and the flag missing from half the callers;
+- `weak: verdict.weak` is a **substring** of `is_weak: verdict.weak`, so
+  writing `weak: false` into the progress row survived a test whose name
+  says it checks both;
+- `when: undefined` appears **twice** in the route, once per handler.
+
+This is the third shape of the same lesson in three days. CLAUDE.md rule
+8 is written about comments defeating a grep; I3 hit it as escape
+sequences inside a regex literal; I4 hit it as duplication between two
+handlers. **The sharpest form is this: when the thing being pinned
+occurs more than once, presence proves nothing — count it, or slice the
+file.** All three assertions now count occurrences.
+
+### An existing test was restated, not weakened
+
+`tests/customerStoryConsent.test.ts` pinned the whole column list of one
+read — `select("category, title, content, public_use_consent")` — so
+adding `is_weak` broke a test whose subject is that **one** column. It
+now asserts the column is selected in **both** reads, however long the
+list gets, which is stronger: the old literal was satisfied by either
+read on its own. Two mutations confirm it.
+
+### Unverified live
+
+**Nothing has run.** Migration 222 is not in production, `judgeAnswer`
+has not judged a real answer, and no owner has seen the card. The first
+genuine run of this is still the first real business.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

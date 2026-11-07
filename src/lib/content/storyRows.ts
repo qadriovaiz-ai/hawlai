@@ -152,7 +152,21 @@ export function factSentences(content: string | null | undefined): { kept: strin
   return { kept, dropped };
 }
 
-export type PromptRow = { category?: string | null; title?: string | null; content?: string | null };
+export type PromptRow = {
+  category?: string | null;
+  title?: string | null;
+  content?: string | null;
+  /**
+   * The note is the owner's own words with nothing checkable in them
+   * (business_knowledge.is_weak, migration 222).
+   *
+   * CARRIED THROUGH, because this function reshapes the content and a
+   * flag that qualifies content has to travel with it. Dropping it here
+   * would hand a generator a thin answer as an ordinary fact, which is
+   * the one thing storing it was supposed to avoid.
+   */
+  weak?: boolean | null;
+};
 
 /**
  * The recorded rows a generation prompt may use, story removed.
@@ -167,12 +181,12 @@ export function rowsForPrompt(
   rows: PromptRow[] | null | undefined,
   opts: { maxChars?: number } = {}
 ): {
-  rows: { title: string; content: string }[];
+  rows: { title: string; content: string; weak: boolean }[];
   storyRowsHeld: number;
   motiveSentencesHeld: number;
   rowsHeldForSpace: number;
 } {
-  const out: { title: string; content: string }[] = [];
+  const out: { title: string; content: string; weak: boolean }[] = [];
   let storyRowsHeld = 0;
   let motiveSentencesHeld = 0;
   let rowsHeldForSpace = 0;
@@ -206,7 +220,7 @@ export function rowsForPrompt(
       continue;
     }
     spent += title.length + content.length;
-    out.push({ title, content });
+    out.push({ title, content, weak: row?.weak === true });
   }
   return { rows: out, storyRowsHeld, motiveSentencesHeld, rowsHeldForSpace };
 }

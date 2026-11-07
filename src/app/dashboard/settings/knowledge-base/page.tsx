@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { BookOpen } from "lucide-react";
 import KnowledgeBaseView from "@/components/settings/KnowledgeBaseView";
+import InterviewCard from "@/components/settings/InterviewCard";
 
 export default async function KnowledgeBasePage() {
   const supabase = await createClient();
@@ -19,6 +20,8 @@ export default async function KnowledgeBasePage() {
           <p className="text-sm text-slate-500">Real hours, pricing notes, policies, and FAQs the AI can use on calls.</p>
         </div>
       </div>
+      {/* The resumable interview (I5), above the list it fills. */}
+      <InterviewCard />
       <KnowledgeBaseView />
     </div>
   );
