@@ -5,7 +5,7 @@
 // it can run every day for every business. That is why it sits in the
 // daily "signals" group, which is the database-only one.
 
-import { auditSite, allText, type SiteAudit, type Finding } from "./technicalAudit";
+import { auditSite, pageText, type SiteAudit, type Finding } from "./technicalAudit";
 import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
 import { localFindings, localSummary } from "./localPresence";
 import { readListingFacts } from "./listingFacts";
@@ -73,13 +73,13 @@ export async function recordLocalPresence(
 
   const facts = readListingFacts(factsRow, { googlePlaceId: dealership?.google_place_id ?? null });
 
-  // The page a stranger lands on, and EVERY word on it. allText rather
-  // than pageText on purpose: pageText reads four named props and misses
-  // the `heading` prop that faq, faq_item and product_grid carry, so a
-  // page whose section heading names the city would have been told it
-  // never mentions it.
+  // The page a stranger lands on, and every word a reader can see on it.
+  // ONE READER for both halves of the audit since 7 Nov 2026: pageText
+  // now includes the `heading` prop, which is where faq, faq_item and
+  // product_grid keep their words — without it a page whose section
+  // heading named the city was told it never mentions one.
   const landing = pages.find((p) => p?.slug === "home" || p?.page_type === "home") ?? pages[0];
-  const landingText = landing ? allText(landing.sections) : "";
+  const landingText = landing ? pageText(landing.sections) : "";
 
   const findings = localFindings({
     facts,

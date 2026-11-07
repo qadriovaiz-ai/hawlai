@@ -99,6 +99,7 @@ const STALE_DAYS = 365;
 const PROSE_BLOCKS = ["text", "faq_item"];
 
 import { isLegalPage } from "./pageKinds";
+import { TEXT_PROPS } from "@/lib/pages/provenance";
 
 type Block = Record<string, any>;
 
@@ -111,55 +112,52 @@ function walk(node: unknown, visit: (b: Block) => void): void {
 }
 
 /**
- * EVERY word a reader could see on the page, whatever prop holds it.
+ * The props that hold words, and nothing else.
  *
- * NOT A LIST OF PROP NAMES, and that is the whole point. `pageText`
- * below reads text/html/label/alt and `headings` reads blocks of type
- * "heading" — and between them they still miss the `heading` PROP that
- * `faq`, `faq_item` and `product_grid` carry. So "Our Products in A
- * City", or an FAQ question naming the city, is invisible to both, and a
- * check asking "does this page say the city" would have answered no
- * about a page that says it twice.
- *
- * This is G1's lesson in its final form: reading prose by prop name
- * cannot work in a block system where the same words live under
- * different keys. For a question of the form "does any visible text
- * contain this", the only safe reader is one that takes all of it.
- *
- * WORD COUNTS MUST NOT USE THIS — they are thresholds with history
- * behind them, and pageText is what they have always measured.
+ * SOURCED FROM provenance.ts, not re-typed. That file's own comment says
+ * "the same four everywhere" and it imports nothing on purpose, so it is
+ * the right place for the one declaration. `alt` is added here because
+ * this reader answers "what can a visitor or a crawler see on this
+ * page", and alt text is read aloud and indexed — while provenance
+ * answers "which props did the OWNER write", where it does not belong.
  */
-export function allText(sections: unknown): string {
-  const parts: string[] = [];
-  walk(sections, (b) => {
-    if (!b.props || typeof b.props !== "object") return;
-    for (const v of Object.values(b.props)) {
-      if (typeof v === "string" && v.trim()) parts.push(v.trim());
-    }
-  });
-  return parts.join(" ");
-}
+export const READABLE_PROPS: readonly string[] = [...TEXT_PROPS, "alt"];
 
 /**
- * The page's BODY text — the props named text, html, label and alt.
+ * Every word a visitor or a crawler can read on the page.
  *
- * NOT THE HEADINGS, and the comment here used to say "everything a
- * reader would actually read", which is not true and is a trap: a reader
- * reads the headings first. Found on 7 November 2026 while building G5,
- * whose "does this page say the city" check would have missed a hero
- * heading naming it. Use `allText` above for that kind of question.
+ * ONE READER, AND THE THIRD VERSION OF IT. The history is worth keeping
+ * because each attempt failed in a different direction:
  *
- * THE BEHAVIOUR IS DELIBERATELY UNCHANGED. Every word count in
- * auditSite reads this, so folding headings in would move the
- * thin-content threshold for every business at once. That is a product
- * decision, not a tidy-up, so it is written here rather than done.
+ *  1. Originally this read text/html/label/alt — and MISSED `heading`,
+ *     which is where `faq`, `faq_item`, `product_grid` and the contact
+ *     block keep their words. A page whose only mention of its city was
+ *     a section heading read as never mentioning it (found 7 Nov 2026
+ *     while building G5). Note that heading BLOCKS were always covered:
+ *     their words live in `props.text`. It is the heading PROP on other
+ *     blocks that fell through.
+ *  2. The first fix was a second function that read EVERY string prop.
+ *     That is worse, and in both directions at once: `href`, `url`,
+ *     `align`, `background` and `style` are machine values, so a thin
+ *     page with fifty buttons would pass the word count, and a slug
+ *     like "/candles-in-a-city" would answer "yes, the page says the
+ *     city" when no reader ever sees it.
+ *  3. So: a DECLARED list, complete, in one place, with
+ *     tests/blockPropsClassified.test.ts failing the suite when the
+ *     registry gains a prop that is in neither list. The lesson was
+ *     never "read everything" — it was that an inclusion list nobody
+ *     checks goes stale silently.
+ *
+ * THE WORD COUNT MOVED when `heading` was added, and that is the point:
+ * a page with a 60-word heading section was never thin, and an FAQ whose
+ * questions were not counted was being measured on half its words.
  */
 export function pageText(sections: unknown): string {
   const parts: string[] = [];
   walk(sections, (b) => {
     if (!b.props || typeof b.props !== "object") return;
     for (const [key, v] of Object.entries(b.props)) {
-      if (typeof v === "string" && v.trim() && ["text", "html", "label", "alt"].includes(key)) parts.push(v.trim());
+      if (typeof v === "string" && v.trim() && READABLE_PROPS.includes(key)) parts.push(v.trim());
     }
   });
   return parts.join(" ");

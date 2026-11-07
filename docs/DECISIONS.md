@@ -3371,6 +3371,75 @@ below an early return. Each was rewritten to mutate what actually runs.
 **Unverified live.** No business has a second address on record, because
 there is no real business.
 
+## 8 Nov 2026 — One text reader, and a test that keeps its list complete
+
+The founder asked for `pageText` and `allText` to be unified while there
+is no real business to disturb. Doing it turned up a bug in the `allText`
+shipped the day before, so the unify is not the one he described.
+
+**`allText` read EVERY string prop, and that is wrong in both
+directions.** The registry's props include `href`, `url`, `align`,
+`background` and `style`. Counting those as words means a thin page with
+fifty buttons passes the word count, and a slug like
+`/candles-in-a-city` answers "yes, the page says the city" when no reader
+ever sees it. The second failure is in G5's own feature.
+
+**So the answer was not "read everything".** It was that an inclusion
+list nobody checks goes stale silently — which is what happened the first
+time, when the list missed `heading` and a page whose only mention of its
+city was a section heading read as never mentioning it. One reader now,
+over a DECLARED list, with `tests/blockPropsClassified.test.ts` failing
+the suite when the registry gains a prop that is in neither list.
+
+**The registry already knew.** Every `propFields` entry declares a
+`type`, and `text` and `richtext` are the ones that hold words — which
+resolve to exactly `alt heading html label text`. So the completeness
+test compares the reader's list against the registry's own
+classification rather than against a list written here. Add a `caption`
+prop to a block and the suite fails until the audit is told about it.
+
+**One declaration, not a fourth copy.** The four word props are spread
+from `TEXT_PROPS` in `lib/pages/provenance.ts`, whose own comment already
+said "the same four everywhere" and which imports nothing on purpose.
+`alt` is the one addition, in the audit only: this reader answers "what
+can a visitor or a crawler see", while provenance answers "which props
+did the OWNER write", where alt does not belong. A test pins that the
+list is SPREAD rather than re-typed, because a hand-typed copy with the
+same four values passes every assertion about values and then drifts the
+first time provenance changes.
+
+**A correction to yesterday's entry.** It said heading BLOCKS were not
+read. They always were — their words live in `props.text`. It is the
+`heading` PROP on `faq`, `faq_item`, `product_grid` and the contact block
+that fell through. Saying otherwise sent the first investigation in the
+wrong direction, so both the claim and the fix are now stated precisely
+in the code.
+
+**The word count moved, on purpose, and nothing disagreed.** Adding
+`heading` means an FAQ's questions and a section heading now count toward
+`MIN_WORDS`. That was the behaviour change held back yesterday as the
+founder's call; he made it. The full suite — 6,282 tests — passed without
+a single existing assertion needing to change, which is the useful part
+of the report: the threshold moved and no test that had an opinion about
+it disagreed.
+
+**`BLOCK_TEXT_KEYS` in `lib/claims/guardBlocks.ts` is still a duplicate
+of `TEXT_PROPS`** — identical values, declared separately. Not touched
+here: it is the guard's WRITE list, a different job from the audit's
+reader, and folding it in is a second change to the claims guard rather
+than part of this one. Worth doing; worth doing on its own.
+
+**Mutation score 19/20, with one equivalent.** Measuring the word count
+over `JSON.stringify(sections)` survived — and it is equivalent rather
+than a gap: `JSON.stringify` emits no spaces outside string values, so a
+page of twenty one-word button labels counts as a single word and is
+reported thin either way, while a prose page keeps the spaces its prose
+already had. The test written while chasing it stays, because it pins
+something nothing asserted before: a page whose only text is twenty
+links has nothing to say.
+
+**Unverified live.** Nothing has run against a real site.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

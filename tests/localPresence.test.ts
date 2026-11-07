@@ -297,10 +297,9 @@ describe("8. THE RUNNER: ONE SIGNAL, AND A FAILED READ FINDS NOTHING", () => {
   }
 
   // THE CITY SITS IN A `heading` PROP ON A NON-HEADING BLOCK, which is
-  // the exact case that defeated the first version. pageText skips the
-  // `heading` prop and headings() wants a block of type "heading", so
-  // neither would have seen it — and the check would have told an owner
-  // whose page names his city that it never does.
+  // the exact case that defeated the first version: pageText skipped the
+  // `heading` prop, so the check would have told an owner whose page
+  // names his city that it never does.
   const homePage = {
     slug: "home",
     page_type: "home",
@@ -323,11 +322,12 @@ describe("8. THE RUNNER: ONE SIGNAL, AND A FAILED READ FINDS NOTHING", () => {
     expect(payload.confidence).toBe("counted");
   });
 
-  it("THE CITY IS FOUND IN A `heading` PROP, which pageText does not read", async () => {
-    // The reason `allText` exists. pageText covers text/html/label/alt
-    // and headings() wants a "heading" BLOCK — so the `heading` prop on
-    // faq, faq_item and product_grid falls between them, and this check
-    // would have reported a missing city on a page that names it.
+  it("THE CITY IS FOUND IN A `heading` PROP, wherever the block keeps it", async () => {
+    // pageText read text/html/label/alt and MISSED `heading`, which is
+    // where faq, faq_item and product_grid keep their words — so this
+    // check reported a missing city on a page that names it. One reader
+    // for the whole audit since 7 Nov 2026, and
+    // tests/blockPropsClassified.test.ts is what keeps its list complete.
     const result = await recordLocalPresence(db(), "d1", [homePage]);
     expect(result.findings.map((f) => f.code)).not.toContain("city_missing_from_landing");
   });
