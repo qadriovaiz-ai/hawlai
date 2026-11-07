@@ -195,7 +195,7 @@ exist, and three are new.
 | **G1** ✅ | **Duplicate body text and stale pages** — two more findings beside the nine `technicalAudit.ts` already has: the same paragraph on two pages, and a page nobody has touched in N months. Pure functions over `sections`, no new surface. | the audit | **S** |
 | **G2** | **Keyword clusters from the real queries** — group what Search Console actually reports, by shared words and intent. Replaces `competitor_keywords`' invented ten with the owner's own demand. | SEO toolkit | **S/M** |
 | **G3a** ✅ | **A page can be a draft.** The safety foundation G3 cannot be built without — and a fix for a hazard that was already live. | the builder | **S/M** |
-| **G3** | **Query gap → a page that answers it**, briefing included — the one missing hop in the vision's own chain. The planning step (topic, the queries it answers, the points to cover) is part of this hop, not a separate feature. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
+| **G3** ✅ | **Query gap → a page that answers it**, briefing included — the one missing hop in the vision's own chain. The planning step (topic, the queries it answers, the points to cover) is part of this hop, not a separate feature. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
 | **G4** | **Page speed, measured** — the only item with a genuine external dependency. PageSpeed Insights has a free API; it needs a key, a cap, and a decision about cost and cadence. Until then the honest state is "not measured", not "6 suggestions". | the audit | **M**, and a cost decision |
 | **G5** | **Entity consistency across site, Maps and socials** — name, address and phone compared between `business_listing_facts`, the Place record and what the storefront prints. This is PLAN-LOCAL-SEO's **L2**, already written and unbuilt. | local plan L2 | **S/M** |
 
@@ -282,6 +282,55 @@ never harder than putting it up (rule 6's reasoning).
 **A draft says it is one.** A page the owner cannot find on the live
 site, with no explanation, would be worse than one published empty — at
 least that was visible.
+
+### G3 as built — 7 November 2026
+
+**The hop exists now.** A search with real demand and no page produces an
+approval card; approving it creates the page, unpublished.
+
+| File | What it does |
+|---|---|
+| `src/lib/opportunities/pageProposal.ts` | the proposal, pure: title, slug, the searches it answers, what is on record, what is missing |
+| `src/lib/opportunities/proposePage.ts` | one card per run, asked once per search ever, through `requestApproval` |
+| `src/lib/executionPolicy.ts` | `create_page_draft` — create, low risk, asks first |
+| `src/app/api/approvals/[id]/route.ts` | the branch that creates it, unpublished, with the slug re-derived |
+| `src/lib/growth/measures.ts` | declared not-collected, with the reason |
+
+**What a proposal is allowed to contain** is the whole design, and it is
+the audit's central finding turned into code: the vision asks for
+measurement and several things here that carry the right name are
+advice. So — the **query** as the customer typed it (never a keyword a
+model thought was "probably" being searched), the **impressions**
+counted from Google, **which recorded notes belong on it** by title, and
+**which answers are missing**, named.
+
+**That last part is what keeps it honest.** A buying page needs a price,
+a delivery time, a reply time and a reason to choose this business. If
+the owner has not answered those, the card says so — *"I don't have your
+Price range, Delivery time yet, so I can't write the page for you"* —
+instead of the page being written around the hole. Every name in that
+sentence is a real interview question (I2), so it is something the owner
+can go and answer.
+
+**Not one word of customer-facing copy is written here.** The page is
+created empty and unpublished; the words come from the owner or from a
+generator that goes through the claims guard. A test asserts the module
+contains no selling point, claim or statistic — the thing §8 argued
+back about.
+
+**One card per run, asked once per search, ever.** Three cards saying
+"write a page" is a backlog, and a backlog is what gets closed unread.
+A rejected card counts as asked: *no* is an answer.
+
+**The outcome is declared not-measurable, and the reason matters:** this
+action cannot move a number, because the page is empty and unpublished
+until the owner acts. The thing worth measuring is the page **going
+live**, which is a different action this product does not record yet —
+and when it does, that is what gets `impressions for this search` with
+its baseline on the day it was published.
+
+**Unverified live:** no card has been raised, no page created from one.
+There is no real business with Search Console data to find a gap in.
 
 **And two smaller ones**, both already named in existing plans rather
 than new: the AEO check on a schedule (**A5**, behind a flag) and who

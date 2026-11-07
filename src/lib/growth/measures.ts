@@ -92,6 +92,20 @@ const NOT_COLLECTED: Record<string, Measure> = {
   // puts those counts on the owner's screen instead, where they are
   // read rather than scored.
   grant_autonomy: { metric: "what this did while it was running on its own", source: null, direction: "up" },
+  // G3, 7 November 2026. NOT COLLECTED, and the honest reason is that
+  // this action cannot move a number at all: the page is created EMPTY
+  // and UNPUBLISHED (migration 223), so until the owner writes it and
+  // presses Publish there is nothing for a search to find. Naming
+  // search_console as the source here would record a failure for a page
+  // that was never put up — the product scoring the owner's inbox
+  // rather than its own work.
+  //
+  // THE THING WORTH MEASURING IS THE PAGE GOING LIVE, which is a
+  // different action and one this product does not record yet. When it
+  // does, that is what gets `{ metric: "impressions for this search",
+  // source: "search_console" }` — and the baseline is the day it was
+  // published, not the day it was proposed.
+  create_page_draft: { metric: "impressions for the search this page answers", source: null, direction: "up" },
   auto_reply_dm: { metric: "replies this automation sent", source: null, direction: "up" },
   dm_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },
   comment_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },

@@ -435,6 +435,72 @@ export async function PATCH(
     // stored action_details is still a value the server should not act
     // on blindly. The database refuses it too (migration 220), so this
     // is the second of three gates rather than the only one.
+    // CREATING THE PROPOSED PAGE — G3.
+    //
+    // THE PAGE IS CREATED UNPUBLISHED, and that is not a detail: before
+    // migration 223 there was no draft state, and approving this card
+    // would have put an empty page on the live site and into
+    // /sitemap.xml. The flag is written here as a literal, never read
+    // from the card.
+    //
+    // THE SLUG IS RE-DERIVED FROM THE TITLE, never taken from the row.
+    // The same lesson the toggle and autonomy branches both record: a
+    // stored action_details is a value the server should not act on
+    // blindly. A slug from the card could point at an existing page and
+    // the insert would collide with the (website_id, slug) unique
+    // constraint — or worse, not collide and sit somewhere nobody meant.
+    if (approval?.action_type === "create_page_draft") {
+      const { slugFromQuery, titleFromQuery } = await import("@/lib/opportunities/pageProposal");
+      const { legacyToBlocks } = await import("@/lib/blocks/convertLegacy");
+
+      const query = String((approval.action_details as any)?.query ?? "").trim();
+      const title = titleFromQuery(query);
+      const slug = slugFromQuery(query);
+      if (!title || !slug) {
+        return NextResponse.json({ error: "That proposal has no page title in it, so nothing was created." }, { status: 400 });
+      }
+
+      const { data: website } = await service
+        .from("websites")
+        .select("id")
+        .eq("dealership_id", approval.dealership_id)
+        .maybeSingle();
+      if (!website) {
+        return NextResponse.json({ error: "There's no website to add a page to yet, so nothing was created." }, { status: 400 });
+      }
+
+      const { data: existing } = await service.from("website_pages").select("slug, order_index").eq("website_id", website.id);
+      // A PAGE AT THAT ADDRESS ALREADY EXISTS. Said rather than
+      // worked around with a numbered slug: the owner approved a page
+      // for a search, and a second page at `-2` is not that.
+      if ((existing ?? []).some((p: any) => p.slug === slug)) {
+        return NextResponse.json(
+          { error: `You already have a page at /${slug}, so nothing was created. Open that one instead.` },
+          { status: 400 }
+        );
+      }
+      const maxOrder = Math.max(-1, ...(existing ?? []).map((p: any) => p.order_index ?? 0));
+
+      const { error: pageError } = await service.from("website_pages").insert({
+        website_id: website.id,
+        slug,
+        title,
+        page_type: "custom",
+        meta_description: null,
+        // EMPTY, AND EMPTY ON PURPOSE. Not one word of copy is written
+        // by this: the owner writes it, or a generator that goes
+        // through the claims guard does. A heading and a blank
+        // paragraph is the same shape Add Page creates.
+        sections: legacyToBlocks([{ type: "hero", headline: title, subheadline: "", ctaText: "" }, { type: "text", heading: "", body: "" }]),
+        order_index: maxOrder + 1,
+        published: false,
+      });
+      if (pageError) {
+        console.error(`[approvals] could not create the proposed page for ${approval.dealership_id}: ${pageError.message}`);
+        return NextResponse.json({ error: "Could not create that page just now." }, { status: 500 });
+      }
+    }
+
     if (approval?.action_type === "grant_autonomy") {
       const wanted = String((approval.action_details as any)?.action_key ?? "");
       const { isAllowlistedForL2 } = await import("@/lib/autonomy/policy");

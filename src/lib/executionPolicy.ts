@@ -142,10 +142,36 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // public copy about the business, written from a chat message, so it
   // is gated like the rest of this group rather than on cost.
   update_page_meta: { actionType: "edit", riskLevel: "medium", description: "Change the search title or meta description on a page of the merchant's own site — what Google and link previews show", requiresApproval: true },
-  // The words a visitor reads on the page itself. There is no draft
-  // layer inside a published site — website_pages IS what /site/{slug}
-  // renders — so an approved edit is public the moment it saves.
+  // The words a visitor reads on the page itself.
+  //
+  // CORRECTED 7 November 2026 (G3a, migration 223). This comment used to
+  // say "there is no draft layer inside a published site", which was
+  // true when it was written and is not any more: `website_pages` now
+  // has its own `published` column. What has NOT changed is the thing
+  // that mattered — an approved edit to an ALREADY-PUBLISHED page is
+  // public the moment it saves, because that page's flag is already
+  // true. The draft layer protects a NEW page, not an edit to a live
+  // one, so this action's risk is unchanged.
   update_page_text: { actionType: "edit", riskLevel: "medium", description: "Change a heading, paragraph or button label on a page of the merchant's own site — what a visitor reads", requiresApproval: true },
+
+  // ---- Proposing a page for a search that has none (G3) ------------
+  //
+  // CREATE, NOT PUBLISH, and the distinction is the whole reason this is
+  // low risk: the page is created with its `published` flag false
+  // (migration 223), so nothing is reachable and nothing enters
+  // /sitemap.xml until the owner presses Publish on it. Deleting it
+  // afterwards costs one click.
+  //
+  // IT STILL ASKS FIRST. A product that adds pages to someone's site
+  // unprompted is a product they stop trusting with their site, and the
+  // card is also where the proposal's own honesty lives: which searches,
+  // how many impressions, which recorded facts belong on it, and which
+  // answers are missing.
+  //
+  // NOT ONE WORD OF COPY IS WRITTEN BY IT. The page is empty. The words
+  // come from the owner, or from a generator that goes through the
+  // claims guard.
+  create_page_draft: { actionType: "create", riskLevel: "low", description: "Create a new, unpublished page on the merchant's own site for a search their site has no answer for — empty, and not reachable until they publish it", requiresApproval: true },
 
   // ---- Granting the product permission to act alone (S7/P5) --------
   //

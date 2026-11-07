@@ -2809,6 +2809,126 @@ real platform I would expect the verify query's two numbers to match
 exactly; if they ever differ, something has written `false` to a page
 that was already public, and that is worth stopping for.
 
+## 7 November 2026 — G3: the hop the vision asks for
+
+**A search with real demand and no page now produces an approval card,
+and approving it creates the page unpublished.** Everything on either
+side of this was already built; what was missing was the sentence
+between them.
+
+### What a proposal may contain, which is the whole design
+
+This is the audit's central finding turned into code. That audit found
+that the vision asks for **measurement** while several things in this
+product carrying the right name are **advice** — `site_speed` writes six
+generic suggestions without looking at the site, `competitor_keywords`
+returns ten keywords competitors are *probably* targeting. A proposal
+built from invented keywords would have been the fourth.
+
+So a proposal contains only:
+
+| In it | Where it comes from |
+|---|---|
+| the query | the customer's own typing, via Search Console |
+| the impressions | counted, Google's |
+| which recorded notes belong on it | the owner's own `business_knowledge`, matched on the search's content words |
+| which answers are missing | interview question keys (I2), filtered to unanswered |
+
+**And the missing half is what keeps it honest.** A buying page needs a
+price, a delivery time, a reply time and a reason to choose this
+business. If those are not on record the card says so rather than
+letting the page be written around the hole — and every name in that
+sentence is a question the owner can actually go and answer, because a
+test holds that each one is a real registry key.
+
+**The title is the customer's own search, tidied.** That is the only
+source of a page title that cannot smuggle one trade's vocabulary in
+(rule 3) — and it is capitalised as a sentence, not word-by-word, so it
+does not read like a headline nobody wrote.
+
+### A design error a test found
+
+`slugFromQuery` fell back to the whole search when it had no meaningful
+words in it, which turned *"the best near me"* into a page at
+`/the-best-near-me` — **a slug manufactured entirely out of filler, for
+a search that does not say what it is about.** A search with no subject
+cannot name a page. The fallback is gone and `proposalFor` refuses it.
+
+### Nothing acts without a registry entry
+
+`create_page_draft`: create, **low** risk, `requiresApproval: true`.
+
+Low risk because **nothing becomes public** — the page is created with
+`published: false` (migration 223, G3a), so it is unreachable and absent
+from `/sitemap.xml` until the owner presses Publish, and deleting it
+costs one click. It still asks first, because a product that adds pages
+to someone's site unprompted is one they stop trusting with their site.
+
+**The slug is re-derived in the route, never read from the card** — the
+lesson the toggle and autonomy branches both record: a stored
+`action_details` is a value the server should not act on blindly. And a
+collision is **said**, not worked around with a numbered slug: the owner
+approved a page for a search, and a second page at `-2` is not that
+page.
+
+### Asked once per search, one card per run
+
+Three cards saying "write a page" is a backlog, and a backlog is what
+gets closed unread. A card already raised for a search stops another
+**whatever the owner decided** — rejected counts, because *no* is an
+answer. A failed read proposes nothing rather than risking a duplicate:
+the cost of staying quiet is one missed card, and the cost of being
+wrong is a duplicate page on a real site.
+
+### The outcome is declared not-measurable, and that is not a shrug
+
+A guard in `recordDecision.test.ts` refuses an action type that is in
+neither the measured list nor the not-collected one, and it caught this
+immediately.
+
+**The honest answer is that this action cannot move a number.** The page
+is empty and unpublished until the owner acts, so naming
+`search_console` as the source would record a failure for a page that
+was never put up — the product scoring the owner's inbox rather than its
+own work. The thing worth measuring is the page **going live**, which is
+a different action this product does not record yet. When it does, that
+is what gets `impressions for this search`, with its baseline on the day
+it was published. Written down rather than left to be rediscovered.
+
+### A comment that had become false
+
+`executionPolicy.ts` said, above `update_page_text`: *"There is no draft
+layer inside a published site — website_pages IS what /site/{slug}
+renders."* True when written; **false since migration 223 the same day.**
+Corrected, with what did *not* change stated too: an approved edit to an
+already-published page is still public the moment it saves, because that
+page's flag is already true. The draft layer protects a new page, not an
+edit to a live one, so that action's risk is unchanged.
+
+### Mutations: 35 of 35 killed, and the three survivors were one family
+
+Three went green on the first pass, all of them the same kind of weak
+assertion — the third day in a row this family has shown up:
+
+- **An assertion that read the constant it was testing.**
+  `proposalFor(gap(..., PAGE_WORTH_IT - 1))` moves with the constant, so
+  lowering the threshold to 1 kept the test passing. It asserts the
+  number now, and fixed values either side of it.
+- **A substring again.** *"1 searches, together 90 times in 28 days"*
+  CONTAINS *"90 times in 28 days"*, so the singular test was satisfied
+  by the plural sentence — the same trap as `weak:` inside `is_weak:`
+  yesterday. It now asserts the plural phrasing is absent.
+- **A source grep cannot see reachability.** Replacing the collision
+  check with `if (false)` left its message sitting in the source and the
+  test green. What a grep has to pin is **the test being made**, not the
+  words printed when it fails.
+
+### Unverified live
+
+No card has been raised and no page created from one. There is no real
+business with Search Console data to find a gap in, so the thresholds
+and the grouping are reasoned rather than observed.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
