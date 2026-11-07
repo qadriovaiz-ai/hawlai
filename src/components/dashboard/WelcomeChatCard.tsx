@@ -8,6 +8,7 @@ import ConnectStep from "@/components/onboarding/ConnectStep";
 import ConfirmBusinessStep, { type ConfirmedBusiness } from "@/components/onboarding/ConfirmBusinessStep";
 import BrandStep, { type BrandAnswer } from "@/components/onboarding/BrandStep";
 import PhotosStep from "@/components/onboarding/PhotosStep";
+import ListingFactsStep from "@/components/onboarding/ListingFactsStep";
 import { connectKindFor, nextStep } from "@/lib/onboarding/steps";
 import { DEFAULT_LANGUAGE, composeToneOfVoice, hinglishFrom, type PreferredLanguage, type ToneTag } from "@/lib/onboarding/brand";
 import OnboardingProgress from "@/components/onboarding/OnboardingProgress";
@@ -334,6 +335,36 @@ export default function WelcomeChatCard({ dealershipName, ownerName }: { dealers
       <div className="w-full max-w-xl animate-fade-in-up">
         <Progress />
         <PhotosStep onFinished={() => goAfter("photos")} onSkip={handleSkip} />
+      </div>
+    );
+  }
+
+  // THE LISTING FACTS (I4). Two screens, four questions, and not one
+  // prompt written here: ListingFactsStep reads them from the registry
+  // in lib/onboarding/interview.ts, where a test holds that none of
+  // them names a trade.
+  if (step === "listing_contact") {
+    return (
+      <div className="w-full max-w-xl animate-fade-in-up">
+        <Progress />
+        <ListingFactsStep
+          questionKeys={["public_phone", "areas_served", "street_address"]}
+          onSaved={() => goAfter("listing_contact")}
+          onSkip={handleSkip}
+        />
+      </div>
+    );
+  }
+
+  if (step === "listing_hours") {
+    return (
+      <div className="w-full max-w-xl animate-fade-in-up">
+        <Progress />
+        <ListingFactsStep
+          questionKeys={["opening_hours"]}
+          onSaved={() => goAfter("listing_hours")}
+          onSkip={handleSkip}
+        />
       </div>
     );
   }

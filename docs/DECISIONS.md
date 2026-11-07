@@ -2417,6 +2417,120 @@ in writing.
 Nothing calls `judgeAnswer`. No answer has been split, no follow-up has
 been asked, and no owner has seen a prompt.
 
+## 7 November 2026 — I4: the four questions, asked and written
+
+**Two onboarding screens, a route, and the first thing in this
+initiative that actually writes a row.** I4 of PLAN-AUTO-INTERVIEW.md.
+
+### Two screens for four questions, which departs from my own plan
+
+The plan's I4 row says "four steps". It is two, and the reason is the
+plan's own §2.1: three of the four are one-line answers that belong
+together, the week's opening hours is a seven-row grid that needs its
+own room, and four screens for four trivial questions is four
+transitions in a flow where **abandonment is the expensive failure** —
+because a half-filled record looks complete to a generator.
+
+Said here rather than quietly done. The registry drives both screens, so
+splitting them into four is a change to one list.
+
+**And they sit after the redesign's five screens, not inside them.**
+`presence → connect → confirm → brand → photos` stay contiguous; the
+listing questions join the block that follows, where the brand-voice
+questions already live. `TRANSITIONAL` — the list whose own comment says
+"nothing new goes on this list" — stays empty, because this is approved
+scope in both orders rather than drift.
+
+### The decision: recording a fact and publishing it are different
+### permissions
+
+Anyone on the business may record the phone number. **Only the owner may
+put it, or a street address, on a public page.** `profiles.dealership_id`
+says which business a user belongs to; `dealerships.owner_id` says
+whether they own it, and a team member belongs without owning.
+
+A non-owner who asks to publish is **refused and told**, not quietly
+written `false`. A silent false is a setting the owner would later find
+switched off with no explanation — and the screen would have looked as
+though it saved. **Turning publishing off is never refused**, which is
+rule 6's reasoning (the safe direction must not be the slow one) applied
+to a privacy flag instead of an automation.
+
+### Absent is not empty, and that is the trap this piece was shaped
+### around
+
+The two screens patch the same row. A cleaner that returned every column
+on every call would have **the hours screen wipe the phone screen's
+answers, every time, with nothing looking wrong** — the same trap the
+brand-profile route already records for `brand_voice`. So
+`cleanListingFactsPatch` includes only keys the caller actually sent, and
+`null` is a value (it is how a number comes off the record) while an
+absent key is left alone. A test asserts the two screens' patches share
+no key at all.
+
+The route refuses an empty patch rather than upserting one, because
+upserting nothing would stamp `answered_at` on a business nobody
+answered for.
+
+### Mutations: 34 of 34 killed across two passes, and three survivors
+### were the same weakness
+
+**Three assertions about the route were satisfiable by any occurrence in
+the file — and the file has two handlers that look alike.** Deleting the
+401 from PATCH left GET's copy matching the regex. Deleting the
+`profiles` read from PATCH left GET's. Both mutants survived tests whose
+names say they check exactly that. The handlers are now sliced apart and
+each assertion reads the one it is about.
+
+**This is CLAUDE.md rule 8's lesson arriving a third way.** The rule is
+written about comments defeating a grep; I3 hit it as escape sequences
+inside a regex literal; this is duplication between two functions. The
+general form is the one worth keeping: *an assertion satisfiable by any
+occurrence proves nothing about the occurrence that matters.*
+
+**A fourth was a regex that missed a parenthesis.**
+`expect(route).not.toMatch(/\.\.\.body/)` does not match
+`...(body as any)`, so a spread writing every client-sent field straight
+into the row survived.
+
+**A fifth was a fixture in the order it was asserting.** The hours grid
+was built Monday-first, so `Object.keys(grid)` and the week's own order
+were the same list, and a mutation that iterated the grid instead of the
+week changed nothing. The fixture is now deliberately out of order.
+
+**One was an anchor of mine that matched twice** (`STEP_ORDER` and
+`TARGET_ORDER` have identical tails) and so never applied. A mutation
+that never applies is not a passing one.
+
+**And one is not a real mutation**, reported as such: replacing the
+body's type check with `(body ?? {})` changes nothing observable,
+because `hasOwnProperty` returns false for every key on a string, a
+number or an array. The check is a cast-safety nicety with no reachable
+difference, and the test already asserts the behaviour that matters.
+
+### An existing test was restated, not weakened
+
+`tests/onboardingSteps.test.ts` asserted `totalSteps(ONE_LANGUAGE)` is
+**9**. Two approved steps made it 11, so a test whose subject had not
+changed went red.
+
+The literal was the problem. That describe block is called *"THE TOTAL IS
+DERIVED, SO IT CANNOT SAY FIVE"* — and pinning it to a number typed in
+the test made the test carry exactly the kind of hardcoded count it
+exists to forbid. Restated, it reads the total off `STEP_ORDER` and
+asserts the conditional step accounts for the difference. **Strictly
+stronger**: two mutations confirm it (making `language_notes`
+unconditional, and making `stepsFor` stop filtering) where the literal
+would only have caught a change in size.
+
+### Unverified live
+
+**Nothing has run.** No owner has walked these two screens, because
+there is no real business to walk them; the flow is asserted, not
+observed. Migration 221 is in production, so the first real signup will
+be the first row — and that will be the first genuine test of this
+piece.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

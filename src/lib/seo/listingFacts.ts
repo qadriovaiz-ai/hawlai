@@ -229,3 +229,79 @@ export function openingHoursSpecification(hours: HoursInterval[]): Record<string
     return { "@type": "OpeningHoursSpecification", dayOfWeek: day, opens: h.opens, closes: h.closes };
   });
 }
+
+// ---------------------------------------------------------------------
+// THE WRITE SIDE (I4 of docs/PLAN-AUTO-INTERVIEW.md).
+//
+// The reader above decides what a page may SAY. This decides what the
+// database may HOLD, and it is the only thing allowed to build that
+// payload — the route calls it and writes what it returns, so a field
+// the client invented cannot reach a column.
+// ---------------------------------------------------------------------
+
+/** A column this cleaner is willing to write, and nothing else is. */
+export type ListingFactsPatch = Partial<{
+  public_phone: string | null;
+  publish_phone: boolean;
+  opening_hours: HoursInterval[];
+  areas_served: string[];
+  street_address: string | null;
+  publish_street_address: boolean;
+}>;
+
+export type CleanedPatch = {
+  patch: ListingFactsPatch;
+  /** Publish flags the caller asked for but is not allowed to set. */
+  refusedPublish: string[];
+};
+
+/**
+ * The body, as columns — and ONLY the keys the caller actually sent.
+ *
+ * ABSENT IS NOT THE SAME AS EMPTY, and this is the lesson the
+ * brand-profile route already records: a caller that omits a key must
+ * leave the stored value alone, because the onboarding flow patches
+ * these columns from TWO separate screens. A cleaner that returned
+ * every column on every call would have the second screen wipe the
+ * first screen's answers, every time, and nothing would look wrong.
+ *
+ * `null` IS a value: it is how the owner clears a phone number he no
+ * longer wants on record. Only an absent key is left untouched.
+ *
+ * PUBLISH FLAGS ARE STRICTLY `true`. Migration 221 defaults both to
+ * false, and `readListingFacts` treats anything but `true` as "do not
+ * publish" — so the string "yes", the number 1 and the word "false" all
+ * mean no here. A privacy decision is not a truthiness question.
+ *
+ * `canPublish` is the caller's authority, decided by the route from the
+ * session. A caller without it may record the facts and may NOT turn
+ * them public; the flags it asked for come back in `refusedPublish` so
+ * the route can say so rather than silently storing a false.
+ */
+export function cleanListingFactsPatch(body: unknown, opts: { canPublish: boolean }): CleanedPatch {
+  const input = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const patch: ListingFactsPatch = {};
+  const refusedPublish: string[] = [];
+
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(input, key);
+
+  if (has("public_phone")) patch.public_phone = text(input.public_phone, 40);
+  if (has("street_address")) patch.street_address = text(input.street_address, 200);
+  // Normalised on the way in, so what is stored is what the reader will
+  // accept — a shape the reader refuses would be a row that exists and
+  // publishes nothing, which is the hardest kind of bug to see.
+  if (has("opening_hours")) patch.opening_hours = readHours(input.opening_hours);
+  if (has("areas_served")) patch.areas_served = readAreas(input.areas_served);
+
+  for (const flag of ["publish_phone", "publish_street_address"] as const) {
+    if (!has(flag)) continue;
+    const wanted = input[flag] === true;
+    if (wanted && !opts.canPublish) {
+      refusedPublish.push(flag);
+      continue;
+    }
+    patch[flag] = wanted;
+  }
+
+  return { patch, refusedPublish };
+}

@@ -128,18 +128,26 @@ describe("2. THE TOTAL IS DERIVED, SO IT CANNOT SAY FIVE", () => {
     // The failure this whole file is about: "Step 1 of 5" on a flow
     // that is longer than five.
     expect(totalSteps(ONE_LANGUAGE)).toBeGreaterThan(5);
-    expect(totalSteps(ONE_LANGUAGE)).toBe(9);
+    // READ OFF STEP_ORDER, NOT TYPED HERE. This assertion used to say
+    // `toBe(9)`, which made the test carry a hardcoded count — the very
+    // thing it exists to forbid — so I4's two approved steps broke a
+    // test whose subject had not changed. Restated, it is stronger: the
+    // total must equal what the built flow actually holds, minus the
+    // conditional step this owner is not asked.
+    expect(totalSteps(ONE_LANGUAGE)).toBe(STEP_ORDER.length - 1);
   });
 
   it("AND GROWS BY ONE FOR SOMEONE WHO WRITES IN BOTH, because that step is only asked then", () => {
-    expect(totalSteps(BOTH_LANGUAGES)).toBe(10);
+    expect(totalSteps(BOTH_LANGUAGES)).toBe(totalSteps(ONE_LANGUAGE) + 1);
+    expect(totalSteps(BOTH_LANGUAGES)).toBe(STEP_ORDER.length);
     expect(stepsFor(BOTH_LANGUAGES)).toContain("language_notes");
   });
 
   it("AND THE CONDITIONAL STEP IS ABSENT, NOT JUST UNCOUNTED, OTHERWISE", () => {
     expect(stepsFor(ONE_LANGUAGE)).not.toContain("language_notes");
     expect(stepNumber("language_notes", ONE_LANGUAGE)).toBeNull();
-    expect(stepNumber("language_notes", BOTH_LANGUAGES)).toBe(8);
+    // Its position comes from the order too, for the same reason.
+    expect(stepNumber("language_notes", BOTH_LANGUAGES)).toBe(STEP_ORDER.indexOf("language_notes") + 1);
   });
 
   it("matches the list it came from, for every step and both answers", () => {

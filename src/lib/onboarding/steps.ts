@@ -74,6 +74,26 @@ export type StepKey =
   | "confirm"
   | "brand"
   | "photos"
+  // THE LISTING FACTS — I4 of docs/PLAN-AUTO-INTERVIEW.md, approved
+  // 7 November 2026. The four questions without which a storefront
+  // cannot print a phone number, an opening time or a service area:
+  // before these, `businessNode` published the city and nothing else,
+  // and the claims guard's own header records what filled the gap.
+  //
+  // TWO SCREENS FOR FOUR QUESTIONS, and this is a deliberate departure
+  // from the plan's "four steps". Three of the four are one-line
+  // answers and belong together; the week's opening hours is a
+  // seven-row grid that needs its own room. Four screens for four
+  // trivial questions is four transitions, and §2.1 of that plan says
+  // abandonment is the expensive failure here — a half-filled record
+  // looks complete to a generator. The registry drives both, so
+  // splitting them into four is a change to one list.
+  //
+  // AFTER THE REDESIGN'S FIVE, NOT INSIDE THEM: presence → connect →
+  // confirm → brand → photos stay contiguous, and these join the block
+  // of questions that follows, where the brand-voice ones already live.
+  | "listing_contact"
+  | "listing_hours"
   // The brand-voice questions, kept on the founder's instruction of
   // 2 November: these are what make Hawlai's writing sound like this
   // business rather than like every business.
@@ -97,6 +117,8 @@ export const TARGET_ORDER: StepKey[] = [
   "confirm",
   "brand",
   "photos",
+  "listing_contact",
+  "listing_hours",
   "business_model",
   "formality",
   "language_notes",
@@ -118,6 +140,9 @@ export const TARGET_ORDER: StepKey[] = [
  * answer was then overwritten by a hardcoded "hinglish".
  * P5 (2 November): `photos` is new, and the built flow now matches
  * TARGET_ORDER exactly.
+ * I4 (7 November): `listing_contact` and `listing_hours` are new, and
+ * they are in TARGET_ORDER too — this is approved scope, not drift, so
+ * the two lists still match exactly and TRANSITIONAL stays empty.
  */
 export const STEP_ORDER: StepKey[] = [
   "presence",
@@ -125,6 +150,8 @@ export const STEP_ORDER: StepKey[] = [
   "confirm",
   "brand",
   "photos",
+  "listing_contact",
+  "listing_hours",
   "business_model",
   "formality",
   "language_notes",

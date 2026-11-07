@@ -150,7 +150,7 @@ addition, not a new system.
 | **I1** ✅ | **The L1 columns.** A `business_listing_facts` table (phone, hours, areas, address, `sameAs`, geo, and a publish flag beside each value), RLS from the start, a pure validator for hours and URLs, and `businessNode` publishing them. | **S** |
 | **I2** ✅ | **The question registry.** The interview as pure data: key, prompt, kind (choice / short text / long text / yes-no), where the answer is written, and whether it needs the falsifiability check. Industry-neutral by construction (rule 3) and asserted so. | **M** |
 | **I3** ✅ | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
-| **I4** | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
+| **I4** ✅ | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
 | **I5** | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
 | **I6** | **Tier 3, the on-demand ask.** Record which phrase was removed, turn a repeated gap into one question, deliver it through the existing card or email. | **M** |
 
@@ -267,6 +267,49 @@ stored and flagged, never blocked — decision 4.
 `business_knowledge` has no column for it, and I5 needs a progress table
 anyway, so the flag goes in with that rather than getting a migration of
 its own now. Until then `judgeAnswer` decides it and nothing records it.
+
+### I4 as built — 7 November 2026
+
+| File | What it does |
+|---|---|
+| `src/lib/onboarding/steps.ts` | two new steps, `listing_contact` and `listing_hours`, in **both** orders. `TRANSITIONAL` stays empty. |
+| `src/app/api/listing-facts/route.ts` | GET through RLS, PATCH through the service client after the session resolves the business. |
+| `src/lib/seo/listingFacts.ts` | `cleanListingFactsPatch` — the only thing that may build a write payload. |
+| `src/components/onboarding/ListingFactsStep.tsx` | one component, two screens, every prompt read from the registry. |
+
+**TWO SCREENS FOR FOUR QUESTIONS — a departure from this plan's own
+"four steps", and the reason is §2.1.** Three of the four are one-line
+answers and belong together; the week's opening hours is a seven-row
+grid that needs its own room. Four screens for four trivial questions is
+four transitions, and abandonment is the expensive failure here. The
+registry drives both screens, so splitting them into four later is a
+change to one list.
+
+**They come after the redesign's five screens, not inside them.**
+presence → connect → confirm → brand → photos stay contiguous; the
+listing questions join the block that follows, where the brand-voice
+questions already live. A test holds both halves.
+
+**Not one prompt is written in the component.** Every word the owner
+reads comes from the registry, where the rule-3 test lives. A prompt
+typed into a component would sit outside that test — so a test now fails
+if one appears.
+
+**The route is the authorization**, because migration 221 gives the
+table no client write policy at all. The business id is read from the
+caller's own `profiles` row, never from the body; the service client is
+only reached afterwards.
+
+**And one rule that is not plumbing: recording a fact and publishing it
+are different permissions.** Anyone on the business may record the phone
+number; only the **owner** may put it, or a street address, on a public
+page. A team member who asks to publish is refused and told — a silent
+false is a setting the owner would later find switched off with no
+explanation. Turning publishing **off** is never refused.
+
+**What I4 does NOT do:** nothing has run. No owner has walked these two
+screens, because there is no real business to walk them — so the flow is
+asserted, not observed.
 
 **I1 and I2 are worth having even alone**: I1 gives every future business
 somewhere truthful to put a phone number, and I2 turns the interview
