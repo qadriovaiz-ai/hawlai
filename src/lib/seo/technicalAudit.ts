@@ -36,6 +36,14 @@ export type AuditPage = {
   page_type?: string | null;
   sections?: unknown;
   og_image_url?: string | null;
+  /**
+   * When the owner (or Hawlai, with approval) last changed this page.
+   *
+   * Optional, and a page without it is NOT called stale: the column is
+   * read from the database, and "the audit could not see a date" is a
+   * different fact from "nobody has touched this in a year".
+   */
+  updated_at?: string | null;
 };
 
 export type AuditInput = {
@@ -53,6 +61,44 @@ export type SiteAudit = {
 const MIN_WORDS = 50;
 const MIN_DESCRIPTION = 50;
 const MAX_DESCRIPTION = 160;
+
+/**
+ * How long a shared passage must be before sharing it is a finding.
+ *
+ * G1 of docs/AUDIT-GROWTH-LOOP.md. Short repeated lines are not
+ * duplicate content — "Get in touch", an address, a tagline under every
+ * heading — they are a site having a voice. Twenty-five words is a
+ * paragraph, and a paragraph that appears on two pages is the thing
+ * search engines actually discount.
+ *
+ * Too low a number here would flag every well-built site, and a finding
+ * that fires against work the owner has already done teaches them to
+ * ignore findings — the same reasoning that fixed `no_faq`.
+ */
+const MIN_DUPLICATE_WORDS = 25;
+
+/**
+ * How long a page may go untouched before it is worth mentioning.
+ *
+ * TWELVE MONTHS, DELIBERATELY CONSERVATIVE. A page that has not changed
+ * is not automatically wrong — most of what a small business says about
+ * itself is still true a year later — so this is a low-priority hint
+ * that something may have gone out of date, not a fault. A six-month
+ * threshold would fire on almost every page of almost every site, which
+ * is the same as firing on none.
+ */
+const STALE_DAYS = 365;
+
+/**
+ * The block types that hold prose.
+ *
+ * `text` is a paragraph; `faq_item`'s `html` is an answer. Both are the
+ * kind of passage a search engine discounts when it appears twice. A
+ * heading, a button, an image's alt text and a product grid are not.
+ */
+const PROSE_BLOCKS = ["text", "faq_item"];
+
+import { isLegalPage } from "./pageKinds";
 
 type Block = Record<string, any>;
 
@@ -92,6 +138,62 @@ function hasFaqBlock(sections: unknown): boolean {
     if (b?.type === "faq_item" && String(b.props?.heading ?? "").trim() && String(b.props?.html ?? "").trim()) found = true;
   });
   return found;
+}
+
+/**
+ * The substantial passages on a page, normalised for comparison.
+ *
+ * ONE PASSAGE PER TEXT BLOCK, not per sentence: a shared sentence
+ * inside two different paragraphs is a coincidence, while a shared
+ * paragraph is a copy. Normalised so that whitespace, case and
+ * punctuation differences do not hide one — a passage pasted between
+ * pages is rarely re-typed identically.
+ */
+export function longPassages(sections: unknown, minWords = MIN_DUPLICATE_WORDS): string[] {
+  const out: string[] = [];
+  walk(sections, (b) => {
+    if (!b.props || typeof b.props !== "object") return;
+    // READ BY BLOCK TYPE, NOT BY PROP NAME, and a test found why: the
+    // `heading` block holds its words on a prop called `text`, while the
+    // `text` block holds its prose on one called `html`. Keying on the
+    // prop name therefore cannot tell a long heading from a paragraph —
+    // and a heading is not what duplicate body content means.
+    //
+    // These are the two block types in the registry that hold prose: a
+    // paragraph, and an FAQ answer. A new one has to be added here
+    // deliberately, which is the right amount of friction for a check
+    // that decides whether a page is discounted.
+    if (!PROSE_BLOCKS.includes(String(b.type ?? ""))) return;
+    for (const [key, v] of Object.entries(b.props)) {
+      if (typeof v !== "string" || key !== "html") continue;
+      const normalised = v
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!normalised) continue;
+      if (normalised.split(" ").length < minWords) continue;
+      out.push(normalised);
+    }
+  });
+  return out;
+}
+
+/**
+ * How many days ago this page was last changed, or null.
+ *
+ * NULL FOR AN UNREADABLE DATE, never a large number. "The audit could
+ * not see a date" and "nobody has touched this in a year" are different
+ * facts, and only one of them is the owner's problem.
+ */
+export function daysSinceChange(updatedAt: string | null | undefined, now = Date.now()): number | null {
+  const raw = String(updatedAt ?? "").trim();
+  if (!raw) return null;
+  const at = Date.parse(raw);
+  if (!Number.isFinite(at)) return null;
+  const days = Math.floor((now - at) / 86400000);
+  // A date in the future is a clock problem, not a stale page.
+  return days < 0 ? null : days;
 }
 
 function headings(sections: unknown): { level: number; text: string }[] {
@@ -171,6 +273,9 @@ export function auditSite(input: AuditInput): SiteAudit {
 
   const titleSeen = new Map<string, string[]>();
   const descriptionSeen = new Map<string, string[]>();
+  // G1. A passage, to the pages it appears on.
+  const passageSeen = new Map<string, string[]>();
+  const stale: string[] = [];
 
   for (const page of pages) {
     const text = pageText(page.sections);
@@ -191,6 +296,26 @@ export function auditSite(input: AuditInput): SiteAudit {
     if (broken.length) {
       brokenOn.push(page.slug);
       brokenLinks += broken.length;
+    }
+
+    // G1 — DUPLICATE BODY TEXT, and LEGAL PAGES ARE EXEMPT.
+    //
+    // A privacy policy and a terms page share standard wording with
+    // every other business's, and nothing penalises them for it. More to
+    // the point: a sentence is never removed from one on Hawlai's
+    // initiative (lib/seo/pageKinds.ts records why), so flagging it
+    // would be a finding with no action behind it.
+    if (!isLegalPage(page)) {
+      for (const passage of longPassages(page.sections)) {
+        const seen = passageSeen.get(passage) ?? [];
+        if (!seen.includes(page.slug)) seen.push(page.slug);
+        passageSeen.set(passage, seen);
+      }
+
+      // G1 — A PAGE NOBODY HAS TOUCHED. Legal pages again: last year's
+      // privacy policy is not out of date for being last year's.
+      const age = daysSinceChange(page.updated_at);
+      if (age !== null && age >= STALE_DAYS) stale.push(page.slug);
     }
 
     const noAlt = imagesMissingAlt(page.sections);
@@ -294,6 +419,24 @@ export function auditSite(input: AuditInput): SiteAudit {
     fix: "Describe what each picture shows, in a few words.",
     priority: "low",
     where: noAltOn,
+  });
+
+  add({
+    code: "duplicate_body",
+    problem: "The same paragraph appears on more than one page.",
+    impact: "Search engines pick one of the pages and discount the rest, so the others stop competing for anything.",
+    fix: "Keep the paragraph on the page it belongs to and write the others from what makes each page different.",
+    priority: "medium",
+    where: [...passageSeen.values()].filter((slugs) => slugs.length > 1).flat().filter((slug, i, all) => all.indexOf(slug) === i),
+  });
+
+  add({
+    code: "stale_content",
+    problem: `Pages not changed in over ${Math.round(STALE_DAYS / 30)} months.`,
+    impact: "Prices, timings and what you offer move on; a page that hasn't been read in a year is the one most likely to be wrong.",
+    fix: "Read it once and change anything that is no longer true. If it is all still true, it needs nothing.",
+    priority: "low",
+    where: stale,
   });
 
   if (pages.length > 0 && !pages.some((p) => p.page_type === "faq" || /faq|questions/i.test(p.slug) || hasFaqBlock(p.sections))) {

@@ -26,6 +26,19 @@ const image = (url: string, alt?: string) => ({ id: "i", type: "image", props: {
 const LONG =
   "Hand poured soy candles made in small batches in Shahjahanpur. Every candle cures for a full day before it leaves the studio, and we choose fragrances that actually carry across a room rather than fading after ten minutes of burning. The workshop runs for ninety minutes and you take home whatever you pour, whether it is your first candle or your fifth, with everything you need provided on the day.";
 
+// A SECOND BODY, ADDED 7 November 2026 (G1).
+//
+// `page()` builds every page from the same LONG paragraph, which was
+// fine while nothing compared bodies between pages. G1's
+// `duplicate_body` finding compares them — and two pages with the
+// identical paragraph IS duplicate content, so the "clean site" fixture
+// below stopped being clean. The finding was right; the fixture was a
+// convenience.
+//
+// Different words, same length, so the 50-word floor is still cleared.
+const LONG_OTHER =
+  "Our workshop sits above the shop and is open through the week, and there is always somebody there to answer a question about an order, a delivery date, or anything that has gone wrong with one. Orders placed before noon usually leave the same day, and anything made to order takes two or three days longer than that depending on what it is and how many of them there are.";
+
 function page(over: Partial<AuditPage> = {}): AuditPage {
   return {
     slug: "home",
@@ -142,10 +155,40 @@ describe("the checks themselves", () => {
       published: true,
       pages: [
         page(),
-        page({ slug: "faq", page_type: "faq", title: "Questions", meta_description: "Answers to what customers ask most: price, timing, and what is included in a workshop." }),
+        page({
+          slug: "faq",
+          page_type: "faq",
+          title: "Questions",
+          meta_description: "Answers to what customers ask most: price, timing, and what is included in a workshop.",
+          // ITS OWN WORDS, since G1. Two pages carrying the identical
+          // paragraph is duplicate content, and this fixture is meant to
+          // be a site with nothing wrong with it.
+          sections: [heading("Questions"), body(LONG_OTHER)],
+        }),
       ],
     });
     expect(clean.findings).toEqual([]);
+  });
+
+  it("AND A CLEAN SITE IS STILL CLEAN WHEN ITS PAGES HAVE BEEN EDITED RECENTLY", () => {
+    // The other half of the same claim, now that age is a finding: a
+    // fixture with no dates at all must not be called stale, because
+    // "the audit could not see a date" is not "nobody has touched this".
+    const recent = auditSite({
+      published: true,
+      pages: [
+        page({ updated_at: new Date().toISOString() }),
+        page({
+          slug: "faq",
+          page_type: "faq",
+          title: "Questions",
+          meta_description: "Answers to what customers ask most: price, timing, and what is included in a workshop.",
+          sections: [heading("Questions"), body(LONG_OTHER)],
+          updated_at: new Date().toISOString(),
+        }),
+      ],
+    });
+    expect(recent.findings).toEqual([]);
   });
 
   it("nothing measured is nothing claimed: no Core Web Vitals, no indexing verdicts", () => {

@@ -2626,6 +2626,105 @@ read on its own. Two mutations confirm it.
 has not judged a real answer, and no owner has seen the card. The first
 genuine run of this is still the first real business.
 
+## 7 November 2026 — G1: duplicate body text, and pages nobody has read
+
+**Two findings added to `technicalAudit.ts`, which now has eleven.**
+G1 of AUDIT-GROWTH-LOOP.md, the first of the five things that audit
+found genuinely missing.
+
+### Both thresholds exist to stop the finding firing on good work
+
+`MIN_DUPLICATE_WORDS = 25` and `STALE_DAYS = 365`, and neither number is
+a guess at a technical optimum — both are chosen so the finding does not
+fire on a site that is fine:
+
+- **Twenty-five words is a paragraph, not a tagline.** A short repeated
+  line — "Get in touch", an address, a strapline under every heading —
+  is a site having a voice, and flagging it would flag every
+  well-built site.
+- **Twelve months is deliberately conservative.** Most of what a small
+  business says about itself is still true a year later. Six months
+  would fire on almost every page of almost every site, which is the
+  same as firing on none.
+
+This is A2's `no_faq` reasoning applied twice: **a finding that fires
+against work the owner has already done teaches them to ignore
+findings.** `stale_content` is therefore priority `low`, and its fix
+line says out loud that the page may need nothing.
+
+### Legal pages are exempt from both, and the exemption is borrowed
+
+Standard privacy and terms wording is not penalised anywhere — and more
+to the point, `lib/seo/pageKinds.ts` already records that a sentence is
+never removed from a legal page on Hawlai's initiative, so a duplicate
+finding against one would have had **no action behind it**. Last year's
+privacy policy is not out of date for being last year's.
+
+The exemption uses `isLegalPage` rather than a fresh regex, because that
+file's own header says it: *"A safety rule kept in two places is a safety
+rule that will disagree with itself."*
+
+### An unreadable date is not a stale page
+
+`daysSinceChange` returns null for a missing date, an unparseable one,
+and a date in the **future** (a clock problem, not a stale page).
+"The audit could not see a date" and "nobody has touched this in a year"
+are different facts and only one of them is the owner's problem — the
+same distinction `null` carries everywhere else in this codebase.
+
+The daily runner's select had to grow `updated_at` for the finding to
+fire at all; without it every page looks undated and the check is dead
+code that passes its tests.
+
+### A design error a test caught
+
+The first version read prose by **prop name** — `["text", "html"]`. That
+cannot work here: the `heading` block holds its words on a prop called
+`text`, while the `text` block holds its prose on one called `html`. So
+a long heading was being collected as a paragraph.
+
+It now reads by **block type**, from a declared `PROSE_BLOCKS` list of
+the two registry types that hold prose. That also fixes the subtler
+case: `faq_item` carries its question on `heading` and its answer on
+`html`, and two pages asking the same question is normal while two pages
+giving the same long answer is a copy.
+
+### Mutations: 22 of 22 killed, and three survivors were overlapping
+### guards
+
+Three went red through an existing test rather than through the
+assertion named for them, which is the useful signal rather than a pass:
+
+- **De-duplicating slugs** changed nothing, because every fixture had one
+  paragraph per page. A page with the **same paragraph twice on itself**
+  is the shape that needs it — and it is not duplicate content either,
+  because search engines compare pages and that is one page.
+- **Adding `heading` to `PROSE_BLOCKS`** changed nothing, because the
+  prop filter blocked it anyway. Two overlapping guards, so neither
+  could be tested through the other — the same pattern as I1's
+  redundant `.length ?` checks. The declaration is what is pinned now.
+- **Removing the prop filter** changed nothing for the same reason, and
+  the case it actually exists for is the FAQ question. Now tested.
+
+### An existing fixture was corrected, not a test weakened
+
+`tests/technicalAudit.test.ts` has a test called *"A CLEAN SITE REPORTS
+NOTHING — no finding is invented to look busy"*, and it went red.
+
+**The finding was right and the fixture was a convenience:** `page()`
+builds every page from the same `LONG` paragraph, which was harmless
+while nothing compared bodies between pages. Two pages with the
+identical paragraph IS duplicate content. So the second page got its own
+words, and the claim is now also asserted with recent dates — a fixture
+with no dates must not be called stale either.
+
+### Unverified live
+
+The daily `site_audit` has not run with these findings against a real
+site, because there is no real site. **The thresholds are reasoned, not
+tuned against real pages**, and the first real business is where they
+get tested.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -192,11 +192,53 @@ exist, and three are new.
 
 | | What | Where it belongs | Size |
 |---|---|---|---|
-| **G1** | **Duplicate body text and stale pages** — two more findings beside the nine `technicalAudit.ts` already has: the same paragraph on two pages, and a page nobody has touched in N months. Pure functions over `sections`, no new surface. | the audit | **S** |
+| **G1** ✅ | **Duplicate body text and stale pages** — two more findings beside the nine `technicalAudit.ts` already has: the same paragraph on two pages, and a page nobody has touched in N months. Pure functions over `sections`, no new surface. | the audit | **S** |
 | **G2** | **Keyword clusters from the real queries** — group what Search Console actually reports, by shared words and intent. Replaces `competitor_keywords`' invented ten with the owner's own demand. | SEO toolkit | **S/M** |
 | **G3** | **Query gap → a page that answers it**, briefing included — the one missing hop in the vision's own chain. The planning step (topic, the queries it answers, the points to cover) is part of this hop, not a separate feature. Detection exists (`marketOpportunities`), page creation exists (`POST /api/website-builder/pages`), the claims guard and approval exist. This joins them: an opportunity above a demand threshold proposes a page, with its title and brief drawn from the query, through an approval card. | a new piece of PLAN-AEO-GEO | **M** |
 | **G4** | **Page speed, measured** — the only item with a genuine external dependency. PageSpeed Insights has a free API; it needs a key, a cap, and a decision about cost and cadence. Until then the honest state is "not measured", not "6 suggestions". | the audit | **M**, and a cost decision |
 | **G5** | **Entity consistency across site, Maps and socials** — name, address and phone compared between `business_listing_facts`, the Place record and what the storefront prints. This is PLAN-LOCAL-SEO's **L2**, already written and unbuilt. | local plan L2 | **S/M** |
+
+### G1 as built — 7 November 2026
+
+Two findings beside the nine `technicalAudit.ts` already had, and the
+audit now has eleven:
+
+| Finding | Fires when | Priority |
+|---|---|---|
+| `duplicate_body` | the same paragraph (25+ words) appears on more than one page | medium |
+| `stale_content` | a page has not changed in over 12 months | low |
+
+**Both thresholds exist to stop the finding firing on good work**, which
+is the reasoning that fixed `no_faq` in A2: a finding that fires against
+what the owner has already done teaches them to ignore findings. Twenty-
+five words is a paragraph, not a tagline — a shared line under every
+heading is a site having a voice. Twelve months is deliberately
+conservative: most of what a small business says about itself is still
+true a year later, so `stale_content` is a low-priority hint and its fix
+says so (*"If it is all still true, it needs nothing"*).
+
+**Legal pages are exempt from both.** Standard privacy and terms wording
+is not penalised anywhere, and `pageKinds.ts` already records that a
+sentence is never removed from one on Hawlai's initiative — so the
+finding would have had no action behind it. Last year's privacy policy
+is not out of date for being last year's.
+
+**An unreadable date is not a stale page.** `daysSinceChange` returns
+null for a missing date, an unparseable one and a date in the future
+(a clock problem). "The audit could not see a date" and "nobody has
+touched this in a year" are different facts, and only one is the owner's
+problem.
+
+**And one design error a test caught:** the first version read prose by
+PROP NAME, which cannot work — the `heading` block holds its words on a
+prop called `text` while the `text` block holds its prose on one called
+`html`. It now reads by BLOCK TYPE, from a declared list of the two
+block types that hold prose, so a long heading is never mistaken for a
+paragraph and an FAQ's *question* is never mistaken for its *answer*.
+
+**Unverified live:** the daily `site_audit` has not run with these two
+findings against a real site, because there is no real site. The
+thresholds are reasoned, not tuned against real pages.
 
 **And two smaller ones**, both already named in existing plans rather
 than new: the AEO check on a schedule (**A5**, behind a flag) and who

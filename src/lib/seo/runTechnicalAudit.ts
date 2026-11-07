@@ -25,7 +25,7 @@ export async function runTechnicalAudit(supabase: any, dealershipId: string): Pr
 
   const { data: pages } = await supabase
     .from("website_pages")
-    .select("slug, title, meta_description, page_type, sections, og_image_url")
+    .select("slug, title, meta_description, page_type, sections, og_image_url, updated_at")
     .eq("website_id", website.id);
 
   const audit = auditSite({ published: Boolean(website.published), pages: pages ?? [] });
