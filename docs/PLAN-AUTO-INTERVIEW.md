@@ -149,7 +149,7 @@ addition, not a new system.
 |---|---|---|
 | **I1** ✅ | **The L1 columns.** A `business_listing_facts` table (phone, hours, areas, address, `sameAs`, geo, and a publish flag beside each value), RLS from the start, a pure validator for hours and URLs, and `businessNode` publishing them. | **S** |
 | **I2** ✅ | **The question registry.** The interview as pure data: key, prompt, kind (choice / short text / long text / yes-no), where the answer is written, and whether it needs the falsifiability check. Industry-neutral by construction (rule 3) and asserted so. | **M** |
-| **I3** | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
+| **I3** ✅ | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
 | **I4** | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
 | **I5** | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
 | **I6** | **Tier 3, the on-demand ask.** Record which phrase was removed, turn a repeated gap into one question, deliver it through the existing card or email. | **M** |
@@ -222,6 +222,51 @@ business is not reported as permanently behind.
 
 **What I2 does NOT do:** nothing asks these questions yet and nothing
 writes an answer. I3 judges answers, I4 asks the four in onboarding.
+
+### I3 as built — 7 November 2026
+
+| File | What it does |
+|---|---|
+| `src/lib/knowledge/noteShape.ts` | the six categories and the note length, in **one** place — the validator writes to fit them and `businessFacts.ts` slices to them. |
+| `src/lib/onboarding/answerCheck.ts` | `splitToNotes`, `rowsForAnswer`, `hasCheckableDetail`, `isVague`, `followUpFor`, `judgeAnswer`. Pure and deterministic. |
+
+**The 200 is no longer a literal in two files, and that mattered.**
+`businessFacts.ts` already records what truncation did: content cut at
+`slice(0, 200)` mid-sentence meant *"'40 hours burn hota hai' could
+reach the model as a number with no unit."* A validator splitting at 200
+while the reader sliced at 180 would have reintroduced exactly that,
+quietly, with nothing failing. One constant, imported by both.
+
+**Split, never truncated — and the split prefers a sentence boundary**,
+because a fact broken in half is two wrong facts. A single sentence
+longer than a note falls back to a word boundary, and a single
+unbreakable word (a pasted URL) is cut rather than dropped. Nothing is
+lost: a test joins the notes back and compares them to the answer.
+
+**The vagueness check is deliberately under-eager, and that is the
+decision in this piece.** It cannot tell a specific noun from a vague one
+without a vocabulary — and a vocabulary of specific nouns would be one
+trade's words handed to every business, which is rule 3 and a leak this
+codebase has had twice. So it flags only an answer that has **nothing
+checkable AND reaches for a superlative**. "We have the best quality in
+the city" is flagged; "we press it by hand and let it rest overnight" is
+left alone. Being wrong in the other direction means arguing with an
+owner about a good answer, and an owner who cannot get past a question
+abandons the interview — the expensive failure in §2.1.
+
+**What counts as checkable is a digit or a unit, and nothing cleverer** —
+₹, %, km, kg, days, hours. All of them mean the same thing to a sweet
+shop and a coaching centre; none of them names what is being measured.
+
+**The follow-up quotes the owner's own word** ("'best' is not something
+a customer can check…") and offers the way out ("if there isn't one, say
+so and we'll leave it out"), asked **once**. A second weak answer is
+stored and flagged, never blocked — decision 4.
+
+**What I3 does NOT do:** the `weak` flag has nowhere to live yet.
+`business_knowledge` has no column for it, and I5 needs a progress table
+anyway, so the flag goes in with that rather than getting a migration of
+its own now. Until then `judgeAnswer` decides it and nothing records it.
 
 **I1 and I2 are worth having even alone**: I1 gives every future business
 somewhere truthful to put a phone number, and I2 turns the interview

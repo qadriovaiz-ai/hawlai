@@ -33,6 +33,7 @@ import { rowsForPrompt } from "@/lib/content/storyRows";
 import { seasonFor, formatSeason, outOfSeasonFestival, indiaToday, SEASON_TRUTH_RULE, type Season, type SeasonalEventRow } from "@/lib/expertise/seasonalCalendar";
 import { TEXT_PROPS, machineWroteProp } from "@/lib/pages/provenance";
 import { countsAsLead } from "@/lib/analytics/orderLinkage";
+import { KNOWLEDGE_NOTE_CHARS, KNOWLEDGE_NOTES_SHOWN } from "@/lib/knowledge/noteShape";
 
 type Row = Record<string, any>;
 
@@ -832,7 +833,13 @@ export function formatFactsForCopy(f: BusinessFacts, audience: FactsAudience = "
   // before they had none of them.
   if (notes.rows.length) {
     lines.push("What the owner says about the business:");
-    for (const k of notes.rows.slice(0, 12)) lines.push(`- ${k.title}: ${k.content.slice(0, 200)}`);
+    // THE 200 AND THE 12 COME FROM lib/knowledge/noteShape.ts (I3,
+    // 7 November 2026). They used to be literals here, and the
+    // interview's validator splits an answer to fit them — a validator
+    // splitting at 200 while this sliced at 180 would quietly
+    // reintroduce the mid-sentence cut recorded above, and nothing
+    // would fail.
+    for (const k of notes.rows.slice(0, KNOWLEDGE_NOTES_SHOWN)) lines.push(`- ${k.title}: ${k.content.slice(0, KNOWLEDGE_NOTE_CHARS)}`);
   }
   if (f.brand.description) lines.push(`How the owner describes the business: ${f.brand.description.slice(0, 300)}`);
   if (f.brand.pillars.length) lines.push(`Brand messaging pillars (the owner's own words): ${f.brand.pillars.join("; ")}`);

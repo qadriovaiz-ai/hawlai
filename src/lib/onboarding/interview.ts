@@ -38,9 +38,12 @@
 import { BUSINESS_MODELS, type BusinessModel } from "@/lib/business/businessModel";
 import { OFFER_PROMISES } from "@/lib/claims/offerPromises";
 
-/** The six the live CHECK on business_knowledge.category accepts (migration 189). */
-export const KNOWLEDGE_CATEGORIES = ["hours", "pricing_note", "policy", "faq", "general", "business_story"] as const;
-export type KnowledgeCategory = (typeof KNOWLEDGE_CATEGORIES)[number];
+// THE CATEGORIES MOVED TO lib/knowledge/noteShape.ts (I3, 7 November
+// 2026), because the answer validator and the facts layer need the same
+// list and the same note length. Re-exported here so this file stays
+// the one place a question's destination is read from.
+export { KNOWLEDGE_CATEGORIES, type KnowledgeCategory } from "@/lib/knowledge/noteShape";
+import type { KnowledgeCategory } from "@/lib/knowledge/noteShape";
 
 /**
  * What kind of answer this is, which decides the input and the check.

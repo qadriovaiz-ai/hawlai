@@ -2288,6 +2288,135 @@ survivor with a reason, and the reason is written in the test beside it.
 judges answers, I4 asks the four in onboarding. The registry is pure
 data: 40 tests assert its rules, and no owner has seen a single prompt.
 
+## 7 November 2026 — I3: judging an answer without reading it
+
+**The validator: split to fit, check the category, and follow up once on
+an answer that is only praise.** I3 of PLAN-AUTO-INTERVIEW.md.
+
+### The 200 was a literal in two files, and that was the real risk
+
+`businessFacts.ts` slices each recorded note to 200 characters before a
+model sees it, and that file already records what the cut did:
+*"content cut at `slice(0, 200)` — mid-sentence, so '40 hours burn hota
+hai' could reach the model as a number with no unit."*
+
+I3's job is to split an answer so it never needs cutting. **A validator
+splitting at 200 while the reader sliced at 180 would have reintroduced
+the mid-sentence cut, quietly, and nothing would have failed.** So the
+number moved into `src/lib/knowledge/noteShape.ts` with the six
+categories, and both files import it. Third extraction of this kind in
+three days (`provenance.ts` asked for it, `offerPromises.ts` in I2, this
+one now) and the reason is the same every time: a constant with two
+homes is a constant that will disagree with itself.
+
+**Pure, so it costs no bundle.** The validator and the registry are read
+by a client component and `businessFacts.ts` pulls in the whole facts
+layer.
+
+### Split, never truncate — and the boundary matters
+
+A sentence is kept whole wherever it fits, because **a fact broken in
+half is two wrong facts**. A single sentence longer than a note falls
+back to a word boundary; a single unbreakable word — a pasted URL — is
+cut, because losing the owner's answer is the worse option. A test joins
+the notes back together and compares them to what was typed, so nothing
+can be dropped silently.
+
+And a long answer becoming four rows is safe rather than lossy, because
+`rowsForPrompt` already says out loud how many rows did not fit: *"N
+more recorded note(s) did not fit here. Do not guess what they say."*
+
+### The decision: the vagueness check is deliberately under-eager
+
+The founder asked for a follow-up on a vague answer. The obvious reuse
+does not work, and this is worth writing down because somebody will try
+it: **`claimCheck` decides whether a claim is supported by the records,
+and here the answer IS the record.** There is nothing behind it to check
+it against, so the guard would pass "we have the best quality in the
+city" without complaint — and it would be right to, because those are
+the owner's own words about his own business.
+
+So the check is new, small, and structural: **does the answer contain
+anything a customer could check** — a digit or a unit — and does it
+reach for a superlative instead. Both conditions, deliberately:
+
+| Answer | Verdict | Why |
+|---|---|---|
+| "We have the best quality in the city" | **weak** | nothing checkable, and a superlative |
+| "The best because it burns 40 hours, not 25" | fine | a number rescues it |
+| "We press it by hand and let it rest overnight" | fine | no number, but no superlative either |
+
+**The third row is the decision.** This check cannot tell a specific noun
+from a vague one without a vocabulary of nouns — and a vocabulary of
+specific nouns would be one trade's words handed to every business,
+which is rule 3 and the leak this codebase has had twice. So a plain
+specific sentence it cannot recognise as specific is left alone. The
+asymmetry is chosen: a false "weak" means arguing with an owner about a
+good answer, and an owner who cannot get past a question abandons the
+interview — which is the expensive failure, because a half-filled record
+looks complete to a generator.
+
+**Units are industry-neutral by construction**: a rupee, a percentage, a
+day and a kilogram mean the same thing to a sweet shop and a coaching
+centre, and none of them names what is being measured.
+
+### Mutations: 42 of 42 killed across three passes, and one found a
+### rule-3 guard that guarded nothing
+
+Eight did not die on the first pass. Five were real test gaps, each the
+same shape — **a fixture that passed for the wrong reason**:
+
+- Every "a number passes" fixture also carried a unit ("2 to 3 **days**",
+  "**₹**650", "40 **hours**"), so deleting the digit half of the check
+  changed nothing: the unit half was quietly doing all the work.
+- The length test used one giant sentence, which takes the word-boundary
+  branch, so a mutation letting the sentence **accumulator** run to twice
+  the limit survived.
+- The unbreakable-word test asserted "more than one note" and "the x's
+  are in there", both still true when a 300-character note was emitted
+  whole.
+- The non-falsifiable fixtures were answers that are not vague anyway
+  ("None, we have no certification"), so dropping the `needsFalsifiable`
+  condition changed nothing about them.
+- The purity test read `answerCheck.ts` only, while `noteShape.ts` is
+  what it imports — and that is the file a client component pulls in.
+
+**And the one worth recording on its own.** A rule-3 assertion in my test
+read `expect(src).not.toMatch(/\bjars?\b/i)` over a file that is largely
+**regex literals**. In the source text a unit appears as `|\bjars?\b)`,
+so the character before "j" is the "b" of `\b` — a word character. There
+is no word boundary there, and the assertion could never have matched a
+trade word added inside the unit pattern. It looked exactly like a
+multi-tenant guard and guarded nothing. A word-boundary assertion cannot
+police a file made of regexes; the check is now a plain
+case-insensitive substring, over a named list of trade words, applied to
+both lists in the file.
+
+This is CLAUDE.md rule 8 in a new costume: that rule is about comments
+defeating a grep, and this is escape sequences doing the same thing.
+
+**Two others were broken mutations of mine** — one aimed at a comment
+line the assertion does not read, one with a double-escaped anchor that
+never applied. A mutation that never applies is not a passing one.
+
+**And one was a no-op against redundant code**: `isVague`'s
+`if (!t) return false` is already covered by the `&&` below it. Removed,
+as with I1's `.length ?` guards — redundant code cannot be guarded.
+
+### The gap I3 leaves, named rather than left to be found
+
+**The `weak` flag has nowhere to live.** `business_knowledge` has no
+column for it. `judgeAnswer` decides it and nothing records it, so until
+I5 — which needs a progress table anyway — a twice-failed answer is
+stored exactly like a good one. Giving it a migration of its own now
+would mean two migrations where one will do, so it waits, and it waits
+in writing.
+
+### Unverified live
+
+Nothing calls `judgeAnswer`. No answer has been split, no follow-up has
+been asked, and no owner has seen a prompt.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**
