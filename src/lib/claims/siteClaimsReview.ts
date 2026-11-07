@@ -28,6 +28,7 @@ import { pageLines } from "@/lib/pages/readPage";
 import { unknownProductName } from "@/lib/pages/editPage";
 import { findUnsupportedClaims } from "./claimCheck";
 import { scrubInventedContacts } from "./guardBlocks";
+import { OFFER_PROMISES } from "./offerPromises";
 import type { BusinessFacts } from "./businessFacts";
 
 type Row = Record<string, any>;
@@ -142,17 +143,19 @@ const LEGACY_FIELDS: [string, "text" | "heading" | "html" | "label"][] = [
  * customer expecting something — and check whether anything in the
  * catalogue or the owner's own words mentions it.
  */
-const OFFER_PATTERNS: { pattern: RegExp; name: string }[] = [
-  { pattern: /\bgift\s*(?:set|sets|hamper|hampers|box|boxes)\b/i, name: "gift sets" },
-  { pattern: /\b(?:bulk|wholesale|corporate)\s*(?:order|orders|enquir|pricing|gifting)/i, name: "bulk or corporate orders" },
-  { pattern: /\brestock\s*(?:alert|alerts|notification)/i, name: "restock alerts" },
-  { pattern: /\b(?:custom|personalis|personaliz|bespoke)\w*\s*(?:order|orders|set|sets|gift|gifts|label|labels)/i, name: "custom orders" },
-  { pattern: /\bsubscription\b|\bmonthly\s*box\b/i, name: "a subscription" },
-  { pattern: /\bwedding\s*(?:favour|favor|favours|favors|gift|gifts)\b/i, name: "wedding favours" },
-  { pattern: /\bgift\s*wrap\w*\b/i, name: "gift wrapping" },
-  { pattern: /\bsample\s*(?:pack|packs|set|sets)\b|\bfree\s*sample/i, name: "samples" },
-  { pattern: /\bworkshop\b|\bclass\b/i, name: "workshops" },
-];
+// MOVED TO lib/claims/offerPromises.ts (I2, 7 November 2026), and the
+// reasoning above it is this file's own, carried across unchanged.
+//
+// WHY: the onboarding interview asks the owner whether he makes each of
+// these promises, so a "yes" is on record before a page says it and a
+// "no" is on record so this review can refuse it. Asking about a
+// DIFFERENT nine than the nine this file watches for would be worse
+// than not asking — the interview would collect answers nobody checks
+// and this review would keep flagging promises nobody was asked about.
+//
+// One list, imported by both. A tenth promise added there is asked
+// about automatically.
+const OFFER_PATTERNS = OFFER_PROMISES;
 
 /** Whether the business's own records mention this offer anywhere. */
 function offerIsOnRecord(name: RegExp, f: BusinessFacts): boolean {

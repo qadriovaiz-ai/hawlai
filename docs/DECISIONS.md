@@ -2196,6 +2196,98 @@ so I4 has somewhere truthful to put an answer. No business has listing
 facts, so no page's structured data has changed, and the migration has
 not been run in production.
 
+## 7 November 2026 — I2: the interview as data, and one list of promises
+
+**25 questions in a registry**, replacing the document a person reads
+out in a meeting. All four of the plan's decisions approved as
+recommended: four questions in onboarding, a fact asked for once ever,
+a deterministic answer check with no model call, and a twice-failed
+answer stored and marked weak rather than blocked.
+
+### The decision: OFFER_PATTERNS moved out of siteClaimsReview.ts
+
+The nine promises the claims review watches for — gift sets, bulk
+orders, restock alerts, custom orders, a subscription, wedding favours,
+gift wrapping, samples, workshops — now live in
+`src/lib/claims/offerPromises.ts`, and both the review and the interview
+import them.
+
+**Why it had to be one list rather than two.** The interview asks the
+owner, one by one, whether he makes each promise, so that a "yes" is on
+record before a page says it and a "no" is on record so the guard can
+refuse it. Asking about a *different* nine would be worse than not
+asking: the interview would collect answers nobody checks, and the
+review would keep flagging promises nobody was asked about. A test now
+fails if the review grows its own copy back.
+
+**And it had to be pure.** The question registry is read by a client
+component, and `siteClaimsReview.ts` imports the whole facts layer. The
+new file imports nothing — the same reasoning `lib/pages/provenance.ts`
+states in its own header: *"One definition, no bundle."* This is also
+the consolidation I declined to do for `TEXT_PROPS` in A2 and said was
+worth doing on its own; this one was in I2's path, so it happened here.
+
+### Rule 3's second half is the one the registry exists for
+
+`tests/multiTenantVocabulary.test.ts` already sweeps every source file
+and would catch a prompt naming a trade. What it cannot catch is what
+`multiTenantRender.test.ts` records: **a prompt can be category-neutral
+in its words and still assume a way of trading.** "How many days does
+delivery take" is meaningless to a coaching centre, and asking it is
+what makes a product feel like it was built for somebody else.
+
+So questions that assume a way of trading are gated on
+`dealerships.business_models` (migration 186), the industry-agnostic
+hook this codebase already has. **And an unknown model is asked
+neither** — empty `models` means nobody has answered, which is not the
+same as "every way of trading". A mutation that read it as "every way"
+dies.
+
+Four questions carry no gate and must not acquire one: reply time, why
+you and not someone cheaper, returns, and what you work with. Those are
+questions for a sweet shop and a coaching centre alike.
+
+### progressFor is what makes a half-finished interview safe
+
+The expensive failure in §2.1 of the plan is not abandonment — it is
+that **a half-filled record looks complete to a generator**, because
+`knownText` reads what is there and has no way to know what the owner
+never reached. "Four of nine answered" is the fact that stops six rows
+being read as the whole truth.
+
+The total is derived, never a literal — the same rule `steps.ts` states
+for the step count, for the same reason it states it — and it counts
+only the questions *this* business is asked, so a services business with
+fewer tier-2 questions is not reported as permanently behind.
+
+### Mutations: 36 of 37 killed, and the one that survived is not a miss
+
+**Two survivors shared one root cause, and it was a real weakness.**
+Both tier-1 assertions read `questionsFor(1, {})` — the FILTERED list.
+So a fifth question moved into tier 1 but gated on a way of trading was
+filtered out of the very answer being checked, and the assertion saw the
+same four and passed. The filtered list cannot prove what the flow
+contains; both now read the registry, and both mutants die.
+
+**The third is an unreachable defensive branch, reported as one.**
+`isComplete` reads `total > 0 && answered === total`, and removing
+`total > 0` changed nothing — for a true reason: there is no way through
+the public API to reach a tier with no questions, because tier 1 is
+never gated and tier 2 always keeps its ungated questions. The branch is
+correct and stays; it is what makes a future all-gated tier safe rather
+than silently "complete". What is testable is the **invariant** that
+makes it unreachable, and that is now asserted across every combination
+of business models.
+
+Calling that a kill would have been the dishonest option. It is a
+survivor with a reason, and the reason is written in the test beside it.
+
+### Unverified live
+
+**Nothing asks these questions yet and nothing writes an answer.** I3
+judges answers, I4 asks the four in onboarding. The registry is pure
+data: 40 tests assert its rules, and no owner has seen a single prompt.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

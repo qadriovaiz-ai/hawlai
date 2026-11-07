@@ -148,7 +148,7 @@ addition, not a new system.
 | | What | Size |
 |---|---|---|
 | **I1** ✅ | **The L1 columns.** A `business_listing_facts` table (phone, hours, areas, address, `sameAs`, geo, and a publish flag beside each value), RLS from the start, a pure validator for hours and URLs, and `businessNode` publishing them. | **S** |
-| **I2** | **The question registry.** The interview as pure data: key, prompt, kind (choice / short text / long text / yes-no), where the answer is written, and whether it needs the falsifiability check. Industry-neutral by construction (rule 3) and asserted so. | **M** |
+| **I2** ✅ | **The question registry.** The interview as pure data: key, prompt, kind (choice / short text / long text / yes-no), where the answer is written, and whether it needs the falsifiability check. Industry-neutral by construction (rule 3) and asserted so. | **M** |
 | **I3** | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
 | **I4** | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
 | **I5** | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
@@ -185,6 +185,44 @@ exist so that I4 has somewhere truthful to put an answer — which is
 exactly what the founder asked for, and worth saying plainly rather than
 leaving to be discovered.
 
+### I2 as built — 7 November 2026
+
+| File | What it does |
+|---|---|
+| `src/lib/onboarding/interview.ts` | the whole interview as pure data: 25 questions, each with a key, a tier, a prompt, a kind, a declared destination and a falsifiability flag. Plus `questionsFor`, `nextQuestion`, `progressFor`, `isComplete`. |
+| `src/lib/claims/offerPromises.ts` | the nine promises, moved out of `siteClaimsReview.ts` so the interview and the claims review read **one** list. |
+
+**Tier 1 is the four approved**, none of them gated, none needing a
+judgment: phone, hours, areas served, address — and the two with a
+privacy consequence carry migration 221's publish decision in the prompt
+itself rather than assuming it.
+
+**Tier 2 is twelve questions plus the nine promises**, and the promises
+are **derived** from `OFFER_PROMISES` rather than retyped. Asking about a
+different nine than the nine the review watches for would be worse than
+not asking: the interview would collect answers nobody checks, and the
+review would keep flagging promises nobody was asked about. A tenth
+promise added to that list is asked about automatically.
+
+**The rule-3 half that is easy to miss, and the registry handles it:** a
+prompt can be category-neutral in its WORDS and still assume a way of
+trading. "How many days does delivery take" is meaningless to a coaching
+centre. So the questions that assume one are gated on
+`dealerships.business_models` (migration 186) — and **an unknown model
+is asked neither**, because asking a business about delivery *and*
+appointments because nobody knows is how a product feels like it was
+built for somebody else.
+
+**`progressFor` is the piece that makes §2.1 safe.** A half-filled record
+looks complete to a generator, because `knownText` reads what is there
+and cannot know what the owner never reached. "Four of nine answered" is
+the fact that stops six rows reading as the whole truth — and the total
+is derived from the questions *this* business is asked, so a services
+business is not reported as permanently behind.
+
+**What I2 does NOT do:** nothing asks these questions yet and nothing
+writes an answer. I3 judges answers, I4 asks the four in onboarding.
+
 **I1 and I2 are worth having even alone**: I1 gives every future business
 somewhere truthful to put a phone number, and I2 turns the interview
 document into code that a test can check for industry-neutrality.
@@ -192,6 +230,11 @@ document into code that a test can check for industry-neutrality.
 ---
 
 ## 5. What I need decided
+
+**All four approved as recommended, 7 November 2026:** four questions in
+onboarding (not zero); Tier 3 asks for a fact once, ever; the answer
+check stays deterministic with no model call; and an answer that fails
+the check twice is stored and marked weak rather than blocked.
 
 1. **Four onboarding questions, or none?** *Recommend: four.* The
    alternative is a clean ten-step onboarding and an owner whose site
