@@ -148,7 +148,7 @@ describe("2. THE ROW SAYS WHETHER IT WENT OUT", () => {
     const errors: string[] = [];
     vi.spyOn(console, "error").mockImplementation((...a: any[]) => void errors.push(a.join(" ")));
     const t = table();
-    const r = await recordClaimCheck(t.client, { dealershipId: "d1", surface: "page_meta", field: { text: "", removed: 0, keptUnsupported: 0, ownerWords: false }, published: true });
+    const r = await recordClaimCheck(t.client, { dealershipId: "d1", surface: "page_meta", field: { text: "", removed: 0, removedKinds: [], keptUnsupported: 0, ownerWords: false }, published: true });
     expect(r.recorded).toBe(false);
     expect(t.rows).toEqual([]);
     expect(errors.join("\n")).toMatch(/nothing a monitor could read back/);

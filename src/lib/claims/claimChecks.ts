@@ -57,6 +57,14 @@ export type ClaimCheckField = {
   keptUnsupported: number;
   /** Were those kept ones the owner's own wording? See migration 217. */
   ownerWords: boolean;
+  /**
+   * What KINDS of claim were removed (I6, migration 224).
+   *
+   * `removed` is how many. This is which, and it is the whole of what
+   * Tier 3 reads: "the owner has never told us a price" is countable
+   * from this and guessable from nothing else.
+   */
+  removedKinds: string[];
 };
 
 export type ClaimCheckInput = {
@@ -109,6 +117,8 @@ export function knownSurfaces(): ClaimSurface[] {
 export function claimCheckField(input: {
   text: string;
   removed: string[];
+  /** From stripUnsupported's `removedKinds`. Absent is "not recorded". */
+  removedKinds?: string[];
   keptUnsupported?: number;
   ownerWords?: boolean;
 }): ClaimCheckField {
@@ -116,6 +126,11 @@ export function claimCheckField(input: {
   return {
     text: String(input.text ?? ""),
     removed: Array.isArray(input.removed) ? input.removed.length : 0,
+    // EMPTY MEANS NOT RECORDED, NOT "NOTHING WAS REMOVED". `removed`
+    // above is where the count is stated, and migration 224's own
+    // comment says the same about the column: every row written before
+    // I6 has an empty array and none of them means a clean output.
+    removedKinds: Array.isArray(input.removedKinds) ? input.removedKinds.map((k) => String(k)) : [],
     keptUnsupported: kept,
     // OWNER'S WORDS ONLY MEANS ANYTHING IF SOMETHING WAS KEPT. True
     // with nothing kept would mark a clean row as the owner's
@@ -160,6 +175,7 @@ export async function recordClaimCheck(supabase: any, input: ClaimCheckInput): P
       action_id: input.actionId ?? null,
       text: input.field.text,
       claims_removed: input.field.removed,
+      removed_kinds: input.field.removedKinds,
       claims_unsupported: input.field.keptUnsupported,
       owner_words: input.field.ownerWords,
       published: input.published,

@@ -165,7 +165,14 @@ describe("low friction: only the offending sentence goes, the rest reads exactly
     // than on guardOrMark, because four paths reach the claim checks
     // without going through guardOrMark at all - including the website
     // widget that talks to visitors.
-    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], priceWarnings: [], substantiation: [], narrative: [], linksFixed: [] });
+    // `removedKinds` added 2026-11-07 (I6): not a sixth channel but the
+    // KIND of each removal, which the function has always known and threw
+    // away one line before any caller could see it. This test went red on
+    // the new field, which is what it is for; adding it here rather than
+    // loosening the match keeps that alarm armed. AN EMPTY ARRAY ON THE
+    // CLEAN PATH IS THE POINT — Tier 3 reads an empty list as "nothing was
+    // removed", and `undefined` would read as "never recorded".
+    expect(stripUnsupported(caption, facts())).toEqual({ text: caption, removed: [], removedKinds: [], priceWarnings: [], substantiation: [], narrative: [], linksFixed: [] });
   });
 
   it("works on every output shape: a hook that was only a claim is dropped, and so is a calendar day left with no caption", () => {

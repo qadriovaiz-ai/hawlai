@@ -27,6 +27,7 @@ import { existingTargetOffers, writeSetupGoalDrafts } from "@/lib/growth/goalDra
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
 import { checkTracking } from "@/lib/growth/tracking";
+import { askForMissingFact } from "@/lib/onboarding/factGaps";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { aiFailureLabel } from "@/lib/ai/claude";
 
@@ -217,6 +218,23 @@ export async function runDailyGrowth(
   // `whyCounted`. The two sentences written here state no figure, which
   // is why both are declared as nothing.
   let noTargetsNumbers: Counted[] = [];
+  // ONE QUESTION THE PRODUCT NEEDS ANSWERED (I6 — Tier 3).
+  //
+  // Raised here, before the report is assembled, because
+  // askForMissingFact RECORDS the ask before handing back the sentence:
+  // if the send then fails, one question is lost rather than the "once,
+  // ever" promise. factGaps.ts states that trade the other way round
+  // too, which is why it is worth repeating at the call site.
+  //
+  // It never throws into the run: a failed read asks nothing and says
+  // why in the log, the same shape as every other optional block here.
+  let askForFact: { text: string; counted: Counted[] } | null = null;
+  try {
+    const ask = await askForMissingFact(supabase, dealershipId);
+    askForFact = ask.line;
+  } catch (err: any) {
+    console.error(`[growth] could not look for a missing fact to ask about: ${err?.message ?? err}`);
+  }
   const maturityNow = maturityOf(
     { firstAt: tracking.siteEvents.firstAt, events: tracking.siteEvents.visitorEvents30d },
     now
@@ -300,6 +318,7 @@ export async function runDailyGrowth(
     targetNumbers,
     noTargetsBecause,
     noTargetsNumbers,
+    askForFact,
     activeGoals,
     findingCount: findings.length,
     pendingSetupDrafts: drafts.pending,

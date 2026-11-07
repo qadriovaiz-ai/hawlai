@@ -1069,7 +1069,29 @@ export function stripUnsupported(
   text: string,
   f: BusinessFacts,
   mode: ClaimsMode = "publish"
-): { text: string; removed: string[]; priceWarnings: string[]; substantiation: string[]; narrative: NarrativeFinding[]; linksFixed: string[] } {
+): {
+  text: string;
+  removed: string[];
+  /**
+   * WHAT KIND each removal was (I6).
+   *
+   * `removed` is the owner-facing sentence and every existing caller
+   * reads it; this is the machine-readable half, and it was being
+   * thrown away one line before anybody could see it. `Problem.kind`
+   * has carried "price" | "claim" | "substantiation" on every removal
+   * since this function was written, and Tier 3 of the interview needs
+   * exactly that to turn "a claim was removed" into "the owner has
+   * never told us a price".
+   *
+   * Added alongside rather than folded into `removed`, so not one of
+   * the existing callers changes.
+   */
+  removedKinds: ("price" | "claim" | "substantiation")[];
+  priceWarnings: string[];
+  substantiation: string[];
+  narrative: NarrativeFinding[];
+  linksFixed: string[];
+} {
   const repair = repairBookingLinks(text, f);
   text = repair.text;
   // THE STORY, CHECKED WHERE THE FACTS ARE (moved here 2026-10-10).
@@ -1092,12 +1114,13 @@ export function stripUnsupported(
   const story = checkNarrative(text, f, mode, "strict");
   text = story.text;
   if (findProblems(text, f).length === 0) {
-    return { text, removed: [], priceWarnings: [], substantiation: [], narrative: story.findings, linksFixed: repair.fixed };
+    return { text, removed: [], removedKinds: [], priceWarnings: [], substantiation: [], narrative: story.findings, linksFixed: repair.fixed };
   }
   const kept: string[] = [];
   const removed: string[] = [];
   const priceWarnings: string[] = [];
   const substantiation: string[] = [];
+  const removedKinds: ("price" | "claim" | "substantiation")[] = [];
   for (const piece of pieces(text)) {
     const problems = findProblems(piece, f);
     // A SENTENCE IS JUDGED BY ITS WORST PROBLEM. Existing precedent,
@@ -1113,12 +1136,21 @@ export function stripUnsupported(
         if (problem.kind === "price") priceWarnings.push(problem.reason);
         else substantiation.push(problem.reason);
       }
-    } else removed.push(...problems.map((p) => p.reason));
+    } else {
+      removed.push(...problems.map((p) => p.reason));
+      // THE KIND, KEPT. Same loop, same problems, one line later it was
+      // gone — see the return type above.
+      removedKinds.push(...problems.map((p) => p.kind));
+    }
   }
   const cleaned = kept.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   return {
     text: cleaned,
     removed: Array.from(new Set(removed)),
+    // NOT DE-DUPLICATED, unlike `removed`. Two prices the guard could
+    // not support is twice the evidence that no price is on record, and
+    // Tier 3 counts.
+    removedKinds,
     priceWarnings: Array.from(new Set(priceWarnings)),
     substantiation: Array.from(new Set(substantiation)),
     narrative: story.findings,

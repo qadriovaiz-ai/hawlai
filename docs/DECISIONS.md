@@ -3170,6 +3170,70 @@ could use them and would group a little more generously. That changes
 shipped behaviour the founder has already accepted, so it is **his call,
 not a tidy-up** — written here rather than done.
 
+## 7 Nov 2026 — I6: the question the product asks because it needed the answer
+
+**The kind was always there and always thrown away.** Since migration 217
+`claim_checks` has recorded `claims_removed` as an integer — how many
+sentences the guard deleted, never which kind. But `claimCheck.ts`'s own
+`Problem` type has carried `kind: "price" | "claim" | "substantiation"` on
+every removal since it was written, and `stripUnsupported` flattened it
+away one line before any caller could see it. I6 carries it through:
+`removedKinds` on the return, on `ClaimCheckField`, and into a new
+`removed_kinds jsonb` column (migration 224).
+
+**The removed sentences are still not stored.** 217 left that question
+open and this closes it the same way: the kind is enough to ask the right
+question, and the sentence is text a model wrote about a business that
+could not support it. Storing it would create a table of the product's own
+unsupported claims with no retention answer.
+
+**An empty `removed_kinds` means NOT RECORDED, not "nothing was removed."**
+Every row written before 224 has one. Reading it as a clean output would
+make Tier 3 confident about a history it cannot see, so an empty list
+contributes nothing to the counts.
+
+**The mapping from a removal to a question is refused wherever it cannot
+be read off the guard's classification.** `price` → price range,
+`substantiation` → why them and not someone cheaper, `claim` carrying a
+unit of time → delivery time, and **everything else asks nothing at all.**
+A mapper that guessed would ask the owner about a "material" because a
+sentence mentioned one — the invented-keyword mistake the Growth Loop
+audit found three times in this product, arriving in the interview.
+
+**Twice, then once ever.** A single removal can be a generator reaching
+for something the business genuinely does not do; twice is a pattern
+(`ASK_AFTER = 2`). One question per run, for the reason G3 gives about
+page proposals. And `interview_answers.asked` (migration 222) means the
+question is never raised again — answered, skipped and asked are all
+"leave it alone", the founder's decision of 7 November.
+
+**The ask is recorded BEFORE the email is built.** If the send then fails,
+one question is lost. The other order loses "once, ever" and asks forever,
+and of those two failures the forgettable one beats the nagging one.
+
+**Two mutation survivors, both real, both fixed.**
+- The tie-break test passed by coincidence: it fed `price` first, where
+  Map insertion order and alphabetical order agree, so deleting
+  `localeCompare` changed nothing. It now feeds `substantiation` first.
+- `nextGapToAsk` had a registry check that **no input could reach**, since
+  `gapsFrom` only ever produces the three keys `questionForKind` returns.
+  The same overlapping-guard fault as I1, I3, I5 and G2. It is gone, the
+  lookup that CAN fail stays in `gapAskLine`, and the invariant it stood
+  for — every key this tier returns is a registered question — is pinned
+  by a test that goes red when the registry is renamed.
+
+**An existing exhaustive test was updated, not loosened.**
+`tests/claimsGuard.test.ts` deep-equals the whole of `stripUnsupported`'s
+return precisely so a new field cannot appear unnoticed; its own comment
+records the same update being made on 9 and 10 October. Going red on
+`removedKinds` is the alarm working. The field was added to the expected
+object, which keeps the match exhaustive and now also pins the empty array
+on the clean path.
+
+**Unverified live.** Nothing has run against a real business, because
+there is not one. The gap counts read `claim_checks`, which has rows only
+from test data.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

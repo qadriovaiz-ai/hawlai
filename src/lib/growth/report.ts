@@ -378,6 +378,19 @@ export function buildDailyReport(input: {
   /** The figures that sentence prints — targets.ts's `whyCounted`. */
   noTargetsNumbers?: Counted[];
   /**
+   * ONE QUESTION THE PRODUCT NEEDS ANSWERED (I6 — Tier 3).
+   *
+   * Not a form and not a nag: it is raised because a generator already
+   * reached for this fact and the guard deleted the sentence, twice or
+   * more. `claim_checks` is where that is counted, and the figure it
+   * prints comes with it so the digit walk can trace it.
+   *
+   * At most one per email, ever per fact — src/lib/onboarding/factGaps.ts
+   * records the ask before this is built, so a failed send loses one
+   * question rather than the "once, ever" promise.
+   */
+  askForFact?: { text: string; counted: Counted[] } | null;
+  /**
    * What the AI could not do during this run, if anything.
    *
    * Reported above everything else: an owner reading "2 setup steps"
@@ -487,6 +500,17 @@ export function buildDailyReport(input: {
       text: `No new target for you to approve today. ${noTargets}`,
       numbers: input.noTargetsNumbers ?? [],
     });
+  }
+
+  // THE ONE QUESTION, ABOVE THE STATS AND BELOW THE PLAN.
+  //
+  // Where it sits is the decision: it is a request, not a result, so it
+  // does not belong among the numbers — and it is not urgent enough to
+  // push the plan down. An owner who reads only the top of the email
+  // still sees it.
+  const ask = input.askForFact;
+  if (ask && String(ask.text ?? "").trim()) {
+    blocks.push({ kind: "line", text: ask.text.trim(), numbers: ask.counted ?? [] });
   }
 
   for (const c of input.counted) blocks.push({ kind: "stat", number: c });

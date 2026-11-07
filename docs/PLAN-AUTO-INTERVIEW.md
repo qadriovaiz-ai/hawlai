@@ -152,7 +152,7 @@ addition, not a new system.
 | **I3** ✅ | **The answer validator.** 200 characters — **split into two rows, never truncated**; a category the live CHECK accepts; and the falsifiability test with its one follow-up. | **S/M** |
 | **I4** ✅ | **Tier 1 in onboarding.** Four steps, driven by I2's registry, writing I1's columns. | **M** |
 | **I5** ✅ | **Tier 2, resumable.** The same registry rendered from the Business Knowledge page, with per-question progress, and the facts layer told how much is unanswered. | **M** |
-| **I6** | **Tier 3, the on-demand ask.** Record which phrase was removed, turn a repeated gap into one question, deliver it through the existing card or email. | **M** |
+| **I6** ✅ | **Tier 3, the on-demand ask.** Record which KIND of claim was removed (migration 224), turn a twice-missed gap into one question, deliver it in the daily email above the numbers. Shipped 2026-11-07. The removed SENTENCES are deliberately still not stored. | **M** |
 
 ### I1 as built — 7 November 2026, migration 221
 
