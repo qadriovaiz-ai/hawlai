@@ -119,13 +119,19 @@ describe("1. THE PAIR SURVIVES THE CONVERSION", () => {
 describe("2. THE PROPS ARE THE ONES THE CLAIMS SYSTEM READS", () => {
   // THE REASON THIS SECTION EXISTS. `faq_item` holds its question on
   // `heading` and its answer on `html` — names that read badly and are
-  // load-bearing. Four systems are keyed on that exact set of prop
-  // names: TEXT_PROPS (who wrote this line), BLOCK_TEXT_KEYS (the claims
-  // guard), LEGACY_FIELDS (the owner's claims review) and the Properties
-  // Panel's marking of the owner's own edits. A prop called `answer`
-  // would be invisible to all four, so an AI-written FAQ answer would
-  // reach a live page UNGUARDED — the 2026-09-30 incident that put the
-  // guard on the builder in the first place.
+  // load-bearing. Several systems are keyed on that exact set of prop
+  // names: who wrote this line, the claims guard, the owner's claims
+  // review, the builder's marking of his own edits, the request the
+  // review's remove button sends, and what the model is allowed to name.
+  // A prop called `answer` would be invisible to all of them, so an
+  // AI-written FAQ answer would reach a live page UNGUARDED — the
+  // 2026-09-30 incident that put the guard on the builder.
+  //
+  // UNTIL 8 NOVEMBER 2026 THEY EACH DECLARED THE LIST THEMSELVES — six
+  // copies — and these tests read each file in turn because the copies
+  // were the risk. There is one declaration now, so they check that each
+  // file ASKS it instead, and tests/textPropsSingleSource.test.ts fails
+  // if a seventh copy appears.
 
   const TEXTY = new Set(["text", "textarea", "richtext"]);
   /**
@@ -158,23 +164,29 @@ describe("2. THE PROPS ARE THE ONES THE CLAIMS SYSTEM READS", () => {
   });
 
   it("THE CLAIMS GUARD'S OWN KEY LIST STILL COVERS THEM", () => {
-    // A second copy of the same four names lives in guardBlocks.ts. The
-    // copies are the risk, so this reads that file rather than trusting
-    // provenance.ts to speak for it.
+    // It used to keep its own copy, BLOCK_TEXT_KEYS. It now reads the
+    // one declaration — so this checks both halves: that the guard loops
+    // over TEXT_PROPS, and that TEXT_PROPS covers faq_item's two props.
     const guard = code("src/lib/claims/guardBlocks.ts");
-    const list = guard.match(/const BLOCK_TEXT_KEYS = \[([^\]]+)\]/);
-    expect(list).not.toBeNull();
-    for (const key of ["heading", "html"]) expect(list![1]).toContain(`"${key}"`);
+    expect(guard).toMatch(/import \{ TEXT_PROPS \} from "@\/lib\/pages\/provenance"/);
+    expect(guard).toMatch(/for \(const key of TEXT_PROPS\)/);
+    expect(guard).not.toMatch(/BLOCK_TEXT_KEYS/);
+    for (const key of ["heading", "html"]) expect(TEXT_PROPS as readonly string[]).toContain(key);
   });
 
   it("and the owner's own FAQ edit is marked as the owner's", () => {
-    // Same list again, in the client component that writes the marks.
-    // Without this, the guard would treat a sentence the OWNER typed
-    // into an answer as the machine's and rewrite it.
+    // The client component that writes the marks. Without this the
+    // guard would treat a sentence the OWNER typed into an answer as the
+    // machine's and rewrite it.
+    //
+    // Its own copy was a Set that SHADOWED the name TEXT_PROPS — the
+    // worst of the six, because a reader would have believed it was the
+    // shared one. It asks isTextProp now.
     const panel = code("src/components/website-builder/blocks/PropertiesPanel.tsx");
-    const list = panel.match(/const TEXT_PROPS = new Set\(\[([^\]]+)\]\)/);
-    expect(list).not.toBeNull();
-    for (const key of ["heading", "html"]) expect(list![1]).toContain(`"${key}"`);
+    expect(panel).toMatch(/isTextProp \} from "@\/lib\/pages\/provenance"|withOwnerProp, isTextProp \} from "@\/lib\/pages\/provenance"/);
+    expect(panel).toMatch(/onChange\(isTextProp\(key\) \?/);
+    expect(panel).not.toMatch(/new Set\(\["text"/);
+    for (const key of ["heading", "html"]) expect(TEXT_PROPS as readonly string[]).toContain(key);
   });
 
   it("THE LABELS SAY QUESTION AND ANSWER, because that is what the owner sees", () => {

@@ -3525,6 +3525,81 @@ The 46th mutation added a comment, which `code()` strips by design.
 **Unverified live.** No business has a Google listing connected, so
 nothing has been fetched and nothing compared.
 
+## 8 Nov 2026 — Six declarations of the same four prop names, folded into one
+
+The founder asked for `BLOCK_TEXT_KEYS` to be folded into `TEXT_PROPS`,
+with the reason that duplicate definitions have always caused bugs here.
+A sweep before touching anything found **six copies, not two**:
+
+| where | shape | what a forgotten word prop would have done |
+|---|---|---|
+| `lib/pages/provenance.ts` | `TEXT_PROPS` | the canonical one |
+| `lib/claims/guardBlocks.ts` | `BLOCK_TEXT_KEYS` | the guard would not clean that prop |
+| `app/api/seo/claims-review/route.ts` | inline array, **validating a request** | the owner's "remove this line" button fails on that line |
+| `components/website-builder/blocks/PropertiesPanel.tsx` | a `Set` **named `TEXT_PROPS`**, shadowing the real one | the builder stops marking the owner's own words |
+| `lib/businessBrain/toolSchemas.ts` | a model-facing `enum` | the model cannot name the prop, so it cannot edit it |
+| `lib/claims/siteClaimsReview.ts` | the union type, three times | a type error or a silent miss |
+
+**The risk is not untidiness.** `faq_item` keeps its question on
+`heading` and its answer on `html`. A prop called `answer` would have
+been invisible to all six, so an AI-written FAQ answer would have reached
+a live page UNGUARDED — the 2026-09-30 incident that put the claims guard
+on the builder in the first place. Six copies is six chances to forget,
+and the one that gets forgotten is the one nobody is looking at.
+
+**The consolidation is a FUNCTION, not just a shared list.** Each caller
+was re-implementing membership its own way — `.has`, `.includes`, an
+inline array, an enum, a union. `isTextProp(prop)` in provenance.ts is
+now the one place that answers it, and every call site asks instead of
+deciding. provenance.ts imports nothing on purpose, which is exactly why
+a client component and five server files can all share it.
+
+**The legacy list stays separate, deliberately.** `LEGACY_TEXT_KEYS`
+holds `headline`, `body`, `ctaText` — the pre-builder names a converter
+maps ONTO those four. It is not the same list, and sharing one
+declaration would invite a caller to write `ctaText` back to a page the
+builder can no longer edit. The reason is recorded beside it, and a test
+asserts its CONTENT rather than its name after mutation M15 replaced the
+whole list with `TEXT_PROPS` and nothing noticed.
+
+**A seventh copy now fails the suite.**
+`tests/textPropsSingleSource.test.ts` sweeps every file under `src/` and
+looks for the SHAPE of a declaration — an array or Set literal of the
+four, or a union of them — not for the words. That distinction is rule 8
+in practice: these names appear legitimately in comments explaining
+`faq_item`, in a tool-schema description telling the model what each prop
+holds, and in registry prop keys, so a word-grep would be useless. The
+detector has its own tests in both directions, including the false
+positives it must ignore.
+
+**FOUR EXISTING TESTS PINNED THE DUPLICATES AND WENT RED.** Each asserted
+the literal declaration it was reading — one of them with the comment
+"the copies are the risk, so this reads that file rather than trusting
+provenance.ts to speak for it", which was correct reasoning while the
+copies existed. None was weakened: each now pins that the file ASKS the
+one declaration, which is strictly stronger, because a drifting copy is
+no longer possible rather than merely checked for.
+
+**And I missed one of the four by truncating my own search.** The first
+sweep of the test suite was piped through `head`, so
+`tests/websiteBuilderClaims.test.ts` did not appear, and the full suite
+found it instead. The same mistake as piping a suite run through `tail`
+earlier the same day and losing the failure detail. Searches that decide
+scope do not get truncated.
+
+**Mutation score 24/24**, after three rounds. Two real gaps came out of
+it: the legacy list's content was unasserted (above), and nothing proved
+the sweep walked the tree — narrowing it to one file left every
+assertion green, because the test that checks the sweep is real was
+calling the walker separately. Both tests now read ONE shared list, so
+narrowing it fails both. The residual limit is stated in the file: a
+mutation that guts a test's own loop in place is not catchable by another
+test, the same way any assertion can be deleted.
+
+**Unverified live.** No behaviour changed — the six copies were
+identical, including their order — so there is nothing new to see on a
+screen.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

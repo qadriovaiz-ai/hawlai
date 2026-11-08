@@ -137,6 +137,9 @@ describe("who wrote each line", () => {
     const route = readFileSync("src/app/api/website-builder/pages/[id]/route.ts", "utf8");
     expect(route).toMatch(/if \(wordsChanged\(current\?\.sections, body\.sections\)\) update\.content_source = "edited";/);
     const panel = readFileSync("src/components/website-builder/blocks/PropertiesPanel.tsx", "utf8");
-    expect(panel).toMatch(/TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, \.\.\.withOwnerProp\(block\?\.props, key\) \}/);
+    // isTextProp since 8 November 2026: the panel's own copy of the four
+    // word-prop names was one of six, and all six were folded into
+    // provenance.ts. The rule this cross-checks is unchanged.
+    expect(panel).toMatch(/isTextProp\(key\) \? \{ \[key\]: value, \.\.\.withOwnerProp\(block\?\.props, key\) \}/);
   });
 });

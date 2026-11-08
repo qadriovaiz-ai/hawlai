@@ -69,11 +69,18 @@ describe("a page is 'edited' only when its words are", () => {
 
 describe("a block is 'edited' only when its words are", () => {
   it("marks a text change and leaves a styling change alone", () => {
-    expect(panel).toMatch(/const TEXT_PROPS = new Set\(\["text", "heading", "html", "label"\]\)/);
-    // Per prop now: withOwnerProp merges this prop into the block's
-    // _edited list rather than stamping the whole block as the
-    // owner's work (src/lib/pages/provenance.ts).
-    expect(panel).toMatch(/onChange\(TEXT_PROPS\.has\(key\) \? \{ \[key\]: value, \.\.\.withOwnerProp\(block\?\.props, key\) \} : \{ \[key\]: value \}\)/);
+    // This asserted the panel's OWN copy of the four prop names until
+    // 8 November 2026, when all six copies were folded into
+    // provenance.ts. The question it was asking — does the panel mark
+    // authorship for word props and not for styling — is unchanged, and
+    // pinning the shared source makes it stronger: a drifting copy is no
+    // longer possible.
+    expect(panel).toMatch(/isTextProp/);
+    expect(panel).not.toMatch(/new Set\(\["text"/);
+    // Per prop: withOwnerProp merges this prop into the block's _edited
+    // list rather than stamping the whole block as the owner's work
+    // (src/lib/pages/provenance.ts).
+    expect(panel).toMatch(/onChange\(isTextProp\(key\) \? \{ \[key\]: value, \.\.\.withOwnerProp\(block\?\.props, key\) \} : \{ \[key\]: value \}\)/);
   });
 
   it("the per-block mark is the one the evidence rule will read", () => {

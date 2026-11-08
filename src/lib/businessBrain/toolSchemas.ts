@@ -52,6 +52,7 @@ import { VIDEO_TASKS } from "@/lib/agents/videoMarketingAgent";
 import { COMPETITOR_TASKS } from "@/lib/agents/competitorIntelAgent";
 import { CRO_TASKS } from "@/lib/agents/croAgentV2";
 import { GRAPHIC_TYPES } from "@/lib/agents/graphicDesignAgent";
+import { TEXT_PROPS } from "@/lib/pages/provenance";
 
 export const TOOLS = [
   {
@@ -155,7 +156,7 @@ export const TOOLS = [
             type: "object",
             properties: {
               blockId: { type: "string", description: "The block id from read_page. Never invent one, and never reuse an id from an earlier conversation — re-read the page." },
-              prop: { type: "string", enum: ["text", "heading", "html", "label"], description: "Which part of that block, exactly as read_page reported it: \"text\" or \"heading\" for a heading, \"html\" for a paragraph, \"label\" for a button." },
+              prop: { type: "string", enum: [...TEXT_PROPS], description: "Which part of that block, exactly as read_page reported it: \"text\" or \"heading\" for a heading, \"html\" for a paragraph, \"label\" for a button." },
               text: { type: "string", description: "The new wording. Plain text, or the markdown subset the site renders (**bold**, *italic*, [text](url)). NEVER HTML tags — the prop is called html for historical reasons and anything tag-like is printed to the visitor literally." },
               writtenByOwner: {
                 type: "boolean",

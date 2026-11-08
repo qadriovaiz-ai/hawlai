@@ -23,6 +23,31 @@
 export const TEXT_PROPS = ["text", "heading", "html", "label"] as const;
 export type TextProp = (typeof TEXT_PROPS)[number];
 
+/**
+ * Whether this prop holds words a visitor reads.
+ *
+ * THE ONE PLACE THAT ANSWERS IT, and the reason this function exists
+ * rather than each caller testing the list itself. On 8 November 2026
+ * the same four names were declared SIX times: here, the claims guard's
+ * `BLOCK_TEXT_KEYS`, an inline array validating a claims-review request,
+ * a Set in the builder's Properties Panel that SHADOWED this very name,
+ * an enum in a model-facing tool schema, and a union type repeated three
+ * times in the owner's claims review.
+ *
+ * A seventh copy is not a tidiness problem, it is the 2026-09-30
+ * incident waiting to happen again: `faq_item` keeps its question on
+ * `heading` and its answer on `html`, and a prop called `answer` would
+ * have been invisible to every one of those six — so an AI-written FAQ
+ * answer would have reached a live page UNGUARDED. Add a word prop in
+ * one place now and every reader learns about it at once.
+ *
+ * tests/textPropsSingleSource.test.ts fails if a seventh declaration
+ * appears.
+ */
+export function isTextProp(prop: string | null | undefined): boolean {
+  return (TEXT_PROPS as readonly string[]).includes(String(prop ?? ""));
+}
+
 type Props = Record<string, any>;
 
 /**

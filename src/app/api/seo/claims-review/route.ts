@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import { reviewPage, factsWithoutGeneratedCopy, withoutSentence, pageCoverage, groupBySentence } from "@/lib/claims/siteClaimsReview";
+import { isTextProp } from "@/lib/pages/provenance";
 
 async function who(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -149,7 +150,10 @@ export async function POST(request: Request) {
     const pageId = String(body?.pageId ?? "");
     const blockId = body?.blockId ? String(body.blockId) : null;
     const field = String(body?.field ?? "");
-    if (!pageId || !["text", "heading", "html", "label"].includes(field)) {
+    // isTextProp, not a list of its own: this route REJECTS anything
+    // not in it, so a word prop added elsewhere and forgotten here would
+    // make the owner's "remove this line" button fail on that line.
+    if (!pageId || !isTextProp(field)) {
       return NextResponse.json({ error: "Which line, on which page?" }, { status: 400 });
     }
 

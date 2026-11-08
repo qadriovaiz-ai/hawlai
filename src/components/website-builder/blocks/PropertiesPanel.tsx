@@ -5,7 +5,7 @@ import { BLOCK_REGISTRY } from "@/lib/blocks/registry";
 import type { Block } from "@/lib/blocks/types";
 import RichTextArea from "../RichTextArea";
 import ImageUploader from "../ImageUploader";
-import { withOwnerProp } from "@/lib/pages/provenance";
+import { withOwnerProp, isTextProp } from "@/lib/pages/provenance";
 
 // Registry-driven — every block type declares its own `propFields`
 // schema (see registry.ts), so this form never needs a per-type branch;
@@ -35,8 +35,6 @@ export default function PropertiesPanel({
   const def = BLOCK_REGISTRY[block.type];
   const fields = def?.propFields ?? [];
 
-  /** The props that hold words. Changing anything else is not authorship. */
-  const TEXT_PROPS = new Set(["text", "heading", "html", "label"]);
 
   function set(key: string, value: any) {
     // Rewriting a block's WORDS makes them the owner's, so the
@@ -48,7 +46,7 @@ export default function PropertiesPanel({
     // the whole block, so changing a heading recorded the paragraph
     // beside it as the owner's words too — exempting it from the claims
     // review and making it evidence for itself.
-    onChange(TEXT_PROPS.has(key) ? { [key]: value, ...withOwnerProp(block?.props, key) } : { [key]: value });
+    onChange(isTextProp(key) ? { [key]: value, ...withOwnerProp(block?.props, key) } : { [key]: value });
   }
 
   return (

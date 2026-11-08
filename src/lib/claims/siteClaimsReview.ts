@@ -30,6 +30,7 @@ import { findUnsupportedClaims } from "./claimCheck";
 import { scrubInventedContacts } from "./guardBlocks";
 import { OFFER_PROMISES } from "./offerPromises";
 import type { BusinessFacts } from "./businessFacts";
+import type { TextProp } from "@/lib/pages/provenance";
 
 type Row = Record<string, any>;
 
@@ -39,7 +40,7 @@ export type ReviewItem = {
   pageTitle: string;
   /** Which block holds it, so Remove can take out the sentence and nothing else. */
   blockId: string | null;
-  field: "text" | "heading" | "html" | "label";
+  field: TextProp;
   /** The sentence as it appears on the page. */
   sentence: string;
   /** Why it is here, in the words the owner reads. */
@@ -122,7 +123,7 @@ export function claimPhraseOf(reason: string): string | null {
 }
 
 /** Flat fields on a pre-block page, mapped to the field name an item reports. */
-const LEGACY_FIELDS: [string, "text" | "heading" | "html" | "label"][] = [
+const LEGACY_FIELDS: [string, TextProp][] = [
   ["headline", "heading"],
   ["subheadline", "heading"],
   ["heading", "heading"],
@@ -192,7 +193,7 @@ export function reviewPage(
   const pageTitle = String(page.title ?? page.slug);
 
   /** Add every flag found in one field of one block. */
-  const review = (blockId: string | null, field: "text" | "heading" | "html" | "label", value: unknown): void => {
+  const review = (blockId: string | null, field: TextProp, value: unknown): void => {
     if (typeof value !== "string" || !value.trim()) return;
     const base = { pageId: page.id, pageSlug: page.slug, pageTitle, blockId, field };
 

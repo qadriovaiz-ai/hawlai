@@ -23,12 +23,21 @@
 import { businessDisplayName } from "@/lib/business/displayName";
 import { stripUnsupported, type ClaimsMode } from "./claimCheck";
 import type { BusinessFacts } from "./businessFacts";
+import { TEXT_PROPS } from "@/lib/pages/provenance";
 
 type Row = Record<string, any>;
 
-/** Block props that hold words a visitor reads. Everything else is left alone. */
-const BLOCK_TEXT_KEYS = ["text", "heading", "html", "label"] as const;
-/** The same, on pages written before the block builder. */
+/**
+ * The same question as TEXT_PROPS, for pages written before the block
+ * builder — different prop NAMES for the same words.
+ *
+ * DELIBERATELY NOT FOLDED INTO provenance.ts on 8 November 2026, when
+ * the other six copies of TEXT_PROPS were. These are not the same list:
+ * they are the legacy names (`headline`, `body`, `ctaText`) that a
+ * converter maps ONTO those four. A shared declaration would invite a
+ * caller to treat `ctaText` as a current prop and write it back to a
+ * page the builder can no longer edit.
+ */
 const LEGACY_TEXT_KEYS = ["headline", "subheadline", "heading", "body", "text", "ctaText", "buttonText", "cta"] as const;
 
 /** A heading anyone can stand behind: what this business is, and where. */
@@ -201,7 +210,7 @@ export function guardBlockTree(blocks: unknown, facts: BusinessFacts | null | un
 
     if (b.props && typeof b.props === "object") {
       const props: Row = { ...b.props };
-      for (const key of BLOCK_TEXT_KEYS) {
+      for (const key of TEXT_PROPS) {
         if (props[key] === undefined) continue;
         props[key] = clean(props[key], key === "label" ? "button" : key === "html" ? "paragraph" : "heading");
       }
