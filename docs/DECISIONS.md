@@ -3440,6 +3440,91 @@ links has nothing to say.
 
 **Unverified live.** Nothing has run against a real site.
 
+## 8 Nov 2026 — The Maps leg: what Google says against what the site says
+
+The founder took the Enterprise SKU after being shown the numbers, so
+G5's headline check is now built (migration 225).
+
+**What it costs, and why that was his call and not mine.** The field mask
+is `displayName`, `formattedAddress` and `nationalPhoneNumber`. The phone
+is the expensive field: it puts the request on the Place Details
+Enterprise SKU, and billing is at the HIGHEST SKU in a request, so the
+phone prices the whole call. Enterprise is free for the first 1,000
+requests a month and $20 per 1,000 after — one request per business per
+month means a thousand businesses before anything is owed. Nothing else
+is in the mask: no rating, no reviews, no location, no hours. Each
+addition is money, and a field nothing compares is a field somebody later
+finds a use for.
+
+**Split in two, and the groups forced it rather than taste.** `signals`
+is "database-only and fast" by `cronGroups.ts`'s own rule and runs in
+front of the emails, so a third-party network call cannot live there. So
+the FETCH is monthly, in `heavy`, writing one row to `place_snapshots`;
+the COMPARISON is three strings against three strings, costs nothing, and
+runs daily inside `site_audit` where the rest of the local audit already
+is. The same shape `search_console_sync` uses.
+
+**Not behind a flag, and that is a judgement rather than an omission.**
+`page_speed` and `aeo_schedule` are flagged because they spend on every
+run. This one is free under a thousand requests a month and skips
+entirely for a business with no listing connected — which is every
+business today. A flag would mean the comparison never runs for the first
+real business either, and a listing that disagrees with the site is worth
+knowing on day one. The reason is written beside the code so a reader who
+notices the asymmetry finds an answer instead of a gap.
+
+**The phone is compared by digits, and getting this wrong would have been
+worse than not building it.** Maps returns the national format; the owner
+types what he types. Comparing the text would report a disagreement every
+single morning for a number that is perfectly correct, and a check that
+cries wolf is a check the owner turns off. `samePhone` keeps the digits,
+DROPS LEADING ZEROS from both sides, requires at least seven digits, and
+asks whether the shorter is a suffix of the longer. No country code and
+no national length is hardcoded — rule 3 applies to a dialling plan as
+much as to a trade. The residual risk is stated in the source rather than
+hidden: two genuinely different numbers where one is a suffix of the
+other still match.
+
+**The first version of `samePhone` was wrong, and its own test caught
+it.** A plain suffix match fails on a trunk zero: `+91 90000 00000` is
+`919000000000` and `090000 00000` is `09000000000`, and the second is not
+a suffix of the first until the zero goes.
+
+**Three things are deliberately NOT compared.** A field Maps does not
+have is not a conflict — "Maps has no phone for you" and "Maps has a
+different phone" are different facts. A missing snapshot compares nothing
+and says so out loud (`maps_not_compared_yet`), because the absence of a
+disagreement is otherwise indistinguishable from agreement. And a
+snapshot whose `place_id` is not the currently connected one is not
+compared at all: if the owner reconnects, last month's row describes the
+old listing.
+
+**A failed fetch leaves the previous snapshot alone.** Overwriting it
+with nulls would turn "we could not ask Google this month" into "Google
+has no address for you", and the daily comparison would then report a
+disagreement that does not exist.
+
+**No client write policy on the table.** These are Google's words, not
+the owner's, and a client that could write them could make the site and
+the listing "agree" without either changing. One row per business —
+`dealership_id` is the primary key, so the snapshot is a current state
+rather than a history, and the `onConflict` target genuinely exists
+(the I5 lesson, where an `onConflict` named columns with no unique index
+behind them and would have failed at runtime).
+
+**Mutation score 45/46, with two real findings.**
+- The runner had a "no listing connected" guard that `fetchPlaceDetails`
+  already enforces with the same words, so no input could reach it —
+  the overlapping-guard fault for the sixth time (I1, I3, I5, G2, G5,
+  now this). Removed, with the mutation number in the comment.
+- Dropping `businessName` from the runner's call left every test green:
+  the name comparison was only ever exercised by passing it straight to
+  `localFindings`. There is now a test that goes through the subsystem.
+The 46th mutation added a comment, which `code()` strips by design.
+
+**Unverified live.** No business has a Google listing connected, so
+nothing has been fetched and nothing compared.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -112,6 +112,34 @@ already does).
 Findings, through the Strategist, into the daily email — the machinery
 S4 and S5 built. No new surface.
 
+**THE MAPS LEG SHIPPED 8 November 2026** (migration 225). The founder
+took the Enterprise SKU knowingly: the field mask is `displayName`,
+`formattedAddress` and `nationalPhoneNumber`, and the phone is what
+prices the call — free for the first 1,000 Place Details requests a
+month, $20 per 1,000 after, which at one request per business per month
+is a thousand businesses before anything is owed.
+
+**Split in two, because the groups forced it.** `signals` is
+"database-only and fast" by `cronGroups.ts`'s own rule, so a Place
+Details call cannot run there. The FETCH is monthly, in `heavy`, and
+writes one row to `place_snapshots`. The COMPARISON is three strings
+against three strings, costs nothing, and runs daily inside `site_audit`
+where the rest of the local audit already lives. The same shape
+`search_console_sync` uses: the slow half writes, the fast half reads.
+
+**Not behind a flag**, unlike G4 and A5, and the difference is real:
+those spend on every run, while this skips entirely for a business with
+no listing connected — which is every business today.
+
+**The phone is compared by digits, not by text.** Maps returns the
+national format and the owner types whatever he types, so a text
+comparison would report a disagreement every single day for a number
+that is perfectly correct. Leading zeros are dropped from both sides and
+the shorter must be a suffix of the longer, so no country code and no
+national length is hardcoded.
+
+**The earlier note, kept because it is why this took two days:**
+
 **SHIPPED 7 November 2026 as G5, except the Maps leg.** The line above
 calls the site-vs-Place comparison "the one check that needs the Places
 read Hawlai already does" — and that read exists but is **field-masked to
@@ -205,7 +233,7 @@ on one setting in Google Cloud.
 | **Search Console back up** | **XS** — a reconnect, plus one small code fix for visibility | nothing |
 | **§1 GBP API application** | **XS** of effort, **weeks** of waiting | the founder, one sitting |
 | **L1** the listing's facts on the site | **S** | the owner answering five questions |
-| **L2** ✅ (not the Maps leg) | **S/M** | shipped 7 Nov 2026 as G5 |
+| **L2** ✅ | **S/M** | G5 7 Nov 2026 · Maps leg 8 Nov (migration 225) |
 | **L3** city and occasion pages | **M** | his own words |
 | **L4** the listing through the API | **L** | §1 being approved |
 

@@ -103,7 +103,21 @@ export type SubsystemKey =
   // tests/dailyJobs.test.ts caught it: it pins daily_autopilot as the
   // last entry, which is a decision with an incident behind it.
   // Corrected 7 November 2026.
-  | "aeo_schedule";
+  | "aeo_schedule"
+  // G5's Maps leg — reads this business's Google listing and stores what
+  // it says (migration 225). In `heavy` for the usual reason: signals is
+  // "database-only and fast" and this is a third-party network call.
+  //
+  // THE COMPARISON IS NOT HERE. It is three strings against three
+  // strings, costs nothing, and runs daily inside site_audit in the
+  // signals group. Only the FETCH is monthly, which is the whole point
+  // of storing a snapshot — the same split search_console_sync uses.
+  //
+  // NOT FLAGGED, unlike page_speed and aeo_schedule, and the difference
+  // is real: those spend on every run, while this is free for the first
+  // 1,000 requests a month and skips entirely for a business with no
+  // listing connected — which is every business today.
+  | "place_snapshot";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
@@ -129,6 +143,9 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     // third party over the network. BEFORE daily_autopilot, like
     // everything else here.
     "aeo_schedule",
+    // G5's Maps leg, beside the other monthly third-party work and
+    // BEFORE daily_autopilot, like everything else in this group.
+    "place_snapshot",
     "daily_autopilot",
   ],
 };

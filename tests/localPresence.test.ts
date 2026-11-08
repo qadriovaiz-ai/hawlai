@@ -8,7 +8,7 @@
 // every marketing email's footer against the one the site publishes.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { localFindings, localSummary, sameText, mentionsCity } from "@/lib/seo/localPresence";
+import { localFindings, localSummary, sameText, mentionsCity, samePhone } from "@/lib/seo/localPresence";
 import { EMPTY_LISTING_FACTS } from "@/lib/seo/listingFacts";
 import { recordLocalPresence } from "@/lib/seo/runTechnicalAudit";
 import { code, sourceWithComments } from "./helpers/source";
@@ -35,6 +35,11 @@ const FULL = {
   city: "A City",
   landingText: "We are in A City and we are open.",
   placeId: "place-1",
+  businessName: "A Business",
+  // A snapshot OF THAT LISTING that agrees on all three. Without one the
+  // business is not "complete": a connected listing nobody has read yet
+  // is its own low finding.
+  snapshot: { placeId: "place-1", name: "A Business", address: "12 A Street, A City", phone: "+91 90000 00000" },
 };
 
 function codes(input: any) {
@@ -94,7 +99,7 @@ describe("3. A COMPLETE BUSINESS HAS NOTHING TO REPORT", () => {
     // A standing statement that only appears when something is broken
     // reads as noise. Same shape as runTechnicalAudit's site health.
     expect(localSummary([])).toMatch(/on record/i);
-    expect(localSummary([])).toMatch(/match/i);
+    expect(localSummary([])).toMatch(/agree/i);
   });
 });
 
@@ -264,7 +269,20 @@ describe("8. THE RUNNER: ONE SIGNAL, AND A FAILED READ FINDS NOTHING", () => {
               eq: () => ({
                 maybeSingle: async () =>
                   over.dealership ?? {
-                    data: { city: "A City", business_address: "12 A Street", google_place_id: "p1" },
+                    data: { dealership_name: "A Business", city: "A City", business_address: "12 A Street", google_place_id: "p1" },
+                    error: null,
+                  },
+              }),
+            }),
+          };
+        }
+        if (table === "place_snapshots") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () =>
+                  over.snapshot ?? {
+                    data: { place_id: "p1", place_name: "A Business", place_address: "12 A Street", place_phone: "+91 90000 00000", fetched_at: new Date().toISOString() },
                     error: null,
                   },
               }),
@@ -369,8 +387,33 @@ describe("8. THE RUNNER: ONE SIGNAL, AND A FAILED READ FINDS NOTHING", () => {
     expect(result.findings.map((f) => f.code)).not.toContain("city_missing_from_landing");
   });
 
+  it("THE BUSINESS NAME REACHES THE MAPS COMPARISON", async () => {
+    // Mutation M35: dropping businessName from the runner's call left
+    // every test green, because the name comparison was only ever tested
+    // by passing it directly to localFindings.
+    const client = db({
+      snapshot: {
+        data: { place_id: "p1", place_name: "Some Other Business", place_address: "12 A Street", place_phone: "+91 90000 00000", fetched_at: new Date().toISOString() },
+        error: null,
+      },
+    });
+    const result = await recordLocalPresence(client, "d1", [homePage]);
+    expect(result.findings.map((f) => f.code)).toContain("maps_name_disagrees");
+  });
+
+  it("AND SO DOES THE SNAPSHOT ITSELF", async () => {
+    // The other half of the same wiring: with a snapshot that agrees,
+    // nothing is reported and the not-yet-read note is absent.
+    const result = await recordLocalPresence(db(), "d1", [homePage]);
+    const codes = result.findings.map((f) => f.code);
+    expect(codes).not.toContain("maps_not_compared_yet");
+    expect(codes).not.toContain("maps_name_disagrees");
+    expect(codes).not.toContain("maps_address_disagrees");
+    expect(codes).not.toContain("maps_phone_disagrees");
+  });
+
   it("THE EVIDENCE IS COUNTED, not described", async () => {
-    const result = await recordLocalPresence(db({ dealership: { data: { city: "A City", business_address: "99 Other Street", google_place_id: "p1" }, error: null } }), "d1", [homePage]);
+    const result = await recordLocalPresence(db({ dealership: { data: { dealership_name: "A Business", city: "A City", business_address: "99 Other Street", google_place_id: "p1" }, error: null } }), "d1", [homePage]);
     const payload = vi.mocked(recordSignal).mock.calls[0][2] as any;
     expect(payload.evidence.findings).toBe(result.findings.length);
     expect(payload.evidence.high).toBe(result.findings.filter((f) => f.priority === "high").length);
@@ -400,9 +443,12 @@ describe("9. IT IS ACTUALLY WIRED INTO THE DAILY AUDIT", () => {
           };
         }
         if (table === "dealerships") {
-          return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { city: "A City", business_address: "12 A Street", google_place_id: null }, error: null }) }) }) };
+          return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { dealership_name: "A Business", city: "A City", business_address: "12 A Street", google_place_id: null }, error: null }) }) }) };
         }
         if (table === "business_listing_facts") {
+          return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) };
+        }
+        if (table === "place_snapshots") {
           return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) };
         }
         throw new Error(`unexpected table ${table}`);
@@ -470,23 +516,122 @@ describe("9. IT IS ACTUALLY WIRED INTO THE DAILY AUDIT", () => {
   });
 });
 
-describe("10. THE MAPS LEG IS ABSENT, AND SAYS WHY", () => {
-  it("NOTHING HERE READS THE PLACE RECORD", () => {
-    // L2 called the site-vs-Maps comparison "the one check that needs
-    // the Places read Hawlai already does". That read is field-masked to
-    // id, displayName, formattedAddress, rating and userRatingCount — no
-    // phone — and it is a search run at connect time, not a stored
-    // snapshot. Comparing on a schedule costs money per business per
-    // run, which is the founder's decision.
-    const src = code("src/lib/seo/localPresence.ts");
-    expect(src).not.toMatch(/findPlaceCandidates|places\.googleapis/);
-    const runner = code("src/lib/seo/runTechnicalAudit.ts");
-    expect(runner).not.toMatch(/findPlaceCandidates|places\.googleapis/);
+describe("10. THE MAPS LEG: WHAT GOOGLE SAYS vs WHAT THE SITE SAYS", () => {
+  it("A DIFFERENT NAME ON MAPS IS A HIGH FINDING", () => {
+    const found = localFindings({ ...FULL, snapshot: { ...FULL.snapshot, name: "Another Business" } } as any);
+    const f = found.find((x) => x.code === "maps_name_disagrees")!;
+    expect(f).toBeTruthy();
+    expect(f.priority).toBe("high");
+    expect(f.fix).toMatch(/Google Business Profile/i);
   });
 
-  it("AND THE REASON IS WRITTEN DOWN WHERE THE NEXT READER WILL LOOK", () => {
-    const src = sourceWithComments("src/lib/seo/localPresence.ts");
-    expect(src).toMatch(/field-masked/i);
-    expect(src).toMatch(/cost decision/i);
+  it("A DIFFERENT ADDRESS ON MAPS IS A HIGH FINDING", () => {
+    const found = localFindings({ ...FULL, snapshot: { ...FULL.snapshot, address: "99 Another Street" } } as any);
+    const f = found.find((x) => x.code === "maps_address_disagrees")!;
+    expect(f).toBeTruthy();
+    expect(f.priority).toBe("high");
+  });
+
+  it("A DIFFERENT NUMBER ON MAPS IS A HIGH FINDING", () => {
+    const found = localFindings({ ...FULL, snapshot: { ...FULL.snapshot, phone: "+91 91111 11111" } } as any);
+    const f = found.find((x) => x.code === "maps_phone_disagrees")!;
+    expect(f).toBeTruthy();
+    expect(f.priority).toBe("high");
+  });
+
+  it("THE SAME NUMBER WRITTEN DIFFERENTLY IS NOT A DISAGREEMENT", () => {
+    // THE ONE THAT WOULD CRY WOLF. Maps returns the national format and
+    // the owner typed whatever he typed; a text comparison would report
+    // this every single day for a perfectly correct number.
+    for (const mapsPhone of ["090000 00000", "9000000000", "+91-90000-00000", "(090000) 00000"]) {
+      const found = localFindings({ ...FULL, snapshot: { ...FULL.snapshot, phone: mapsPhone } } as any);
+      expect(found.map((f) => f.code), `"${mapsPhone}" is the same number`).not.toContain("maps_phone_disagrees");
+    }
+  });
+
+  it("NOTHING IS COMPARED WITHOUT A SNAPSHOT, and that is said out loud", () => {
+    // A missing snapshot means nobody has asked Google yet. Reading it
+    // as "they agree" would tell the owner his listing is consistent
+    // when it has never been looked at.
+    const found = localFindings({ ...FULL, snapshot: null } as any);
+    const codes = found.map((f) => f.code);
+    expect(codes).not.toContain("maps_name_disagrees");
+    expect(codes).not.toContain("maps_address_disagrees");
+    expect(codes).not.toContain("maps_phone_disagrees");
+    const f = found.find((x) => x.code === "maps_not_compared_yet")!;
+    expect(f).toBeTruthy();
+    expect(f.priority).toBe("low");
+    expect(f.fix).toMatch(/nothing to do/i);
+  });
+
+  it("A SNAPSHOT OF A DIFFERENT LISTING IS NOT COMPARED", () => {
+    // The owner reconnected. Last month's row describes the old listing,
+    // and comparing it would report a disagreement with a listing he no
+    // longer has.
+    const found = localFindings({
+      ...FULL,
+      placeId: "place-2",
+      snapshot: { placeId: "place-1", name: "The Old Name", address: "99 Old Street", phone: "+91 91111 11111" },
+    } as any);
+    const codes = found.map((f) => f.code);
+    expect(codes).not.toContain("maps_name_disagrees");
+    expect(codes).not.toContain("maps_address_disagrees");
+    expect(codes).not.toContain("maps_phone_disagrees");
+    expect(codes).toContain("maps_not_compared_yet");
+  });
+
+  it("AND NO LISTING AT ALL IS THE OTHER FINDING, not this one", () => {
+    const codes = localFindings({ ...FULL, placeId: null, snapshot: null } as any).map((f) => f.code);
+    expect(codes).toContain("no_maps_listing_linked");
+    expect(codes).not.toContain("maps_not_compared_yet");
+  });
+
+  it("a field Maps does not have is not a disagreement", () => {
+    // "Maps has no phone for you" and "Maps has a different phone" are
+    // different facts, and only one of them is a conflict.
+    const codes = localFindings({ ...FULL, snapshot: { ...FULL.snapshot, phone: null, address: null, name: null } } as any).map((f) => f.code);
+    expect(codes).not.toContain("maps_phone_disagrees");
+    expect(codes).not.toContain("maps_address_disagrees");
+    expect(codes).not.toContain("maps_name_disagrees");
+  });
+});
+
+describe("11. samePhone — DIGITS, NOT TEXT, AND NO DIALLING PLAN HARDCODED", () => {
+  it("a country prefix, a trunk zero, or neither", () => {
+    expect(samePhone("+91 90000 00000", "090000 00000")).toBe(true);
+    expect(samePhone("+91 90000 00000", "9000000000")).toBe(true);
+    expect(samePhone("090000 00000", "9000000000")).toBe(true);
+  });
+
+  it("punctuation of any kind is ignored", () => {
+    expect(samePhone("(+91) 90000-00000", "+91.90000.00000")).toBe(true);
+  });
+
+  it("A GENUINELY DIFFERENT NUMBER IS DIFFERENT", () => {
+    expect(samePhone("+91 90000 00000", "+91 91111 11111")).toBe(false);
+    expect(samePhone("9000000000", "9000000001")).toBe(false);
+  });
+
+  it("FEWER THAN SEVEN DIGITS IS NOT COMPARED AT ALL", () => {
+    // A suffix match on three digits would call every number the same.
+    expect(samePhone("000", "9000000000")).toBe(false);
+    expect(samePhone("9000000000", "000")).toBe(false);
+    expect(samePhone("123456", "123456")).toBe(false);
+  });
+
+  it("two blanks are not a match", () => {
+    expect(samePhone(null, null)).toBe(false);
+    expect(samePhone("", "")).toBe(false);
+    expect(samePhone("+91 90000 00000", null)).toBe(false);
+  });
+
+  it("NO COUNTRY CODE AND NO NATIONAL LENGTH IS WRITTEN INTO THE SOURCE", () => {
+    // Rule 3 applies to a dialling plan as much as to a trade: this
+    // product is for India today, and a hardcoded 91 or a fixed ten
+    // digits would be a guess about everywhere else.
+    const src = code("src/lib/seo/localPresence.ts");
+    const samePhoneSrc = src.slice(src.indexOf("export function samePhone"), src.indexOf("export function mentionsCity"));
+    expect(samePhoneSrc).not.toMatch(/91/);
+    expect(samePhoneSrc).not.toMatch(/slice\(-10\)|length === 10/);
   });
 });

@@ -58,11 +58,18 @@ export async function recordLocalPresence(
   dealershipId: string,
   pages: { slug?: string | null; page_type?: string | null; sections?: unknown }[]
 ): Promise<{ findings: Finding[]; skipped?: string }> {
-  const [{ data: dealership, error: dealershipError }, { data: factsRow }] = await Promise.all([
-    supabase.from("dealerships").select("city, business_address, google_place_id").eq("id", dealershipId).maybeSingle(),
+  const [{ data: dealership, error: dealershipError }, { data: factsRow }, { data: snapshotRow }] = await Promise.all([
+    supabase.from("dealerships").select("dealership_name, city, business_address, google_place_id").eq("id", dealershipId).maybeSingle(),
     supabase
       .from("business_listing_facts")
       .select("public_phone, publish_phone, opening_hours, areas_served, street_address, publish_street_address, instagram_url, other_profile_urls")
+      .eq("dealership_id", dealershipId)
+      .maybeSingle(),
+    // What Maps said, last time it was asked (migration 225). A monthly
+    // subsystem writes it; this read is free and daily.
+    supabase
+      .from("place_snapshots")
+      .select("place_id, place_name, place_address, place_phone, fetched_at")
       .eq("dealership_id", dealershipId)
       .maybeSingle(),
   ]);
@@ -88,8 +95,19 @@ export async function recordLocalPresence(
     addressPublished: factsRow?.publish_street_address === true,
     phoneOnRecord: factsRow?.public_phone ?? null,
     city: dealership?.city ?? null,
+    businessName: dealership?.dealership_name ?? null,
     landingText,
     placeId: dealership?.google_place_id ?? null,
+    // A FAILED READ OF THE SNAPSHOT IS NO SNAPSHOT, not an empty one —
+    // localFindings compares nothing without a usable row.
+    snapshot: snapshotRow
+      ? {
+          placeId: snapshotRow.place_id ?? null,
+          name: snapshotRow.place_name ?? null,
+          address: snapshotRow.place_address ?? null,
+          phone: snapshotRow.place_phone ?? null,
+        }
+      : null,
   });
 
   await recordSignal(supabase, dealershipId, {

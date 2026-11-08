@@ -21,6 +21,7 @@ import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
 import { runPageSpeed } from "@/lib/seo/pageSpeed";
 import { runAeoSchedule } from "@/lib/seo/aeoSchedule";
+import { runPlaceSnapshot } from "@/lib/seo/placeSnapshot";
 import { siteBase } from "@/lib/claims/businessFacts";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
@@ -45,6 +46,9 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // missing was a second run to compare against. Monthly and flagged
   // off, both decided inside the function.
   aeo_schedule: (s, id) => runAeoSchedule(s, id),
+  // G5's Maps leg. Monthly and listing-gated, both decided inside the
+  // function; the comparison it feeds runs daily in site_audit.
+  place_snapshot: (s, id) => runPlaceSnapshot(s, id),
   // S7/P2 — reads claim_checks rows that went out and asks the
   // extractor about them again. Costs money, so it is capped per
   // business per run inside the function rather than by a flag here.

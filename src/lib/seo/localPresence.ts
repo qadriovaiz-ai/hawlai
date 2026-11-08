@@ -4,17 +4,20 @@
 // The technical audit already reads the site and finds missing titles and
 // duplicate body text. This is the same shape pointed at local facts.
 //
-// WHAT IT DOES NOT DO, AND WHY — the headline check L2 named was "the
-// name, address and phone not matching between the site and the Place
-// record", described there as "the one check that needs the Places read
-// Hawlai already does". That read exists (lib/google/findPlaceCandidates)
-// but it is field-masked to id, displayName, formattedAddress, rating
-// and userRatingCount — Places (New) bills by the fields requested, and
-// a phone number is a higher tier. It is also a SEARCH run when the owner
-// connects reviews, not a stored snapshot: only `google_place_id` is
-// kept, so comparing on a schedule would mean a Place Details read per
-// business per run. Both of those are the founder's cost decision, not
-// this file's, so the Maps leg is NOT here. What is here costs nothing.
+// THE MAPS LEG IS HERE SINCE 8 NOVEMBER 2026, and the reason it was not
+// before is worth keeping: L2 called it "the one check that needs the
+// Places read Hawlai already does", but that read
+// (lib/google/findPlaceCandidates) is a TEXT SEARCH field-masked to id,
+// displayName, formattedAddress, rating and userRatingCount — no phone,
+// and nothing stored but `google_place_id`. Comparing on a schedule
+// needed a Place Details read, and the phone field puts that on the
+// Enterprise SKU. The founder took that cost knowingly: free for the
+// first 1,000 requests a month, which at one per business per month is a
+// thousand businesses.
+//
+// THE COMPARISON ITSELF IS STILL FREE AND STILL DAILY. It reads
+// `place_snapshots` (migration 225), which the monthly `place_snapshot`
+// subsystem writes. Nothing in this file calls Google.
 //
 // AND THERE IS STILL A REAL MISMATCH TO FIND WITHOUT IT. Hawlai holds
 // the business's address TWICE, entered by hand on two different screens:
@@ -69,6 +72,53 @@ export function sameText(a: string | null | undefined, b: string | null | undefi
   return x === y;
 }
 
+/**
+ * The same phone number, however it is written.
+ *
+ * DIGITS ONLY, THEN A SUFFIX MATCH. "+91 90000 00000", "090000 00000"
+ * and "9000000000" are one number written three ways, and Maps returns
+ * the national format while an owner types whatever he types. Comparing
+ * the text would report a disagreement every single day for a business
+ * whose number is perfectly correct — a check that cries wolf is a check
+ * the owner turns off.
+ *
+ * NO COUNTRY CODE IS HARDCODED, and no fixed national length either.
+ * Rule 3 applies to a dialling plan as much as to a trade: this product
+ * is for India today, and a hardcoded 91 or a fixed ten digits would be
+ * a guess about everywhere else.
+ *
+ * THREE STEPS, in this order:
+ *   1. keep the digits
+ *   2. DROP LEADING ZEROS. A national significant number does not begin
+ *      with one anywhere — the leading zero is a trunk prefix a caller
+ *      dials, not part of the number. Dropping it from both sides is
+ *      what makes a suffix match work: "+91 90000 00000" is
+ *      919000000000 and "090000 00000" is 09000000000, and the second is
+ *      NOT a suffix of the first until the zero goes. A country that
+ *      keeps a zero inside the international form, like Italy's 06, is
+ *      unaffected: nothing is stripped from the middle.
+ *   3. the shorter must be a suffix of the longer, which covers a
+ *      country prefix on one side, on both, or on neither.
+ *
+ * AT LEAST SEVEN DIGITS ON BOTH SIDES, or nothing is compared: a suffix
+ * match on three digits would call every number the same.
+ *
+ * THE RESIDUAL RISK, stated rather than hidden: two genuinely different
+ * numbers where one is a suffix of the other still match. Seven digits
+ * makes that unlikely and the alternative is worse — an exact text
+ * comparison reports a disagreement every single day for a number that
+ * is perfectly correct, and a check that cries wolf is a check the owner
+ * turns off.
+ */
+export function samePhone(a: string | null | undefined, b: string | null | undefined): boolean {
+  const digits = (v: string | null | undefined) => String(v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  const x = digits(a);
+  const y = digits(b);
+  if (x.length < 7 || y.length < 7) return false;
+  const [shorter, longer] = x.length <= y.length ? [x, y] : [y, x];
+  return longer.endsWith(shorter);
+}
+
 /** Whether a city name appears in a page's words. */
 export function mentionsCity(text: string | null | undefined, city: string | null | undefined): boolean {
   const c = String(city ?? "").trim().toLowerCase();
@@ -89,10 +139,25 @@ export type LocalInput = {
   phoneOnRecord: string | null | undefined;
   /** The business's city, as the business itself states it. */
   city: string | null | undefined;
+  /** What the business calls itself, for the comparison with Maps. */
+  businessName?: string | null | undefined;
   /** The words on the page a stranger lands on. */
   landingText: string | null | undefined;
   /** Whether anything ties the site to a Maps listing. */
   placeId: string | null | undefined;
+  /**
+   * What Google Maps said, last time it was asked (migration 225).
+   *
+   * NULL MEANS NOBODY HAS ASKED YET, which is not the same as "Maps
+   * agrees". A missing snapshot compares nothing rather than reporting a
+   * clean result — the same rule as an empty `removed_kinds` in I6.
+   */
+  snapshot?: {
+    placeId: string | null | undefined;
+    name: string | null | undefined;
+    address: string | null | undefined;
+    phone: string | null | undefined;
+  } | null;
 };
 
 /**
@@ -196,6 +261,73 @@ export function localFindings(input: LocalInput): Finding[] {
     });
   }
 
+  // ---- THE MAPS LEG (migration 225) --------------------------------
+  //
+  // NOTHING IS COMPARED WITHOUT A SNAPSHOT. A missing one means nobody
+  // has asked Google yet — a business that connected its listing
+  // yesterday has no row until the 1st — and reading that as "they
+  // agree" would tell the owner his listing is consistent when it has
+  // never been looked at.
+  //
+  // AND A SNAPSHOT OF A DIFFERENT LISTING IS NOT COMPARED EITHER. If the
+  // owner reconnects to another listing, last month's row describes the
+  // old one, and comparing it would report a disagreement with a listing
+  // he no longer has.
+  const snap = input.snapshot;
+  const snapshotUsable = Boolean(snap && String(snap.placeId ?? "").trim() && sameText(snap.placeId, input.placeId));
+
+  if (snapshotUsable && snap) {
+    if (String(snap.name ?? "").trim() && String(input.businessName ?? "").trim() && !sameText(snap.name, input.businessName)) {
+      out.push({
+        code: "maps_name_disagrees",
+        problem: "Google Maps lists this business under a different name from the one on your site.",
+        impact:
+          "Search engines match a business across the web by its name, address and phone together — two names means two weaker records instead of one strong one, and a customer cannot tell they are the same place.",
+        fix: "Decide which name is right, then change the other one — the site name in Settings, or the listing name in your Google Business Profile.",
+        priority: "high",
+        where: [],
+      });
+    }
+
+    if (String(snap.address ?? "").trim() && String(input.addressOnRecord ?? "").trim() && !sameText(snap.address, input.addressOnRecord)) {
+      out.push({
+        code: "maps_address_disagrees",
+        problem: "The address on Google Maps is not written the same way as the one on your site.",
+        impact: "This is the single thing local search compares most, and a customer following the map can end up somewhere else.",
+        fix: "Pick one wording and use it in both places — your business details here, and your Google Business Profile.",
+        priority: "high",
+        where: [],
+      });
+    }
+
+    // THE PHONE IS COMPARED BY DIGITS, not by text — see samePhone. The
+    // snapshot's number is in national format and the owner typed his
+    // own way, so a text comparison would report a disagreement every
+    // day for a number that is perfectly correct.
+    if (String(snap.phone ?? "").trim() && String(input.phoneOnRecord ?? "").trim() && !samePhone(snap.phone, input.phoneOnRecord)) {
+      out.push({
+        code: "maps_phone_disagrees",
+        problem: "The phone number on Google Maps is a different number from the one on your site.",
+        impact: "One of them is reaching somebody who is not you, or nobody at all — and a call is the most direct thing a nearby customer does.",
+        fix: "Check both and make them the same number: your business details here, and your Google Business Profile.",
+        priority: "high",
+        where: [],
+      });
+    }
+  } else if (String(input.placeId ?? "").trim()) {
+    // A LISTING IS CONNECTED BUT NOT YET READ. Said out loud rather than
+    // passed over in silence, because the absence of a disagreement is
+    // otherwise indistinguishable from agreement.
+    out.push({
+      code: "maps_not_compared_yet",
+      problem: "Your Google listing has not been read yet, so nothing has been compared against it.",
+      impact: "Until it is, nobody can tell you whether Maps and your site agree about your name, address and number.",
+      fix: "Nothing to do — this happens on its own at the start of the month.",
+      priority: "low",
+      where: [],
+    });
+  }
+
   const rank: Record<Finding["priority"], number> = { high: 0, medium: 1, low: 2 };
   return out.sort((a, b) => rank[a.priority] - rank[b.priority]);
 }
@@ -209,7 +341,7 @@ export function localFindings(input: LocalInput): Finding[] {
  */
 export function localSummary(findings: Finding[]): string {
   if (findings.length === 0) {
-    return "The business's local details are on record and its two addresses match";
+    return "The business's local details are on record, and the site, the email footer and the Maps listing all agree";
   }
   const high = findings.filter((f) => f.priority === "high");
   const lead = (high.length ? high : findings).map((f) => f.problem.replace(/\.$/, ""));
