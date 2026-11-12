@@ -20,7 +20,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { auditSite, auditCatalogue } from "@/lib/growth/audit";
-import { checkTracking, conversionClaimsAllowed, measurementHealthLine } from "@/lib/growth/tracking";
+import { measurementHealthLine, checkTracking, conversionClaimsAllowed } from "@/lib/growth/tracking";
 import { scorable } from "@/lib/growth/findings";
 
 const ORIGINAL = globalThis.fetch;
@@ -189,6 +189,13 @@ describe("4. T — the tracking check", () => {
       dealerships: [{ id: "d1" }],
       ad_creatives: [],
       orders: [],
+      // A PUBLISHED SITE, so these tests still ask what they were
+      // written to ask. Health gained a no_site answer on 12 Nov 2026
+      // because a business with no website was being told its
+      // measurement was BROKEN; without a site here, every one of these
+      // would now get that answer instead of the one it is testing.
+      websites: [{ dealership_id: "d1", published: true }],
+      landing_pages: [],
       ...over,
     });
   }
@@ -215,6 +222,43 @@ describe("4. T — the tracking check", () => {
     });
     const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
     expect(t.siteEvents.visitorEvents30d).toBe(1);
+  });
+
+  it("NOTHING TO MEASURE IS NOT A FAULT — no site, no BROKEN", async () => {
+    // THE REPORTED BUG, 12 Nov 2026. A business with no website read
+    // "Measurement health: BROKEN", which sent its owner looking for a
+    // fault that did not exist. Zero events means nothing until there
+    // is something that could have produced one.
+    forbidModelCalls();
+    const { client } = tracked({ page_events: [], websites: [], landing_pages: [] });
+    const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
+    expect(t.health).toBe("no_site");
+    expect(t.site.published).toBe(false);
+    const line = measurementHealthLine(t);
+    expect(line).not.toMatch(/BROKEN/);
+    expect(line).toMatch(/NOTHING TO MEASURE YET/);
+    // AND IT DOES NOT PILE ON. Three not-connected complaints about a
+    // business that has not opened its doors are noise.
+    expect(line).not.toMatch(/Search Console/);
+    expect(line).not.toMatch(/ad conversions/);
+  });
+
+  it("A SAVED BUT UNPUBLISHED SITE SAYS SO, rather than 'no website'", async () => {
+    forbidModelCalls();
+    const { client } = tracked({ page_events: [], websites: [{ dealership_id: "d1", published: false }], landing_pages: [] });
+    const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
+    expect(t.health).toBe("no_site");
+    expect(t.site.why).toMatch(/not published yet/);
+  });
+
+  it("A PUBLISHED LANDING PAGE COUNTS AS SOMETHING TO MEASURE", async () => {
+    // /api/public/track resolves a visit against landing_pages OR
+    // websites, so a quick-launch page is measured just as much.
+    forbidModelCalls();
+    const { client } = tracked({ page_events: [], websites: [], landing_pages: [{ dealership_id: "d1", published: true }] });
+    const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
+    expect(t.site.published).toBe(true);
+    expect(t.health).toBe("broken");
   });
 
   it("IS BROKEN WHEN NOTHING IS FIRING", async () => {

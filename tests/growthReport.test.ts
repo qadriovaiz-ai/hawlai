@@ -31,6 +31,7 @@ function tracking(over: Partial<TrackingState> = {}): TrackingState {
   return {
     siteEvents: { firing: true, lastAt: "2026-10-22T10:00:00Z", visitorEvents30d: 41, firstAt: "2026-08-01T10:00:00Z" },
     searchConsole: { connected: true, siteUrl: "https://example.test" },
+    site: { published: true, why: "your site is published" },
     adsConversions: { verified: true, why: "a campaign has run and a paid order has been recorded in the last 30 days" },
     health: "ok",
     ...over,
@@ -230,6 +231,7 @@ describe("4. the measurement health line is in every report", () => {
     const broken = tracking({
       siteEvents: { firing: false, lastAt: null, visitorEvents30d: 0, firstAt: null },
       searchConsole: { connected: false, siteUrl: null },
+      site: { published: true, why: "your site is published" },
       adsConversions: { verified: false, why: "no ad campaign has run, so there is nothing to attribute" },
       health: "broken",
     });

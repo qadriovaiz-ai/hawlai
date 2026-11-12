@@ -262,6 +262,7 @@ describe("5. THE LINE SAYS WHY IT IS ASKING, AND DECLARES ITS FIGURE", () => {
       tracking: {
         siteEvents: { firing: true, lastAt: "2026-10-22T10:00:00Z", visitorEvents30d: 41, firstAt: "2026-08-01T10:00:00Z" },
         searchConsole: { connected: true, siteUrl: "https://example.test" },
+        site: { published: true, why: "your site is published" },
         adsConversions: { verified: true, why: "a campaign has run and a paid order has been recorded" },
         health: "ok",
       },
