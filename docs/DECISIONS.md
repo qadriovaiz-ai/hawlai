@@ -3600,6 +3600,117 @@ test, the same way any assertion can be deleted.
 identical, including their order — so there is nothing new to see on a
 screen.
 
+## 12 Nov 2026 — The auto-reply bug: diagnosed, and made unable to hide
+
+The DM and comment auto-reply toggles have been ON in production and
+`auto_reply_log` has had **zero rows, ever**. Noticed 4 November,
+undiagnosed for eight days.
+
+### The diagnosis, from the code
+
+**Two certain faults, both in the Facebook connection, neither a guess.**
+
+1. **The requested scopes cannot do the job.**
+   `src/app/api/auth/facebook/connect/route.ts` asks for
+   `pages_show_list`, `pages_read_engagement`, `pages_manage_ads`,
+   `pages_manage_posts`, `ads_management`, `ads_read`,
+   `leads_retrieval`. Missing: **`pages_messaging`** (required to send a
+   DM reply at all), **`pages_manage_metadata`** (required to subscribe
+   a Page to the app and therefore to RECEIVE its webhooks), and
+   **`pages_manage_engagement`** (required to post a comment reply).
+
+2. **Nothing has ever subscribed a Page to the app.** There is no
+   `POST /{page-id}/subscribed_apps` call anywhere in the codebase. Meta
+   does not deliver `messages` or `feed` webhooks for a Page that is not
+   subscribed — so the four early returns in `handleAutoReplyEntry` were
+   never even reached.
+
+**Instagram is different and better off:**
+`/api/auth/instagram/start` does request
+`instagram_business_manage_messages` and
+`instagram_business_manage_comments`. Its only gap is the shared one —
+nothing subscribes its webhooks either.
+
+So the single shared root cause is **the webhook is never delivered**,
+plus a Facebook-only scope gap that would have stopped the send even if
+it had been.
+
+### Why it took eight days, which is the part worth fixing first
+
+Five gates stand between Meta and a reply, and **every one was silent**:
+
+| gate | what it did |
+|---|---|
+| rejected signature | a `console.error` and a 401 |
+| no entry id | `return` |
+| no business matched | `return` |
+| no reply token | `return` |
+| both toggles off | `return` |
+
+None of that is wrong as behaviour — a webhook endpoint should be quiet
+to Meta, which retries. What was wrong is that being quiet to Meta was
+also being quiet to the owner.
+
+**And `auto_reply_log` could never have recorded the two most important
+gates.** Its `dealership_id` is NOT NULL (migration 033), and those two
+fire precisely when no business matched. So "DID META EVER CALL US" was
+a question the database could not answer, at all.
+
+### What this commit does
+
+`webhook_deliveries` (migration 226): one row per webhook entry, with a
+**nullable** dealership, a constrained `outcome`, and one sentence of
+`detail`. Every one of the five gates now records why it stopped.
+
+**Metadata only, enforced by the schema rather than by discipline.** No
+message text, no sender id, no token — and no column that could hold
+them. A row here can be about a page belonging to nobody on this
+platform, and storing a stranger's words against no owner is collection
+with no purpose and no retention answer. `auto_reply_log` keeps the
+conversation where there is an owner who has a relationship with the
+person writing.
+
+**A row with a null dealership is readable by nobody through RLS**, and
+that is a stated limit rather than an oversight: there is no owner it
+could be shown to without showing one business another's page id. Those
+rows are read by hand, with the query the migration ships.
+
+**The migration ships the diagnosis**, not just the table — group by
+outcome over the last hour, with what each answer means, including "no
+rows at all means Meta never called".
+
+### A bug I shipped inside the fix, caught by an existing test
+
+The rejection path called `createServiceClient()` at the call site, and
+that function **throws** when the Supabase env vars are absent — so the
+signature rejection threw instead of returning its 401.
+`tests/leadIngestion.test.ts` went red on exactly that. A webhook
+rejection must not depend on the database being reachable: it is the one
+response the route must always be able to give. The client is now built
+inside the try, in `recordDeliveryStandalone`, and a test pins that the
+rejection path constructs no client.
+
+### Mutation score 30/30
+
+Two real gaps: the unmatched-business row stopped saying why and nothing
+noticed, and the privacy assertion covered only the one gate that
+replies — so putting the customer's message into another gate's `detail`
+survived. Three of my own mutations were equivalent rather than
+survivors, one for a reason worth recording: a mutation that inserted a
+second `detail:` key BEFORE the existing one had no effect, because the
+last key in a JS object literal wins.
+
+### Still to do, and the next commit
+
+The scopes and the `subscribed_apps` call. **Both have an owner-side
+cost the founder needs to know now:** adding `pages_messaging` means
+**reconnecting Facebook** (a new token), and on a live Meta app that
+permission needs **App Review**. That is a queue, like the GBP
+application — worth starting before the pilot, not during it.
+
+**Unverified live.** Nothing here has seen a real webhook. The table is
+empty by design until one arrives.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
+import { recordDelivery, recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 
 // Kept as a standalone endpoint in case a separate Callback URL is
 // ever configured for this specifically, but in practice Meta only
@@ -33,7 +34,13 @@ export async function POST(request: Request) {
   // closed, including when FACEBOOK_APP_SECRET is unset.
   const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
   if (!signature.valid) {
-    console.error("[meta-messaging]", describeRejection(signature));
+    const why = describeRejection(signature);
+    console.error("[meta-messaging]", why);
+    // RECORDED, NOT ONLY LOGGED (migration 226). A console line in
+    // Vercel is invisible to the owner, and "FACEBOOK_APP_SECRET is not
+    // set" rejecting every delivery looks identical from outside to
+    // Meta never calling at all.
+    await recordDeliveryStandalone({ source: "meta-messaging", outcome: "signature_rejected", detail: why });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -46,7 +53,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
   for (const entry of body?.entry ?? []) {
-    await handleAutoReplyEntry(entry, supabase);
+    await handleAutoReplyEntry(entry, supabase, "meta-messaging");
   }
 
   return NextResponse.json({ success: true });

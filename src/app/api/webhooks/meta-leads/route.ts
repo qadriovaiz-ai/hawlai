@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
+import { recordDelivery, recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 import { triggerVapiCall } from "@/lib/agents/vapiCallAgent";
 import { emitNotification } from "@/lib/notifications/emit";
 import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
@@ -62,9 +63,18 @@ export async function POST(request: Request) {
   // that leads will not arrive until it is set.
   const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
   if (!signature.valid) {
-    console.error("[meta-leads]", describeRejection(signature));
-    // 401 with no detail. A rejection must not tell an unauthenticated
-    // caller anything about why, or it becomes an oracle.
+    const why = describeRejection(signature);
+    console.error("[meta-leads]", why);
+    // RECORDED, NOT ONLY LOGGED (migration 226). This is the URL Meta
+    // actually calls, so this is the rejection that matters: an unset
+    // FACEBOOK_APP_SECRET rejecting every delivery is indistinguishable
+    // from outside from Meta never calling at all, and that ambiguity
+    // is what cost eight days.
+    //
+    // THE ROW IS NOT THE RESPONSE. The 401 still says nothing, so an
+    // unauthenticated caller learns nothing about why — the reason goes
+    // where only the owner and the service role can read it.
+    await recordDeliveryStandalone({ source: "meta-leads", outcome: "signature_rejected", detail: why });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -92,7 +102,7 @@ export async function POST(request: Request) {
     // has to live on this same URL since Meta only allows one Callback
     // URL per Page product. No-ops if the dealer hasn't enabled either
     // toggle or this entry has no messaging/feed payload.
-    await handleAutoReplyEntry(entry, supabase);
+    await handleAutoReplyEntry(entry, supabase, "meta-leads");
 
     // entry.id is the Facebook Page ID this event came from — use it to
     // find which dealership owns this page, so leads from different

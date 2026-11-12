@@ -7,6 +7,7 @@ import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { fetchCatalog, type CatalogProduct } from "@/lib/claims/businessFacts";
 import { bookingPageUrl } from "@/lib/catalog/catalogItem";
 import { siteUrl } from "@/lib/email/consent";
+import { recordDelivery } from "@/lib/webhooks/deliveryLog";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -76,9 +77,16 @@ export function autoReplyCatalog(items: CatalogProduct[], bookingPage: string | 
   }));
 }
 
-export async function handleAutoReplyEntry(entry: any, supabase: any) {
+export async function handleAutoReplyEntry(entry: any, supabase: any, source: "meta-leads" | "meta-messaging" = "meta-leads") {
+  // EVERY RETURN BELOW RECORDS WHY (migration 226). The behaviour is
+  // unchanged — a webhook endpoint should stay quiet to Meta — but
+  // being quiet to Meta was also being quiet to the owner, and that is
+  // what left the auto-reply toggles on with an empty log for months.
   const entryId: string | undefined = entry?.id;
-  if (!entryId) return;
+  if (!entryId) {
+    await recordDelivery(supabase, { source, outcome: "no_entry_id", detail: "the webhook entry carried no id" });
+    return;
+  }
 
   let dealership = (await supabase
     .from("dealerships")
@@ -99,10 +107,31 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
     }
   }
 
-  if (!dealership) return;
+  if (!dealership) {
+    // THE MOST DIAGNOSTIC ROW IN THE TABLE. The id Meta named is kept,
+    // so it can be compared with what dealerships.fb_page_id and
+    // instagram_business_id actually hold.
+    await recordDelivery(supabase, {
+      source, entryId, outcome: "no_business_matched",
+      detail: "no business has this id as its Facebook page or Instagram business account",
+    });
+    return;
+  }
   const replyToken = channel === "instagram" ? dealership.instagram_access_token : readMetaPageToken(dealership);
-  if (!replyToken) return;
-  if (!dealership.dm_auto_reply_enabled && !dealership.comment_auto_reply_enabled) return;
+  if (!replyToken) {
+    await recordDelivery(supabase, {
+      source, entryId, dealershipId: dealership.id, outcome: "no_reply_token",
+      detail: `matched on ${channel}, but the connection has no usable access token`,
+    });
+    return;
+  }
+  if (!dealership.dm_auto_reply_enabled && !dealership.comment_auto_reply_enabled) {
+    await recordDelivery(supabase, {
+      source, entryId, dealershipId: dealership.id, outcome: "both_toggles_off",
+      detail: "DM and comment auto-reply are both switched off",
+    });
+    return;
+  }
 
   // P3 20a — was its own separate brand_profiles query; now the same
   // shared assembler chat and calls already use, so this surface
@@ -129,6 +158,10 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
     ? bookingPageUrl((await supabase.from("dealerships").select("booking_slug").eq("id", dealership.id).maybeSingle()).data?.booking_slug, siteUrl())
     : null;
   const productCatalog = autoReplyCatalog(catalogItems, bookingPage);
+
+  // Whether any customer message or comment in this entry was actually
+  // answered — read at the end to tell "handled" from "nothing to do".
+  let handledSomething = false;
 
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {
@@ -185,6 +218,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
         dealership_id: dealership.id, channel: `dm_${channel}`, source_id: senderId, lead_id: leadId,
         incoming_text: text, reply_text: replyText, success, error: errorMsg,
       });
+      handledSomething = true;
     }
   }
 
@@ -231,6 +265,20 @@ export async function handleAutoReplyEntry(entry: any, supabase: any) {
         dealership_id: dealership.id, channel: "comment", source_id: commentId,
         incoming_text: text, reply_text: replyText, success, error: errorMsg,
       });
+      handledSomething = true;
     }
   }
+
+  // MATCHED, ENABLED, AND STILL NOTHING TO DO is a real and common
+  // outcome — a feed change that was not a comment, an echo of the
+  // business's own message, a delivery receipt. Recorded separately
+  // from the gates above so that "the plumbing works, this particular
+  // payload just had nothing in it" is distinguishable from a fault.
+  await recordDelivery(supabase, {
+    source, entryId, dealershipId: dealership.id,
+    outcome: handledSomething ? "handled" : "nothing_to_reply_to",
+    detail: handledSomething
+      ? null
+      : "matched and enabled, but the entry carried no customer message or comment to answer",
+  });
 }
