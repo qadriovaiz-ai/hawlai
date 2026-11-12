@@ -355,7 +355,14 @@ describe("6. THE ASK IS RECORDED BEFORE IT IS SENT", () => {
   it("the order is recorded-then-returned, and the file says why", () => {
     const src = sourceWithComments("src/lib/onboarding/factGaps.ts");
     expect(src).toMatch(/THE RECORD IS WRITTEN BEFORE THE EMAIL IS BUILT/);
-    const body = code("src/lib/onboarding/factGaps.ts");
+    // SLICED TO askForMissingFact FIRST. R2c added findMissingFact,
+    // which READS ONLY and returns the same shape earlier in the file —
+    // so indexOf found its return and inverted this check. The
+    // satisfied-by-any-occurrence fault, again: when the thing occurs
+    // more than once, slice.
+    const whole = code("src/lib/onboarding/factGaps.ts");
+    const body = whole.slice(whole.indexOf("export async function askForMissingFact"));
+    expect(body.length).toBeGreaterThan(400);
     const upsertAt = body.indexOf('from("interview_answers").upsert');
     const returnAt = body.indexOf("return { asked: gap, line");
     expect(upsertAt).toBeGreaterThan(-1);

@@ -179,6 +179,56 @@ export type AskResult = {
  * guarantee and asks forever, and of the two failures the forgettable
  * one is better than the nagging one.
  */
+/**
+ * The gap worth asking about, and the sentence for it — READING ONLY.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM askForMissingFact — R2c, 12 November
+ * 2026. That one RECORDS the ask before handing back the line, because
+ * an email is pushed at the owner whether he reads it or not: if the
+ * send then fails, one question is lost rather than the "once, ever"
+ * promise.
+ *
+ * A CARD IS NOT PUSHED, so that trade does not apply to it. The
+ * question sits on the Business Knowledge page until he answers it or
+ * skips it, and `nextGapToAsk` already treats both as dealt with. So
+ * the card must NOT record an ask: doing so would burn the one question
+ * on a page view, which is the same fault as marking a finding
+ * "surfaced" because something considered showing it (R2a).
+ */
+export async function findMissingFact(
+  supabase: any,
+  dealershipId: string,
+  opts: { sinceDays?: number } = {}
+): Promise<AskResult> {
+  const since = new Date(Date.now() - (opts.sinceDays ?? 30) * 86400000).toISOString();
+
+  const [{ data: checks, error: checkError }, { data: progress, error: progressError }] = await Promise.all([
+    supabase
+      .from("claim_checks")
+      .select("removed_kinds, claims_removed")
+      .eq("dealership_id", dealershipId)
+      .gte("created_at", since),
+    supabase.from("interview_answers").select("question_key, status, attempts, weak").eq("dealership_id", dealershipId),
+  ]);
+
+  // A FAILED READ ASKS NOTHING, the same rule the pushing version
+  // follows: offering a question without being able to check what has
+  // already been dealt with is how one question becomes every morning.
+  if (checkError || progressError) {
+    const why = `could not read the history: ${checkError?.message ?? progressError?.message}`;
+    console.error(`[fact-gaps] ${dealershipId}: ${why}`);
+    return { asked: null, line: null, why };
+  }
+
+  const gap = nextGapToAsk(checks, progress);
+  if (!gap) return { asked: null, line: null, why: "nothing has been missed often enough to ask about" };
+
+  const line = gapAskLine(gap);
+  if (!line) return { asked: null, line: null, why: `no question is registered for "${gap.key}"` };
+
+  return { asked: gap, line, why: null };
+}
+
 export async function askForMissingFact(
   supabase: any,
   dealershipId: string,

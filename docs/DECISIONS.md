@@ -3856,6 +3856,87 @@ plan was not made from.
 **Unverified live.** No report has been regenerated for a real
 business, and `no_data_yet` has never been shown to anyone.
 
+## 12 Nov 2026 — R2b and R2c: the daily email stops, and the question that rode on it keeps its voice
+
+The founder's decision: the agent keeps working in the background, and a
+report is something he asks for.
+
+### A CORRECTION I OWE, and the reason the order changed
+
+I told him THREE things hung on the daily email — the Tier 3 interview
+question, the S7 demotion notice, and the AI-failure notice. **Only the
+first did.**
+
+`lib/ai/claude.ts` emits a `platform_ai_unavailable` notification on
+every AI failure, and `lib/autonomy/demotion.ts` emits
+`autonomy_lowered` with a dedupe key. Both are independent of the
+report, and both kinds have existed since migrations 190 and 218. I had
+read two code comments — "the owner hears about a demotion in the daily
+email" and "the growth run is the only part of this loop that reaches
+the owner" — and believed them instead of checking what the code does.
+**Both comments are true of their own loop and false of the product.**
+
+It cost nothing because the tests caught it: removing the send turned
+red an assertion whose own premise was the false one, and reading that
+is what sent me to look. It would have cost something if I had built a
+second notification path for things that already had one.
+
+### What R2b does
+
+`runDailyAutopilot` calls `runGrowthWork` and builds no report. The run
+log's `notSentBecause` keeps its name and tells the truth — "reports are
+built when the owner asks for one, not on a schedule" — because a bare
+`sent: false` with no reason is how a working product looks broken to
+whoever reads the log next. `buildGrowthReport` and `runDailyGrowth`
+both stay, for the on-demand path R3 will call.
+
+### What R2c does
+
+The Tier 3 question moves to the Business Knowledge interview card,
+which is where answers are written anyway, and it goes IN FRONT of the
+registry's next question: a fact that has already cost the owner a
+deleted line is worth more than the next one on a list. The reason
+travels with it, because "I had to cut a line twice because I do not
+have your price range" is a different request from "what is your price
+range".
+
+**AND SERVING IT RECORDS NOTHING.** `askForMissingFact` records the ask
+BEFORE returning the line, because an email is pushed whether or not it
+is read. A card is not pushed — the question sits there until the owner
+answers or skips it, and `nextGapToAsk` already treats both as dealt
+with. Recording on a page view would burn the one question the product
+gets to ask, which is the same fault as marking a finding "surfaced"
+because something considered showing it (R2a). So there are two
+functions: `findMissingFact` reads, `askForMissingFact` pushes.
+
+### Six existing assertions were retargeted, one of them corrected
+
+Four were mechanical — the function the autopilot calls changed name, so
+slices and greps naming `runDailyGrowth` had to name `runGrowthWork`.
+Their subjects are unchanged: the cron never asks for the paid pass, the
+loop imports and calls rather than fetching its own URL, and a throw
+does not undo the work already done.
+
+The fifth was **"AND IT HANDS THE AI FAILURE OVER, because only the
+report reaches the owner"** — a true assertion resting on a false
+premise. It now asserts the guarantee where the guarantee actually
+lives: `claude.ts` notifying by itself, which is stronger than
+asserting the wiring that used to carry it.
+
+The sixth, in `factGaps`, broke on the satisfied-by-any-occurrence
+fault: it used `indexOf` to prove the ask is recorded BEFORE the line is
+returned, and `findMissingFact` returns the same shape earlier in the
+file, so the check inverted. Sliced to one function.
+
+**Mutation score 16/16.** One real gap: deleting the line that puts the
+reason on the response survived, because the test matched the word
+`because` — which the variable's own declaration also satisfies.
+
+**Unverified live, and one gap is open on purpose.** No report has been
+built on demand, because R3 has not built the way to ask for one. Until
+it does, **the owner has no way to get a report at all.** That is the
+gap R3 closes, and it is open right now.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

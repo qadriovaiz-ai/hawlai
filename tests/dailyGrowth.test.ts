@@ -462,8 +462,11 @@ describe("3. money", () => {
 
   it("AND THE CRON NEVER ASKS", () => {
     const src = code("src/lib/agents/autopilotAgent.ts");
-    const block = src.slice(src.indexOf("runDailyGrowth"), src.indexOf("runDailyGrowth") + 600);
-    expect(block).toMatch(/runDailyGrowth\(supabase, dealershipId/);
+    // runGrowthWork since R2b: the daily run does the work and builds
+    // no report. The property this test is about — that the cron never
+    // asks for the paid pass — is unchanged.
+    const block = src.slice(src.indexOf("runGrowthWork"), src.indexOf("runGrowthWork") + 600);
+    expect(block).toMatch(/runGrowthWork\(supabase, dealershipId/);
     // THE PROPERTY, NOT THE CALL'S SHAPE. The cron may pass options —
     // it passes aiFailure now — but never this one. Pinning the exact
     // argument list broke the moment a legitimate option was added,
@@ -705,16 +708,31 @@ describe("4. in-process, and it never breaks the rest of the run", () => {
   it("THE AUTOPILOT IMPORTS AND CALLS IT, rather than calling a route", () => {
     const src = code("src/lib/agents/autopilotAgent.ts");
     expect(src).toMatch(/await import\("@\/lib\/growth\/dailyGrowth"\)/);
-    expect(src).toMatch(/await runDailyGrowth\(/);
+    // runGrowthWork since R2b. The subject is that the loop IMPORTS AND
+    // CALLS rather than fetching its own URL — the Vercel 508 rule —
+    // and that is unchanged.
+    expect(src).toMatch(/await runGrowthWork\(/);
+    expect(src).not.toMatch(/fetch\(.*daily-run/);
   });
 
-  it("AND IT HANDS THE AI FAILURE OVER, because only the report reaches the owner", () => {
-    // A source assertion because the loop tests pass aiFailure directly
-    // and so cannot see this wiring at all — the mutation that removed
-    // it survived them. `ai.failure` is set by the drafting above; the
-    // growth run is the only part of this loop the owner ever reads.
+  it("AND AN AI FAILURE STILL REACHES THE OWNER, by its own route", () => {
+    // THIS TEST'S PREMISE WAS WRONG AND IS CORRECTED — R2b, 12
+    // November 2026. It said the growth report was "the only part of
+    // this loop the owner ever reads", and handed the report an
+    // `aiFailure` on that basis. But lib/ai/claude.ts emits a
+    // `platform_ai_unavailable` NOTIFICATION on every AI failure, with
+    // no help from the report at all — so the guarantee never depended
+    // on the email, and the daily run no longer builds one.
+    //
+    // What must stay true is the guarantee itself: an AI failure is not
+    // swallowed. That is asserted where it actually lives, which is
+    // stronger than asserting the wiring that used to carry it.
+    const claude = code("src/lib/ai/claude.ts");
+    expect(claude).toMatch(/kind: "platform_ai_unavailable"/);
+    // And the loop still records it on the run, for the run log.
     const src = code("src/lib/agents/autopilotAgent.ts");
-    expect(src).toMatch(/runDailyGrowth\(supabase, dealershipId, \{ aiFailure: ai\.failure \?\? null \}\)/);
+    expect(src).toMatch(/ai\.failure/);
+    expect(src).toMatch(/aiFailure: ai\.failure/);
   });
 
   it("AND A GROWTH RUN THAT THROWS DOES NOT UNDO THE WORK ALREADY REPORTED", () => {
@@ -727,7 +745,7 @@ describe("4. in-process, and it never breaks the rest of the run", () => {
     // THE FALLBACK IS THE PROPERTY, not the keyword. A catch that
     // rethrows still contains the word "catch", which is how a
     // mutation that replaced the handler's body survived this once.
-    expect(after).toMatch(/growth = \{ findings: 0, suggestions: 0, setupSteps: 0, sent: false, notSentBecause: `the growth run threw/);
+    expect(after).toMatch(/growth = \{ findings: 0, suggestions: 0, setupSteps: 0, sent: false, notSentBecause: `the growth work threw/);
     expect(after).not.toMatch(/catch \(err: any\) \{\s*throw/);
   });
 });

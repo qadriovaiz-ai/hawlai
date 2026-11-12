@@ -303,7 +303,19 @@ export async function runDailyAutopilot(supabase: any, dealershipId: string): Pr
   const auto_paused = await applyAutoPause(supabase, dealershipId, ai);
   const snapshotted = await snapshotCampaignPerformance(supabase, dealershipId);
 
-  // THE GROWTH MANAGER'S LOOP BODY — S4/P5.
+  // THE GROWTH MANAGER'S LOOP BODY — S4/P5, and THE WORK ONLY since
+  // R2b (12 November 2026).
+  //
+  // The founder's decision: the agent keeps checking and fixing in the
+  // background, and a report is something he asks for. So this calls
+  // `runGrowthWork` — perceive, diagnose, plan, write the findings and
+  // the goal drafts — and builds no report and sends no email.
+  //
+  // WHY THE WORK AND THE REPORT HAD TO BE SPLIT FIRST (R1): the
+  // planning phase WRITES. recordFindings, writeSetupGoalDrafts,
+  // linkFindingsToGoals and the interview's own ask all happen in the
+  // middle of what used to be one function, so deleting the send from
+  // it would have stopped the agent rather than the inbox.
   //
   // IN-PROCESS, by import and call. This function is reached from
   // /api/autopilot/daily-run, the route whose self-calls produced the
@@ -320,21 +332,27 @@ export async function runDailyAutopilot(supabase: any, dealershipId: string): Pr
   // that throws must not undo the report of work that was done.
   let growth: { findings: number; suggestions: number; setupSteps: number; sent: boolean; notSentBecause: string | null } | undefined;
   try {
-    const { runDailyGrowth } = await import("@/lib/growth/dailyGrowth");
-    // THE FAILURE TRAVELS THE SHORT DISTANCE. `ai.failure` is already
-    // set by the drafting above; the growth run is the only part of
-    // this loop that reaches the owner.
-    const run = await runDailyGrowth(supabase, dealershipId, { aiFailure: ai.failure ?? null });
+    const { runGrowthWork } = await import("@/lib/growth/dailyGrowth");
+    const work = await runGrowthWork(supabase, dealershipId);
     growth = {
-      findings: run.findings,
-      suggestions: run.suggestions,
-      setupSteps: run.setupSteps,
-      sent: run.sent,
-      notSentBecause: run.notSentBecause,
+      findings: work.findings.length,
+      // WHAT WAS PLANNED, NOT WHAT WAS SHOWN. Nothing is shown by this
+      // run any more, and `picks` is what a report would draw on when
+      // one is asked for. Counting them as "suggestions" keeps the run
+      // log's meaning: this is what the agent has ready.
+      suggestions: work.suggestions.length,
+      setupSteps: work.setupGoals.length,
+      sent: false,
+      // THE FIELD KEPT ITS NAME ON PURPOSE. It has always answered "why
+      // was nothing sent", and the honest answer now is that nothing is
+      // sent on a schedule. A reader of the run log gets told why
+      // rather than finding a false `sent: false` with no reason —
+      // which is how a working product looks broken.
+      notSentBecause: "reports are built when the owner asks for one, not on a schedule",
     };
   } catch (err: any) {
     console.error(`[autopilot] growth run failed for ${dealershipId}: ${err?.message}`);
-    growth = { findings: 0, suggestions: 0, setupSteps: 0, sent: false, notSentBecause: `the growth run threw: ${err?.message}` };
+    growth = { findings: 0, suggestions: 0, setupSteps: 0, sent: false, notSentBecause: `the growth work threw: ${err?.message}` };
   }
 
   return { drafted, auto_paused, snapshotted, growth, ...(ai.failure ? { aiFailure: ai.failure } : {}) };

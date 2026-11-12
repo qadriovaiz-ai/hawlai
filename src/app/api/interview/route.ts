@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
 import { nextQuestion, progressFor, questionByKey } from "@/lib/onboarding/interview";
+import { findMissingFact } from "@/lib/onboarding/factGaps";
 import { attemptFor, contextFrom, readProgress } from "@/lib/onboarding/interviewProgress";
 import { judgeAnswer } from "@/lib/onboarding/answerCheck";
 import { cleanBusinessModels } from "@/lib/business/businessModel";
@@ -62,11 +63,47 @@ export async function GET() {
   const models = cleanBusinessModels(dealership?.business_models) ?? [];
   const progress = readProgress(rows);
   const ctx = contextFrom(progress, models);
-  const next = nextQuestion(ctx);
+
+  // A GAP THE PRODUCT HAS ALREADY PAID FOR COMES FIRST — R2c.
+  //
+  // Tier 3 (I6) asks for a fact because a generator reached for it and
+  // the claims guard deleted the sentence instead. Until now its only
+  // delivery was the daily email, so making reports on-demand would
+  // have taken the question with them. It belongs here anyway: this is
+  // the screen where answers are written.
+  //
+  // IT GOES IN FRONT OF THE REGISTRY'S OWN NEXT QUESTION, because a
+  // fact that has already cost the owner a deleted line is worth more
+  // than the next one on a list.
+  //
+  // NOTHING IS RECORDED BY SERVING IT. findMissingFact only reads; the
+  // ask is spent when he answers or skips, which the POST below
+  // records and nextGapToAsk already treats as dealt with. Marking it
+  // "asked" here would burn the one question on a page view.
+  let because: string | null = null;
+  let next = nextQuestion(ctx);
+  try {
+    const gap = await findMissingFact(supabase, dealershipId);
+    if (gap.asked && gap.line) {
+      const gapQuestion = questionByKey(gap.asked.key);
+      if (gapQuestion) {
+        next = gapQuestion;
+        because = gap.line.text;
+      }
+    }
+  } catch (err: any) {
+    // Never breaks the interview: a gap that cannot be read just means
+    // the registry's next question, which is what used to happen.
+    console.error(`[interview] could not look for a missing fact: ${err?.message ?? err}`);
+  }
 
   return NextResponse.json({
     // The whole question, so the screen writes no prompt of its own.
     next: next ? { ...next, when: undefined } : null,
+    // WHY THIS ONE, when it is a gap rather than the next on the list.
+    // Null for an ordinary question — the screen must not invent a
+    // reason for a question that does not have one.
+    because,
     // THE COUNT THE FACTS LAYER WILL ALSO STATE. One source, so the
     // screen and the prompt cannot disagree about how far along this is.
     progress: progressFor(2, ctx),

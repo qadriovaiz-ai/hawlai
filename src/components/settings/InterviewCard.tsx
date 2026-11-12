@@ -41,6 +41,11 @@ export default function InterviewCard() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [thin, setThin] = useState(false);
+  // WHY THIS QUESTION, when the product is asking because a line it
+  // wrote was deleted for want of the answer (Tier 3 / I6). Null for an
+  // ordinary question from the list: the card must not invent a reason
+  // for a question that does not have one.
+  const [because, setBecause] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +57,7 @@ export default function InterviewCard() {
       const data = await res.json();
       setQuestion(data.next ?? null);
       setProgress(data.progress ?? { answered: 0, total: 0 });
+      setBecause(typeof data.because === "string" && data.because.trim() ? data.because : null);
     } catch {
       // Nothing is invented on a failed read: the card simply does not
       // offer a question.
@@ -135,6 +141,11 @@ export default function InterviewCard() {
         </span>
       </div>
 
+      {/* THE REASON COMES FIRST, because it is what makes the question
+          worth answering: "I had to cut a line twice because I do not
+          have your price range" is a different request from "what is
+          your price range". */}
+      {because && <p className="text-sm text-amber-500 mb-2">{because}</p>}
       <p className="text-base font-medium text-slate-900">{question.prompt}</p>
       {question.help && <p className="text-sm text-slate-500 mt-1">{question.help}</p>}
       {followUp && <p className="text-sm text-amber-500 mt-3">{followUp}</p>}
