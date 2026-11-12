@@ -3792,6 +3792,70 @@ by its own evidence. Everything above is reasoned from Meta's current
 documentation and pinned by tests; the first real DM after a reconnect
 is the only thing that will prove it.
 
+## 12 Nov 2026 — R5 and R1: honest words, and the work split from the report
+
+The founder's three clarifications: the growth agent keeps running in
+the background, reports become on-demand and must carry a comparison,
+and "BROKEN" must not be shown to a business with no website.
+
+### R5 — "no visits yet" is not "broken"
+
+His rule is that the product says only what is true, and that settles a
+question left open the day before. For a site published yesterday with
+nobody through the door, **"site visits are NOT being recorded" is a
+claim the count cannot support**: the tracking may be working perfectly
+and nobody may have come. `no_data_yet` says both. `broken` now means
+visits were recorded and stopped — narrower, and supported.
+
+**An assertion from S4 moved, and that was the point rather than a
+casualty.** "IS BROKEN WHEN NOTHING IS FIRING" was reading "we have no
+data" as "the plumbing is broken" — the same conflation the `no_site`
+fix removed one layer out. What it was really holding, that a silent
+site is reported and not passed over, is unchanged and still asserted.
+
+**And the fake database was lying about the window.** `growthAudit`'s
+`db` helper ignored every `gte:` filter — no row has a property named
+`gte:created_at`, so the filter passed everything — which meant every
+`.gte("created_at", since)` in the code under test was unverified: a
+30-day window returning the whole table looked identical to one that
+worked. Found because "visits stopped" cannot be told from "visits are
+arriving" without it.
+
+### R1 — the work and the report are two functions
+
+**Why the obvious version would have broken things silently.**
+`runDailyGrowth` did four jobs in one function, and the middle one
+WRITES: `recordFindings`, `writeSetupGoalDrafts`,
+`linkFindingsToGoals` and I6's `askForMissingFact` all ran between the
+audit and the email. Deleting the send would have meant no findings, no
+goal drafts and no interview question — the agent stopping, not the
+email.
+
+So: `runGrowthWork` (daily, writes, builds nothing, sends nothing),
+`buildGrowthReport` (builds and checks, sends nothing), and
+`runDailyGrowth` as the composition of the two plus the send. **R1 is a
+pure restructuring** — the same calls in the same order, the same
+report, the same send — which is why the proof is that the suite's
+6,406 tests stayed green with the same count.
+
+**The left-out record and the un-marking of unshown findings went with
+the REPORT**, not the work, because each is a consequence of having
+SHOWN something rather than of having found it.
+
+**A consequence for R2, found here and not later:** `pickToday` marks
+findings `last_surfaced_on` during the WORK, and the report un-marks
+the ones it did not show. Once the report is on-demand, the daily work
+will mark findings as surfaced on days nothing is shown. R2 has to move
+that marking to the report.
+
+**Mutation score 17/17.** One real gap: the report re-auditing the site
+survived, because the section only checked the planning WRITES — a
+report that re-perceives costs the work twice and describes a state the
+plan was not made from.
+
+**Unverified live.** No report has been regenerated for a real
+business, and `no_data_yet` has never been shown to anyone.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

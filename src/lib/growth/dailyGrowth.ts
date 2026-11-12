@@ -81,7 +81,57 @@ export type GrowthRunResult = {
   report: DailyReport | null;
 };
 
-export async function runDailyGrowth(
+
+/**
+ * What the growth agent found and planned, before anything is written
+ * for the owner to read.
+ *
+ * WHY THIS TYPE EXISTS — R1, 12 November 2026. `runDailyGrowth` did
+ * four things in one function: perceive, diagnose, plan, and send an
+ * email. The founder's decision is that the agent keeps running in the
+ * background while the report becomes something he asks for — and that
+ * cannot be done by deleting the send, because THE PLANNING WRITES TO
+ * THE DATABASE. `recordFindings`, `writeSetupGoalDrafts`,
+ * `linkFindingsToGoals` and I6's `askForMissingFact` all happen in the
+ * middle of that function, so "no email" would have meant "no findings,
+ * no goal drafts, no interview question" too.
+ *
+ * So the work is its own function now, and the report is built FROM
+ * this rather than alongside it. R1 is deliberately a pure
+ * restructuring: the same calls in the same order, the same report, the
+ * same send. What changes is that they can now be asked for separately.
+ */
+export type GrowthWork = {
+  day: string;
+  now: Date;
+  tracking: Awaited<ReturnType<typeof checkTracking>>;
+  maturity: ReturnType<typeof maturityOf>;
+  findings: AuditFinding[];
+  counted: Counted[];
+  alsoCounted: Counted[];
+  setupGoals: ReturnType<typeof setupGoalsFrom>;
+  targetGoals: ReturnType<typeof setupGoalsFrom>;
+  targetNumbers: Counted[];
+  noTargetsBecause: string | null;
+  noTargetsNumbers: Counted[];
+  askForFact: { text: string; counted: Counted[] } | null;
+  drafts: { drafted: number; pending: number };
+  picks: Awaited<ReturnType<typeof pickToday>>;
+  activeGoals: number;
+  suggestions: { row: any; goalTitle: string }[];
+  copyAuditCostInr: number;
+  copyAuditUnverified: boolean;
+  copyLinesSeen: number;
+};
+
+/**
+ * Perceive, diagnose and plan. Writes findings, goal drafts and the
+ * interview ask. Builds nothing and sends nothing.
+ *
+ * THIS IS THE PART THAT RUNS DAILY, whatever the owner does about
+ * reports.
+ */
+export async function runGrowthWork(
   supabase: any,
   dealershipId: string,
   opts: {
@@ -102,26 +152,9 @@ export async function runDailyGrowth(
      */
     aiFailure?: { kind: string; message: string } | null;
   } = {}
-): Promise<GrowthRunResult> {
+): Promise<GrowthWork> {
   const now = opts.now ?? new Date();
   const day = indiaToday(now);
-  const empty: GrowthRunResult = {
-    day,
-    findings: 0,
-    suggestions: 0,
-    setupSteps: 0,
-    reportSound: false,
-    blocksLeftOut: 0,
-    leftOut: [],
-    sent: false,
-    notSentBecause: null,
-    copyAuditCostInr: 0,
-    goalsDrafted: 0,
-    goalDraftsPending: 0,
-    targetsDrafted: 0,
-    noTargetsBecause: null,
-    report: null,
-  };
 
   // ---- Perceive -------------------------------------------------------
   const site = await auditSite(supabase, dealershipId);
@@ -297,6 +330,69 @@ export async function runDailyGrowth(
     .map((row) => ({ row, goalTitle: row.goal_id ? goalTitleById.get(row.goal_id) ?? "" : "" }))
     .filter((s) => s.goalTitle);
 
+
+  return {
+    day,
+    now,
+    tracking,
+    maturity,
+    findings,
+    counted,
+    alsoCounted,
+    setupGoals,
+    targetGoals,
+    targetNumbers,
+    noTargetsBecause,
+    noTargetsNumbers,
+    askForFact,
+    drafts,
+    picks,
+    activeGoals,
+    suggestions,
+    copyAuditCostInr,
+    copyAuditUnverified,
+    copyLinesSeen,
+  };
+}
+
+/**
+ * Turn the work into the thing the owner reads, and record what had to
+ * be left out of it.
+ *
+ * SENDS NOTHING. The digit walk, the left-out record and the un-marking
+ * of findings that were not shown all live here, because every one of
+ * them is a consequence of SHOWING something rather than of finding it.
+ */
+export async function buildGrowthReport(
+  supabase: any,
+  dealershipId: string,
+  work: GrowthWork,
+  opts: { aiFailure?: { kind: string; message: string } | null } = {}
+): Promise<GrowthRunResult> {
+  const {
+    day, tracking, maturity, findings, counted, alsoCounted, setupGoals,
+    targetGoals, targetNumbers, noTargetsBecause, noTargetsNumbers,
+    askForFact, drafts, picks, activeGoals, suggestions,
+    copyAuditCostInr, copyAuditUnverified, copyLinesSeen,
+  } = work;
+  const empty: GrowthRunResult = {
+    day,
+    findings: 0,
+    suggestions: 0,
+    setupSteps: 0,
+    reportSound: false,
+    blocksLeftOut: 0,
+    leftOut: [],
+    sent: false,
+    notSentBecause: null,
+    copyAuditCostInr: 0,
+    goalsDrafted: 0,
+    goalDraftsPending: 0,
+    targetsDrafted: 0,
+    noTargetsBecause: null,
+    report: null,
+  };
+
   // ---- Report ---------------------------------------------------------
   const business = await businessName(supabase, dealershipId);
   const report = buildDailyReport({
@@ -386,6 +482,44 @@ export async function runDailyGrowth(
       }
     }
   }
+
+  return result;
+}
+
+/**
+ * The daily composition: do the work, build the report, send it.
+ *
+ * KEPT AS ONE CALL so `runDailyAutopilot` is unchanged by R1 and the
+ * suite proves the split did not alter behaviour. R2 is what changes
+ * who calls what.
+ */
+export async function runDailyGrowth(
+  supabase: any,
+  dealershipId: string,
+  opts: {
+    now?: Date;
+    /** Run M9's extractor and judge. Costs money. Never set by the cron. */
+    allowCopyAudit?: boolean;
+    /** Build and check, send nothing. */
+    dryRun?: boolean;
+    /**
+     * What the AI could not do earlier in this run.
+     *
+     * PASSED IN RATHER THAN DETECTED HERE. runDailyAutopilot already
+     * knows — draftStuckLeadFollowUps records it — and the growth run
+     * is the only part of the loop that reaches the owner, so the fact
+     * has to travel the short distance between them. For nine days in
+     * October it did not, and the report arrived every morning saying
+     * nothing about a product whose AI was dead.
+     */
+    aiFailure?: { kind: string; message: string } | null;
+  } = {}
+): Promise<GrowthRunResult> {
+  const work = await runGrowthWork(supabase, dealershipId, opts);
+  const result = await buildGrowthReport(supabase, dealershipId, work, { aiFailure: opts.aiFailure ?? null });
+  const sendable = result.report;
+  const day = work.day;
+  if (!sendable) return { ...result, notSentBecause: "there was no report to send" };
 
   if (opts.dryRun) return { ...result, notSentBecause: "dry run" };
 
