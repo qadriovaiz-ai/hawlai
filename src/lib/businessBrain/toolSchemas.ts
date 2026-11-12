@@ -711,4 +711,18 @@ export const TOOLS = [
     description: "Get download links for a PDF report and a PowerPoint presentation of current performance, plus the client-shareable report link (generating one if it doesn't exist yet).",
     input_schema: { type: "object", properties: {}, required: [] },
   },
+  {
+    // R3, and the founder's written reason for a 60th tool: "report
+    // dashboard button se bhi aaye, chat se bhi". The daily email
+    // stopped in R2b, so without this the only way to ask is the
+    // Strategy page.
+    //
+    // IT SHOWS, IT DOES NOT SEND. Emailing the report is a button on
+    // the screen, never a tool — a chat tool that calls a sender is
+    // what tests/approvalCoverage.test.ts exists to refuse.
+    name: "get_growth_report",
+    description:
+      "Build the growth report NOW and show it: what the agent found on the site and the catalogue, what it suggests, and the measurement health line. Use when the owner asks how things are going, where he stands, or for his report. It sends no email — the owner emails it to himself from the Strategy page if he wants a copy.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
 ];

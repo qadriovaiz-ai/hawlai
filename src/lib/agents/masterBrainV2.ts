@@ -3030,6 +3030,24 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         confirm: codeConfirm,
       });
     }
+    case "get_growth_report": {
+      // R3. Runs the same two halves the Strategy page does, so chat
+      // and the screen cannot disagree about what the report says.
+      // NOTHING IS SENT: there is no sender in this case, deliberately.
+      const { runGrowthWork, buildGrowthReport } = await import("@/lib/growth/dailyGrowth");
+      const work = await runGrowthWork(supabase, ctx.id);
+      const built = await buildGrowthReport(supabase, ctx.id, work);
+      if (!built.report) return { error: "There was nothing to put in a report just now." };
+      return {
+        subject: built.report.subject,
+        day: built.report.day,
+        blocks: built.report.blocks,
+        blocksLeftOut: built.blocksLeftOut,
+        // SAID HERE TOO, so the reply cannot imply a copy is on its way.
+        emailed: false,
+        howToEmail: "Open Strategy and use 'Email it to me as well' to get a copy.",
+      };
+    }
     case "get_report_links": {
       const { data: dealership } = await supabase.from("dealerships").select("report_share_token").eq("id", ctx.id).single();
       let token = dealership?.report_share_token;

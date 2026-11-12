@@ -164,6 +164,15 @@ export const TOOL_FAMILIES: Record<string, ToolFamily> = {
   // /book/<slug> address is stable. Derived, not authored.
   get_booking_link: "Internal",
   get_report_links: "Internal",
+  // R3. NOT "read", although the owner asks it to show him something:
+  // building a report runs the growth WORK first, which records
+  // findings into `opportunities`, writes goal drafts and marks what
+  // the report showed. Labelling it read would be the first lie the
+  // reachability walker catches, and it is the walker that makes this
+  // registry worth having.
+  //
+  // Nothing it writes leaves the business: no send, no post, no spend.
+  get_growth_report: "Internal",
   // Writes a new product into the business's own catalogue. CREATING
   // is direct; EDITING an existing product's price, name or
   // description is approval-gated through publish/ (migration-era

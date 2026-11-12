@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Target, Loader2, Sparkles, IndianRupee, Calendar as CalIcon, Lightbulb, TrendingUp, Layers, Check } from "lucide-react";
 import DeepStrategyPanel from "@/components/strategy/DeepStrategyPanel";
 import DiagnosisPanel from "@/components/strategy/DiagnosisPanel";
+import GrowthReportPanel from "@/components/strategy/GrowthReportPanel";
 import PositioningPanel from "@/components/strategy/PositioningPanel";
 import CalendarPanel from "@/components/strategy/CalendarPanel";
 import { Button } from "@/components/ui/Button";
@@ -89,6 +90,10 @@ export default function StrategyPage() {
       </div>
 
       {/* Where the business actually leaks, from its own data — read first. */}
+      {/* R3 — the report the owner asks for. On this page because the
+          growth agent'"'"'s own diagnosis already lives here, and Rule 5
+          says depth over breadth: no new page for one panel. */}
+      <GrowthReportPanel />
       <DiagnosisPanel />
 
       {/* What competitors say in public, and the ground this business can own. */}

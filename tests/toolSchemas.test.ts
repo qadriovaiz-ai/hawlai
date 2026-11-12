@@ -33,9 +33,18 @@ import { code, sourceWithComments } from "./helpers/source";
  * Updated deliberately, in the same commit as the schema change, with
  * the reason in the commit message. 59 tools, 51,770 characters of
  * JSON, recorded 2026-11-04 when the array moved.
+ *
+ * 60 tools, recorded 2026-11-12: get_growth_report (R3). The daily
+ * email stopped in R2b on the founder'"'"'s decision, so the report had to
+ * become something he can ask for — from the Strategy page and from
+ * chat, which were his words. The tool was APPENDED rather than slotted
+ * in beside the other report tool, because the cache prefix is the
+ * array up to the marker: an insertion in the middle would have missed
+ * the cache on every tool after it, on every turn, until it warmed
+ * again.
  */
-const FINGERPRINT = "61717bb97bc3f5c3a201b7ff1278fafdab0deae7e9f1fa6f906b245119a9cebe";
-const TOOL_COUNT = 59;
+const FINGERPRINT = "1fc019df4a8b1ae62bdceabb892e99390010a5b5abec3a0f174c149e2ff3ec0a";
+const TOOL_COUNT = 60;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {
   it("THE PROMPT-CACHE PREFIX IS WHAT IT WAS", () => {
