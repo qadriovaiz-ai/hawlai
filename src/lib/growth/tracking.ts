@@ -34,19 +34,26 @@
  * `daysSinceChange` already refuses to make: "the audit could not see a
  * date" and "nobody has touched this in a year" are different facts.
  *
- *   no_site                 nothing is published, so nothing can be
- *                           measured. NOT a fault.
- *   broken / partial / ok   unchanged, and still decided by the event
- *                           count once there IS something to measure.
+ *   no_site       nothing is published, so nothing can be measured
+ *   no_data_yet   published, and no visit has EVER been recorded
+ *   broken        visits WERE recorded once, and none in 30 days
+ *   partial / ok  unchanged
  *
- * DELIBERATELY NOT ADDED, and it is a real open question: a site
- * published yesterday with no visits yet also reads BROKEN, while the
- * same email says the business is still learning. Separating "no visit
- * has EVER been recorded" from "it stopped" would fix that, but it
- * changes what this file has asserted since S4 and it is the founder's
- * call, not a tidy-up. Written up in docs/DECISIONS.md rather than done.
+ * WHY no_data_yet EXISTS, added 12 November 2026 on the founder's rule
+ * that the product says only what is true. For a site published
+ * yesterday with nobody through the door yet, "site visits are NOT
+ * being recorded" IS A CLAIM WE CANNOT SUPPORT: the tracking may be
+ * working perfectly and nobody may have come. The count cannot tell
+ * those apart, so the line says both.
+ *
+ * `broken` now means something the data does support — there were
+ * visits and they stopped. That is a narrower and therefore honest
+ * claim, and it is why this change moved an assertion that had stood
+ * since S4 ("IS BROKEN WHEN NOTHING IS FIRING"): that test was reading
+ * "we have no data" as "the plumbing is broken", which is the same
+ * conflation the no_site fix removed one layer further out.
  */
-export type MeasurementHealth = "ok" | "partial" | "broken" | "no_site";
+export type MeasurementHealth = "ok" | "partial" | "broken" | "no_site" | "no_data_yet";
 
 export type TrackingState = {
   siteEvents: {
@@ -194,16 +201,18 @@ export async function checkTracking(supabase: any, dealershipId: string, now: Da
   }
 
   const firing = visitorEvents30d > 0;
-  // NOTHING PUBLISHED OUTRANKS EVERY OTHER ANSWER. A zero event count
-  // means nothing until there is something that could have produced
-  // one, so this is asked FIRST and the rest is unchanged.
+  // READ TOP TO BOTTOM, EACH ANSWER NARROWER THAN THE LAST:
+  //   nothing published        -> there is nothing to measure
+  //   published, no event ever -> we cannot tell working from quiet
+  //   published, events then none -> it stopped, which IS a claim
+  //   firing                   -> ok or partial, as before
   const health: MeasurementHealth = !site.published
     ? "no_site"
-    : !firing
-      ? "broken"
-      : connected && adsConversions.verified
-        ? "ok"
-        : "partial";
+    : firing
+      ? (connected && adsConversions.verified ? "ok" : "partial")
+      : firstAt
+        ? "broken"
+        : "no_data_yet";
 
   return {
     siteEvents: { firing, lastAt, visitorEvents30d, firstAt },
@@ -231,9 +240,11 @@ const HEALTH_WORDS: Record<MeasurementHealth, string> = {
   ok: "OK",
   partial: "PARTIAL",
   broken: "BROKEN",
-  // NOT A FAULT, AND THE WORD MUST NOT SOUND LIKE ONE. This replaced a
-  // BROKEN that was being shown to a business with no website at all.
+  // NEITHER OF THESE IS A FAULT, AND NEITHER WORD MAY SOUND LIKE ONE.
+  // They replaced a BROKEN shown to a business with no website, and a
+  // BROKEN shown to a site that simply had no visitors yet.
   no_site: "NOTHING TO MEASURE YET",
+  no_data_yet: "NO VISITS RECORDED YET",
 };
 
 export function measurementHealthLine(t: TrackingState): string {
@@ -248,7 +259,11 @@ export function measurementHealthLine(t: TrackingState): string {
   const parts = [
     t.siteEvents.firing
       ? `site visits are being recorded (${t.siteEvents.visitorEvents30d} in 30 days, your own visits excluded)`
-      : "site visits are NOT being recorded",
+      // BOTH POSSIBILITIES, because the count cannot tell them apart
+      // and asserting either one would be a guess.
+      : t.health === "no_data_yet"
+        ? "no visit has been recorded yet — either nobody has been to the site, or the tracking is not working"
+        : "site visits have stopped being recorded",
     t.searchConsole.connected ? "Search Console is connected" : "Search Console is not connected",
     t.adsConversions.verified ? "ad conversions are verified" : `ad conversions are not verified — ${t.adsConversions.why}`,
   ];

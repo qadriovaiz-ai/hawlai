@@ -228,8 +228,13 @@ describe("4. the measurement health line is in every report", () => {
   });
 
   it("AND WHEN IT IS BROKEN — §2c says every report", () => {
+    // firstAt IS SET, because since 12 Nov 2026 "broken" means visits
+    // were arriving and STOPPED. With firstAt null this fixture described
+    // a state checkTracking can no longer produce — it would be
+    // no_data_yet — so the fixture was internally inconsistent, not just
+    // differently worded.
     const broken = tracking({
-      siteEvents: { firing: false, lastAt: null, visitorEvents30d: 0, firstAt: null },
+      siteEvents: { firing: false, lastAt: null, visitorEvents30d: 0, firstAt: "2026-06-01T10:00:00Z" },
       searchConsole: { connected: false, siteUrl: null },
       site: { published: true, why: "your site is published" },
       adsConversions: { verified: false, why: "no ad campaign has run, so there is nothing to attribute" },
@@ -238,7 +243,7 @@ describe("4. the measurement health line is in every report", () => {
     const report = build({ tracking: broken, maturity: maturityOf({ firstAt: null, events: 0 }, NOW) });
     const text = renderText(report);
     expect(text).toMatch(/Measurement health: BROKEN\./);
-    expect(text).toMatch(/NOT being recorded/);
+    expect(text).toMatch(/stopped being recorded/);
     expect(everyNumberIsCounted(report).ok).toBe(true);
   });
 

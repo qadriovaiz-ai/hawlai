@@ -48,6 +48,19 @@ function db(tables: Tables, seen: { filters: Record<string, any>[] } = { filters
         let out = (rows ?? []) as any[];
         for (const [k, v] of Object.entries(filters)) {
           if (k.startsWith("__")) continue;
+          // `gte:` IS HONOURED, as of 12 Nov 2026. It was silently
+          // ignored (no row has a property literally named
+          // "gte:created_at", so the filter passed everything), which
+          // meant every `.gte("created_at", since)` in the code under
+          // test was unverified — a window that returned the whole
+          // table looked identical to one that worked. Found while
+          // adding a test for "visits stopped", which cannot be
+          // distinguished from "visits are arriving" without it.
+          if (k.startsWith("gte:")) {
+            const col = k.slice(4);
+            out = out.filter((r) => (col in r ? String(r[col]) >= String(v) : true));
+            continue;
+          }
           out = out.filter((r) => (k in r ? r[k] === v : true));
         }
         return { data: out, error: null };
@@ -237,6 +250,8 @@ describe("4. T — the tracking check", () => {
     const line = measurementHealthLine(t);
     expect(line).not.toMatch(/BROKEN/);
     expect(line).toMatch(/NOTHING TO MEASURE YET/);
+    // AND WHICH CASE IT IS, in the sentence itself.
+    expect(line).toMatch(/no website or landing page yet/);
     // AND IT DOES NOT PILE ON. Three not-connected complaints about a
     // business that has not opened its doors are noise.
     expect(line).not.toMatch(/Search Console/);
@@ -249,6 +264,13 @@ describe("4. T — the tracking check", () => {
     const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
     expect(t.health).toBe("no_site");
     expect(t.site.why).toMatch(/not published yet/);
+    // ON THE LINE, which is what the owner reads. Mutation M13 dropped
+    // site.why from the sentence and survived, because this only ever
+    // checked the state behind it — so "no website" and "saved but not
+    // published" would have read identically to him.
+    const line = measurementHealthLine(t);
+    expect(line).toMatch(/not published yet/);
+    expect(line).not.toMatch(/there is no website/);
   });
 
   it("A PUBLISHED LANDING PAGE COUNTS AS SOMETHING TO MEASURE", async () => {
@@ -258,15 +280,63 @@ describe("4. T — the tracking check", () => {
     const { client } = tracked({ page_events: [], websites: [], landing_pages: [{ dealership_id: "d1", published: true }] });
     const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
     expect(t.site.published).toBe(true);
-    expect(t.health).toBe("broken");
+    // Not "broken": there IS something to measure and nothing has come
+    // through it yet, which is a different sentence (see no_data_yet).
+    expect(t.health).toBe("no_data_yet");
   });
 
-  it("IS BROKEN WHEN NOTHING IS FIRING", async () => {
+  it("NOTHING FIRING IS REPORTED, and not hidden", async () => {
+    // THIS TEST SAID "IS BROKEN WHEN NOTHING IS FIRING" from S4 until
+    // 12 November 2026. What it was really holding — that a silent site
+    // is reported rather than passed over — is unchanged and asserted
+    // below. What moved is the WORD: a site with no visit ever recorded
+    // is not evidence of broken plumbing, because nobody may have come.
+    // The founder's rule is that the product says only what is true, and
+    // "visits are NOT being recorded" was a claim the count cannot
+    // support. The honest claim lives in the next test.
     forbidModelCalls();
     const { client } = tracked({ page_events: [] });
     const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
     expect(t.siteEvents.firing).toBe(false);
+    expect(t.health).toBe("no_data_yet");
+    expect(t.health).not.toBe("ok");
+    expect(t.health).not.toBe("partial");
+    const line = measurementHealthLine(t);
+    expect(line).toMatch(/NO VISITS RECORDED YET/);
+    // BOTH POSSIBILITIES, neither asserted over the other.
+    expect(line).toMatch(/nobody has been to the site/);
+    expect(line).toMatch(/tracking is not working/);
+  });
+
+  it("IS BROKEN WHEN VISITS WERE ARRIVING AND STOPPED", async () => {
+    // The claim the data DOES support, and the one `broken` now means.
+    // The event is older than the 30-day window, so firstAt is set and
+    // the window is empty — which only works because the fake db
+    // honours gte (see above).
+    forbidModelCalls();
+    const { client } = tracked({
+      page_events: [{ dealership_id: "d1", is_internal: false, created_at: "2026-06-01T10:00:00Z" }],
+    });
+    const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
+    expect(t.siteEvents.firing).toBe(false);
+    expect(t.siteEvents.firstAt).toBe("2026-06-01T10:00:00Z");
     expect(t.health).toBe("broken");
+    expect(measurementHealthLine(t)).toMatch(/stopped being recorded/);
+  });
+
+  it("AND THE 30-DAY WINDOW IS REAL, not the whole table", async () => {
+    // Pins what the gte fix above revealed: an old event must not count
+    // as this month's traffic.
+    forbidModelCalls();
+    const { client } = tracked({
+      page_events: [
+        { dealership_id: "d1", is_internal: false, created_at: "2026-06-01T10:00:00Z" },
+        { dealership_id: "d1", is_internal: false, created_at: "2026-10-22T10:00:00Z" },
+      ],
+    });
+    const t = await checkTracking(client, "d1", new Date("2026-10-23T00:00:00Z"));
+    expect(t.siteEvents.visitorEvents30d).toBe(1);
+    expect(t.siteEvents.firstAt).toBe("2026-06-01T10:00:00Z");
   });
 
   it("IS PARTIAL WHEN EVENTS ARRIVE BUT THE REST IS UNVERIFIED", async () => {
