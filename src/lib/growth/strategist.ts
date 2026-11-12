@@ -294,22 +294,58 @@ export async function pickToday(
     { now, surfacedToday: alreadySurfaced }
   );
 
+  // PICKING IS NOT SHOWING — R2a, 12 November 2026.
+  //
+  // This function used to WRITE last_surfaced_on for everything it
+  // picked, and buildGrowthReport then un-marked whatever the digit
+  // walk had dropped. That compensating pair worked only while a report
+  // was built every single day. The founder's decision is that reports
+  // are on-demand, so the daily work would have gone on marking
+  // findings as surfaced on days nothing was surfaced — the record
+  // saying the owner had seen what he never saw, which is exactly the
+  // 3 November fault the un-marking was added to fix.
+  //
+  // So the one writer is now `markSurfaced`, called by the report with
+  // what it actually printed. The un-marking is gone, because there is
+  // nothing to undo.
+  //
+  // THE SKIP ABOVE STILL READS THE MARK, which is what keeps a second
+  // report on the same day from repeating the first one.
   const pickedRows = picked.map((p: any) => p.row as StrategistRow);
-  if (pickedRows.length) {
-    const { error: markError } = await supabase
-      .from("opportunities")
-      .update({ last_surfaced_on: today })
-      .in("id", pickedRows.map((r) => r.id));
-    // A FAILED MARK WOULD MEAN SHOWING THEM AGAIN TOMORROW ON TOP OF
-    // TOMORROW'S THREE. Reported rather than swallowed; the report
-    // still goes, because the suggestions themselves are sound.
-    if (markError) console.error(`[strategist] could not mark surfaced for ${dealershipId}: ${markError.message}`);
-  }
-
   return {
     picked: pickedRows,
     skipped: [...blocked, ...skipped.map((s: any) => ({ row: s.finding.row as StrategistRow, why: s.why }))],
     alreadySurfaced,
     today,
   };
+}
+
+
+/**
+ * Record that these findings were SHOWN to the owner.
+ *
+ * THE ONE WRITER of last_surfaced_on, and it is called by the report
+ * rather than the picker (R2a). A finding is surfaced when it appears
+ * in front of the owner, not when something considered putting it
+ * there.
+ *
+ * A FAILED MARK MEANS SHOWING THEM AGAIN IN THE NEXT REPORT, on top of
+ * that report's own three. Reported rather than swallowed — the same
+ * reasoning the inline version carried.
+ */
+export async function markSurfaced(
+  supabase: any,
+  ids: string[],
+  day: string
+): Promise<{ marked: number; why: string | null }> {
+  if (!ids.length) return { marked: 0, why: null };
+  const { error } = await supabase
+    .from("opportunities")
+    .update({ last_surfaced_on: day })
+    .in("id", ids);
+  if (error) {
+    console.error(`[strategist] could not mark ${ids.length} findings as surfaced: ${error.message}`);
+    return { marked: 0, why: error.message };
+  }
+  return { marked: ids.length, why: null };
 }

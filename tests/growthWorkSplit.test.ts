@@ -110,7 +110,12 @@ describe("2. THE REPORT DOES NONE OF THE PLANNING", () => {
     // the report and not with the work.
     const report = bodyOf("buildGrowthReport");
     expect(report).toContain("recordBlocksLeftOut");
-    expect(report).toContain("last_surfaced_on");
+    // markSurfaced, not the column name: R2a moved the write into a
+    // named function, and what matters is that the report is the one
+    // that records what it SHOWED.
+    expect(report).toContain("markSurfaced");
+    const work = bodyOf("runGrowthWork");
+    expect(work, "the work must not mark anything as shown").not.toContain("markSurfaced");
   });
 });
 

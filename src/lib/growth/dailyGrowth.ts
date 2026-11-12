@@ -22,7 +22,7 @@
 import { auditCatalogue, auditSite, type AuditFinding, type Counted } from "@/lib/growth/audit";
 import { auditLiveCopy, type CopyLine } from "@/lib/growth/copyAudit";
 import { buildDailyReport, everyNumberIsCounted, renderText, withoutUncountedBlocks, type DailyReport } from "@/lib/growth/report";
-import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
+import { linkFindingsToGoals, markSurfaced, pickToday, recordFindings } from "@/lib/growth/strategist";
 import { existingTargetOffers, writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
@@ -463,24 +463,21 @@ export async function buildGrowthReport(
     report: sendable,
   };
 
-  // AND A FINDING THAT WAS NOT SHOWN IS NOT MARKED AS SHOWN. pickToday
-  // writes last_surfaced_on BEFORE the report is built, so on 3
-  // November both findings were recorded as surfaced on a day nothing
-  // was surfaced — the record saying the owner had seen something he
-  // never saw. Put back here, so tomorrow's cap and tomorrow's report
-  // are working from what actually happened.
-  if (removed.length) {
-    const shown = new Set(sendable.blocks.filter((b) => b.kind === "suggestion").map((b: any) => b.title));
-    const unshown = picks.picked.filter((row) => !shown.has(row.title)).map((row) => row.id);
-    if (unshown.length) {
-      const { error: unmarkError } = await supabase
-        .from("opportunities")
-        .update({ last_surfaced_on: null })
-        .in("id", unshown);
-      if (unmarkError) {
-        console.error(`[growth] could not un-mark ${unshown.length} unshown findings for ${dealershipId}: ${unmarkError.message}`);
-      }
-    }
+  // WHAT WAS ACTUALLY SHOWN IS WHAT GETS MARKED — R2a.
+  //
+  // pickToday used to mark everything it picked and this function
+  // un-marked whatever the digit walk dropped. That pair only worked
+  // while a report went out daily; with reports on demand, the daily
+  // work would have recorded findings as surfaced on days nothing was.
+  // So the marking happens here, from the blocks that survived, and
+  // there is nothing left to undo.
+  //
+  // AND IT IS WHY A SECOND REPORT ON THE SAME DAY DOES NOT REPEAT THE
+  // FIRST: pickToday skips anything already marked today.
+  const shownTitles = new Set(sendable.blocks.filter((b) => b.kind === "suggestion").map((b: any) => b.title));
+  const shownIds = picks.picked.filter((row) => shownTitles.has(row.title)).map((row) => row.id);
+  if (shownIds.length) {
+    await markSurfaced(supabase, shownIds, day);
   }
 
   return result;

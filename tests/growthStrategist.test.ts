@@ -12,7 +12,7 @@
 // happen.
 
 import { describe, it, expect, vi } from "vitest";
-import { linkFindingsToGoals, pickToday, recordFindings } from "@/lib/growth/strategist";
+import { linkFindingsToGoals, markSurfaced, pickToday, recordFindings } from "@/lib/growth/strategist";
 import { MAX_ACTIONS_PER_DAY } from "@/lib/growth/findings";
 import type { AuditFinding } from "@/lib/growth/audit";
 import type { TrackingState } from "@/lib/growth/tracking";
@@ -310,6 +310,18 @@ describe("3. picking today's three", () => {
     });
     const r = await pickToday(client, "d1", tracking(), NOW);
     expect(r.picked.map((p) => p.id)).toEqual(["a", "b", "c"]);
+
+    // THE MARK MOVED, THE RULE DID NOT — R2a, 12 November 2026.
+    // pickToday used to write last_surfaced_on itself; the one writer is
+    // markSurfaced now, called by the report with what it actually
+    // printed. PICKING IS NOT SHOWING, and with reports on demand the
+    // daily work would otherwise have recorded findings as surfaced on
+    // days nothing was shown.
+    for (const id of ["a", "b", "c"]) {
+      expect(tables.opportunities.find((o) => o.id === id)!.last_surfaced_on, id).toBeNull();
+    }
+
+    await markSurfaced(client, r.picked.map((row) => row.id), TODAY);
     for (const id of ["a", "b", "c"]) {
       expect(tables.opportunities.find((o) => o.id === id)!.last_surfaced_on, id).toBe(TODAY);
     }
@@ -318,7 +330,48 @@ describe("3. picking today's three", () => {
     expect(tables.opportunities.find((o) => o.id === "d")!.last_surfaced_on).toBe("2026-10-01");
   });
 
+  it("MARKING NOTHING ISSUES NO QUERY AT ALL", async () => {
+    // Mutation M5: dropping the empty-list guard survived, because the
+    // table assertion elsewhere is happy with one more write to the
+    // same table. An `.in("id", [])` update is a pointless round trip
+    // at best, and a filter that gets dropped somewhere downstream
+    // would rewrite every row in the table.
+    const { client, writes } = db({ opportunities: [] });
+    const r = await markSurfaced(client, [], TODAY);
+    expect(r.marked).toBe(0);
+    expect(r.why).toBeNull();
+    expect(writes).toHaveLength(0);
+  });
+
+  it("A FAILED MARK IS REPORTED, NOT SWALLOWED", async () => {
+    // Its own comment says so: a mark that silently failed means the
+    // same findings in the next report, on top of that report's three.
+    // Mutation M6 returned success on an error and nothing noticed.
+    const broken = {
+      from: () => ({ update: () => ({ in: async () => ({ error: { message: "no column" } }) }) }),
+    } as any;
+    const r = await markSurfaced(broken, ["a"], TODAY);
+    expect(r.marked).toBe(0);
+    expect(r.why).toBe("no column");
+  });
+
+  it("AND PICKING ALONE WRITES NOTHING AT ALL", async () => {
+    // The seam R2a creates. If pickToday ever writes again, the daily
+    // work starts marking findings the owner has not been shown.
+    const { client, tables } = db({
+      opportunities: [ready({ id: "a", type: "t1", impact: 5, confidence: 5, effort: 1 })],
+    });
+    const before = JSON.stringify(tables.opportunities);
+    await pickToday(client, "d1", tracking(), NOW);
+    expect(JSON.stringify(tables.opportunities)).toBe(before);
+  });
+
   it("THE CAP IS PER DAY, NOT PER RUN — the dispatcher really re-enters", async () => {
+    // WHAT SPENDS THE CAP IS NOW THE REPORT, not the pick — R2a.
+    // The guard is unchanged in substance: a run that is re-entered
+    // must not put the same three findings in front of the owner
+    // twice. It is the marking that moved, so the cap is spent when
+    // something is SHOWN rather than when something is considered.
     const { client } = db({
       opportunities: [
         ready({ id: "a", type: "t1" }),
@@ -329,6 +382,16 @@ describe("3. picking today's three", () => {
     });
     const first = await pickToday(client, "d1", tracking(), NOW);
     expect(first.picked).toHaveLength(3);
+
+    // Nothing shown yet, so a re-entered run picks the same three
+    // rather than three MORE. That is the point: the owner has seen
+    // nothing, so there is nothing to protect him from.
+    const reentered = await pickToday(client, "d1", tracking(), NOW);
+    expect(reentered.picked.map((r) => r.id)).toEqual(first.picked.map((r) => r.id));
+
+    // Once they have been shown, the cap is spent and a second report
+    // on the same day does not repeat them.
+    await markSurfaced(client, first.picked.map((row) => row.id), TODAY);
     const second = await pickToday(client, "d1", tracking(), NOW);
     expect(second.alreadySurfaced).toBe(3);
     expect(second.picked).toEqual([]);
@@ -431,7 +494,12 @@ describe("5. it writes nothing but findings", () => {
     });
     await recordFindings(client, "d1", [finding({ type: "products_without_image" })]);
     await linkFindingsToGoals(client, "d1");
-    await pickToday(client, "d1", tracking(), NOW);
+    const picks = await pickToday(client, "d1", tracking(), NOW);
+    // markSurfaced JOINS THE SAME RULE — R2a. pickToday no longer
+    // writes, so the count below used to include its write; the subject
+    // of this test is the TABLE, and the one writer that moved out of
+    // the pick is held to it too.
+    await markSurfaced(client, picks.picked.map((row) => row.id), TODAY);
     expect(writes.length).toBeGreaterThan(2);
     expect([...new Set(writes.map((w) => w.table))]).toEqual(["opportunities"]);
   });
