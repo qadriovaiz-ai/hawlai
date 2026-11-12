@@ -3711,6 +3711,87 @@ application — worth starting before the pilot, not during it.
 **Unverified live.** Nothing here has seen a real webhook. The table is
 empty by design until one arrives.
 
+## 12 Nov 2026 — The auto-reply fix: the scopes, and asking Meta to call
+
+The second half of the auto-reply bug. Migration 226 made the silence
+visible; this removes the two causes.
+
+**1. Three scopes the product never asked for.** The Facebook connect
+route requested seven permissions, none of which can send a DM, receive
+a Page's webhooks, or reply to a comment. Added `pages_messaging`,
+`pages_manage_metadata` and `pages_manage_engagement`. The existing
+seven are untouched — removing an ads scope to "make room" would break
+ad launching, which a test now pins.
+
+**2. Nothing had ever subscribed a Page.** A Page is installed on an app
+through its OWN `subscribed_apps` edge, with its own token. Configuring
+the webhook product in the Meta App dashboard is necessary and **not
+sufficient**, and that second step is invisible from the dashboard —
+which is why this looked healthy for months. `subscribeWebhooks.ts` now
+makes that call at both connection points.
+
+**The field names are not interchangeable, and this is the one that
+would have failed silently.** A Facebook Page carries a comment on
+`feed`; Instagram carries it on `comments`. Asking for the wrong one
+subscribes *successfully* and then delivers nothing. A test cross-checks
+the subscribed field against what `handleAutoReplyEntry` actually reads
+(`change.field !== "feed"`), so the two cannot drift apart.
+
+**Two different API surfaces**, the same split the handler already lives
+with: `graph.facebook.com` with the token as a query parameter, and
+`graph.instagram.com` with a Bearer header. A test asserts the Instagram
+token never appears in the URL.
+
+**`success: true` is required.** Meta can answer 200 without confirming,
+and recording that as a subscription would put a timestamp on a
+connection that still receives nothing.
+
+**A timestamp and an error, never both** (migration 227). On success the
+error is cleared; on failure the timestamp is nulled. A stale
+"subscribed at" beside a live error reads as "it worked once" — the
+exact ambiguity that made this bug take eight days.
+
+**A subscription failure does not fail the connection.** The connection
+itself succeeded; the subscription is reported in the response and
+recorded on the business. Failing the connect flow over it would leave
+the owner with no integration at all.
+
+### What the founder has to do, and it is not SQL
+
+1. **Reconnect Facebook.** A token carries the permissions that were
+   asked for when it was granted. No server-side change can give an
+   existing token a new one.
+2. **`pages_messaging` needs Meta App Review** on a live app. Until it is
+   granted, DM replies work only for people with a role on the app
+   (admins, developers, testers). **That is a queue — join it before the
+   pilot, not during it.** Instagram Business Login already asks for its
+   own messaging permission and is not blocked on this.
+3. After reconnecting, send one real DM and run migration 226's
+   diagnosis query.
+
+### Mutation score 36/36
+
+Two real gaps, both of them a test that checked only the happy path:
+`subscribeAndRecord` returning a hardcoded `{ ok: true }` survived
+because nothing asserted a FAILURE came back — a caller would have been
+told the subscription worked when it had not, which is the very fault
+this feature exists to end. And removing the `.catch(() => null)` on
+`res.json()` survived because the outer try/catch returns `ok: false`
+either way: what that catch is actually for is the REASON, since "Meta
+answered but did not confirm" and "we could not reach Meta" send the
+owner to two different places.
+
+Two of my own test anchors were wrong in a way worth recording:
+`indexOf("subscribeAndRecord")` lands on the IMPORT at the top of the
+file, not the call, which inverted an ordering assertion and made a
+file-slice cover the whole file. The satisfied-by-any-occurrence fault,
+for the fourth time in this codebase.
+
+**Unverified live.** No webhook has ever been delivered to this product,
+by its own evidence. Everything above is reasoned from Meta's current
+documentation and pinned by tests; the first real DM after a reconnect
+is the only thing that will prove it.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

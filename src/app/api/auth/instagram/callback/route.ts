@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
+import { subscribeAndRecord } from "@/lib/webhooks/subscribeWebhooks";
 
 // Receives Instagram's redirect after the person logs in and clicks
 // Allow. Exchanges the code for a short-lived token, then a
@@ -81,7 +82,25 @@ export async function GET(request: Request) {
     }).eq("id", dealershipId);
     if (dbError) throw new Error(dbError.message);
 
+    // The same missing step as on the Facebook side: an Instagram
+    // account must be installed on the app through its own
+    // subscribed_apps edge before Meta sends anything. Instagram's
+    // start route already asks for the two permissions this needs
+    // (instagram_business_manage_messages / _manage_comments), so
+    // unlike Facebook this works on the existing connection flow.
+    //
+    // Never throws, and does NOT fail the connection: a connected
+    // account with no subscription is still better than no account, and
+    // the reason is recorded on the business (migration 227).
+    const subscription = await subscribeAndRecord(service, dealershipId, "instagram", {
+      id: meData.id,
+      token: finalToken,
+    });
+
     integrationsUrl.searchParams.set("instagram_connected", meData.username ?? "1");
+    // So the Integrations page can say it, rather than the owner
+    // finding out by waiting for a DM that is never answered.
+    if (!subscription.ok) integrationsUrl.searchParams.set("instagram_webhook_error", subscription.reason);
     return NextResponse.redirect(integrationsUrl);
   } catch (err: any) {
     integrationsUrl.searchParams.set("instagram_error", err.message);

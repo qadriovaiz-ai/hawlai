@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { metaPageTokenWrite } from "@/lib/crypto/oauthSecrets";
 import { fetchAdAccountLimits, limitsToRow } from "@/lib/ads/adAccountLimits";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
+import { subscribeAndRecord } from "@/lib/webhooks/subscribeWebhooks";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -89,8 +90,32 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // ASK META TO ACTUALLY SEND THE WEBHOOKS. Nothing did this before
+  // 12 November 2026, which is why the DM and comment auto-reply
+  // toggles were on with zero replies ever sent: a Page must be
+  // installed on the app through its own subscribed_apps edge, and
+  // configuring the webhook product in the Meta dashboard does not do
+  // it. Needs pages_manage_metadata, which is why the connect route now
+  // asks for it and why an older connection has to be remade.
+  //
+  // AFTER the row is written, so the token it subscribes with is the
+  // one now stored — and never before, or a failure here would leave a
+  // connection half-saved.
+  //
+  // It cannot throw and does not gate the response: the connection
+  // itself succeeded, and the subscription result is recorded on the
+  // business (migration 227) for the Integrations page to report.
+  const subscription = await subscribeAndRecord(serviceClient, dealershipId, "facebook", {
+    id: page.id,
+    token: page.access_token,
+  });
+
   return NextResponse.json({
     success: true,
+    // Said out loud rather than left for the owner to discover by
+    // waiting for a DM that never gets answered.
+    webhooksSubscribed: subscription.ok,
+    webhooksError: subscription.ok ? null : subscription.reason,
     // So the UI can say which pixel it picked rather than silently
     // configuring conversion tracking behind the dealer's back.
     pixelId: chosenPixel?.id ?? dealership?.meta_pixel_id ?? null,
