@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { runSalesAgentTurn } from "@/lib/agents/chatbotAgent";
-import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
+import { recordFirstTouchpoint, bridgeVisitorTouchpoints } from "@/lib/agents/touchpointAgent";
 import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
 import { resolvePublicSite } from "@/lib/publicSite";
@@ -23,7 +23,7 @@ import { visitPath } from "@/lib/utils";
 // /api/public/track and /api/public/leads use, so an unpublished draft
 // resolves to nobody here as well.
 export async function POST(request: Request) {
-  const { slug, message, history, path } = await request.json();
+  const { slug, message, history, path, visitorId } = await request.json();
   if (!slug) return NextResponse.json({ error: "Missing page reference" }, { status: 400 });
   if (!message || message.trim().length < 1) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
   if (message.length > 500) return NextResponse.json({ error: "Message is too long" }, { status: 400 });
@@ -96,6 +96,10 @@ export async function POST(request: Request) {
     { supabase, dealershipId }
   );
 
+  // The browser id, if they consented to one. Sanitised the same way
+  // every other field from this request is: it arrives from a browser.
+  const visitor = typeof visitorId === "string" && visitorId.trim() ? visitorId.trim() : null;
+
   // A CUSTOMER ASKED SOMETHING THE RECORDS COULD NOT ANSWER — V4c.
   //
   // Recorded before the lead work below, because it is true whether or
@@ -142,9 +146,18 @@ export async function POST(request: Request) {
         email: leadCapture.email ?? null,
         source: "ai_sales_agent",
         qualification_reason: leadCapture.interest ?? null,
+        // V5a, migration 231 — same as the landing form. Until now a
+        // lead captured through the CHAT had no link to its visitor at
+        // all: this route never received an id and never bridged one.
+        visitor_id: visitor,
       }).select("id").single();
       if (newLead) {
         await recordFirstTouchpoint(supabase, { leadId: newLead.id, dealershipId: dealershipId, source: "ai_sales_agent" });
+        // AND ITS BROWSING BECOMES TOUCHPOINTS, which the landing form
+        // has done since migration 196 and this path never did — so a
+        // chat lead's first touch was recorded as "ai_sales_agent" and
+        // everything before it was lost.
+        await bridgeVisitorTouchpoints(supabase, { leadId: newLead.id, dealershipId, visitorId: visitor });
       }
     }
     leadCaptured = true;

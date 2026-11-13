@@ -63,6 +63,10 @@ export async function POST(request: Request) {
     lead_temperature: qualification.temperature,
     status: "ready_to_call",
     qualification_reason: qualification.reason,
+    // WHICH VISITOR BECAME THIS LEAD — V5a, migration 231. Null when
+    // they declined cookies, which is "we cannot connect them to any
+    // browsing" and never "they browsed nothing".
+    visitor_id: typeof visitorId === "string" && visitorId.trim() ? visitorId.trim() : null,
   }).select("id").single();
 
   if (error) return NextResponse.json({ error: "Something went wrong, please try again" }, { status: 500 });
