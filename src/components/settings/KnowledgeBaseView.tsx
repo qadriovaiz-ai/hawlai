@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Plus, Trash2, Pencil, Save, X, BookOpen, ShieldAlert } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Save, X, BookOpen, ShieldAlert, EyeOff, Eye } from "lucide-react";
 import { needsConsent } from "@/lib/claims/personalStories";
 import { Button, Card, EmptyState, Input, Select, Textarea } from "@/components/ui";
 
@@ -89,6 +89,30 @@ export default function KnowledgeBaseView() {
     });
   }
 
+  /**
+   * "Never tell a customer this." — migration 229.
+   *
+   * The only way business_knowledge.internal_only is ever set. Nothing
+   * infers it: whether a note is for customers is a judgement about her
+   * own business — a supplier's name, a cost, a note-to-self — and a
+   * pattern that guessed would be wrong in the expensive direction
+   * either way.
+   *
+   * AVAILABLE ON EVERY NOTE, not just General. General is where such a
+   * note usually lands, but "this is not for customers" is a true thing
+   * to say about a policy or a pricing note too, and a control that
+   * appeared only sometimes would be a control she could not find.
+   */
+  async function toggleInternal(fact: any) {
+    const next = !fact.internal_only;
+    setFacts((prev) => prev.map((f) => (f.id === fact.id ? { ...f, internal_only: next } : f)));
+    await fetch("/api/business-knowledge", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: fact.id, internal_only: next }),
+    });
+  }
+
   async function remove(id: string) {
     setFacts((prev) => prev.filter((f) => f.id !== id));
     await fetch("/api/business-knowledge", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
@@ -159,6 +183,15 @@ export default function KnowledgeBaseView() {
                       <p className="text-sm font-medium text-slate-700">{f.title}</p>
                       <p className="text-xs text-slate-500 mt-0.5">{f.content}</p>
                       {!f.is_active && <p className="text-[10px] text-amber-500 mt-1">Off — not used on calls</p>}
+                      {/* NEVER A HIDDEN STATE. A note that is being
+                          held back from customers has to say so on the
+                          note itself — otherwise the owner wonders why
+                          the agent keeps saying it will check. */}
+                      {f.internal_only && (
+                        <p className="text-[10px] text-slate-600 mt-1 flex items-center gap-1">
+                          <EyeOff className="w-3 h-3" /> Internal — your team only. Hawlai will never tell a customer this, and won&apos;t use it in any website copy, ad, email or post.
+                        </p>
+                      )}
                       {/* SOMEBODY ELSE'S PRIVATE SITUATION.
                           Hawlai will not write from this until the owner
                           says she has that person's permission — it is
@@ -187,6 +220,14 @@ export default function KnowledgeBaseView() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleInternal(f)}
+                        title={f.internal_only ? "Customers may be told this" : "Never tell a customer this"}
+                        aria-label={f.internal_only ? "Make this note usable with customers" : "Mark this note internal"}
+                        className={`p-1 rounded-md transition-colors ${f.internal_only ? "text-slate-700 bg-slate-200" : "text-slate-500 hover:text-slate-700"}`}
+                      >
+                        {f.internal_only ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
                       <button
                         onClick={() => toggleActive(f)}
                         title={f.is_active ? "Turn off" : "Turn on"}

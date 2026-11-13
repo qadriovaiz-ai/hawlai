@@ -3997,6 +3997,43 @@ rather than invented.
 exist, the work is to make it impossible to bypass — not to build a
 second one beside it.
 
+## 2026-11-13 — the internal-note flag, and how far "internal" reaches
+
+**The owner asked for the column the day after it was flagged as the one
+gap left open** (see the V4a entry above): a way to write a note down
+and keep it in, now that the sales agent is on every page of the shop.
+
+**Two calls made without asking, both stated here rather than buried:**
+
+**1. The flag is on every row, not only `general`.** The ask named
+General, which is where such a note usually lands — a supplier, a cost,
+a note-to-self. But "this is not for customers" is a true thing to say
+about a policy or a pricing note too, and a CHECK tying the column to
+one category would need migrating again the first time she marks one.
+A control that appears only sometimes is also a control she cannot
+find.
+
+**2. "Internal" means out of ALL generated copy, not only out of the
+website chat.** The gate went where the consent gate already is —
+`withheldFromCopy` — which is the one place every generation path
+already passes through: the visitor chat, social posts, ads, emails,
+the facts block, and Master Chat's own grounding. One gate, no second
+copy to drift.
+
+**The consequence, which is slightly more than the ask:** the owner's
+own Master Chat will not use an internal note either, because Master
+Chat also drafts copy a customer reads. She can always read the note
+herself on the Business Knowledge page, and the model is TOLD the note
+exists and that it is off-limits rather than finding a silent gap —
+otherwise it invents something to fill it. **If she wants her own chat
+to read them, that is a one-line change and her call.**
+
+`default false`, and the migration contains no UPDATE: every note
+written before today stays exactly as customer-facing as it was. The
+opposite default would have decided, on her behalf, which of her
+existing notes her customers may no longer be told — and she would
+have found out from a customer.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

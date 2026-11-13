@@ -48,7 +48,7 @@ export async function PATCH(request: Request) {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { id, title, content, category, is_active, public_use_consent } = await request.json();
+  const { id, title, content, category, is_active, public_use_consent, internal_only } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const update: any = { updated_at: new Date().toISOString() };
@@ -61,6 +61,10 @@ export async function PATCH(request: Request) {
   // a statement only she can make, so nothing infers it, and no
   // generator writes it (src/lib/claims/personalStories.ts).
   if (public_use_consent !== undefined) update.public_use_consent = public_use_consent === true;
+  // Migration 229 — "never tell a customer this". The owner's own
+  // instruction about her own note; nothing else writes this column,
+  // and no generator reads past it (src/lib/claims/personalStories.ts).
+  if (internal_only !== undefined) update.internal_only = internal_only === true;
 
   const { error } = await supabase.from("business_knowledge").update(update).eq("id", id).eq("dealership_id", dealershipId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

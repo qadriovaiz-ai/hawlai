@@ -35,6 +35,16 @@ export type StoryFact = {
   content: string;
   /** The owner has confirmed she has that person's permission. */
   consented?: boolean;
+  /**
+   * The owner marked this note internal — migration 229.
+   *
+   * NOT A JUDGEMENT ANYTHING HERE MAKES. "Is this for customers?" is a
+   * statement about her own business: a supplier's name, a cost, a
+   * note-to-self. A pattern that guessed would be wrong in the
+   * expensive direction either way, so only she sets it, on the
+   * Business Knowledge page.
+   */
+  internalOnly?: boolean;
 };
 
 /** Someone who is not the owner and not the business. */
@@ -81,6 +91,12 @@ function matches(patterns: RegExp[], text: string): boolean {
  * tell, and hers to decide about.
  */
 export function withheldFromCopy(fact: StoryFact): string | null {
+  // THE OWNER'S OWN INSTRUCTION, CHECKED FIRST AND NEEDING NO PATTERN.
+  // Everything below reads the text to work out whether a row is
+  // somebody else's private situation; this one was decided by the
+  // person who wrote the note, and no reading of it can overrule her.
+  if (fact.internalOnly === true) return INTERNAL_REASON;
+
   const text = `${fact.title ?? ""} ${fact.content ?? ""}`;
   if (!text.trim()) return null;
   if (!matches(THIRD_PARTY, text)) return null;
@@ -106,19 +122,25 @@ export function needsConsent(fact: StoryFact): boolean {
   return Boolean(text.trim()) && matches(THIRD_PARTY, text) && matches(PRIVATE_EVENT, text);
 }
 
+/** Why a row was withheld. Two different things to say to a model. */
+export type WithheldKind = "internal_only" | "private_situation";
+
+export const INTERNAL_REASON =
+  "you marked it internal, so it is never shown to a customer or used in generated copy";
+
 export type SplitStories = {
   /** Safe to write from. */
   usable: StoryFact[];
   /** Withheld, with the reason, for the prompt to be told about explicitly. */
-  withheld: { fact: StoryFact; reason: string }[];
+  withheld: { fact: StoryFact; reason: string; kind: WithheldKind }[];
 };
 
 export function splitStories(facts: StoryFact[]): SplitStories {
   const usable: StoryFact[] = [];
-  const withheld: { fact: StoryFact; reason: string }[] = [];
+  const withheld: SplitStories["withheld"] = [];
   for (const fact of facts) {
     const reason = withheldFromCopy(fact);
-    if (reason) withheld.push({ fact, reason });
+    if (reason) withheld.push({ fact, reason, kind: reason === INTERNAL_REASON ? "internal_only" : "private_situation" });
     else usable.push(fact);
   }
   return { usable, withheld };
@@ -135,6 +157,30 @@ export function splitStories(facts: StoryFact[]): SplitStories {
  */
 export function withheldNote(withheld: SplitStories["withheld"]): string {
   if (withheld.length === 0) return "";
+
+  // TWO REASONS, TWO SENTENCES. This note used to assume every withheld
+  // row was a customer's private situation, because that was the only
+  // way a row could be withheld. An internal note is a different fact
+  // about a different thing, and telling the model the wrong reason is
+  // how it talks itself round one.
+  const internal = withheld.filter((w) => w.kind === "internal_only");
+  const privateSituation = withheld.filter((w) => w.kind !== "internal_only");
+
+  const parts: string[] = [];
+  if (internal.length) {
+    parts.push(
+      [
+        `WITHHELD FROM YOU ON PURPOSE: ${internal.length} ${internal.length === 1 ? "note" : "notes"} the owner marked INTERNAL.`,
+        "You may NOT repeat, quote, paraphrase, summarise or hint at them to a customer, and you must NOT invent a substitute to fill the gap.",
+        "If a customer asks something only an internal note answers, say you will check and offer to come back to them.",
+      ].join(" ")
+    );
+  }
+  if (privateSituation.length) parts.push(privateSituationNote(privateSituation));
+  return parts.join("\n\n");
+}
+
+function privateSituationNote(withheld: SplitStories["withheld"]): string {
   return [
     `WITHHELD FROM YOU ON PURPOSE: ${withheld.length} ${withheld.length === 1 ? "entry" : "entries"} in this owner's Business Story ${withheld.length === 1 ? "describes" : "describe"} a customer's private situation (illness, bereavement, an accident or similar).`,
     "You may NOT use, quote, paraphrase, allude to or build a scene from any customer's personal circumstances, and you must NOT invent a substitute anecdote to fill the gap — an invented customer story is a fabricated testimonial.",

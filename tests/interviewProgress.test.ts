@@ -210,12 +210,21 @@ describe("5. A THIN NOTE IS MARKED WHERE IT IS SHOWN", () => {
     // that file, and a `toMatch` was satisfied by either one — so
     // dropping the column from one read left the assertion green and
     // the flag missing from half the callers.
+    //
+    // THE LITERAL MOVED ON 2026-11-13 and the assertion moved with it,
+    // at the same strictness: migration 229 added `internal_only` to
+    // both reads, so the exact spelling this pins is now the longer
+    // one. Nothing here was loosened — if anything it is tighter, since
+    // it pins two columns across both reads instead of one. The two
+    // earlier spellings must still appear nowhere.
     const facts = code("src/lib/claims/businessFacts.ts");
-    const withFlag = occurrences(facts, 'select("category, title, content, public_use_consent, is_weak")');
+    const withFlag = occurrences(facts, 'select("category, title, content, public_use_consent, is_weak, internal_only")');
+    const weakOnly = occurrences(facts, 'select("category, title, content, public_use_consent, is_weak")');
     const withoutFlag = occurrences(facts, 'select("category, title, content, public_use_consent")');
     expect(withFlag).toBe(2);
-    // The flagless spelling ends in `")`, so it is not a substring of the
-    // flagged one — it must not appear at all.
+    // Each shorter spelling ends in `")`, so neither is a substring of
+    // the longer one — they must not appear at all.
+    expect(weakOnly).toBe(0);
     expect(withoutFlag).toBe(0);
     expect(facts).toMatch(/weak: k\.is_weak === true/);
   });

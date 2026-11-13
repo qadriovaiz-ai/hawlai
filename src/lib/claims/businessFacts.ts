@@ -86,6 +86,12 @@ export type KnowledgeFact = {
    */
   consented?: boolean;
   /**
+   * The owner marked this note internal (migration 229) — never shown
+   * to a customer, never used in generated copy. Set by her alone on
+   * the Business Knowledge page; nothing infers it.
+   */
+  internalOnly?: boolean;
+  /**
    * The interview asked for something checkable, the owner answered
    * twice without one, and the answer was stored anyway — the founder's
    * decision of 7 November 2026: store and flag, never block
@@ -231,7 +237,7 @@ export function matchProducts(products: CatalogProduct[], term: string): Catalog
 
 /** The owner's own stated facts (Business Knowledge). */
 export async function fetchKnowledgeFacts(supabase: any, dealershipId: string): Promise<KnowledgeFact[]> {
-  const { data } = await supabase.from("business_knowledge").select("category, title, content, public_use_consent, is_weak").eq("dealership_id", dealershipId).eq("is_active", true);
+  const { data } = await supabase.from("business_knowledge").select("category, title, content, public_use_consent, is_weak, internal_only").eq("dealership_id", dealershipId).eq("is_active", true);
   return (data ?? []).filter((k: Row) => k?.title || k?.content).map(toKnowledgeFact);
 }
 
@@ -253,6 +259,12 @@ function toKnowledgeFact(k: Row): KnowledgeFact {
     // codebase: a missing column on an older row must read as "not
     // known to be thin", never as thin.
     weak: k.is_weak === true,
+    // Migration 229. Strictly true as well — but note the direction is
+    // the opposite of the others: a row whose flag cannot be read stays
+    // customer-facing, which is how it behaved yesterday. Making an
+    // unreadable column mean "internal" would silently empty the
+    // agent's answers the day the read failed.
+    internalOnly: k.internal_only === true,
   };
 }
 
@@ -441,7 +453,7 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
     read<Row[]>("orders", supabase.from("orders").select("status, created_at").eq("dealership_id", dealershipId), []),
     read<Row[]>("leads", supabase.from("leads").select("id, merged_into_lead_id, is_test").eq("dealership_id", dealershipId), []),
     read<Row[]>("abandoned carts", supabase.from("abandoned_carts").select("id").eq("dealership_id", dealershipId).gte("created_at", since), []),
-    read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content, public_use_consent, is_weak").eq("dealership_id", dealershipId).eq("is_active", true), []),
+    read<Row[]>("business knowledge", supabase.from("business_knowledge").select("category, title, content, public_use_consent, is_weak, internal_only").eq("dealership_id", dealershipId).eq("is_active", true), []),
     read<Row | null>("brand profile", supabase.from("brand_profiles").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
     read<Row | null>("brand kit", supabase.from("brand_kits").select("*").eq("dealership_id", dealershipId).maybeSingle(), null),
     // HOW MUCH OF THE INTERVIEW IS ANSWERED (I5, migration 222).
