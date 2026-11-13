@@ -28,6 +28,7 @@ import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
 import { readComparison, comparisonText, visitorsWeekOverWeek, fixedThisWeek } from "@/lib/growth/comparison";
 import { readVisits, summarise } from "@/lib/growth/visits";
+import { readPageKinds, summariseIntent, intentLine } from "@/lib/growth/intent";
 import { checkTracking } from "@/lib/growth/tracking";
 import { askForMissingFact } from "@/lib/onboarding/factGaps";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
@@ -438,6 +439,20 @@ export async function buildGrowthReport(
         `Visits: ${summary.visits} in the last 7 days from visitors who accepted cookies, and ${typical}.`
       );
       counted.push(...summary.counted);
+
+      // WHAT THOSE VISITS SUGGEST — V3. The kinds are read first: a
+      // FAILED read gives null, and scoring against null would classify
+      // every page as unidentifiable and report the week as "nobody was
+      // interested". Null means this paragraph does not appear.
+      const kinds = await readPageKinds(supabase, dealershipId);
+      if (kinds) {
+        const intent = summariseIntent(visits, kinds);
+        const line = intentLine(intent);
+        if (line) {
+          lines.push(line);
+          counted.push(...intent.counted);
+        }
+      }
     }
     if (fixed) {
       // THE HALF A GROWTH REPORT USUALLY DROPS: what did NOT get done.
