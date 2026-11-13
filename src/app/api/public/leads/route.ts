@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { resolvePublicSite } from "@/lib/publicSite";
 import { NextResponse } from "next/server";
 import { mapLeadAnswers, scoreNewLead } from "@/lib/leads/leadIntake";
 import { loadBusinessModels } from "@/lib/leads/leadProfile";
@@ -22,25 +23,12 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  const { data: landingPage } = await supabase
-    .from("landing_pages")
-    .select("dealership_id, published")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  let dealershipId = landingPage?.published ? landingPage.dealership_id : null;
-  let source = "landing_page";
-
-  if (!dealershipId) {
-    // Not a quick-launch landing page — check if it's a multi-page
-    // Website Builder site instead (different slug namespace, same
-    // lead-capture contract).
-    const { data: website } = await supabase.from("websites").select("dealership_id, published").eq("slug", slug).maybeSingle();
-    if (website?.published) {
-      dealershipId = website.dealership_id;
-      source = "website";
-    }
-  }
+  // The landing-page-or-site fallback now lives in one place
+  // (lib/publicSite); this route and /api/public/track had each written
+  // it out by hand, in two different shapes.
+  const site = await resolvePublicSite(supabase, slug);
+  const dealershipId = site?.dealershipId ?? null;
+  const source = site?.source ?? "landing_page";
 
   if (!dealershipId) {
     return NextResponse.json({ error: "This page is not accepting leads right now" }, { status: 404 });

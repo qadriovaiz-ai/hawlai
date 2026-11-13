@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { ownedPieceId } from "@/lib/attribution/pieces";
 import { createClient } from "@/lib/supabase/server";
 import { visitPath } from "@/lib/utils";
+import { resolvePublicSite } from "@/lib/publicSite";
 
 /**
  * Whether the caller is signed in as the owner or active staff of this
@@ -38,16 +39,11 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const { data: page } = await supabase.from("landing_pages").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
-
-  // Not a quick-launch landing page — check if it's a Website Builder
-  // site instead (different slug namespace, same tracking contract).
-  // Same fallback /api/public/leads/route.ts already uses.
-  let dealershipId = page?.dealership_id;
-  if (!dealershipId) {
-    const { data: website } = await supabase.from("websites").select("dealership_id").eq("slug", slug).eq("published", true).maybeSingle();
-    dealershipId = website?.dealership_id;
-  }
+  // A slug is a landing page OR a Website Builder site, and the
+  // fallback between them now lives in one place (lib/publicSite) —
+  // this route and /api/public/leads had each written it out by hand.
+  const site = await resolvePublicSite(supabase, slug);
+  const dealershipId = site?.dealershipId;
 
   if (!dealershipId) return NextResponse.json({ ok: true }); // fail silently — tracking should never break the page
 
