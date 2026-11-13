@@ -26,6 +26,7 @@ import { linkFindingsToGoals, markSurfaced, pickToday, recordFindings } from "@/
 import { existingTargetOffers, writeSetupGoalDrafts } from "@/lib/growth/goalDrafts";
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
+import { readComparison, comparisonText, visitorsWeekOverWeek, fixedThisWeek } from "@/lib/growth/comparison";
 import { checkTracking } from "@/lib/growth/tracking";
 import { askForMissingFact } from "@/lib/onboarding/factGaps";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
@@ -394,6 +395,45 @@ export async function buildGrowthReport(
   };
 
   // ---- Report ---------------------------------------------------------
+  // ---- What changed — R4 ---------------------------------------------
+  //
+  // READ HERE, not in the work, because it is about what the OWNER is
+  // being told rather than about what the agent found. The work runs
+  // daily and nobody reads it; a comparison only means something at the
+  // moment somebody is looking.
+  //
+  // IT NEVER THROWS INTO THE REPORT. A business with no earlier
+  // snapshot is the normal first week, and an unreadable one must not
+  // cost the owner the rest of his report.
+  let comparison: { text: string; counted: Counted[] } | null = null;
+  try {
+    const { gatherBusinessNumbers } = await import("@/lib/reports/businessNumbers");
+    const todays = await gatherBusinessNumbers(supabase, dealershipId);
+    const against = await readComparison(supabase, dealershipId, todays as unknown as Record<string, unknown>);
+    const visitors = await visitorsWeekOverWeek(supabase, dealershipId);
+    const fixed = await fixedThisWeek(supabase, dealershipId);
+
+    const lines: string[] = [comparisonText(against)];
+    const counted: Counted[] = [...against.counted];
+    if (visitors) {
+      const direction = visitors.change === 0 ? "the same as" : visitors.change > 0 ? "up from" : "down from";
+      lines.push(`Visits: ${visitors.thisWeek} in the last 7 days, ${direction} ${visitors.lastWeek} the week before.`);
+      counted.push(...visitors.counted);
+    }
+    if (fixed) {
+      // THE HALF A GROWTH REPORT USUALLY DROPS: what did NOT get done.
+      // resolved_at has been on `opportunities` since it was created and
+      // no report has ever read it.
+      lines.push(
+        `I found ${fixed.found} thing${fixed.found === 1 ? "" : "s"} this week and ${fixed.fixed} ${fixed.fixed === 1 ? "was" : "were"} fixed; ${fixed.stillOpen} ${fixed.stillOpen === 1 ? "is" : "are"} still open.`
+      );
+      counted.push(...fixed.counted);
+    }
+    comparison = { text: lines.filter(Boolean).join("\n"), counted };
+  } catch (err: any) {
+    console.error(`[growth] could not build the comparison for ${dealershipId}: ${err?.message ?? err}`);
+  }
+
   const business = await businessName(supabase, dealershipId);
   const report = buildDailyReport({
     dealershipId,
@@ -414,6 +454,7 @@ export async function buildGrowthReport(
     targetNumbers,
     noTargetsBecause,
     noTargetsNumbers,
+    comparison,
     askForFact,
     activeGoals,
     findingCount: findings.length,

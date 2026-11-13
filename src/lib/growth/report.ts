@@ -391,6 +391,18 @@ export function buildDailyReport(input: {
    */
   askForFact?: { text: string; counted: Counted[] } | null;
   /**
+   * What changed since last time — R4.
+   *
+   * THE FOUNDER'S DECISION, 12 November 2026: a report must carry a
+   * before-and-after, not a status. "Pehle din kya tha, kitna grow
+   * hua, kitna nahi hua."
+   *
+   * Every figure in it is declared, because the digit walk prunes a
+   * block whose numbers trace to nothing — and the comparison sentence
+   * names two numbers per line, so BOTH sides have to be counted.
+   */
+  comparison?: { text: string; counted: Counted[] } | null;
+  /**
    * What the AI could not do during this run, if anything.
    *
    * Reported above everything else: an owner reading "2 setup steps"
@@ -508,6 +520,14 @@ export function buildDailyReport(input: {
   // does not belong among the numbers — and it is not urgent enough to
   // push the plan down. An owner who reads only the top of the email
   // still sees it.
+  // WHAT CHANGED COMES BEFORE THE RAW FIGURES — R4. A column of
+  // today's numbers answers "where am I"; the owner asked "what moved",
+  // and that is the first thing he should read.
+  const comparison = input.comparison;
+  if (comparison && String(comparison.text ?? "").trim()) {
+    blocks.push({ kind: "line", text: comparison.text.trim(), numbers: comparison.counted ?? [] });
+  }
+
   const ask = input.askForFact;
   if (ask && String(ask.text ?? "").trim()) {
     blocks.push({ kind: "line", text: ask.text.trim(), numbers: ask.counted ?? [] });
