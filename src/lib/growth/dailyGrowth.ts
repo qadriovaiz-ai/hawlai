@@ -27,6 +27,7 @@ import { existingTargetOffers, writeSetupGoalDrafts } from "@/lib/growth/goalDra
 import { hasNoPlan, maturityOf, setupGoalsFrom } from "@/lib/growth/strategy";
 import { recordBlocksLeftOut, type LeftOutBlock } from "@/lib/growth/leftOut";
 import { readComparison, comparisonText, visitorsWeekOverWeek, fixedThisWeek } from "@/lib/growth/comparison";
+import { readVisits, summarise } from "@/lib/growth/visits";
 import { checkTracking } from "@/lib/growth/tracking";
 import { askForMissingFact } from "@/lib/onboarding/factGaps";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
@@ -417,8 +418,26 @@ export async function buildGrowthReport(
     const counted: Counted[] = [...against.counted];
     if (visitors) {
       const direction = visitors.change === 0 ? "the same as" : visitors.change > 0 ? "up from" : "down from";
-      lines.push(`Visits: ${visitors.thisWeek} in the last 7 days, ${direction} ${visitors.lastWeek} the week before.`);
+      lines.push(`Page views: ${visitors.thisWeek} in the last 7 days, ${direction} ${visitors.lastWeek} the week before.`);
       counted.push(...visitors.counted);
+    }
+
+    // VISITS, WHICH ARE NOT PAGE VIEWS — V2. A person's pages in one
+    // sitting. Said beside the views rather than instead of them,
+    // because only a CONSENTED visitor can be grouped at all
+    // (visitor_id is withheld without consent), so visits are always
+    // the smaller and more cautious number of the two.
+    const visits = await readVisits(supabase, dealershipId, { sinceDays: 7 });
+    if (visits && visits.length) {
+      const summary = summarise(visits);
+      const typical =
+        summary.medianSeconds === null
+          ? "none of them lasted long enough to time"
+          : `the typical one lasted at least ${summary.medianSeconds} seconds`;
+      lines.push(
+        `Visits: ${summary.visits} in the last 7 days from visitors who accepted cookies, and ${typical}.`
+      );
+      counted.push(...summary.counted);
     }
     if (fixed) {
       // THE HALF A GROWTH REPORT USUALLY DROPS: what did NOT get done.

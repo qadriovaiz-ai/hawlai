@@ -382,11 +382,19 @@ describe("9. THE REPORT CARRIES IT, ABOVE THE RAW FIGURES", () => {
 
   it("AND IT CANNOT COST THE OWNER THE REST OF HIS REPORT", () => {
     const report = bodyOf("src/lib/growth/dailyGrowth.ts", "buildGrowthReport");
+    // SLICED TO THE BLOCK, not to a character window. The first
+    // version took 600 characters before and 1200 after, and V2 adding
+    // the visits read pushed the catch outside it — a window is a guess
+    // about length, and the thing being asserted is STRUCTURE.
     const at = report.indexOf("readComparison(");
-    const around = report.slice(Math.max(0, at - 600), at + 1200);
-    expect(around).toMatch(/try \{/);
-    expect(around).toMatch(/catch \(err: any\) \{/);
-    expect(around).not.toMatch(/catch \(err: any\) \{\s*throw/);
+    expect(at).toBeGreaterThan(-1);
+    const tryAt = report.lastIndexOf("try {", at);
+    const catchAt = report.indexOf("catch (err: any) {", at);
+    expect(tryAt, "readComparison is not inside a try").toBeGreaterThan(-1);
+    expect(catchAt, "the try has no catch after readComparison").toBeGreaterThan(at);
+    const block = report.slice(tryAt, catchAt + 200);
+    expect(block.length).toBeGreaterThan(200);
+    expect(block).not.toMatch(/catch \(err: any\) \{\s*throw/);
   });
 
   it("the four compared fields are the cumulative ones, named once", () => {

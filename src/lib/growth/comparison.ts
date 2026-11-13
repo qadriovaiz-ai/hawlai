@@ -202,7 +202,15 @@ export type WeekOverWeek = {
 };
 
 /**
- * Visitors, this seven days against the seven before.
+ * PAGE VIEWS, this seven days against the seven before.
+ *
+ * IT SAID "VISITS" UNTIL V2, AND IT WAS NOT COUNTING VISITS — a
+ * correction I owe, because I wrote it in R4 four days ago. It counts
+ * `page_events` ROWS, so one visitor clicking eight times read as eight
+ * "visits" in the owner's report. Now it counts `view` events and calls
+ * them page views, which is what they are. Visits — a person's pages in
+ * one sitting — are `lib/growth/visits.ts`, and the report states both
+ * because they answer different questions.
  *
  * THE OWNER'S OWN VISITS ARE EXCLUDED, in the query, not in a comment —
  * migration 207 exists because visits went 28 to 31 while he tested his
@@ -223,6 +231,10 @@ export async function visitorsWeekOverWeek(
       .select("created_at")
       .eq("dealership_id", dealershipId)
       .eq("is_internal", false)
+      // A PAGE VIEW, NOT EVERY EVENT. A click, a chat opening and a
+      // form being started are all rows here, and counting them as
+      // views inflated the figure by however busy the visitor was.
+      .eq("event_type", "view")
       .gte("created_at", from);
     if (to) q = q.lt("created_at", to);
     const { data, error } = await q;
@@ -241,8 +253,8 @@ export async function visitorsWeekOverWeek(
     lastWeek,
     change: thisWeek - lastWeek,
     counted: [
-      { label: "visits in the last 7 days", value: thisWeek, source: "page_events" },
-      { label: "visits in the 7 days before that", value: lastWeek, source: "page_events" },
+      { label: "page views in the last 7 days", value: thisWeek, source: "page_events" },
+      { label: "page views in the 7 days before that", value: lastWeek, source: "page_events" },
     ],
   };
 }
