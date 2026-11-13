@@ -28,7 +28,7 @@
 import { getModel } from "../models";
 import { callClaude } from "@/lib/ai/claude";
 import { parseModelJson } from "@/lib/ai/modelJson";
-import { truthBlock } from "@/lib/claims/factsGate";
+import { visitorFactsBlock } from "@/lib/claims/factsGate";
 import { stripUnsupported, stripUnverifiable } from "@/lib/claims/claimCheck";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { splitStories } from "@/lib/claims/personalStories";
@@ -111,7 +111,7 @@ ${context.headline ? `Tagline: ${context.headline}` : ""}
 ${context.offerText ? `Current offer: ${context.offerText}` : ""}
 ${context.toneOfVoice ? `Tone to use: ${context.toneOfVoice}` : "Tone: friendly and helpful"}
 ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.join("; ")}` : ""}
-${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}${truthBlock(context.facts, "customer")}`;
+${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}`;
 
   try {
     const r = await callClaude({

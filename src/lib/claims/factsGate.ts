@@ -67,6 +67,37 @@ export function truthBlock(
 }
 
 /**
+ * The facts block for someone who is NOT the owner — a visitor on the
+ * public website, reading an answer from the sales agent.
+ *
+ * NO AUDIENCE ARGUMENT, DELIBERATELY. `truthBlock`'s audience defaults
+ * to "owner", which is the right default for the eighteen internal
+ * callers and the wrong one for the one public surface. Until this
+ * existed, the public chat path was correct because somebody had
+ * remembered to type "customer" — correct by habit, not by structure,
+ * and a refactor that dropped the second argument would have silently
+ * started reading the owner's trading figures to strangers.
+ *
+ * WHAT THE OWNER AUDIENCE CARRIES THAT THIS MUST NOT. `allTime` is a
+ * count of paid orders and leads, and the owner block states it
+ * outright ("Track record: 47 paid order(s)"). A visitor asking "how
+ * many have you sold?" would get a real answer: private, and for a new
+ * business a damaging one. The customer audience replaces it with the
+ * fact that there is nothing to quote, which is what stops the model
+ * inventing a number to fill the gap.
+ *
+ * `last30` — views, chat opens, leads, orders, abandoned carts,
+ * conversion rate — is carried on BusinessFacts and belongs to the
+ * owner alone. `formatFactsForCopy` prints it for neither audience, and
+ * `formatFactsForPrompt` (which prints all of it) has exactly one
+ * caller, the internal CRO agent. A behavioural test holds that line
+ * rather than trusting the read.
+ */
+export function visitorFactsBlock(facts: BusinessFacts | null | undefined): string {
+  return truthBlock(facts, "customer");
+}
+
+/**
  * Said to the model when the records are unreadable.
  *
  * Not "there are no products" — that would be a claim about the
