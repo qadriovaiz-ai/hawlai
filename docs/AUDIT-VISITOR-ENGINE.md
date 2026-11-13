@@ -159,12 +159,36 @@ on. The popup's words are also fixed — there is no behaviour-aware copy.
   a lead inactive for `follow_up_inactive_days` (default 3). That is two
   messages, not a sequence.
 - `workflowEngine` trigger types are **`new_lead`**, **`lead_converted`**
-  and **`appointment_booked`** — all CRM events, none behavioural, and
-  with no day-offset steps.
+  and **`appointment_booked`** — all CRM events, **none behavioural**.
 - `notifyColdLeads` and `churn_detection` already chase quiet leads.
 
-So the Day 0 / Day 2 / Day 5 / Day 10 shape does not exist in any form,
-and neither does "what to send depends on what they looked at".
+### CORRECTION, 13 November 2026 — the day-offset half of this was wrong
+
+**This section originally said the engine has "no day-offset steps".
+That is false, and it was the premise V5 was sized on.** Read before
+building rather than after:
+
+- **`workflow_steps.delay_days` exists**, and `runWorkflows` computes
+  `dueDate = triggerDate + delay_days` and skips a step until it is due.
+- **Steps run in `step_order`**, and the loop `break`s on the first step
+  that is not due — later steps are due later still.
+- **`workflow_step_runs` has a unique constraint**, so each (step, lead)
+  pair sends once ever, and only a run that SUCCEEDED counts as done.
+- **DND opt-out and the unsubscribe list are both checked before a step
+  writes an email**, not after.
+- **AI-written steps are checked against `gatherBusinessFactsSafely`**,
+  so "a Day-5 case study needs a case study" is already enforced where
+  it matters.
+
+**So the Day 0 / Day 2 / Day 5 / Day 10 shape EXISTS.** What does not
+exist is a behavioural trigger: nothing can start a sequence because of
+what somebody did on the site.
+
+**V5 is therefore one new trigger type, not a new engine** — and the
+engine's own comment says a new trigger type "needs zero new plumbing".
+That moves V5 from **M/L to S/M**, and moves most of its rule-6 risk
+onto a path that is already gated, already suppression-checked and
+already fact-checked.
 
 ---
 
@@ -180,7 +204,7 @@ most lacks.
 | **V2** | **Group a visitor's events into a visit**, and derive time-on-site and pages-per-visit | **S/M** | A "visit" boundary is a judgement, not a fact. The 30-minute-gap convention has to be stated as a convention, and the owner's own visits stay excluded (migration 207) |
 | **V3** | **A visitor intent score** from page path + time, for anonymous visitors too | **M** | It must be **its own number**. `predicted_conversion_score` measures how well we handled a LEAD; folding behaviour into it would silently change a figure the owner may already read, and mix "what they did" with "what we did" into something unexplainable |
 | **V4** | **The site-wide sales and info agent** — see §7a, it is an UPGRADE | **L** | The **field-level public/internal filter**. A leak is unrecoverable, and `business_knowledge` has no privacy flag today |
-| **V5** | **A behaviour-based follow-up sequence** | **M/L** | Rule 6: every step through `executionPolicy` → `requestApproval`, and switching a sequence **off** stays ungated. And a Day-5 case study needs a case study |
+| **V5** | **A behaviour-based follow-up sequence** — one new `workflowEngine` trigger, not a new engine (see the correction in §6) | **S/M** | That the trigger reads BEHAVIOUR and not a lead's CRM status — and that a lead with no consented `visitor_id` is never guessed at. Sending, DND, unsubscribe and the facts check are already the engine's |
 
 ---
 

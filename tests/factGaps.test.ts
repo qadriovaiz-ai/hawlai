@@ -135,14 +135,14 @@ describe("2. A GAP IS ONLY NAMED WHERE THE GUARD ALREADY CLASSIFIED IT", () => {
 // ---------------------------------------------------------------------
 describe("3. GAPS ARE COUNTED, AND AN EMPTY LIST IS NOT A CLEAN OUTPUT", () => {
   it("THE SAME GAP TWICE IS COUNTED TWICE", () => {
-    expect(gapsFrom([row("price"), row("price")])).toEqual([{ key: "price_range", times: 2 }]);
-    expect(gapsFrom([row("price", "price")])).toEqual([{ key: "price_range", times: 2 }]);
+    expect(gapsFrom([row("price"), row("price")])).toEqual([{ key: "price_range", times: 2, fromCustomers: 0 }]);
+    expect(gapsFrom([row("price", "price")])).toEqual([{ key: "price_range", times: 2, fromCustomers: 0 }]);
   });
 
   it("THE MOST MISSED IS FIRST", () => {
     const gaps = gapsFrom([row("price"), row("substantiation"), row("substantiation"), row("substantiation")]);
-    expect(gaps[0]).toEqual({ key: "why_not_cheaper", times: 3 });
-    expect(gaps[1]).toEqual({ key: "price_range", times: 1 });
+    expect(gaps[0]).toEqual({ key: "why_not_cheaper", times: 3, fromCustomers: 0 });
+    expect(gaps[1]).toEqual({ key: "price_range", times: 1, fromCustomers: 0 });
   });
 
   it("A TIE IS BROKEN BY KEY, so two runs cannot disagree", () => {
@@ -190,7 +190,7 @@ describe("4. ONE QUESTION, ABOVE A THRESHOLD, AND ONCE EVER", () => {
     // business genuinely does not do. Twice is a pattern.
     expect(ASK_AFTER).toBe(2);
     expect(nextGapToAsk([row("price")], [])).toBeNull();
-    expect(nextGapToAsk([row("price"), row("price")], [])).toEqual({ key: "price_range", times: 2 });
+    expect(nextGapToAsk([row("price"), row("price")], [])).toEqual({ key: "price_range", times: 2, fromCustomers: 0 });
   });
 
   it("AN ANSWERED QUESTION IS LEFT ALONE", () => {
@@ -214,7 +214,7 @@ describe("4. ONE QUESTION, ABOVE A THRESHOLD, AND ONCE EVER", () => {
   it("THE NEXT GAP DOWN IS ASKED INSTEAD, not nothing", () => {
     const rows = [row("price"), row("price"), row("substantiation"), row("substantiation")];
     const progress = [{ question_key: "price_range", status: "asked" }];
-    expect(nextGapToAsk(rows, progress)).toEqual({ key: "why_not_cheaper", times: 2 });
+    expect(nextGapToAsk(rows, progress)).toEqual({ key: "why_not_cheaper", times: 2, fromCustomers: 0 });
   });
 
   it("and a gap with no registered question is skipped over", () => {
@@ -228,14 +228,14 @@ describe("5. THE LINE SAYS WHY IT IS ASKING, AND DECLARES ITS FIGURE", () => {
     // "What is your price range?" out of nowhere is a form. "I had to
     // delete a line twice because I don't know your prices" is a reason,
     // and it is true.
-    const line = gapAskLine({ key: "price_range", times: 3 })!;
+    const line = gapAskLine({ key: "price_range", times: 3, fromCustomers: 0 })!;
     expect(line.text).toMatch(/^I had to cut a line 3 times recently because I don't have your Price range\./);
   });
 
   it("AND THE QUESTION ITSELF COMES FROM THE REGISTRY", () => {
     // So the rule-3 test that holds the interview's prompts
     // category-neutral holds this line too.
-    const line = gapAskLine({ key: "price_range", times: 2 })!;
+    const line = gapAskLine({ key: "price_range", times: 2, fromCustomers: 0 })!;
     expect(line.text).toContain(questionByKey("price_range")!.prompt);
     expect(code("src/lib/onboarding/factGaps.ts")).toMatch(/\$\{question\.prompt\}/);
   });
@@ -244,14 +244,14 @@ describe("5. THE LINE SAYS WHY IT IS ASKING, AND DECLARES ITS FIGURE", () => {
     // growth/audit.ts records the fault: the digit walk refuses a number
     // it cannot trace, and it dropped an entire email over the "5" in
     // "5 pages have no search title".
-    const line = gapAskLine({ key: "price_range", times: 4 })!;
+    const line = gapAskLine({ key: "price_range", times: 4, fromCustomers: 0 })!;
     expect(line.counted).toEqual([
       { label: "lines cut for a missing Price range", value: 4, source: "claim_checks" },
     ]);
   });
 
   it("AND THE REPORT KEEPS THE BLOCK, digit walk and all", () => {
-    const line = gapAskLine({ key: "delivery_time", times: 2 })!;
+    const line = gapAskLine({ key: "delivery_time", times: 2, fromCustomers: 0 })!;
     // The same shape tests/growthReport.test.ts builds, because the
     // builder reads tracking and maturity and a partial object throws
     // before it reaches the block being tested.
@@ -281,13 +281,22 @@ describe("5. THE LINE SAYS WHY IT IS ASKING, AND DECLARES ITS FIGURE", () => {
   });
 
   it("a gap with no registered question produces no line", () => {
-    expect(gapAskLine({ key: "not_a_question", times: 5 })).toBeNull();
+    expect(gapAskLine({ key: "not_a_question", times: 5, fromCustomers: 0 })).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------
 describe("6. THE ASK IS RECORDED BEFORE IT IS SENT", () => {
-  function db(opts: { checks?: any[]; progress?: any[]; failCheck?: boolean; failWrite?: boolean } = {}) {
+  function db(
+    opts: {
+      checks?: any[];
+      customer?: any[];
+      progress?: any[];
+      failCheck?: boolean;
+      failCustomer?: boolean;
+      failWrite?: boolean;
+    } = {}
+  ) {
     const written: any[] = [];
     const client = {
       from(table: string) {
@@ -296,6 +305,19 @@ describe("6. THE ASK IS RECORDED BEFORE IT IS SENT", () => {
             select: () => chain,
             eq: () => chain,
             gte: async () => ({ data: opts.checks ?? [], error: opts.failCheck ? { message: "boom" } : null }),
+          };
+          return chain;
+        }
+        // V4c: a REAL CUSTOMER asked and the records were silent. The
+        // fake served every unknown table from the interview_answers
+        // branch, which has no `gte` — so the new read found undefined
+        // rather than rows. A fake that answers a query it was never
+        // taught is how a read goes untested.
+        if (table === "answer_gaps") {
+          const chain: any = {
+            select: () => chain,
+            eq: () => chain,
+            gte: async () => ({ data: opts.customer ?? [], error: opts.failCustomer ? { message: "boom" } : null }),
           };
           return chain;
         }
@@ -314,7 +336,7 @@ describe("6. THE ASK IS RECORDED BEFORE IT IS SENT", () => {
   it("A GAP WORTH ASKING ABOUT IS MARKED asked, WITH A TIMESTAMP", () => {
     const { client, written } = db({ checks: [row("price"), row("price")] });
     return askForMissingFact(client as any, "d1").then((r) => {
-      expect(r.asked).toEqual({ key: "price_range", times: 2 });
+      expect(r.asked).toEqual({ key: "price_range", times: 2, fromCustomers: 0 });
       expect(r.line!.text).toContain("Price range");
       expect(written[0]).toMatchObject({ dealership_id: "d1", question_key: "price_range", status: "asked" });
       expect(typeof written[0].asked_at).toBe("string");
