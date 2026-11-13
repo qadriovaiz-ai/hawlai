@@ -168,33 +168,115 @@ and neither does "what to send depends on what they looked at".
 
 ---
 
-## 7. What I would build, in order
+## 7. The plan, approved 13 November 2026
 
-Each piece is independently useful and each one is useless without the
-one before it, which is why the order is not negotiable.
+Each piece is independently useful, and the order is mostly forced: V2
+and V3 are meaningless without V1, and V4 needs V1 for the one thing it
+most lacks.
 
-| | Piece | Size | Why here |
+| | Piece | Size | The riskiest part |
 |---|---|---|---|
-| **V1** | **Record the page.** `page_events.path`, set from the slug the route already receives, plus `form_start` for abandonment | **S** | The keystone. Already-arriving data, currently discarded. Nothing else in Detect or Score can exist without it |
-| **V2** | **A visit, and how long it lasted.** Group a visitor's events into visits and derive time-on-site and pages-per-visit | **S/M** | Needs V1 to mean anything. No new third party, pure arithmetic over rows |
-| **V3** | **A visitor intent score** — its own number, for anonymous visitors too, every point traceable to a recorded event, no model call | **M** | Needs V1+V2. Deliberately separate from `predicted_conversion_score` |
-| **V4** | **Behaviour-triggered engagement** — a `behaviour` trigger for `Popup` and the chat, on a score threshold or a page pattern | **M** | Needs V3. Reuses the popup and `popup_shown` that already exist |
-| **V5** | **A behaviour-based sequence** — day-offset steps on `workflowEngine`, with the step chosen by what the person actually looked at | **M/L** | Needs V3. Every send still through `executionPolicy` → `requestApproval` |
+| **V1** | **Record the page.** `page_events.path`, from the slug the track route already receives, plus `form_start` | **S** | A path is a page on the business's own site, **not a full URL**. Query strings are where personal data leaks into analytics, and this table is read by five other features |
+| **V2** | **Group a visitor's events into a visit**, and derive time-on-site and pages-per-visit | **S/M** | A "visit" boundary is a judgement, not a fact. The 30-minute-gap convention has to be stated as a convention, and the owner's own visits stay excluded (migration 207) |
+| **V3** | **A visitor intent score** from page path + time, for anonymous visitors too | **M** | It must be **its own number**. `predicted_conversion_score` measures how well we handled a LEAD; folding behaviour into it would silently change a figure the owner may already read, and mix "what they did" with "what we did" into something unexplainable |
+| **V4** | **The site-wide sales and info agent** — see §7a, it is an UPGRADE | **L** | The **field-level public/internal filter**. A leak is unrecoverable, and `business_knowledge` has no privacy flag today |
+| **V5** | **A behaviour-based follow-up sequence** | **M/L** | Rule 6: every step through `executionPolicy` → `requestApproval`, and switching a sequence **off** stays ungated. And a Day-5 case study needs a case study |
 
-### What each one must not do
+---
 
-- **V1**: a path is a page on the business's own site, not a query
-  string. No full URLs with parameters in the row — that is where
-  personal data leaks into analytics.
-- **V3**: the score is `counted`, never a model's opinion, and the owner
-  must be able to see the events behind any number. This codebase has
-  shipped invented statistics before; the digit walk exists because of it.
-- **V4**: a popup that fires on behaviour is still a popup. One per
-  visit, dismissible, and `popup_shown` recorded so its effect is
-  measurable rather than assumed.
-- **V5**: no step may send to anyone who has not opted in, and nothing
-  may reach a sender without a registry entry. Switching a sequence
-  **off** stays ungated — the safe direction must not be the slow one.
+## 7a. V4 — THE AGENT ALREADY EXISTS, and that changes the work
+
+**The founder asked me to confirm this before building, and he was right
+to.** There is a widget, and behind it a real agent:
+
+| | |
+|---|---|
+| `src/components/website/ChatWidget.tsx` | 128 lines |
+| `POST /api/public/chat` | 111 lines |
+| `runSalesAgentTurn` in `src/lib/agents/chatbotAgent.ts` | the code already calls it the AI Sales Agent |
+
+**And two of the new requirements are already met, which is the useful
+part of asking first:**
+
+- **It is already fact-bound through C2.** `chatbotAgent.ts` imports
+  `truthBlock` (factsGate), `stripUnsupported` and `stripUnverifiable`,
+  and runs `stripUnsupported(spoken, facts, "publish")` — the STRICTEST
+  mode. "No line without a FactRecord" is true on this path today.
+- **It already reads the business's own knowledge.** `getBusinessContext`
+  gives it `business_knowledge` — hours, pricing notes, policies, FAQs —
+  and a `website_chat` persona that defaults to sales. It records a
+  first touchpoint, captures a lead, and offers a booking.
+
+### So what is actually missing is four things, and one of them is big
+
+**1. IT IS ON THE WRONG PAGES — and this is the whole of "site-wide".**
+The widget is rendered in exactly one place: `src/app/p/[slug]/page.tsx`,
+the quick-launch landing page. The route reads
+`landing_pages` by slug. **The Website Builder storefront
+(`/site/[slug]`) has no agent at all** — so on a real built site, with
+products, policies and an about page, there is nobody to ask. This is a
+placement problem, not an intelligence problem, and it is most of V4's
+value.
+
+**2. It does not know where the visitor is.** The route passes the
+landing page's `headline` and `offer_text`. A site-wide agent needs the
+current page and, on a product page, the product. **V1 provides exactly
+this**, which is why V1 comes first.
+
+**3. The conversation is invisible.** Only `chat_open` is tracked —
+fired by the widget, counted in analytics, mapped to a touchpoint
+channel. Nothing records what was ASKED, what was answered, or **when
+the agent had to say it did not know**. That last one is the most
+valuable row in the whole engine: it is a fact the business is missing,
+measured at the moment a customer wanted it. It should feed the same
+Tier 3 machinery the claims guard already feeds (`claim_checks` → I6).
+
+**4. THERE IS NO PUBLIC/INTERNAL FILTER — the riskiest part of V4.**
+
+What I checked, rather than assumed:
+
+- **`products` has no cost or margin column at all.** No `cost`,
+  no `wholesale_price`, no `margin`. There is nothing internal in the
+  catalogue to leak.
+- **`CATALOG_COLUMNS` is already an explicit allowlist** — and it
+  excludes `sku`, so the agent cannot read one out either.
+- **`business_knowledge` has NO privacy flag.** `is_active` retires a
+  note; it does not hide one. The categories are hours, pricing_note,
+  policy, faq, general — plus `business_story` (migration 189).
+- **`business_story` is the sensitive one** and already has a consent
+  gate (`personalStories.ts`), which was built after a fabricated
+  testimonial reached a live page.
+
+So the filter V4 needs is **an allowlist of categories read at the
+source**, plus `business_story` only through the existing consent gate.
+That needs no migration. If the owner later wants a "never tell a
+customer this" note, that is a column and his decision — recorded here
+rather than assumed.
+
+### V4's shape, then
+
+**An upgrade in three steps, not a new agent:**
+
+| | | Size |
+|---|---|---|
+| **V4a** | Put the existing widget on the Website Builder storefront, and make the route resolve a site as well as a landing page — the same `landing_pages` OR `websites` fallback `/api/public/track` and `/api/public/leads` already use | **M** |
+| **V4b** | Pass the current page and product into the turn, so the agent knows where the visitor is standing | **S** (needs V1) |
+| **V4c** | Record the conversation into `page_events` — asked, answered, and **"I did not know"** — and feed the gaps to Tier 3 | **M** |
+
+And the field-level filter is not a step: it is a precondition on V4a,
+because the moment the agent is on a product page with a catalogue it is
+reading more than it used to.
+
+### What V4 must not become
+
+- **No new department and no new agent.** `chatbotAgent` is the agent;
+  this upgrades it. Rule 5.
+- **No naggy popup.** The founder said so, and `Popup.tsx` already
+  exists separately with its own triggers — V4 is the agent being
+  available, not the agent interrupting.
+- **It asks for contact when interest is real**, which `leadCapture`
+  already does. V3's score is what makes "real" measurable, and until
+  V3 exists the existing behaviour stands rather than being guessed at.
 
 ---
 
