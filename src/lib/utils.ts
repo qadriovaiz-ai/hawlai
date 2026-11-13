@@ -161,7 +161,16 @@ export function toWhatsAppLink(phone: string | null | undefined, message: string
 //
 // Re-exported from consent.ts rather than reimplemented so there is
 // exactly one place that decides whether an identifier may exist.
-export { getVisitorIdIfConsented as getOrCreateVisitorId } from "./consent";
+//
+// RENAMED 13 November 2026, UNDER ITS REAL NAME. This was aliased to
+// `getOrCreateVisitorId`, which reads as "create one regardless" — and
+// that misreading cost something: while building V5a I believed it and
+// wrote a second, consent-checking wrapper beside it, which is a
+// duplicated copy of a consent rule and the worst possible thing to
+// have two of. The function returns null unless consent was granted and
+// creates an id only for somebody who already said yes. The name says
+// that now.
+export { getVisitorIdIfConsented } from "./consent";
 
 // Read directly from the current URL rather than threading utm_*
 // through every component that calls trackEvent — as long as the

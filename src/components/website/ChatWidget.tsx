@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2 } from "lucide-react";
-import { trackEvent, visitPath, getOrCreateVisitorId } from "@/lib/utils";
+import { trackEvent, visitPath, getVisitorIdIfConsented } from "@/lib/utils";
 import AgentAvatar from "@/components/website/AgentAvatar";
 
 interface Message {
@@ -52,14 +52,9 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
           history: messages,
           path: typeof window === "undefined" ? null : visitPath(window.location.pathname),
           // V5a — so a lead captured in this conversation can be tied
-          // to what this visitor actually looked at.
-          //
-          // CONSENT-GATED DESPITE THE NAME: getOrCreateVisitorId is a
-          // re-export of consent.ts's getVisitorIdIfConsented, which
-          // returns null unless consent was granted. It creates an id
-          // only for somebody who already said yes. One place decides
-          // whether an identifier may exist, and this is not a second.
-          visitorId: getOrCreateVisitorId(),
+          // to what this visitor actually looked at. Null unless they
+          // accepted cookies, which the name now says.
+          visitorId: getVisitorIdIfConsented(),
         }),
       });
       const data = await res.json();

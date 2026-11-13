@@ -78,25 +78,39 @@ describe("3. CONSENT DECIDES, IN EXACTLY ONE PLACE", () => {
   it("THE WIDGET SENDS THE ID THROUGH THE CONSENT-GATED READER", () => {
     const src = code(WIDGET);
     const body = src.slice(src.indexOf("body: JSON.stringify("));
-    expect(body.slice(0, 600)).toMatch(/visitorId: getOrCreateVisitorId\(\)/);
+    expect(body.slice(0, 600)).toMatch(/visitorId: getVisitorIdIfConsented\(\)/);
   });
 
   it("THERE IS NO SECOND FUNCTION DECIDING WHETHER AN ID MAY EXIST", () => {
     // THE LOAD-BEARING ONE. I wrote one on the way in — a
     // `visitorIdForCapture` that re-checked consent and re-wrapped the
-    // try/catch — on the false belief that getOrCreateVisitorId mints
-    // an id regardless. It does not: it is a re-export of consent.ts's
-    // getVisitorIdIfConsented, which returns null unless consent was
-    // granted. A duplicated definition of a consent rule is the worst
-    // possible place for the two copies to drift.
+    // try/catch — on the false belief that the then-alias
+    // `getOrCreateVisitorId` minted an id regardless. It did not: it
+    // was a re-export of consent.ts's getVisitorIdIfConsented, which
+    // returns null unless consent was granted. A duplicated definition
+    // of a consent rule is the worst possible place for two copies to
+    // drift, and the misleading name is what invited the duplicate —
+    // so the alias is gone and the real name is used everywhere.
     const utils = code("src/lib/utils.ts");
-    expect(utils).toMatch(/export \{ getVisitorIdIfConsented as getOrCreateVisitorId \} from "\.\/consent";/);
+    expect(utils).toMatch(/export \{ getVisitorIdIfConsented \} from "\.\/consent";/);
     expect(utils).not.toMatch(/visitorIdForCapture/);
+    // AND THE MISLEADING ALIAS IS GONE, so nothing can reach the
+    // consent decision under a name that suggests it does not make one.
+    expect(utils).not.toMatch(/getOrCreateVisitorId/);
 
     const consent = code("src/lib/consent.ts");
     const fn = consent.slice(consent.indexOf("export function getVisitorIdIfConsented"));
     const body = fn.slice(0, fn.indexOf("\n}"));
     expect(body).toMatch(/if \(readConsent\(\) !== "granted"\) return null;/);
+  });
+
+  it("AND SO DOES THE LANDING FORM — both capture paths, not just one", () => {
+    // FOUND BY A MUTATION. Only the widget's call site was pinned, so
+    // replacing the landing form's consent-gated read with a literal
+    // string passed every test. Two capture paths need two assertions.
+    const src = code("src/components/website/LandingLeadForm.tsx");
+    const body = src.slice(src.indexOf("body: JSON.stringify("));
+    expect(body.slice(0, 300)).toMatch(/visitorId: getVisitorIdIfConsented\(\)/);
   });
 
   it("AND NO CAPTURE PATH READS localStorage ITSELF", () => {
