@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2 } from "lucide-react";
 import { trackEvent } from "@/lib/utils";
+import AgentAvatar from "@/components/website/AgentAvatar";
 
 interface Message {
   role: "user" | "assistant";
@@ -53,14 +54,21 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
           className="fixed bottom-20 sm:bottom-5 right-5 z-40 w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
           style={{ backgroundColor: accentColor }}
         >
-          <MessageCircle className="w-6 h-6 text-white" />
+          {/* The robot, not a chat bubble. Drawn ON the accent
+              colour, so the shell is white and the face screen takes
+              the business's own colour — the same drawing as the
+              header badge and the reply avatars, at a different size. */}
+          <AgentAvatar color={accentColor} onColor="#FFFFFF" size={30} />
         </button>
       )}
 
       {open && (
         <div className="fixed bottom-20 sm:bottom-5 right-5 z-40 w-[92vw] max-w-sm h-[65vh] max-h-[500px] bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 text-white shrink-0" style={{ backgroundColor: accentColor }}>
-            <p className="text-sm font-semibold">Ask {dealershipName}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <AgentAvatar color={accentColor} onColor="#FFFFFF" size={22} />
+              <p className="text-sm font-semibold truncate">Ask {dealershipName}</p>
+            </div>
             <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white">
               <X className="w-4 h-4" />
             </button>
@@ -68,10 +76,23 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2.5 bg-neutral-50">
             {messages.length === 0 && (
-              <p className="text-xs text-neutral-400 text-center py-6">Ask about pricing, availability, offers — anything!</p>
+              <div className="flex flex-col items-center gap-2 py-6">
+                <AgentAvatar color={accentColor} size={44} />
+                <p className="text-xs text-neutral-400 text-center">Ask about pricing, availability, offers — anything!</p>
+              </div>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
+                {/* WHO IS SPEAKING, on the reply itself. The agent's
+                    answers and the visitor's own messages are different
+                    shapes and sides already; the face makes the
+                    difference survive a screenshot. */}
+                {m.role === "assistant" && (
+                  <div className="flex items-center gap-1.5 mb-0.5 pl-0.5">
+                    <AgentAvatar color={accentColor} size={16} />
+                    <span className="text-[10px] font-medium text-neutral-400">{dealershipName}</span>
+                  </div>
+                )}
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
                     m.role === "user" ? "text-white rounded-tr-sm" : "bg-white border border-neutral-200 text-neutral-700 rounded-tl-sm"
@@ -98,7 +119,8 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
             )}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-white border border-neutral-200 rounded-xl rounded-tl-sm px-3 py-2">
+                <div className="bg-white border border-neutral-200 rounded-xl rounded-tl-sm px-3 py-2 flex items-center gap-2">
+                  <AgentAvatar color={accentColor} size={14} />
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-neutral-400" />
                 </div>
               </div>

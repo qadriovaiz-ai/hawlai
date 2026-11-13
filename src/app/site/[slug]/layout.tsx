@@ -7,6 +7,7 @@ import { getSiteFontFamilies, getSiteFontStylesheetUrl } from "@/lib/siteFonts";
 import CartIcon from "@/components/website/CartIcon";
 import PageTracker from "@/components/website/PageTracker";
 import ConsentBanner from "@/components/website/ConsentBanner";
+import ChatWidget from "@/components/website/ChatWidget";
 import TrackingScripts from "@/components/website/TrackingScripts";
 import { TrackingConfigProvider } from "@/components/website/TrackingConfigProvider";
 import { CaptureAttribution } from "@/components/storefront/CaptureAttribution";
@@ -104,6 +105,14 @@ export default async function SiteLayout({ children, params }: { children: React
           banner says "<name> uses cookies" to every first-time visitor,
           and it was the one place still reading the raw signup handle. */}
       <ConsentBanner slug={slug} businessName={dealershipName} />
+      {/* V4a — THE AGENT, ON EVERY PAGE OF THE SITE. It lived only on
+          the quick-launch landing page (/p/[slug]) until now, so a
+          business with a real built site had nobody to ask. In the
+          LAYOUT for the same reason the tracker is: a visitor can land
+          on a product page, a custom page or the cart, and the question
+          they want to ask follows them. The formatted business name,
+          like the header and footer — never the raw signup handle. */}
+      <ChatWidget slug={slug} dealershipName={dealershipName} accentColor={theme.dark} />
     </div>
   );
 }

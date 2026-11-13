@@ -3955,6 +3955,48 @@ corrected.
 a chat is a confirmation the project does not have. Migrations 224, 225
 and 226 were recorded the same way and 227 was the one that slipped.
 
+## 2026-11-13 — V4a: what a visitor may be told, and the one gap left open
+
+**Decided without asking, because the architecture already said so.**
+The sales agent moved from one quick-launch landing page onto every
+page of the Website Builder storefront. Three things were checked
+before that, rather than assumed:
+
+- **The field-level public/internal filter already existed.**
+  `FactsAudience` is it. `BusinessFacts` carries the owner's trading
+  figures — `allTime.paidOrders`, `allTime.leads` and the whole of
+  `last30` — and the owner block states them outright ("Track record:
+  47 paid order(s)"). The customer audience replaces that with "no
+  ratings, reviews or customer counts are on record", which is what
+  stops the model inventing a number to fill the gap.
+- **What did not exist was anything stopping the public path asking for
+  the owner audience.** `truthBlock`'s parameter defaults to `"owner"`
+  — correct for its eighteen internal callers, and the public surface
+  was correct only because somebody had remembered to type the second
+  argument. `visitorFactsBlock` takes no audience at all. A refactor
+  that dropped an argument would have started reading a business's
+  trading figures to strangers, and nothing would have failed.
+- **The catalogue was already safe by construction.** `products` has no
+  cost, margin or wholesale column; `CATALOG_COLUMNS` is an explicit
+  allowlist excluding `sku` and `gtin`; the read uses that list rather
+  than `*`. All three are pinned by tests now, because a site-wide
+  agent reads the catalogue on every product page.
+
+**THE GAP LEFT OPEN, AND IT IS THE OWNER'S CALL, NOT MINE.**
+`business_knowledge` has no "private note" flag. Its six categories
+(hours, pricing_note, policy, faq, general, business_story) are all
+customer-facing by design, and `personalStories`' content-based consent
+gate already withholds anything telling a third party's private
+situation whatever category it sits in. But **`general` is a
+catch-all**: a note typed there can be read aloud to a visitor by an
+agent that is now on every page of the shop. Adding a "never tell a
+customer this" flag is a column and a migration, so it is recorded here
+rather than invented.
+
+**The rule this is an instance of:** when a guard turns out to already
+exist, the work is to make it impossible to bypass — not to build a
+second one beside it.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

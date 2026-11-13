@@ -4,9 +4,20 @@ import { runSalesAgentTurn } from "@/lib/agents/chatbotAgent";
 import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
 import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
+import { resolvePublicSite } from "@/lib/publicSite";
 
-// Public, unauthenticated — the landing page AI Sales Agent widget
-// posts here.
+// Public, unauthenticated — the AI Sales Agent widget posts here.
+//
+// V4a: IT ANSWERS FOR A WEBSITE BUILDER STOREFRONT TOO. Until now this
+// route read `landing_pages` and nothing else, so the agent existed on
+// the one-page quick launch and NOT on a real built site — the one with
+// products, policies and an about page, where a visitor actually has
+// something to ask about. That was a placement problem, not an
+// intelligence problem, and it was most of V4's value.
+//
+// The landing-page-or-site fallback is lib/publicSite's, the same one
+// /api/public/track and /api/public/leads use, so an unpublished draft
+// resolves to nobody here as well.
 export async function POST(request: Request) {
   const { slug, message, history } = await request.json();
   if (!slug) return NextResponse.json({ error: "Missing page reference" }, { status: 400 });
@@ -14,16 +25,22 @@ export async function POST(request: Request) {
   if (message.length > 500) return NextResponse.json({ error: "Message is too long" }, { status: 400 });
 
   const supabase = createServiceClient();
-  const { data: page } = await supabase
-    .from("landing_pages")
-    .select("dealership_id, headline, offer_text, dealerships(booking_slug)")
-    .eq("slug", slug)
-    .eq("published", true)
-    .maybeSingle();
+  const site = await resolvePublicSite(supabase, slug);
+  if (!site) return NextResponse.json({ error: "Page not found" }, { status: 404 });
+  const dealershipId = site.dealershipId;
 
-  if (!page) return NextResponse.json({ error: "Page not found" }, { status: 404 });
-
-  const dealership = (page as any).dealerships;
+  // A LANDING PAGE HAS A HEADLINE AND AN OFFER; A STOREFRONT HAS
+  // NEITHER, and must not be given somebody else's. These two fields
+  // are the quick-launch page's own copy — on a site they stay null,
+  // and the agent falls back to the business's facts, which is what it
+  // should have been doing anyway. V4b gives it the page the visitor
+  // is actually standing on.
+  const [{ data: dealership }, { data: page }] = await Promise.all([
+    supabase.from("dealerships").select("booking_slug").eq("id", dealershipId).maybeSingle(),
+    site.source === "landing_page"
+      ? supabase.from("landing_pages").select("headline, offer_text").eq("slug", slug).eq("published", true).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
   // P3 20a — was its own separate dealerships/brand_profiles query;
   // now the same shared assembler chat and calls already use, so this
   // surface gains business_knowledge (hours/pricing/policies/FAQs) for
@@ -33,9 +50,9 @@ export async function POST(request: Request) {
   // object it does return), kept as-is rather than folding it in and
   // risking a behavior change beyond "same source, more facts."
   const [businessCtx, { data: brandProfile }, persona] = await Promise.all([
-    getBusinessContext(supabase, page.dealership_id),
-    supabase.from("brand_profiles").select("messaging_pillars").eq("dealership_id", page.dealership_id).maybeSingle(),
-    resolvePersona(supabase, page.dealership_id, "website_chat"), // P3 piece 5 — defaults to sales
+    getBusinessContext(supabase, dealershipId),
+    supabase.from("brand_profiles").select("messaging_pillars").eq("dealership_id", dealershipId).maybeSingle(),
+    resolvePersona(supabase, dealershipId, "website_chat"), // P3 piece 5 — defaults to sales
   ]);
 
   const { reply, leadCapture, suggestBooking } = await runSalesAgentTurn(
@@ -43,8 +60,8 @@ export async function POST(request: Request) {
       dealershipName: businessCtx.name,
       city: businessCtx.city,
       businessCategory: businessCtx.category,
-      headline: page.headline,
-      offerText: page.offer_text,
+      headline: page?.headline ?? null,
+      offerText: page?.offer_text ?? null,
       toneOfVoice: businessCtx.toneOfVoice,
       messagingPillars: brandProfile?.messaging_pillars,
       knowledgeFacts: businessCtx.knowledgeFacts,
@@ -58,7 +75,7 @@ export async function POST(request: Request) {
     },
     Array.isArray(history) ? history.slice(-6) : [],
     message.trim(),
-    { supabase, dealershipId: page.dealership_id }
+    { supabase, dealershipId }
   );
 
   // Real CRM update — only when the visitor volunteered a name and at
@@ -72,11 +89,11 @@ export async function POST(request: Request) {
   if (leadCapture?.phone || leadCapture?.email) {
     let existing: { id: string } | null = null;
     if (leadCapture.phone) {
-      const { data } = await supabase.from("leads").select("id").eq("dealership_id", page.dealership_id).eq("phone", leadCapture.phone).maybeSingle();
+      const { data } = await supabase.from("leads").select("id").eq("dealership_id", dealershipId).eq("phone", leadCapture.phone).maybeSingle();
       existing = data;
     }
     if (!existing && leadCapture.email) {
-      const { data } = await supabase.from("leads").select("id").eq("dealership_id", page.dealership_id).eq("email", leadCapture.email).maybeSingle();
+      const { data } = await supabase.from("leads").select("id").eq("dealership_id", dealershipId).eq("email", leadCapture.email).maybeSingle();
       existing = data;
     }
 
@@ -89,7 +106,7 @@ export async function POST(request: Request) {
       }).eq("id", existing.id);
     } else {
       const { data: newLead } = await supabase.from("leads").insert({
-        dealership_id: page.dealership_id,
+        dealership_id: dealershipId,
         name: leadCapture.name,
         phone: leadCapture.phone ?? null,
         email: leadCapture.email ?? null,
@@ -97,7 +114,7 @@ export async function POST(request: Request) {
         qualification_reason: leadCapture.interest ?? null,
       }).select("id").single();
       if (newLead) {
-        await recordFirstTouchpoint(supabase, { leadId: newLead.id, dealershipId: page.dealership_id, source: "ai_sales_agent" });
+        await recordFirstTouchpoint(supabase, { leadId: newLead.id, dealershipId: dealershipId, source: "ai_sales_agent" });
       }
     }
     leadCaptured = true;

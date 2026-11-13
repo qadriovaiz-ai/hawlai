@@ -311,6 +311,24 @@ And the field-level filter is not a step: it is a precondition on V4a,
 because the moment the agent is on a product page with a catalogue it is
 reading more than it used to.
 
+### What V4a shipped, 13 November 2026
+
+| | | |
+|---|---|---|
+| **V4a-i** | One resolver for "whose page is this slug" (`lib/publicSite`), replacing two hand-written copies that had drifted in shape | `09b3b17e` |
+| **V4a-ii** | `visitorFactsBlock` — the public path can no longer ask for the owner audience. The filter existed; nothing enforced it | `062cca27` |
+| **V4a-iii** | The widget on every page of the storefront, and the robot avatar | this commit |
+
+**What the precondition turned out to be.** Not a filter to build — one
+to make unbypassable. `FactsAudience` already withheld the owner's
+trading figures from a customer; `truthBlock`'s parameter defaulted to
+`"owner"`, so the public surface was correct by habit. See DECISIONS.md,
+13 November, including the one gap left open: `business_knowledge` has
+no private-note flag and `general` is a catch-all.
+
+**Still true after V4a:** the agent does not know which page the
+visitor is on. That is V4b, and V1 is what supplies it.
+
 ### What V4 must not become
 
 - **No new department and no new agent.** `chatbotAgent` is the agent;
