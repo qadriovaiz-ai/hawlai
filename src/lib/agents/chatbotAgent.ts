@@ -33,6 +33,7 @@ import { stripUnsupported, stripUnverifiable } from "@/lib/claims/claimCheck";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { splitStories } from "@/lib/claims/personalStories";
 import { offerOpeningRule, askRatherThanGuessRule } from "@/lib/chat/visitorPage";
+import { gapReportRule } from "@/lib/chat/answerGaps";
 
 interface DealershipContext {
   dealershipName: string;
@@ -91,6 +92,18 @@ function formatKnowledgeFacts(facts?: DealershipContext["knowledgeFacts"]): stri
 export interface SalesAgentResult {
   reply: string;
   /**
+   * The question the business's records could not answer — V4c.
+   *
+   * REPORTED BY THE MODEL, not guessed from its reply. Reading the
+   * wording to decide whether it deferred would be an English keyword
+   * list that is wrong in both directions on the same sentence.
+   *
+   * Null when it answered. Validated against the interview's own keys
+   * by `questionKeyFrom` before anything is stored, so a made-up key
+   * becomes "other" rather than a finding nobody can close.
+   */
+  unanswered: string | null;
+  /**
    * A name, and at least one way to reach them.
    *
    * PHONE IS OPTIONAL BECAUSE EMAIL COUNTS. This required a phone, so a
@@ -115,6 +128,11 @@ export async function runSalesAgentTurn(
     reply: "Thanks for your question! Please leave your name and number in the form below and our team will get back to you shortly.",
     leadCapture: null,
     suggestBooking: false,
+    // NOT A GAP. The fallback is this product failing to answer, not
+    // the business's records being silent — recording it would blame a
+    // missing fact for an outage and send the owner a question he has
+    // already answered.
+    unanswered: null,
   };
 
   const category = context.businessCategory || "business";
@@ -131,7 +149,7 @@ ${context.offerText ? `Current offer: ${context.offerText}` : ""}
 ${context.toneOfVoice ? `Tone to use: ${context.toneOfVoice}` : "Tone: friendly and helpful"}
 ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.join("; ")}` : ""}
 ${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}
-${context.visitorPageLine ?? ""}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}${offerOpeningRule(context.facts)}${askRatherThanGuessRule(context.facts)}`;
+${context.visitorPageLine ?? ""}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}${offerOpeningRule(context.facts)}${askRatherThanGuessRule(context.facts)}${gapReportRule()}`;
 
   try {
     const r = await callClaude({
@@ -149,7 +167,7 @@ Your job in this conversation, as relevant to what the visitor says:
 - Never claim to be a human. Keep replies short (2-4 sentences) and conversational, not corporate.
 - Only discuss things relevant to this business — politely redirect anything unrelated.
 
-Return JSON only, no markdown: {"reply": "your conversational reply", "leadCapture": {"name": "...", "phone": "...", "email": "... or omit", "interest": "one short phrase on what they're interested in"} or null until they have given a name AND at least one of a phone number or an email address in this conversation (either one is enough — never invent the other), "suggestBooking": true or false}`,
+Return JSON only, no markdown: {"reply": "your conversational reply", "leadCapture": {"name": "...", "phone": "...", "email": "... or omit", "interest": "one short phrase on what they're interested in"} or null until they have given a name AND at least one of a phone number or an email address in this conversation (either one is enough — never invent the other), "suggestBooking": true or false, "unanswered": "<a question key, or other>" or null}`,
       messages: [
         ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
         { role: "user", content: message },
@@ -191,6 +209,18 @@ Return JSON only, no markdown: {"reply": "your conversational reply", "leadCaptu
           ? parsed.leadCapture
           : null,
       suggestBooking: !!parsed.suggestBooking && context.hasBookingLink,
+      // TAKEN AS THE MODEL GAVE IT, AND VALIDATED LATER RATHER THAN
+      // HERE: `questionKeyFrom` turns anything that is not a real
+      // interview question into "other" at the point of storage, so
+      // this stays a plain read of the field.
+      //
+      // A REPLY EMPTIED BY THE CLAIMS GUARD IS NOT RECORDED AS A GAP,
+      // deliberately. That is this product inventing something and
+      // being caught — logged two lines above as a withheld claim — not
+      // the business's records being silent. Recording it here would
+      // send the owner an interview question to answer for an AI
+      // failure that had nothing to do with him.
+      unanswered: typeof parsed.unanswered === "string" ? parsed.unanswered : null,
     };
   } catch (err: any) {
     console.error("[ai-sales-agent] error:", err.message);

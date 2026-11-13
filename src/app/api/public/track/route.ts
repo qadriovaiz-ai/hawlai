@@ -30,7 +30,12 @@ async function isOwnerSession(dealershipId: string): Promise<boolean> {
 // `form_start` added 13 Nov 2026 (V1): there was a form_submit and
 // nothing for a form begun and abandoned, so the commonest way a
 // visitor shows intent and then leaves was invisible.
-const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "form_start", "whatsapp_click", "popup_shown"];
+// `chat_message` added 13 Nov 2026 (V4c): `chat_open` fired once when
+// the widget opened and nothing after it, so a visitor who opened the
+// chat and left was indistinguishable from one who asked six
+// questions. The event carries no message text — only that a turn
+// happened.
+const VALID_EVENTS = ["view", "click", "chat_open", "chat_message", "form_submit", "form_start", "whatsapp_click", "popup_shown"];
 
 export async function POST(request: Request) {
   const { slug, eventType, path, xPct, yPct, variant, visitorId, utm_source, utm_medium, utm_campaign, consentGranted, contentPieceId, internal: internalFlag } = await request.json();

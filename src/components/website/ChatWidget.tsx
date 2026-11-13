@@ -26,6 +26,14 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
   async function handleSend() {
     const text = input.trim();
     if (!text || loading) return;
+    // THE CONVERSATION WAS INVISIBLE BEYOND ITS FIRST SECOND — V4c.
+    // `chat_open` fired when the widget opened and nothing after it, so
+    // one visitor who opened the widget and left looked exactly like
+    // one who asked six questions. Counted through the same track
+    // route as every other event, so the owner's own messages are
+    // excluded and consent decides what is identifiable — and no
+    // message text is ever sent.
+    trackEvent(slug, "chat_message");
     const newHistory = [...messages, { role: "user" as const, content: text }];
     setMessages(newHistory);
     setInput("");

@@ -7,6 +7,7 @@ import { resolvePersona } from "@/lib/agents/personas";
 import { resolvePublicSite } from "@/lib/publicSite";
 import { readPageKinds } from "@/lib/growth/intent";
 import { describeVisitorPage } from "@/lib/chat/visitorPage";
+import { recordAnswerGap } from "@/lib/chat/answerGaps";
 import { visitPath } from "@/lib/utils";
 
 // Public, unauthenticated — the AI Sales Agent widget posts here.
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     businessCtx.facts
   );
 
-  const { reply, leadCapture, suggestBooking } = await runSalesAgentTurn(
+  const { reply, leadCapture, suggestBooking, unanswered } = await runSalesAgentTurn(
     {
       dealershipName: businessCtx.name,
       city: businessCtx.city,
@@ -94,6 +95,18 @@ export async function POST(request: Request) {
     message.trim(),
     { supabase, dealershipId }
   );
+
+  // A CUSTOMER ASKED SOMETHING THE RECORDS COULD NOT ANSWER — V4c.
+  //
+  // Recorded before the lead work below, because it is true whether or
+  // not they left their details: the gap is a fact about the business,
+  // and a visitor who asks and leaves has still told us what is
+  // missing. Never throws and never blocks the reply — a visitor is
+  // waiting on this request.
+  //
+  // What is NOT recorded: their words, their name, their id. See
+  // lib/chat/answerGaps.
+  if (unanswered) await recordAnswerGap(supabase, dealershipId, unanswered);
 
   // Real CRM update — only when the visitor volunteered a name and at
   // least one real identity signal (never fabricated). P2 27a-ii —
