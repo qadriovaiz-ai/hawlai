@@ -3937,6 +3937,24 @@ built on demand, because R3 has not built the way to ask for one. Until
 it does, **the owner has no way to get a report at all.** That is the
 gap R3 closes, and it is open right now.
 
+## 13 Nov 2026 — Migration 227 verified live
+
+**227 (`webhook_subscription_status`) is applied in production.** The
+owner verified it by hand: four columns present
+(`fb_webhook_subscribed_at`, `fb_webhook_error`,
+`ig_webhook_subscribed_at`, `ig_webhook_error`), correct types, all
+nullable.
+
+Recorded here because the verification happened in conversation and
+left no trace in the repo, so the next reader — including me — saw an
+unconfirmed migration and would have asked for it again. ROADMAP.md
+listed it as NOT CONFIRMED on the strength of that gap and has been
+corrected.
+
+**The rule this is an instance of:** a confirmation that exists only in
+a chat is a confirmation the project does not have. Migrations 224, 225
+and 226 were recorded the same way and 227 was the one that slipped.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

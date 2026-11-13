@@ -15,6 +15,17 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME, variant }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  // A FORM BEGUN IS A FACT — V1. There was a form_submit and nothing
+  // for a form started and abandoned, so the commonest way a visitor
+  // shows real intent and then leaves was invisible. ONCE per mount:
+  // the signal is "he started", not "he typed forty characters".
+  const [started, setStarted] = useState(false);
+
+  function noteStart() {
+    if (started) return;
+    setStarted(true);
+    trackEvent(slug, "form_start", undefined, variant);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,14 +65,14 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME, variant }
     <form onSubmit={handleSubmit} className="bg-white border border-neutral-200 rounded-xl p-6 space-y-3.5 shadow-sm">
       <input
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => { noteStart(); setName(e.target.value); }}
         placeholder="Your name"
         className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
         style={{ "--tw-ring-color": `${theme.accent}66` } as React.CSSProperties}
       />
       <input
         value={phone}
-        onChange={(e) => setPhone(e.target.value)}
+        onChange={(e) => { noteStart(); setPhone(e.target.value); }}
         placeholder="Phone number"
         type="tel"
         className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
@@ -69,7 +80,7 @@ export default function LandingLeadForm({ slug, theme = DEFAULT_THEME, variant }
       />
       <input
         value={interest}
-        onChange={(e) => setInterest(e.target.value)}
+        onChange={(e) => { noteStart(); setInterest(e.target.value); }}
         placeholder="What are you interested in? (optional)"
         className="w-full p-3 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2"
         style={{ "--tw-ring-color": `${theme.accent}66` } as React.CSSProperties}

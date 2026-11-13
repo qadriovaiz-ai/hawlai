@@ -204,6 +204,40 @@ export function isOwnerVisit(): boolean {
   }
 }
 
+/** How much of a path is kept. A page, not an essay. */
+export const PATH_CHARS = 200;
+
+/**
+ * The page a visitor was on — V1, and the privacy rule of the whole
+ * Organic Visitor Engine.
+ *
+ * THE PATH, NEVER THE URL. A query string is where personal data gets
+ * into analytics: unsubscribe tokens, an email in a shared link, a
+ * session id. `page_events` is read by five features and by the owner's
+ * dashboard and none of them needs a parameter, so the parameters never
+ * arrive.
+ *
+ * APPLIED IN THE BROWSER AND AGAIN ON THE SERVER. This function runs
+ * client-side, where a determined caller could simply not use it — so
+ * /api/public/track re-applies the same rule to whatever it receives.
+ * One of the two is a convenience; the other is the guarantee.
+ *
+ * EMPTY MEANS "we could not tell", not "/". The column is nullable for
+ * exactly that reason.
+ */
+export function visitPath(raw: string | null | undefined): string | null {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  // Cut at the FIRST of either, so "?a=1#b" and "#b?a=1" both lose
+  // everything after the first mark rather than only one of them.
+  const cut = Math.min(
+    ...[text.indexOf("?"), text.indexOf("#")].filter((i) => i > -1).concat([text.length])
+  );
+  const path = text.slice(0, cut).trim();
+  if (!path || !path.startsWith("/")) return null;
+  return path.slice(0, PATH_CHARS);
+}
+
 export function trackEvent(slug: string, eventType: string, coords?: { xPct: number; yPct: number }, variant?: string | null) {
   try {
     // Consent decides how much of this event is identifiable, not
@@ -219,6 +253,13 @@ export function trackEvent(slug: string, eventType: string, coords?: { xPct: num
       body: JSON.stringify({
         slug,
         eventType,
+        // WHICH PAGE — V1. Sent whether or not the visitor consented,
+        // like `variant` and the content piece and unlike the UTM tag:
+        // a page is a fact about the SITE, and counting visits per page
+        // is the same aggregate site operation as counting visits per
+        // post. Tying it to a person still needs visitorId, which stays
+        // consent-gated below.
+        path: typeof window === "undefined" ? null : visitPath(window.location.pathname),
         xPct: coords?.xPct,
         yPct: coords?.yPct,
         variant,

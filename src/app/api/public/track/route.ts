@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { ownedPieceId } from "@/lib/attribution/pieces";
 import { createClient } from "@/lib/supabase/server";
+import { visitPath } from "@/lib/utils";
 
 /**
  * Whether the caller is signed in as the owner or active staff of this
@@ -25,10 +26,13 @@ async function isOwnerSession(dealershipId: string): Promise<boolean> {
   }
 }
 
-const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "whatsapp_click", "popup_shown"];
+// `form_start` added 13 Nov 2026 (V1): there was a form_submit and
+// nothing for a form begun and abandoned, so the commonest way a
+// visitor shows intent and then leaves was invisible.
+const VALID_EVENTS = ["view", "click", "chat_open", "form_submit", "form_start", "whatsapp_click", "popup_shown"];
 
 export async function POST(request: Request) {
-  const { slug, eventType, xPct, yPct, variant, visitorId, utm_source, utm_medium, utm_campaign, consentGranted, contentPieceId, internal: internalFlag } = await request.json();
+  const { slug, eventType, path, xPct, yPct, variant, visitorId, utm_source, utm_medium, utm_campaign, consentGranted, contentPieceId, internal: internalFlag } = await request.json();
   if (!slug || !VALID_EVENTS.includes(eventType)) {
     return NextResponse.json({ error: "Invalid tracking event" }, { status: 400 });
   }
@@ -75,6 +79,12 @@ export async function POST(request: Request) {
 
   await supabase.from("page_events").insert({
     is_internal: internal,
+    // THE PAGE, RE-SANITISED HERE — V1. visitPath also runs in the
+    // browser, but that one is a convenience and this one is the
+    // guarantee: a caller that posts "/thanks?email=x@y.com" directly
+    // must not be able to store it. Migration 228's last verify query
+    // is a count of rows containing "?" and expects zero, always.
+    path: visitPath(typeof path === "string" ? path : null),
     marketing_piece_id: piece,
     dealership_id: dealershipId,
     event_type: eventType,

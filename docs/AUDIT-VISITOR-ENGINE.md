@@ -253,6 +253,50 @@ That needs no migration. If the owner later wants a "never tell a
 customer this" note, that is a column and his decision — recorded here
 rather than assumed.
 
+### 5. It only answers — a salesman also OPENS with what is running
+
+**Added to the spec 13 November 2026.** The founder's words: a real
+salesman says "humare paas abhi ye achha offer chal raha hai" without
+waiting to be asked. The agent should bring up genuine running offers in
+the greeting and in conversation, not only when a visitor happens to ask
+about price.
+
+**This needs no new data, which is the useful finding.** The facts layer
+already carries exactly this, and already refuses to invent it:
+
+- `BusinessFacts.offers` is built from **`discount_codes`** where
+  `is_active = true`, each row passed through **`discountUsable`** —
+  which refuses an inactive code, **an expired one** (`expires_at` in
+  the past) and one that has **hit its usage limit**
+  (`used_count >= max_uses`). So "ya expire ho chuka" is already
+  handled, at the source.
+- `factsPrompt` already states it in words: *"Active offers: code X —
+  20% off"*, or, when there are none, *"Active offers: none — do not
+  write any discount, sale or offer."*
+- `COPY_TRUTH_RULES` already says: *"NEVER write an offer, discount,
+  sale price, free shipping, gift, guarantee... unless it is in the
+  facts. With no active offer, sell the product itself."*
+- And `stripUnsupported` — which this path already runs in `publish`
+  mode — deletes a `20% off` that no record supports. An invented offer
+  does not survive the same guard that catches an invented one in an
+  email.
+
+**So the change is behavioural, inside a path that is already guarded:**
+the agent stops being purely reactive. What it must NOT become:
+
+- **It never says an offer is running when `offers` is empty.** The
+  prompt already carries the sentence for that case, and the guard
+  already deletes the claim. Both stay.
+- **It mentions the offer, it does not manufacture urgency.** "Selling
+  fast", "only 3 left" and "while stocks last" are already in
+  `SCARCITY` and are already stripped.
+- **An offer is not repeated every turn.** A salesman who opens with the
+  deal is useful; one who says it four times is the popup the founder
+  rejected.
+
+Size: **S**, and it belongs with **V4b**, because what is worth
+mentioning depends on the page the visitor is standing on.
+
 ### V4's shape, then
 
 **An upgrade in three steps, not a new agent:**
@@ -260,7 +304,7 @@ rather than assumed.
 | | | Size |
 |---|---|---|
 | **V4a** | Put the existing widget on the Website Builder storefront, and make the route resolve a site as well as a landing page — the same `landing_pages` OR `websites` fallback `/api/public/track` and `/api/public/leads` already use | **M** |
-| **V4b** | Pass the current page and product into the turn, so the agent knows where the visitor is standing | **S** (needs V1) |
+| **V4b** | Pass the current page and product into the turn, so the agent knows where the visitor is standing — **and let it open with a genuine running offer** (§5 above) | **S/M** (needs V1) |
 | **V4c** | Record the conversation into `page_events` — asked, answered, and **"I did not know"** — and feed the gaps to Tier 3 | **M** |
 
 And the field-level filter is not a step: it is a precondition on V4a,

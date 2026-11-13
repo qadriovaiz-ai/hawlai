@@ -42,22 +42,19 @@ thing most likely to produce a surprise.
 | **A5** | The AEO check on a schedule | **Built, flag OFF** (`AEO_SCHEDULE_ENABLED`) |
 | **A3, local L1** | The interview that fills a real business's facts | **Paused** until a real business onboards |
 | **A4a** | Who gets named instead of this business | **Held.** Needs A5 on, with real runs to read |
-| **Auto-reply** | The DM/comment bug: three missing scopes, and nothing ever subscribed a Page | **Fixed in code.** Migrations 226 ✅, **227 NOT CONFIRMED RUN** |
+| **Auto-reply** | The DM/comment bug: three missing scopes, and nothing ever subscribed a Page | **Fixed in code.** Migrations 226 ✅ and 227 ✅ (227 verified live 13 Nov — four columns, correct types, all nullable) |
 | **R1–R5** | The report becomes on-demand, and carries a before-and-after | **Done** |
 
 ---
 
 ## What is waiting on somebody, not on code
 
-1. **Migration 227** (`fb_webhook_subscribed_at` and its three siblings).
-   Until it runs, the webhook subscription cannot record whether it
-   worked.
-2. **Meta App Review** for `pages_messaging` **and**
+1. **Meta App Review** for `pages_messaging` **and**
    `instagram_content_publish`. A queue; the owner is doing it.
-3. **Reconnect Facebook** after App Review — a token carries the
+2. **Reconnect Facebook** after App Review — a token carries the
    permissions asked for when it was granted.
-4. **GBP API application.** Also a queue. Gates local L4.
-5. **Delete the test business's fabricated `business_story` rows**
+3. **GBP API application.** Also a queue. Gates local L4.
+4. **Delete the test business's fabricated `business_story` rows**
    before a real business shares that database — they still count as
    evidence through `knownText`.
 
