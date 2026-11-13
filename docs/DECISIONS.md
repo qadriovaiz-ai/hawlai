@@ -4034,6 +4034,34 @@ opposite default would have decided, on her behalf, which of her
 existing notes her customers may no longer be told — and she would
 have found out from a customer.
 
+## 2026-11-13 — migrations 229, 230 and 231 verified live
+
+Recorded here for the same reason migration 227 was: **a confirmation
+that exists only in a chat is a confirmation the project does not
+have.** 230 was verified by the owner in conversation — 5 columns, RLS
+on, the SELECT policy present — and I later listed it as outstanding,
+because nothing in the repo said otherwise. That is the second time
+this gap has cost a re-ask.
+
+| | | |
+|---|---|---|
+| **229** | `business_knowledge.internal_only` | verified: boolean, NOT NULL, default false, 0 rows marked internal |
+| **230** | `answer_gaps` | verified: 5 columns, RLS on, one SELECT policy, no INSERT policy |
+| **231** | `leads.visitor_id` | verified: text, nullable, partial index, 0 existing rows touched |
+
+**231 was held back from `git push` until the owner confirmed it**, and
+that order was the point: 229 and 230 add new tables whose writers fail
+soft, while 231 writes to `leads`. Deployed ahead of the column,
+PostgREST rejects the whole insert and lead capture stops on both the
+landing form and the chat. Production missing migration 140 did exactly
+that to `ad_creatives` once already.
+
+**The rule, stated once more so the next reader does not have to
+rediscover it:** when a migration adds a column that existing code
+writes to an existing table, the migration runs first and the code
+ships after. When it only adds a new table or a new read, either order
+is safe.
+
 ## Forward-looking checklist — pause and ask vs. proceed
 
 **Proceed without asking when:**

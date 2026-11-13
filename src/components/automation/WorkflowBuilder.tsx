@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Zap, X } from "lucide-react";
 import { EMAIL_TASKS } from "@/lib/departments/email";
+import { defaultIntentSequence, DEFAULT_INTENT_SEQUENCE_NAME } from "@/lib/automation/intentSequence";
 import { Button, Card, EmptyState, Input, Select, Textarea } from "@/components/ui";
 
 const TRIGGERS = [
@@ -117,6 +118,31 @@ export default function WorkflowBuilder() {
               ))}
             </div>
           </div>
+
+          {/* A STARTING POINT, NOT A DECISION — V5b. The owner is not
+              handed an empty builder and asked to invent a drip
+              campaign. This fills the draft so every step is visible
+              and editable BEFORE anything is created, and the workflow
+              is still created switched off like any other. */}
+          {triggerType === "visitor_intent" && (
+            <div className="rounded-lg border border-slate-300 bg-slate-200 p-3 space-y-1.5">
+              <p className="text-xs text-slate-600 leading-snug">
+                Not sure what to send? Start from a three-email shape — a nudge the same day, what you
+                actually have on two, and an easy way out on five. Hawlai writes each one from your own
+                records, and you can change or delete any of them before you create this.
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSteps(defaultIntentSequence());
+                  if (!name) setName(DEFAULT_INTENT_SEQUENCE_NAME);
+                }}
+              >
+                Use this as a starting point
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-semibold text-slate-400">Steps (in order)</p>
