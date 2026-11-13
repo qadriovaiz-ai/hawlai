@@ -5,6 +5,9 @@ import { recordFirstTouchpoint } from "@/lib/agents/touchpointAgent";
 import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
 import { resolvePublicSite } from "@/lib/publicSite";
+import { readPageKinds } from "@/lib/growth/intent";
+import { describeVisitorPage } from "@/lib/chat/visitorPage";
+import { visitPath } from "@/lib/utils";
 
 // Public, unauthenticated — the AI Sales Agent widget posts here.
 //
@@ -19,7 +22,7 @@ import { resolvePublicSite } from "@/lib/publicSite";
 // /api/public/track and /api/public/leads use, so an unpublished draft
 // resolves to nobody here as well.
 export async function POST(request: Request) {
-  const { slug, message, history } = await request.json();
+  const { slug, message, history, path } = await request.json();
   if (!slug) return NextResponse.json({ error: "Missing page reference" }, { status: 400 });
   if (!message || message.trim().length < 1) return NextResponse.json({ error: "Message is empty" }, { status: 400 });
   if (message.length > 500) return NextResponse.json({ error: "Message is too long" }, { status: 400 });
@@ -55,6 +58,19 @@ export async function POST(request: Request) {
     resolvePersona(supabase, dealershipId, "website_chat"), // P3 piece 5 — defaults to sales
   ]);
 
+  // WHERE THE VISITOR IS STANDING — V4b. The path is re-sanitised
+  // here because the browser sent it, and the page kinds come from the
+  // business's own `website_pages` declarations (V3's reader). A failed
+  // read gives null, and null means the agent is simply told nothing
+  // about the page — the same answer it had before V4b, rather than a
+  // guess.
+  const kinds = await readPageKinds(supabase, dealershipId);
+  const visitorPage = describeVisitorPage(
+    visitPath(typeof path === "string" ? path : null),
+    kinds,
+    businessCtx.facts
+  );
+
   const { reply, leadCapture, suggestBooking } = await runSalesAgentTurn(
     {
       dealershipName: businessCtx.name,
@@ -72,6 +88,7 @@ export async function POST(request: Request) {
       // a model that had never been given one. getBusinessContext
       // already gathered these for this request.
       facts: businessCtx.facts,
+      visitorPageLine: visitorPage?.line ?? null,
     },
     Array.isArray(history) ? history.slice(-6) : [],
     message.trim(),

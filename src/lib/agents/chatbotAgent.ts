@@ -32,6 +32,7 @@ import { visitorFactsBlock } from "@/lib/claims/factsGate";
 import { stripUnsupported, stripUnverifiable } from "@/lib/claims/claimCheck";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { splitStories } from "@/lib/claims/personalStories";
+import { offerOpeningRule } from "@/lib/chat/visitorPage";
 
 interface DealershipContext {
   dealershipName: string;
@@ -39,6 +40,14 @@ interface DealershipContext {
   businessCategory?: string | null;
   headline?: string | null;
   offerText?: string | null;
+  /**
+   * Where the visitor is standing, in one sentence — V4b.
+   *
+   * Built by lib/chat/visitorPage from the page's kind and the
+   * business's own catalogue. Never contains anything the visitor
+   * typed or put in a URL.
+   */
+  visitorPageLine?: string | null;
   toneOfVoice?: string | null;
   messagingPillars?: string[] | null;
   // P3 20a — sourced from the shared getBusinessContext() assembler;
@@ -111,7 +120,8 @@ ${context.headline ? `Tagline: ${context.headline}` : ""}
 ${context.offerText ? `Current offer: ${context.offerText}` : ""}
 ${context.toneOfVoice ? `Tone to use: ${context.toneOfVoice}` : "Tone: friendly and helpful"}
 ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.join("; ")}` : ""}
-${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}`;
+${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}
+${context.visitorPageLine ?? ""}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}${offerOpeningRule(context.facts)}`;
 
   try {
     const r = await callClaude({

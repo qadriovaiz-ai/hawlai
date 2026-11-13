@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2 } from "lucide-react";
-import { trackEvent } from "@/lib/utils";
+import { trackEvent, visitPath } from "@/lib/utils";
 import AgentAvatar from "@/components/website/AgentAvatar";
 
 interface Message {
@@ -34,7 +34,16 @@ export default function ChatWidget({ slug, dealershipName, accentColor }: { slug
       const res = await fetch("/api/public/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, message: text, history: messages }),
+        // WHERE THE VISITOR IS — V4b. Sanitised by the same
+        // visitPath the tracker uses, so no query string or fragment
+        // leaves the page; the server re-sanitises and treats it as a
+        // claim either way.
+        body: JSON.stringify({
+          slug,
+          message: text,
+          history: messages,
+          path: typeof window === "undefined" ? null : visitPath(window.location.pathname),
+        }),
       });
       const data = await res.json();
       if (data.leadCaptured) setLeadCaptured(true);
