@@ -38,7 +38,7 @@
 // have done — the distinction the whole claims layer exists to keep.
 
 import { pageKind, type PageKind } from "@/lib/growth/intent";
-import type { BusinessFacts, CatalogProduct } from "@/lib/claims/businessFacts";
+import { physicalProducts, type BusinessFacts, type CatalogProduct } from "@/lib/claims/businessFacts";
 
 export type VisitorPage = {
   kind: PageKind;
@@ -148,4 +148,64 @@ export function offerOpeningRule(facts: BusinessFacts | null | undefined): strin
     "- State only what the facts say about it. Never add urgency, scarcity or a deadline that is not recorded — no \"selling fast\", \"last chance\" or \"only a few left\".",
     "- If what they are asking about has nothing to do with the offer, answer their question first.",
   ].join("\n");
+}
+
+/**
+ * What to do when the honest answer depends on the customer.
+ *
+ * THE FOUNDER'S ASK, 13 November 2026: a visitor asks what delivery
+ * will cost them and the agent should not guess. It should say it wants
+ * to give an exact figure, ask whether it may take a number or an email,
+ * and tell them the business will send it — which captures a lead as a
+ * side effect of being honest rather than instead of it.
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * THE TRAP THIS AVOIDS, AND IT IS THE WHOLE DESIGN
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * A BLANKET "NEVER ANSWER, ALWAYS ASK" WOULD BE WORSE SERVICE AND
+ * WOULD CONTRADICT THE FACTS. When shipping is a flat rate the records
+ * carry it, the facts block states it ("Shipping: ₹60 flat on every
+ * order"), and the right answer is the figure. Asking a visitor for
+ * their phone number to tell them something already written on the page
+ * trains them to distrust the question — and the next time it is asked,
+ * when it is genuinely needed, they will not answer.
+ *
+ * So the rule is conditional on WHAT IS ACTUALLY RECORDED, which is why
+ * it is built from the facts rather than written as a constant.
+ *
+ * RULE 3. No trade, product or question list appears here. What makes
+ * an answer customer-specific is stated in general terms — where they
+ * are, exactly what or how much, which date — and the only concrete
+ * case named is one the facts themselves show to be missing.
+ *
+ * AND THE PROMISE HAS TO BE KEEPABLE. Nothing in Hawlai texts a visitor
+ * automatically, so the agent must not say "I will text you" — it says
+ * the BUSINESS will come back to them, which the captured lead makes
+ * true. A promise nobody keeps is the kind of false claim the whole
+ * claims layer exists to stop, and it would be made to a real customer.
+ */
+export function askRatherThanGuessRule(facts: BusinessFacts | null | undefined): string {
+  const lines = [
+    "",
+    "WHEN THE ANSWER DEPENDS ON THE CUSTOMER, ASK — DON'T ESTIMATE:",
+    "- Some answers depend on the individual: where they are, exactly what or how much they want, or which date. If the verified facts above don't already answer it FOR THIS CUSTOMER, don't estimate, don't give a range, and don't say \"usually\", \"around\" or \"approximately\".",
+    "- Say you'd rather give them the exact figure than a guess, ask if you may take their phone number or email, and tell them the business will send it. Never say that YOU will text, email or call them — you can't; the business will.",
+    "- Ask once. If they'd rather not give it, answer what you can and leave it there — don't ask again later in the conversation.",
+    "- Put what they asked for in `interest`, in their terms, so the business knows exactly what to send back.",
+    "- IF THE FACTS DO ANSWER IT, JUST ANSWER IT. Asking for a number you didn't need is worse service, not safer.",
+  ];
+
+  // THE ONE CONCRETE CASE, AND ONLY WHEN THE RECORDS SHOW IT MISSING.
+  // `formatFactsForCopy` prints a Shipping line only when something
+  // physical is sold; with no shipping set up it would say "not set
+  // up", which a model can read as "there is no charge" just as easily
+  // as "it is not known".
+  if (facts && physicalProducts(facts).length > 0 && !facts.shipping) {
+    lines.push(
+      "- This business has NOT recorded what delivery costs. That means you do not know it — never quote, estimate or imply a delivery charge, and never say delivery is free. It is exactly the kind of question to take their contact details for."
+    );
+  }
+
+  return lines.join("\n");
 }

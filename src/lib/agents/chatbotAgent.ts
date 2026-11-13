@@ -32,7 +32,7 @@ import { visitorFactsBlock } from "@/lib/claims/factsGate";
 import { stripUnsupported, stripUnverifiable } from "@/lib/claims/claimCheck";
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
 import { splitStories } from "@/lib/claims/personalStories";
-import { offerOpeningRule } from "@/lib/chat/visitorPage";
+import { offerOpeningRule, askRatherThanGuessRule } from "@/lib/chat/visitorPage";
 
 interface DealershipContext {
   dealershipName: string;
@@ -90,7 +90,17 @@ function formatKnowledgeFacts(facts?: DealershipContext["knowledgeFacts"]): stri
 
 export interface SalesAgentResult {
   reply: string;
-  leadCapture: { name: string; phone: string; email?: string; interest?: string } | null;
+  /**
+   * A name, and at least one way to reach them.
+   *
+   * PHONE IS OPTIONAL BECAUSE EMAIL COUNTS. This required a phone, so a
+   * visitor who offered an email and no number was dropped here —
+   * while /api/public/chat has matched on "phone or email" since P2
+   * 27a-ii. The two ends of one contract disagreed, and the stricter
+   * end silently won. Asking for "your number or email" and then
+   * throwing the email away is worse than not asking.
+   */
+  leadCapture: { name: string; phone?: string; email?: string; interest?: string } | null;
   suggestBooking: boolean;
 }
 
@@ -121,7 +131,7 @@ ${context.offerText ? `Current offer: ${context.offerText}` : ""}
 ${context.toneOfVoice ? `Tone to use: ${context.toneOfVoice}` : "Tone: friendly and helpful"}
 ${context.messagingPillars?.length ? `Key points: ${context.messagingPillars.join("; ")}` : ""}
 ${context.hasBookingLink ? "A booking page exists — you may suggest booking a meeting when the visitor seems ready." : "No booking page exists yet — don't offer to book a meeting."}
-${context.visitorPageLine ?? ""}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}${offerOpeningRule(context.facts)}`;
+${context.visitorPageLine ?? ""}${formatKnowledgeFacts(context.knowledgeFacts)}${visitorFactsBlock(context.facts)}${offerOpeningRule(context.facts)}${askRatherThanGuessRule(context.facts)}`;
 
   try {
     const r = await callClaude({
@@ -139,7 +149,7 @@ Your job in this conversation, as relevant to what the visitor says:
 - Never claim to be a human. Keep replies short (2-4 sentences) and conversational, not corporate.
 - Only discuss things relevant to this business — politely redirect anything unrelated.
 
-Return JSON only, no markdown: {"reply": "your conversational reply", "leadCapture": {"name": "...", "phone": "...", "email": "... or omit", "interest": "one short phrase on what they're interested in"} or null if they haven't given both a name and phone number yet in this conversation, "suggestBooking": true or false}`,
+Return JSON only, no markdown: {"reply": "your conversational reply", "leadCapture": {"name": "...", "phone": "...", "email": "... or omit", "interest": "one short phrase on what they're interested in"} or null until they have given a name AND at least one of a phone number or an email address in this conversation (either one is enough — never invent the other), "suggestBooking": true or false}`,
       messages: [
         ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
         { role: "user", content: message },
@@ -176,7 +186,10 @@ Return JSON only, no markdown: {"reply": "your conversational reply", "leadCaptu
       // A reply emptied by the check becomes the honest hand-off rather
       // than a blank bubble.
       reply: reply || fallback.reply,
-      leadCapture: parsed.leadCapture && parsed.leadCapture.name && parsed.leadCapture.phone ? parsed.leadCapture : null,
+      leadCapture:
+        parsed.leadCapture && parsed.leadCapture.name && (parsed.leadCapture.phone || parsed.leadCapture.email)
+          ? parsed.leadCapture
+          : null,
       suggestBooking: !!parsed.suggestBooking && context.hasBookingLink,
     };
   } catch (err: any) {
