@@ -3,6 +3,7 @@ import { sendMarketingEmail } from "@/lib/email/sendMarketingEmail";
 import { normaliseEmail, suppressedAmong } from "@/lib/email/consent";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 import type { AiFailureNote } from "@/lib/ai/claude";
+import { intentTriggeredLeads } from "./visitorIntentTrigger";
 
 interface TriggeredLead {
   leadId: string;
@@ -44,6 +45,21 @@ async function getTriggeredLeads(supabase: any, dealershipId: string, workflow: 
       .eq("dnd_opt_out", false)
       .limit(200);
     return (data ?? []).map((l: any) => ({ leadId: l.id, email: l.email, name: l.name, triggerDate: l.converted_at }));
+  }
+
+  // V5b — THE FIRST TRIGGER THAT IS ABOUT WHAT SOMEBODY DID rather
+  // than what the CRM says happened to them. The lookup lives in
+  // visitorIntentTrigger because it reads the whole visitor engine
+  // (V1 pages, V2 visits, V3 intent, V4c page kinds, V5a the link),
+  // and because the DND and consent rules are easier to see on their
+  // own than buried in this switch.
+  //
+  // triggerDate is the VISIT, not the lead: a day-2 step means two
+  // days after they showed interest. Using created_at would fire "day
+  // 2" on an old lead the moment the workflow is switched on — the
+  // mistake migration 134 already fixed for lead_converted.
+  if (workflow.trigger_type === "visitor_intent") {
+    return intentTriggeredLeads(supabase, dealershipId);
   }
 
   if (workflow.trigger_type === "appointment_booked") {

@@ -43,7 +43,17 @@ import { code, sourceWithComments } from "./helpers/source";
  * the cache on every tool after it, on every turn, until it warmed
  * again.
  */
-const FINGERPRINT = "1fc019df4a8b1ae62bdceabb892e99390010a5b5abec3a0f174c149e2ff3ec0a";
+// CHANGED DELIBERATELY, 13 November 2026 (V5b). `create_workflow`'s
+// triggerType enum gained "visitor_intent" — the first trigger that is
+// about what a visitor DID rather than what the CRM recorded. The tool
+// count is unchanged; one existing schema gained one enum value.
+//
+// The cost is stated rather than waved past: this invalidates the
+// Anthropic prompt-cache prefix, so chat turns pay full price until the
+// cache warms again. A one-value enum change was judged worth it
+// because the alternative is a trigger the owner can only reach through
+// the dashboard, in a product whose premise is that chat can do it.
+const FINGERPRINT = "e3e5e4a18095d0626bc011e4c231fc73af13f8cdb980ad9f744a97f39351e753";
 const TOOL_COUNT = 60;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

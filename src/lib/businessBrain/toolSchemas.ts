@@ -312,7 +312,7 @@ export const TOOLS = [
       type: "object",
       properties: {
         name: { type: "string" },
-        triggerType: { type: "string", enum: ["new_lead", "appointment_booked", "lead_converted"] },
+        triggerType: { type: "string", enum: ["new_lead", "appointment_booked", "lead_converted", "visitor_intent"] },
         steps: {
           type: "array",
           items: {
