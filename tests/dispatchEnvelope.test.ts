@@ -42,7 +42,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const ROUTE = "src/app/api/approvals/[id]/route.ts";
+// H1: the decision moved to lib/approvals/decide.ts so WhatsApp can
+// reach the same one. Same assertions, new location.
+const ROUTE = "src/lib/approvals/decide.ts";
 
 /** leads / video_generations / dealerships, enough for both dispatchers. */
 function db(seed: Record<string, any[]> = {}) {

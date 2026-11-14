@@ -53,7 +53,11 @@ const req = () => new Request("https://hawlai.test/api/approvals/ap1");
 const params = { params: Promise.resolve({ id: "ap1" }) };
 
 const card = readFileSync("src/components/chat/MasterChatPage.tsx", "utf8");
-const route = readFileSync("src/app/api/approvals/[id]/route.ts", "utf8");
+// H1 MOVED THE DECISION out of the route and into
+// lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+// one instead of a second copy. These assertions are unchanged; only
+// the file they read moved. The route still holds the session half.
+const route = readFileSync("src/lib/approvals/decide.ts", "utf8");
 
 describe("the card asks what was already decided", () => {
   it("reads the approval's real status when it mounts", () => {

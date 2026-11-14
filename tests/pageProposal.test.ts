@@ -235,12 +235,16 @@ describe("6. NOTHING ACTS WITHOUT A REGISTRY ENTRY", () => {
   it("THE APPROVALS ROUTE CARRIES IT OUT", () => {
     // A card nobody executes is a dead end: the owner presses Approve
     // and nothing happens.
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = code("src/lib/approvals/decide.ts");
     expect(route).toMatch(/action_type === "create_page_draft"/);
   });
 
   it("THE PAGE IS CREATED UNPUBLISHED, from a literal", () => {
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    const route = code("src/lib/approvals/decide.ts");
     const branch = route.slice(route.indexOf('action_type === "create_page_draft"'), route.indexOf('action_type === "grant_autonomy"'));
     expect(branch).toMatch(/published: false,/);
     // Never read from the card.
@@ -250,7 +254,7 @@ describe("6. NOTHING ACTS WITHOUT A REGISTRY ENTRY", () => {
   it("AND THE SLUG IS RE-DERIVED, never trusted from the card", () => {
     // A stored action_details is a value the server should not act on
     // blindly — the lesson the toggle and autonomy branches record.
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    const route = code("src/lib/approvals/decide.ts");
     const branch = route.slice(route.indexOf('action_type === "create_page_draft"'), route.indexOf('action_type === "grant_autonomy"'));
     expect(branch).toMatch(/const slug = slugFromQuery\(query\)/);
     expect(branch).toMatch(/const title = titleFromQuery\(query\)/);
@@ -266,7 +270,7 @@ describe("6. NOTHING ACTS WITHOUT A REGISTRY ENTRY", () => {
     // and this test green — a source grep cannot see reachability, so
     // what it has to pin is the test being made, not the words printed
     // when it fails.
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    const route = code("src/lib/approvals/decide.ts");
     const branch = route.slice(route.indexOf('action_type === "create_page_draft"'), route.indexOf('action_type === "grant_autonomy"'));
     expect(branch).toMatch(/if \(\(existing \?\? \[\]\)\.some\(\(p: any\) => p\.slug === slug\)\) \{/);
     expect(branch).toMatch(/You already have a page at/);

@@ -156,7 +156,9 @@ the control that `executionPolicy` exists to provide — and
 
 - Approvals over WhatsApp are **referenced explicitly**, never by a bare "yes" — Hawlai sends a short numbered list and accepts `APPROVE 2` / `REJECT 2`, or a one-time token per approval. Unambiguous, and it reads naturally.
 - **Rejecting is always allowed.** Saying no is the safe direction and must never be the slow one — the same rule that keeps switching an automation *off* ungated.
-- **Approving is allowed for everything except the `critical` tier**, which still needs the dashboard. The owner loses nothing he has today; he gains the ninety per cent that is captions, drafts and small changes.
+- ~~**Approving is allowed for everything except the `critical` tier**~~ — **OVERRULED BY THE OWNER, 13 November 2026, knowingly.** Everything is approvable from WhatsApp, spending included. I raised the trade in §2 and §4b — a dashboard approval is backed by a session, a WhatsApp one by possession of a phone — and he decided with that in front of him. It is recorded here so the decision is visible rather than inferred from code.
+
+  **What that makes load-bearing:** the explicit reference below stops being a nicety. An ambiguous "yes" can now spend money, so `APPROVE n` is the guard, not the manners.
 - Every WhatsApp approval records **that it came from WhatsApp**, so the audit trail does not claim a dashboard click that never happened.
 
 ---
@@ -189,12 +191,15 @@ a session.
 |---|---|---|---|
 | **H1** | **One approval decision function**, extracted from the PATCH route so the dashboard and WhatsApp share it. No behaviour change on the dashboard | **M** | It is the authorization path. The extraction must be provably identical — the existing route's tests are the spec, and nothing in them gets loosened |
 | **H2** | **Pending approvals over WhatsApp** — a numbered list, `APPROVE n` / `REJECT n`, rejection always allowed, `critical` tier excluded, source recorded | **M** | §4b. A bare "yes" must never approve a record, and the model's own conversational "yes" must stay separate from an approval id |
-| **H3** | **Tell the owner something is waiting.** Nothing notifies him today — he only finds out in the dashboard, which is the thing he is trying not to open | **S** | Frequency. One message per approval is useful; one per minor action is the popup problem in his pocket |
+| **H3** | **Tell the owner something is waiting**, one message per approval (his choice over a digest). Nothing notifies him today — he only finds out in the dashboard, which is the thing he is trying not to open | **S** | Frequency. One per approval is what he asked for; the restraint has to come from how few approvals exist, so nothing should start raising more because this exists |
 | **H4** | **Disconnect, and clean up on number change** | **S** | That revocation stays dashboard-only — see §5 |
-| **H5** | **Confirm the live payload shape** against real Gupshup traffic and replace the defensive guesswork at `route.ts:20-28` with what actually arrives | **S** | Cannot be done by me. Needs one real message through a live number — an owner task |
+| **H5** | **Confirm the live payload shape** against real Gupshup traffic and replace the defensive guesswork at `route.ts:20-28` with what actually arrives | **S** | Cannot be done by me. Needs one real message through a live number |
 
-**Order:** H5 first if credentials exist, because every other piece is
-built on a payload shape nobody has seen. Otherwise H1 → H2 → H3 → H4.
+**Order, settled 13 November 2026: H1 → H2 → H3 → H4.** H5 is deferred:
+there is no live Gupshup number or key yet, so the payload shape stays
+the defensive guess it is today and everything built on it is
+**unverified against a real message** — stated plainly rather than
+discovered later.
 
 **No new tool, agent, department or page.** H1 extracts an existing
 function, H2 and H4 add branches to an existing webhook and an existing
@@ -202,8 +207,8 @@ connect flow, H3 is a message from a job that already runs.
 
 ---
 
-## 7. What I would check with the owner before building
+## 7. Answered by the owner, 13 November 2026
 
-1. **The `critical` exclusion in H2** — he may want *everything* approvable from WhatsApp. That is his call to make knowingly, not mine to assume. It trades the session-backed control that `executionPolicy` was built to give for the convenience the whole feature exists for.
-2. **H3's frequency** — every approval, or a daily digest?
-3. **Whether H5 is possible at all** right now: is there a live Gupshup number and key? If not, everything here ships unverified against the one integration whose shape is a guess.
+1. **Critical approvals over WhatsApp: YES, included.** Spending too. Decided with the session-versus-phone-possession trade stated in front of him. The consequence is that `APPROVE n` is now a security control rather than a convenience, and that is how it will be built and tested.
+2. **H3 frequency: one message per approval**, not a digest.
+3. **H5: deferred.** No live Gupshup number or key exists yet, so the defensive parsing stands and nothing here has been seen by a real message.

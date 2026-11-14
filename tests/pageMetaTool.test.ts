@@ -113,7 +113,11 @@ describe("what the chat is told about applying it", () => {
   });
 
   it("the approve route passes the read-back verdict through to the card", () => {
-    const route = readFileSync("src/app/api/approvals/[id]/route.ts", "utf8");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = readFileSync("src/lib/approvals/decide.ts", "utf8");
     expect(route).toContain("verification");
     expect(route).toMatch(/verified: Boolean\(verification\.verified\)/);
     const chat = readFileSync("src/components/chat/MasterChatPage.tsx", "utf8");

@@ -25,7 +25,11 @@
 import { describe, it, expect } from "vitest";
 import { code } from "./helpers/source";
 
-const ROUTE = code("src/app/api/approvals/[id]/route.ts");
+// H1 MOVED THE DECISION OUT OF THE ROUTE and into
+// lib/approvals/decide.ts, so a WhatsApp message can reach the same
+// one rather than a second copy of it. These assertions are unchanged;
+// only the file they read moved.
+const ROUTE = code("src/lib/approvals/decide.ts");
 const CREATE = code("src/lib/publish/create.ts");
 
 describe("1. a broken link is reported, not congratulated", () => {

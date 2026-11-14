@@ -178,7 +178,11 @@ describe("every outbound action is gated", () => {
     // longer "is there a branch" but "is there anything at all" — and
     // an action with NEITHER still fails, which is the dead end this
     // test exists to catch.
-    const route = readFileSync("src/app/api/approvals/[id]/route.ts", "utf8");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = readFileSync("src/lib/approvals/decide.ts", "utf8");
     const dispatched = new Set<string>(dispatchedActionTypes());
     for (const actionType of ["place_outbound_call", "publish_video", "create_discount_code", "set_automation_toggle"]) {
       const carriedOut =

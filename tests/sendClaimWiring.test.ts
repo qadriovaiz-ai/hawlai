@@ -251,7 +251,11 @@ describe("the key actually reaches the endpoint", () => {
     // A fresh id at the press would defeat the claim it exists to take:
     // two presses would become two different sends.
     const { code } = await import("./helpers/source");
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = code("src/lib/approvals/decide.ts");
     const at = route.indexOf('action_type === "send_email"');
     const branch = route.slice(at, at + 1600);
     expect(branch).toMatch(/request_id: d\.request_id \?\? null/);

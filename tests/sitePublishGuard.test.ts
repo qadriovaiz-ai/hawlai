@@ -192,7 +192,11 @@ describe("G-3 step 2b: the approval record", () => {
     // That re-read is the point of the record: a page that fell back to
     // placeholder content between the card and the press still stops the
     // publish.
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = code("src/lib/approvals/decide.ts");
     const branch = route.slice(route.indexOf('action_type === "publish_site"'), route.indexOf('action_type === "generate_graphic"'));
     expect(branch).toMatch(/setSitePublished\(service, approval\.dealership_id, true\)/);
     expect(branch).toMatch(/if \(!done\.ok\) return NextResponse\.json/);

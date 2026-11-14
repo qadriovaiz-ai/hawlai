@@ -242,7 +242,11 @@ describe("the approve route does not run activation twice", () => {
     // Without this guard a chat activation would hit the legacy branch,
     // which looks up action_details.campaign_id — absent on these — and
     // fail the approval before the real executor ever ran.
-    const route = committed("src/app/api/approvals/[id]/route.ts");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = committed("src/lib/approvals/decide.ts");
     expect(route).toMatch(/action_type === "activate_ad_campaign" && !\(approval\.action_details as any\)\?\.publish_action_id/);
   });
 });

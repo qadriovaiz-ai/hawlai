@@ -71,7 +71,11 @@ describe("the registry is complete", () => {
 
   it("the approve route uses the shared registry, not its own literal", () => {
     // The original bug was an inline object nobody could inspect.
-    const route = committed("src/app/api/approvals/[id]/route.ts");
+    // H1 MOVED THE DECISION out of the route and into
+    // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+    // one instead of a second copy. These assertions are unchanged; only
+    // the file they read moved. The route still holds the session half.
+    const route = committed("src/lib/approvals/decide.ts");
     expect(route).toMatch(/createPlatformRegistry\(service\)/);
     expect(route).not.toMatch(/platforms:\s*\{\s*shopify:/);
   });

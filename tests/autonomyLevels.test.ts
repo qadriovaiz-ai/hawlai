@@ -390,7 +390,11 @@ describe("8. L2 — RUNNING WITH NOBODY WATCHING — S7/P4", () => {
     expect(promotion).toMatch(/requestApproval/);
 
     // AND THE ROUTE IS THE ONE PLACE THAT DOES WRITE IT.
-    const route = code("src/app/api/approvals/[id]/route.ts");
+    // H1 MOVED THE DECISION OUT OF THE ROUTE and into
+    // lib/approvals/decide.ts, so a WhatsApp message can reach the
+    // same one instead of a second copy. The assertion is unchanged —
+    // only where it looks. The route now holds the session half.
+    const route = code("src/lib/approvals/decide.ts");
     expect(route).toMatch(/grant_autonomy/);
     expect(route).toMatch(/from\("action_levels"\)/);
     // Re-checked against the allowlist there rather than trusted from

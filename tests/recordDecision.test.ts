@@ -203,7 +203,11 @@ describe("3. A DECISION ROW IS A RECORD OF AN ACTION, NEVER A STEP IN IT", () =>
     // A call site that used recordDecision directly would hand the
     // owner a 500 for a bookkeeping failure.
     for (const site of [
-      "src/app/api/approvals/[id]/route.ts",
+      // H1 MOVED THE DECISION out of the route and into
+      // lib/approvals/decide.ts, so the WhatsApp channel reaches the same
+      // one instead of a second copy. These assertions are unchanged; only
+      // the file they read moved. The route still holds the session half.
+      "src/lib/approvals/decide.ts",
       "src/app/api/goals/[id]/confirm/route.ts",
       "src/app/api/opportunities/[id]/route.ts",
     ]) {
@@ -230,7 +234,7 @@ describe("3. A DECISION ROW IS A RECORD OF AN ACTION, NEVER A STEP IN IT", () =>
     expect(activatesFirst, "the goal activation went away").toBeGreaterThan(-1);
     expect(confirm.search(call)).toBeGreaterThan(activatesFirst);
 
-    const approvals = code("src/app/api/approvals/[id]/route.ts");
+    const approvals = code("src/lib/approvals/decide.ts");
     const writesFirst = approvals.indexOf("reviewed_at");
     expect(writesFirst, "the approval status write went away").toBeGreaterThan(-1);
     expect(approvals.search(call)).toBeGreaterThan(writesFirst);
@@ -240,7 +244,7 @@ describe("3. A DECISION ROW IS A RECORD OF AN ACTION, NEVER A STEP IN IT", () =>
 describe("4. WHICH DECISIONS GET RECORDED, AND WHICH DO NOT", () => {
   it("A REJECTED APPROVAL IS NOT A DECISION TO MEASURE", async () => {
     // The owner declining to act has no effect to look at in 28 days.
-    const src = code("src/app/api/approvals/[id]/route.ts");
+    const src = code("src/lib/approvals/decide.ts");
     expect(src).toMatch(/if \(status === "approved"\) \{\s*await recordDecisionQuietly/);
   });
 
@@ -416,7 +420,7 @@ describe("7. the baseline is captured before the action, not after", () => {
   it("AND AN APPROVAL SENDS null RATHER THAN A NUMBER IT DOES NOT HAVE", () => {
     // An approval's measure is about a page, a customer or a campaign
     // the decision row does not identify, so there is nothing to count.
-    const src = code("src/app/api/approvals/[id]/route.ts");
+    const src = code("src/lib/approvals/decide.ts");
     expect(src).toMatch(/baseline: null,/);
   });
 
