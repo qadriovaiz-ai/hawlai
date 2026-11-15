@@ -3,6 +3,8 @@ import { sendWhatsAppText, sendWhatsAppImage, normalizePhoneNumber } from "@/lib
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
+import { applyApprovalDecision } from "@/lib/approvals/decide";
+import { parseApprovalReply, resolveApproval, cannotTell, describeApproval, approvalCode } from "@/lib/whatsapp/approvalReply";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     // ---------- Identify who's messaging ----------
-    const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name").eq("owner_whatsapp_number", phone).eq("owner_whatsapp_verified", true).maybeSingle();
+    const { data: dealership } = await supabase.from("dealerships").select("id, dealership_name, owner_id").eq("owner_whatsapp_number", phone).eq("owner_whatsapp_verified", true).maybeSingle();
 
     // A dealership can connect WhatsApp automation while on a plan that
     // includes it, then later downgrade — re-check on every inbound
@@ -93,6 +95,61 @@ export async function POST(request: Request) {
       const { data: tasks } = await supabase.from("tasks").select("title, status").eq("assigned_to", member.id).neq("status", "done").order("created_at", { ascending: false }).limit(10);
       const list = (tasks ?? []).map((t) => `• ${t.title} (${t.status})`).join("\n");
       await sendWhatsAppText(phone, list ? `Your open tasks:\n\n${list}` : "You have no open tasks right now.");
+      return NextResponse.json({ ok: true });
+    }
+
+    // ---------- Owner: approving from the phone — H2 ----------
+    //
+    // BEFORE MASTER CHAT, because "haan A3F2" is an instruction about a
+    // record and not a sentence for a model to interpret. Handing it to
+    // the chat would mean a language model deciding whether money gets
+    // spent, which is the one thing a registry of approvals exists to
+    // stop.
+    //
+    // PARSING IS DELIBERATELY NARROW (see lib/whatsapp/approvalReply):
+    // anything that is not plainly a short approval instruction falls
+    // through to the chat exactly as before, so an ordinary message
+    // containing "no" is still an ordinary message.
+    const reply = parseApprovalReply(text);
+    if (reply) {
+      const { data: pending } = await supabase
+        .from("pending_approvals")
+        .select("id, action_type, amount")
+        .eq("dealership_id", dealership.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true });
+
+      const found = resolveApproval(pending ?? [], reply);
+      if (!found.ok) {
+        // NEVER A BEST GUESS. Every failure is a question back, which
+        // costs him one message; guessing costs him whatever the wrong
+        // approval did.
+        await sendWhatsAppText(phone, cannotTell(found.reason, pending ?? []));
+        return NextResponse.json({ ok: true });
+      }
+
+      // THE OWNER'S OWN auth.users ID, which is truthful: he really is
+      // the one deciding. `label` is what the audit trail records, and
+      // it says whatsapp — so nothing later claims a button was pressed
+      // in a browser nobody opened.
+      const outcome = await applyApprovalDecision(
+        found.approval.id,
+        { status: reply.decision },
+        { userId: String(dealership.owner_id ?? ""), role: "owner", label: `whatsapp:${phone}` }
+      );
+      const result = await outcome.json().catch(() => ({} as any));
+
+      const said = describeApproval(found.approval);
+      if (!outcome.ok) {
+        await sendWhatsAppText(phone, `Couldn't do that one (${said}): ${result?.error ?? "something went wrong"}`);
+        return NextResponse.json({ ok: true });
+      }
+      await sendWhatsAppText(
+        phone,
+        reply.decision === "approved"
+          ? `Done — approved ${said}.${result?.publish?.message ? `\n\n${result.publish.message}` : ""}`
+          : `Rejected ${said}. Nothing was done.`
+      );
       return NextResponse.json({ ok: true });
     }
 
