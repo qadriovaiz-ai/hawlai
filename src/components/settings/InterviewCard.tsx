@@ -21,7 +21,7 @@
 // rule-3 test holds that none of it names a trade.
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, MessageSquare } from "lucide-react";
+import { Loader2, MessageSquare, Check, Pencil, X } from "lucide-react";
 
 type Question = {
   key: string;
@@ -31,6 +31,21 @@ type Question = {
 };
 
 type Progress = { answered: number; total: number };
+
+/**
+ * What we think the answer is, before he has said — D3.
+ *
+ * `discovered` carries the sentence it was read from; `inferred` does
+ * not, because nobody wrote it down. The card says which, because a
+ * wrong transcription and a wrong deduction are different mistakes and
+ * he is checking for different things.
+ */
+type Suggestion = {
+  questionKey: string;
+  value: string;
+  source: "discovered" | "inferred";
+  evidence: { sourceKind: string; url?: string | null; quote?: string | null } | null;
+};
 
 export default function InterviewCard() {
   const [question, setQuestion] = useState<Question | null>(null);
@@ -46,8 +61,13 @@ export default function InterviewCard() {
   // ordinary question from the list: the card must not invent a reason
   // for a question that does not have one.
   const [because, setBecause] = useState<string | null>(null);
+  // THE DRAFT FOR THIS QUESTION, when the site had one. Null for most
+  // questions — the card must not imply a draft that does not exist.
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  // Whether he has asked to change the draft rather than accept it.
+  const [editing, setEditing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (discovered = false) => {
     try {
       const res = await fetch("/api/interview");
       if (!res.ok) {
@@ -58,6 +78,31 @@ export default function InterviewCard() {
       setQuestion(data.next ?? null);
       setProgress(data.progress ?? { answered: 0, total: 0 });
       setBecause(typeof data.because === "string" && data.because.trim() ? data.because : null);
+      // A DRAFT ONLY COUNTS FOR THE QUESTION BEING ASKED. The server
+      // sends one or none; this guards against showing yesterday's
+      // draft against today's question if that ever changed.
+      const draft = data.suggestion ?? null;
+      setSuggestion(draft && draft.questionKey === data.next?.key ? draft : null);
+      setEditing(false);
+      // THE FIRST VISIT ASKS FOR THE DRAFTS, then reads again.
+      //
+      // One extra round trip, once per business, in exchange for the
+      // GET staying a read — an existing test holds that this endpoint
+      // reads through RLS and never writes, and it was right to.
+      if (data.needsDiscovery) {
+        await fetch("/api/interview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discover: true }),
+        }).catch(() => {});
+        // `discovered: true` stops this recursing if discovery found
+        // nothing and the business still has no rows.
+        // THE FLAG IS THE ARGUMENT, NOT STATE. A business whose site
+        // yields nothing still has no rows afterwards, so without it
+        // this would ask, re-read, find nothing, and ask again. One
+        // retry, carried on the call itself.
+        if (!discovered) return load(true);
+      }
     } catch {
       // Nothing is invented on a failed read: the card simply does not
       // offer a question.
@@ -68,6 +113,18 @@ export default function InterviewCard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /**
+   * He says our draft is wrong.
+   *
+   * NOT A SKIP. Skipping means "don't ask me this" and the question is
+   * gone for good; rejecting means "that answer is wrong", so the
+   * question comes back and is asked properly.
+   */
+  async function reject() {
+    if (!question) return;
+    await send({ reject: true });
+  }
 
   async function send(body: Record<string, unknown>) {
     if (!question) return;
@@ -95,9 +152,11 @@ export default function InterviewCard() {
       setFollowUp(null);
       setThin(data.weak === true);
       setAnswer("");
+      setSuggestion(null);
+      setEditing(false);
       setQuestion(data.next ?? null);
       if (data.progress) setProgress(data.progress);
-      if (data.skipped) await load();
+      if (data.skipped || data.rejected) await load();
       setSaving(false);
     } catch {
       setError("Could not save that just now.");
@@ -151,7 +210,12 @@ export default function InterviewCard() {
       {followUp && <p className="text-sm text-amber-500 mt-3">{followUp}</p>}
       {thin && <p className="text-sm text-slate-500 mt-3">Saved as you wrote it, marked as thin.</p>}
 
-      {question.kind === "yes_no" ? (
+      {/* THE DRAFT AND THE BLANK BOX ARE NEVER BOTH ON SCREEN — D3.
+          A suggested answer beside an empty field asks him to do both,
+          which is more work than the form this replaces, not less. The
+          draft has its own three buttons; this is what he sees when
+          there is no draft, or when he has asked to change one. */}
+      {(!suggestion || editing) && (question.kind === "yes_no" ? (
         <div className="flex items-center gap-2 mt-4">
           <button
             onClick={() => send({ answer: "Yes" })}
@@ -175,12 +239,76 @@ export default function InterviewCard() {
           rows={question.kind === "long_text" ? 4 : 2}
           className="w-full mt-3 rounded-lg bg-slate-200 border border-slate-300 px-3 py-2 text-slate-900"
         />
+      ))}
+
+      {/* THE DRAFT, AND WHERE IT CAME FROM — D3.
+          Confirming is reading, not remembering: the value he is being
+          asked about and the line of his own page it came from are both
+          on screen, so a tap is an informed one. */}
+      {suggestion && !editing && (
+        <div className="mt-3 rounded-lg border border-slate-300 bg-slate-200 p-3 space-y-2">
+          <p className="text-xs text-slate-500">
+            {suggestion.source === "discovered"
+              ? "Your website already says this:"
+              : "Worked out from your own products:"}
+          </p>
+          <p className="text-sm font-medium text-slate-900">{suggestion.value}</p>
+          {/* THE SENTENCE IT WAS READ FROM. Without it he is confirming
+              something he cannot check, which is the friction this is
+              meant to remove. An inference has none, because nobody
+              wrote it down.
+              
+              NOT SHOWN WHEN IT IS THE SAME SENTENCE. The hours and the
+              address are passed through from his page unchanged, so
+              the draft and its evidence are word for word identical —
+              and printing it twice makes him read the same line twice
+              to find a difference that is not there. Seen in a render
+              of the card, not reasoned about. */}
+          {suggestion.evidence?.quote && suggestion.evidence.quote.trim() !== suggestion.value.trim() && (
+            <p className="text-[11px] text-slate-500 italic border-l-2 border-slate-400 pl-2">
+              &ldquo;{suggestion.evidence.quote}&rdquo;
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={() => send({ answer: suggestion.value })}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white px-3 py-1.5 text-sm font-medium disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Yes, that&apos;s right
+            </button>
+            <button
+              onClick={() => {
+                // HIS OWN EDIT STARTS FROM OUR DRAFT, not from a blank
+                // box: correcting two words beats retyping a sentence.
+                setAnswer(suggestion.value);
+                setEditing(true);
+              }}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-300 text-slate-900 px-3 py-1.5 text-sm font-medium disabled:opacity-60"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Change it
+            </button>
+            <button
+              onClick={reject}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
+            >
+              <X className="w-3.5 h-3.5" />
+              That&apos;s wrong
+            </button>
+          </div>
+        </div>
       )}
 
       {error && <p className="text-sm text-red-400 mt-3">{error}</p>}
 
       <div className="flex items-center gap-3 mt-4">
-        {question.kind !== "yes_no" && (
+        {/* The Save button belongs to the blank box, so it goes with
+            it — the draft carries its own. */}
+        {question.kind !== "yes_no" && (!suggestion || editing) && (
           <button
             onClick={() => send({ answer })}
             disabled={saving || !answer.trim()}

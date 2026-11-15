@@ -7,6 +7,9 @@ import { findMissingFact } from "@/lib/onboarding/factGaps";
 import { attemptFor, contextFrom, readProgress } from "@/lib/onboarding/interviewProgress";
 import { judgeAnswer } from "@/lib/onboarding/answerCheck";
 import { cleanBusinessModels } from "@/lib/business/businessModel";
+import { pendingSuggestions, rejectSuggestion, storeSuggestion } from "@/lib/onboarding/suggestions";
+import { discoverFromSite } from "@/lib/onboarding/discoverFromSite";
+import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 // The resumable interview (I5 of docs/PLAN-AUTO-INTERVIEW.md).
 //
@@ -56,7 +59,7 @@ export async function GET() {
   // and to an active team member, so a refusal genuinely means "not
   // yours" rather than being worked around.
   const [{ data: rows }, { data: dealership }] = await Promise.all([
-    supabase.from("interview_answers").select("question_key, status, attempts, weak").eq("dealership_id", dealershipId),
+    supabase.from("interview_answers").select("question_key, status, attempts, weak, source, suggested_value, evidence").eq("dealership_id", dealershipId),
     supabase.from("dealerships").select("business_models").eq("id", dealershipId).maybeSingle(),
   ]);
 
@@ -80,6 +83,19 @@ export async function GET() {
   // ask is spent when he answers or skips, which the POST below
   // records and nextGapToAsk already treats as dealt with. Marking it
   // "asked" here would burn the one question on a page view.
+  // WHETHER ANYTHING HAS EVER BEEN DISCOVERED FOR THIS BUSINESS.
+  //
+  // THE DISCOVERY ITSELF IS A POST, and this is only the flag that
+  // tells the screen to ask for one. An existing test holds that this
+  // handler reads through RLS and never reaches for the service client
+  // — "the handler that only reads" — and it caught the first version
+  // of D3, which ran discovery here and wrote rows from a GET.
+  //
+  // The test was right and the design was wrong: a refusal from this
+  // handler should mean "not yours" because RLS said so, and a GET
+  // that writes is a GET a browser may repeat for its own reasons.
+  const needsDiscovery = !(rows ?? []).length;
+
   let because: string | null = null;
   let next = nextQuestion(ctx);
   try {
@@ -97,9 +113,27 @@ export async function GET() {
     console.error(`[interview] could not look for a missing fact: ${err?.message ?? err}`);
   }
 
+  // THE DRAFT FOR THE QUESTION BEING ASKED, if there is one.
+  //
+  // ONE QUESTION, ONE DRAFT. The screen is not handed the whole list:
+  // the interview asks one thing at a time, and a card showing six
+  // drafts at once is the form this feature exists to replace.
+  //
+  const draft = next
+    ? pendingSuggestions(rows).find((s) => s.questionKey === next!.key) ?? null
+    : null;
+
   return NextResponse.json({
     // The whole question, so the screen writes no prompt of its own.
     next: next ? { ...next, when: undefined } : null,
+    // WHAT WE THINK THE ANSWER IS, AND WHERE WE GOT IT. Null for a
+    // question nothing was found for, which is most of them — the
+    // screen must not imply a draft that does not exist.
+    suggestion: draft,
+    // THE SCREEN ASKS FOR DISCOVERY, this handler never performs it.
+    // True exactly once per business: the first time anybody opens
+    // this card, before a single question has any state.
+    needsDiscovery,
     // WHY THIS ONE, when it is a gap rather than the next on the list.
     // Null for an ordinary question — the screen must not invent a
     // reason for a question that does not have one.
@@ -121,6 +155,42 @@ export async function POST(request: Request) {
   const key = String((body as any)?.key ?? "").trim();
   const text = String((body as any)?.answer ?? "");
   const skip = (body as any)?.skip === true;
+  const reject = (body as any)?.reject === true;
+  const discover = (body as any)?.discover === true;
+
+  // READ WHAT HIS OWN SITE ALREADY SAYS, AND STORE IT AS DRAFTS — D3.
+  //
+  // IN THE POST, where this file's writes live. It carries no question
+  // key, so it runs before the key is resolved; everything after this
+  // point is about one question and this is about all of them.
+  //
+  // ONLY WHEN NOTHING HAS BEEN DECIDED YET. storeSuggestion refuses an
+  // answered, skipped or rejected row on its own, so a second run
+  // cannot overwrite a decision — this is the cheaper guard that stops
+  // the writes happening at all.
+  if (discover) {
+    const service = createServiceClient();
+    const { data: existing } = await service
+      .from("interview_answers")
+      .select("question_key, status")
+      .eq("dealership_id", dealershipId);
+    if ((existing ?? []).length) return NextResponse.json({ ok: true, discovered: 0, already: true });
+
+    try {
+      const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+      let stored = 0;
+      for (const suggestion of discoverFromSite(facts)) {
+        if (await storeSuggestion(service, dealershipId, suggestion, null)) stored += 1;
+      }
+      return NextResponse.json({ ok: true, discovered: stored });
+    } catch (err: any) {
+      // A SITE THAT CANNOT BE READ IS NOT A REASON TO LOSE THE
+      // INTERVIEW. The questions are asked blank, which is exactly
+      // what happened before discovery existed.
+      console.error(`[interview] could not read the site for suggestions: ${err?.message ?? err}`);
+      return NextResponse.json({ ok: true, discovered: 0 });
+    }
+  }
 
   const question = questionByKey(key);
   // A KEY NOBODY DECLARED IS REFUSED, not guessed at. questionByKey
@@ -130,8 +200,20 @@ export async function POST(request: Request) {
   const service = createServiceClient();
   const { data: rows } = await service
     .from("interview_answers")
-    .select("question_key, status, attempts, weak")
+    .select("question_key, status, attempts, weak, source, suggested_value")
     .eq("dealership_id", dealershipId);
+
+  // THE OWNER SAYS OUR DRAFT IS WRONG — D3.
+  //
+  // NOT A SKIP, and the difference is next time: skipping means "don't
+  // ask me this", rejecting means "that answer is wrong", so the
+  // question stays in the interview and is asked properly. The value
+  // goes; `source` stays, because that we guessed is a fact about this
+  // business's record even when the guess was bad.
+  if (reject) {
+    const done = await rejectSuggestion(service, dealershipId, key);
+    return NextResponse.json({ ok: done, rejected: done });
+  }
 
   // SKIPPING IS AN ANSWER ABOUT THE QUESTION, NOT ABOUT THE BUSINESS.
   // It stops the question being asked again — a product that re-asks is
@@ -204,11 +286,37 @@ export async function POST(request: Request) {
     }
   }
 
+  // WHERE THE ANSWER CAME FROM, AND IT SURVIVES BEING ANSWERED — D3.
+  //
+  // An upsert writes the whole row, so saying nothing about `source`
+  // would blank it: a confirmed discovery would come back reading as
+  // if nobody had ever suggested anything. The origin is read off the
+  // existing row and written back untouched.
+  //
+  // `owner` only when there was no draft. Everything else keeps the
+  // origin it had, and that is the point of the column — "he confirmed
+  // something we found" and "he told us" must stay different facts
+  // forever, which is what lets anyone later count how many of this
+  // business's records began as a guess.
+  //
+  // AN EDIT KEEPS THE ORIGIN TOO. The owner correcting our draft is
+  // still an answer this product went looking for; `source` records
+  // where the ANSWER ORIGINATED, not how much of it survived.
+  const before = (rows ?? []).find((r: any) => r.question_key === key) as any;
+  const origin = String(before?.source ?? "").trim() || "owner";
+
   await service.from("interview_answers").upsert(
     {
       dealership_id: dealershipId,
       question_key: key,
       status: "answered",
+      source: origin,
+      // THE DRAFT IS CLEARED ON THE WAY THROUGH. Keeping it would let
+      // a later reader compare what we guessed against what he stored,
+      // which is a real measure of whether discovery is any good — and
+      // it is not worth a column holding a stale value nothing reads.
+      // Recorded as considered rather than missed.
+      suggested_value: null,
       attempts: attempt,
       weak: verdict.weak,
       answered_at: new Date().toISOString(),
