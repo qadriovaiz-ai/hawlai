@@ -32,6 +32,10 @@ export type ProgressRow = {
   status?: string | null;
   attempts?: number | null;
   weak?: boolean | null;
+  /** D1, migration 232. See lib/onboarding/suggestions.ts. */
+  source?: string | null;
+  suggested_value?: string | null;
+  evidence?: unknown;
 };
 
 export type InterviewProgress = {
@@ -43,9 +47,27 @@ export type InterviewProgress = {
   asked: string[];
   /** Keys whose stored answer is thin. */
   weak: string[];
+  /**
+   * Keys with a draft waiting on the owner — D1.
+   *
+   * NOT ANSWERED, NOT ASKED, NOT SKIPPED. A suggestion is something we
+   * think, and the question is as open as it was before we thought it.
+   * It is its own list precisely so no caller can reach for it by
+   * accident while counting what is known.
+   */
+  suggested: string[];
+  /**
+   * Keys where the owner saw a draft and said it was wrong.
+   *
+   * SEPARATE FROM `skipped`, and the difference matters next time:
+   * skipped is "don't ask me this", rejected is "that answer is wrong"
+   * — so a rejected question is still worth asking properly, and a
+   * skipped one is not.
+   */
+  rejected: string[];
 };
 
-export const EMPTY_PROGRESS: InterviewProgress = { answered: [], skipped: [], asked: [], weak: [] };
+export const EMPTY_PROGRESS: InterviewProgress = { answered: [], skipped: [], asked: [], weak: [], suggested: [], rejected: [] };
 
 /**
  * The rows, sorted into what they mean.
@@ -57,7 +79,7 @@ export const EMPTY_PROGRESS: InterviewProgress = { answered: [], skipped: [], as
  * report a question as done when nobody knows that it is.
  */
 export function readProgress(rows: ProgressRow[] | null | undefined): InterviewProgress {
-  const out: InterviewProgress = { answered: [], skipped: [], asked: [], weak: [] };
+  const out: InterviewProgress = { answered: [], skipped: [], asked: [], weak: [], suggested: [], rejected: [] };
   for (const row of rows ?? []) {
     const key = String(row?.question_key ?? "").trim();
     if (!key) continue;
@@ -66,6 +88,11 @@ export function readProgress(rows: ProgressRow[] | null | undefined): InterviewP
     if (status === "answered") out.answered.push(key);
     else if (status === "skipped") out.skipped.push(key);
     else if (status === "asked") out.asked.push(key);
+    // D1. Listed, never merged: a draft is not knowledge, and the two
+    // lists below exist so that nothing counting what this business
+    // knows can pick one up by mistake.
+    else if (status === "suggested") out.suggested.push(key);
+    else if (status === "rejected") out.rejected.push(key);
   }
   return out;
 }
@@ -92,6 +119,16 @@ export function attemptFor(rows: ProgressRow[] | null | undefined, key: string):
  * the facts layer must not count it as a fact that exists.
  */
 export function contextFrom(progress: InterviewProgress, models: BusinessModel[] = []): InterviewContext {
+  // D1: NEITHER `suggested` NOR `rejected` IS DEALT WITH.
+  //
+  // A suggestion is a draft nobody has confirmed, so the question is
+  // still open and the interview should still reach it — what changes
+  // is that the card arrives pre-filled rather than blank.
+  //
+  // A rejection is the owner saying our ANSWER was wrong, not that the
+  // question was unwelcome. Treating it as dealt with would lose the
+  // question entirely because we guessed badly once, which is the
+  // opposite of what he told us.
   return { models, answered: [...progress.answered, ...progress.skipped] };
 }
 
