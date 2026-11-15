@@ -92,7 +92,18 @@ const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 // The `i` flag means nothing for digits and everything for the label
 // withLabel() wraps around this: without it "Call us at" did not match
 // its own pattern and the words were left standing with no number.
-const PHONE = /(?:\+?91[\s-]?)?\b[6-9]\d{1,4}[\s-]?\d{2,5}[\s-]?\d{2,5}\b/gi;
+/**
+ * EXPORTED FOR D2, which reads the owner's OWN pages looking for his
+ * number to suggest back to him. One pattern for "what looks like a
+ * phone number here", used both to delete an invented one and to find
+ * a real one — a second copy would drift, and the copy that drifted
+ * would be the one nobody was looking at.
+ *
+ * IT CARRIES THE `g` FLAG, so callers use `.match()` and never
+ * `.test()`: a shared global regex keeps `lastIndex` between calls, and
+ * `.test()` would return alternating answers for the same string.
+ */
+export const PHONE = /(?:\+?91[\s-]?)?\b[6-9]\d{1,4}[\s-]?\d{2,5}[\s-]?\d{2,5}\b/gi;
 /** A social handle. Emails are taken out first, so this cannot catch one. */
 const HANDLE = /(?<![\w.@])@[a-z0-9._]{2,30}\b/gi;
 
