@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateWebsite, saveGeneratedWebsite, PlannedPage } from "@/lib/agents/websiteBuilderAgent";
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
+import { readPublicSurfaces, otherSurfacesLine } from "@/lib/website/publicSurfaces";
 
 // Generating several pages (even with the per-page 8s internal
 // timeout below) across concurrent batches can still add up past
@@ -73,7 +74,14 @@ export async function GET() {
     );
     console.log("[website-builder GET] website_pages query done. error:", pagesError?.message ?? "none", "count:", pages?.length ?? 0);
     if (pagesError) throw new Error(pagesError.message);
-    return NextResponse.json({ website, pages: pages ?? [] });
+    // WHAT ELSE OF HIS IS PUBLIC. Three tables each carry their own
+    // `published` flag, and the builder's toggle honestly controls only
+    // one of them — so without this the owner can switch his site off
+    // and still have landing pages and search pages served under his
+    // name. Read here rather than on the publish call, because the
+    // question is "what is public right now", not "what changed".
+    const surfaces = await readPublicSurfaces(supabase, dealershipId);
+    return NextResponse.json({ website, pages: pages ?? [], surfaces, otherSurfaces: otherSurfacesLine(surfaces) });
   } catch (err: any) {
     console.error("[website-builder/generate GET] error:", err.message);
     return NextResponse.json({ error: `Couldn't load your website. (${err.message})` }, { status: 500 });

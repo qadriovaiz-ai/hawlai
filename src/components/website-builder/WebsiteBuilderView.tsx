@@ -57,6 +57,7 @@ export default function WebsiteBuilderView() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [otherSurfaces, setOtherSurfaces] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -94,6 +95,10 @@ export default function WebsiteBuilderView() {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
         setWebsite(d.website);
+        // WHAT ELSE IS PUBLIC. Null for the businesses that have only a
+        // site, which is most of them — a line that appears always is a
+        // line nobody reads.
+        setOtherSurfaces(typeof d.otherSurfaces === "string" && d.otherSurfaces.trim() ? d.otherSurfaces : null);
         setLogoUrl(d.website?.logo_url ?? "");
         setPages(d.pages ?? []);
         if (d.pages?.length > 0) setActivePage((prev: string | null) => prev ?? d.pages[0].id);
@@ -565,6 +570,18 @@ export default function WebsiteBuilderView() {
             <div>
               <p className="text-sm font-semibold text-slate-700">Site: /site/{website.slug}</p>
               <p className="text-xs text-slate-400">{website.published ? "Live — visible to the public" : "Not published yet"}</p>
+              {/* THIS TOGGLE CONTROLS ONE OF THREE PUBLIC SURFACES, and
+                  says so above: "Site: /site/<slug>". Landing pages and
+                  search pages have their own published flags, and
+                  nothing told him they were still being served — so he
+                  could switch this off and reasonably believe his
+                  business was no longer public.
+                  
+                  SAID, NOT ACTED ON. Making one switch take all three
+                  down would quietly kill the landing page his ads are
+                  paying to send people to. He asked for the site to be
+                  off; what he is owed is the rest of the truth. */}
+              {otherSurfaces && <p className="text-xs text-slate-500 mt-1 max-w-md">{otherSurfaces}</p>}
               {publishError && <p className="text-xs text-red-400 mt-1 max-w-md">{publishError}</p>}
             </div>
             <div className="flex items-center gap-3">
