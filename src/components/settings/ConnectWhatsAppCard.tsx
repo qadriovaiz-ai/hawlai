@@ -71,7 +71,37 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
           <Link href="/dashboard/billing" className="text-xs text-brand-400 hover:underline shrink-0">Upgrade</Link>
         </div>
       ) : connected ? (
-        <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({connectedNumber})</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({connectedNumber})</span>
+          {/* TURNING IT OFF IS NEVER THE SLOW PATH — H4. No
+              confirmation step and no second screen: the safe
+              direction must not be the difficult one, the same rule
+              that keeps automation toggles ungated. And this is the
+              ONLY place it can be done — never over WhatsApp, because
+              whoever is holding the phone could do it too. */}
+          <button
+            onClick={async () => {
+              setLoading(true);
+              try {
+                const res = await fetch("/api/whatsapp-connect/disconnect", { method: "POST" });
+                if (res.ok) {
+                  setConnected(false);
+                  setStep("idle");
+                  setPhone("");
+                } else {
+                  const data = await res.json().catch(() => ({}));
+                  setError(data.error ?? "Couldn't disconnect just now.");
+                }
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="text-xs text-slate-500 hover:text-slate-700 shrink-0 disabled:opacity-60"
+          >
+            Disconnect
+          </button>
+        </div>
       ) : step === "idle" ? (
         <div className="space-y-2">
           <input

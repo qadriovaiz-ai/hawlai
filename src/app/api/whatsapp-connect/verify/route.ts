@@ -35,6 +35,34 @@ export async function POST(request: Request) {
   if (pending.code !== code.trim()) return NextResponse.json({ error: "That code doesn't match." }, { status: 400 });
 
   await supabase.from("whatsapp_verification_codes").update({ verified_at: new Date().toISOString() }).eq("id", pending.id);
+
+  // THE OLD NUMBER'S CONVERSATION GOES WITH THE OLD NUMBER — H4.
+  //
+  // Changing the number already stops the old one being recognised,
+  // because the lookup is on `owner_whatsapp_number`. What it did NOT
+  // do was remove the session: `whatsapp_chat_sessions` is keyed on
+  // the phone number, so the old row sat there holding the history of
+  // a connection that no longer exists.
+  //
+  // It is unreachable while nothing matches it, and that is exactly
+  // the problem with leaving it: a carrier reassigns numbers, and the
+  // next person to connect that handset would pick up a conversation
+  // about somebody else's business. History belongs to the connection.
+  const { data: before } = await supabase
+    .from("dealerships")
+    .select("owner_whatsapp_number")
+    .eq("id", dealership.id)
+    .maybeSingle();
+  const previous = String(before?.owner_whatsapp_number ?? "").trim();
+  if (previous && previous !== normalized) {
+    const { error: sessionError } = await supabase.from("whatsapp_chat_sessions").delete().eq("phone_number", previous);
+    if (sessionError) {
+      // Not fatal: the number is about to stop being recognised either
+      // way, so the connection is still correctly replaced.
+      console.error(`[whatsapp-connect] left the previous session behind for ${dealership.id}: ${sessionError.message}`);
+    }
+  }
+
   await supabase.from("dealerships").update({ owner_whatsapp_number: normalized, owner_whatsapp_verified: true }).eq("id", dealership.id);
 
   return NextResponse.json({ success: true });
