@@ -36,9 +36,35 @@ export async function PATCH(
     ? await openFindingsOfType(supabase, String(before.dealership_id), String(before.type))
     : null;
 
+  // A DISMISSAL IS A REJECTION, AND IT IS DATED.
+  //
+  // WHAT WAS BROKEN, FOUND 18 NOVEMBER. The owner clearing a finding
+  // off his list did NOTHING LASTING: this wrote `dismissed`, the
+  // re-audit's live set is `("open","rejected")`, so the next morning
+  // the same finding was inserted again as open and offered again.
+  // "A product that re-asks is one the owner stops reading" is a rule
+  // this codebase already states — and this was it, daily.
+  //
+  // Everything needed was already built and unreachable. Migration 210
+  // added `rejected` and the constraint "a rejection without its date
+  // is a cooldown nobody can compute"; `surfaceable` skips a finding
+  // rejected less than REJECTION_COOLDOWN_DAYS ago; the unique index
+  // covers open and rejected. Nothing could put a row into that state,
+  // because this route only ever wrote `dismissed` and `resolved_at`.
+  //
+  // THE WORD THE CLIENT SENDS DOES NOT CHANGE. "dismissed" is a wire
+  // value — the feed sends it, nothing displays it — so what is stored
+  // is what it MEANS, and the machinery built for it starts working.
+  const rejecting = status === "dismissed";
   const { data, error } = await supabase
     .from("opportunities")
-    .update({ status, resolved_at: new Date().toISOString() })
+    .update({
+      status: rejecting ? "rejected" : status,
+      resolved_at: new Date().toISOString(),
+      // The constraint requires this whenever status is `rejected`, and
+      // it is what the 30-day count is measured from.
+      ...(rejecting ? { rejected_at: new Date().toISOString() } : {}),
+    })
     .eq("id", id)
     .select()
     .single();

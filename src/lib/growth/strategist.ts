@@ -29,7 +29,7 @@
 
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import type { AuditFinding } from "@/lib/growth/audit";
-import { pickForToday, type Finding } from "@/lib/growth/findings";
+import { pickForToday, inCooldown, type Finding } from "@/lib/growth/findings";
 import { findingTypesWithGoals, goalTitleForFindingType } from "@/lib/growth/strategy";
 import { conversionClaimsAllowed, type TrackingState } from "@/lib/growth/tracking";
 
@@ -104,13 +104,17 @@ function asFinding(row: StrategistRow): Finding {
 export async function recordFindings(
   supabase: any,
   dealershipId: string,
-  findings: AuditFinding[]
+  findings: AuditFinding[],
+  // THE CLOCK, so the thirty days can be tested without waiting them.
+  // Same shape pickToday already takes.
+  opts: { now?: Date } = {}
 ): Promise<{ inserted: number; updated: number; failed: number }> {
+  const now = opts.now ?? new Date();
   if (!findings.length) return { inserted: 0, updated: 0, failed: 0 };
 
   const { data: liveRows, error: readError } = await supabase
     .from("opportunities")
-    .select("id, type, reference_id, status")
+    .select("id, type, reference_id, status, rejected_at")
     .eq("dealership_id", dealershipId)
     .in("status", ["open", "rejected"]);
   // A FAILED READ IS NOT AN EMPTY TABLE. Treating it as one would
@@ -135,9 +139,23 @@ export async function recordFindings(
     };
 
     if (existing) {
-      // The wording and the count may have changed since yesterday; the
-      // rejection and its date must not be touched.
-      const { error } = await supabase.from("opportunities").update(payload).eq("id", existing.id);
+      // THIRTY DAYS LATER, THE SAME STEP COMES BACK — the founder's
+      // answer of 4 November, which until now nothing carried out.
+      //
+      // A rejected row is kept in the live set so the finding is not
+      // inserted twice while the owner's "no" still stands. But it is
+      // never PICKED either, because the picker reads only `open` — so
+      // without this, a rejection was permanent and the cooldown was a
+      // number nothing counted to.
+      //
+      // Reopening clears the date as well: a row that is open again has
+      // no standing rejection, and leaving the date would put it
+      // straight back into cooldown on the next pick.
+      const reopen = existing.status === "rejected" && !inCooldown(existing.rejected_at, now);
+      const { error } = await supabase
+        .from("opportunities")
+        .update(reopen ? { ...payload, status: "open", rejected_at: null } : payload)
+        .eq("id", existing.id);
       if (error) failed += 1;
       else updated += 1;
       continue;

@@ -399,7 +399,13 @@ describe("7. the baseline is captured before the action, not after", () => {
     // the owner decided against.
     const src = code("src/app/api/opportunities/[id]/route.ts");
     const reads = src.indexOf("openFindingsOfType(");
-    const updates = src.indexOf('.update({ status, resolved_at');
+    // THE ANCHOR MOVED, THE ASSERTION DID NOT — 18 November 2026. The
+    // update became a multi-line object when a dismissal started
+    // recording its rejection date, so the one-line literal matched
+    // nothing and this read -1 < -1 as a pass waiting to happen. The
+    // ordering below is the content of this test; `resolved_at` is
+    // written once, in that update, and is what it anchors on now.
+    const updates = src.indexOf("resolved_at: new Date().toISOString()");
     expect(reads, "the baseline read went away").toBeGreaterThan(-1);
     expect(updates, "the update went away").toBeGreaterThan(-1);
     expect(reads).toBeLessThan(updates);
