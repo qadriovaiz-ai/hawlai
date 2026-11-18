@@ -207,6 +207,40 @@ connect flow, H3 is a message from a job that already runs.
 
 ---
 
+## 6a. What shipped, and the two guards that changed the design
+
+**18 November 2026.**
+
+| | | |
+|---|---|---|
+| **H1** | One approval decision, shared by every channel | `5b7eac50` |
+| **H2** | Approve or reject from WhatsApp, critical included | `7479ade4` |
+| **H3** | **Deferred with H5** — parked on `hawl-h3-deferred` | — |
+| **H4** | Disconnect, and the session goes with the connection | `eb2f53b2` |
+| **H5** | Deferred: no live Gupshup number or key | — |
+
+**Three existing guards caught designs in this stretch, and the code
+changed every time.** Worth recording together, because the pattern is
+the point:
+
+1. **`interviewProgress`** — "the reads go through RLS in the handler that only reads" caught D3 running discovery inside a GET. Moved to a POST.
+2. **`channelRules`** — "only the inbound webhook can send a WhatsApp message" caught H3 notifying over WhatsApp. That guard encodes WhatsApp's **24-hour session window**: outside it, only a Meta-approved template may be sent, so the design would have failed against the live API whether or not a test existed.
+3. **`s6ExitTest`** — "a send cannot be reached from its tool at all", with every door open, caught the email fallback placed inside `requestApproval`, which sits on every approval-raising tool's path.
+
+**The third one had an escape that was not taken.** Moving the send one
+frame up, into `runMasterBrainChat`, would have passed the walk —
+which starts at the tool's case body — without satisfying it. That is
+gaming a guard, and it is how gates rot.
+
+**H3 and H5 are now one piece of work.** When the template is approved,
+the notice goes out over WhatsApp from the webhook — already the single
+permitted sender — so no guard needs touching then either. The code and
+its 16 tests are on the branch; two tests asserting the wiring are
+skipped with a note rather than deleted.
+
+**Until then, by the owner's decision:** no interim email and no
+interim cron. A pending approval is seen in the app.
+
 ## 7. Answered by the owner, 13 November 2026
 
 1. **Critical approvals over WhatsApp: YES, included.** Spending too. Decided with the session-versus-phone-possession trade stated in front of him. The consequence is that `APPROVE n` is now a security control rather than a convenience, and that is how it will be built and tested.
