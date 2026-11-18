@@ -18,7 +18,7 @@ migrations.
 |---|---|---|---|
 | **S4** | The growth manager: audit → findings → goals → the daily report | **Closed.** Runs daily as `site_audit` + `daily_autopilot` | A 30-day cooldown after a rejection: `opportunities.status` has no `rejected` value, only open/completed/dismissed. Partly answered later by `existingTargetOffers` re-offering after 30 days |
 | **S5** | Outcomes: decisions recorded, measured on a check date | **Closed.** P6 exit test DONE 4 Nov. Migration 215 | Nothing in the plan's table |
-| **S6** | Actions: nothing that changes state is reachable except through an Action | **Closed.** P6 exit test DONE 5 Nov | P4's four retirements were **WITHDRAWN** — none was a duplicate. One real find: `/api/growth-report` has no callers |
+| **S6** | Actions: nothing that changes state is reachable except through an Action | **Closed.** P6 exit test DONE 5 Nov | P4's four retirements were **WITHDRAWN** — none was a duplicate. Its one real find, `/api/growth-report`, **was deleted in `6f78aea2`** — nothing is outstanding here. Left reading as open until 18 Nov, which cost a re-investigation |
 | **S7** | Autonomy L0/L1/L2: promotion asks once, demotion is automatic | **Closed.** P7 exit test DONE 6 Nov. Migrations 219 + 220 run and verified 7 Nov | **Nothing has ever run unattended.** An L2 action has by definition not run long when the stage closes |
 
 **What "closed" means here:** the stage's own exit test is green and its
