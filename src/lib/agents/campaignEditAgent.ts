@@ -180,29 +180,22 @@ export async function applyTargetingChange(
   return { success: true };
 }
 
-export async function setCampaignStatus(
-  supabase: any,
-  dealershipId: string,
-  campaign: CampaignSummary,
-  status: "ACTIVE" | "PAUSED"
-): Promise<{ success: boolean; error?: string }> {
-  if (!campaign.meta_ad_id) return { success: false, error: "This campaign hasn't been launched on Meta yet" };
-
-  const { data: dealership } = await supabase
-    .from("dealerships").select("fb_page_access_token, fb_page_access_token_encrypted").eq("id", dealershipId).single();
-  const token = readMetaPageToken(dealership) ?? process.env.META_PAGE_ACCESS_TOKEN;
-  if (!token) return { success: false, error: "Facebook Page isn't connected" };
-
-  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${campaign.meta_ad_id}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, access_token: token }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) {
-    return { success: false, error: data.error?.message ?? "Meta API error" };
-  }
-
-  await supabase.from("ad_creatives").update({ meta_status: status }).eq("id", campaign.id);
-  return { success: true };
-}
+// setCampaignStatus USED TO LIVE HERE, AND IT WAS THE OLD BUG.
+//
+// Deleted 19 November 2026. It POSTed status to the AD alone, never
+// read effective_status, and wrote meta_status locally as though Meta
+// had confirmed it — which is exactly the defect
+// lib/ads/campaignStatus.ts documents replacing, surviving in a second
+// copy of the same name. Meta's own rule is that a paused campaign
+// forces its children to CAMPAIGN_PAUSED, so the ad could report
+// ACTIVE and deliver nothing.
+//
+// Its one caller (autopilotAgent's auto-pause) only ever passed
+// "PAUSED", and pausing an ad does stop that ad, so it was never
+// lying to anyone. It was a loaded gun: one "ACTIVE" caller would have
+// brought the original failure back in full. It also used the Page
+// token, which cannot read campaigns or ad sets.
+//
+// Everything that sets a campaign's status now goes through
+// lib/ads/campaignStatus.ts — all three levels, in the right order per
+// direction, verified against effective_status afterwards.

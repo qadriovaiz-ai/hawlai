@@ -19,7 +19,9 @@ import { syncOpportunities } from "./opportunityAgent";
 import { generateFollowUpMessage } from "./contentAgent";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 import { analyzeCampaigns } from "./optimizationAgent";
-import { setCampaignStatus } from "./campaignEditAgent";
+import { setCampaignStatus } from "@/lib/ads/campaignStatus";
+import { adsTokenFor } from "@/lib/ads/metaToken";
+import { META_PAGE_TOKEN_SELECT } from "@/lib/crypto/oauthSecrets";
 import { snapshotCampaignPerformance, getCampaignPerformanceState, type CampaignPerformanceResult } from "./analyticsAgent";
 import { recordCampaignPauseInsight } from "@/lib/businessMemory/outcomeInsights";
 import { emitNotification } from "@/lib/notifications/emit";
@@ -128,7 +130,7 @@ async function applyAutoPause(supabase: any, dealershipId: string, ai: AiRun): P
 
   const { data: campaigns } = await supabase
     .from("ad_creatives")
-    .select("id, headline, body_copy, meta_ad_id, meta_status, daily_budget, targeting_city, creative_score, mode, background_style, scheduled_start, variant_group_id")
+    .select("id, headline, body_copy, meta_ad_id, meta_adset_id, meta_campaign_id, meta_status, daily_budget, targeting_city, creative_score, mode, background_style, scheduled_start, variant_group_id")
     .eq("dealership_id", dealershipId)
     .eq("status", "launched");
 
@@ -138,12 +140,59 @@ async function applyAutoPause(supabase: any, dealershipId: string, ai: AiRun): P
   // in the same pass.
   let performanceCache: CampaignPerformanceResult | null = null;
 
+  // THE USER TOKEN, not the Page token. The replaced function used
+  // readMetaPageToken, and this codebase's own note says a Page token
+  // cannot read campaigns or ad sets (lib/ads/metaToken.ts) — which is
+  // exactly what verifying a pause requires. Read once for the run.
+  const { data: connection } = await supabase
+    .from("dealerships").select(META_PAGE_TOKEN_SELECT).eq("id", dealershipId).maybeSingle();
+  const token = (await adsTokenFor(supabase, dealershipId, connection)) ?? process.env.META_PAGE_ACCESS_TOKEN ?? null;
+
   for (const rec of toPause) {
     const campaign = (campaigns ?? []).find((c: any) => c.id === rec.campaign_id && c.meta_status === "ACTIVE");
     if (!campaign) continue;
 
-    const outcome = await setCampaignStatus(supabase, dealershipId, campaign, "PAUSED");
-    if (outcome.success) {
+    // ALL THREE LEVELS, THEN VERIFIED — 19 November 2026.
+    //
+    // This used to call a SECOND function of the same name in
+    // campaignEditAgent.ts, which POSTed status to the AD alone, never
+    // read effective_status, and wrote meta_status locally as though
+    // Meta had confirmed it. That is precisely the defect
+    // lib/ads/campaignStatus.ts was written to replace, still live in a
+    // second copy, and the only thing keeping it harmless was that its
+    // one caller only ever passed "PAUSED". One "ACTIVE" caller would
+    // have brought the original bug back in full.
+    //
+    // account: null, deliberately. Pausing is the safe direction and
+    // must never wait on a Graph read of the ad account — a dead
+    // account is a reason to pause, not a reason to refuse to.
+    if (!token) continue;
+    const outcome = await setCampaignStatus({
+      objects: {
+        campaignId: campaign.meta_campaign_id ?? null,
+        adsetId: campaign.meta_adset_id ?? null,
+        adId: campaign.meta_ad_id ?? null,
+      },
+      token,
+      status: "PAUSED",
+      account: null,
+      dealershipId,
+    });
+
+    // A PAUSE META ACCEPTED BUT COULD NOT READ BACK IS NOT A FAILED
+    // PAUSE. Every write succeeded; only the confirmation read did not.
+    // Treating that as a failure would leave the row saying ACTIVE for
+    // a campaign that has almost certainly stopped, and the cron would
+    // try again tomorrow against an already-paused ad.
+    const stopped = outcome.ok || outcome.unconfirmed === true;
+    if (stopped) {
+      // The local write moved here from the deleted function, where it
+      // happened whether or not Meta had confirmed anything. Dual-write
+      // for the same reason the dashboard route does it (migration 140).
+      await supabase
+        .from("ad_creatives")
+        .update({ meta_status: "PAUSED", external_status: "PAUSED" })
+        .eq("id", campaign.id);
       pausedCount++;
 
       // AI-Intelligence Pillar 1 — causal reasoning. A comparative

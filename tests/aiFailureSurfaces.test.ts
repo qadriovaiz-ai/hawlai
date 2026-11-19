@@ -57,11 +57,40 @@ vi.mock("@/lib/agents/analyticsAgent", () => ({
 vi.mock("@/lib/agents/optimizationAgent", () => ({
   analyzeCampaigns: async () => ({ recommendations: [{ campaign_id: "loser", action: "pause", reason: "Cost per lead 3x the winner" }] }),
 }));
-vi.mock("@/lib/agents/campaignEditAgent", () => ({
-  setCampaignStatus: async (_s: any, _d: string, c: Row, status: string) => {
-    tables.ad_creatives.find((r) => r.id === c.id)!.meta_status = status;
-    return { success: true };
+// THE PAUSE MOVED MODULES — 19 November 2026.
+//
+// This mocked agents/campaignEditAgent's setCampaignStatus, a SECOND
+// function of that name which POSTed status to the ad alone and never
+// verified it. It was deleted; autopilot now calls the real one in
+// lib/ads/campaignStatus, which flips all three levels and reads back
+// effective_status.
+//
+// Mocked here for the same reason as before — this file is about what
+// the owner is told when the AI fails, not about Meta's hierarchy —
+// but pointed at the module that actually does the work. Left on the
+// old module it silently mocked nothing, autopilot reached the real
+// Graph call, and the pause failed for reasons this file is not
+// testing.
+// SPREAD THE ORIGINAL, override one export. A whole-module factory
+// here silently removed `readCampaignState` too, which analyticsAgent
+// imports from this same file — so the autopilot run died before it
+// reached anything this test is about, and the failure looked like the
+// AI-failure plumbing being broken.
+vi.mock("@/lib/ads/campaignStatus", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ads/campaignStatus")>()),
+  setCampaignStatus: async ({ objects }: { objects: { adId: string | null } }) => {
+    // The fake client records updates without applying them, so the
+    // paused row is flipped here — the variant logic downstream only
+    // fires when exactly one member of the A/B group is left ACTIVE,
+    // and that is the behaviour under test.
+    const row = tables.ad_creatives.find((r) => r.meta_ad_id === objects.adId);
+    if (row) row.meta_status = "PAUSED";
+    return { ok: true, effectiveStatus: "PAUSED", flipped: ["campaign", "adset", "ad"] };
   },
+}));
+vi.mock("@/lib/ads/metaToken", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ads/metaToken")>()),
+  adsTokenFor: async () => "TEST_TOKEN",
 }));
 
 import { runMasterBrainChat, executeTool } from "@/lib/agents/masterBrainV2";
@@ -219,9 +248,12 @@ describe("Autopilot doesn't save templates as work", () => {
 
   it("a paused A/B loser: no template saved as a 'new variant ready to review'", async () => {
     tables.dealerships[0] = { ...tables.dealerships[0], auto_pause_low_performers: true, auto_generate_variant_on_pause: true };
+    // Meta ids, because a "launched" campaign always has them and the
+    // pause now reads all three levels. Without them the pause had
+    // nothing to identify, which is how the stale mock below was found.
     tables.ad_creatives = [
-      { id: "loser", headline: "Old hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "A" },
-      { id: "winner", headline: "Winning hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "B" },
+      { id: "loser", headline: "Old hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "A", meta_ad_id: "ad_loser", meta_adset_id: "set_loser", meta_campaign_id: "camp_loser" },
+      { id: "winner", headline: "Winning hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "B", meta_ad_id: "ad_winner", meta_adset_id: "set_winner", meta_campaign_id: "camp_winner" },
     ];
     anthropic(creditsOut);
     const result = await runDailyAutopilot(db(), "d1");
@@ -233,9 +265,12 @@ describe("Autopilot doesn't save templates as work", () => {
 
   it("…and when the AI works, the variant is drafted as before", async () => {
     tables.dealerships[0] = { ...tables.dealerships[0], auto_pause_low_performers: true, auto_generate_variant_on_pause: true };
+    // Meta ids, because a "launched" campaign always has them and the
+    // pause now reads all three levels. Without them the pause had
+    // nothing to identify, which is how the stale mock below was found.
     tables.ad_creatives = [
-      { id: "loser", headline: "Old hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "A" },
-      { id: "winner", headline: "Winning hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "B" },
+      { id: "loser", headline: "Old hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "A", meta_ad_id: "ad_loser", meta_adset_id: "set_loser", meta_campaign_id: "camp_loser" },
+      { id: "winner", headline: "Winning hook", meta_status: "ACTIVE", status: "launched", variant_group_id: "g1", variant_label: "B", meta_ad_id: "ad_winner", meta_adset_id: "set_winner", meta_campaign_id: "camp_winner" },
     ];
     anthropic(ok(JSON.stringify({ headline: "Ghar mein Diwali ki khushboo", body: "Hand-poured soy candles", confidence_score: 80 })));
     await runDailyAutopilot(db(), "d1");
