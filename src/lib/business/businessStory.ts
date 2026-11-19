@@ -36,13 +36,35 @@ export const STORY_CATEGORY = "business_story";
  * The business_knowledge categories that hold PRODUCT FACTS rather than
  * notes about running the business.
  *
- * Added 2026-10-15 for migration 209. The founder is moving nine rows
- * out of `business_story` and into `general`, because all fourteen of
- * the live business's rows were filed under the story category and nine
- * of them hold the facts — the double-boiler step, the fragrance
- * timing, "paraffin-free, soy wax only". Those nine must keep printing
- * uncapped after the move, so `general` counts as a fact category and
- * not as a note.
+ * Added 2026-10-15 in anticipation of a data move: the founder was to
+ * shift rows out of `business_story` and into `general`, because the
+ * live business's rows were all filed under the story category and
+ * several of them hold the facts — the double-boiler step, the
+ * fragrance timing, "paraffin-free, soy wax only". `general` was added
+ * here so those kept printing uncapped afterwards.
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * TWO CORRECTIONS, 19 November 2026
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * 1. THIS CITED "MIGRATION 209", AND 209 IS `action_levels`. It has
+ *    nothing to do with business_knowledge. The move was never a
+ *    migration — it was a manual data change — so there is no numbered
+ *    file to point at and no record of it having run.
+ *
+ * 2. AND IT NEVER RAN. Checked against production while drafting the
+ *    story-row cleanup: that business has NO `general` rows at all.
+ *    Every row is still in `business_story`, facts included.
+ *
+ * WHICH TURNS OUT NOT TO MATTER FOR CORRECTNESS, and that is worth
+ * saying plainly: `STORY_CATEGORY` is in the set below, so a fact
+ * filed under `business_story` is ALREADY read as a fact and already
+ * prints uncapped. The move was for tidiness, not for behaviour.
+ *
+ * IT MATTERS ENORMOUSLY FOR DELETION. A cleanup scoped to
+ * `category = 'business_story'` would take the facts with the stories,
+ * and the only thing that stopped it was checking for the `general`
+ * rows first and finding none.
  *
  * `hours`, `pricing_note`, `policy` and `faq` are notes: true, useful,
  * and not what a product claim is built from. They stay capped at 200

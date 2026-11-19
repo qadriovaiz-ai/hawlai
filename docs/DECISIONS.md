@@ -4155,3 +4155,36 @@ refused. That is the evidence this balance turns on, and nobody has it
 yet. This axis has already produced one over-correction (eight true
 recorded claims refused, 19 October) and one under-correction, so it
 moves on measurement, not on reasoning alone.
+
+## 2026-11-19 — "Migration 209 moved the facts" was wrong twice over
+
+**What the code said:** a comment in `lib/business/businessStory.ts`
+recorded that migration 209 moved nine rows out of `business_story`
+into `general`, so the facts among them would keep printing uncapped.
+
+**Both halves were false.** Migration 209 is `action_levels.sql` and
+has nothing to do with `business_knowledge` — the move was never a
+migration, only a manual data change planned on 15 October. And it
+never happened: the business has no `general` rows at all.
+
+**What it nearly cost:** the first cleanup draft scoped its delete to
+`category = 'business_story'` on the strength of that comment. It would
+have deleted "paraffin-free, soy wax only", "hand-poured in small
+batches", the Instagram handle and the bulk-order note along with the
+invented stories. The only thing that stopped it was the draft's own
+step 2b — a check written because the comment might be wrong.
+
+**Why nothing was actually broken:** `FACT_CATEGORIES` contains BOTH
+`business_story` and `general`, so a fact filed under the story
+category is already read as a fact and already prints uncapped. The
+move was for tidiness, not behaviour.
+
+**The real discriminator is the title, not the category.**
+`save_business_story` is the only writer of that category and always
+uses one of ten fixed titles from `STORY_QUESTIONS`. Anything else was
+typed by hand through the Business Knowledge page. The v2 cleanup moves
+the hand-typed rows to `general` first — the move that was planned and
+never made — and only then deletes by title.
+
+**Sixth instance** of a recorded description differing from the code.
+The comment is corrected in place.
