@@ -10,6 +10,8 @@ import { describe, it, expect } from "vitest";
 import { code } from "./helpers/source";
 
 const ROUTE = "src/app/api/interview/route.ts";
+/** Where the answer-storing body moved to, 19 November 2026. */
+const SAVE = "src/lib/onboarding/saveAnswer.ts";
 const CARD = "src/components/settings/InterviewCard.tsx";
 
 describe("1. CONFIRMING DOES NOT LAUNDER A GUESS", () => {
@@ -19,14 +21,19 @@ describe("1. CONFIRMING DOES NOT LAUNDER A GUESS", () => {
     // would come back reading as if nobody had ever suggested
     // anything, and the one question this column exists to answer
     // would be unanswerable.
-    const src = code(ROUTE);
+    // MOVED, NOT CHANGED (19 November 2026). The answer-storing body
+    // left /api/interview for lib/onboarding/saveAnswer so WhatsApp can
+    // confirm a suggestion through the same path — see that file's
+    // header. The rule is unchanged and so is this assertion; only the
+    // file it reads moved with the code.
+    const src = code(SAVE);
     expect(src).toMatch(/const origin = String\(before\?\.source \?\? ""\)\.trim\(\) \|\| "owner";/);
     const upsert = src.slice(src.indexOf('status: "answered"'));
     expect(upsert.slice(0, 200)).toMatch(/source: origin,/);
   });
 
   it("AND `owner` IS ONLY USED WHEN THERE WAS NO DRAFT", () => {
-    const src = code(ROUTE);
+    const src = code(SAVE);
     // The fallback is the literal, reached only when the row carries
     // no source — which is a question nothing ever suggested.
     expect(src).toMatch(/\|\| "owner";/);
@@ -41,7 +48,7 @@ describe("1. CONFIRMING DOES NOT LAUNDER A GUESS", () => {
   });
 
   it("the draft is cleared once it has been decided", () => {
-    const src = code(ROUTE);
+    const src = code(SAVE);
     const upsert = src.slice(src.indexOf('status: "answered"'));
     expect(upsert.slice(0, 300)).toMatch(/suggested_value: null,/);
   });
@@ -53,8 +60,12 @@ describe("2. REJECTING IS NOT SKIPPING", () => {
     expect(src).toMatch(/const reject = \(body as any\)\?\.reject === true;/);
     const branch = src.indexOf("if (reject) {");
     expect(branch).toBeGreaterThan(-1);
-    // Before judgeAnswer: there is no answer to judge.
-    expect(branch).toBeLessThan(src.indexOf("judgeAnswer("));
+    // Before anything is judged: there is no answer to judge. Judging
+    // moved to lib/onboarding/saveAnswer, so what this asserts is that
+    // the branch comes before the call to it — and that the route does
+    // not judge on its own any more, which would be a second copy.
+    expect(branch).toBeLessThan(src.indexOf("saveInterviewAnswer("));
+    expect(src).not.toMatch(/judgeAnswer\(/);
   });
 
   it("IT CALLS rejectSuggestion AND NOT THE SKIP WRITE", () => {

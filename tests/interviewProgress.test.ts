@@ -262,8 +262,16 @@ describe("6. THE FACTS LAYER READS THE PROGRESS AND SAYS IT", () => {
 
 // ---------------------------------------------------------------------
 describe("7. THE ROUTE JUDGES, WRITES, AND RECORDS — in that order", () => {
+  // JUDGING AND WRITING MOVED, 19 November 2026. The answer-storing
+  // body left /api/interview for lib/onboarding/saveAnswer, so that
+  // WhatsApp can confirm a discovered suggestion through exactly the
+  // same path instead of a second copy of it (D4). Nothing about the
+  // order below changed — it is the same code, read where it now is.
+  //
+  // The GET half never moved, and still reads from the route.
   const route = code("src/app/api/interview/route.ts");
-  const POST = route.slice(route.indexOf("export async function POST"));
+  const save = code("src/lib/onboarding/saveAnswer.ts");
+  const POST = [route.slice(route.indexOf("export async function POST")), save].join("\n");
   const GET = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
 
   it("THIS IS THE FIRST CALLER OF judgeAnswer", () => {
