@@ -47,6 +47,25 @@
 
 
 -- ────────────────────────────────────────────────────────────────────
+-- HOW TO RUN THIS — ONE SCRIPT, ONE RUN, PER TRANSACTION
+-- ────────────────────────────────────────────────────────────────────
+--
+-- LEARNED THE HARD WAY ON 19 NOVEMBER 2026. The Supabase SQL editor
+-- appears to open a NEW CONNECTION for every Run. Version 2 of this
+-- file ended each transaction with a commented-out `commit;`, expecting
+-- it to be run separately after reading the verify-select. That second
+-- Run was a different session, so the transaction was silently rolled
+-- back: it looked done and was not.
+--
+-- So each `begin` below ends with its own `commit` IN THE SAME BLOCK,
+-- and the check that would have been eyeballed is now a `do $$` that
+-- RAISES. An exception aborts the transaction, so `commit` never runs
+-- and nothing changed — the expectation is stated in SQL instead of
+-- being left to a person comparing numbers across two Runs.
+--
+-- Steps 1 and 2 are read-only and safe to run on their own.
+
+-- ────────────────────────────────────────────────────────────────────
 -- STEP 1 — FIND THE BUSINESS. Do not guess the id.
 -- ────────────────────────────────────────────────────────────────────
 -- Expected: one row. If it returns two, or none, STOP.
@@ -126,17 +145,20 @@ where dealership_id = :business_id
     'What people get wrong'
   );
 
--- Expected: the hand-typed rows now read `general`, the intake rows
--- still read `business_story`. If the numbers are not what step 2
--- showed, type rollback; and nothing has happened.
-select category, count(*) as rows
-from business_knowledge
-where dealership_id = :business_id
-group by category
-order by category;
+-- THE CHECK IS INSIDE THE TRANSACTION. Replace 4 with the number of
+-- hand-typed rows step 2 showed. If it does not match, this raises,
+-- the transaction aborts, and the commit below never happens.
+do $$
+declare moved int;
+begin
+  select count(*) into moved from business_knowledge
+   where dealership_id = :business_id and category = 'general';
+  if moved <> 4 then
+    raise exception 'expected 4 rows in general after the move, found %', moved;
+  end if;
+end $$;
 
--- commit;
--- rollback;
+commit;
 
 
 -- ────────────────────────────────────────────────────────────────────
@@ -166,16 +188,24 @@ where dealership_id = :business_id
     'What people get wrong'
   );
 
--- Expected: no `business_story` rows left, and the `general` count
--- unchanged from the end of step 3.
-select category, count(*) as rows
-from business_knowledge
-where dealership_id = :business_id
-group by category
-order by category;
+-- SAME SHAPE: the expectation is asserted, not eyeballed. No story
+-- rows may remain, and the facts moved in step 3 must still be there.
+do $$
+declare stories int; facts int;
+begin
+  select count(*) into stories from business_knowledge
+   where dealership_id = :business_id and category = 'business_story';
+  select count(*) into facts from business_knowledge
+   where dealership_id = :business_id and category = 'general';
+  if stories <> 0 then
+    raise exception 'expected no story rows left, found %', stories;
+  end if;
+  if facts <> 4 then
+    raise exception 'the facts changed count: expected 4, found %', facts;
+  end if;
+end $$;
 
--- commit;
--- rollback;
+commit;
 
 
 -- ────────────────────────────────────────────────────────────────────
