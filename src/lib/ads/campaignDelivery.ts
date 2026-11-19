@@ -53,7 +53,12 @@ export function describeDelivery(s: CampaignState): Delivery {
   // `delivering`, NOT `running` — the fourth level. All three toggles
   // can say ACTIVE on an account that cannot pay, and that is the state
   // a campaign sat in for seventy days while this column said "Active".
-  if (s.delivering) return d("active");
+  //
+  // A WARNING RIDES ALONG WITHOUT CHANGING THE LABEL. An account
+  // running low is still delivering, and calling it anything other than
+  // Active would be the false alarm this file is otherwise about. It is
+  // said underneath instead, where the reason for a status already goes.
+  if (s.delivering) return d("active", s.account?.warning ?? null);
 
   // THE ACCOUNT IS THE REASON, SO THE ACCOUNT IS WHAT IS SAID. Reached
   // when every level is ACTIVE and the account is not usable, which

@@ -180,9 +180,12 @@ describe("4. THE ACCOUNT IS READ ONCE, AND REFRESHED", () => {
     const src = code("src/lib/ads/adAccountLimits.ts");
     const at = src.indexOf("export async function accountHealthFor");
     expect(at).toBeGreaterThan(-1);
-    const fn = src.slice(at, at + 400);
+    // Commit 3 added the funding read after this, so the body is no
+    // longer one line — the assertion is on the two things that must
+    // stay true, not on its old shape.
+    const fn = src.slice(at, at + 1200);
     expect(fn).toMatch(/await getAdAccountLimits\(/);
-    expect(fn).toMatch(/return isAccountUsable\(limits\.accountStatus\)/);
+    expect(fn).toMatch(/isAccountUsable\(limits\.accountStatus\)/);
   });
 
   it("AND NOTHING READS fb_account_status STRAIGHT OFF THE ROW ANY MORE", () => {

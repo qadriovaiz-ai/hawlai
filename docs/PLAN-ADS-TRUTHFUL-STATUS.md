@@ -556,15 +556,22 @@ test is the better answer anyway. Multi-tenant throughout: the check
 compares Meta's returned name against the business's own words, and no
 trade vocabulary is written into the code.
 
-**Location.** [`resolveLocation`](src/lib/ads/metaTargeting.ts:167)
-already reads the business profile and falls back to All India
-([:217](src/lib/ads/metaTargeting.ts:217)). Lucknow +25km was not a
-default: 25km is `SPECIAL_CATEGORY_MIN_RADIUS_KM`
-([:58](src/lib/ads/metaTargeting.ts:58)) — so **this ad set was targeted
-as a special ad category**. Worth confirming against the live ad set,
-because if the candle business is being classified as housing/employment/
-credit, that is its own bug and it also restricts delivery. Added to the
-G diagnosis as a check.
+**Location — and a correction.** An earlier draft of this section said
+Lucknow +25km meant the ad set had been targeted as a **special ad
+category**, because 25 is `SPECIAL_CATEGORY_MIN_RADIUS_KM`
+([metaTargeting.ts:58](src/lib/ads/metaTargeting.ts:58)). **That was
+wrong.** `DEFAULT_RADIUS_KM` is also 25
+([:50](src/lib/ads/metaTargeting.ts:50)) — the two constants happen to
+share a value, so 25km is simply the ordinary default and proves
+nothing either way. I drew a conclusion from a coincidence.
+
+What is actually true: [`resolveLocation`](src/lib/ads/metaTargeting.ts:167)
+reads the business profile and falls back to All India
+([:217](src/lib/ads/metaTargeting.ts:217)), and Hawlai **cannot**
+mistakenly declare a candle business as a special ad category — the
+only mapping is an exact match on `"real estate"`
+([:68](src/lib/ads/metaTargeting.ts:68)). See section 11 for what that
+investigation did find.
 
 | | |
 |---|---|
@@ -702,3 +709,79 @@ written. **Nothing in this plan should be read as "the cause was X".** The
 product failure being fixed here is not that the ad did not deliver — it
 is that the ad did not deliver *and the owner was never told*.
 
+
+---
+
+## 11. Special ad categories — read-only findings
+
+Asked for on 19 November 2026, reported without changing anything.
+
+**Can a candle business be given a special ad category by mistake? No,
+not by Hawlai.** `isSpecialAdCategory`
+([metaTargeting.ts:71](src/lib/ads/metaTargeting.ts:71)) is an exact,
+trimmed, lowercased match against one key — `"real estate"` → `HOUSING`
+([:68](src/lib/ads/metaTargeting.ts:68)). Nothing else maps. A candle
+business would have to have typed "Real Estate" into its own category
+field. Meta applies its own classifier on top, independently of what is
+declared, so a restriction visible in Ads Manager would be Meta's doing
+and not Hawlai's — which is what the live read settles.
+
+Two real findings came out of looking, neither of them the thing that
+was being looked for.
+
+### A. Every non-real-estate launch sends `special_ad_categories: [null]`
+
+[launchCampaign.ts:134](src/lib/ads/launchCampaign.ts:134):
+
+```ts
+special_ad_categories: [built.specialAdCategory],
+```
+
+`specialAdCategory` is `null` for every business that is not real
+estate, and `metaPost` sends the body through `JSON.stringify`
+([adEngine.ts:285](src/lib/adEngine.ts:285)) — so what reaches Meta is
+literally `"special_ad_categories": [null]`, an array containing null
+rather than the empty array that is meant.
+
+Meta evidently tolerates it: the candle campaign was created. But it is
+malformed on every launch, it depends on undocumented leniency, and the
+correct form is `[]`. **Not changed** — reported only.
+
+### B. The more dangerous direction: a real estate business that is missed
+
+The exact-match is brittle, and it fails **open**. The category field is
+free text ([BusinessCategoryField.tsx:50](src/components/settings/BusinessCategoryField.tsx:50))
+with suggestions, not a fixed list. So "Real Estate" matches, and
+"Real Estate Agent", "Property Dealer", "Realestate" and "real-estate"
+all return `null` — no category declared, no `HOUSING`, and the
+demographic targeting that Meta legally strips from housing ads is sent
+anyway.
+
+That is an undeclared housing ad, which is an account policy risk rather
+than a cosmetic one, and it is the opposite failure from the one asked
+about. The code's own comment already says a misdeclared category is
+"an account policy risk at worst"
+([metaTargeting.ts:280](src/lib/ads/metaTargeting.ts:280)); the risk is
+in under-declaring, and that is the case that is unguarded.
+
+**Not changed** — reported only. Worth its own commit, and it is not in
+the current build order.
+
+### The live read could not be done from here
+
+Campaign `120254652336640260`'s `special_ad_categories` needs a Meta
+token. There is none in this working copy — `.env.local` holds
+Anthropic, Shopify and the three encryption keys, and no Meta or
+Supabase credentials. The ad token lives encrypted in the production
+database and is only reachable from the deployed app.
+
+The campaign's own `special_ad_categories` is readable with:
+
+```
+GET https://graph.facebook.com/v23.0/120254652336640260
+    ?fields=name,objective,special_ad_categories,effective_status
+```
+
+Ads Manager shows the same thing on the campaign row under **Special Ad
+Category**. Either answer settles whether Meta's classifier applied one
+by itself.

@@ -139,7 +139,7 @@ export type LevelState = {
  * because it already has a sentence for every status code Meta
  * documents and the correct answer for "never checked".
  */
-export type AccountHealth = { usable: boolean; reason: string };
+export type AccountHealth = { usable: boolean; reason: string; warning?: string | null };
 
 export type CampaignState =
   | {

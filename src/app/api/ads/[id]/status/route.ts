@@ -344,5 +344,9 @@ export async function PATCH(
     .select()
     .single();
 
-  return NextResponse.json({ ...updated, effectiveStatus: outcome.effectiveStatus });
+  // The account warning rides along with a SUCCESS. A balance running
+  // low does not stop this activation and must not read like a failure
+  // — but the owner is about to start spending against it, so this is
+  // the moment it is worth saying.
+  return NextResponse.json({ ...updated, effectiveStatus: outcome.effectiveStatus, accountWarning: account?.warning ?? null });
 }

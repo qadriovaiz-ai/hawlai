@@ -85,9 +85,31 @@ export async function accountHealthFor(
   supabase: any,
   dealershipId: string,
   opts: { row?: Record<string, any>; token?: string | null } = {}
-): Promise<{ usable: boolean; reason: string }> {
+): Promise<{ usable: boolean; reason: string; warning?: string | null }> {
   const limits = await getAdAccountLimits(supabase, dealershipId, opts);
-  return isAccountUsable(limits.accountStatus);
+
+  // THE STATUS FIRST, AND IT SHORT-CIRCUITS. A disabled or unsettled
+  // account is already the answer; asking it about funding afterwards
+  // would be a second Graph call to reach a conclusion already reached,
+  // and could overwrite "Meta has disabled this account" — which the
+  // owner must act on — with a note about the balance.
+  const status = isAccountUsable(limits.accountStatus);
+  if (!status.usable) return status;
+
+  // Funding needs an account id and a token. Without either this is
+  // simply not asked, and silence is unknown, never "no".
+  const adAccount = opts.row?.fb_ad_account_id ?? (await readAdAccountId(supabase, dealershipId));
+  if (!adAccount || !opts.token) return status;
+
+  const verdict = describeFunding(await fetchAccountFunding(adAccount, opts.token), limits);
+  if (!verdict.usable && verdict.reason) return { usable: false, reason: verdict.reason };
+  return { ...status, warning: verdict.warning };
+}
+
+/** Only when the caller did not already have the row. */
+async function readAdAccountId(supabase: any, dealershipId: string): Promise<string | null> {
+  const { data } = await supabase.from("dealerships").select("fb_ad_account_id").eq("id", dealershipId).maybeSingle();
+  return data?.fb_ad_account_id ?? null;
 }
 
 /** Minor units → a human amount. 9491 + INR → "₹94.91". */
@@ -190,6 +212,176 @@ export async function fetchAdAccountLimits(
   } catch (err: any) {
     return { ok: false, reason: err?.message ?? "Could not reach Meta." };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// CAN IT PAY — funding, balance, spend cap
+// ─────────────────────────────────────────────────────────────────────
+//
+// WHAT HAPPENED (19 November 2026). The account had ₹250 of prepaid
+// funds on it and Meta would not publish. Adding UPI as a PAYMENT
+// METHOD is what unblocked it. Funds and a payment method are two
+// different things, and an account can have the first without the
+// second while every other field reads perfectly healthy.
+//
+// NONE OF THIS IS CACHED, and that is deliberate. The seven-day cache
+// is right for the account's minimum daily budget, which barely moves;
+// a balance changes hourly, and a week-old one is worse than no answer
+// because it looks like an answer. So this is read at the moment a
+// decision is made and thrown away, and `limitsToRow` never learns
+// about it — which is also why commit 3 needs no migration.
+
+export type AccountFunding = {
+  /**
+   * Whether the account has a payment method attached at all.
+   * NULL means the field could not be read — never "no".
+   */
+  hasPaymentMethod: boolean | null;
+  /** Minor units, as Meta returns them. */
+  balanceMinor: number | null;
+  spendCapMinor: number | null;
+  amountSpentMinor: number | null;
+};
+
+/** How many days of the account's own minimum counts as "running low". */
+export const LOW_BALANCE_DAYS = 3;
+
+const num = (v: any): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Ask Meta what this account can actually pay with. Read-only.
+ *
+ * Returns null when the answer cannot be had, which every caller treats
+ * as "unknown" — never as "no payment method". A permission-scoped
+ * token that cannot see funding would otherwise block every launch.
+ */
+export async function fetchAccountFunding(
+  adAccountId: string,
+  token: string,
+  graphVersion = "v23.0"
+): Promise<AccountFunding | null> {
+  const acct = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  const fields = "funding_source_details,balance,spend_cap,amount_spent";
+  const url = `https://graph.facebook.com/${graphVersion}/${acct}?fields=${fields}&access_token=${encodeURIComponent(token)}`;
+
+  try {
+    const res = await fetch(url);
+    const data: any = await res.json();
+    if (!res.ok || data.error) return null;
+
+    // PRESENT-BUT-EMPTY AND ABSENT ARE DIFFERENT. Meta omits
+    // `funding_source_details` entirely when there is no payment
+    // method; a token that cannot read it also omits it. The two are
+    // indistinguishable here, so the absence is only treated as "no
+    // payment method" when Meta answered with the OTHER funding fields
+    // — which proves it was willing and able to talk about funding.
+    const details = data.funding_source_details;
+    const answeredAboutFunding =
+      data.balance !== undefined || data.spend_cap !== undefined || data.amount_spent !== undefined;
+    const hasPaymentMethod =
+      details && typeof details === "object" && (details.id || details.type !== undefined || details.display_string)
+        ? true
+        : answeredAboutFunding
+          ? false
+          : null;
+
+    return {
+      hasPaymentMethod,
+      balanceMinor: num(data.balance),
+      spendCapMinor: num(data.spend_cap),
+      amountSpentMinor: num(data.amount_spent),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export type FundingVerdict = {
+  /** False only when something definitely stops delivery. */
+  usable: boolean;
+  /** Why it cannot run, in the owner's words. Null when it can. */
+  reason: string | null;
+  /** Worth saying, but not a blocker. */
+  warning: string | null;
+};
+
+/**
+ * What the funding state means for an owner.
+ *
+ * TWO RULES, AND THEY PULL IN OPPOSITE DIRECTIONS. A false refusal
+ * costs a retry; a false "it's running" costs an owner seventy days of
+ * believing their money is working. So anything that DEFINITELY stops
+ * delivery blocks, and anything merely uncertain only warns — and a
+ * field that could not be read does neither.
+ *
+ * `balance` NEVER BLOCKS. Meta's own meaning for it differs between
+ * prepaid and credit accounts, and I could not confirm which applies to
+ * an Indian prepaid account from the documentation. Guessing it would
+ * risk pausing an account that is fine, so it only ever produces a
+ * warning. The block rests on `funding_source_details`, which is
+ * unambiguous, and on a spend cap that has been reached, which is
+ * arithmetic.
+ */
+export function describeFunding(
+  funding: AccountFunding | null,
+  limits: { currency: string | null; minDailyBudget: number | null }
+): FundingVerdict {
+  const ok: FundingVerdict = { usable: true, reason: null, warning: null };
+  if (!funding) return ok;
+
+  const money = (minor: number | null) => (minor === null ? null : formatMinorAmount(minor, limits.currency));
+
+  // 1. NO PAYMENT METHOD. The live case, and it blocks: the owner had
+  //    funds, Meta would not publish, and attaching a payment method is
+  //    what fixed it. Said as two different sentences depending on
+  //    whether there is money sitting there, because "add a payment
+  //    method" reads as nonsense to someone who has already paid.
+  if (funding.hasPaymentMethod === false) {
+    const sitting = funding.balanceMinor !== null && funding.balanceMinor > 0 ? money(funding.balanceMinor) : null;
+    return {
+      usable: false,
+      reason: sitting
+        ? `This ad account has ${sitting} on it but no payment method attached, and Meta won't publish ads until there is one. Adding one — a card or UPI — is what releases it; the money already there is not lost.`
+        : "This ad account has no payment method attached, so Meta won't publish ads from it. Add a card or UPI on the account first.",
+      warning: null,
+    };
+  }
+
+  // 2. SPEND CAP REACHED. Arithmetic, not interpretation: Meta stops
+  //    delivery at the cap. A cap of 0 means NO CAP, not a cap of
+  //    nothing — getting that backwards would pause every account that
+  //    never set one.
+  const cap = funding.spendCapMinor;
+  const spent = funding.amountSpentMinor;
+  if (cap !== null && cap > 0 && spent !== null && spent >= cap) {
+    return {
+      usable: false,
+      reason: `This ad account has reached its spend limit of ${money(cap) ?? "its cap"}, so Meta has stopped delivery. Raise or clear the limit in the account's billing settings.`,
+      warning: null,
+    };
+  }
+
+  // 3. RUNNING LOW — a warning, never a block. Measured against the
+  //    account's OWN minimum daily budget rather than a number written
+  //    in here, which would be wrong for every currency but one.
+  if (
+    funding.balanceMinor !== null &&
+    limits.minDailyBudget !== null &&
+    limits.minDailyBudget > 0 &&
+    funding.balanceMinor > 0 &&
+    funding.balanceMinor < limits.minDailyBudget * LOW_BALANCE_DAYS
+  ) {
+    return {
+      ...ok,
+      warning: `This ad account is down to ${money(funding.balanceMinor)}, which is under ${LOW_BALANCE_DAYS} days at its minimum daily budget. Ads stop when it runs out.`,
+    };
+  }
+
+  return ok;
 }
 
 /** The four columns, for a SELECT. */
