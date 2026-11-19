@@ -160,8 +160,13 @@ describe("4. THE WEBHOOK DECIDES THROUGH THE ONE SHARED FUNCTION", () => {
     // "haan A3F2" is an instruction about a record, not a sentence for
     // a model to interpret. Handing it to the chat would put a
     // language model in charge of whether money is spent.
+    // RENAMED, NOT CHANGED (19 November 2026). D4 generalised this
+    // resolver so approvals and onboarding suggestions share ONE pool —
+    // two separate resolvers would each find a single match and each
+    // act, so a "haan" meant for a suggestion would approve a spend.
+    // parseApprovalReply became parseDecision; the rule is the same.
     const s = src();
-    const parse = s.indexOf("const reply = parseApprovalReply(text)");
+    const parse = s.indexOf("const reply = parseDecision(text)");
     const chat = s.indexOf("runMasterBrainChat(");
     expect(parse).toBeGreaterThan(-1);
     expect(parse).toBeLessThan(chat);
@@ -170,7 +175,8 @@ describe("4. THE WEBHOOK DECIDES THROUGH THE ONE SHARED FUNCTION", () => {
   it("A MESSAGE THAT IS NOT AN APPROVAL STILL REACHES THE CHAT", () => {
     // The narrow parse is only safe because the fall-through is intact.
     const s = src();
-    const start = s.indexOf("const reply = parseApprovalReply(text)");
+    const start = s.indexOf("const reply = parseDecision(text)");
+    expect(start).toBeGreaterThan(-1);
     const block = s.slice(start, s.indexOf("runMasterBrainChat("));
     expect(block).toMatch(/if \(reply\) \{/);
   });
@@ -188,14 +194,14 @@ describe("4. THE WEBHOOK DECIDES THROUGH THE ONE SHARED FUNCTION", () => {
   it("AND IT READS ONLY THIS BUSINESS'S PENDING ROWS", () => {
     const s = src();
     const start = s.indexOf('from("pending_approvals")');
-    const query = s.slice(start, s.indexOf("resolveApproval("));
+    const query = s.slice(start, s.indexOf("resolvePending("));
     expect(query).toMatch(/\.eq\("dealership_id", dealership\.id\)/);
     expect(query).toMatch(/\.eq\("status", "pending"\)/);
   });
 
   it("AN UNRESOLVED MESSAGE ASKS, AND DECIDES NOTHING", () => {
     const s = src();
-    const start = s.indexOf("const found = resolveApproval(");
+    const start = s.indexOf("const found = resolvePending(");
     const block = s.slice(start, s.indexOf("applyApprovalDecision("));
     expect(block).toMatch(/if \(!found\.ok\)/);
     expect(block).toMatch(/cannotTell\(found\.reason/);

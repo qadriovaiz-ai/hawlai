@@ -4,7 +4,10 @@ import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { applyApprovalDecision } from "@/lib/approvals/decide";
-import { parseApprovalReply, resolveApproval, cannotTell, describeApproval, approvalCode } from "@/lib/whatsapp/approvalReply";
+import { describeApproval } from "@/lib/whatsapp/approvalReply";
+import { parseDecision, resolvePending, cannotTell, type Pending } from "@/lib/whatsapp/pendingReply";
+import { pendingSuggestionRows, applySuggestionDecision } from "@/lib/whatsapp/suggestionReply";
+import { pendingSuggestions } from "@/lib/onboarding/suggestions";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -110,21 +113,69 @@ export async function POST(request: Request) {
     // anything that is not plainly a short approval instruction falls
     // through to the chat exactly as before, so an ordinary message
     // containing "no" is still an ordinary message.
-    const reply = parseApprovalReply(text);
+    const reply = parseDecision(text);
     if (reply) {
-      const { data: pending } = await supabase
-        .from("pending_approvals")
-        .select("id, action_type, amount")
-        .eq("dealership_id", dealership.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: true });
+      // ───────────────────────────────────────────────────────────────
+      // ONE POOL, AND THAT IS THE WHOLE POINT — D4
+      // ───────────────────────────────────────────────────────────────
+      //
+      // Approvals and onboarding suggestions both wait on a one-word
+      // answer from this phone. Resolving them SEPARATELY is the bug
+      // this shape exists to prevent: with one of each waiting, two
+      // resolvers would each find exactly one match and each act, so a
+      // "haan" meant for a phone number would approve a spend.
+      //
+      // Together, "two things are waiting" is the honest answer and the
+      // owner is asked which — the same refusal H2 already makes when
+      // two approvals are waiting.
+      const [{ data: approvals }, { data: answers }] = await Promise.all([
+        supabase
+          .from("pending_approvals")
+          .select("id, action_type, amount")
+          .eq("dealership_id", dealership.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("interview_answers")
+          .select("id, question_key, status, attempts, weak, source, suggested_value, evidence")
+          .eq("dealership_id", dealership.id),
+      ]);
 
-      const found = resolveApproval(pending ?? [], reply);
+      const pending: Pending[] = [
+        ...(approvals ?? []).map((a: any) => ({ id: String(a.id), kind: "approval" as const, describe: describeApproval(a) })),
+        ...pendingSuggestionRows(answers ?? []),
+      ];
+
+      const found = resolvePending(pending, reply);
       if (!found.ok) {
         // NEVER A BEST GUESS. Every failure is a question back, which
         // costs him one message; guessing costs him whatever the wrong
-        // approval did.
-        await sendWhatsAppText(phone, cannotTell(found.reason, pending ?? []));
+        // one did.
+        await sendWhatsAppText(phone, cannotTell(found.reason, pending));
+        return NextResponse.json({ ok: true });
+      }
+
+      if (found.row.kind === "suggestion") {
+        // CONFIRMING GOES THROUGH saveInterviewAnswer, the same
+        // function the web form calls — judged, written to
+        // business_knowledge, origin kept. Anything less would record
+        // the fact where nothing reads it.
+        const service = createServiceClient();
+        const match = pendingSuggestions(answers ?? []).find(
+          (s) => String((answers ?? []).find((r: any) => r.question_key === s.questionKey)?.id ?? s.questionKey) === found.row.id
+        );
+        if (!match) {
+          await sendWhatsAppText(phone, "That one isn't waiting any more.");
+          return NextResponse.json({ ok: true });
+        }
+        const outcome = await applySuggestionDecision(service, dealership.id, match, reply.decision, answers ?? []);
+        await sendWhatsAppText(phone, outcome.said);
+        return NextResponse.json({ ok: true });
+      }
+
+      const approval = (approvals ?? []).find((a: any) => String(a.id) === found.row.id);
+      if (!approval) {
+        await sendWhatsAppText(phone, "That one isn't waiting any more.");
         return NextResponse.json({ ok: true });
       }
 
@@ -133,13 +184,13 @@ export async function POST(request: Request) {
       // it says whatsapp — so nothing later claims a button was pressed
       // in a browser nobody opened.
       const outcome = await applyApprovalDecision(
-        found.approval.id,
+        approval.id,
         { status: reply.decision },
         { userId: String(dealership.owner_id ?? ""), role: "owner", label: `whatsapp:${phone}` }
       );
       const result = await outcome.json().catch(() => ({} as any));
 
-      const said = describeApproval(found.approval);
+      const said = describeApproval(approval);
       if (!outcome.ok) {
         await sendWhatsAppText(phone, `Couldn't do that one (${said}): ${result?.error ?? "something went wrong"}`);
         return NextResponse.json({ ok: true });
@@ -147,7 +198,9 @@ export async function POST(request: Request) {
       await sendWhatsAppText(
         phone,
         reply.decision === "approved"
-          ? `Done — approved ${said}.${result?.publish?.message ? `\n\n${result.publish.message}` : ""}`
+          ? `Done — approved ${said}.${result?.publish?.message ? `
+
+${result.publish.message}` : ""}`
           : `Rejected ${said}. Nothing was done.`
       );
       return NextResponse.json({ ok: true });
