@@ -141,15 +141,22 @@ describe("3. A DEAD ACCOUNT NEVER BLOCKS SWITCHING OFF", () => {
   });
 
   it("AND THE DASHBOARD ROUTE ONLY READS IT WHEN STARTING", () => {
-    // Sliced to the setCampaignStatus call before anchoring: the route
-    // mentions ACTIVE in its authority gate far above this, and an
-    // indexOf on the bare word lands there instead.
+    // The route declares `account` as null and fills it only inside the
+    // ACTIVE branch, so the pause path reaches setCampaignStatus with
+    // null and never touches the Graph. (Commit 2 moved this from an
+    // inline ternary on the call to a hoisted variable, because the
+    // activation gate needs the same reading — the behaviour is pinned
+    // here and in activateChecksAccount.test.ts, which checks the
+    // ordering against the authority gate.)
     const src = code("src/app/api/ads/[id]/status/route.ts");
-    const at = src.indexOf("const outcome = await setCampaignStatus(");
-    expect(at).toBeGreaterThan(-1);
-    const call = src.slice(at, at + 700);
-    expect(call).toMatch(/account: status === "ACTIVE" \? await accountHealthFor\(/);
-    expect(call).toMatch(/: null,/);
+    expect(src).toMatch(/let account: Awaited<ReturnType<typeof accountHealthFor>> \| null = null;/);
+
+    const read = src.indexOf("accountHealthFor(supabase, dealershipId");
+    const branch = src.indexOf('if (status === "ACTIVE") {');
+    expect(branch).toBeGreaterThan(-1);
+    expect(read).toBeGreaterThan(branch);
+    // Exactly one read in the whole route — the pause path has none.
+    expect(src.match(/accountHealthFor\(/g) ?? []).toHaveLength(1);
   });
 });
 

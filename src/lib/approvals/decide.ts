@@ -254,6 +254,18 @@ export async function applyApprovalDecision(
         return NextResponse.json({ error: "Can't apply this — the campaign or Facebook connection is missing" }, { status: 400 });
       }
 
+      // AND THE SAME ACCOUNT CHECK, for the same reason this branch
+      // needed the three-level fix: it is the other door onto the same
+      // spend. An approval granted is not an account that can pay, and
+      // without this the approver is told the campaign started while
+      // nothing delivers — the seventy-day failure with a signature on
+      // it. Refused here rather than attempted, because an activation
+      // Meta accepts and never runs is the harder state to notice.
+      const account = await accountHealthFor(service, approval.dealership_id, { token });
+      if (!account.usable) {
+        return NextResponse.json({ error: account.reason }, { status: 400 });
+      }
+
       // SAME THREE-LEVEL FIX as /api/ads/[id]/status. This branch had
       // the identical bug: it POSTed ACTIVE to the ad alone, so an
       // approval could be granted, Meta could accept it, and the ad
@@ -270,7 +282,7 @@ export async function applyApprovalDecision(
         // this, the approver is told the campaign started and nothing
         // delivers — which is the seventy-day failure with a signature
         // on it.
-        account: await accountHealthFor(service, approval.dealership_id, { token }),
+        account,
         dealershipId: approval.dealership_id,
       });
       if (!activation.ok) {

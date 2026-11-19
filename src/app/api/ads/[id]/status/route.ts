@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { checkApprovalAuthority, type ApprovalRole } from "@/lib/approvalAuthority";
-import { metaLog } from "@/lib/ads/metaLog";
+import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { getValidGoogleAdsAccessToken, setGoogleCampaignStatus } from "@/lib/ads/googleAds";
 import { getValidPinterestAccessToken, setPinterestCampaignStatus } from "@/lib/ads/pinterestAds";
 import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ads/snapchatAds";
@@ -64,7 +64,51 @@ export async function PATCH(
   // ad_campaign_activate split). Turning PAUSED back off never needs
   // gating — same "reversible action needs no check" rule the
   // approvals route (/api/approvals/[id]) already applies to "rejected".
+  // Same token source as every campaign-status path (metaToken.ts).
+  // HOISTED above the activation gate, because the account check there
+  // needs it too and two copies of this line is how they drift apart.
+  // Only for Meta: the other platforms never reach the Graph.
+  const token =
+    platform === "meta" ? (await adsTokenFor(supabase, dealershipId, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN : null;
+
+  // The account state, read once and reused below. Null when pausing:
+  // stopping spend must never wait on a Graph read.
+  let account: Awaited<ReturnType<typeof accountHealthFor>> | null = null;
+
   if (status === "ACTIVE") {
+    // ───────────────────────────────────────────────────────────────
+    // CAN THIS ACCOUNT PAY? ASKED BEFORE ANYTHING ELSE
+    // ───────────────────────────────────────────────────────────────
+    //
+    // /api/ads/adlaunch refuses a dead account at its "LAYER 3a", and
+    // launching SPENDS NOTHING — everything is created paused. This
+    // route is the call that actually starts the money, and until
+    // 19 November 2026 it did not ask at all. The check was on the
+    // harmless door and missing from the dangerous one.
+    //
+    // BEFORE THE AUTHORITY GATE, NOT AFTER. The gate's other branch
+    // queues a pending_approvals row, and asking a manager to approve
+    // spend on an account Meta will not let spend is worse than not
+    // asking: somebody reads it, approves it, and the campaign still
+    // delivers nothing — the seventy-day failure with a signature on
+    // it. Nothing can be approved into existence here that the account
+    // cannot carry out.
+    //
+    // Refusing is safe in a way that activating is not. A false refusal
+    // costs a retry; a false "it's running" costs an owner seventy days
+    // of believing their money is working.
+    //
+    // META ONLY. `fb_account_status` says nothing about a Google Ads or
+    // LinkedIn account, and refusing one of those because a Facebook ad
+    // account is unsettled would be a fault of its own.
+    if (platform === "meta") {
+      account = await accountHealthFor(supabase, dealershipId, { token });
+      if (!account.usable) {
+        metaError("activate.account_unusable", { dealership: dealershipId, campaign: id, platform });
+        return NextResponse.json({ error: account.reason }, { status: 400 });
+      }
+    }
+
     const isOwner = dealership?.owner_id === user.id;
     let role: ApprovalRole = "owner";
     if (!isOwner) {
@@ -256,8 +300,6 @@ export async function PATCH(
     return NextResponse.json(updated);
   }
 
-  // Same token source as every campaign-status path (metaToken.ts).
-  const token = (await adsTokenFor(supabase, dealershipId, dealership)) ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json({ error: "Facebook Page isn't connected" }, { status: 400 });
   }
@@ -282,7 +324,7 @@ export async function PATCH(
     // ONLY WHEN STARTING. Pausing must never wait on a Graph read: the
     // safe direction is not allowed to be the slow one, and a dead
     // account is a reason to pause rather than a reason to refuse to.
-    account: status === "ACTIVE" ? await accountHealthFor(supabase, dealershipId, { token }) : null,
+    account,
     dealershipId,
   });
 
