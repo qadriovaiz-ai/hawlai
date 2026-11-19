@@ -664,6 +664,22 @@ fields that were one root cause.
 
 Documented rather than chased: diminishing returns.
 
+**Reviewed one by one on 19 November 2026, on the founder's
+instruction, before launch. No code was changed, and that is the
+finding rather than an omission** — four of the five are prompt- or
+model-level or eval-gated, and the fifth needs a decision that is not
+mine. What changed is the record: K4's stated mechanism was wrong, and
+K5 now carries the shape of its fix so the decision can be made without
+re-deriving it.
+
+| | Verdict | Why |
+|---|---|---|
+| **K1** | Leave | The code fix needs a list of quality words, which is trade vocabulary and barred by rule 3. Widening the existing check was measured and rejected: it removed four lines across 127 sentences and one was true copy. Already mitigated — every label row goes to the grader as a claim, so it is visible rather than silent |
+| **K2** | Leave — not a code gap | Price and size are on record and reach the facts block; the copy not using them is generation quality. Measured by the grader, fixable at prompt level |
+| **K3** | Leave | Changing what Select picks is the number the founder grades first, and the plan records that it RECURRED after a previous fix. Not safe to change without a graded run, and the evals cost model calls |
+| **K4** | Record corrected | The gate does not read a sentence without its frame — it splits the whole field and passes every sentence, at temperature 0 since 16 October. The residual is model typing variance. See the note under K4 |
+| **K5** | Decision needed | The asymmetry is real and current. The fix is one line of plumbing and the note under K5 now states it exactly, but it sits on an axis that has already produced an over-correction and an under-correction |
+
 **K1 — an unlicensed benefit claim can sit in a `title`.** salon-11
 shipped `"Keratin Treatment — Ek Session, Smooth Finish"`. The
 introduced-name check abstains on a mostly-Title-Cased short line — a
@@ -692,7 +708,22 @@ same sentence shape: *"A lot of people assume ghee adds weight"* came
 back from the gate's re-ask as a `benefit` claim once and a
 `customer_state` claim once. The main pipeline handled it correctly both
 times and published it, which is what the owner's recorded misconception
-row exists to allow. The gate reads one sentence without its frame.
+row exists to allow. 
+> **The explanation above is wrong, checked 19 November 2026.** It said
+> "the gate reads one sentence without its frame". It does not.
+> `outputMonitor` splits the WHOLE field — `claim_checks.text` is the
+> field's full copy, not one sentence — and passes every sentence to
+> `extractClaims` in one call, so the frame is present. And that call
+> has run at temperature 0 since 16 October, fixed for this exact class
+> of variance.
+>
+> So the mechanism is neither a missing frame nor sampling. What is
+> left is the extractor typing one framed sentence two ways across
+> runs, which is prompt- or model-level — the same place K1's fix lives
+> — and re-checking it needs the gate's evals, which cost model calls.
+>
+> Recorded because a wrong mechanism is worse than an open issue: it
+> sends the next reader to the wrong file.
 
 **K5 — the same scope question is answered two different ways.** Select
 asks it through `resolveProduct`, which has deliberate carve-outs for a
@@ -704,6 +735,35 @@ exception of 22 October fixed the case this surfaced through
 (dairy-03's FSSAI licence); **the asymmetry itself is unfixed**, and it
 is on the axis that has already produced one over-correction and one
 under-correction, so it should not be touched without a decision.
+
+> **Still true on 19 November 2026, and here is the decision it needs.**
+> Both functions sit in `lib/facts/scope.ts`, forty lines apart.
+> `resolveProduct` takes the catalogue and returns `{kind:"none"}` —
+> scope does not apply — in two cases: a reference matching MORE THAN
+> ONE product (it is the range, not an item), and a catalogue with ONE
+> product (nothing to be ambiguous about). `recordSupportsScope` takes
+> the raw name, the catalogue never reaches it, and so it applies
+> product scope in both of those cases anyway.
+>
+> The concrete failure: in a single-product catalogue Select decides
+> scope does not apply, the judge's evidence filter decides it does,
+> and a business-level record that Select allowed is filtered out — so
+> true copy is refused for want of evidence that was there.
+>
+> **The fix is one line of plumbing, not new logic:** resolve the
+> product ONCE with `resolveProduct` and pass the result to
+> `recordSupportsScope`, instead of passing the name and letting a
+> second function re-decide without the catalogue. One answer to one
+> question — the same principle as the single `setCampaignStatus` and
+> the single `saveInterviewAnswer`.
+>
+> **Not done, and deliberately.** This axis has already produced one
+> over-correction — the scope fix of 19 October refused eight true
+> recorded claims — and one under-correction. Making the judge agree
+> with Select means the judge stops filtering in exactly the cases
+> Select is most permissive, and whether that is right is a judgement
+> about evidence rather than a bug. It needs the founder's call and a
+> graded run.
 
 ---
 
