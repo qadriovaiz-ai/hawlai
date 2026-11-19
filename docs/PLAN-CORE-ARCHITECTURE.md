@@ -678,7 +678,7 @@ re-deriving it.
 | **K2** | Leave — not a code gap | Price and size are on record and reach the facts block; the copy not using them is generation quality. Measured by the grader, fixable at prompt level |
 | **K3** | Leave | Changing what Select picks is the number the founder grades first, and the plan records that it RECURRED after a previous fix. Not safe to change without a graded run, and the evals cost model calls |
 | **K4** | Record corrected | The gate does not read a sentence without its frame — it splits the whole field and passes every sentence, at temperature 0 since 16 October. The residual is model typing variance. See the note under K4 |
-| **K5** | Decision needed | The asymmetry is real and current. The fix is one line of plumbing and the note under K5 now states it exactly, but it sits on an axis that has already produced an over-correction and an under-correction |
+| **K5** | Decided: leave | Real and current, and the fix is one line of plumbing — but the asymmetry errs toward REFUSING, which is the safe direction before a launch. A true sentence occasionally refused beats a false claim occasionally published. Founder's decision, 19 November 2026 |
 
 **K1 — an unlicensed benefit claim can sit in a `title`.** salon-11
 shipped `"Keratin Treatment — Ek Session, Smooth Finish"`. The
@@ -764,6 +764,17 @@ under-correction, so it should not be touched without a decision.
 > Select is most permissive, and whether that is right is a judgement
 > about evidence rather than a bug. It needs the founder's call and a
 > graded run.
+>
+> **DECIDED 19 November 2026: leave it, and leave it deliberately.**
+> The founder's reasoning, which is the right one before a launch: a
+> true sentence occasionally refused is better than a false claim
+> occasionally published. The asymmetry errs toward refusing, so it
+> errs the safe way, and the cost falls on copy quality rather than on
+> a customer being told something untrue.
+>
+> This is a decision, not a deferral. Revisit it when there is a real
+> business whose copy is being refused — that is the evidence that
+> would change the balance, and nobody has it yet.
 
 ---
 

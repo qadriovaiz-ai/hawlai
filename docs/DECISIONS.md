@@ -4132,3 +4132,26 @@ footnote.
 **Shape:** find the id (never key on a guessed slug), read what would
 go and what would stay, then delete inside a transaction with a
 verification select before the commit.
+
+## 2026-11-19 — K5's scope asymmetry stays, as the safe default
+
+**The asymmetry:** `resolveProduct` says "scope does not apply" for a
+collective reference and for a single-product catalogue;
+`recordSupportsScope` never sees the catalogue and applies product
+scope anyway. So Select can allow a business-level record that the
+judge's evidence filter then removes, and true copy is refused.
+
+**The fix is small** — resolve once, pass the result — and it is
+written out under K5 so nobody has to re-derive it.
+
+**Decided: not now.** The founder's reasoning: the asymmetry errs
+toward REFUSING, so it errs the safe way. Before a launch, a true
+sentence occasionally refused is better than a false claim occasionally
+published — the cost lands on copy quality rather than on a customer
+being told something untrue.
+
+**What would change it:** a real business whose copy is actually being
+refused. That is the evidence this balance turns on, and nobody has it
+yet. This axis has already produced one over-correction (eight true
+recorded claims refused, 19 October) and one under-correction, so it
+moves on measurement, not on reasoning alone.
