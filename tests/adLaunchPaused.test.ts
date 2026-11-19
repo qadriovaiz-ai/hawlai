@@ -394,9 +394,17 @@ describe("the destination and objective actually reach Meta", () => {
 });
 
 describe("every object is validated with Meta before it is created", () => {
-  it("ALL THREE LEVELS ARE DRY-RUN, in the order they are created", async () => {
+  it("EVERY OBJECT IS DRY-RUN, in the order it is created", async () => {
+    // FOUR, NOT THREE (19 November 2026). Commit 5 validated the
+    // campaign, the ad set and the ad; the CREATIVE is created before
+    // all three and was never validated at all. Commit 9 added it,
+    // because that is where instagram_user_id goes — putting an
+    // untested field on an unvalidated real POST is how a launch flow
+    // breaks for everybody at once.
+    //
+    // The order is the creation order, and the creative comes first.
     await POST(launchRequest());
-    expect(dryRuns.map((d) => d.path.split("/").pop())).toEqual(["campaigns", "adsets", "ads"]);
+    expect(dryRuns.map((d) => d.path.split("/").pop())).toEqual(["adcreatives", "campaigns", "adsets", "ads"]);
   });
 
   it("AND ONLY THE AD ASKS FOR THE POLICY REVIEW", async () => {

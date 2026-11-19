@@ -341,6 +341,10 @@ export async function POST(request: Request) {
         currency: dealership?.fb_currency ?? null,
       },
       targetingSummary: launched.targetingSummary,
+      // Facebook-only or Facebook and Instagram, said either way — an
+      // owner who expected Instagram and got silence cannot tell a
+      // missing feature from a broken one.
+      placement: launched.placement,
     });
   } catch (err: any) {
     // metaPost already logged the Graph-level detail; this says which

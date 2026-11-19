@@ -23,6 +23,7 @@ import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
 import { preflight, preflightMessage } from "@/lib/ads/preflight";
 import { dryRun, dryRunMessage } from "@/lib/ads/dryRun";
 import { declarationFor, financeEvidence, targetsIndia } from "@/lib/ads/regulatedCategory";
+import { readInstagramIdentity, withInstagramIdentity, placementNote } from "@/lib/ads/instagramIdentity";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
 export type LaunchContext = {
@@ -68,6 +69,12 @@ export type LaunchResult = {
   updated: any;
   budget: { minor: number; raised: boolean; from: number };
   targetingSummary: string;
+  /**
+   * Where this ad will actually appear, in one sentence. Said in BOTH
+   * directions: an owner who expected Instagram and got silence cannot
+   * tell a missing feature from a broken one.
+   */
+  placement: string;
   targetingJson: Record<string, any>;
   destination: ResolvedDestination;
   linkUrl: string | null;
@@ -95,7 +102,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
 
   // Step 4: the ad creative — Instant Form (stays inside Facebook) or
   // an external website/landing page.
-  const creativeRes = await metaPost(`${adAccount}/adcreatives`, {
+  const baseCreative = {
     name: `${plan.headline} - Creative`,
     object_story_spec: {
       page_id: pageId,
@@ -113,7 +120,67 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
           : { type: "LEARN_MORE", value: { lead_gen_form_id: destination.leadFormId ?? leadFormId } },
       },
     },
-  }, pageAccessToken);
+  };
+
+  // ───────────────────────────────────────────────────────────────────
+  // THE INSTAGRAM IDENTITY, PROVEN BEFORE IT IS USED
+  // ───────────────────────────────────────────────────────────────────
+  //
+  // `instagram_user_id` replaced `instagram_actor_id` in Marketing API
+  // v22.0, and we are on v23.0. Neither name has ever appeared in this
+  // repository, so ads have been Facebook-only by omission.
+  //
+  // AND A GAP COMMIT 5 LEFT. The dry run validates the campaign, the ad
+  // set and the ad — but the CREATIVE is created before all three and
+  // was never validated at all. Adding an untested field to an
+  // unvalidated real POST is how a working launch flow breaks for
+  // everybody at once. So the creative is dry-run first, which is also
+  // the demonstration that Meta accepts the field: it validates the
+  // exact spec about to be sent, and creates nothing.
+  //
+  // AN ABSENT OR REFUSED INSTAGRAM NEVER STOPS THE AD. If Meta will not
+  // take the spec WITH the identity, the same spec is validated WITHOUT
+  // it; if that passes, the ad goes out Facebook-only and the owner is
+  // told in a sentence. An optional identity that can fail a launch is
+  // worse than no identity at all.
+  const instagram = await readInstagramIdentity(pageId, pageAccessToken, dealershipId);
+  let creativeSpec: Record<string, any> = withInstagramIdentity(baseCreative, instagram);
+  let placement = placementNote(instagram);
+
+  const creativeCheck = await dryRun(`${adAccount}/adcreatives`, creativeSpec, pageAccessToken, {
+    stage: "creative",
+    dealershipId,
+  });
+
+  if (!creativeCheck.ok && !creativeCheck.inconclusive) {
+    // Refused. Was the identity the reason? Ask Meta rather than
+    // parsing its error text — the same spec minus one field is a
+    // clean experiment, and still creates nothing.
+    //
+    // ONE THROW, DELIBERATELY. The first version had two — one for a
+    // refusal with Instagram attached and one for a refusal without —
+    // and a mutation check caught that the test could not tell them
+    // apart, because `throw new Error(dryRunMessage(creativeCheck...` 
+    // occurred twice and a grep was satisfied by either. Deleting the
+    // no-Instagram branch let a launch proceed on a spec Meta had
+    // rejected, and every test still passed. One exit, one assertion.
+    const withoutIg = instagram
+      ? await dryRun(`${adAccount}/adcreatives`, baseCreative, pageAccessToken, {
+          stage: "creative.no_instagram",
+          dealershipId,
+        })
+      : { ok: false, inconclusive: false, reason: null };
+
+    if (withoutIg.ok && instagram) {
+      metaLog("launch.instagram_dropped", { dealership: dealershipId, instagram: instagram.id });
+      creativeSpec = baseCreative;
+      placement = placementNote(null, "refused");
+    } else {
+      throw new Error(dryRunMessage(creativeCheck, "ad creative") ?? "Meta rejected this ad's creative.");
+    }
+  }
+
+  const creativeRes = await metaPost(`${adAccount}/adcreatives`, creativeSpec, pageAccessToken);
 
   // WHAT THIS BUSINESS ACTUALLY SELLS, from its own records — never
   // from the ad copy, which a model wrote and which would let a
@@ -382,6 +449,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     updated,
     budget,
     targetingSummary: built.summary,
+    placement,
     targetingJson,
     destination,
     linkUrl,

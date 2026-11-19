@@ -453,6 +453,7 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
             status: "PAUSED",
             daily_budget_minor: launched.budget.minor,
             targeting: launched.targetingSummary,
+            placement: launched.placement,
           },
         };
       } catch (err: any) {
