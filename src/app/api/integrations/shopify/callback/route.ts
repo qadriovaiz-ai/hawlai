@@ -156,9 +156,18 @@ export async function GET(request: Request) {
       // failures that have so far been indistinguishable from the
       // outside. `granted` is not secret and is the single most
       // useful fact for whoever debugs this next.
+      //
+      // AND WHAT IS MISSING, not only what was granted. Added with the
+      // scope widening of 20 November 2026: the likeliest cause of
+      // this failure is now that the Shopify app version has not
+      // declared a scope this build requires, and the fix is to add
+      // that exact scope in the Partner Dashboard. Handing over the
+      // granted list and leaving the reader to diff it against a
+      // constant in the source is a worse version of the same
+      // information.
       return settings(
         origin,
-        `shopify_error=scope_not_granted&granted=${encodeURIComponent(grantedScope || "none")}`
+        `shopify_error=scope_not_granted&granted=${encodeURIComponent(grantedScope || "none")}&missing=${encodeURIComponent(missing.join(","))}`
       );
     }
 

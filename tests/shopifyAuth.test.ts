@@ -112,11 +112,25 @@ describe("buildInstallUrl", () => {
     expect(url().origin + url().pathname).toBe("https://acme.myshopify.com/admin/oauth/authorize");
   });
 
-  it("requests read_products only", () => {
-    // Nothing in this product writes to a store. A wider scope means
-    // a scarier approval screen and a worse token to leak.
+  it("REQUESTS EXACTLY WHAT THE CONSTANT SAYS, and nothing beyond the job", () => {
+    // Was "requests read_products only", on the reasoning that nothing
+    // in this product writes to a store. Content editing does, by
+    // decision of 20 November 2026, so the literal changed — but the
+    // rule it was protecting did not: a wider scope is a scarier
+    // approval screen and a worse token to leak, so the set is still
+    // the smallest one that does the job.
     expect(url().searchParams.get("scope")).toBe(SHOPIFY_SCOPES);
-    expect(SHOPIFY_SCOPES).toBe("read_products");
+
+    // The three write scopes content editing needs, and no others.
+    expect(SHOPIFY_SCOPES.split(",").sort()).toEqual(["write_content", "write_files", "write_products"]);
+
+    // THE PART THAT MUST NEVER DRIFT. Orders and customers are outside
+    // this product by decision; themes additionally need an exemption
+    // Shopify grants by application, so asking for it would put
+    // somebody else's approval in front of work that does not need it.
+    for (const forbidden of ["orders", "customers", "themes", "shop"]) {
+      expect(SHOPIFY_SCOPES, forbidden).not.toContain(forbidden);
+    }
   });
 
   it("carries the nonce as state", () => {

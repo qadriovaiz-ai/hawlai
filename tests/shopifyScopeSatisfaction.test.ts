@@ -67,9 +67,20 @@ describe("missingScopes", () => {
   it("reports nothing missing for the real live grant", () => {
     // THE REGRESSION CASE. This exact string was rejected in
     // production over a grant that was entirely correct.
-    expect(missingScopes(SHOPIFY_SCOPES, REAL_GRANT)).toEqual([]);
+    // The regression itself is pinned on LITERALS, not on the
+    // constant: what was rejected in production was this required set
+    // against this grant, and that pair must keep passing however the
+    // app's own scopes change.
     expect(missingScopes("read_products", REAL_GRANT)).toEqual([]);
     expect(missingScopes("read_products,read_content", REAL_GRANT)).toEqual([]);
+    expect(missingScopes("write_products,write_content", REAL_GRANT)).toEqual([]);
+
+    // AND THE CURRENT REQUIREMENT AGAINST THAT SAME HISTORICAL GRANT
+    // IS NOT SATISFIED — write_files was not in it. That is correct
+    // and worth stating: a merchant connected under the old app
+    // version would be asked to reconnect, which is exactly what the
+    // scope widening of 20 November 2026 means in practice.
+    expect(missingScopes(SHOPIFY_SCOPES, REAL_GRANT)).toEqual(["write_files"]);
   });
 
   it("still reports a genuinely absent scope", () => {
@@ -82,8 +93,8 @@ describe("missingScopes", () => {
   it("treats an empty grant as everything missing", () => {
     // What a genuinely broken install looks like, and it must stay
     // distinguishable from the case above.
-    expect(missingScopes(SHOPIFY_SCOPES, "")).toEqual(["read_products"]);
-    expect(missingScopes(SHOPIFY_SCOPES, "   ")).toEqual(["read_products"]);
+    expect(missingScopes(SHOPIFY_SCOPES, "")).toEqual(["write_products", "write_content", "write_files"]);
+    expect(missingScopes(SHOPIFY_SCOPES, "   ")).toEqual(["write_products", "write_content", "write_files"]);
   });
 
   it("tolerates whitespace and stray separators in Shopify's list", () => {

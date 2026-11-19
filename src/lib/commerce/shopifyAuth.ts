@@ -43,9 +43,52 @@ export { createHandshakeNonce as createShopifyNonce, isHandshakeFresh as isShopi
  * real job is the check in the callback: does the token we were handed
  * cover what we need?
  *
- * Products read is all this product needs — see shopifyAgent.ts.
+ * ─────────────────────────────────────────────────────────────────────
+ * WIDENED 20 NOVEMBER 2026, AND THE ORDER OF OPERATIONS IS THE WHOLE
+ * RISK
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * This was `read_products`, which is all the read-only product agent
+ * needed. Content editing — pages, blog posts, collections, images —
+ * needs more, and each one is checked in the callback.
+ *
+ * BECAUSE THE GRANT COMES FROM THE APP VERSION AND NOT FROM THIS
+ * STRING, widening it here does not widen anything at Shopify. What it
+ * does is make the callback REQUIRE more than a token may carry. So:
+ *
+ *   1. the Shopify app version declares the new scopes FIRST, then
+ *   2. this constant is deployed.
+ *
+ * In the other order, every new connection fails `scope_not_granted`
+ * until the dashboard catches up — the connect flow breaks for a
+ * reason that lives outside the repository. The failure now names the
+ * missing scopes so whoever hits it is told exactly what to add,
+ * rather than being handed the granted list and left to diff it.
+ *
+ * WHAT EACH ONE BUYS, from Shopify's own scope table:
+ *
+ *   write_products  Product, ProductVariant AND Collection — so
+ *                   collections need no scope of their own. It also
+ *                   covers read_products, which is what this app had,
+ *                   so nothing that works today stops working.
+ *   write_content   Article, Blog, Comment, Page — the blog and the
+ *                   pages.
+ *   write_files     MediaImage and GenericFile — images.
+ *
+ * NO METAFIELD SCOPE, DELIBERATELY. Shopify's SEO title and
+ * description are fields ON the product, page and collection
+ * resources, not metafields, so the two write scopes above already
+ * carry them. A metafield scope could not be verified in the
+ * documentation and is not requested on a guess.
+ *
+ * NO THEME SCOPE, AND NOT BY OVERSIGHT. `write_themes` additionally
+ * needs an exemption granted by Shopify through an application, which
+ * is a relationship rather than an engineering task. Theme editing is
+ * its own deferred item and asking for the scope now would put an
+ * approval Hawlai does not have in front of work that does not need
+ * it.
  */
-export const SHOPIFY_SCOPES = "read_products";
+export const SHOPIFY_SCOPES = "write_products,write_content,write_files";
 
 /**
  * Whether a granted scope list covers a required scope.

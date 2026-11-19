@@ -29,8 +29,20 @@ const CALLBACK = "src/app/api/integrations/shopify/callback/route.ts";
 // Which Admin API resources each scope actually grants. Only the ones
 // this app could plausibly reach for — the point is the mapping, not
 // completeness.
+//
+// WRITE SCOPES CARRY THEIR READS, and the map has to know that or the
+// invariant breaks the moment a scope is widened. Shopify's own words,
+// already quoted in shopifyAuth: "Any permission to write a resource
+// includes permission to read it." So write_products grants everything
+// read_products grants — which is what kept products.json a legal
+// probe when the scope set widened on 20 November 2026.
 const GRANTED_BY: Record<string, string[]> = {
   read_products: ["products", "collections", "variants"],
+  write_products: ["products", "collections", "variants"],
+  read_content: ["pages", "blogs", "articles"],
+  write_content: ["pages", "blogs", "articles"],
+  read_files: ["files"],
+  write_files: ["files"],
   read_orders: ["orders"],
   read_customers: ["customers"],
   read_shop: ["shop"],
@@ -56,6 +68,18 @@ describe("Shopify connect health check", () => {
     expect(SHOPIFY_SCOPES).not.toContain("read_shop");
   });
 
+  it("ASKS FOR NOTHING ABOUT ORDERS, CUSTOMERS OR THEMES", () => {
+    // The permanent boundary, pinned where a scope widening would
+    // trip over it. Orders and customers are outside this product's
+    // scope by decision, not by accident, and a theme scope
+    // additionally needs an exemption Shopify grants by application —
+    // asking for it here would put somebody else's approval in front
+    // of work that does not need it.
+    for (const forbidden of ["orders", "customers", "themes", "shipping", "payment"]) {
+      expect(SHOPIFY_SCOPES, `${forbidden} is outside this product's scope`).not.toContain(forbidden);
+    }
+  });
+
   it("only verifies with resources the requested scopes actually grant", () => {
     // THE LOAD-BEARING ONE. Not "must be products.json" — that would
     // pin an implementation detail. This pins the rule: whatever the
@@ -70,6 +94,27 @@ describe("Shopify connect health check", () => {
         `callback verifies with ${resource}.json, which "${SHOPIFY_SCOPES}" does not grant — Shopify will 403 a valid token`
       ).toContain(resource);
     }
+  });
+
+  it("TELLS THE MERCHANT WHICH SCOPE IS MISSING, not only what was granted", () => {
+    // Added with the scope widening of 20 November 2026, and it is
+    // the difference between a fixable error and a puzzle. Because
+    // this app uses Shopify-managed installation, the likeliest cause
+    // of scope_not_granted is now that the APP VERSION has not
+    // declared a scope this build requires — and the fix is to add
+    // that exact scope in the Partner Dashboard. Handing over the
+    // granted list and leaving the reader to diff it against a
+    // constant in the source is a worse version of the same
+    // information.
+    expect(source).toMatch(/missing=\$\{encodeURIComponent\(missing\.join\(","\)\)\}/);
+
+    // And the screen the merchant is actually looking at shows it.
+    const connect = execFileSync("git", ["show", "HEAD:src/components/settings/ShopifyConnect.tsx"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    expect(connect).toMatch(/params\.get\("missing"\)/);
+    expect(connect).toMatch(/Missing: \$\{missing\}/);
   });
 
   it("distinguishes a scope refusal from a rejected token", () => {

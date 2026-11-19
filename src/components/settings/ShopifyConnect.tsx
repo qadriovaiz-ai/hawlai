@@ -74,7 +74,14 @@ export default function ShopifyConnect() {
       const status = params.get("status");
       // Both appended when present, so every scope-related failure
       // carries the evidence needed to tell it from its neighbour.
-      const detail = [granted && `Shopify granted: ${granted}`, status && `HTTP ${status}`].filter(Boolean).join(" · ");
+      const missing = params.get("missing");
+      const detail = [
+        missing && `Missing: ${missing}`,
+        granted && `Shopify granted: ${granted}`,
+        status && `HTTP ${status}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       setError(detail ? `${base} (${detail})` : base);
     }
   }, []);
