@@ -18,6 +18,7 @@
 // tests/approvalExecution.test.ts for that half.
 
 import { describe, it, expect } from "vitest";
+import { executionOptions } from "@/lib/ads/dryRun";
 import { readFileSync } from "fs";
 import { ACTION_POLICIES, AUTOMATION_TOGGLES, getActionPolicy, toggleRisk } from "@/lib/executionPolicy";
 import { ALWAYS_REQUIRES_APPROVAL, ACTION_RISK } from "@/lib/publish/types";
@@ -402,5 +403,59 @@ describe("a cron endpoint with no secret refuses", () => {
       expect(src, path).not.toMatch(/searchParams\.get\("secret"\)/);
       expect(src, path).toMatch(/authorizeCron\(/);
     }
+  });
+});
+
+/**
+ * THE ONE GRAPH POST THAT IS NOT GATED, AND WHY — 19 November 2026.
+ *
+ * Rule 6 says nothing sends, posts, spends or calls without a registry
+ * entry. The Meta dry run (lib/ads/dryRun.ts) is a POST to Graph and is
+ * deliberately NOT gated, on the founder's decision of 19 November 2026.
+ *
+ * The reasoning: `execution_options: ["validate_only"]` performs no
+ * mutation. Nothing is created, nothing is published, nothing is spent.
+ * It is a question, and gating a question behind an approval would make
+ * the checking step slower than the doing step — the same inversion
+ * Rule 6 itself forbids when it says switching an automation OFF is
+ * never gated.
+ *
+ * THE EXEMPTION IS ONLY TRUE WHILE validate_only IS ALWAYS SENT, so
+ * this allowlist entry is not a comment — it is the assertion below.
+ * The day a call on this path can be built without validate_only, it
+ * stops being a question and starts being an ungated creation, and
+ * this fails.
+ */
+describe("the Meta dry run is exempt from Rule 6, and stays exempt only while it asks", () => {
+  const DRY_RUN = "src/lib/ads/dryRun.ts";
+
+  const source = () =>
+    readFileSync(DRY_RUN, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+
+  it("EVERY OPTIONS ARRAY IT CAN BUILD CONTAINS validate_only", () => {
+    expect(executionOptions()).toContain("validate_only");
+    expect(executionOptions({ review: true })).toContain("validate_only");
+    expect(executionOptions({ review: false })).toContain("validate_only");
+  });
+
+  it("THE POST CANNOT BE MADE WITHOUT THE OPTIONS", () => {
+    // One fetch, one body, and execution_options is in it — not behind
+    // a flag, not optional, not overridable by the caller's params.
+    const src = source();
+    expect(src.match(/fetch\(/g) ?? []).toHaveLength(1);
+    expect(src).toMatch(/const execution_options = executionOptions\(opts\);/);
+    expect(src).toMatch(/\.\.\.params, execution_options, access_token: token/);
+  });
+
+  it("AND IT WRITES NOTHING LOCALLY EITHER", () => {
+    // A question that quietly records a row is not a question.
+    const src = source();
+    expect(src).not.toMatch(/\.insert\(/);
+    expect(src).not.toMatch(/\.update\(/);
+    expect(src).not.toMatch(/supabase/);
   });
 });

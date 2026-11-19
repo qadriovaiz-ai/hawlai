@@ -15,6 +15,30 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 
+// THE DRY RUN IS MOCKED, AND THAT IS NOT A DETAIL — 19 November 2026.
+//
+// lib/ads/dryRun.ts validates each object with Meta before creating it,
+// and it uses raw `fetch` rather than the mocked metaPost. Without this
+// mock these tests made REAL network calls to graph.facebook.com, got a
+// genuine auth refusal, and the launch threw — which is how it was
+// found. A unit test must never depend on the internet, and must never
+// quietly talk to a live ad platform.
+//
+// It records what it was asked to validate, so the calls are asserted
+// below rather than merely bypassed.
+const dryRuns: { path: string; review: boolean }[] = [];
+vi.mock("@/lib/ads/dryRun", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ads/dryRun")>();
+  return {
+    ...actual,
+    dryRun: vi.fn(async (path: string, _params: unknown, _token: string, opts?: { review?: boolean }) => {
+      dryRuns.push({ path, review: Boolean(opts?.review) });
+      return { ok: true, inconclusive: false, reason: null };
+    }),
+  };
+});
+
+
 vi.mock("@/lib/adEngine", () => ({
   GRAPH_VERSION: "v23.0",
   metaPost: vi.fn(async (path: string) => {

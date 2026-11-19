@@ -600,12 +600,30 @@ Required on every ad set created on or after 28 July 2025 that delivers
 to audiences in India. Verification is through SEBI registration, or
 identity/business verification for the exempt.
 
-**What I could not verify, and how we will.** The **exact enum value** for
-the India securities category is not in any public documentation I could
-find — Meta's blog names the fields but not the values. I will not guess
-it. Commit 5's `validate_only` dry run is exactly how it gets confirmed:
-Meta validates the ad set and says, and nothing is created. This is the
-first real payoff from building the dry run before this item.
+**CONFIRMED 19 November 2026: the value is `INDIA_FINSERV`.** It did not
+need the dry run after all — it is in Meta's ad set reference, which the
+blog post points at but does not quote. Verbatim: *"INDIA_FINSERV: Use
+this value to declare a Securities and Investments ad set if the ad set
+targets India Audience"*.
+
+Three things that came with it and change the plan:
+
+- **It is an AD SET field, not a campaign field.** It appears in the ad
+  set reference and not in the campaign reference. An earlier draft of
+  this plan said "ad set" already, so nothing moves, but it is now
+  confirmed rather than assumed.
+- **`null` is an accepted value**, and the other listed values are
+  `TAIWAN_FINSERV`, `AUSTRALIA_FINSERV`, `TAIWAN_UNIVERSAL`,
+  `SINGAPORE_UNIVERSAL`, `THAILAND_UNIVERSAL`, `AUSTRALIA_UNIVERSAL`,
+  `MALAYSIA_UNIVERSAL`, `BRAZIL_REGULATION`, `US_SECURITIES_LICENSING`.
+  The published list may be longer than what was read.
+- **`regional_regulation_identities` is still NOT confirmed.** Its type
+  is `RegionalRegulationIdentities` / a JSON object, and the sub-field
+  names (`india_finserv_beneficiary`, `india_finserv_payer`) were only
+  summarised, never read verbatim. That half stays unverified, and the
+  dry run is still how it gets settled — which only matters for a
+  finance business, and a finance business is refused rather than
+  launched.
 
 **The default is "not finance", and it is never auto-ticked.** Your live
 test is the evidence that matters: you published with the box **unchecked**

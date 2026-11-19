@@ -22,6 +22,30 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /** Every Graph API call the route made, in order. */
 const metaCalls: { path: string; params: Record<string, any> }[] = [];
+
+// THE DRY RUN IS MOCKED, AND THAT IS NOT A DETAIL — 19 November 2026.
+//
+// lib/ads/dryRun.ts validates each object with Meta before creating it,
+// and it uses raw `fetch` rather than the mocked metaPost. Without this
+// mock these tests made REAL network calls to graph.facebook.com, got a
+// genuine auth refusal, and the launch threw — which is how it was
+// found. A unit test must never depend on the internet, and must never
+// quietly talk to a live ad platform.
+//
+// It records what it was asked to validate, so the calls are asserted
+// below rather than merely bypassed.
+const dryRuns: { path: string; review: boolean }[] = [];
+vi.mock("@/lib/ads/dryRun", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ads/dryRun")>();
+  return {
+    ...actual,
+    dryRun: vi.fn(async (path: string, _params: unknown, _token: string, opts?: { review?: boolean }) => {
+      dryRuns.push({ path, review: Boolean(opts?.review) });
+      return { ok: true, inconclusive: false, reason: null };
+    }),
+  };
+});
+
 /** Everything written to ad_creatives, in order. */
 const writes: Record<string, any>[] = [];
 
@@ -119,6 +143,7 @@ function launchRequest(body: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   metaCalls.length = 0;
+  dryRuns.length = 0;
   writes.length = 0;
   serverRows = {
     profiles: { dealership_id: DEALERSHIP },
@@ -365,5 +390,19 @@ describe("the destination and objective actually reach Meta", () => {
     const body = await res.json();
     expect(body.error).toMatch(/nowhere to send people|no website set up/i);
     expect(metaCalls).toEqual([]);
+  });
+});
+
+describe("every object is validated with Meta before it is created", () => {
+  it("ALL THREE LEVELS ARE DRY-RUN, in the order they are created", async () => {
+    await POST(launchRequest());
+    expect(dryRuns.map((d) => d.path.split("/").pop())).toEqual(["campaigns", "adsets", "ads"]);
+  });
+
+  it("AND ONLY THE AD ASKS FOR THE POLICY REVIEW", async () => {
+    // synchronous_ad_review judges language and the image text rule —
+    // both are about the creative. A campaign carries neither.
+    await POST(launchRequest());
+    expect(dryRuns.filter((d) => d.review).map((d) => d.path.split("/").pop())).toEqual(["ads"]);
   });
 });

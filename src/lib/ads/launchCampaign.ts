@@ -21,6 +21,7 @@ import { frequencyCapFor } from "@/lib/retargeting/messages";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
 import { preflight, preflightMessage } from "@/lib/ads/preflight";
+import { dryRun, dryRunMessage } from "@/lib/ads/dryRun";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
 export type LaunchContext = {
@@ -144,7 +145,13 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
   }
 
   // Step 5: campaign
-  const campaignRes = await metaPost(`${adAccount}/campaigns`, {
+  //
+  // THE SPEC IS BUILT ONCE AND USED TWICE — validated, then created.
+  // Two separately written bodies would eventually drift, and a dry run
+  // that validates a different campaign from the one being made is
+  // worse than none at all: it reports a pass for something that was
+  // never checked.
+  const campaignSpec = {
     // Named after what is actually being advertised. The fallback used
     // to be "Cars", so a candle shop's campaign appeared in Ads Manager
     // as "Hawlai - Cars - 09/09/2026". Cosmetic, but it is the name the
@@ -154,7 +161,20 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     status: "PAUSED",
     special_ad_categories: [built.specialAdCategory],
     is_adset_budget_sharing_enabled: false,
-  }, pageAccessToken);
+  };
+
+  // THE ONE DRY RUN THAT PREVENTS EVERYTHING. A campaign has no parent,
+  // so this can be asked before anything at all exists — and a refusal
+  // here means nothing was created, not even an empty campaign.
+  const campaignCheck = await dryRun(`${adAccount}/campaigns`, campaignSpec, pageAccessToken, {
+    stage: "campaign",
+    dealershipId,
+  });
+  if (!campaignCheck.ok && !campaignCheck.inconclusive) {
+    throw new Error(dryRunMessage(campaignCheck, "campaign") ?? "Meta rejected this campaign.");
+  }
+
+  const campaignRes = await metaPost(`${adAccount}/campaigns`, campaignSpec, pageAccessToken);
 
   // The account's real floor. Meta rejects an under-floor ad set HERE,
   // with a campaign already created and a creative already uploaded,
@@ -173,7 +193,7 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
   }
 
   // Step 6: ad set (targeting + budget)
-  const adsetRes = await metaPost(`${adAccount}/adsets`, {
+  const adsetSpec = {
     name: `${plan.headline} - AdSet`,
     campaign_id: campaignRes.id,
     daily_budget: budget.minor,
@@ -191,15 +211,42 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     // destination actually calls for it.
     ...(destination.promotedObject ? { promoted_object: destination.promotedObject } : {}),
     ...(ctx.scheduledStart ? { start_time: new Date(ctx.scheduledStart).toISOString() } : {}),
-  }, pageAccessToken);
+  };
+
+  // The ad set is where most refusals happen — budget, targeting,
+  // promoted object, regional regulation. The campaign already exists
+  // by now, so this cannot prevent an empty one being left behind; what
+  // it prevents is the owner being handed a Graph error code instead of
+  // a sentence.
+  const adsetCheck = await dryRun(`${adAccount}/adsets`, adsetSpec, pageAccessToken, { stage: "adset", dealershipId });
+  if (!adsetCheck.ok && !adsetCheck.inconclusive) {
+    throw new Error(dryRunMessage(adsetCheck, "ad set") ?? "Meta rejected this ad set.");
+  }
+
+  const adsetRes = await metaPost(`${adAccount}/adsets`, adsetSpec, pageAccessToken);
 
   // Step 7: the ad itself
-  const adRes = await metaPost(`${adAccount}/ads`, {
+  const adSpec = {
     name: plan.headline,
     adset_id: adsetRes.id,
     creative: { creative_id: creativeRes.id },
     status: "PAUSED",
-  }, pageAccessToken);
+  };
+
+  // REVIEW: TRUE, AND ONLY HERE. synchronous_ad_review runs Meta's Ads
+  // Integrity checks — message language, the image text rule, the rest
+  // of the policy logic — and those are judgements about the CREATIVE.
+  // Asking for them on a campaign or an ad set would be asking about an
+  // object that carries no copy and no image.
+  //
+  // This is the check that otherwise arrives as a DISAPPROVED ad hours
+  // after launch, with the owner's money already committed to it.
+  const adCheck = await dryRun(`${adAccount}/ads`, adSpec, pageAccessToken, { stage: "ad", review: true, dealershipId });
+  if (!adCheck.ok && !adCheck.inconclusive) {
+    throw new Error(dryRunMessage(adCheck, "ad") ?? "Meta rejected this ad.");
+  }
+
+  const adRes = await metaPost(`${adAccount}/ads`, adSpec, pageAccessToken);
 
   const targetingJson = {
     ...built.targeting,
