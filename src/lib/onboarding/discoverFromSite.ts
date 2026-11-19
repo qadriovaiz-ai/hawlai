@@ -131,10 +131,22 @@ function priceSpan(facts: BusinessFacts | null | undefined): { low: number; high
  * answer and means "nothing here is unambiguous" — not that the site is
  * empty.
  */
-export function discoverFromSite(facts: BusinessFacts | null | undefined): Suggestion[] {
-  const lines = siteLines(facts);
+/**
+ * Everything a page's own lines can suggest — D2's rules, shared.
+ *
+ * EXTRACTED SO D5 CAN REUSE THEM (19 November 2026) rather than grow a
+ * second copy that drifts. The business's external website answers the
+ * same three questions as the Hawlai-built one, by the same discipline:
+ * exactly one line, or say nothing.
+ *
+ * `sourceKind` and `url` only change what the evidence says it came
+ * from. The judgement is identical, which is the point — a phone number
+ * found on a brochure site deserves neither more nor less trust than
+ * one found on a page we built.
+ */
+export function suggestFromLines(lines: string[], sourceKind: string, url: string | null): Suggestion[] {
   const out: Suggestion[] = [];
-  const url = facts?.site?.url ?? null;
+  const SITE_SOURCE = sourceKind;
 
   // ---- the phone, when the site shows exactly one ------------------
   const phones = phonesIn(lines);
@@ -176,6 +188,16 @@ export function discoverFromSite(facts: BusinessFacts | null | undefined): Sugge
       evidence: { sourceKind: SITE_SOURCE, url, quote: address },
     });
   }
+
+  return out;
+}
+
+export function discoverFromSite(facts: BusinessFacts | null | undefined): Suggestion[] {
+  const lines = siteLines(facts);
+  const out: Suggestion[] = [];
+  const url = facts?.site?.url ?? null;
+
+  out.push(...suggestFromLines(lines, SITE_SOURCE, url));
 
   // ---- the price range: computed, not read -------------------------
   const span = priceSpan(facts);

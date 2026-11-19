@@ -10,6 +10,7 @@ import { cleanBusinessModels } from "@/lib/business/businessModel";
 import { pendingSuggestions, rejectSuggestion, storeSuggestion } from "@/lib/onboarding/suggestions";
 import { saveInterviewAnswer } from "@/lib/onboarding/saveAnswer";
 import { discoverFromSite } from "@/lib/onboarding/discoverFromSite";
+import { discoverFromExternalSite } from "@/lib/onboarding/discoverFromExternal";
 import { gatherBusinessFactsSafely } from "@/lib/claims/businessFacts";
 
 // The resumable interview (I5 of docs/PLAN-AUTO-INTERVIEW.md).
@@ -179,8 +180,32 @@ export async function POST(request: Request) {
 
     try {
       const facts = await gatherBusinessFactsSafely(supabase, dealershipId);
+      const found = [...discoverFromSite(facts)];
+
+      // ---- D5: the business's own website, somewhere else ----------
+      //
+      // AFTER the Hawlai-built site, and only for questions it did not
+      // already answer. D2 costs one read we have already done; this
+      // costs an outbound request, so it runs second and adds nothing
+      // where the first bucket already spoke.
+      //
+      // THE URL IS THE OWNER'S OWN, off the dealerships row. Never a
+      // link found on a page — that would let a page choose what our
+      // servers fetch next.
+      const { data: biz } = await supabase
+        .from("dealerships")
+        .select("external_website_url")
+        .eq("id", dealershipId)
+        .maybeSingle();
+      if (biz?.external_website_url) {
+        const answered = new Set(found.map((f) => f.questionKey));
+        for (const s of await discoverFromExternalSite(biz.external_website_url)) {
+          if (!answered.has(s.questionKey)) found.push(s);
+        }
+      }
+
       let stored = 0;
-      for (const suggestion of discoverFromSite(facts)) {
+      for (const suggestion of found) {
         if (await storeSuggestion(service, dealershipId, suggestion, null)) stored += 1;
       }
       return NextResponse.json({ ok: true, discovered: stored });

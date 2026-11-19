@@ -29,6 +29,7 @@ import {
   isValidNonceFormat,
   HANDSHAKE_TTL_MS,
 } from "./connectHandshake";
+import { isPublicHost } from "@/lib/net/publicUrl";
 
 // The nonce and freshness rules moved to connectHandshake.ts when
 // Shopify needed the identical pair. Re-exported under the original
@@ -72,26 +73,12 @@ export function normaliseStoreUrl(input: string | null | undefined): NormalisedS
 
   const host = url.hostname.toLowerCase();
 
-  // Loopback, link-local, private ranges and mDNS names. A store on
-  // any of these is not reachable from our servers anyway, so this
-  // rejects nothing legitimate.
-  const blocked =
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal") ||
-    host === "[::1]" ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^169\.254\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    /^0\./.test(host);
-  if (blocked) return { ok: false, reason: "That address isn't a public store." };
-
-  // A dot is the cheapest way to reject a bare hostname without
-  // resolving anything.
-  if (!host.includes(".")) return { ok: false, reason: "That doesn't look like a store address." };
+  // Loopback, link-local, private ranges, mDNS names, and the bare
+  // hostname check. MOVED to lib/net/publicUrl on 19 November 2026,
+  // unchanged, because D5 fetches the business's own website and needs
+  // exactly the same guard — and a blocked-range list living in two
+  // files is one that will be corrected in only one of them.
+  if (!isPublicHost(host)) return { ok: false, reason: "That address isn't a public store." };
 
   // Path is preserved (WordPress is often installed in a subdirectory)
   // but query and hash are dropped — nothing in them belongs in an
