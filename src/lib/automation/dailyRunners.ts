@@ -15,6 +15,7 @@ import { runSeasonalCalendar } from "@/lib/agents/seasonalityAgent";
 import { notifyAtRiskCustomers } from "@/lib/agents/churnAgent";
 import { notifyColdLeads } from "@/lib/agents/coldLeadAgent";
 import { checkCampaignBudgets } from "@/lib/agents/budgetAlertAgent";
+import { runDeliveryWatch } from "@/lib/automation/deliveryWatch";
 import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
@@ -78,6 +79,9 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // different groups (signals runs first), so they may read yesterday's
   // snapshot — acceptable for an alert.
   budget_alerts: (s, id) => checkCampaignBudgets(s, id),
+  // Active and reaching nobody. Reads the snapshots rather than Meta,
+  // and only touches Meta to diagnose a campaign already found silent.
+  delivery_watch: (s, id) => runDeliveryWatch(s, id),
   churn_detection: (s, id) => notifyAtRiskCustomers(s, id),
   cold_lead_detection: (s, id) => notifyColdLeads(s, id),
   lead_scoring: (s, id) => scoreActiveLeads(s, id),

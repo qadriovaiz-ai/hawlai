@@ -22,6 +22,11 @@ export type NotificationKind =
   | "lead_going_cold"
   | "campaign_budget_warning"
   | "campaign_budget_overrun"
+  // Active on Meta and reaching nobody. A budget alert cannot catch
+  // this: a campaign spending zero is comfortably UNDER its budget, so
+  // the one state that means broken looked like the thriftiest
+  // campaign on the account. Seventy days, September to November 2026.
+  | "campaign_not_delivering"
   | "variant_draft_generated"
   | "call_needs_follow_up"
   | "call_escalated"

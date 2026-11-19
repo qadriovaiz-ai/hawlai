@@ -117,7 +117,26 @@ export type SubsystemKey =
   // is real: those spend on every run, while this is free for the first
   // 1,000 requests a month and skips entirely for a business with no
   // listing connected — which is every business today.
-  | "place_snapshot";
+  | "place_snapshot"
+  // THE SEVENTY DAYS. A campaign read Active in Hawlai and in Ads
+  // Manager, at all three levels, with zero impressions and zero spend,
+  // from 10 September to 19 November 2026 — and nothing told the owner.
+  // The sentence existed (notDeliveringNote) but it is a DISPLAY
+  // function: it fires when somebody opens Analytics. Nobody did.
+  //
+  // And nothing here could have caught it either. `budget_alerts`
+  // compares spend against the daily budget, so a campaign spending
+  // zero is comfortably under budget — the one state that means broken
+  // was indistinguishable from thrifty.
+  //
+  // In `heavy` for this file's usual reason: signals is "database-only
+  // and fast", and this makes live Graph reads for any campaign that
+  // turns out to be silent. A business with nothing wrong makes none.
+  //
+  // BEFORE daily_autopilot, like everything else in this group. Its AI
+  // work is what uses up the sixty seconds, and an alert the owner
+  // needed is not the thing to lose when they run out.
+  | "delivery_watch";
 
 // TWO groups, not three: Vercel Hobby allows exactly two cron entries.
 export const GROUPS: Record<string, SubsystemKey[]> = {
@@ -146,6 +165,10 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     // G5's Maps leg, beside the other monthly third-party work and
     // BEFORE daily_autopilot, like everything else in this group.
     "place_snapshot",
+    // Reads the snapshots daily_autopilot wrote YESTERDAY, which is the
+    // point: a campaign silent for 24 hours is yesterday's fact, and
+    // waiting for today's snapshot would push every alert a day later.
+    "delivery_watch",
     "daily_autopilot",
   ],
 };
