@@ -4102,3 +4102,33 @@ flag's wording and the actual defect were different things — the
 `/api/growth-report` route, the `rejected` status, and now this. The
 practice of verifying the root cause before writing a fix has paid for
 itself three times, and is worth keeping.
+
+## 2026-11-19 — The fabricated Business Story rows are a cleanup, not a migration
+
+**What:** candle_by_qaaf's Business Story answers were written to
+exercise the intake flow, not by a shopkeeper about a real shop. They
+read as a real person's account, and `personalStories.ts` plus
+`claimCheck` let an owner's own words through into customer-facing copy
+— so an invented origin story could be printed as if the founder had
+said it. They go before a pilot.
+
+**Why not a migration file:** `supabase/migrations/` is the schema, and
+every file in it runs against every new environment. This is a one-off
+data fix for one tenant's rows; a fresh database has nothing to fix.
+Drafted as `docs/CLEANUP-fabricated-story-rows.sql`, to be run by hand
+and reviewed first.
+
+**The careful part:** migration 209 moved nine rows out of
+`business_story` into `general` because they hold product facts — the
+double-boiler step, the fragrance timing, "paraffin-free, soy wax
+only". Those are real, and they are what product claims are built from.
+The delete is scoped to `category = 'business_story'` so it cannot
+reach them, and step 2b of the script proves they are already in
+`general` BEFORE anything is deleted. If 209 has not run in that
+environment, the facts would still be in the story category and the
+delete would take them — which is why that check is a step and not a
+footnote.
+
+**Shape:** find the id (never key on a guessed slug), read what would
+go and what would stay, then delete inside a transaction with a
+verification select before the commit.
