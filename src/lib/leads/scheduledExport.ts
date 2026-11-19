@@ -19,6 +19,7 @@ import { ownerEmail } from "@/lib/email/sendDealerEmail";
 import { sendViaResend, senderDisplayName } from "@/lib/email/resendClient";
 import { siteUrl } from "@/lib/email/consent";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
+import { emitNotification } from "@/lib/notifications/emit";
 
 export type ExportFrequency = "off" | "weekly" | "monthly";
 export const EXPORT_FREQUENCIES: ExportFrequency[] = ["off", "weekly", "monthly"];
@@ -81,9 +82,43 @@ export async function runScheduledLeadExport(service: any, dealershipId: string)
     if (logError) console.error("[lead-export] couldn't record the export:", logError.message);
   };
 
+  /**
+   * TELL THE OWNER IT DID NOT GO OUT — 19 November 2026.
+   *
+   * Every failure below was already recorded: written to
+   * lead_export_log, and shown as "failing" on the Autopilot page by
+   * buildExportHealth. But that is a screen somebody has to open, and
+   * an export that fails every Monday fails SILENTLY FOREVER — the
+   * owner's evidence is simply that the email never arrives, which
+   * looks identical to the feature not existing.
+   *
+   * That is the same shape as the campaign that read Active for
+   * seventy days: the truth existed, on a page nobody opened.
+   *
+   * DEDUPED ON THE CAUSE, not the date. The same failure every week is
+   * one thing to fix, and a weekly repeat of it is what makes an owner
+   * stop reading. A different cause is genuinely new information.
+   */
+  const tellOwner = async (why: string) => {
+    await emitNotification(service, {
+      dealershipId,
+      kind: "scheduled_export_failed",
+      title: `Your ${frequency} leads export didn't go out`,
+      body: `${why} It will be tried again on the next scheduled day. Nothing about your leads has changed — only the email failed.`,
+      href: "/dashboard/autopilot",
+      dedupeKey: `export_failed:${why.slice(0, 60)}`,
+    });
+  };
+
   const to = await ownerEmail(dealership?.owner_id);
   if (!to) {
+    // THE MOST LIKELY PERMANENT FAILURE, and the one that produces
+    // "this business never gets it" while another business does: a
+    // null owner_id, or an owner whose auth user no longer exists,
+    // fails here every single week with nothing to show for it.
+    const why = "Hawlai couldn't find the owner's email address to send it to.";
     await log({ success: false, error: "the owner's email couldn't be read" });
+    await tellOwner(why);
     return { error: "the owner's email couldn't be read" };
   }
 
@@ -92,6 +127,7 @@ export async function runScheduledLeadExport(service: any, dealershipId: string)
     leads = await fetchLeadsForExport(service, dealershipId, {});
   } catch (err: any) {
     await log({ recipient: to, success: false, error: err.message });
+    await tellOwner("Hawlai couldn't read your leads to build the export.");
     return { error: err.message };
   }
   const since = lastSentAt ? Date.parse(lastSentAt) : Date.now() - (frequency === "weekly" ? 7 : 30) * DAY_MS;
@@ -118,7 +154,10 @@ export async function runScheduledLeadExport(service: any, dealershipId: string)
     error: result.success ? null : result.error ?? "the email couldn't be sent",
     resend_message_id: result.resendMessageId ?? null,
   });
-  if (!result.success) return { error: result.error ?? "the email couldn't be sent" };
+  if (!result.success) {
+    await tellOwner("The email itself couldn't be sent.");
+    return { error: result.error ?? "the email couldn't be sent" };
+  }
 
   const { error: updateError } = await service.from("dealerships").update({ lead_export_last_sent_at: new Date().toISOString() }).eq("id", dealershipId);
   // Sent but not recorded would send it again tomorrow — say so rather than hide it.

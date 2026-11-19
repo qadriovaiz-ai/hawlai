@@ -27,6 +27,12 @@ export type NotificationKind =
   // the one state that means broken looked like the thriftiest
   // campaign on the account. Seventy days, September to November 2026.
   | "campaign_not_delivering"
+  // A scheduled export the owner turned on did not go out. Distinct
+  // from email_delivery_problem, which is a bounce AFTER a send — this
+  // one never left. Nothing told anybody before: the failure was
+  // written to lead_export_log and shown on the Autopilot page, which
+  // is a screen somebody has to open.
+  | "scheduled_export_failed"
   | "variant_draft_generated"
   | "call_needs_follow_up"
   | "call_escalated"
