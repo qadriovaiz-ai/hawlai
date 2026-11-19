@@ -5,6 +5,7 @@ import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ProductCatalog from "@/components/website/ProductCatalog";
 import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
 import { hoursLines, type ListingFacts } from "@/lib/seo/listingFacts";
+import type { StorefrontReview } from "@/lib/catalog/storefrontReviews";
 
 
 export interface BlockRenderContext {
@@ -17,6 +18,8 @@ export interface BlockRenderContext {
    * need them — only `hours_address` reads this.
    */
   listing?: ListingFacts | null;
+  /** Submitted customer reviews. Only `reviews` reads this. */
+  reviews?: StorefrontReview[];
 }
 
 const GAP_CLASS: Record<string, string> = { sm: "gap-2", md: "gap-5", lg: "gap-8" };
@@ -204,6 +207,46 @@ export default function BlockRenderer({ block, ctx }: { block: Block; ctx: Block
         <div className={`w-full ${hiddenOnMobile(block)}`}>
           <h3 className={HEADING_SIZE[3]}>{question}</h3>
           {block.props.html ? <div className="leading-relaxed mt-1">{renderRichText(block.props.html)}</div> : null}
+        </div>
+      );
+    }
+
+    // A CUSTOMER SAID THIS, AND THE MARKUP SAYS SO.
+    //
+    // <blockquote> with a <cite>, not a styled paragraph — so the
+    // attribution survives being read by something that is not a
+    // person. The quote is rendered verbatim: never trimmed to fit,
+    // never tidied, never passed through a model. An edited
+    // testimonial is the business's words wearing a customer's name.
+    case "reviews": {
+      const items = ctx.reviews ?? [];
+      // Nothing to show means nothing is shown — a heading over no
+      // reviews reads as a business with bad ones.
+      if (!items.length) return null;
+      return (
+        <div className="px-4 py-6">
+          {block.props.heading && (
+            <h3 className="text-lg font-semibold mb-4" style={{ color: theme.dark }}>
+              {block.props.heading}
+            </h3>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map((r) => (
+              <figure key={r.id} className="rounded-lg border border-neutral-200 p-4 bg-white/60">
+                <div className="text-xs mb-2" aria-label={`${r.rating} out of 5`} style={{ color: theme.accent }}>
+                  {"★".repeat(r.rating)}
+                  <span className="text-neutral-300">{"★".repeat(5 - r.rating)}</span>
+                </div>
+                <blockquote className="text-sm text-neutral-700 whitespace-pre-line">{r.comment}</blockquote>
+                <figcaption className="mt-3 text-xs text-neutral-500">
+                  <cite className="not-italic font-medium" style={{ color: theme.dark }}>
+                    {r.name}
+                  </cite>
+                  {r.productName && <span> · {r.productName}</span>}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       );
     }

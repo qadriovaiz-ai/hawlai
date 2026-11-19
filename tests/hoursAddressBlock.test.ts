@@ -120,8 +120,14 @@ describe("4. IT IS A DATA-BACKED BLOCK, WITH EVERYTHING THAT IMPLIES", () => {
     // A model writing opening hours would be inventing the very thing
     // the block exists to read — the same reasoning product_grid has
     // always had, now stated once for both.
+    // ASSERTS THIS BLOCK'S MEMBERSHIP, NOT THE WHOLE SET. The first
+    // version pinned the exact two-element literal and broke the day
+    // `reviews` was added as a third — a deliberate extension reading
+    // as a regression. What this test is about is that the hours block
+    // is excluded, and that the exclusion is what AI_BLOCK_TYPES uses.
     const src = code("src/lib/agents/websiteBuilderAgent.ts");
-    expect(src).toMatch(/DATA_BACKED_BLOCKS = new Set\(\["product_grid", "hours_address"\]\)/);
+    const set = src.slice(src.indexOf("DATA_BACKED_BLOCKS = new Set("), src.indexOf("const AI_BLOCK_TYPES"));
+    expect(set).toMatch(/"hours_address"/);
     expect(src).toMatch(/AI_BLOCK_TYPES = Object\.keys\(BLOCK_REGISTRY\)\.filter\(\(t\) => !DATA_BACKED_BLOCKS\.has\(t\)\)/);
   });
 

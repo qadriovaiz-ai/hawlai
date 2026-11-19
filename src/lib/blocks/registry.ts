@@ -15,6 +15,7 @@ import {
   CalendarCheck,
   LayoutGrid,
   Clock,
+  Quote,
   type LucideIcon,
 } from "lucide-react";
 import type { Block, BlockDefinition } from "./types";
@@ -183,6 +184,27 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
       { key: "heading", label: "Question", type: "text" },
       { key: "html", label: "Answer", type: "richtext" },
     ],
+  },
+  // A CUSTOMER'S OWN WORDS, KEPT AS A CUSTOMER'S OWN WORDS.
+  //
+  // Before this, a quote in a `text` block with a name underneath was
+  // a sentence like any other: the claims guard read it as the
+  // business's own words, the facts layer could not tell a customer
+  // apart from the shop, and a visitor had only the quotation marks to
+  // go on. The distinction that matters most on this block — somebody
+  // else said this — was carried by typography.
+  //
+  // Fed from the `reviews` table and nothing else. See
+  // lib/catalog/storefrontReviews for why a submitted review may be
+  // shown and a story the owner transcribed may not: the consent is in
+  // the mechanism the customer used, not in how the sentence reads.
+  reviews: {
+    label: "Customer Reviews",
+    icon: Quote,
+    category: "content",
+    isContainer: false,
+    defaultProps: { heading: "What customers say" },
+    propFields: [{ key: "heading", label: "Heading", type: "text" }],
   },
   // THE HOURS THE PAGE ALREADY KNEW AND WOULD NOT SHOW.
   //

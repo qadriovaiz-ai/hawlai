@@ -10,6 +10,7 @@ import { loadStorefrontItems } from "@/lib/catalog/storefrontCatalog";
 import { storefrontJsonLd } from "@/lib/seo/structuredData";
 import { loadSiteIdentity } from "@/lib/seo/siteIdentity";
 import StructuredData from "@/components/website/StructuredData";
+import { loadStorefrontReviews } from "@/lib/catalog/storefrontReviews";
 
 // Without this, Next.js's default fetch caching can wrap the Supabase
 // calls below indefinitely — a real bug found live: a database fix
@@ -46,6 +47,12 @@ export default async function SiteHomePage({ params }: { params: Promise<{ slug:
   // them to a visitor costs no extra query, and cannot disagree with
   // the JSON-LD because it is the same object.
   const needsListing = blockTreeContainsType(blocks, "hours_address");
+  // Read only when the page actually shows them. A business with no
+  // reviews block pays nothing, and nothing reads a customer's words
+  // that is not about to display them.
+  const reviews = blockTreeContainsType(blocks, "reviews")
+    ? await loadStorefrontReviews(supabase, website.dealership_id)
+    : [];
 
   // What a machine reads off this page (Brain, Phase 1a). Hawlai builds
   // the site, so Hawlai is the only thing that can emit this — the SEO
@@ -65,7 +72,7 @@ export default async function SiteHomePage({ params }: { params: Promise<{ slug:
   return (
     <>
       <StructuredData node={jsonLd} />
-      <SectionRenderer sections={sections} theme={getTheme(website.theme_key)} slug={slug} products={needsProducts ? products : []} listing={needsListing ? identity?.listing ?? null : null} />
+      <SectionRenderer sections={sections} theme={getTheme(website.theme_key)} slug={slug} products={needsProducts ? products : []} listing={needsListing ? identity?.listing ?? null : null} reviews={reviews} />
     </>
   );
 }

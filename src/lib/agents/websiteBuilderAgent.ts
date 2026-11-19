@@ -247,7 +247,7 @@ ${grounding ?? ""}`,
 // listing facts with the owner's publish flags on them — so a model
 // writing one would be inventing the very thing the block exists to
 // read. Same reasoning product_grid has always had.
-const DATA_BACKED_BLOCKS = new Set(["product_grid", "hours_address"]);
+const DATA_BACKED_BLOCKS = new Set(["product_grid", "hours_address", "reviews"]);
 const AI_BLOCK_TYPES = Object.keys(BLOCK_REGISTRY).filter((t) => !DATA_BACKED_BLOCKS.has(t));
 
 const BLOCK_SCHEMA = {
