@@ -195,3 +195,138 @@ export function declarationFor(input: {
 
   return { kind: "none" };
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// META'S SPECIAL AD CATEGORIES, AND THE MATCH THAT FAILS OPEN
+// ─────────────────────────────────────────────────────────────────────
+//
+// FOUND 19 NOVEMBER 2026. `isSpecialAdCategory` (metaTargeting.ts) is
+// an exact, trimmed, lowercased match against one key, "real estate",
+// and the business category it reads is FREE TEXT with suggestions, not
+// a fixed list.
+//
+// So "Real Estate" is declared as HOUSING, and "Real Estate Agent",
+// "Property Dealer", "Realestate" and "Real Estate & Rentals" are all
+// declared as NONE.
+//
+// IT FAILS OPEN, in the direction that costs the owner. An undeclared
+// housing ad is sent with the age, gender and interest targeting Meta
+// legally strips from housing ads. metaTargeting's own comment names
+// the stake — a misdeclared category is "an account policy risk at
+// worst" — and the unguarded case is the UNDER-declaration.
+//
+// The reverse mistake is mild by comparison: a business wrongly
+// declared HOUSING gets geo-only targeting and a narrower audience. It
+// delivers; it just delivers less well.
+//
+// WHY NOT A LONGER LIST OF SPELLINGS. It would still miss the next one,
+// and a list of trade words is what Rule 3 forbids. The answer is to
+// ask, once, and remember — the founder's decision of 19 November 2026.
+//
+// THE TERMS BELOW ARE META'S OWN SPECIAL-AD-CATEGORY SCOPE, the same
+// justification as INDIA_FINSERV above: identical for every business on
+// the platform, used only to RAISE A QUESTION and stop a launch, never
+// to write copy.
+
+/** Meta's special ad categories, as the campaign field spells them. */
+export const SPECIAL_CATEGORIES = ["HOUSING", "EMPLOYMENT", "CREDIT"] as const;
+export type SpecialCategory = (typeof SPECIAL_CATEGORIES)[number];
+
+/**
+ * Terms that mean the business MIGHT fall inside a special ad category.
+ *
+ * NOT A CLASSIFIER, for the same reason the finance list is not one. A
+ * builder sells property and a recruiter advertises jobs, but so does a
+ * sign-writer who says "property signage" and a shop hiring one person.
+ * A match is a question.
+ */
+const SPECIAL_TERMS: { pattern: RegExp; category: SpecialCategory; what: string }[] = [
+  { pattern: /\breal\s*-?\s*estate\b/i, category: "HOUSING", what: "real estate" },
+  { pattern: /\bpropert(?:y|ies)\b/i, category: "HOUSING", what: "property" },
+  { pattern: /\bhousing\b/i, category: "HOUSING", what: "housing" },
+  { pattern: /\brealtor\b/i, category: "HOUSING", what: "realtors" },
+  { pattern: /\b(?:flats?|apartments?)\s+(?:for\s+)?(?:sale|rent)\b/i, category: "HOUSING", what: "flats for sale or rent" },
+  { pattern: /\bto\s*-?\s*let\b|\bletting\s+agent\b/i, category: "HOUSING", what: "letting" },
+  { pattern: /\brecruit(?:ment|er|ing)\b/i, category: "EMPLOYMENT", what: "recruitment" },
+  { pattern: /\bstaffing\s+(?:agency|services?)\b/i, category: "EMPLOYMENT", what: "staffing" },
+  { pattern: /\bjob\s+(?:portal|board|placement|consultan)/i, category: "EMPLOYMENT", what: "job placement" },
+  { pattern: /\bhiring\s+(?:agency|solutions?)\b/i, category: "EMPLOYMENT", what: "hiring services" },
+  { pattern: /\b(?:home|personal|business|gold)\s+loans?\b/i, category: "CREDIT", what: "loans" },
+  { pattern: /\bcredit\s+card\b/i, category: "CREDIT", what: "credit cards" },
+  { pattern: /\bmortgage\b/i, category: "CREDIT", what: "mortgages" },
+  { pattern: /\blending\b|\bmoney\s*lender\b/i, category: "CREDIT", what: "lending" },
+];
+
+export type SpecialEvidence = {
+  /** The category it points at, when anything does. */
+  category: SpecialCategory | null;
+  /** The plain-language thing that was spotted. */
+  what: string | null;
+  where: string | null;
+};
+
+const NO_EVIDENCE: SpecialEvidence = { category: null, what: null, where: null };
+
+/** Look for a hint, in the business's own words. Never a verdict. */
+export function specialCategoryEvidence(
+  sources: { label: string; text: string | null | undefined }[]
+): SpecialEvidence {
+  for (const { label, text } of sources) {
+    if (!text || !String(text).trim()) continue;
+    const hit = SPECIAL_TERMS.find((t) => t.pattern.test(String(text)));
+    if (hit) return { category: hit.category, what: hit.what, where: label };
+  }
+  return NO_EVIDENCE;
+}
+
+/** The registry key. Stable forever — renaming it re-asks the owner. */
+export const SPECIAL_CATEGORY_QUESTION = "special_ad_category";
+
+export type SpecialDeclaration =
+  /** Declare it. Either an exact category match, or the owner said so. */
+  | { kind: "declare"; value: SpecialCategory }
+  /** No category applies — what almost every business gets. */
+  | { kind: "none" }
+  /** Stop and ask. Evidence exists and the owner has never answered. */
+  | { kind: "ask"; question: string; reason: string };
+
+/**
+ * What to declare for this business.
+ *
+ * THE ORDER IS THE POINT. An exact match is already certain and is
+ * declared without asking anybody — that is today's behaviour and it
+ * does not change. The owner's recorded answer comes next, because a
+ * person who has told us beats a pattern. Only then does evidence
+ * raise a question, and only when nothing has been recorded.
+ *
+ * BLOCK, NOT BROAD. Unlike an irrelevant interest there is no safe
+ * middle: the declaration is binary, Meta enforces it legally, and
+ * sending NONE on a maybe is a false declaration in exactly the
+ * direction the founder forbade. So an unanswered maybe stops the
+ * launch and asks.
+ */
+export function specialDeclarationFor(input: {
+  /** From isSpecialAdCategory — today's exact match, unchanged. */
+  exact: string | null;
+  evidence: SpecialEvidence;
+  /**
+   * The owner's recorded answer: the category they confirmed, or null
+   * if they said none applies. Undefined means never asked.
+   */
+  ownerAnswer?: SpecialCategory | null;
+}): SpecialDeclaration {
+  if (input.exact) return { kind: "declare", value: input.exact as SpecialCategory };
+  if (input.ownerAnswer === null) return { kind: "none" };
+  if (input.ownerAnswer) return { kind: "declare", value: input.ownerAnswer };
+  if (!input.evidence.category) return { kind: "none" };
+
+  const where = input.evidence.where ?? "this business";
+  return {
+    kind: "ask",
+    question: SPECIAL_CATEGORY_QUESTION,
+    reason:
+      `Before this ad can run, one question needs answering once. ${where} mentions ${input.evidence.what}, ` +
+      `and Meta treats ads about housing, jobs or credit as a special category — they have to be declared, and Meta removes age, gender and interest targeting from them by law. ` +
+      `Declaring it wrongly either way is a problem, so I won't guess. Answer the "special category" question in your business details and I'll remember it; this ad will launch straight after.`,
+  };
+}

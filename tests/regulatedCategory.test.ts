@@ -200,6 +200,12 @@ describe("6. THE TRADE WORDS NEVER REACH ANYTHING THAT WRITES COPY", () => {
     const allowed = new Set([
       "src/lib/ads/launchCampaign.ts",
       "src/lib/ads/regulatedCategory.ts",
+      // The interview registry, added 19 November 2026 with commit 10.
+      // It reads specialCategoryEvidence for ONE purpose: deciding
+      // whether to show the owner the special-category question at all.
+      // It asks a question; it does not write copy, and the prompt it
+      // holds names only Meta's own three categories.
+      "src/lib/onboarding/interview.ts",
     ]);
     const offenders: string[] = [];
 

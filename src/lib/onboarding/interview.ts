@@ -43,6 +43,7 @@ import { OFFER_PROMISES } from "@/lib/claims/offerPromises";
 // list and the same note length. Re-exported here so this file stays
 // the one place a question's destination is read from.
 export { KNOWLEDGE_CATEGORIES, type KnowledgeCategory } from "@/lib/knowledge/noteShape";
+import { SPECIAL_CATEGORY_QUESTION, specialCategoryEvidence } from "@/lib/ads/regulatedCategory";
 import type { KnowledgeCategory } from "@/lib/knowledge/noteShape";
 
 /**
@@ -68,6 +69,16 @@ export type Destination =
       category: KnowledgeCategory;
       /** The row's title — short, and the same every time so a re-answer updates rather than duplicates. */
       title: string;
+      /**
+       * Never shown to a customer and never used to write copy
+       * (migration 229, and businessFacts.ts honours it).
+       *
+       * For answers that are about COMPLIANCE rather than about the
+       * offer. "This business advertises housing" is a declaration Meta
+       * needs; it is not a fact a customer should ever read back in an
+       * ad, and it has no business in the RAG store.
+       */
+      internalOnly?: boolean;
     };
 
 /** What the interview knows so far, as far as the question order cares. */
@@ -76,6 +87,14 @@ export type InterviewContext = {
   models?: BusinessModel[];
   /** Keys already answered, however weakly. */
   answered?: string[];
+  /**
+   * `dealerships.business_category`, free text as the owner typed it.
+   *
+   * Only one question reads it, and only to decide whether to ASK — a
+   * business whose own words give no hint of housing, jobs or credit is
+   * never shown a question about them.
+   */
+  category?: string | null;
 };
 
 export type InterviewQuestion = {
@@ -242,6 +261,31 @@ const TIER_2: InterviewQuestion[] = [
     kind: "short_text",
     writesTo: { table: "business_knowledge", category: "general", title: "Certifications" },
     needsFalsifiable: false,
+  },
+  {
+    // ASKED ONCE, AND ONLY WHERE IT COULD MATTER — 19 November 2026.
+    //
+    // isSpecialAdCategory matches the exact string "real estate" against
+    // a FREE TEXT field, so "Real Estate Agent" and "Property Dealer"
+    // were declared NONE: an undeclared housing ad, sent with the
+    // demographic targeting Meta legally strips from housing ads. It
+    // failed open, in the direction that costs the owner.
+    //
+    // A longer list of spellings would still miss the next one, and a
+    // list of trade words is what Rule 3 forbids. So: ask, once, and
+    // remember — with the answer kept internal, because a compliance
+    // declaration is not a fact a customer should ever read back.
+    //
+    // `when` is what keeps it rare. A business whose own category gives
+    // no hint is never shown this.
+    key: SPECIAL_CATEGORY_QUESTION,
+    tier: 2,
+    prompt: "Do your ads offer housing or property, jobs, or loans and credit?",
+    help: "Meta treats these three as special categories and removes age, gender and interest targeting from them. Declaring it wrongly either way causes problems, so it is worth being sure.",
+    kind: "yes_no",
+    writesTo: { table: "business_knowledge", category: "policy", title: "Special ad category", internalOnly: true },
+    needsFalsifiable: false,
+    when: (ctx) => specialCategoryEvidence([{ label: "category", text: ctx.category }]).category !== null,
   },
   {
     key: "returns_policy",

@@ -22,7 +22,15 @@ import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
 import { preflight, preflightMessage } from "@/lib/ads/preflight";
 import { dryRun, dryRunMessage } from "@/lib/ads/dryRun";
-import { declarationFor, financeEvidence, targetsIndia } from "@/lib/ads/regulatedCategory";
+import {
+  declarationFor,
+  financeEvidence,
+  targetsIndia,
+  specialCategoryEvidence,
+  specialDeclarationFor,
+  SPECIAL_CATEGORY_QUESTION,
+  type SpecialCategory,
+} from "@/lib/ads/regulatedCategory";
 import { readInstagramIdentity, withInstagramIdentity, placementNote } from "@/lib/ads/instagramIdentity";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
@@ -243,9 +251,28 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     ]),
   });
 
+  // META'S SPECIAL AD CATEGORIES. An exact category match is already
+  // certain and declares itself, exactly as before. Otherwise the
+  // owner's recorded answer decides, and if there is evidence and no
+  // answer the launch stops and asks — once, ever.
+  const evidence = specialCategoryEvidence([
+    { label: "The category on your profile", text: dealership?.business_category },
+    { label: "Your ad text", text: `${plan.headline ?? ""} ${plan.body ?? ""}` },
+  ]);
+  const special = specialDeclarationFor({
+    // `built.specialAdCategory` IS the exact match — buildMetaTargeting
+    // has already run isSpecialAdCategory and returns "NONE" or the
+    // category. Calling it again here would be a second source of the
+    // same truth, and the two could disagree.
+    exact: built.specialAdCategory !== "NONE" ? built.specialAdCategory : null,
+    evidence,
+    ownerAnswer: await readSpecialCategoryAnswer(serviceClient, dealershipId, evidence.category),
+  });
+
   const targetingChecks = preflight({
     targeting: { targeting: built.targeting, specialAdCategory: built.specialAdCategory },
     regulated,
+    special,
   });
   if (!targetingChecks.ok) {
     metaError("launch.preflight_failed", {
@@ -271,7 +298,11 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     name: `Hawlai - ${plan.car_type || dealership?.business_category || "Campaign"} - ${new Date().toLocaleDateString("en-IN")}`,
     objective: destination.objective,
     status: "PAUSED",
-    special_ad_categories: [built.specialAdCategory],
+    // `built.specialAdCategory` is "NONE" or an exact match. A category
+    // the OWNER confirmed overrides it — that is the whole point of
+    // asking, and without this the answer would be recorded and then
+    // ignored.
+    special_ad_categories: [special.kind === "declare" ? special.value : built.specialAdCategory],
     is_adset_budget_sharing_enabled: false,
   };
 
@@ -454,4 +485,43 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     destination,
     linkUrl,
   };
+}
+
+/**
+ * What the owner said, when they have been asked.
+ *
+ * `undefined` means never answered — which is what makes the launch
+ * stop and ask. `null` means they said none of the three applies, and
+ * that is an answer: it is never asked again and the ad launches.
+ *
+ * A YES BECOMES THE CATEGORY THE EVIDENCE POINTED AT. The question is
+ * one yes/no covering all three, because the registry's prompts are
+ * industry-neutral by rule and a three-way choice would have to name
+ * the trades. The evidence already says which one it saw, and the
+ * owner has just confirmed that it saw correctly.
+ *
+ * NEVER THROWS. An unreadable answers table means nobody has answered
+ * as far as this can tell, which stops the launch rather than guessing
+ * — the safe direction for a declaration that is legally enforced.
+ */
+async function readSpecialCategoryAnswer(
+  supabase: any,
+  dealershipId: string,
+  evidenceCategory: SpecialCategory | null
+): Promise<SpecialCategory | null | undefined> {
+  try {
+    const { data } = await supabase
+      .from("interview_answers")
+      .select("status, answer")
+      .eq("dealership_id", dealershipId)
+      .eq("question_key", SPECIAL_CATEGORY_QUESTION)
+      .maybeSingle();
+    if (!data || data.status !== "answered") return undefined;
+    const said = String(data.answer ?? "").trim().toLowerCase();
+    if (!said) return undefined;
+    const yes = said === "yes" || said === "true" || said === "haan";
+    return yes ? evidenceCategory : null;
+  } catch {
+    return undefined;
+  }
 }

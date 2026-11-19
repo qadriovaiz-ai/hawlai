@@ -79,6 +79,12 @@ export type PreflightInput = {
    * and this function stays pure.
    */
   regulated?: { kind: "none" } | { kind: "refuse"; reason: string } | { kind: "declare"; value: string } | null;
+  /**
+   * Exactly what specialDeclarationFor returned. `ask` means the
+   * business might be housing, jobs or credit and nobody has ever said
+   * which — see the rule below for why that blocks.
+   */
+  special?: { kind: "none" } | { kind: "declare"; value: string } | { kind: "ask"; question: string; reason: string } | null;
 };
 
 export type PreflightResult = {
@@ -238,6 +244,16 @@ export function preflight(input: PreflightInput): PreflightResult {
   // its behalf.
   if (input.regulated && input.regulated.kind === "refuse") {
     add("needs_finance_verification", "adset", input.regulated.reason);
+  }
+
+  // ── Meta's special ad categories ───────────────────────────────────
+  // BLOCK, NOT BROAD, and that is the difference from an irrelevant
+  // interest. There is no safe middle here: the declaration is binary,
+  // Meta enforces it legally, and sending NONE on a maybe is a false
+  // declaration in exactly the direction that is forbidden. One
+  // question, answered once, and the ad launches straight after.
+  if (input.special && input.special.kind === "ask") {
+    add("needs_special_category_answer", "campaign", input.special.reason);
   }
 
   return { ok: problems.length === 0, problems, budgetMinor, budgetRaised };
