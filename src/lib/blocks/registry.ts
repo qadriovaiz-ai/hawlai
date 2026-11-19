@@ -12,6 +12,9 @@ import {
   Package,
   HelpCircle,
   MessageSquare,
+  CalendarCheck,
+  LayoutGrid,
+  type LucideIcon,
 } from "lucide-react";
 import type { Block, BlockDefinition } from "./types";
 
@@ -194,13 +197,83 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────
+// WHAT THE CATALOGUE BLOCK IS CALLED, FOR THIS BUSINESS
+// ─────────────────────────────────────────────────────────────────────
+//
+// THE DEFECT, FOUND 19 NOVEMBER 2026 while asking how flexible this
+// builder is for a business that is not a shop. `product_grid` renders
+// SERVICES correctly — ProductCatalog reads `kind === "service"` and
+// gives it a duration and a Book now button instead of stock and a
+// cart — and then the palette offers it as "Product Grid" with a
+// package icon and a default heading of "Our Products".
+//
+// So a salon owner opening the builder sees no block for their
+// services, and the one block that would serve them is named after
+// something they do not sell. The behaviour was right and the words
+// were wrong, which is the harder kind of wrong to notice.
+//
+// RULE 3, JUST OUTSIDE WHERE THE TEST LOOKS. multiTenantVocabulary
+// reads code and prompts; this is UI copy in a registry, so it sat in
+// the gap. It is the same fault: one kind of business's vocabulary
+// shown to all of them.
+//
+// THE TYPE KEY DOES NOT CHANGE. `product_grid` is stored in every
+// saved page's block tree and in convertLegacy's output; renaming it
+// would strand every existing site. Only what a person reads changes.
+
+/** How the catalogue block presents itself to one business. */
+export type CatalogueDisplay = { label: string; heading: string; icon: LucideIcon };
+
+/**
+ * The catalogue block's words and icon for a business's own models.
+ *
+ * NEUTRAL WHEN NOTHING IS KNOWN, rather than defaulting to products.
+ * An empty or unreadable `business_models` means nobody has said what
+ * this business sells, and guessing "products" is how the original
+ * fault got there. "Catalogue" is true either way.
+ */
+export function catalogueDisplay(models: readonly string[] | null | undefined): CatalogueDisplay {
+  const m = Array.isArray(models) ? models : [];
+  const products = m.includes("products");
+  const services = m.includes("services");
+
+  if (products && !services) return { label: "Products", heading: "Our Products", icon: Package };
+  if (services && !products) return { label: "Services", heading: "Our Services", icon: CalendarCheck };
+  if (products && services) return { label: "Products & Services", heading: "What we offer", icon: LayoutGrid };
+  return { label: "Catalogue", heading: "What we offer", icon: LayoutGrid };
+}
+
+/**
+ * A registry entry as this business should see it.
+ *
+ * Every other block is the same for everybody, so this touches one
+ * type and leaves twelve alone.
+ */
+export function blockDefinitionFor(type: string, models: readonly string[] | null | undefined): BlockDefinition | undefined {
+  const def = BLOCK_REGISTRY[type];
+  if (!def || type !== "product_grid") return def;
+  const display = catalogueDisplay(models);
+  return { ...def, label: display.label, icon: display.icon, defaultProps: { ...def.defaultProps, heading: display.heading } };
+}
+
 export function generateBlockId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `blk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function createBlock(type: string, overrides?: Partial<Pick<Block, "props" | "children">>): Block {
-  const def = BLOCK_REGISTRY[type];
+export function createBlock(
+  type: string,
+  overrides?: Partial<Pick<Block, "props" | "children">>,
+  /**
+   * The business's own `business_models`. Only the catalogue block
+   * reads it, and only to pick its default heading — a block dropped
+   * by a salon should say "Our Services" from the first render, not
+   * after the owner retypes it.
+   */
+  models?: readonly string[] | null
+): Block {
+  const def = models === undefined ? BLOCK_REGISTRY[type] : blockDefinitionFor(type, models) ?? BLOCK_REGISTRY[type];
   if (!def) throw new Error(`Unknown block type: ${type}`);
   return {
     id: generateBlockId(),

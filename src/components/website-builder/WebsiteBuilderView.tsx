@@ -58,6 +58,9 @@ export default function WebsiteBuilderView() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [otherSurfaces, setOtherSurfaces] = useState<string | null>(null);
+  // What this business sells. The catalogue block is named from it —
+  // a salon should not be offered a "Product Grid".
+  const [businessModels, setBusinessModels] = useState<string[]>([]);
   const [prompt, setPrompt] = useState("");
   const [planning, setPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -99,6 +102,7 @@ export default function WebsiteBuilderView() {
         // site, which is most of them — a line that appears always is a
         // line nobody reads.
         setOtherSurfaces(typeof d.otherSurfaces === "string" && d.otherSurfaces.trim() ? d.otherSurfaces : null);
+        setBusinessModels(Array.isArray(d.businessModels) ? d.businessModels.filter((m: unknown) => typeof m === "string") : []);
         setLogoUrl(d.website?.logo_url ?? "");
         setPages(d.pages ?? []);
         if (d.pages?.length > 0) setActivePage((prev: string | null) => prev ?? d.pages[0].id);
@@ -756,6 +760,7 @@ export default function WebsiteBuilderView() {
 
                 <div className={previewMode === "mobile" ? "max-w-[375px] mx-auto" : ""}>
                   <BlockCanvas
+                    businessModels={businessModels}
                     blocks={legacyToBlocks(currentPage.sections)}
                     onChange={(blocks) => updatePageBlocks(currentPage.id, blocks)}
                     theme={getTheme(website?.theme_key)}

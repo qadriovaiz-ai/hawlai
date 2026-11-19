@@ -17,7 +17,7 @@ import {
 import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
-import { BLOCK_REGISTRY, createBlock } from "@/lib/blocks/registry";
+import { BLOCK_REGISTRY, blockDefinitionFor, createBlock } from "@/lib/blocks/registry";
 import { moveBlock, removeBlock, insertBlockAt, findBlockById, updateBlockProps, updateBlockResponsiveMobile } from "@/lib/blocks/treeOps";
 import type { Block, BlockDefinition } from "@/lib/blocks/types";
 import type { LandingTheme } from "@/lib/landingThemes";
@@ -48,12 +48,15 @@ export default function BlockCanvas({
   theme,
   slug,
   products,
+  businessModels,
 }: {
   blocks: Block[];
   onChange: (blocks: Block[]) => void;
   theme: LandingTheme;
   slug: string;
   products?: any[];
+  /** From dealerships.business_models. Names the catalogue block. */
+  businessModels?: readonly string[];
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -93,7 +96,7 @@ export default function BlockCanvas({
     }
 
     if (activeData?.kind === "new") {
-      onChange(insertBlockAt(blocks, targetContainerId, targetIndex, createBlock(activeData.blockType)));
+      onChange(insertBlockAt(blocks, targetContainerId, targetIndex, createBlock(activeData.blockType, undefined, businessModels ?? [])));
       return;
     }
     if (!activeData) return;
@@ -110,7 +113,7 @@ export default function BlockCanvas({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex gap-4 items-start">
-        <BlockPalette />
+        <BlockPalette models={businessModels} />
         <div className="flex-1 min-w-0 border border-dashed border-slate-300 rounded-xl p-4 bg-white" onClick={() => setSelectedId(null)}>
           <ContainerDropZone containerId={ROOT_CONTAINER} items={blocks}>
             {blocks.map((block, i) => (
@@ -142,12 +145,12 @@ export default function BlockCanvas({
         />
       </div>
       <DragOverlay>
-        {activeType && BLOCK_REGISTRY[activeType]
+        {activeType && blockDefinitionFor(activeType, businessModels ?? [])
           ? (() => {
-              const Icon = BLOCK_REGISTRY[activeType].icon;
+              const Icon = blockDefinitionFor(activeType, businessModels ?? [])!.icon;
               return (
                 <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 text-white text-xs shadow-lg">
-                  <Icon className="w-3.5 h-3.5" /> {BLOCK_REGISTRY[activeType].label}
+                  <Icon className="w-3.5 h-3.5" /> {blockDefinitionFor(activeType, businessModels ?? [])!.label}
                 </div>
               );
             })()
@@ -300,7 +303,7 @@ function InlineLeafEditor({ block, onUpdate }: { block: Block; onUpdate: (props:
   return <ImageUploader kind="section" currentUrl={block.props.url || undefined} onUploaded={(url) => onUpdate({ url })} />;
 }
 
-function BlockPalette() {
+function BlockPalette({ models }: { models?: readonly string[] }) {
   const categories: Array<{ key: "layout" | "content"; label: string }> = [
     { key: "layout", label: "Layout" },
     { key: "content", label: "Content" },
@@ -311,7 +314,8 @@ function BlockPalette() {
         <div key={cat.key}>
           <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">{cat.label}</p>
           <div className="space-y-1">
-            {Object.entries(BLOCK_REGISTRY)
+            {Object.keys(BLOCK_REGISTRY)
+              .map((type) => [type, blockDefinitionFor(type, models ?? [])!] as const)
               .filter(([, def]) => def.category === cat.key)
               .map(([type, def]) => (
                 <PaletteItem key={type} type={type} def={def} />

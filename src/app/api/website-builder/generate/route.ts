@@ -4,6 +4,7 @@ import { generateWebsite, saveGeneratedWebsite, PlannedPage } from "@/lib/agents
 import { checkAndRecordGenerationUsage, generationLimitMessage } from "@/lib/usage/generationLimits";
 import { gatherBusinessFactsSafely, factsPrompt } from "@/lib/claims/businessFacts";
 import { readPublicSurfaces, otherSurfacesLine } from "@/lib/website/publicSurfaces";
+import { cleanBusinessModels } from "@/lib/business/businessModel";
 
 // Generating several pages (even with the per-page 8s internal
 // timeout below) across concurrent batches can still add up past
@@ -55,7 +56,10 @@ export async function GET() {
   console.log("[website-builder GET] dealershipId:", dealershipId ?? "none");
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { data: dealershipRow } = await supabase.from("dealerships").select("business_category").eq("id", dealershipId).maybeSingle();
+  // `business_models` so the catalogue block can call itself what
+  // this business actually sells — see catalogueDisplay in
+  // lib/blocks/registry.
+  const { data: dealershipRow } = await supabase.from("dealerships").select("business_category, business_models").eq("id", dealershipId).maybeSingle();
 
   try {
     console.log("[website-builder GET] querying websites...");
@@ -65,7 +69,7 @@ export async function GET() {
     );
     console.log("[website-builder GET] websites query done. error:", websiteError?.message ?? "none", "found:", !!website);
     if (websiteError) throw new Error(websiteError.message);
-    if (!website) return NextResponse.json({ website: null, pages: [], businessCategory: dealershipRow?.business_category ?? null });
+    if (!website) return NextResponse.json({ website: null, pages: [], businessCategory: dealershipRow?.business_category ?? null, businessModels: cleanBusinessModels(dealershipRow?.business_models) ?? [] });
 
     console.log("[website-builder GET] querying website_pages...");
     const { data: pages, error: pagesError } = await withTimeout(
@@ -81,7 +85,15 @@ export async function GET() {
     // name. Read here rather than on the publish call, because the
     // question is "what is public right now", not "what changed".
     const surfaces = await readPublicSurfaces(supabase, dealershipId);
-    return NextResponse.json({ website, pages: pages ?? [], surfaces, otherSurfaces: otherSurfacesLine(surfaces) });
+    return NextResponse.json({
+      website,
+      pages: pages ?? [],
+      surfaces,
+      otherSurfaces: otherSurfacesLine(surfaces),
+      // What this business sells, so the catalogue block can call
+      // itself by the right name (catalogueDisplay in lib/blocks).
+      businessModels: cleanBusinessModels(dealershipRow?.business_models) ?? [],
+    });
   } catch (err: any) {
     console.error("[website-builder/generate GET] error:", err.message);
     return NextResponse.json({ error: `Couldn't load your website. (${err.message})` }, { status: 500 });
