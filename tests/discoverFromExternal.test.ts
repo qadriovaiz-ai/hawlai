@@ -128,11 +128,20 @@ describe("2. THE ADDRESS IS GUARDED, EVEN THOUGH THE OWNER TYPED IT", () => {
     expect(out.ok && out.url.protocol).toBe("https:");
   });
 
-  it("A REFUSED ADDRESS IS NEVER FETCHED", async () => {
+  it("A REFUSED ADDRESS IS NEVER FETCHED, AND IS REFUSED BY THE GUARD", async () => {
+    // THE SECOND HALF EARNS ITS PLACE. The first version asserted only
+    // that nothing was fetched — and a mutation removing the guard
+    // SURVIVED it, because without the early return `checked.url` is
+    // undefined and `.toString()` throws before fetch is reached. The
+    // test passed by accident of a crash.
+    //
+    // So the REASON is asserted too: the guard's own sentence, not
+    // whatever an exception happened to say.
     const { impl, calls } = serving(CONTACT);
     const out = await readExternalSite("http://169.254.169.254/latest/meta-data", impl);
     expect(out.ok).toBe(false);
     expect(calls).toEqual([]);
+    expect(out.ok === false && out.reason).toBe("That address isn't a public website.");
   });
 });
 
