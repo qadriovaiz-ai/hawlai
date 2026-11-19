@@ -4077,3 +4077,28 @@ is safe.
 
 **Always, even when proceeding without asking:**
 - Say what was decided and why, in the commit message and the turn's status update — not just in code comments. A judgment call that's only visible by reading a diff line-by-line isn't actually disclosed.
+
+## 2026-11-19 — The weekly lead export was never a bug
+
+**Flagged as:** one business receives the weekly leads email and another
+never does.
+
+**Settled from production:** the second business had
+`lead_export_frequency = 'off'`. The feature had never been switched on.
+The business with it set to `weekly` sends successfully, with zero
+failures in `lead_export_log`. There was no defect in the export code,
+and the owner switched the setting on himself.
+
+**Kept anyway:** the investigation found a different, real defect —
+every failure path in `runScheduledLeadExport` was recorded (to
+`lead_export_log`, and shown as "failing" by `buildExportHealth`) and
+none was told to anybody. The Autopilot page is a screen somebody has to
+open, so an export that failed on Monday would have kept failing every
+Monday with nothing to show for it. Commit `d6b5be42` makes all three
+failure paths notify, and migration 235 adds the notification kind.
+
+**Why this is logged:** it is the third time in this series that a
+flag's wording and the actual defect were different things — the
+`/api/growth-report` route, the `rejected` status, and now this. The
+practice of verifying the root cause before writing a fix has paid for
+itself three times, and is worth keeping.

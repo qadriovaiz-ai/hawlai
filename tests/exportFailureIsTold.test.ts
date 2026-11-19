@@ -3,6 +3,15 @@
 // THE FLAG: one business gets the weekly leads email and another never
 // does.
 //
+// THE FLAG WAS NOT A BUG. Settled from production on 19 November 2026:
+// the second business had lead_export_frequency = 'off' and the feature
+// had never been switched on. The business with it set has been sending
+// successfully, zero failures. That is the third time in this series
+// that a flag's wording and the actual defect turned out to be
+// different things — which is why the root cause is checked first.
+//
+// WHAT THIS FILE GUARDS IS THE REAL FINDING, which stands on its own.
+//
 // WHAT THE CODE SETTLES. The daily run plans jobs for EVERY business
 // with no filter (dailyJobs.planDailyJobs), and `lead_export` is the
 // first subsystem in the `signals` group, so no business is starved by

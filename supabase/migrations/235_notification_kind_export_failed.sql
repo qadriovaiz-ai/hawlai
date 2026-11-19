@@ -8,11 +8,18 @@
 -- which looks exactly like the feature not existing.
 --
 -- Flagged as "this business gets the weekly report and that one never
--- does". The likeliest permanent cause is a null owner_id, or an owner
--- whose auth user no longer exists: ownerEmail() returns null, the run
--- logs it, and nothing reaches anybody. Which business it is cannot be
--- told from the code — see the verify queries at the end, which settle
--- it from production.
+-- does". THE FLAG WAS NOT A BUG, and the queries below are what
+-- settled it, on 19 November 2026: the second business had
+-- lead_export_frequency = 'off' and the feature had simply never been
+-- switched on. The business that has it set to 'weekly' has been
+-- sending successfully, with zero failures on record.
+--
+-- This migration is kept anyway, and so is the notification it
+-- enables, because the OTHER thing the investigation found is real:
+-- every failure path was recorded and none was told to anybody. An
+-- export that fails on Monday would keep failing every Monday with
+-- nothing to show for it. That defect existed whether or not it was
+-- the one flagged.
 --
 -- NOT email_delivery_problem. That kind is a BOUNCE, raised by the
 -- Resend webhook after a send. This one never left.
