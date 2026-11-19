@@ -73,6 +73,12 @@ export type PreflightInput = {
   } | null;
   /** Only at the second call: exactly what buildMetaTargeting returned. */
   targeting?: { targeting: Record<string, any>; specialAdCategory: string } | null;
+  /**
+   * Exactly what declarationFor returned (regulatedCategory.ts).
+   * Computed outside, because deciding it needs the business's own text
+   * and this function stays pure.
+   */
+  regulated?: { kind: "none" } | { kind: "refuse"; reason: string } | { kind: "declare"; value: string } | null;
 };
 
 export type PreflightResult = {
@@ -221,6 +227,17 @@ export function preflight(input: PreflightInput): PreflightResult {
         "This campaign doesn't declare whether it's a special category ad (housing, employment or credit). That has to be stated, even when the answer is none."
       );
     }
+  }
+
+  // ── Meta's regional regulated categories ───────────────────────────
+  // India securities and investments ads need a verified advertiser,
+  // payer and beneficiary before they may run at all. Declaring the
+  // category without that verification produces Meta's "Verification
+  // required for 1 location" (#3858541), so a business that looks
+  // regulated is stopped and told what Meta needs — never declared on
+  // its behalf.
+  if (input.regulated && input.regulated.kind === "refuse") {
+    add("needs_finance_verification", "adset", input.regulated.reason);
   }
 
   return { ok: problems.length === 0, problems, budgetMinor, budgetRaised };

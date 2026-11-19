@@ -22,6 +22,7 @@ import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
 import { preflight, preflightMessage } from "@/lib/ads/preflight";
 import { dryRun, dryRunMessage } from "@/lib/ads/dryRun";
+import { declarationFor, financeEvidence, targetsIndia } from "@/lib/ads/regulatedCategory";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
 export type LaunchContext = {
@@ -134,7 +135,22 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
   // An ad set Meta refuses leaves a campaign already created and
   // orphaned in Ads Manager, which is where "New Sales ad set"-looking
   // debris comes from. Refusing one frame earlier leaves nothing.
-  const targetingChecks = preflight({ targeting: { targeting: built.targeting, specialAdCategory: built.specialAdCategory } });
+  // META'S REGIONAL REGULATED CATEGORIES — decided from the business's
+  // OWN words, and never decided silently. Evidence raises a question
+  // and stops the launch; its absence sends no field at all, which is
+  // the unticked box in Ads Manager.
+  const regulated = declarationFor({
+    india: targetsIndia(built.targeting),
+    evidence: financeEvidence([
+      { label: "Your ad text", text: `${plan.headline ?? ""} ${plan.body ?? ""}` },
+      { label: "The category on your profile", text: dealership?.business_category },
+    ]),
+  });
+
+  const targetingChecks = preflight({
+    targeting: { targeting: built.targeting, specialAdCategory: built.specialAdCategory },
+    regulated,
+  });
   if (!targetingChecks.ok) {
     metaError("launch.preflight_failed", {
       dealership: dealershipId,
@@ -211,6 +227,11 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     // destination actually calls for it.
     ...(destination.promotedObject ? { promoted_object: destination.promotedObject } : {}),
     ...(ctx.scheduledStart ? { start_time: new Date(ctx.scheduledStart).toISOString() } : {}),
+    // ONLY WHEN IT HAS BEEN ESTABLISHED, NEVER INFERRED. An ordinary
+    // business sends no field — the same as leaving the box unticked,
+    // which is the state Meta accepted on 19 November 2026. A business
+    // that looks regulated never reaches here: preflight refused above.
+    ...(regulated.kind === "declare" ? { regional_regulated_categories: [regulated.value] } : {}),
   };
 
   // The ad set is where most refusals happen — budget, targeting,
