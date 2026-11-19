@@ -120,12 +120,25 @@ describe("1. recording a finding", () => {
   });
 
   it("AND NEVER OVERWRITES A REJECTION — the cooldown's whole point", async () => {
+    // THE CLOCK IS PINNED, AND IT HAS TO BE. This test read the real
+    // one, against a rejection dated 20 October. It passed every day
+    // until 19 November 2026 and failed that morning, because that is
+    // day 30 and `recordFindings` reopens a rejection once the cooldown
+    // has elapsed — behaviour added the day before, in f9509cfc, which
+    // updated rejectionCooldown.test.ts and left this one on the wall
+    // clock.
+    //
+    // A test whose fixture is an absolute date and whose "now" is
+    // today's is not testing the thing it names; it is counting down to
+    // a morning when it means something else. The assertions below are
+    // unchanged — only the clock is now stated.
+    const fiveDaysLater = new Date("2026-10-25T00:00:00Z");
     const { client, tables, writes } = db({
       opportunities: [
         { id: "o1", type: "pages_without_search_title", reference_id: "singleton", status: "rejected", rejected_at: "2026-10-20T00:00:00Z" },
       ],
     });
-    const r = await recordFindings(client, "d1", [finding()]);
+    const r = await recordFindings(client, "d1", [finding()], { now: fiveDaysLater });
     expect(r).toEqual({ inserted: 0, updated: 1, failed: 0 });
     expect(tables.opportunities).toHaveLength(1);
     expect(tables.opportunities[0].status).toBe("rejected");
