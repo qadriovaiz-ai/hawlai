@@ -31,6 +31,7 @@ import { createPlatformRegistry } from "@/lib/publish/registry";
 import { humanizeActionType } from "@/lib/approvalLabels";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { setCampaignStatus } from "@/lib/ads/campaignStatus";
+import { accountHealthFor } from "@/lib/ads/adAccountLimits";
 import { adsTokenFor } from "@/lib/ads/metaToken";
 
 /**
@@ -265,6 +266,11 @@ export async function applyApprovalDecision(
         },
         token,
         status: "ACTIVE",
+        // An approval granted is not an account that can pay. Without
+        // this, the approver is told the campaign started and nothing
+        // delivers — which is the seventy-day failure with a signature
+        // on it.
+        account: await accountHealthFor(service, approval.dealership_id, { token }),
         dealershipId: approval.dealership_id,
       });
       if (!activation.ok) {

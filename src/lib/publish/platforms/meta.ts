@@ -39,6 +39,7 @@ import { resolveAdDestination, type ResolvedDestination } from "@/lib/ads/destin
 import {
   getAdAccountLimits,
   isAccountUsable,
+  accountHealthFor,
   clampBudgetToMinimum,
   describeMinimum,
   formatMinorAmount,
@@ -120,7 +121,12 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     // The user token when stored: the Page token can't read campaigns or ad sets (metaToken.ts).
     const token = await adsTokenFor(supabase, action.dealershipId, row);
     if (!token) return { ok: false, reason: "Connect your Facebook Page before starting a campaign." };
-    const account = isAccountUsable(row.fb_account_status);
+    // REFRESHED, not read straight off the cached column. This was
+    // `isAccountUsable(row.fb_account_status)` — whatever was last
+    // written there, and the reading is kept for seven days. A payment
+    // method removed last week would still read healthy, which is the
+    // exact case this check exists for.
+    const account = await accountHealthFor(supabase, action.dealershipId, { row, token });
     if (!account.usable) return { ok: false, reason: account.reason };
 
     const ad = await draftFor(action);
@@ -137,11 +143,21 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     const state = await readCampaignState(
       { campaignId: ad.meta_campaign_id ?? null, adsetId: ad.meta_adset_id ?? null, adId: ad.meta_ad_id },
       token,
+      account,
       action.dealershipId
     );
     if (!state.ok) return { ok: false, reason: state.reason };
     if (state.running) {
-      return { ok: false, reason: `"${ad.headline}" is already running on Meta — the campaign, ad set and ad all report ACTIVE.` };
+      // `running`, NOT `delivering`, and the difference is the point.
+      // The question here is "is it already switched on", and a campaign
+      // whose account cannot pay is still switched on — offering to
+      // start it again would do nothing. So it is still refused, and the
+      // account is named, because that is the thing the owner can fix.
+      const blocked = state.account && !state.account.usable ? ` It still isn't delivering, though: ${state.account.reason}` : "";
+      return {
+        ok: false,
+        reason: `"${ad.headline}" is already running on Meta — the campaign, ad set and ad all report ACTIVE.${blocked}`,
+      };
     }
     // What Ads Manager shows on the campaign row.
     const effective = (state.levels.find((l) => l.level === "campaign") ?? state.ad).effective;
@@ -197,7 +213,12 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
     // The user token when stored: the Page token can't read campaigns or ad sets (metaToken.ts).
     const token = await adsTokenFor(supabase, action.dealershipId, row);
     if (!token) return { ok: false, reason: "The Facebook connection is missing." };
-    const account = isAccountUsable(row.fb_account_status);
+    // REFRESHED, not read straight off the cached column. This was
+    // `isAccountUsable(row.fb_account_status)` — whatever was last
+    // written there, and the reading is kept for seven days. A payment
+    // method removed last week would still read healthy, which is the
+    // exact case this check exists for.
+    const account = await accountHealthFor(supabase, action.dealershipId, { row, token });
     if (!account.usable) return { ok: false, reason: account.reason };
 
     const ad = await draftFor(action);
@@ -221,6 +242,7 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
       objects: { campaignId: ad.meta_campaign_id ?? null, adsetId: ad.meta_adset_id ?? null, adId: ad.meta_ad_id },
       token,
       status: "ACTIVE",
+      account: await accountHealthFor(supabase, action.dealershipId, { row, token }),
       dealershipId: action.dealershipId,
     });
     if (!result.ok) return { ok: false, reason: result.reason };
@@ -369,7 +391,7 @@ export function createMetaPlatform(deps: MetaPlatformDeps): PublishPlatform {
       // Re-checked at execution, not only at preview. An account can
       // be disabled between the two, and creating into a dead account
       // fails five Graph calls deep with an unhelpful error.
-      const account = isAccountUsable(row.fb_account_status);
+      const account = await accountHealthFor(supabase, action.dealershipId, { row, token });
       if (!account.usable) return { ok: false, reason: account.reason };
 
       // Re-resolved rather than carried over from the preview: the

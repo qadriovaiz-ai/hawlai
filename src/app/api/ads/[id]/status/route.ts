@@ -9,6 +9,7 @@ import { getValidSnapchatAccessToken, setSnapchatCampaignStatus } from "@/lib/ad
 import { getValidLinkedInAccessToken, setLinkedInCampaignStatus } from "@/lib/ads/linkedinAds";
 import { readToken, tokenWrite } from "@/lib/crypto/oauthSecrets";
 import { setCampaignStatus } from "@/lib/ads/campaignStatus";
+import { accountHealthFor } from "@/lib/ads/adAccountLimits";
 import { adsTokenFor } from "@/lib/ads/metaToken";
 
 const GRAPH_VERSION = "v23.0";
@@ -278,6 +279,10 @@ export async function PATCH(
     },
     token,
     status: status as "ACTIVE" | "PAUSED",
+    // ONLY WHEN STARTING. Pausing must never wait on a Graph read: the
+    // safe direction is not allowed to be the slow one, and a dead
+    // account is a reason to pause rather than a reason to refuse to.
+    account: status === "ACTIVE" ? await accountHealthFor(supabase, dealershipId, { token }) : null,
     dealershipId,
   });
 

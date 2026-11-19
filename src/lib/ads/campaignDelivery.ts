@@ -49,7 +49,19 @@ export function describeDelivery(s: CampaignState): Delivery {
   const effective = s.levels.map((l) => l.effective);
   if (effective.includes("DELETED")) return d("deleted");
   if (effective.includes("ARCHIVED")) return d("archived");
-  if (s.running) return d("active");
+
+  // `delivering`, NOT `running` — the fourth level. All three toggles
+  // can say ACTIVE on an account that cannot pay, and that is the state
+  // a campaign sat in for seventy days while this column said "Active".
+  if (s.delivering) return d("active");
+
+  // THE ACCOUNT IS THE REASON, SO THE ACCOUNT IS WHAT IS SAID. Reached
+  // when every level is ACTIVE and the account is not usable, which
+  // would otherwise fall through to the line below and report
+  // `explainEffective("ACTIVE")` — "Meta reports it as ACTIVE" — as the
+  // explanation for why it is not delivering. True, useless, and
+  // exactly the sentence that leaves an owner with nothing to do.
+  if (s.running && s.account && !s.account.usable) return d("not_delivering", s.account.reason);
 
   // Switched off somewhere — the toggle a person flips in Ads Manager.
   const adEffective = s.ad.effective ?? "UNKNOWN";

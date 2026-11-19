@@ -31,6 +31,24 @@
 // that never happened. Reads and status writes now retry transient
 // errors (metaRead.ts), verification waits briefly for Meta to catch up,
 // and "accepted but not read back" is its own outcome: unconfirmed.
+//
+// AND THREE LEVELS ARE NOT THE WHOLE STORY EITHER (19 November 2026).
+// A campaign launched on 10 September read Active here and in Ads
+// Manager, at every one of those three levels, for about seventy days —
+// with zero impressions and zero spend. The ad account had no payment
+// method on it. Meta's own words were "ad set delivering zero
+// impressions due to non-delivery".
+//
+// The account is a fourth level above the campaign, and nothing was
+// reading it. `isAccountUsable` already existed, with a sentence for
+// every status code Meta documents; it was called before a LAUNCH,
+// which spends nothing because everything is created paused, and never
+// on the read that decides what the owner is told. So the check sat on
+// the harmless door and was missing from the one that matters.
+//
+// Hence `delivering`, which is what may be shown as "Active", and
+// `running`, which is only the three toggles. They are different
+// questions and conflating them is what let this go unnoticed.
 
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { metaRead, metaWriteIdempotent, metaRetryTiming, describeGraphFailure, waitMs, type GraphFailure } from "@/lib/ads/metaRead";
@@ -114,8 +132,37 @@ export type LevelState = {
   effective: string | null;
 };
 
+/**
+ * Whether the ad account itself can spend, in the owner's words.
+ *
+ * Exactly what `isAccountUsable` returns — reused rather than redefined,
+ * because it already has a sentence for every status code Meta
+ * documents and the correct answer for "never checked".
+ */
+export type AccountHealth = { usable: boolean; reason: string };
+
 export type CampaignState =
-  | { ok: true; levels: LevelState[]; ad: LevelState; running: boolean }
+  | {
+      ok: true;
+      levels: LevelState[];
+      ad: LevelState;
+      /**
+       * All three toggles say ACTIVE. This is a fact about Meta's
+       * hierarchy and nothing else — it does NOT mean money can move.
+       * Use it for "is this already switched on", never for a label.
+       */
+      running: boolean;
+      /** The account's own state, or null when the caller did not check. */
+      account: AccountHealth | null;
+      /**
+       * THE ONE THAT MAY BE CALLED "ACTIVE". Every level is on AND the
+       * account can actually pay. A campaign on a disabled or unsettled
+       * account is `running` and not `delivering` — which is precisely
+       * the state that read Active for seventy days while reaching
+       * nobody.
+       */
+      delivering: boolean;
+    }
   | {
       ok: false;
       reason: string;
@@ -146,6 +193,15 @@ const MISMATCH =
 export async function readCampaignState(
   objects: CampaignObjects,
   token: string,
+  /**
+   * The ad account's state, from `isAccountUsable`. REQUIRED, and
+   * positioned before the optional id so TypeScript makes every caller
+   * answer it: the account went unread for seventy days precisely
+   * because nothing forced the question. Pass `null` only where there
+   * is genuinely no account to read, and the state then reports
+   * `account: null` rather than pretending it is healthy.
+   */
+  account: AccountHealth | null,
   dealershipId?: string
 ): Promise<CampaignState> {
   const { campaignId, adsetId, adId } = objects;
@@ -180,7 +236,12 @@ export async function readCampaignState(
   const ad: LevelState = { level: "ad", id: adId, status: adNode.status ?? null, effective: adNode.effective_status ?? null };
   levels.push(ad);
 
-  return { ok: true, levels, ad, running: levels.every((l) => l.effective === "ACTIVE") };
+  const running = levels.every((l) => l.effective === "ACTIVE");
+  // An unchecked account is not a broken one — the same rule
+  // `isAccountUsable` applies to a null status, for the same reason:
+  // turning a missing cache row into "your ads are off" would be its own
+  // false alarm. It is only ever subtractive.
+  return { ok: true, levels, ad, running, account, delivering: running && account?.usable !== false };
 }
 
 /** Why a campaign that should be running is not, in plain words. */
@@ -216,9 +277,15 @@ export async function setCampaignStatus(input: {
   objects: CampaignObjects;
   token: string;
   status: "ACTIVE" | "PAUSED";
+  /**
+   * The ad account's state. Required for the same reason
+   * readCampaignState requires it: "it started" must not be claimed for
+   * an account that cannot pay. Pausing ignores it entirely.
+   */
+  account: AccountHealth | null;
   dealershipId?: string;
 }): Promise<StatusResult> {
-  const { objects, token, status, dealershipId } = input;
+  const { objects, token, status, account, dealershipId } = input;
   const { campaignId, adsetId, adId } = objects;
 
   if (!adId) return { ok: false, reason: "This campaign hasn't been created on Meta yet." };
@@ -228,7 +295,7 @@ export async function setCampaignStatus(input: {
   // campaign and the ad of another. Not done for PAUSE: stopping spend
   // must never wait on a read, and pausing the wrong ad spends nothing.
   if (status === "ACTIVE") {
-    const before = await readCampaignState(objects, token, dealershipId);
+    const before = await readCampaignState(objects, token, account, dealershipId);
     if (!before.ok) return { ok: false, reason: before.reason };
   }
 
@@ -260,17 +327,17 @@ export async function setCampaignStatus(input: {
   // ACTIVE (readCampaignState); paused means the ad reports one of the
   // known paused states; anything else is unconfirmed either way.
   const matches = (s: Extract<CampaignState, { ok: true }>) =>
-    status === "ACTIVE" ? s.running : PAUSED_STATES.has(s.ad.effective ?? "");
+    status === "ACTIVE" ? s.delivering : PAUSED_STATES.has(s.ad.effective ?? "");
 
   // Meta can take a moment to reflect a status change it has accepted.
   // A readable state that doesn't match yet is re-read a couple of times
   // before it is called a failure.
-  let after = await readCampaignState(objects, token, dealershipId);
+  let after = await readCampaignState(objects, token, account, dealershipId);
   for (const wait of metaRetryTiming.settleMs) {
     if (!after.ok || !after.ad.effective || matches(after)) break;
     metaLog("status.settling", { dealership: dealershipId, ad: adId, requested: status, effective: after.ad.effective, wait_ms: wait });
     await waitMs(wait);
-    after = await readCampaignState(objects, token, dealershipId);
+    after = await readCampaignState(objects, token, account, dealershipId);
   }
 
   if (!after.ok || !after.ad.effective) {

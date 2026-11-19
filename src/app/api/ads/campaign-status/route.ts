@@ -20,6 +20,7 @@ import { META_PAGE_TOKEN_SELECT } from "@/lib/crypto/oauthSecrets";
 import { adsTokenFor } from "@/lib/ads/metaToken";
 import { readCampaignState } from "@/lib/ads/campaignStatus";
 import { readCampaignBudget, describeBudget } from "@/lib/ads/campaignBudget";
+import { accountHealthFor, LIMITS_SELECT } from "@/lib/ads/adAccountLimits";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
 import type { LiveDelivery } from "@/lib/ads/campaignDeliveryDisplay";
 import { metaError } from "@/lib/ads/metaLog";
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
 
   const { data: dealership } = await supabase
     .from("dealerships")
-    .select(`${META_PAGE_TOKEN_SELECT}, fb_currency`)
+    .select(`${META_PAGE_TOKEN_SELECT}, fb_ad_account_id, ${LIMITS_SELECT}`)
     .eq("id", dealershipId)
     .maybeSingle();
   const token = await adsTokenFor(supabase, dealershipId, dealership);
@@ -80,11 +81,19 @@ export async function POST(request: Request) {
   const checkedAt = new Date().toISOString();
   const queue = [...(rows ?? [])];
 
+  // ONCE PER REQUEST, NOT ONCE PER CAMPAIGN. The account is the same for
+  // every row in the table, and it is read before the workers start so
+  // fifty campaigns do not become fifty identical Graph reads. Refreshed
+  // from Meta when the cached reading is stale, which is the case this
+  // exists to catch: a payment method removed last week.
+  const account = await accountHealthFor(supabase, dealershipId, { row: dealership ?? undefined, token });
+
   async function worker() {
     for (let r = queue.shift(); r; r = queue.shift()) {
       const state = await readCampaignState(
         { campaignId: r.meta_campaign_id ?? null, adsetId: r.meta_adset_id ?? null, adId: r.meta_ad_id ?? null },
         token!,
+        account,
         dealershipId
       );
       const delivery = describeDelivery(state);

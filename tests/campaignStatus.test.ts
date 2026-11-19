@@ -17,6 +17,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { setCampaignStatus, readEffectiveStatus } from "@/lib/ads/campaignStatus";
 
+import type { AccountHealth } from "@/lib/ads/campaignStatus";
+
+/** A healthy ad account, so these cases keep testing the hierarchy and nothing else. */
+const HEALTHY: AccountHealth = { usable: true, reason: "Active." };
+
 afterEach(() => vi.unstubAllGlobals());
 
 const OBJECTS = { campaignId: "120254652336640260", adsetId: "120254652336770260", adId: "120254652337290260" };
@@ -61,7 +66,7 @@ describe("all three levels are flipped, in the right order", () => {
     // other way leaves a window where the ad is "active" under a paused
     // parent — the exact state this exists to prevent.
     const m = meta({ effective: "ACTIVE" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
 
     expect(r.ok).toBe(true);
     expect(m.posts.map((p) => p.node)).toEqual([OBJECTS.campaignId, OBJECTS.adsetId, OBJECTS.adId]);
@@ -70,13 +75,13 @@ describe("all three levels are flipped, in the right order", () => {
 
   it("does NOT flip only the ad — the whole bug in one assertion", async () => {
     const m = meta({ effective: "ACTIVE" });
-    await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(m.posts.length, "only the ad was flipped, so the parents stay paused").toBe(3);
   });
 
   it("pauses all three too, so the record is unambiguous", async () => {
     const m = meta({ effective: "PAUSED" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(true);
     expect(m.posts.every((p) => p.status === "PAUSED")).toBe(true);
     expect(m.posts.length).toBe(3);
@@ -84,14 +89,14 @@ describe("all three levels are flipped, in the right order", () => {
 
   it("still works for an older row that only stored an ad id", async () => {
     const m = meta({ effective: "ACTIVE" });
-    const r = await setCampaignStatus({ objects: { campaignId: null, adsetId: null, adId: "ad_1" }, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: { campaignId: null, adsetId: null, adId: "ad_1" }, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(true);
     expect(m.posts.map((p) => p.node)).toEqual(["ad_1"]);
   });
 
   it("refuses when there is no ad on Meta at all", async () => {
     meta();
-    const r = await setCampaignStatus({ objects: { campaignId: null, adsetId: null, adId: null }, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: { campaignId: null, adsetId: null, adId: null }, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toMatch(/created on Meta/i);
   });
@@ -102,7 +107,7 @@ describe("effective_status is verified, not assumed", () => {
     // THE ORIGINAL FAILURE, now caught. Every POST succeeds; Meta then
     // reports CAMPAIGN_PAUSED. Previously this was reported as success.
     const m = meta({ effective: "CAMPAIGN_PAUSED" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
 
     expect(m.posts.length).toBe(3);
     expect(r.ok).toBe(false);
@@ -111,7 +116,7 @@ describe("effective_status is verified, not assumed", () => {
 
   it("names the reason in words, not as a Meta enum", async () => {
     meta({ effective: "CAMPAIGN_PAUSED" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(!r.ok && r.reason).toMatch(/campaign above it is still paused/i);
     expect(!r.ok && r.reason).toMatch(/nothing is being spent/i);
   });
@@ -124,7 +129,7 @@ describe("effective_status is verified, not assumed", () => {
     ["WITH_ISSUES", /flagged an issue/i],
   ])("explains %s rather than passing the code through", async (effective, expected) => {
     meta({ effective });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toMatch(expected);
   });
@@ -132,13 +137,13 @@ describe("effective_status is verified, not assumed", () => {
   it("treats an UNKNOWN effective status as not running, rather than assuming it is", async () => {
     // A state Meta adds later must not be read as success by default.
     meta({ effective: "SOME_NEW_META_STATE" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
   });
 
   it("refuses to switch anything on when Meta's current state can't be read first", async () => {
     const m = meta({ verifyFails: true });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(m.posts).toEqual([]);
     expect(!r.ok && r.reason).toMatch(/couldn't read/i);
@@ -149,7 +154,7 @@ describe("effective_status is verified, not assumed", () => {
     // was accepted, so the campaign may already be spending, and saying
     // it failed would be just as false.
     meta({ verifyFailsAfterFlip: true });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.unconfirmed).toBe(true);
     expect(!r.ok && r.reason).toMatch(/accepted the start request/i);
@@ -158,13 +163,13 @@ describe("effective_status is verified, not assumed", () => {
 
   it("accepts a genuine pause, where a paused effective status IS the goal", async () => {
     meta({ effective: "CAMPAIGN_PAUSED" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(true);
   });
 
   it("fails a pause that did not take", async () => {
     meta({ effective: "ACTIVE" });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toMatch(/still shows as running/i);
   });
@@ -177,7 +182,7 @@ describe("the ids on file must be one real campaign on Meta", () => {
   // and somebody else's ad.
   it("refuses to switch anything on when the ad sits under another campaign", async () => {
     const m = meta({ states: { [OBJECTS.adId]: { campaign_id: "120254999999999999" } } });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toMatch(/different campaign/i);
     expect(m.posts).toEqual([]);
@@ -185,7 +190,7 @@ describe("the ids on file must be one real campaign on Meta", () => {
 
   it("…or under another ad set", async () => {
     const m = meta({ states: { [OBJECTS.adId]: { adset_id: "120254999999999998" } } });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(m.posts).toEqual([]);
   });
@@ -193,7 +198,7 @@ describe("the ids on file must be one real campaign on Meta", () => {
   it("an ad that reports ACTIVE is not enough: a paused campaign above it means not running", async () => {
     // "Running" means every level says so, not one of them.
     meta({ states: { [OBJECTS.campaignId]: { status: "PAUSED", effective_status: "PAUSED" } } });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toMatch(/campaign above it is still paused/i);
   });
@@ -208,7 +213,7 @@ describe("a level that refuses to flip is named", () => {
     // "Meta rejected the change" tells nobody which of three objects
     // refused, or why.
     meta({ failOn: node });
-    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toContain(level);
     expect(!r.ok && r.reason).toContain("Invalid parameter");
@@ -216,7 +221,7 @@ describe("a level that refuses to flip is named", () => {
 
   it("stops at the first failure rather than half-flipping the rest", async () => {
     const m = meta({ failOn: OBJECTS.campaignId });
-    await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE" });
+    await setCampaignStatus({ objects: OBJECTS, token: "T", status: "ACTIVE", account: HEALTHY });
     expect(m.posts).toEqual([]);
   });
 });

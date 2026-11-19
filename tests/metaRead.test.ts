@@ -16,6 +16,11 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { metaRead, metaWriteIdempotent, classifyGraphError, DEFAULT_META_RETRY_TIMING } from "@/lib/ads/metaRead";
 import { setCampaignStatus, readCampaignState } from "@/lib/ads/campaignStatus";
 
+import type { AccountHealth } from "@/lib/ads/campaignStatus";
+
+/** A healthy ad account, so these cases keep testing the hierarchy and nothing else. */
+const HEALTHY: AccountHealth = { usable: true, reason: "Active." };
+
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const TOKEN = "EAAB-SECRET-TOKEN-123";
@@ -64,7 +69,7 @@ const accepted = ok({ success: true });
 
 describe("metaRead retries what is worth retrying", () => {
   it("a 500 'unexpected error' on the first attempt → retried, and the value comes back", async () => {
-    const calls = scripted(UNEXPECTED, ok({ id: A, effective_status: "ACTIVE" }));
+    const calls = scripted(UNEXPECTED, ok({ id: A, effective_status: "ACTIVE", account: HEALTHY }));
     const r = await metaRead(A, "effective_status", TOKEN, { stage: "t" });
     expect(r.ok && r.data.effective_status).toBe("ACTIVE");
     expect(calls).toHaveLength(2);
@@ -135,14 +140,14 @@ describe("metaRead retries what is worth retrying", () => {
 describe("the two reported cases, with one transient error each", () => {
   it("STATUS CHECK: the first read fails transiently → the real state comes back", async () => {
     scripted(UNEXPECTED, adState("ACTIVE", "ACTIVE"), level(C, "ACTIVE", "ACTIVE"), level(S, "ACTIVE", "ACTIVE"));
-    const s = await readCampaignState(OBJECTS, TOKEN);
+    const s = await readCampaignState(OBJECTS, TOKEN, HEALTHY);
     expect(s.ok && s.running).toBe(true);
   });
 
   it("PAUSE: the confirmation read fails once → retried, and the pause is confirmed", async () => {
     // Pause does no read first: three accepted writes, then the read-back.
     const calls = scripted(accepted, accepted, accepted, UNEXPECTED, adState("CAMPAIGN_PAUSED"), level(C, "PAUSED"), level(S, "CAMPAIGN_PAUSED"));
-    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(true);
     expect(calls.filter((c) => c.startsWith("POST"))).toHaveLength(3);
   });
@@ -154,13 +159,13 @@ describe("the two reported cases, with one transient error each", () => {
       adState("ACTIVE", "PAUSED"), level(C, "ACTIVE", "PAUSED"), level(S, "ACTIVE", "PAUSED"),
       adState("CAMPAIGN_PAUSED"), level(C, "PAUSED"), level(S, "CAMPAIGN_PAUSED"),
     );
-    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(true);
   });
 
   it("PAUSE accepted but never readable → UNCONFIRMED, worded as sent, not as failed", async () => {
     scripted(accepted, accepted, accepted, UNEXPECTED);
-    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.unconfirmed).toBe(true);
     expect(!r.ok && r.reason).toMatch(/accepted the pause for the campaign, ad set and ad/i);
@@ -174,13 +179,13 @@ describe("the two reported cases, with one transient error each", () => {
       accepted, accepted, accepted,
       adState("ACTIVE", "ACTIVE"), level(C, "ACTIVE", "ACTIVE"), level(S, "ACTIVE", "ACTIVE"),
     );
-    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "ACTIVE" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "ACTIVE", account: HEALTHY });
     expect(r.ok).toBe(true);
   });
 
   it("a status WRITE hit by a transient error is retried, not reported as refused", async () => {
     const calls = scripted(UNEXPECTED, accepted, accepted, accepted, adState("CAMPAIGN_PAUSED"), level(C, "PAUSED"), level(S, "CAMPAIGN_PAUSED"));
-    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED" });
+    const r = await setCampaignStatus({ objects: OBJECTS, token: TOKEN, status: "PAUSED", account: HEALTHY });
     expect(r.ok).toBe(true);
     expect(calls.filter((c) => c === `POST ${C}`)).toHaveLength(2);
   });

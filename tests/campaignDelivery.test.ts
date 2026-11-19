@@ -10,12 +10,19 @@ import { describe, it, expect } from "vitest";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
 import { statusCell, DELIVERY_LABELS, type DeliveryState, type LiveDelivery } from "@/lib/ads/campaignDeliveryDisplay";
 import { resolveVisibleColumns, serializeColumns, ALL_COLUMN_KEYS } from "@/lib/analytics/campaignColumns";
-import type { CampaignState, LevelState } from "@/lib/ads/campaignStatus";
+import type { AccountHealth, CampaignState, LevelState } from "@/lib/ads/campaignStatus";
+
+const HEALTHY: AccountHealth = { usable: true, reason: "Active." };
 
 const lvl = (level: LevelState["level"], status: string, effective: string): LevelState => ({ level, id: level, status, effective });
 const state = (campaign: [string, string], adset: [string, string], ad: [string, string]): CampaignState => {
   const levels = [lvl("campaign", ...campaign), lvl("adset", ...adset), lvl("ad", ...ad)];
-  return { ok: true, levels, ad: levels[2], running: levels.every((l) => l.effective === "ACTIVE") };
+  const running = levels.every((l) => l.effective === "ACTIVE");
+  // A HEALTHY ACCOUNT BY DEFAULT, so every case below keeps testing
+  // exactly what it did before: the three-level hierarchy. The account
+  // is a fourth level (19 November 2026) and has its own file —
+  // accountIsALevel.test.ts — rather than being smuggled in here.
+  return { ok: true, levels, ad: levels[2], running, account: HEALTHY, delivering: running };
 };
 
 describe("Meta's three-level state → one status", () => {

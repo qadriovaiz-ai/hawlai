@@ -3494,6 +3494,13 @@ export async function pauseMetaCampaign(ctx: any, supabase: any, input: any) {
     objects: { campaignId: campaign.meta_campaign_id ?? null, adsetId: campaign.meta_adset_id ?? null, adId: campaign.meta_ad_id ?? null },
     token,
     status: "PAUSED",
+    // NULL ON PURPOSE, AND IT MUST STAY NULL. Pausing is the safe
+    // direction and this codebase's rule is that the safe direction is
+    // never the slow one. Reading the ad account first would put a
+    // Graph call — and a possible failure — in front of stopping spend,
+    // to answer a question that changes nothing: a dead account is a
+    // reason to pause, never a reason to refuse to.
+    account: null,
     dealershipId: ctx.id,
   });
   // A pause Meta ACCEPTED but that couldn't be read back is not a

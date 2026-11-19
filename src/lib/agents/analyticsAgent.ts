@@ -12,6 +12,7 @@
 
 import type { Loaded } from "@/lib/dataState";
 import { readCampaignState } from "@/lib/ads/campaignStatus";
+import { accountHealthFor } from "@/lib/ads/adAccountLimits";
 import { describeDelivery } from "@/lib/ads/campaignDelivery";
 import { adsTokenFor } from "@/lib/ads/metaToken";
 import { metaRead } from "@/lib/ads/metaRead";
@@ -379,11 +380,19 @@ async function recordDeliveryStatus(supabase: any, dealershipId: string, adCreat
     .in("id", adCreativeIds);
   if (error || !creatives) return;
 
+  // Read once, before the loop: the account is the same for every
+  // campaign, and this is what keeps "Active" from being written into a
+  // snapshot for an account that cannot pay. The snapshots are what the
+  // Status column falls back to when Meta can't be reached, so a wrong
+  // one here outlives the day it was taken.
+  const account = await accountHealthFor(supabase, dealershipId, { token });
+
   for (const c of creatives) {
     const delivery = describeDelivery(
       await readCampaignState(
         { campaignId: c.meta_campaign_id ?? null, adsetId: c.meta_adset_id ?? null, adId: c.meta_ad_id ?? null },
         token,
+        account,
         dealershipId
       )
     );

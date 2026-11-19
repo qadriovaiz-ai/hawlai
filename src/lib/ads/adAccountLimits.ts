@@ -63,6 +63,33 @@ export function isAccountUsable(status: number | null | undefined): { usable: bo
   };
 }
 
+/**
+ * The ad account's state, ready to hand to readCampaignState.
+ *
+ * ONE ANSWER, IN ONE PLACE. Five call sites now have to say whether the
+ * account can pay, and five copies of "read the row, call
+ * isAccountUsable" would drift — one of them would end up reading the
+ * cached column directly and never refreshing it, which is the version
+ * of this bug that hides for another seventy days.
+ *
+ * Goes through getAdAccountLimits, so a reading older than its TTL is
+ * refreshed from Meta first. That matters here more than at launch: a
+ * payment method removed last week is exactly the case this exists to
+ * notice, and a stale cache would report the account healthy.
+ *
+ * NEVER THROWS, for the reason getAdAccountLimits never does — if Meta
+ * cannot be reached the cached reading stands, and a never-checked
+ * account reads as usable rather than as broken.
+ */
+export async function accountHealthFor(
+  supabase: any,
+  dealershipId: string,
+  opts: { row?: Record<string, any>; token?: string | null } = {}
+): Promise<{ usable: boolean; reason: string }> {
+  const limits = await getAdAccountLimits(supabase, dealershipId, opts);
+  return isAccountUsable(limits.accountStatus);
+}
+
 /** Minor units → a human amount. 9491 + INR → "₹94.91". */
 export function formatMinorAmount(minor: number | null | undefined, currency: string | null | undefined): string | null {
   if (minor == null || !Number.isFinite(minor)) return null;
@@ -135,15 +162,31 @@ export async function fetchAdAccountLimits(
     if (!res.ok || data.error) {
       return { ok: false, reason: data?.error?.message ?? `Graph returned ${res.status}` };
     }
-    return {
-      ok: true,
-      limits: {
-        minDailyBudget: typeof data.min_daily_budget === "number" ? data.min_daily_budget : Number(data.min_daily_budget) || null,
-        currency: data.currency ?? null,
-        accountStatus: typeof data.account_status === "number" ? data.account_status : Number(data.account_status) || null,
-        checkedAt: new Date().toISOString(),
-      },
+    const limits: AdAccountLimits = {
+      minDailyBudget: typeof data.min_daily_budget === "number" ? data.min_daily_budget : Number(data.min_daily_budget) || null,
+      currency: data.currency ?? null,
+      accountStatus: typeof data.account_status === "number" ? data.account_status : Number(data.account_status) || null,
+      checkedAt: new Date().toISOString(),
     };
+
+    // A 200 CARRYING NONE OF THE THREE FIELDS IS NOT AN ANSWER.
+    //
+    // Found 19 November 2026. Without this, such a response became
+    // `ok: true` with three nulls, and getAdAccountLimits PERSISTS what
+    // it fetches — so a good cached reading was overwritten with nulls
+    // and stamped with a fresh `checkedAt`, which makes it look current
+    // for another seven days.
+    //
+    // A null account_status reads as "never checked", and never checked
+    // reads as usable. So the failure mode is precisely the one this
+    // whole change exists to end: an account that cannot pay, reported
+    // as fine, for a week at a time. An empty answer has to leave the
+    // last real one alone.
+    if (limits.minDailyBudget === null && limits.currency === null && limits.accountStatus === null) {
+      return { ok: false, reason: "Meta answered without any of the account's limits." };
+    }
+
+    return { ok: true, limits };
   } catch (err: any) {
     return { ok: false, reason: err?.message ?? "Could not reach Meta." };
   }
