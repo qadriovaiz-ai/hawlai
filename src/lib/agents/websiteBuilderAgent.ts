@@ -242,7 +242,13 @@ ${grounding ?? ""}`,
 // no prompt edit required). "product_grid" is deliberately excluded —
 // real catalog data is spliced in programmatically after generation,
 // same principle the old "product_catalog" splice used.
-const AI_BLOCK_TYPES = Object.keys(BLOCK_REGISTRY).filter((t) => t !== "product_grid");
+// NEITHER OF THE TWO DATA-BACKED BLOCKS IS AI-AUTHORED. Both resolve
+// server-side from the business's own records — products, and the
+// listing facts with the owner's publish flags on them — so a model
+// writing one would be inventing the very thing the block exists to
+// read. Same reasoning product_grid has always had.
+const DATA_BACKED_BLOCKS = new Set(["product_grid", "hours_address"]);
+const AI_BLOCK_TYPES = Object.keys(BLOCK_REGISTRY).filter((t) => !DATA_BACKED_BLOCKS.has(t));
 
 const BLOCK_SCHEMA = {
   type: "object",

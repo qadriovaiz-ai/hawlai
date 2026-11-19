@@ -41,6 +41,11 @@ export default async function SiteHomePage({ params }: { params: Promise<{ slug:
   // read either way.
   const products = await loadStorefrontItems(supabase, website.dealership_id);
   const needsProducts = blockTreeContainsType(blocks, "product_grid");
+  // The hours and the address come from the identity read below, which
+  // already loads business_listing_facts for the schema — so showing
+  // them to a visitor costs no extra query, and cannot disagree with
+  // the JSON-LD because it is the same object.
+  const needsListing = blockTreeContainsType(blocks, "hours_address");
 
   // What a machine reads off this page (Brain, Phase 1a). Hawlai builds
   // the site, so Hawlai is the only thing that can emit this — the SEO
@@ -60,7 +65,7 @@ export default async function SiteHomePage({ params }: { params: Promise<{ slug:
   return (
     <>
       <StructuredData node={jsonLd} />
-      <SectionRenderer sections={sections} theme={getTheme(website.theme_key)} slug={slug} products={needsProducts ? products : []} />
+      <SectionRenderer sections={sections} theme={getTheme(website.theme_key)} slug={slug} products={needsProducts ? products : []} listing={needsListing ? identity?.listing ?? null : null} />
     </>
   );
 }

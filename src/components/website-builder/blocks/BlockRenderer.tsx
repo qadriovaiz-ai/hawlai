@@ -4,12 +4,19 @@ import { renderRichText, stripTags } from "@/lib/richText";
 import LandingLeadForm from "@/components/website/LandingLeadForm";
 import ProductCatalog from "@/components/website/ProductCatalog";
 import type { StorefrontProduct } from "@/lib/catalog/storefrontCatalog";
+import { hoursLines, type ListingFacts } from "@/lib/seo/listingFacts";
 
 
 export interface BlockRenderContext {
   theme: LandingTheme;
   slug: string;
   products?: StorefrontProduct[];
+  /**
+   * The business's own listing facts, with the owner's publish flags
+   * already applied by readListingFacts. Absent means the page did not
+   * need them — only `hours_address` reads this.
+   */
+  listing?: ListingFacts | null;
 }
 
 const GAP_CLASS: Record<string, string> = { sm: "gap-2", md: "gap-5", lg: "gap-8" };
@@ -197,6 +204,63 @@ export default function BlockRenderer({ block, ctx }: { block: Block; ctx: Block
         <div className={`w-full ${hiddenOnMobile(block)}`}>
           <h3 className={HEADING_SIZE[3]}>{question}</h3>
           {block.props.html ? <div className="leading-relaxed mt-1">{renderRichText(block.props.html)}</div> : null}
+        </div>
+      );
+    }
+
+    // THE HOURS AND THE ADDRESS, FROM THE ONE PLACE THAT HOLDS THEM.
+    //
+    // Never typed into the block, so the page cannot disagree with the
+    // schema it emits. The publish flags arrived with the data —
+    // readListingFacts gives back a null phone and a null address
+    // unless the owner said they may be shown — so withholding still
+    // works, and this block simply has less to render.
+    //
+    // NOTHING TO SHOW MEANS NOTHING IS SHOWN. A heading over an empty
+    // panel is worse than no block: it tells a visitor the business
+    // declined to say where it is, when in fact nobody has been asked
+    // yet.
+    case "hours_address": {
+      const listing = ctx.listing ?? null;
+      const lines = hoursLines(listing?.hours ?? []);
+      const address = listing?.streetAddress ?? null;
+      const phone = listing?.phone ?? null;
+      const areas = listing?.areasServed ?? [];
+      if (!lines.length && !address && !phone && !areas.length) return null;
+      return (
+        <div className="px-4 py-6">
+          {block.props.heading && (
+            <h3 className="text-lg font-semibold mb-3" style={{ color: theme.dark }}>
+              {block.props.heading}
+            </h3>
+          )}
+          <div className="grid gap-5 sm:grid-cols-2 max-w-2xl">
+            {lines.length > 0 && (
+              <dl className="text-sm">
+                {lines.map((l) => (
+                  <div key={l.day} className="flex justify-between gap-6 py-0.5">
+                    <dt className="text-neutral-600">{l.day}</dt>
+                    <dd className="font-medium tabular-nums" style={{ color: theme.dark }}>
+                      {l.when}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {(address || phone || areas.length > 0) && (
+              <div className="text-sm space-y-2">
+                {address && <p className="whitespace-pre-line text-neutral-700">{address}</p>}
+                {phone && (
+                  <p>
+                    <a href={`tel:${phone.replace(/\s+/g, "")}`} className="font-medium underline" style={{ color: theme.accent }}>
+                      {phone}
+                    </a>
+                  </p>
+                )}
+                {areas.length > 0 && <p className="text-neutral-600">Serving {areas.join(", ")}</p>}
+              </div>
+            )}
+          </div>
         </div>
       );
     }

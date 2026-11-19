@@ -14,6 +14,7 @@ import {
   MessageSquare,
   CalendarCheck,
   LayoutGrid,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import type { Block, BlockDefinition } from "./types";
@@ -182,6 +183,28 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
       { key: "heading", label: "Question", type: "text" },
       { key: "html", label: "Answer", type: "richtext" },
     ],
+  },
+  // THE HOURS THE PAGE ALREADY KNEW AND WOULD NOT SHOW.
+  //
+  // `LocalBusiness` schema has carried openingHoursSpecification and
+  // the street address since the listing facts existed, so a search
+  // engine could read them and a VISITOR COULD NOT — unless the owner
+  // typed them a second time into a text block, at which point two
+  // copies could disagree and only one of them was guarded.
+  //
+  // Same safety principle as product_grid, and for the same reason:
+  // resolved server-side from business_listing_facts at render time,
+  // never hand-filled, never AI-authored. The owner's publish flags
+  // come with it — readListingFacts returns a null phone and a null
+  // address unless he said they may be shown, so this block cannot
+  // publish what he withheld.
+  hours_address: {
+    label: "Hours & Address",
+    icon: Clock,
+    category: "content",
+    isContainer: false,
+    defaultProps: { heading: "Visit us" },
+    propFields: [{ key: "heading", label: "Heading", type: "text" }],
   },
   // Never AI-authored and never hand-filled with fake products — always
   // resolved server-side against the real products table at render

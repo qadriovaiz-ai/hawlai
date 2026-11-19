@@ -220,6 +220,41 @@ export function hasAnyListingFact(facts: ListingFacts): boolean {
  * because "shut on Sunday" is the answer a customer is looking for and
  * leaving the day out says only that nobody mentioned it.
  */
+/**
+ * The opening hours as a person reads them, one line per stated day.
+ *
+ * BESIDE THE SCHEMA VERSION ON PURPOSE. Until now the hours were
+ * machine-readable and invisible: `openingHoursSpecification` put them
+ * in `LocalBusiness` JSON-LD, so a search engine knew them and a
+ * visitor looking at the page did not — unless the owner typed them a
+ * second time into a text block, at which point two copies could
+ * disagree and only one of them was guarded. Both readings now come
+ * off the same array in the same file.
+ *
+ * NOT GROUPED INTO RANGES, and that is a decision rather than
+ * laziness. "Mon-Sat 10:00-19:00" is what people expect, and a bug in
+ * the grouping misstates when a shop is open — a real cost to a real
+ * customer standing outside a closed door. One line per day cannot be
+ * subtly wrong.
+ *
+ * A DAY THAT IS ABSENT IS ABSENT. `readHours` keeps "nobody answered"
+ * and "closed, stated" as different facts, and so does this: a missing
+ * day produces no line, a day with null times reads "Closed".
+ */
+export function hoursLines(hours: HoursInterval[]): { day: string; when: string }[] {
+  const byDay = new Map<string, HoursInterval>();
+  for (const h of hours ?? []) if (h?.day) byDay.set(h.day, h);
+
+  const out: { day: string; when: string }[] = [];
+  for (const day of DAYS) {
+    const h = byDay.get(day);
+    if (!h) continue;
+    const label = day.charAt(0).toUpperCase() + day.slice(1);
+    out.push({ day: label, when: h.opens && h.closes ? `${h.opens} – ${h.closes}` : "Closed" });
+  }
+  return out;
+}
+
 export function openingHoursSpecification(hours: HoursInterval[]): Record<string, unknown>[] {
   return hours.map((h) => {
     const day = `https://schema.org/${h.day[0].toUpperCase()}${h.day.slice(1)}`;
