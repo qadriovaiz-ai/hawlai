@@ -115,8 +115,37 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     },
   }, pageAccessToken);
 
+  // WHAT THIS BUSINESS ACTUALLY SELLS, from its own records — never
+  // from the ad copy, which a model wrote and which would let a
+  // generic headline vouch for any interest at all.
+  //
+  // A CATALOGUE THAT CANNOT BE READ IS NOT AN EMPTY ONE, AND NEITHER
+  // IS A REASON TO FAIL THE LAUNCH. It means this run cannot judge
+  // whether an interest is relevant — so no interest is applied and the
+  // ad goes out broad, which is the safe direction and the one a small
+  // budget wants anyway. An ad the owner approved must not die because
+  // a products query did.
+  let catalogue: { name?: string | null; category?: string | null }[] = [];
+  try {
+    const { data } = await serviceClient
+      .from("products")
+      .select("name, category")
+      .eq("dealership_id", dealershipId)
+      .eq("is_active", true)
+      .limit(25);
+    if (Array.isArray(data)) catalogue = data;
+  } catch {
+    metaLog("launch.catalogue_unreadable", { dealership: dealershipId });
+  }
+
+  const vocabulary = [
+    ...catalogue.flatMap((p) => [p?.name, p?.category]),
+    dealership?.business_category,
+  ].filter((w: unknown): w is string => typeof w === "string" && w.trim().length > 0);
+
   const built = await buildMetaTargeting({
     businessCategory: dealership?.business_category,
+    vocabulary,
     persona: brandProfile?.target_persona ?? null,
     location: ctx.targetingLocation ?? null,
     aiSuggestedCity: plan.targeting_city,

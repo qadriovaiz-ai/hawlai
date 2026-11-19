@@ -102,37 +102,137 @@ export function resolveGenders(gender: TargetPersona["gender"]): number[] | unde
   return undefined; // "all" or unset — omitted, which is Meta's own "all genders" default
 }
 
-// ---- Interests (concerns -> real Meta interest IDs) -----------------
+// ---- Interests ------------------------------------------------------
+//
+// THE DEFECT, FOUND 19 NOVEMBER 2026. A candle business was targeted at
+// "Electronic music (music)" — 1.1 to 1.4 million people, paid for.
+//
+// The cause was three lines of agreement between two reasonable things.
+// The search ran with `limit=1`, and `data[0]` was accepted WITH NO
+// RELEVANCE CHECK AT ALL. And what it searched was `concerns` —
+// pain-point phrases from the brand persona like "relaxation" or
+// "ambience", which are not interest-category names and never were.
+// Meta's search did its job; it was asked a question it cannot answer,
+// and whatever came back first became paid targeting.
+//
+// THE FIX WAS ALREADY WRITTEN, TEN LINES BELOW. resolveIncomeBracket
+// calls the same endpoint and then REFUSES a match that does not read
+// like an income bracket, with a comment explaining that silently
+// targeting "luxury cars" for "high income" would be worse than
+// omitting income entirely. The principle was in this file all along —
+// it had simply never been applied to the field that spends money.
+//
+// SO: ask for a list, not one. Search the business's REAL words
+// (its products and its category) rather than its pain points. Check
+// every candidate against the business's own vocabulary. And when
+// nothing matches, send NO INTERESTS AT ALL — broad targeting, which
+// at a small daily budget is the better answer anyway, and is always
+// better than a wrong one.
+//
+// RULE 3 HOLDS. The check compares two runtime strings: Meta's returned
+// interest name against words the business itself supplied. No product,
+// category or trade word is written here.
 
 interface MetaInterest { id: string; name: string }
 
-async function searchAdInterest(query: string, token: string): Promise<MetaInterest | null> {
+/** Enough candidates that the right one is reachable; Meta ranks them. */
+export const INTEREST_CANDIDATES = 25;
+
+/** Shortest word worth matching on. Below this it is noise, not meaning. */
+export const MIN_WORD = 3;
+
+/**
+ * Words that carry no meaning about a trade.
+ *
+ * STRUCTURAL ONLY — articles, conjunctions, prepositions. Deliberately
+ * not a list of "generic business words": that would be a judgement
+ * about what businesses are like, which is the thing Rule 3 forbids.
+ */
+const STRUCTURAL = new Set(["and", "or", "the", "for", "with", "from", "into", "onto", "its", "your", "our"]);
+
+/**
+ * A string reduced to the words worth comparing.
+ *
+ * Singular and plural are folded together, because "candles" and
+ * "Candle" are the same interest and a naive compare would reject the
+ * one match that mattered. A trailing "ss" is left alone so "business"
+ * does not become "busines".
+ */
+export function meaningfulWords(text: string | null | undefined): string[] {
+  if (!text) return [];
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .filter((w) => w.length >= MIN_WORD && !STRUCTURAL.has(w));
+}
+
+/**
+ * Does this interest have anything to do with this business?
+ *
+ * ONE SHARED MEANINGFUL WORD is the whole test. It is deliberately
+ * crude in the SAFE direction: a near-miss like "home decor" against
+ * "Interior design" is rejected and the ad goes out broad, which costs
+ * nothing. The failure it exists to stop — a candle shop paying to
+ * reach people who like electronic music — shares no word with anything
+ * the business ever said.
+ */
+export function isRelevantInterest(interestName: string, vocabulary: string[]): boolean {
+  const vocab = new Set(vocabulary.flatMap((v) => meaningfulWords(v)));
+  if (vocab.size === 0) return false;
+  return meaningfulWords(interestName).some((w) => vocab.has(w));
+}
+
+async function searchAdInterests(query: string, token: string): Promise<MetaInterest[]> {
   try {
-    const url = `https://graph.facebook.com/${GRAPH_VERSION}/search?type=adinterest&q=${encodeURIComponent(query)}&limit=1&access_token=${token}`;
+    const url = `https://graph.facebook.com/${GRAPH_VERSION}/search?type=adinterest&q=${encodeURIComponent(query)}&limit=${INTEREST_CANDIDATES}&access_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
-    const first = data?.data?.[0];
-    return first ? { id: String(first.id), name: first.name } : null;
+    if (!Array.isArray(data?.data)) return [];
+    return data.data
+      .filter((d: any) => d?.id && d?.name)
+      .map((d: any) => ({ id: String(d.id), name: String(d.name) }));
   } catch {
-    return null;
+    return [];
   }
 }
 
-// concerns are pain-point phrases ("affordability", "family safety"),
-// not literal Meta interest-category names — each is looked up
-// individually against Meta's real taxonomy at launch time. Phrases
-// with no reasonable match return nothing rather than a wrong-but-
-// present interest; capped at 5 so targeting doesn't over-narrow from
-// a long concerns list.
-export async function resolveInterests(concerns: string[] | null | undefined, token: string): Promise<MetaInterest[]> {
-  if (!concerns || concerns.length === 0) return [];
-  const results = await Promise.all(concerns.slice(0, 5).map((c) => searchAdInterest(c, token)));
+/**
+ * Real Meta interest ids for this business — or none.
+ *
+ * `terms` are what to search for; `vocabulary` is what the business
+ * itself says it sells. They overlap on purpose: a product name is both
+ * a good query AND the thing a match has to resemble.
+ *
+ * NEVER GUESSES. A term that returns nothing relevant contributes
+ * nothing, and a run where nothing at all is relevant returns an empty
+ * array — which buildMetaTargeting treats as broad targeting.
+ */
+export async function resolveInterests(
+  terms: string[] | null | undefined,
+  vocabulary: string[],
+  token: string
+): Promise<MetaInterest[]> {
+  const queries = [...new Set((terms ?? []).map((t) => String(t ?? "").trim()).filter(Boolean))].slice(0, 5);
+  if (queries.length === 0) return [];
+
+  const found = await Promise.all(queries.map((q) => searchAdInterests(q, token)));
+
   const seen = new Set<string>();
-  return results.filter((r): r is MetaInterest => {
-    if (!r || seen.has(r.id)) return false;
-    seen.add(r.id);
-    return true;
-  });
+  const kept: MetaInterest[] = [];
+  for (const candidates of found) {
+    for (const c of candidates) {
+      if (seen.has(c.id)) continue;
+      // THE CHECK THAT WAS MISSING. Without it, `candidates[0]` is
+      // whatever Meta ranked first for a question it could not answer.
+      if (!isRelevantInterest(c.name, vocabulary)) continue;
+      seen.add(c.id);
+      kept.push(c);
+      break; // one interest per term is plenty; more only narrows.
+    }
+  }
+  return kept.slice(0, 5);
 }
 
 // ---- Income (best-effort, honest about its limits) ------------------
@@ -150,11 +250,12 @@ export async function resolveInterests(concerns: string[] | null | undefined, to
 // worse than omitting income targeting entirely.
 export async function resolveIncomeBracket(income: string | null | undefined, token: string): Promise<MetaInterest | null> {
   if (!income || !income.trim()) return null;
-  const result = await searchAdInterest(income.trim(), token);
-  // Only accept a match whose name plausibly reads as an income
-  // bracket — an unrelated interest match would be actively wrong.
-  if (result && /income|affluen|earner/i.test(result.name)) return result;
-  return null;
+  // Now reads a LIST rather than one result, because the interest
+  // search became plural — and this check was always the right shape,
+  // so it simply gets more candidates to refuse. The first one that
+  // reads like an income bracket wins; none means none.
+  const results = await searchAdInterests(income.trim(), token);
+  return results.find((r) => /income|affluen|earner/i.test(r.name)) ?? null;
 }
 
 // ---- Location ------------------------------------------------------
@@ -233,6 +334,18 @@ export interface BuildTargetingInput {
   customAudienceIds?: string[] | null;
   /** Never show this ad to these — the people who already bought or booked (R3). */
   excludedCustomAudienceIds?: string[] | null;
+  /**
+   * What this business actually sells, in its own words — product
+   * names and its category. Two jobs: they are the best things to
+   * SEARCH for, and they are what a candidate interest has to resemble
+   * before it is paid for.
+   *
+   * Empty means no interest can be judged relevant, so none is applied
+   * and the ad goes out broad. That is the safe direction: the failure
+   * being fixed here is a candle shop paying to reach people who like
+   * electronic music.
+   */
+  vocabulary?: string[] | null;
 }
 
 export interface BuiltTargeting {
@@ -322,7 +435,16 @@ export async function buildMetaTargeting(input: BuildTargetingInput): Promise<Bu
   const age = parseAgeRange(input.persona?.age_range);
   const genders = resolveGenders(input.persona?.gender);
   const [interests, incomeBracket] = await Promise.all([
-    resolveInterests(input.persona?.concerns, input.accessToken),
+    // THE BUSINESS'S OWN WORDS COME FIRST. `concerns` are pain-point
+    // phrases ("relaxation", "ambience") and Meta's interest taxonomy
+    // cannot answer them — asking anyway is what produced "Electronic
+    // music" for a candle shop. They stay as extra queries, but now
+    // every result has to survive the relevance check.
+    resolveInterests(
+      [...(input.vocabulary ?? []), ...(input.persona?.concerns ?? [])],
+      (input.vocabulary ?? []).filter(Boolean) as string[],
+      input.accessToken
+    ),
     resolveIncomeBracket(input.persona?.income, input.accessToken),
   ]);
 
