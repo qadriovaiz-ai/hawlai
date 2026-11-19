@@ -214,19 +214,42 @@ describe("the launch is otherwise well-formed", () => {
 
 describe("an unconnected business cannot launch", () => {
   it.each([
-    ["no token", { fb_page_access_token: null }],
-    ["no ad account", { fb_ad_account_id: null }],
-    ["no page", { fb_page_id: null }],
-  ])("refuses with %s, before any Graph call", async (_label, missing) => {
+    ["no token", { fb_page_access_token: null }, /reconnect facebook/i, "no_token"],
+    ["no ad account", { fb_ad_account_id: null }, /no meta ad account is connected/i, "no_ad_account"],
+    ["no page", { fb_page_id: null }, /no facebook page is connected/i, "no_page"],
+  ])("refuses with %s, before any Graph call", async (_label, missing, says, key) => {
     // The state candle_by_qaaf is in today. Refusing before the first
     // Graph call is what makes the error actionable ("connect your
     // Page") instead of a Meta permissions error.
+    //
+    // THE MESSAGE NOW NAMES THE RIGHT THING (19 November 2026). All
+    // three used to return one sentence — "Facebook Page isn't
+    // connected" — including for a missing AD ACCOUNT, which is a
+    // different thing in a different place, and for an expired token,
+    // which is reconnecting rather than connecting. This asserts per
+    // case instead of one shared phrase, so a wrong-but-plausible
+    // message can no longer pass.
     serverRows.dealerships = { ...connection, ...missing };
 
     const res = await POST(launchRequest());
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/isn't connected/i);
+    const body = await res.json();
+    expect(body.error).toMatch(says);
+    // The stable key travels with it, for the log line and for anything
+    // that wants to act on the cause rather than read the sentence.
+    expect(body.problems.map((p: any) => p.key)).toContain(key);
     expect(metaCalls).toEqual([]);
+  });
+
+  it("ONE ROOT CAUSE IS NOT REPORTED TWICE", async () => {
+    // A missing Page is also the missing promoted object on a lead ad.
+    // Saying both would be one problem in two sentences, which is the
+    // noise this module replaces rather than adds to.
+    serverRows.dealerships = { ...connection, fb_page_id: null };
+    const res = await POST(launchRequest());
+    const keys = (await res.json()).problems.map((p: any) => p.key);
+    expect(keys).toContain("no_page");
+    expect(keys).not.toContain("no_promoted_object");
   });
 });
 

@@ -729,23 +729,31 @@ and not Hawlai's — which is what the live read settles.
 Two real findings came out of looking, neither of them the thing that
 was being looked for.
 
-### A. Every non-real-estate launch sends `special_ad_categories: [null]`
+### A. WITHDRAWN — I was wrong
 
-[launchCampaign.ts:134](src/lib/ads/launchCampaign.ts:134):
+I reported that [launchCampaign.ts:134](src/lib/ads/launchCampaign.ts:134)
+sends `special_ad_categories: [null]` on every non-real-estate launch,
+and asked to be allowed to change it to `[]`.
 
-```ts
-special_ad_categories: [built.specialAdCategory],
-```
+**That was wrong, and there is nothing to fix.** I read
+`isSpecialAdCategory` returning `null` and assumed it flowed straight
+into the campaign body. It does not. `buildMetaTargeting` has three
+return paths and every one sets a non-null string: the special branch
+sets the real category ([metaTargeting.ts:287](src/lib/ads/metaTargeting.ts:287)),
+and both ordinary branches set `specialAdCategory: "NONE"`
+([:316](src/lib/ads/metaTargeting.ts:316) and
+[:375](src/lib/ads/metaTargeting.ts:375)). So Meta receives
+`["NONE"]`, which is the correct declaration.
 
-`specialAdCategory` is `null` for every business that is not real
-estate, and `metaPost` sends the body through `JSON.stringify`
-([adEngine.ts:285](src/lib/adEngine.ts:285)) — so what reaches Meta is
-literally `"special_ad_categories": [null]`, an array containing null
-rather than the empty array that is meant.
+The type annotation said so — `specialAdCategory: string; // "NONE" or
+a real category` ([:240](src/lib/ads/metaTargeting.ts:240)) — and I did
+not read it before reporting. Caught while implementing the "fix",
+before changing anything.
 
-Meta evidently tolerates it: the candle campaign was created. But it is
-malformed on every launch, it depends on undocumented leniency, and the
-correct form is `[]`. **Not changed** — reported only.
+What survives from it is a rule rather than a defect: the category must
+be **declared either way**, and a blank one is a missing field. That is
+now `no_special_ad_category` in the pre-flight module, so the day
+something does start producing a blank, it is refused instead of sent.
 
 ### B. The more dangerous direction: a real estate business that is missed
 
@@ -785,3 +793,77 @@ GET https://graph.facebook.com/v23.0/120254652336640260
 Ads Manager shows the same thing on the campaign row under **Special Ad
 Category**. Either answer settles whether Meta's classifier applied one
 by itself.
+
+
+---
+
+## 12. Proposed: commit 10 — the real estate category that fails open
+
+Not built. Proposed for **after commit 9**, as its own commit, on the
+founder's instruction of 19 November 2026.
+
+### What is wrong
+
+`isSpecialAdCategory` ([metaTargeting.ts:71](src/lib/ads/metaTargeting.ts:71))
+is an exact, trimmed, lowercased match against one key, `"real estate"`.
+The business category it reads is **free text** with suggestions, not a
+fixed list ([BusinessCategoryField.tsx:50](src/components/settings/BusinessCategoryField.tsx:50)).
+
+So "Real Estate" is declared as `HOUSING`, and **"Real Estate Agent",
+"Property Dealer", "Realestate", "real-estate" and "Real Estate &
+Rentals" are all declared as `NONE`.**
+
+### Why it matters more than it looks
+
+It fails **open**, and in the direction that costs the owner rather than
+inconveniences them. An undeclared housing ad is sent with the age,
+gender and interest targeting that Meta legally strips from housing ads.
+This file's own comment already names the stake — a misdeclared category
+is "an account policy risk at worst"
+([:280](src/lib/ads/metaTargeting.ts:280)) — and the unguarded case is
+the under-declaration, not the over-declaration.
+
+The reverse mistake is harmless by comparison: a business wrongly
+declared `HOUSING` gets geo-only targeting and a narrower audience. It
+delivers; it just delivers less well.
+
+### The shape of the fix, and the thing to decide
+
+The tempting fix is a longer list of spellings. That is Rule 3's
+problem, not a solution: a list of trade words in the code is exactly
+what `multiTenantVocabulary.test.ts` exists to stop, and it would still
+miss the next spelling.
+
+Two defensible options, and this is what needs the founder's call:
+
+**Option 1 — ask the owner, once.** When the category is not a confident
+match either way, the launch stops and asks: "Is this ad about property,
+housing or rentals?" One question, answered once, stored as a fact with
+its provenance — the same pattern the three-bucket onboarding already
+uses for everything else it is unsure of. It cannot be wrong silently.
+
+**Option 2 — make the field a real choice.** Keep free text for display,
+but have a separate explicit declaration on the ad account: housing,
+employment, credit, or none. Meta asks this question directly, so
+modelling it as a guess derived from a text field is the original
+mistake.
+
+**My recommendation is Option 1**, because it needs no migration, it
+reuses machinery that exists, and it degrades safely — a business that
+never answers simply cannot launch a housing ad, rather than launching
+an undeclared one. Option 2 is better product and a bigger change.
+
+Either way, **no trade vocabulary enters the code**: the question is
+asked in the owner's own words and the answer is stored per business.
+
+| | |
+|---|---|
+| **Size** | **M** for Option 1, **L** for Option 2 |
+| **Riskiest part** | Asking too often. A question on every launch is a question nobody reads — it is asked once per business and remembered, and the "confident match either way" test has to be tight enough that an obvious candle shop is never asked at all. |
+
+**Tests.** "Real Estate" declares HOUSING without asking. "Candle shop"
+declares NONE without asking. "Real Estate Agent" and "Property Dealer"
+**ask, and refuse to launch until answered** — one failing fixture each.
+An answered business is never asked twice. And the relevance test
+contains no trade words, pinned by extending
+`multiTenantVocabulary.test.ts`.

@@ -20,6 +20,7 @@ import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 import { frequencyCapFor } from "@/lib/retargeting/messages";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { clampBudgetToMinimum } from "@/lib/ads/adAccountLimits";
+import { preflight, preflightMessage } from "@/lib/ads/preflight";
 import { withCampaignTag, type ResolvedDestination } from "@/lib/ads/destination";
 
 export type LaunchContext = {
@@ -121,6 +122,26 @@ export async function launchPausedCampaign(ctx: LaunchContext): Promise<LaunchRe
     customAudienceIds: ctx.retargetAudienceIds ?? [],
     excludedCustomAudienceIds: ctx.excludeAudienceIds ?? [],
   });
+
+  // THE SECOND PRE-FLIGHT, and the reason there are two.
+  //
+  // Targeting does not exist until buildMetaTargeting has resolved a
+  // city against Meta's own taxonomy, so these rules cannot run in the
+  // route with the rest. They run here, before the campaign POST —
+  // which is the first call that creates anything that can spend.
+  //
+  // An ad set Meta refuses leaves a campaign already created and
+  // orphaned in Ads Manager, which is where "New Sales ad set"-looking
+  // debris comes from. Refusing one frame earlier leaves nothing.
+  const targetingChecks = preflight({ targeting: { targeting: built.targeting, specialAdCategory: built.specialAdCategory } });
+  if (!targetingChecks.ok) {
+    metaError("launch.preflight_failed", {
+      dealership: dealershipId,
+      stage: "targeting",
+      problems: targetingChecks.problems.map((p) => p.key).join(","),
+    });
+    throw new Error(preflightMessage(targetingChecks) ?? "This ad can't be launched as configured.");
+  }
 
   // Step 5: campaign
   const campaignRes = await metaPost(`${adAccount}/campaigns`, {

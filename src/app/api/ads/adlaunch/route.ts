@@ -11,7 +11,8 @@ import {
 import { buildMetaTargeting } from "@/lib/ads/metaTargeting";
 import { metaLog, metaError } from "@/lib/ads/metaLog";
 import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
-import { isAccountUsable, clampBudgetToMinimum, describeMinimum, limitsFromRow } from "@/lib/ads/adAccountLimits";
+import { accountHealthFor, clampBudgetToMinimum, describeMinimum, limitsFromRow } from "@/lib/ads/adAccountLimits";
+import { preflight, preflightMessage } from "@/lib/ads/preflight";
 import { launchPausedCampaign } from "@/lib/ads/launchCampaign";
 import { resolveAdDestination } from "@/lib/ads/destination";
 import { aiFailedResponse } from "@/lib/ai/aiFailureResponse";
@@ -41,41 +42,9 @@ export async function POST(request: Request) {
   const pageId: string | undefined = dealership?.fb_page_id ?? process.env.META_PAGE_ID;
   const leadFormId: string | undefined = dealership?.fb_lead_form_id ?? process.env.META_LEAD_FORM_ID;
 
-  if (!pageAccessToken || !rawAdAccountId || !pageId) {
-    // The most common launch failure, and previously invisible: it
-    // returns 400 before any Graph call, so nothing downstream logged.
-    metaError("launch.not_connected", {
-      dealership: dealershipId,
-      has_token: Boolean(pageAccessToken),
-      has_ad_account: Boolean(rawAdAccountId),
-      has_page: Boolean(pageId),
-    });
-    return NextResponse.json(
-      { error: "Facebook Page isn't connected. Go to Settings and connect your Facebook Page first, then launch the ad." },
-      { status: 400 }
-    );
-  }
-
-  // LAYER 3a — refuse a dead ad account BEFORE generating an image or
-  // calling Claude. Meta would reject the campaign anyway, but only
-  // after the whole flow has run, and with an error naming neither the
-  // cause nor the fix.
-  const accountState = isAccountUsable(dealership?.fb_account_status);
-  if (!accountState.usable) {
-    metaError("launch.account_unusable", { dealership: dealershipId, status: dealership?.fb_account_status ?? null });
-    return NextResponse.json({ error: accountState.reason }, { status: 400 });
-  }
-
   const body = await request.json();
   const { photo_base64, prompt, image_mode, scheduled_start, destination, draft_id, product_destination_url, variant_group_id, variant_label, targeting_location, retarget_audience_key } = body;
   const adDestination: "instant_form" | "website" = destination === "website" ? "website" : "instant_form";
-
-  if (adDestination === "instant_form" && !leadFormId) {
-    return NextResponse.json(
-      { error: "No Instant Form connected for this Page. Connect one in Settings, or choose 'Website' as the destination instead." },
-      { status: 400 }
-    );
-  }
 
   let destinationUrl: string | null = null;
   if (adDestination === "website") {
@@ -104,12 +73,6 @@ export async function POST(request: Request) {
         }
       }
     }
-    if (!destinationUrl) {
-      return NextResponse.json(
-        { error: "No website set up yet. Either add your website URL or publish your landing page in the Website tab first." },
-        { status: 400 }
-      );
-    }
   }
 
   if (!draft_id) {
@@ -121,6 +84,52 @@ export async function POST(request: Request) {
   const mimeType = match?.[1] ?? "image/jpeg";
   const rawBase64 = match?.[2] ?? photo_base64 ?? "";
   const inputBuffer = rawBase64 ? Buffer.from(rawBase64, "base64") : Buffer.alloc(0);
+
+  // ───────────────────────────────────────────────────────────────────
+  // EVERYTHING THAT WOULD STOP THIS AD, SAID AT ONCE
+  // ───────────────────────────────────────────────────────────────────
+  //
+  // Replaces four separate early returns that each reported the FIRST
+  // failure — so an owner with no payment method, no website and no
+  // Instant Form learned one of those per attempt. The old "LAYER 3a"
+  // reasoning still holds and is why this sits here: before Claude is
+  // called, before an image is generated, and long before any Graph
+  // call, so a launch that cannot work costs nothing.
+  const checks = preflight({
+    account: await accountHealthFor(supabase, dealershipId, { row: dealership ?? undefined, token: pageAccessToken }),
+    connection: { pageId, adAccountId: rawAdAccountId, token: pageAccessToken, leadFormId },
+    destination:
+      adDestination === "website"
+        ? { ok: true, destination: { kind: "external_website", url: destinationUrl, optimizationGoal: "LINK_CLICKS", promotedObject: null } }
+        : {
+            ok: true,
+            destination: {
+              kind: "instant_form",
+              url: null,
+              leadFormId,
+              optimizationGoal: "LEAD_GENERATION",
+              promotedObject: pageId ? { page_id: pageId } : null,
+            },
+          },
+  });
+
+  if (!checks.ok) {
+    // The connection log keeps its exact shape: its whole job is to say
+    // WHICH of the three is missing, and metaLog.test.ts pins it.
+    if (checks.problems.some((p) => p.key === "no_page" || p.key === "no_ad_account" || p.key === "no_token")) {
+      metaError("launch.not_connected", {
+        dealership: dealershipId,
+        has_token: Boolean(pageAccessToken),
+        has_ad_account: Boolean(rawAdAccountId),
+        has_page: Boolean(pageId),
+      });
+    }
+    if (checks.problems.some((p) => p.key === "account_unusable")) {
+      metaError("launch.account_unusable", { dealership: dealershipId, status: dealership?.fb_account_status ?? null });
+    }
+    metaError("launch.preflight_failed", { dealership: dealershipId, problems: checks.problems.map((p) => p.key).join(",") });
+    return NextResponse.json({ error: preflightMessage(checks), problems: checks.problems }, { status: 400 });
+  }
 
   const serviceClient = createServiceClient();
 
