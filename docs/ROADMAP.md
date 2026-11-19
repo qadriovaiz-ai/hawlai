@@ -16,10 +16,14 @@ migrations.
 
 | | What it is | State | Its own plan records as open |
 |---|---|---|---|
-| **S4** | The growth manager: audit → findings → goals → the daily report | **Closed.** Runs daily as `site_audit` + `daily_autopilot` | A 30-day cooldown after a rejection: `opportunities.status` has no `rejected` value, only open/completed/dismissed. Partly answered later by `existingTargetOffers` re-offering after 30 days |
+| **S4** | The growth manager: audit → findings → goals → the daily report | **Closed.** Runs daily as `site_audit` + `daily_autopilot` | **Nothing outstanding.** The 30-day cooldown was the last open item and it SHIPPED on 18 Nov (`f9509cfc`): migration 210 had already added `rejected` and the cooldown, and nothing could put a row into that state — the route wrote `dismissed`, which the re-audit's live set does not contain, so the finding came back every morning. Left reading as open until 19 Nov |
 | **S5** | Outcomes: decisions recorded, measured on a check date | **Closed.** P6 exit test DONE 4 Nov. Migration 215 | Nothing in the plan's table |
 | **S6** | Actions: nothing that changes state is reachable except through an Action | **Closed.** P6 exit test DONE 5 Nov | P4's four retirements were **WITHDRAWN** — none was a duplicate. Its one real find, `/api/growth-report`, **was deleted in `6f78aea2`** — nothing is outstanding here. Left reading as open until 18 Nov, which cost a re-investigation |
 | **S7** | Autonomy L0/L1/L2: promotion asks once, demotion is automatic | **Closed.** P7 exit test DONE 6 Nov. Migrations 219 + 220 run and verified 7 Nov | **Nothing has ever run unattended.** An L2 action has by definition not run long when the stage closes |
+
+**All four stages are closed and nothing in this table is outstanding as code.** Checked on 19 November 2026 against the question "what is the next stage": there is no S8. S5's outcome records are live (migration 215), S6's four proposed retirements were withdrawn because none was a duplicate, and S7's promotion reads from recorded data. What remains is not building — it is watching any of it work on a real business, which the live-verification section below is for.
+
+Twice now a row here has read as open after the work was done — S6 until 18 November, S4 until 19 November — and each cost a re-investigation. The header's rule about a stale page is not decoration.
 
 **What "closed" means here:** the stage's own exit test is green and its
 phases are done. It does **not** mean anyone has watched it work on a
