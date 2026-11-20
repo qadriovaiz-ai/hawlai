@@ -81,6 +81,12 @@ const NOT_COLLECTED: Record<string, Measure> = {
   auto_paused_campaign: { metric: "spend on this campaign", source: null, direction: "down" },
   update_product_name: { metric: "paid orders of this product", source: null, direction: "up" },
   update_product_description: { metric: "paid orders of this product", source: null, direction: "up" },
+  // Shopify 3.3. NOT COLLECTED, and the reason is the honest one:
+  // the metric that matters is visits to that collection page, and
+  // `page_events` holds the business's own Hawlai site only. Scoring
+  // a merchant's storefront edit against a table with no storefront
+  // data in it would report a flat line as a failure.
+  update_collection_text: { metric: "visits to this collection page", source: null, direction: "up" },
   refund_approve: { metric: "refunds issued", source: null, direction: "down" },
   set_automation_toggle: { metric: "what this automation did while it was on", source: null, direction: "up" },
   // S7/P5. NOT COLLECTED, and the honest reason is worth stating: what

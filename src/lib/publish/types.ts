@@ -78,7 +78,29 @@ export type ActionKey =
    * site: website_pages IS what /site/{slug} renders, so an approved
    * edit is public the moment it saves.
    */
-  | "update_page_text";
+  | "update_page_text"
+  /**
+   * Change the words on a COLLECTION page of the merchant's store — the
+   * paragraph a customer reads above a group of products.
+   *
+   * A separate key from `update_page_text`, and the separation is not
+   * tidiness. `update_page_text` addresses a block inside a page of the
+   * business's OWN Hawlai site; this one writes to a live external
+   * storefront. `update_page_meta` is on the L2 unattended-autonomy
+   * allowlist and `growth/measures.ts` scores both page keys against
+   * `page_events`, a table that holds no external-storefront data.
+   * Riding a merchant's storefront in on either key would have widened
+   * unattended autonomy onto a live shop and scored the result against
+   * visits it cannot see.
+   *
+   * Deliberately NOT the collection's search title and description.
+   * Those are a second decision about the same object, read in a search
+   * result rather than on the page, and merging them into this key
+   * would make "chat reworded my Diwali collection" and "chat changed
+   * what Google shows for it" the same audit record. If they are wanted
+   * they get their own key, as pages did.
+   */
+  | "update_collection_text";
 
 /**
  * One field changing, in terms a person can check.
@@ -320,6 +342,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "activate_ad_campaign",
   "update_page_meta",
   "update_page_text",
+  "update_collection_text",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -342,4 +365,8 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   // draft layer, so an approved edit is what every visitor reads from
   // the moment it saves.
   update_page_text: "medium",
+  // Nothing spends, and the prior text is recorded so it is reversible
+  // — but this is a live external storefront with no draft layer, so an
+  // approved edit is what the merchant's customers read immediately.
+  update_collection_text: "medium",
 };

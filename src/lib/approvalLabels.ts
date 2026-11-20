@@ -16,6 +16,7 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   // "Update Page Meta" title-cased tells an owner nothing about what
   // they are approving; this is the line strangers read in Google.
   update_page_meta: "Change a page's search title & description",
+  update_collection_text: "Rewrite a collection page's description",
   update_page_text: "Change the words on a page",
   // S7/P5. "Grant Autonomy" title-cased is machine language for the one
   // card whose subject is a permission rather than a thing.

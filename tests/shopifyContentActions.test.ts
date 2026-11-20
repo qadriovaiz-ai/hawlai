@@ -330,7 +330,7 @@ describe("6. UNDO: THE DECLARATION AND THE METHOD MUST AGREE", () => {
     // honour is a promise about reversibility that nothing keeps.
     const { impl } = sequence([pageBody()]);
     const p = platform(impl);
-    expect(p.undoes).toEqual(["update_page_text", "update_page_meta"]);
+    expect(p.undoes).toEqual(["update_page_text", "update_page_meta", "update_collection_text"]);
     // And it is a subset of what the platform can do at all.
     for (const key of p.undoes ?? []) expect(p.supports).toContain(key);
   });
@@ -379,5 +379,204 @@ describe("6. UNDO: THE DECLARATION AND THE METHOD MUST AGREE", () => {
     const r = await platform(impl).undo!(action({ actionKey: "update_page_text", preview: previewed as any }));
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toMatch(/isn't in Shopify any more/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// COLLECTIONS — 3.3
+// ─────────────────────────────────────────────────────────────────────
+
+const COLLECTION = {
+  id: "gid://shopify/Collection/9",
+  title: "Diwali gifting",
+  handle: "diwali-gifting",
+  descriptionHtml: "<p>Soy candles for the festival of lights.</p>",
+  productsCount: { count: 12 },
+};
+
+const collBody = (over: Record<string, unknown> = {}) => ({
+  data: { collection: { ...COLLECTION, ...over } },
+});
+
+const collAction = (over: Partial<PublishActionRecord> = {}) =>
+  action({
+    actionKey: "update_collection_text",
+    targetRef: COLLECTION.id,
+    requestedChanges: { html: "<p>Gifting sets, hand poured.</p>" },
+    ...over,
+  });
+
+/** A preview that recorded the whole prior description. */
+const collPreview = (before: string | null, after: string) =>
+  ({ summary: "", changes: [{ field: "descriptionHtml", before, after }], warnings: [] }) as any;
+
+describe("7. A COLLECTION PAGE'S DESCRIPTION", () => {
+  it("is a key of its own, NOT update_page_text", () => {
+    // The load-bearing reason, and it is a safety property rather than
+    // tidiness: `update_page_meta` is the single key on the L2
+    // unattended-autonomy allowlist, and growth/measures.ts scores
+    // both page keys against `page_events` — a table that holds the
+    // business's own Hawlai site and nothing else. Letting a
+    // merchant's live storefront ride in on either key would have
+    // widened unattended autonomy onto a real shop and scored the
+    // result against visits it cannot see.
+    const p = platform(sequence([collBody()]).impl);
+    expect(p.supports).toContain("update_collection_text");
+  });
+
+  it("previews the WHOLE prior description as the before-value", async () => {
+    // Undo is built from preview.changes[].before, so anything less
+    // than the complete prior text is an undo that loses words.
+    const { impl, sent } = sequence([collBody()]);
+    const r = await platform(impl).preview(collAction());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.preview.changes).toEqual([
+      { field: "descriptionHtml", before: COLLECTION.descriptionHtml, after: "<p>Gifting sets, hand poured.</p>" },
+    ]);
+    expect(r.preview.summary).toContain("Diwali gifting");
+    expect(r.preview.summary).toContain("/collections/diwali-gifting");
+    // One call, and it is a read.
+    expect(sent.length).toBe(1);
+    expect(sent[0].query).not.toContain("mutation");
+  });
+
+  it("WARNS when the collection holds no products, without blocking", async () => {
+    // Not an error, but almost always a sign the wrong collection was
+    // resolved — and the preview is the only place that can be caught.
+    const r = await platform(sequence([collBody({ productsCount: { count: 0 } })]).impl).preview(collAction());
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.preview.warnings.join(" ")).toMatch(/no products/i);
+  });
+
+  it("warns when it already reads that way", async () => {
+    const r = await platform(sequence([collBody()]).impl).preview(
+      collAction({ requestedChanges: { html: COLLECTION.descriptionHtml } })
+    );
+    expect(r.ok && r.preview.warnings.join(" ")).toMatch(/already/i);
+  });
+
+  it("refuses a collection that has gone, and one with no new text", async () => {
+    const gone = await platform(sequence([{ data: { collection: null } }]).impl).preview(collAction());
+    expect(gone.ok).toBe(false);
+    const empty = await platform(sequence([collBody()]).impl).preview(collAction({ requestedChanges: {} }));
+    expect(empty.ok).toBe(false);
+  });
+
+  it("THE LOAD-BEARING ONE: refuses when the text moved since the preview", async () => {
+    // Approved as A becomes B. Someone else wrote C in between.
+    // Applying the approved intent would erase words nobody saw.
+    const { impl, sent } = sequence([collBody({ descriptionHtml: "<p>Someone else rewrote this.</p>" })]);
+    const r = await platform(impl).execute(
+      collAction({ preview: collPreview(COLLECTION.descriptionHtml, "<p>new</p>") })
+    );
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.stale).toBe(true);
+    // And crucially: NOTHING was written. One read, no mutation.
+    expect(sent.length).toBe(1);
+  });
+
+  it("is idempotent: already at the target writes nothing", async () => {
+    // What makes a retry safe. A timeout leaves the caller unable to
+    // tell whether the write landed, so the retry must be harmless —
+    // and this check comes BEFORE the staleness one, or a successful
+    // write plus a retry would report a succeeded action as stale.
+    const { impl, sent } = sequence([collBody({ descriptionHtml: "<p>new</p>" })]);
+    const r = await platform(impl).execute(
+      collAction({ preview: collPreview(COLLECTION.descriptionHtml, "<p>new</p>") })
+    );
+    expect(r.ok).toBe(true);
+    expect(sent.length).toBe(1);
+  });
+
+  it("writes with the id INSIDE the collection argument, never as `input`", async () => {
+    // As of API 2026-07 `collectionUpdate` takes
+    // `collection: CollectionUpdateInput!` and the `input:` form is
+    // Deprecated. Several of Shopify's own examples still show the old
+    // one, which is exactly how a copied snippet gets in.
+    const { impl, sent } = sequence([
+      collBody(),
+      { data: { collectionUpdate: { collection: { id: COLLECTION.id }, userErrors: [] } } },
+    ]);
+    const r = await platform(impl).execute(
+      collAction({ preview: collPreview(COLLECTION.descriptionHtml, "<p>new</p>") })
+    );
+    expect(r.ok).toBe(true);
+    const mutation = sent[1];
+    expect(mutation.query).toContain("collectionUpdate(collection:");
+    expect(mutation.query).not.toContain("collectionUpdate(input:");
+    expect(mutation.variables.collection).toEqual({ id: COLLECTION.id, descriptionHtml: "<p>new</p>" });
+    // Nothing else is sent. A CollectionUpdateInput carrying only the
+    // changed field leaves the rest alone.
+    expect(Object.keys(mutation.variables.collection).sort()).toEqual(["descriptionHtml", "id"]);
+  });
+
+  it("surfaces a DECLINED write instead of reporting success", async () => {
+    const { impl } = sequence([
+      collBody(),
+      {
+        data: {
+          collectionUpdate: {
+            collection: null,
+            userErrors: [{ field: ["descriptionHtml"], message: "Body is too long" }],
+          },
+        },
+      },
+    ]);
+    const r = await platform(impl).execute(
+      collAction({ preview: collPreview(COLLECTION.descriptionHtml, "<p>new</p>") })
+    );
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && !r.stale && r.reason).toContain("Body is too long");
+  });
+
+  it("puts the exact prior text back, word for word", async () => {
+    const { impl } = sequence([collBody()]);
+    const r = await platform(impl).undo!(collAction({ preview: collPreview("<p>was</p>", "<p>now</p>") }));
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.requestedChanges.html).toBe("<p>was</p>");
+    expect(r.ok && r.changed[0]).toMatchObject({ what: "Collection text", from: "<p>now</p>", to: "<p>was</p>" });
+  });
+
+  it("AN EDIT THAT RECORDED NOTHING IS NOT OFFERED AS AN UNDO", async () => {
+    // An undo card with no prior value is a button that would blank
+    // the collection.
+    const { impl } = sequence([collBody()]);
+    const r = await platform(impl).undo!(
+      collAction({ preview: { summary: "", changes: [], warnings: [] } as any })
+    );
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toMatch(/didn't record what the page said before/);
+  });
+
+  it("and a collection that has gone cannot be put back", async () => {
+    const { impl } = sequence([{ data: { collection: null } }]);
+    const r = await platform(impl).undo!(collAction({ preview: collPreview("<p>was</p>", "<p>now</p>") }));
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toMatch(/isn't in Shopify any more/);
+  });
+
+  it("THE UNDO GUARD READS `undoes`, so the two cannot drift", async () => {
+    // This method named its two keys inline until 3.3. `undoes` is
+    // what the autonomy layer reads when it decides an action is
+    // reversible, so a key it gains must be one this method obeys —
+    // and a key declared there with no branch has to fail loudly
+    // rather than fall through and read the wrong object.
+    const p = platform(sequence([collBody()]).impl);
+    expect((p.undoes ?? []).length).toBeGreaterThan(0);
+    for (const key of p.undoes ?? []) expect(p.supports).toContain(key);
+    let refused = 0;
+    for (const key of p.supports) {
+      if ((p.undoes ?? []).includes(key)) continue;
+      const r = await p.undo!(
+        collAction({ actionKey: key, preview: { summary: "", changes: [], warnings: [] } as any })
+      );
+      expect(r.ok, `${key} is not in undoes, so undo must refuse it`).toBe(false);
+      expect(!r.ok && r.reason, key).toMatch(/nothing to put back/i);
+      refused += 1;
+    }
+    // Not vacuous: there IS at least one supported-but-not-undoable
+    // key, so the loop above actually ran.
+    expect(refused).toBeGreaterThan(0);
   });
 });

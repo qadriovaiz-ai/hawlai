@@ -108,6 +108,54 @@ const ARTICLE_MUTATION = `
   }
 `;
 
+// ─────────────────────────────────────────────────────────────────────
+// COLLECTIONS (3.3)
+// ─────────────────────────────────────────────────────────────────────
+//
+// A collection is a group of products with a page of its own, and the
+// thing a merchant asks to change is the paragraph above the grid.
+//
+// `write_products` COVERS THIS, not `write_content` — Shopify's own
+// docs for collectionUpdate say so, and that scope has been granted
+// since 4 September 2026. So this needed no scope widening.
+//
+// TWO ARGUMENT FORMS EXIST and the older one is a trap. As of API
+// 2026-07 (the version pinned in shopifyAuth.ts) `collectionUpdate`
+// takes `collection: CollectionUpdateInput!` with the id INSIDE the
+// object, and the `input: CollectionInput!` form that several of
+// Shopify's own examples still use is marked Deprecated. Verified
+// against the version-pinned documentation on 20 November 2026 rather
+// than the "latest" alias, which resolves to 2026-10 and would have
+// been the wrong page to read.
+const COLLECTION_QUERY = `
+  query PublishCollection($id: ID!) {
+    collection(id: $id) {
+      id
+      title
+      handle
+      descriptionHtml
+      productsCount { count }
+    }
+  }
+`;
+
+const COLLECTION_MUTATION = `
+  mutation PublishCollectionUpdate($collection: CollectionUpdateInput!) {
+    collectionUpdate(collection: $collection) {
+      collection { id title descriptionHtml }
+      userErrors { field message }
+    }
+  }
+`;
+
+type CollectionNode = {
+  id: string;
+  title: string;
+  handle: string;
+  descriptionHtml: string | null;
+  productsCount: { count: number } | null;
+};
+
 type PageNode = {
   id: string;
   title: string;
@@ -176,6 +224,7 @@ export function createShopifyPlatform(deps: {
     "update_page_text",
     "update_page_meta",
     "publish_post",
+    "update_collection_text",
   ];
 
   /**
@@ -193,7 +242,7 @@ export function createShopifyPlatform(deps: {
    * would accept — the article may have been edited since. It is
    * created unpublished, so nothing went live to take back.
    */
-  const undoes: readonly ActionKey[] = ["update_page_text", "update_page_meta"];
+  const undoes: readonly ActionKey[] = ["update_page_text", "update_page_meta", "update_collection_text"];
 
   async function readPage(shop: string, token: string, pageId: string): Promise<PageNode | null> {
     const result = await shopifyGraphQL<{ page: PageNode | null }>(shop, token, PAGE_QUERY, { id: pageId }, fetchImpl);
@@ -206,6 +255,17 @@ export function createShopifyPlatform(deps: {
     // store has no blog" lead to different sentences, and only one of
     // them is the merchant's to fix.
     return result.ok ? result.data.blogs?.nodes ?? [] : null;
+  }
+
+  async function readCollection(shop: string, token: string, id: string): Promise<CollectionNode | null> {
+    const result = await shopifyGraphQL<{ collection: CollectionNode | null }>(
+      shop,
+      token,
+      COLLECTION_QUERY,
+      { id },
+      fetchImpl
+    );
+    return result.ok ? result.data.collection ?? null : null;
   }
 
   async function readVariant(
@@ -287,6 +347,48 @@ export function createShopifyPlatform(deps: {
             // missing field would read as unknown rather than as absent.
             target: { title: page.title, variantTitle: null, currentPrice: null, imageUrl: null },
             changes,
+            warnings,
+          },
+        };
+      }
+
+      // ---- content: a collection page's description ---------------
+      if (action.actionKey === "update_collection_text") {
+        if (!action.targetRef) return { ok: false, reason: "No collection was specified." };
+        const collection = await readCollection(creds.shop, creds.accessToken, action.targetRef);
+        if (!collection) return { ok: false, reason: "That collection no longer exists in Shopify." };
+
+        const html = typeof action.requestedChanges.html === "string" ? action.requestedChanges.html : null;
+        if (html === null) return { ok: false, reason: "No new text was given for that collection." };
+
+        const warnings: string[] = [];
+        const current = collection.descriptionHtml ?? "";
+        if (current.trim() === html.trim()) {
+          warnings.push("The collection already reads this way — approving will change nothing.");
+        }
+        // AN EMPTY COLLECTION IS WORTH SAYING OUT LOUD. Writing a
+        // paragraph about a group of products that currently holds
+        // none is not an error, but it is almost always a sign the
+        // wrong collection was resolved — and the preview is the only
+        // place that can be caught.
+        if (collection.productsCount?.count === 0) {
+          warnings.push("This collection has no products in it yet, so customers have nothing to see below the text.");
+        }
+
+        return {
+          ok: true,
+          preview: {
+            summary: `"${collection.title}" (/collections/${collection.handle}): collection text updated`,
+            // No price and no image on this path. Stated as null
+            // rather than omitted: the shape is shared with the
+            // product preview, where a missing field would read as
+            // unknown rather than as absent.
+            target: { title: collection.title, variantTitle: null, currentPrice: null, imageUrl: null },
+            // THE WHOLE DESCRIPTION IS THE BEFORE-VALUE, not a diff.
+            // Undo is built from preview.changes[].before, so anything
+            // less than the complete prior text is an undo that loses
+            // words.
+            changes: [{ field: "descriptionHtml", before: current, after: html }],
             warnings,
           },
         };
@@ -456,7 +558,18 @@ export function createShopifyPlatform(deps: {
      * take back.
      */
     async undo(action: PublishActionRecord): Promise<UndoProposal> {
-      if (action.actionKey !== "update_page_text" && action.actionKey !== "update_page_meta") {
+      // ONE LIST, NOT TWO — the same correction execute() needed. This
+      // named the two page keys inline, so `undoes` could gain a key
+      // this method would then happily refuse, or lose one it still
+      // handled. `undoes` is what the autonomy layer reads when it
+      // decides whether an action is reversible, so it has to be the
+      // same list this method obeys.
+      //
+      // The dispatch below still ends in a refusal. A key declared in
+      // `undoes` with no branch here is a promise nothing keeps, and
+      // it should fail loudly rather than fall through to the page
+      // path and read the wrong object.
+      if (!undoes.includes(action.actionKey)) {
         return { ok: false, reason: `There's nothing to put back for "${action.actionKey}".` };
       }
       if (!action.targetRef) return { ok: false, reason: "That edit didn't record which page it changed, so I can't put it back." };
@@ -464,6 +577,34 @@ export function createShopifyPlatform(deps: {
 
       const creds = await deps.getCredentials(action.dealershipId);
       if (!creds) return { ok: false, reason: "Shopify isn't connected." };
+
+      if (action.actionKey === "update_collection_text") {
+        const collection = await readCollection(creds.shop, creds.accessToken, action.targetRef);
+        if (!collection) {
+          return { ok: false, reason: "That collection isn't in Shopify any more, so there's nothing to put back." };
+        }
+        const was = action.preview.changes.find((c) => c.field === "descriptionHtml");
+        // NOTHING RECORDED MEANS NOTHING OFFERED. An undo card with no
+        // prior value is a button that would blank the collection.
+        if (!was || was.before === null) {
+          return { ok: false, reason: "That edit didn't record what the page said before, so I can't put it back." };
+        }
+        return {
+          ok: true,
+          actionKey: action.actionKey,
+          targetRef: action.targetRef,
+          targetLabel: String(action.targetLabel ?? collection.title),
+          requestedChanges: { html: was.before },
+          // from and to are the REVERSE journey — what it says now
+          // goes back to what it said before.
+          changed: [{ what: "Collection text", from: was.after, to: was.before }],
+          warnings: [],
+        };
+      }
+
+      if (action.actionKey !== "update_page_text" && action.actionKey !== "update_page_meta") {
+        return { ok: false, reason: `There's nothing to put back for "${action.actionKey}".` };
+      }
       const page = await readPage(creds.shop, creds.accessToken, action.targetRef);
       if (!page) return { ok: false, reason: "That page isn't in Shopify any more, so there's nothing to put back." };
 
@@ -585,6 +726,55 @@ export function createShopifyPlatform(deps: {
           return { ok: false, reason: result.reason };
         }
         publishLog("shopify.write_ok", { action: action.id, page: current.id });
+        return { ok: true, platformResponse: result.data };
+      }
+
+      // ---- content: a collection page's description -----------------
+      //
+      // THE SAME THREE STEPS IN THE SAME ORDER as the page and price
+      // paths: already-at-target first so a retry after a timeout is a
+      // no-op rather than a false "stale", then the staleness check,
+      // then the write.
+      if (action.actionKey === "update_collection_text") {
+        if (!action.targetRef) return { ok: false, reason: "No collection was specified." };
+        const current = await readCollection(creds.shop, creds.accessToken, action.targetRef);
+        if (!current) return { ok: false, reason: "That collection no longer exists in Shopify." };
+
+        const expected = action.preview.changes.find((c) => c.field === "descriptionHtml");
+        if (!expected) return { ok: false, reason: "The preview did not record anything to verify against." };
+
+        const now = current.descriptionHtml ?? "";
+        if (now === expected.after) {
+          publishLog("shopify.noop", { action: action.id, collection: current.id, why: "already_at_target" });
+          return { ok: true, platformResponse: { skipped: "the collection already reads this way" } };
+        }
+        if (now !== (expected.before ?? "")) {
+          publishError("shopify.stale", { action: action.id, collection: current.id, fields: "descriptionHtml" });
+          return {
+            ok: false,
+            stale: true,
+            changed: [{ field: "descriptionHtml", before: expected.before, after: now }],
+          };
+        }
+
+        publishLog("shopify.write", { action: action.id, collection: current.id, fields: "descriptionHtml" });
+        const result = await shopifyMutation<{ collection: { id: string } }>(
+          creds.shop,
+          creds.accessToken,
+          COLLECTION_MUTATION,
+          // THE ID GOES INSIDE the collection object — see the comment
+          // on COLLECTION_MUTATION. Nothing else is sent: a
+          // CollectionUpdateInput carrying only the fields that change
+          // leaves the rest alone, unlike the `seo` object on a page.
+          { collection: { id: current.id, descriptionHtml: expected.after } },
+          "collectionUpdate",
+          fetchImpl
+        );
+        if (!result.ok) {
+          publishError("shopify.write_failed", { action: action.id, detail: result.reason });
+          return { ok: false, reason: result.reason };
+        }
+        publishLog("shopify.write_ok", { action: action.id, collection: current.id });
         return { ok: true, platformResponse: result.data };
       }
 

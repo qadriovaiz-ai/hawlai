@@ -4222,3 +4222,38 @@ Steps are in `docs/SHOPIFY-APP-CONFIG.md`. The Dev Dashboard route is
 recommended over the CLI: `shopify app config link` would bring a live
 app under new management for a one-line change, and the documentation
 does not state what it overwrites.
+
+## 2026-11-20 — a Shopify collection gets its own ActionKey, not `update_page_text`
+
+Shopify 3.3 needed a verb for "rewrite the paragraph above a group of
+products". The cheap answer was to reuse `update_page_text` with a
+collection id as the target, and it would have worked — the adapter
+resolves the target itself, so nothing would have failed.
+
+**It would also have widened unattended autonomy onto a live
+storefront.** `update_page_meta` is the single entry on
+`L2_ALLOWLIST` — the founder's decision 3, the one action permitted to
+run with nobody watching — and `growth/measures.ts` scores both page
+keys against `page_events`, a table that holds the business's own
+Hawlai site and nothing else. A merchant's shop riding in on either key
+would have inherited an autonomy grant nobody made for it, and had the
+result measured against visits that table cannot see.
+
+So: **`update_collection_text`**, registered in all eight places a key
+has to be registered (the union, `ALWAYS_REQUIRES_APPROVAL`,
+`ACTION_RISK`, `ACTION_POLICIES`, `approvalLabels`, `autonomy/overview`,
+`autonomy/promotion`, `claims/claimChecks`, `growth/measures`), and
+deliberately NOT on `L2_ALLOWLIST`. `publishContract.test.ts` failed
+until the policy entry existed, which is Rule 6 doing its job.
+
+**What was left out, and why:** the collection's search title and
+description. Those are a second decision about the same object, read in
+a search result rather than on the page, and folding them into this key
+would make "chat reworded my Diwali collection" and "chat changed what
+Google shows for it" the same audit record. Pages have two keys for
+exactly that reason. If collection SEO is wanted it gets its own key.
+
+**Measured as not-collected, named rather than defaulted.** The metric
+that matters is visits to that collection page, and this product has no
+storefront analytics — scoring the edit against `page_events` would
+report a flat line as a failure.

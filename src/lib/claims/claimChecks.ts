@@ -89,6 +89,11 @@ export type ClaimCheckInput = {
 const SURFACE_OF: Record<string, ClaimSurface> = {
   update_page_meta: "page_meta",
   update_page_text: "page_text",
+  // A collection page is customer-facing prose about groups of
+  // products, which is what page_text means. Same checks, same
+  // monitor — the surface is where the words landed, not which
+  // platform hosts them.
+  update_collection_text: "page_text",
   update_post: "page_text",
   publish_post: "page_text",
   update_product_description: "product_description",

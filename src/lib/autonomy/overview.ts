@@ -43,6 +43,7 @@ export type AutonomyRow = {
 
 const LABELS: Record<string, string> = {
   update_page_meta: "Change a page's search title and description",
+  update_collection_text: "Rewrite a collection page's description",
 };
 
 /** Midnight IST today, as an instant a Postgres timestamp compares to. */
