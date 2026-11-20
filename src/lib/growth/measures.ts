@@ -87,6 +87,11 @@ const NOT_COLLECTED: Record<string, Measure> = {
   // a merchant's storefront edit against a table with no storefront
   // data in it would report a flat line as a failure.
   update_collection_text: { metric: "visits to this collection page", source: null, direction: "up" },
+  // Shopify 3.3b. NOT COLLECTED, and here the honest reason is
+  // that the action cannot move a number at all: the file is not on
+  // any page. Whatever later references it is the thing with a
+  // consequence, and that action carries its own measure.
+  upload_image: { metric: "uses of this picture", source: null, direction: "up" },
   refund_approve: { metric: "refunds issued", source: null, direction: "down" },
   set_automation_toggle: { metric: "what this automation did while it was on", source: null, direction: "up" },
   // S7/P5. NOT COLLECTED, and the honest reason is worth stating: what

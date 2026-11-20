@@ -148,6 +148,54 @@ const COLLECTION_MUTATION = `
   }
 `;
 
+// ─────────────────────────────────────────────────────────────────────
+// FILES (3.3b)
+// ─────────────────────────────────────────────────────────────────────
+//
+// `write_files` was released in app version 4 on 20 November 2026 and
+// this is the first thing to use it.
+//
+// SHOPIFY FETCHES THE IMAGE; we do not upload bytes. `originalSource`
+// accepts an external HTTPS URL, which is exactly the shape every
+// picture this product makes already has — a public URL in its own
+// storage bucket. So there is no staged upload and no multipart body.
+//
+// PROCESSING IS ASYNCHRONOUS, in Shopify's own words: "Files are
+// processed asynchronously. Check the fileStatus field to monitor
+// processing completion." So `image.url` can be null on a perfectly
+// successful create, and the honest report is "created, still
+// processing" rather than a null URL dressed up as one. Deliberately
+// NO polling loop: the file exists either way, and a route that waits
+// on Shopify's image pipeline is a route that times out.
+//
+// Verified against the 2026-07 documentation on 20 November 2026, not
+// the "latest" alias.
+const FILE_MUTATION = `
+  mutation PublishFileCreate($files: [FileCreateInput!]!) {
+    fileCreate(files: $files) {
+      files {
+        id
+        fileStatus
+        alt
+        ... on MediaImage {
+          image { url }
+        }
+      }
+      userErrors { field message code }
+    }
+  }
+`;
+
+/** Shopify's own limit, and it rejects the whole create when exceeded. */
+const ALT_LIMIT = 512;
+
+type CreatedFile = {
+  id: string;
+  fileStatus: string;
+  alt: string | null;
+  image?: { url: string | null } | null;
+};
+
 type CollectionNode = {
   id: string;
   title: string;
@@ -183,6 +231,36 @@ function samePrice(a: string | null, b: string | null): boolean {
   const nb = Number(b);
   if (Number.isNaN(na) || Number.isNaN(nb)) return a === b;
   return Math.abs(na - nb) < 0.005;
+}
+
+/**
+ * Where an image may come from, and it is not anywhere.
+ *
+ * An arbitrary URL in `requestedChanges` is an injection surface: a
+ * page or a document that says "upload this image" would otherwise put
+ * a stranger's file into a merchant's store under the merchant's own
+ * name. So the source must be a picture THIS PRODUCT made, which means
+ * the storage origin it writes them to.
+ *
+ * Read from configuration rather than written down, both because the
+ * origin differs per deployment and because Rule 3 has no room for a
+ * hardcoded host. `replyLinks.ts` already treats the same value as
+ * "where Hawlai puts the pictures it makes", for the same reason.
+ *
+ * NOT CONFIGURED MEANS NOTHING PASSES. A missing origin makes every
+ * source fail the check, which is the safe direction — an upload is
+ * never the urgent half of anything.
+ */
+function sourceAllowed(url: string): boolean {
+  const origin = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!origin) return false;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    return u.host === new URL(origin).host;
+  } catch {
+    return false;
+  }
 }
 
 export function createShopifyPlatform(deps: {
@@ -225,6 +303,7 @@ export function createShopifyPlatform(deps: {
     "update_page_meta",
     "publish_post",
     "update_collection_text",
+    "upload_image",
   ];
 
   /**
@@ -348,6 +427,47 @@ export function createShopifyPlatform(deps: {
             target: { title: page.title, variantTitle: null, currentPrice: null, imageUrl: null },
             changes,
             warnings,
+          },
+        };
+      }
+
+      // ---- files: a picture into the store's own library ----------
+      if (action.actionKey === "upload_image") {
+        const src = typeof action.requestedChanges.imageUrl === "string" ? action.requestedChanges.imageUrl.trim() : "";
+        if (!src) return { ok: false, reason: "No picture was given to upload." };
+        if (!sourceAllowed(src)) {
+          // The reason says WHOSE picture is acceptable rather than
+          // naming the host, which would read as a configuration error
+          // to the one person who cannot fix it.
+          return {
+            ok: false,
+            reason: "That picture isn't one Hawlai made, so it can't be uploaded to the store.",
+          };
+        }
+        const alt = typeof action.requestedChanges.alt === "string" ? action.requestedChanges.alt : "";
+        if (alt.length > ALT_LIMIT) {
+          // REFUSED, NOT TRUNCATED. Shortening it silently would mean
+          // the approver agreed to words that are not the words
+          // written — and Shopify rejects the whole create anyway.
+          return { ok: false, reason: `The description of the picture is longer than ${ALT_LIMIT} characters.` };
+        }
+
+        const filename = typeof action.requestedChanges.filename === "string" ? action.requestedChanges.filename.trim() : "";
+        return {
+          ok: true,
+          preview: {
+            summary: `Add a picture to this store's file library${filename ? ` as "${filename}"` : ""} — not placed on any page`,
+            // The picture itself IS the target here, which is what
+            // `imageUrl` on the preview is for: the approver looks at
+            // the image rather than reading a URL.
+            target: { title: filename || "Picture", variantTitle: null, currentPrice: null, imageUrl: src },
+            // `before: null` IS WHAT MARKS A CREATION. There is no
+            // prior value, and undoing a creation is a different
+            // decision from undoing an edit.
+            changes: [{ field: "file", before: null, after: src }],
+            warnings: [
+              "This only adds the picture to the store's file library. No customer sees it until something puts it on a page.",
+            ],
           },
         };
       }
@@ -727,6 +847,75 @@ export function createShopifyPlatform(deps: {
         }
         publishLog("shopify.write_ok", { action: action.id, page: current.id });
         return { ok: true, platformResponse: result.data };
+      }
+
+      // ---- files: a picture into the store's own library ------------
+      //
+      // A CREATION HAS NO BEFORE-VALUE, so there is no staleness check
+      // to make and none is faked — the same shape as publish_post.
+      // What protects a retry is the idempotency the executor already
+      // applies to the action, and the worst case of a double write is
+      // a duplicate file in a library rather than anything a customer
+      // can see.
+      if (action.actionKey === "upload_image") {
+        const src = typeof action.requestedChanges.imageUrl === "string" ? action.requestedChanges.imageUrl.trim() : "";
+        // CHECKED AGAIN HERE, not only in the preview. Approval can
+        // arrive hours later against a record that was written
+        // elsewhere, and this is the step that actually hands a URL to
+        // Shopify.
+        if (!src || !sourceAllowed(src)) {
+          return { ok: false, reason: "That picture isn't one Hawlai made, so it wasn't uploaded." };
+        }
+        const alt = typeof action.requestedChanges.alt === "string" ? action.requestedChanges.alt : "";
+        if (alt.length > ALT_LIMIT) {
+          return { ok: false, reason: `The description of the picture is longer than ${ALT_LIMIT} characters.` };
+        }
+        const filename = typeof action.requestedChanges.filename === "string" ? action.requestedChanges.filename.trim() : "";
+
+        publishLog("shopify.write", { action: action.id, what: "file_create" });
+        const result = await shopifyMutation<{ files: CreatedFile[] }>(
+          creds.shop,
+          creds.accessToken,
+          FILE_MUTATION,
+          {
+            files: [
+              {
+                originalSource: src,
+                contentType: "IMAGE",
+                ...(alt ? { alt } : {}),
+                ...(filename ? { filename } : {}),
+              },
+            ],
+          },
+          "fileCreate",
+          fetchImpl
+        );
+        if (!result.ok) {
+          publishError("shopify.write_failed", { action: action.id, detail: result.reason });
+          return { ok: false, reason: result.reason };
+        }
+        const file = result.data.files?.[0] ?? null;
+        if (!file) {
+          // No userErrors and no file is not a success. Reporting one
+          // would record a picture in the library that is not there.
+          publishError("shopify.write_failed", { action: action.id, detail: "no_file_returned" });
+          return { ok: false, reason: "Shopify accepted the upload but returned no file, so I can't confirm it." };
+        }
+        publishLog("shopify.write_ok", { action: action.id, file: file.id, status: file.fileStatus });
+        return {
+          ok: true,
+          platformResponse: {
+            id: file.id,
+            fileStatus: file.fileStatus,
+            // NULL WHEN STILL PROCESSING, and said so rather than
+            // omitted. Shopify processes files asynchronously, so a
+            // successful create can carry no URL yet — and a caller
+            // that reads a missing field as an empty string would put
+            // a broken image on a page.
+            url: file.image?.url ?? null,
+            processing: file.fileStatus !== "READY",
+          },
+        };
       }
 
       // ---- content: a collection page's description -----------------

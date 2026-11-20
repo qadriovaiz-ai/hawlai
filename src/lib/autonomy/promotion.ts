@@ -390,6 +390,7 @@ function humanActionName(actionKey: string): string {
   const NAMES: Record<string, string> = {
     update_page_meta: "change a page's search title and description",
     update_collection_text: "rewrite a collection page's description",
+    upload_image: "add a picture to the store's file library",
   };
   return NAMES[actionKey] ?? actionKey.replace(/_/g, " ");
 }

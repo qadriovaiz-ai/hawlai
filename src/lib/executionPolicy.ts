@@ -143,6 +143,7 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // is gated like the rest of this group rather than on cost.
   update_page_meta: { actionType: "edit", riskLevel: "medium", description: "Change the search title or meta description on a page of the merchant's own site — what Google and link previews show", requiresApproval: true },
   update_collection_text: { actionType: "edit", riskLevel: "medium", description: "Rewrite the paragraph shown above a group of products on a collection page of the merchant's store", requiresApproval: true },
+  upload_image: { actionType: "create", riskLevel: "low", description: "Add a picture to the merchant's own Files library on their store — not placed on any page, so no customer sees it until something references it", requiresApproval: true },
   // The words a visitor reads on the page itself.
   //
   // CORRECTED 7 November 2026 (G3a, migration 223). This comment used to

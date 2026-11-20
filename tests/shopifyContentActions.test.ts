@@ -11,7 +11,7 @@
 // this adapter that "Shopify is not a CMS in the sense those mean".
 // Shopify has Blog and Article objects and the scope covers them.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createShopifyPlatform } from "@/lib/publish/platforms/shopify";
 import type { PublishActionRecord } from "@/lib/publish/types";
 
@@ -578,5 +578,240 @@ describe("7. A COLLECTION PAGE'S DESCRIPTION", () => {
     // Not vacuous: there IS at least one supported-but-not-undoable
     // key, so the loop above actually ran.
     expect(refused).toBeGreaterThan(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// FILES — 3.3b
+// ─────────────────────────────────────────────────────────────────────
+
+const STORAGE = "https://abcdefgh.supabase.co";
+const OURS = `${STORAGE}/storage/v1/object/public/ad-creatives/d1/diwali.png`;
+
+const fileOk = (over: Record<string, unknown> = {}) => ({
+  data: {
+    fileCreate: {
+      files: [{ id: "gid://shopify/MediaImage/5", fileStatus: "READY", alt: "Diwali candles", image: { url: "https://cdn.shopify.com/s/files/1/diwali.png" }, ...over }],
+      userErrors: [],
+    },
+  },
+});
+
+const uploadAction = (over: Partial<PublishActionRecord> = {}) =>
+  action({
+    actionKey: "upload_image",
+    targetRef: null,
+    requestedChanges: { imageUrl: OURS, alt: "Diwali candles" },
+    ...over,
+  });
+
+describe("8. A PICTURE INTO THE STORE'S OWN FILE LIBRARY", () => {
+  const saved = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = STORAGE;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = saved;
+  });
+
+  it("THE LOAD-BEARING ONE: only a picture Hawlai made can be uploaded", async () => {
+    // An arbitrary URL in requestedChanges is an injection surface. A
+    // page or a document saying "upload this image" would otherwise
+    // put a stranger's file into a merchant's store under the
+    // merchant's own name — so the source has to be this product's own
+    // storage origin, and it is checked in preview AND in execute,
+    // because approval arrives later against a record written
+    // elsewhere.
+    const strangers = [
+      "https://evil.example.com/payload.png",
+      // The right path on the wrong host.
+      "https://evil.example.com/storage/v1/object/public/ad-creatives/x.png",
+      // The right host over plain http.
+      OURS.replace("https://", "http://"),
+      // Two near-misses, in BOTH directions, because a host check
+      // written with the wrong string method lets exactly one through
+      // and looks right against the other. A mutation swapping `===`
+      // for `endsWith` survived until the second line was here.
+      //
+      // ours is a SUFFIX of theirs — defeats startsWith/includes:
+      "https://abcdefgh.supabase.co.evil.example.com/x.png",
+      // ours is a PREFIX of nothing but their host ENDS with ours —
+      // defeats endsWith:
+      "https://evil-abcdefgh.supabase.co/x.png",
+      "https://notabcdefgh.supabase.co/x.png",
+      "not-a-url-at-all",
+      "",
+    ];
+    for (const src of strangers) {
+      const { impl, sent } = sequence([fileOk()]);
+      const p = platform(impl);
+      const a = uploadAction({ requestedChanges: { imageUrl: src } });
+      const pv = await p.preview(a);
+      expect(pv.ok, `preview must refuse ${src || "(empty)"}`).toBe(false);
+      const ex = await p.execute(
+        uploadAction({
+          requestedChanges: { imageUrl: src },
+          preview: { summary: "", changes: [{ field: "file", before: null, after: src }], warnings: [] } as any,
+        })
+      );
+      expect(ex.ok, `execute must refuse ${src || "(empty)"}`).toBe(false);
+      // And nothing was sent to Shopify either time.
+      expect(sent.length, `nothing may reach Shopify for ${src || "(empty)"}`).toBe(0);
+    }
+  });
+
+  it("AND REFUSES EVERYTHING when the storage origin is not configured", async () => {
+    // The safe direction. A missing origin must not mean "allow
+    // anything" — an upload is never the urgent half of anything.
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const { impl, sent } = sequence([fileOk()]);
+    const r = await platform(impl).preview(uploadAction());
+    expect(r.ok).toBe(false);
+    expect(sent.length).toBe(0);
+  });
+
+  it("previews the picture itself, and says plainly that nothing goes live", async () => {
+    const { impl, sent } = sequence([fileOk()]);
+    const r = await platform(impl).preview(uploadAction({ requestedChanges: { imageUrl: OURS, filename: "diwali.png" } }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // The approver looks at the image, not at a URL.
+    expect(r.preview.target?.imageUrl).toBe(OURS);
+    expect(r.preview.warnings.join(" ")).toMatch(/no customer sees it/i);
+    // `before: null` is what marks a creation.
+    expect(r.preview.changes).toEqual([{ field: "file", before: null, after: OURS }]);
+    // A preview reads nothing and writes nothing.
+    expect(sent.length).toBe(0);
+  });
+
+  it("refuses alt text over Shopify's limit rather than silently shortening it", async () => {
+    // Shortening it would mean the approver agreed to words that are
+    // not the words written — and Shopify rejects the whole create
+    // anyway.
+    const r = await platform(sequence([fileOk()]).impl).preview(
+      uploadAction({ requestedChanges: { imageUrl: OURS, alt: "a".repeat(513) } })
+    );
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toMatch(/512/);
+    const fine = await platform(sequence([fileOk()]).impl).preview(
+      uploadAction({ requestedChanges: { imageUrl: OURS, alt: "a".repeat(512) } })
+    );
+    expect(fine.ok).toBe(true);
+  });
+
+  it("hands Shopify the URL to fetch — no staged upload, no bytes", async () => {
+    const { impl, sent } = sequence([fileOk()]);
+    const r = await platform(impl).execute(
+      uploadAction({
+        requestedChanges: { imageUrl: OURS, alt: "Diwali candles", filename: "diwali.png" },
+        preview: { summary: "", changes: [{ field: "file", before: null, after: OURS }], warnings: [] } as any,
+      })
+    );
+    expect(r.ok).toBe(true);
+    expect(sent.length).toBe(1);
+    expect(sent[0].query).toContain("fileCreate(files:");
+    expect(sent[0].variables.files).toEqual([
+      { originalSource: OURS, contentType: "IMAGE", alt: "Diwali candles", filename: "diwali.png" },
+    ]);
+  });
+
+  it("omits alt and filename rather than sending empty strings", async () => {
+    // An empty `alt` is not the same as no alt: it would overwrite
+    // nothing here, but it is a blank description on a real image.
+    const { impl, sent } = sequence([fileOk()]);
+    await platform(impl).execute(
+      uploadAction({
+        requestedChanges: { imageUrl: OURS },
+        preview: { summary: "", changes: [{ field: "file", before: null, after: OURS }], warnings: [] } as any,
+      })
+    );
+    expect(Object.keys(sent[0].variables.files[0]).sort()).toEqual(["contentType", "originalSource"]);
+  });
+
+  it("THE ASYNCHRONOUS ONE: a file still processing reports no URL, not an empty one", async () => {
+    // Shopify's own words: "Files are processed asynchronously. Check
+    // the fileStatus field to monitor processing completion." So a
+    // perfectly successful create can carry no URL yet. A caller that
+    // read a missing field as an empty string would put a broken image
+    // on a page.
+    const { impl } = sequence([fileOk({ fileStatus: "UPLOADED", image: null })]);
+    const r = await platform(impl).execute(
+      uploadAction({
+        preview: { summary: "", changes: [{ field: "file", before: null, after: OURS }], warnings: [] } as any,
+      })
+    );
+    expect(r.ok).toBe(true);
+    expect(r.ok && (r.platformResponse as any).url).toBeNull();
+    expect(r.ok && (r.platformResponse as any).processing).toBe(true);
+    expect(r.ok && (r.platformResponse as any).fileStatus).toBe("UPLOADED");
+  });
+
+  it("and a READY file is not reported as still processing", async () => {
+    const { impl } = sequence([fileOk()]);
+    const r = await platform(impl).execute(
+      uploadAction({
+        preview: { summary: "", changes: [{ field: "file", before: null, after: OURS }], warnings: [] } as any,
+      })
+    );
+    expect(r.ok && (r.platformResponse as any).processing).toBe(false);
+    expect(r.ok && (r.platformResponse as any).url).toBe("https://cdn.shopify.com/s/files/1/diwali.png");
+  });
+
+  it("surfaces a DECLINED upload instead of reporting success", async () => {
+    const { impl } = sequence([
+      { data: { fileCreate: { files: [], userErrors: [{ field: ["files"], message: "The file type is not supported.", code: "UNACCEPTABLE_ASSET" }] } } },
+    ]);
+    const r = await platform(impl).execute(
+      uploadAction({
+        preview: { summary: "", changes: [{ field: "file", before: null, after: OURS }], warnings: [] } as any,
+      })
+    );
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && !r.stale && r.reason).toContain("not supported");
+  });
+
+  it("NO ERRORS AND NO FILE IS NOT A SUCCESS", async () => {
+    // Reporting one would record a picture in the library that is not
+    // there, and the next action would reference nothing.
+    const { impl } = sequence([{ data: { fileCreate: { files: [], userErrors: [] } } }]);
+    const r = await platform(impl).execute(
+      uploadAction({
+        preview: { summary: "", changes: [{ field: "file", before: null, after: OURS }], warnings: [] } as any,
+      })
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("IS NOT UNDOABLE, and that is a decision", async () => {
+    // Same reason as publish_post: deleting a file is a deletion, not
+    // a reverse, and by the time anyone asks, a page may already point
+    // at it.
+    const p = platform(sequence([fileOk()]).impl);
+    expect(p.undoes).not.toContain("upload_image");
+    const r = await p.undo!(
+      uploadAction({ preview: { summary: "", changes: [], warnings: [] } as any })
+    );
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toMatch(/nothing to put back/i);
+  });
+
+  it("is the only publish action classified low, and still requires approval", async () => {
+    // Nothing is published and no customer can see the file, which is
+    // what makes it low — and writing to a merchant's store unasked is
+    // what keeps it gated. One field to relax if it turns out to put a
+    // second card in front of one decision.
+    const { ACTION_RISK, ALWAYS_REQUIRES_APPROVAL } = await import("@/lib/publish/types");
+    const { getActionPolicy } = await import("@/lib/executionPolicy");
+    expect(ACTION_RISK.upload_image).toBe("low");
+    expect(getActionPolicy("upload_image")?.requiresApproval).toBe(true);
+    expect(getActionPolicy("upload_image")?.riskLevel).toBe("low");
+    // Absent from the list this codebase treats as settled, on purpose.
+    expect(ALWAYS_REQUIRES_APPROVAL).not.toContain("upload_image");
+    // Not vacuous: every OTHER key in the risk table is above low.
+    for (const [key, risk] of Object.entries(ACTION_RISK)) {
+      if (key === "upload_image") continue;
+      expect(risk, `${key} should not be low`).not.toBe("low");
+    }
   });
 });

@@ -100,7 +100,32 @@ export type ActionKey =
    * what Google shows for it" the same audit record. If they are wanted
    * they get their own key, as pages did.
    */
-  | "update_collection_text";
+  | "update_collection_text"
+  /**
+   * Put a picture Hawlai made into the merchant's own Files library on
+   * their store, so the store hosts it rather than this product.
+   *
+   * WHY THAT MATTERS AND IS NOT BOOKKEEPING: every image this product
+   * generates lives at a public URL in its own storage bucket. An
+   * image referenced from a merchant's live page by that URL is a page
+   * that breaks if the bucket is ever moved, renamed or cleaned up —
+   * their shop, our storage. Uploading it first gives a URL the
+   * merchant's own store owns.
+   *
+   * CHANGES NOTHING A CUSTOMER SEES. A file in the Files library is
+   * not on any page until something references it, which is why this
+   * is the only publish action classified `low` and the only one
+   * absent from ALWAYS_REQUIRES_APPROVAL. It still requires approval
+   * in ACTION_POLICIES — writing to a merchant's store unasked is not
+   * something to decide by default — but that is one field to relax if
+   * it turns out to produce a second card for one decision, rather
+   * than an entry on a list this codebase treats as settled.
+   *
+   * NO UNDO, and the same reason as publish_post: deleting a file is a
+   * deletion, not a reverse, and by the time anyone asks, a page may
+   * already point at it.
+   */
+  | "upload_image";
 
 /**
  * One field changing, in terms a person can check.
@@ -369,4 +394,9 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   // — but this is a live external storefront with no draft layer, so an
   // approved edit is what the merchant's customers read immediately.
   update_collection_text: "medium",
+  // The only `low` in this table. Nothing is published, nothing
+  // spends, and no customer can see the file until a separate action
+  // references it. See the key's own comment for why it is still
+  // approval-gated in ACTION_POLICIES.
+  upload_image: "low",
 };
