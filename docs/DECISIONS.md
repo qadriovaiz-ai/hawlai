@@ -4288,9 +4288,23 @@ it gates. A summary table is not a reference.
    read did not understand is an item the write drops. Every other
    action in the adapter touches one field of one object.
 
-This is the **sixth** time a written description in this codebase has
-turned out to differ from what it described, which is why the standing
-rule exists. `tests/shopifyMenuUnsupported.test.ts` now pins the
+This is the **seventh** time a written description in this codebase
+has turned out to differ from what it described, which is why the
+standing rule exists.
+
+**The count was wrong when this entry was first written** — it said
+sixth, and the founder caught it. Sixth was the `business_story`
+cleanup: a code comment said migration 209 moved nine rows out of that
+table, and 209 is `action_levels.sql`; the move never happened, and
+only the founder stopping at step 2b prevented four real product facts
+being deleted. So the menu-API mismatch is seventh. The commit message
+on `da367518` still says sixth and cannot be rewritten; this is the
+correction of record.
+
+Miscounting the instances of a rule about miscounted records is not an
+irony worth preserving, but it is worth noting why it happened: the
+list in memory held five, and I added one to the number in the list
+rather than to the number of things that had actually happened. `tests/shopifyMenuUnsupported.test.ts` now pins the
 correction: the false phrase may appear at most once and only inside a
 block that marks it as past and calls it false.
 

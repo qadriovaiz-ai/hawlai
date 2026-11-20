@@ -64,9 +64,12 @@ menu rather than patching a link, so an item the read did not
 understand is an item the write drops. That needs its own staleness
 contract, not a corner of another phase.
 
-Any plan that promises "edit your menu
-everywhere" is wrong on a third of the platforms, and the adapter must
-be able to say so rather than fail.
+Any plan that promises "edit your menu everywhere" is still wrong —
+but for different reasons per platform, which is the point of a
+per-adapter `supports` rather than one capability list. On Shopify the
+API exists and the scope is not granted. On WordPress the endpoint is
+unverified (see below). The adapter must be able to say which, rather
+than fail at the API.
 
 **Theme file edits need Shopify's permission, not just the merchant's.**
 A publicly distributed app that modifies theme files needs an exemption
