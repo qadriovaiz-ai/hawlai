@@ -42,4 +42,9 @@ card.txt
 armcheck.txt
 sample-monthly-review.txt
 
+# Added by `vercel env pull`, kept and narrowed. `.env*` also covered
+# .env.example, which is tracked and which tests/envExample.test.ts
+# reads — an already-tracked file ignores .gitignore, so nothing broke,
+# but a delete-and-re-add would have silently dropped it.
 .env*
+!.env.example
