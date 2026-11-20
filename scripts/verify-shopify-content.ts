@@ -202,11 +202,16 @@ async function main(): Promise<number> {
   // setup step. The two Supabase variables are not in .env.local by
   // default — they live in Vercel, because nothing else run locally
   // needs the service-role key.
-  const NEEDED = [
+  const NEEDED: (readonly [string, string])[] = [
     ["NEXT_PUBLIC_SUPABASE_URL", "Vercel → Settings → Environment Variables"],
     ["SUPABASE_SERVICE_ROLE_KEY", "Vercel → Settings → Environment Variables (secret — do not paste it into chat)"],
-    ["COMMERCE_ENCRYPTION_KEY", "already in .env.local"],
-  ] as const;
+  ];
+  // Only needed to DECRYPT a stored token. With SHOPIFY_VERIFY_TOKEN
+  // set there is nothing to decrypt, and demanding the key would be
+  // demanding the very thing that cannot be obtained.
+  if (!process.env.SHOPIFY_VERIFY_TOKEN) {
+    NEEDED.push(["COMMERCE_ENCRYPTION_KEY", "already in .env.local — but it must be the key that ENCRYPTED the token"]);
+  }
   const missing = NEEDED.filter(([k]) => !process.env[k]);
   if (missing.length) {
     console.error("Refusing to run — these are not in the environment:\n");
@@ -248,17 +253,63 @@ async function main(): Promise<number> {
   console.log(`Store:     ${SHOP_ARG}`);
   console.log(`Mode:      ${WRITE ? "WRITE — real edits, each one put back" : "DRY RUN — preview only, nothing written"}\n`);
 
-  // ---------------- the credential, through the real path ------------
-  const creds = await shopifyCredentialsAdapter(dealershipId);
-  if (!creds) {
-    console.error("Couldn't resolve a Shopify credential. Is the store still connected?");
-    return 1;
+  // ---------------- the credential ------------------------------------
+  //
+  // TWO SOURCES, AND THE OVERRIDE IS NOT A SHORTCUT. The stored token
+  // is encrypted with COMMERCE_ENCRYPTION_KEY, and the token for this
+  // store was written by the LIVE app on Vercel — so it is encrypted
+  // under the production key. That key is a Vercel "Sensitive"
+  // variable: it cannot be read back by anyone, including the owner,
+  // and `secretCrypto` only ever tries COMMERCE_ENCRYPTION_KEY and
+  // COMMERCE_ENCRYPTION_KEY_PREVIOUS. There is nothing to recover.
+  //
+  // The two obvious ways round it are both worse than the problem.
+  // Rotating the key rewrites every encrypted secret in the database
+  // to fix one test store. Reconnecting the store from a local dev
+  // server re-encrypts the token under the LOCAL key, which then makes
+  // it undecryptable in production — breaking the live connection to
+  // fix the local one.
+  //
+  // So: SHOPIFY_VERIFY_TOKEN, an Admin API token from a custom app on
+  // the test store itself. What is unverified here is the four
+  // MUTATION SHAPES. Credential resolution is not unverified — it has
+  // been running in production since September — so it does not belong
+  // in this test. Skipping it costs nothing and risks nothing, and the
+  // database path stays the default so the script still works
+  // unchanged in a context that has the real key.
+  let creds: { shop: string; accessToken: string } | null = null;
+  const override = process.env.SHOPIFY_VERIFY_TOKEN;
+  if (override) {
+    creds = { shop: SHOP_ARG, accessToken: override };
+    record(
+      "credential source",
+      true,
+      "SHOPIFY_VERIFY_TOKEN — a store-level token; the encrypted-token path is DELIBERATELY NOT exercised"
+    );
+  } else {
+    creds = await shopifyCredentialsAdapter(dealershipId);
+    if (!creds) {
+      console.error("Couldn't resolve a Shopify credential from the database.");
+      console.error("");
+      console.error("If the error above was a decryption failure, this machine's");
+      console.error("COMMERCE_ENCRYPTION_KEY is not the key that encrypted the token.");
+      console.error("That is expected for a store connected through the live app, and it");
+      console.error("is not recoverable. Set SHOPIFY_VERIFY_TOKEN in .env.local instead:");
+      console.error("");
+      console.error(`  Shopify admin for ${SHOP_ARG} → Settings → Apps and sales channels`);
+      console.error("  → Develop apps → Create an app → Configure Admin API scopes");
+      console.error("  → tick write_products, write_content, write_files → Install");
+      console.error("  → reveal the Admin API access token (shpat_...)");
+      console.error("");
+      console.error("Nothing was written.");
+      return 1;
+    }
+    if (creds.shop !== SHOP_ARG) {
+      console.error(`Resolved credential is for ${creds.shop}, not ${SHOP_ARG}. Refusing to continue.`);
+      return 1;
+    }
+    record("the stored credential resolves and matches --shop", true, `token for ${creds.shop} (not printed)`);
   }
-  if (creds.shop !== SHOP_ARG) {
-    console.error(`Resolved credential is for ${creds.shop}, not ${SHOP_ARG}. Refusing to continue.`);
-    return 1;
-  }
-  record("the stored credential resolves and matches --shop", true, `token for ${creds.shop} (not printed)`);
 
   // ---------------- discovery ----------------------------------------
   const found = await shopifyGraphQL<any>(creds.shop, creds.accessToken, DISCOVER, {});
@@ -626,6 +677,15 @@ function finish(): number {
   if (!WRITE) {
     console.log("\nDRY RUN — nothing was written. Re-run with --write to execute.");
   }
+  // SAID EVERY TIME, so a pasted result is never ambiguous about what
+  // it covers. A pass here is a statement about the mutation shapes,
+  // and with the override it is NOT a statement about the stored
+  // credential or the OAuth-granted scopes.
+  console.log(
+    process.env.SHOPIFY_VERIFY_TOKEN
+      ? "Credential: SHOPIFY_VERIFY_TOKEN (store-level). The encrypted-token path was not exercised."
+      : "Credential: resolved and decrypted from the database — that path was exercised too."
+  );
   return failed.length ? 1 : 0;
 }
 
