@@ -4257,3 +4257,46 @@ exactly that reason. If collection SEO is wanted it gets its own key.
 that matters is visits to that collection page, and this product has no
 storefront analytics — scoring the edit against `page_events` would
 report a flat line as a failure.
+
+## 2026-11-20 — the recorded reason for excluding Shopify menus was false
+
+The adapter's comment said: "Shopify has no menu API at all — there is
+no menu scope and no menu object, and `write_online_store_navigation`
+covers URL redirects only." I wrote that, and it is wrong on every
+part. Checked against the 2026-07 reference rather than trusted:
+
+- a `Menu` object exists, read scope `read_online_store_navigation`
+- `menuCreate` and `menuUpdate` both exist
+- `menuUpdate` itself states it requires `write_online_store_navigation`
+
+**Where the mistake came from, because it is a reusable one.** The
+access-scope *table* lists only `UrlRedirect` against that scope. The
+table is incomplete; the mutation's own page is the authority on what
+it gates. A summary table is not a reference.
+
+**The exclusion stands, for two reasons that are true:**
+
+1. **The scope is not granted.** App version 4 declares
+   `write_products`, `write_content`, `write_files`. Nothing
+   navigation-related. Declaring a menu action would offer the owner
+   something that fails at Shopify's door, and getting the scope costs
+   a new app version plus every connected merchant re-approving — the
+   3.1 cost paid a second time.
+2. **`menuUpdate` replaces the whole menu.** `items` is required and is
+   the complete list, as is `title`. Changing one link means reading
+   the entire menu and writing all of it back, and an item shape the
+   read did not understand is an item the write drops. Every other
+   action in the adapter touches one field of one object.
+
+This is the **sixth** time a written description in this codebase has
+turned out to differ from what it described, which is why the standing
+rule exists. `tests/shopifyMenuUnsupported.test.ts` now pins the
+correction: the false phrase may appear at most once and only inside a
+block that marks it as past and calls it false.
+
+**And the first version of that test was wrong in the same way the
+Rule 8 incident describes.** It asserted the false phrase was absent —
+but the correction quotes the phrase in order to retract it, so the
+test failed on the fix. "Absent" was never the property worth having.
+The property is that the phrase never appears without its retraction:
+slice to the block, then anchor inside it.

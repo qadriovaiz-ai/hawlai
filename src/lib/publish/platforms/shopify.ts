@@ -290,12 +290,35 @@ export function createShopifyPlatform(deps: {
    * than that one: editing an existing article is a separate read and
    * a separate staleness contract, and it is not built yet.
    *
-   * NO MENU ACTION, AND NOT BECAUSE IT IS UNBUILT. Shopify has no menu
-   * API at all — there is no menu scope and no menu object, and
-   * `write_online_store_navigation` covers URL redirects only. A
-   * declared capability is a promise the tool layer reads, so the
+   * NO MENU ACTION. This comment USED TO SAY "Shopify has no menu API
+   * at all — there is no menu scope and no menu object". THAT WAS
+   * FALSE, found on 20 November 2026 by checking it instead of
+   * trusting it. The 2026-07 Admin API has a `Menu` object (read scope
+   * `read_online_store_navigation`) and both `menuCreate` and
+   * `menuUpdate` (write scope `write_online_store_navigation`).
+   *
+   * The real reasons, and they are better ones:
+   *
+   * 1. THE SCOPE IS NOT GRANTED. App version 4 declares
+   *    write_products, write_content and write_files. Nothing
+   *    navigation-related. Declaring a menu action here would offer
+   *    the owner something that fails at Shopify's door — and getting
+   *    the scope means a new app version AND every connected merchant
+   *    re-approving, which is the 3.1 cost paid a second time.
+   *
+   * 2. `menuUpdate` REPLACES THE WHOLE MENU. `items` is required and
+   *    is the complete list, as is `title`. So changing one link means
+   *    reading the entire menu and writing all of it back, and any
+   *    item shape the read did not understand is an item the write
+   *    silently drops. Every other action in this file touches one
+   *    field of one object. A menu edit rewrites the merchant's whole
+   *    navigation, which is a different risk class and needs its own
+   *    staleness contract rather than a place in someone else's phase.
+   *
+   * A declared capability is a promise the tool layer reads, so the
    * absence here is what stops the assistant offering a menu edit on a
-   * Shopify store. tests/shopifyMenuUnsupported.test.ts pins it.
+   * Shopify store. tests/shopifyMenuUnsupported.test.ts pins it, and
+   * pins that this comment does not go back to the false reason.
    */
   const supports: readonly ActionKey[] = [
     "update_product_price",

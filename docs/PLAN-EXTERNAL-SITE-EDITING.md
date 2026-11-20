@@ -41,15 +41,30 @@ Where a page did not answer, it says so rather than guessing.
 | Blog posts / articles | `write_content` | ✅ |
 | Products, collections | `write_products` | ✅ |
 | Images / files | `write_files` | ✅ |
-| **Navigation menus** | — | ❌ **No API.** `write_online_store_navigation` covers `UrlRedirect` only |
+| **Navigation menus** | `write_online_store_navigation` | ⚠️ **API exists, scope NOT granted** — corrected 2026-11-20 |
 | Theme files | `write_themes` **plus an exemption** | ⚠️ gated |
 | SEO metafields | not documented on the scopes page | ⚠️ unverified |
 
 Two findings worth pulling out of the table.
 
-**Menus cannot be edited on Shopify.** There is no menu scope and no
-menu object in the Admin API. The navigation scope that sounds like it
-would is for URL redirects. Any plan that promises "edit your menu
+**CORRECTED 2026-11-20 — the original claim here was false.** It said
+there is no menu scope and no menu object in the Admin API, and that
+the navigation scope is for URL redirects only. Checked against the
+2026-07 reference: a `Menu` object exists (`read_online_store_navigation`),
+and `menuCreate` and `menuUpdate` both exist (`write_online_store_navigation`).
+The access-scope table lists only `UrlRedirect` against that scope,
+which is where the mistake came from — the table is incomplete, and the
+mutation page is the authority on what it gates.
+
+**Menus are still out of this phase, for two real reasons.** The scope
+is not in app version 4, so adding it costs a new app version plus
+every connected merchant re-approving. And `menuUpdate` takes the
+complete `items` list as a required argument — it replaces the whole
+menu rather than patching a link, so an item the read did not
+understand is an item the write drops. That needs its own staleness
+contract, not a corner of another phase.
+
+Any plan that promises "edit your menu
 everywhere" is wrong on a third of the platforms, and the adapter must
 be able to say so rather than fail.
 
@@ -143,8 +158,9 @@ that, because "modelling a universal *create discount* would produce a
 tool the assistant offers on sites that cannot do it, and a failure the
 merchant experiences as the product lying to them."
 
-That is exactly the right answer to Shopify's missing menu API. The
-adapter does not stub a menu edit that fails at runtime; it omits
+That is exactly the right answer to a menu action Shopify's granted
+scopes cannot perform. The adapter does not stub a menu edit that fails
+at runtime; it omits
 `update_menu` from `supports`, and the assistant never offers it for
 that store.
 
