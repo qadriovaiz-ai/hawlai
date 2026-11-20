@@ -54,8 +54,14 @@ vi.mock("@/lib/publish/registry", async (orig) => ({
     void real;
     const built = realRegistry(supabase);
     if (!noUndo) return built;
+    // STRIPS `undoes`, NOT `undo` — 20 November 2026. The capability
+    // moved from "does this platform have an undo method" to "does it
+    // declare this KEY as undoable", because Shopify now undoes a page
+    // edit and not a price change and the method's presence could no
+    // longer answer for a key. Taking the method away stopped changing
+    // the answer, so this fake stopped testing anything; it takes both.
     return Object.fromEntries(
-      Object.entries(built).map(([id, p]: [string, any]) => [id, p ? { ...p, undo: undefined } : p])
+      Object.entries(built).map(([id, p]: [string, any]) => [id, p ? { ...p, undo: undefined, undoes: [] } : p])
     );
   },
 }));

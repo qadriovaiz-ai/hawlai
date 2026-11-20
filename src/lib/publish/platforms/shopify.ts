@@ -17,6 +17,7 @@ import {
   type ExecuteResult,
   type FieldChange,
   type ActionKey,
+  type UndoProposal,
 } from "@/lib/publish/types";
 import { shopifyGraphQL, shopifyMutation } from "@/lib/commerce/shopifyGraphQL";
 import { publishLog, publishError } from "@/lib/publish/log";
@@ -51,6 +52,72 @@ const PRICE_MUTATION = `
     }
   }
 `;
+
+// ─────────────────────────────────────────────────────────────────────
+// CONTENT — pages and blog articles (3.2)
+// ─────────────────────────────────────────────────────────────────────
+//
+// `write_content` has been granted since 4 September 2026 and nothing
+// used it. These reuse the ActionKeys the built-in site already
+// defines — `update_page_text` and `update_page_meta` — rather than
+// inventing shopify-shaped twins, so the tool layer, the approval
+// registry and undo all behave the same whichever surface the owner's
+// page lives on.
+//
+// SEO IS A FIELD, NOT A METAFIELD. `seo { title description }` sits on
+// the Page itself, which is why 3.1 asked for no metafield scope.
+const PAGE_QUERY = `
+  query PublishPage($id: ID!) {
+    page(id: $id) {
+      id
+      title
+      handle
+      body
+      isPublished
+      seo { title description }
+    }
+  }
+`;
+
+const PAGE_MUTATION = `
+  mutation PublishPageUpdate($id: ID!, $page: PageUpdateInput!) {
+    pageUpdate(id: $id, page: $page) {
+      page { id title body seo { title description } }
+      userErrors { field message }
+    }
+  }
+`;
+
+// A BLOG, NOT A BLOG POST. An article has to be created inside one,
+// and a store can have several — so the blog is read first and the
+// absence of any is a refusal rather than a guess.
+const BLOGS_QUERY = `
+  query PublishBlogs {
+    blogs(first: 10) {
+      nodes { id title handle }
+    }
+  }
+`;
+
+const ARTICLE_MUTATION = `
+  mutation PublishArticleCreate($article: ArticleCreateInput!) {
+    articleCreate(article: $article) {
+      article { id title handle isPublished }
+      userErrors { field message }
+    }
+  }
+`;
+
+type PageNode = {
+  id: string;
+  title: string;
+  handle: string;
+  body: string | null;
+  isPublished: boolean;
+  seo: { title: string | null; description: string | null } | null;
+};
+
+type BlogNode = { id: string; title: string; handle: string };
 
 type ShopNode = { currencyCode: string };
 
@@ -87,11 +154,59 @@ export function createShopifyPlatform(deps: {
    * assistant should never have offered. They come back when they
    * work.
    *
-   * publish_post and update_post are absent for a different reason —
-   * Shopify is not a CMS in the sense those mean, so they are not
-   * planned here at all.
+   * publish_post WAS absent, on the reasoning that "Shopify is not a
+   * CMS in the sense those mean". THAT WAS WRONG (20 November 2026):
+   * Shopify has Blog and Article objects, `write_content` covers them,
+   * and that scope has been granted since 4 September. A blog post on
+   * a Shopify store is a blog post.
+   *
+   * update_post is still absent, and now for an honest reason rather
+   * than that one: editing an existing article is a separate read and
+   * a separate staleness contract, and it is not built yet.
+   *
+   * NO MENU ACTION, AND NOT BECAUSE IT IS UNBUILT. Shopify has no menu
+   * API at all — there is no menu scope and no menu object, and
+   * `write_online_store_navigation` covers URL redirects only. A
+   * declared capability is a promise the tool layer reads, so the
+   * absence here is what stops the assistant offering a menu edit on a
+   * Shopify store. tests/shopifyMenuUnsupported.test.ts pins it.
    */
-  const supports: readonly ActionKey[] = ["update_product_price"];
+  const supports: readonly ActionKey[] = [
+    "update_product_price",
+    "update_page_text",
+    "update_page_meta",
+    "publish_post",
+  ];
+
+  /**
+   * Which of those can be put back, declared rather than inferred.
+   *
+   * A TEST FORCED THIS INTERFACE CHANGE, and it was right to.
+   * `undoExistsFor` asked `typeof platform.undo === "function"` — a
+   * question about the PLATFORM standing in for a question about the
+   * KEY. That held while a platform either undid everything it did or
+   * nothing. Shopify now undoes a page edit and not a price change, so
+   * the proxy started answering "yes" for prices.
+   *
+   * publish_post is absent: un-creating a post is a deletion, and a
+   * deletion is not the reverse of a creation in any sense an owner
+   * would accept — the article may have been edited since. It is
+   * created unpublished, so nothing went live to take back.
+   */
+  const undoes: readonly ActionKey[] = ["update_page_text", "update_page_meta"];
+
+  async function readPage(shop: string, token: string, pageId: string): Promise<PageNode | null> {
+    const result = await shopifyGraphQL<{ page: PageNode | null }>(shop, token, PAGE_QUERY, { id: pageId }, fetchImpl);
+    return result.ok ? result.data.page ?? null : null;
+  }
+
+  async function readBlogs(shop: string, token: string): Promise<BlogNode[] | null> {
+    const result = await shopifyGraphQL<{ blogs: { nodes: BlogNode[] } }>(shop, token, BLOGS_QUERY, {}, fetchImpl);
+    // NULL IS NOT AN EMPTY LIST. "Could not read your blogs" and "this
+    // store has no blog" lead to different sentences, and only one of
+    // them is the merchant's to fix.
+    return result.ok ? result.data.blogs?.nodes ?? [] : null;
+  }
 
   async function readVariant(
     shop: string,
@@ -113,6 +228,7 @@ export function createShopifyPlatform(deps: {
   return {
     id: "shopify",
     supports,
+    undoes,
 
     async isConnected(dealershipId: string): Promise<boolean> {
       return (await deps.getCredentials(dealershipId)) !== null;
@@ -124,6 +240,108 @@ export function createShopifyPlatform(deps: {
       }
       const creds = await deps.getCredentials(action.dealershipId);
       if (!creds) return { ok: false, reason: "Shopify isn't connected." };
+      // ---- content: a page's text, or its search title ------------
+      if (action.actionKey === "update_page_text" || action.actionKey === "update_page_meta") {
+        if (!action.targetRef) return { ok: false, reason: "No page was specified." };
+        const page = await readPage(creds.shop, creds.accessToken, action.targetRef);
+        if (!page) return { ok: false, reason: "That page no longer exists in Shopify." };
+
+        const changes: FieldChange[] = [];
+        const warnings: string[] = [];
+
+        if (action.actionKey === "update_page_text") {
+          const body = typeof action.requestedChanges.html === "string" ? action.requestedChanges.html : null;
+          if (body === null) return { ok: false, reason: "No new text was given for that page." };
+          // THE WHOLE BODY IS THE BEFORE-VALUE, not a diff. Undo is
+          // built from preview.changes[].before, so anything less than
+          // the complete prior body is an undo that loses text.
+          changes.push({ field: "body", before: page.body ?? "", after: body });
+          if ((page.body ?? "").trim() === body.trim()) {
+            warnings.push("The page already reads this way — approving will change nothing.");
+          }
+        } else {
+          const title = typeof action.requestedChanges.metaTitle === "string" ? action.requestedChanges.metaTitle : null;
+          const description =
+            typeof action.requestedChanges.metaDescription === "string" ? action.requestedChanges.metaDescription : null;
+          if (title === null && description === null) {
+            return { ok: false, reason: "No search title or description was given." };
+          }
+          if (title !== null) changes.push({ field: "seoTitle", before: page.seo?.title ?? "", after: title });
+          if (description !== null) {
+            changes.push({ field: "seoDescription", before: page.seo?.description ?? "", after: description });
+          }
+        }
+
+        if (!page.isPublished) {
+          warnings.push("This page is not published in Shopify, so the change won't be visible to customers yet.");
+        }
+
+        return {
+          ok: true,
+          preview: {
+            summary: `"${page.title}" (/pages/${page.handle}): ${
+              action.actionKey === "update_page_text" ? "page text" : "search title and description"
+            } updated`,
+            // A page has no price. Stated as null rather than omitted,
+            // because the shape is shared with the product preview and a
+            // missing field would read as unknown rather than as absent.
+            target: { title: page.title, variantTitle: null, currentPrice: null, imageUrl: null },
+            changes,
+            warnings,
+          },
+        };
+      }
+
+      // ---- content: a new blog post -------------------------------
+      if (action.actionKey === "publish_post") {
+        const title = typeof action.requestedChanges.title === "string" ? action.requestedChanges.title.trim() : "";
+        const body = typeof action.requestedChanges.html === "string" ? action.requestedChanges.html : "";
+        if (!title) return { ok: false, reason: "A blog post needs a title." };
+        if (!body.trim()) return { ok: false, reason: "A blog post needs some text." };
+
+        const blogs = await readBlogs(creds.shop, creds.accessToken);
+        if (blogs === null) {
+          return { ok: false, reason: "Couldn't read this store's blogs from Shopify. Nothing was created." };
+        }
+        if (!blogs.length) {
+          return {
+            ok: false,
+            reason: "This store has no blog yet. Create one in Shopify under Online Store, then ask again.",
+          };
+        }
+        // ONE BLOG, OR THE OWNER CHOOSES. Picking among several would
+        // be publishing to a blog nobody named.
+        const named = typeof action.targetRef === "string" ? action.targetRef : null;
+        const blog = named
+          ? blogs.find((b) => b.id === named || b.handle === named) ?? null
+          : blogs.length === 1
+            ? blogs[0]
+            : null;
+        if (!blog) {
+          return {
+            ok: false,
+            reason: `This store has ${blogs.length} blogs (${blogs
+              .map((b) => b.title)
+              .join(", ")}). Say which one to post to.`,
+          };
+        }
+
+        return {
+          ok: true,
+          preview: {
+            summary: `New post "${title}" on the "${blog.title}" blog — created as a draft, not published`,
+            target: { title: blog.title, variantTitle: null, currentPrice: null, imageUrl: null },
+            // `before: null` IS WHAT MARKS A CREATION. There is no
+            // prior value, and undoing a creation is a different
+            // decision from undoing an edit.
+            changes: [{ field: "article", before: null, after: title }],
+            warnings: [
+              "The post is created unpublished. Publishing it is a separate step in Shopify, so nothing goes live on approval.",
+            ],
+          },
+        };
+      }
+
       if (!action.targetRef) return { ok: false, reason: "No product variant was specified." };
 
       const variant = await readVariant(creds.shop, creds.accessToken, action.targetRef);
@@ -210,15 +428,207 @@ export function createShopifyPlatform(deps: {
       };
     },
 
+    /**
+     * Put a page back the way it was.
+     *
+     * NEEDED, NOT OPTIONAL, AND A TEST FOUND OUT WHY. `undoExistsFor`
+     * walks the registry and answers on the FIRST platform that claims
+     * an action key. While `update_page_text` was claimed only by the
+     * built-in site, that was the built-in site's answer. The moment
+     * Shopify claimed it too and had no `undo`, the autonomy layer
+     * started reading "nothing can put this back yet" for a page edit
+     * the built-in site has always been able to reverse.
+     *
+     * So the fix is to be undoable rather than to loosen the question.
+     * `canHoldL1` refuses L1 to any action with no undo, and that
+     * refusal is correct — an action is only reversible if every
+     * platform that performs it can reverse it.
+     *
+     * IT PROPOSES, IT DOES NOT WRITE. The undo comes back as a new
+     * action with its own preview and its own approval, built from
+     * `preview.changes[].before` — which is why there is no history
+     * table and why what goes back cannot drift from what was changed.
+     *
+     * PUBLISH_POST HAS NO UNDO, deliberately. Un-creating a post is a
+     * deletion, and a deletion is not the reverse of a creation in any
+     * sense an owner would accept — the article may have been edited
+     * since. The post is created unpublished, so nothing went live to
+     * take back.
+     */
+    async undo(action: PublishActionRecord): Promise<UndoProposal> {
+      if (action.actionKey !== "update_page_text" && action.actionKey !== "update_page_meta") {
+        return { ok: false, reason: `There's nothing to put back for "${action.actionKey}".` };
+      }
+      if (!action.targetRef) return { ok: false, reason: "That edit didn't record which page it changed, so I can't put it back." };
+      if (!action.preview) return { ok: false, reason: "That edit was never previewed, so there is no record of what the page said before." };
+
+      const creds = await deps.getCredentials(action.dealershipId);
+      if (!creds) return { ok: false, reason: "Shopify isn't connected." };
+      const page = await readPage(creds.shop, creds.accessToken, action.targetRef);
+      if (!page) return { ok: false, reason: "That page isn't in Shopify any more, so there's nothing to put back." };
+
+      const changes: Record<string, unknown> = {};
+      const changed: { what: string; from: string; to: string }[] = [];
+      for (const c of action.preview.changes) {
+        if (typeof c.before !== "string") continue;
+        // FROM AND TO ARE THE OTHER WAY ROUND, because this is the
+        // reverse journey: what the page says NOW goes back to what it
+        // said before.
+        if (c.field === "body") {
+          changes.html = c.before;
+          changed.push({ what: "Page text", from: String(c.after ?? ""), to: c.before });
+        }
+        if (c.field === "seoTitle") {
+          changes.metaTitle = c.before;
+          changed.push({ what: "Search title", from: String(c.after ?? ""), to: c.before });
+        }
+        if (c.field === "seoDescription") {
+          changes.metaDescription = c.before;
+          changed.push({ what: "Search description", from: String(c.after ?? ""), to: c.before });
+        }
+      }
+      // NOTHING RECORDED MEANS NOTHING OFFERED. An undo card with no
+      // prior value is a button that would blank the page.
+      if (!Object.keys(changes).length) {
+        return { ok: false, reason: "That edit didn't record what the page said before, so I can't put it back." };
+      }
+
+      return {
+        ok: true,
+        actionKey: action.actionKey,
+        targetRef: action.targetRef,
+        targetLabel: String(action.targetLabel ?? page.title),
+        requestedChanges: changes,
+        changed,
+        warnings: [],
+      };
+    },
+
     async execute(action: PublishActionRecord): Promise<ExecuteResult> {
-      if (action.actionKey !== "update_product_price") {
+      // ONE LIST, NOT TWO. This was `!== "update_product_price"`, which
+      // meant a key could be declared in `supports` and still be
+      // refused here — the two would drift the moment either changed.
+      // Reading `supports` is the same source the tool layer reads, so
+      // "offered" and "executable" cannot disagree.
+      if (!supports.includes(action.actionKey)) {
         return { ok: false, reason: `Execute for "${action.actionKey}" is not built yet.` };
       }
 
       const creds = await deps.getCredentials(action.dealershipId);
       if (!creds) return { ok: false, reason: "Shopify isn't connected." };
-      if (!action.targetRef) return { ok: false, reason: "No product variant was specified." };
       if (!action.preview) return { ok: false, reason: "This action was never previewed." };
+
+      // ---- content: a page's text or search title ------------------
+      //
+      // SAME THREE STEPS AS THE PRICE PATH, in the same order and for
+      // the same reasons: already-at-target first so a retry after a
+      // timeout is a no-op rather than a false "stale", then the
+      // staleness check, then the write.
+      if (action.actionKey === "update_page_text" || action.actionKey === "update_page_meta") {
+        if (!action.targetRef) return { ok: false, reason: "No page was specified." };
+        const current = await readPage(creds.shop, creds.accessToken, action.targetRef);
+        if (!current) return { ok: false, reason: "That page no longer exists in Shopify." };
+
+        const nowOf = (field: string): string =>
+          field === "body"
+            ? current.body ?? ""
+            : field === "seoTitle"
+              ? current.seo?.title ?? ""
+              : current.seo?.description ?? "";
+
+        const expected = action.preview.changes.filter((c) => ["body", "seoTitle", "seoDescription"].includes(c.field));
+        if (!expected.length) return { ok: false, reason: "The preview did not record anything to verify against." };
+
+        if (expected.every((c) => nowOf(c.field) === c.after)) {
+          publishLog("shopify.noop", { action: action.id, page: current.id, why: "already_at_target" });
+          return { ok: true, platformResponse: { skipped: "the page already reads this way" } };
+        }
+
+        const moved = expected.filter((c) => nowOf(c.field) !== (c.before ?? ""));
+        if (moved.length) {
+          publishError("shopify.stale", { action: action.id, page: current.id, fields: moved.map((c) => c.field).join(",") });
+          return {
+            ok: false,
+            stale: true,
+            changed: moved.map((c) => ({ field: c.field, before: c.before, after: nowOf(c.field) })),
+          };
+        }
+
+        const page: Record<string, unknown> = {};
+        for (const c of expected) {
+          if (c.field === "body") page.body = c.after;
+        }
+        const seoTitle = expected.find((c) => c.field === "seoTitle");
+        const seoDescription = expected.find((c) => c.field === "seoDescription");
+        if (seoTitle || seoDescription) {
+          // BOTH SIDES SENT TOGETHER. Shopify's seo input replaces the
+          // object, so sending only the title would blank a
+          // description nobody asked to remove — the current value is
+          // carried through for whichever half is not changing.
+          page.seo = {
+            title: seoTitle ? seoTitle.after : current.seo?.title ?? "",
+            description: seoDescription ? seoDescription.after : current.seo?.description ?? "",
+          };
+        }
+
+        publishLog("shopify.write", { action: action.id, page: current.id, fields: Object.keys(page).join(",") });
+        const result = await shopifyMutation<{ page: { id: string } }>(
+          creds.shop,
+          creds.accessToken,
+          PAGE_MUTATION,
+          { id: current.id, page },
+          "pageUpdate",
+          fetchImpl
+        );
+        if (!result.ok) {
+          publishError("shopify.write_failed", { action: action.id, detail: result.reason });
+          return { ok: false, reason: result.reason };
+        }
+        publishLog("shopify.write_ok", { action: action.id, page: current.id });
+        return { ok: true, platformResponse: result.data };
+      }
+
+      // ---- content: a new blog post --------------------------------
+      //
+      // A CREATION HAS NO BEFORE-VALUE, so there is no staleness check
+      // to make and none is faked. What protects a retry here is the
+      // idempotency the executor already applies to the action, not a
+      // comparison — and the post is created UNPUBLISHED, so the worst
+      // case of a double write is a duplicate draft rather than two
+      // live posts.
+      if (action.actionKey === "publish_post") {
+        const title = typeof action.requestedChanges.title === "string" ? action.requestedChanges.title.trim() : "";
+        const body = typeof action.requestedChanges.html === "string" ? action.requestedChanges.html : "";
+        if (!title || !body.trim()) return { ok: false, reason: "The post needs a title and some text." };
+
+        const blogs = await readBlogs(creds.shop, creds.accessToken);
+        if (blogs === null) return { ok: false, reason: "Couldn't read this store's blogs from Shopify. Nothing was created." };
+        const named = typeof action.targetRef === "string" ? action.targetRef : null;
+        const blog = named
+          ? blogs.find((b) => b.id === named || b.handle === named) ?? null
+          : blogs.length === 1
+            ? blogs[0]
+            : null;
+        if (!blog) return { ok: false, reason: "Couldn't tell which blog to post to. Nothing was created." };
+
+        publishLog("shopify.write", { action: action.id, blog: blog.id, what: "article_create" });
+        const result = await shopifyMutation<{ article: { id: string } }>(
+          creds.shop,
+          creds.accessToken,
+          ARTICLE_MUTATION,
+          { article: { blogId: blog.id, title, body, isPublished: false } },
+          "articleCreate",
+          fetchImpl
+        );
+        if (!result.ok) {
+          publishError("shopify.write_failed", { action: action.id, detail: result.reason });
+          return { ok: false, reason: result.reason };
+        }
+        publishLog("shopify.write_ok", { action: action.id, blog: blog.id });
+        return { ok: true, platformResponse: result.data };
+      }
+
+      if (!action.targetRef) return { ok: false, reason: "No product variant was specified." };
 
       // RE-READ BEFORE WRITING. The contract, and the reason execute()
       // cannot simply apply the approved payload.

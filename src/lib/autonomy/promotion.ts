@@ -253,16 +253,36 @@ export async function undoExistsFor(supabase: any, actionKey: string): Promise<b
   try {
     const { createPlatformRegistry } = await import("@/lib/publish/registry");
     const registry = createPlatformRegistry(supabase);
+    // EVERY PLATFORM THAT DOES IT MUST BE ABLE TO PUT IT BACK, not the
+    // first one found and not merely one of them — corrected
+    // 20 November 2026.
+    //
+    // This returned on the FIRST platform claiming the key, reading
+    // `typeof platform.undo === "function"`. Two faults hid behind that
+    // while each key had one platform. When Shopify also claimed
+    // `update_page_text`, the answer became whichever platform the
+    // registry happened to list first. And when Shopify gained an
+    // `undo` for pages but not prices, the presence of the METHOD
+    // started answering a question about the KEY — so prices read as
+    // reversible.
+    //
+    // Both are now one question asked of `undoes`, and asked of every
+    // claiming platform: an action is reversible only if whichever
+    // platform performs it can reverse it, and this function does not
+    // know which one will.
+    let claimed = false;
     for (const platform of Object.values(registry)) {
       if (!platform) continue;
       // COMPARED AS STRINGS, because this function is asked about an
       // ACTION_POLICIES key and `supports` is typed as the narrower
       // publish ActionKey. Casting the key INTO that type would be
       // claiming it is one; comparing the other way round asks the
-      // honest question — "does any platform claim this key" — and
-      // answers false for a key no platform has.
-      if ((platform.supports as readonly string[]).includes(actionKey)) return typeof platform.undo === "function";
+      // honest question.
+      if (!(platform.supports as readonly string[]).includes(actionKey)) continue;
+      claimed = true;
+      if (!((platform.undoes ?? []) as readonly string[]).includes(actionKey)) return false;
     }
+    if (claimed) return true;
   } catch (err: any) {
     console.error(`[autonomy] could not read the publish registry for ${actionKey}: ${err?.message ?? err}`);
   }

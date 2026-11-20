@@ -237,6 +237,22 @@ export interface PublishPlatform {
   /** Which actions this platform can genuinely perform. See ActionKey. */
   readonly supports: readonly ActionKey[];
 
+  /**
+   * Which of those it can PUT BACK. A subset of `supports`.
+   *
+   * DECLARED, NOT INFERRED FROM THE PRESENCE OF `undo` — 20 November
+   * 2026. `undoExistsFor` used to ask `typeof platform.undo ===
+   * "function"`, which is a question about the platform standing in
+   * for a question about the key. That was indistinguishable while a
+   * platform either undid everything it did or nothing; Shopify now
+   * undoes a page edit and not a price change, and the proxy started
+   * answering "yes" for prices.
+   *
+   * Absent means nothing can be put back, which is the same reading
+   * `canHoldL1` gives a missing undo.
+   */
+  readonly undoes?: readonly ActionKey[];
+
   /** Whether this business has a usable connection right now. */
   isConnected(dealershipId: string): Promise<boolean>;
 

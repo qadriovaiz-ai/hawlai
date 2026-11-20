@@ -65,18 +65,40 @@ const action = (over: Partial<PublishActionRecord> = {}): PublishActionRecord =>
 });
 
 describe("capabilities are declared honestly", () => {
-  it("does not claim it can publish posts", () => {
-    // Shopify is not a CMS in the sense publish_post means. Declaring
-    // it would produce a tool the assistant offers on a Shopify store
-    // and that fails when used.
+  it("REVERSED 20 NOVEMBER 2026: it DOES publish posts, and the old reason was wrong", () => {
+    // This asserted the opposite, on the reasoning that "Shopify is
+    // not a CMS in the sense publish_post means". That was wrong:
+    // Shopify has Blog and Article objects, `write_content` covers
+    // them, and that scope has been granted since 4 September. A blog
+    // post on a Shopify store is a blog post.
+    //
+    // Reversed on the founder's instruction and with the scope
+    // confirmed, not to make a change fit.
     const p = platform(sequence([{}]));
-    expect(p.supports).not.toContain("publish_post");
+    expect(p.supports).toContain("publish_post");
+    expect(p.supports).toContain("update_page_text");
+    expect(p.supports).toContain("update_page_meta");
     expect(p.supports).toContain("update_product_price");
+  });
+
+  it("STILL DOES NOT CLAIM WHAT IS NOT BUILT", () => {
+    // The rule the test above was protecting, which has not changed: a
+    // declared capability is a promise the tool layer reads, so
+    // anything unbuilt stays absent. update_post is a separate read
+    // and a separate staleness contract; discounts were removed once
+    // already for being declared before they worked.
+    const p = platform(sequence([{}]));
+    expect(p.supports).not.toContain("update_post");
+    expect(p.supports).not.toContain("create_discount_code");
+    expect(p.supports).not.toContain("update_product_description");
   });
 
   it("refuses an action it does not support", async () => {
     const p = platform(sequence([{}]));
-    const r = await p.preview(action({ actionKey: "publish_post" }));
+    // create_discount_code rather than publish_post: the latter is
+    // supported as of 20 November 2026, so it no longer demonstrates
+    // a refusal.
+    const r = await p.preview(action({ actionKey: "create_discount_code" }));
     expect(r.ok).toBe(false);
   });
 });

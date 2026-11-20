@@ -312,6 +312,10 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
   return {
     id: "hawlai_site",
     supports: ["update_page_meta", "update_page_text"] as const,
+    // Both, and it has been able to since undo existed here. Declared
+    // now because the question moved from the platform to the key —
+    // see `undoes` in publish/types.
+    undoes: ["update_page_meta", "update_page_text"] as const,
 
     async isConnected(dealershipId: string): Promise<boolean> {
       const { data, error } = await deps.supabase.from("websites").select("id").eq("dealership_id", dealershipId).limit(1);
