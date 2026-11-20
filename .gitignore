@@ -41,3 +41,5 @@ paths.txt
 card.txt
 armcheck.txt
 sample-monthly-review.txt
+
+.env*

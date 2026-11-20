@@ -185,13 +185,13 @@ async function applyUndo(
   return "restored";
 }
 
-async function main() {
+async function main(): Promise<number> {
   console.log("Verifying the Shopify content write path against a real store.\n");
 
   if (!SHOP_ARG) {
     console.error("Refusing to run: --shop=<domain> is required.");
     console.error("The script must not be able to choose which store it writes to.");
-    process.exit(1);
+    return 1;
   }
 
   // ---------------- preflight ----------------
@@ -213,7 +213,7 @@ async function main() {
     for (const [key, where] of missing) console.error(`  ${key}\n      from: ${where}`);
     console.error("\nAdd them to .env.local (or `vercel env pull .env.local`) and run again.");
     console.error("Nothing was read and nothing was written.");
-    process.exit(1);
+    return 1;
   }
 
   // ---------------- the business, confirmed by a read ----------------
@@ -224,23 +224,27 @@ async function main() {
   const service = createServiceClient();
   const { data: rows, error } = await service
     .from("dealerships")
-    .select("id, name, shopify_store_url")
+    // `dealership_name`, CONFIRMED in migration 001_schema.sql. I
+    // wrote `name` from habit and it does not exist on this table —
+    // 001 declares `name` on a DIFFERENT table seventeen lines later,
+    // which is exactly how the wrong one looks right in a grep.
+    .select("id, dealership_name, shopify_store_url")
     .eq("shopify_store_url", SHOP_ARG);
 
   if (error) {
     console.error(`Couldn't read dealerships: ${error.message}`);
-    process.exit(1);
+    return 1;
   }
   if (!rows?.length) {
     console.error(`No business has ${SHOP_ARG} connected. Nothing to verify.`);
-    process.exit(1);
+    return 1;
   }
   if (rows.length > 1) {
     console.error(`${rows.length} businesses share that store domain. Refusing to guess which.`);
-    process.exit(1);
+    return 1;
   }
   const dealershipId = rows[0].id as string;
-  console.log(`Business:  ${rows[0].name} (${dealershipId})`);
+  console.log(`Business:  ${rows[0].dealership_name} (${dealershipId})`);
   console.log(`Store:     ${SHOP_ARG}`);
   console.log(`Mode:      ${WRITE ? "WRITE — real edits, each one put back" : "DRY RUN — preview only, nothing written"}\n`);
 
@@ -248,11 +252,11 @@ async function main() {
   const creds = await shopifyCredentialsAdapter(dealershipId);
   if (!creds) {
     console.error("Couldn't resolve a Shopify credential. Is the store still connected?");
-    process.exit(1);
+    return 1;
   }
   if (creds.shop !== SHOP_ARG) {
     console.error(`Resolved credential is for ${creds.shop}, not ${SHOP_ARG}. Refusing to continue.`);
-    process.exit(1);
+    return 1;
   }
   record("the stored credential resolves and matches --shop", true, `token for ${creds.shop} (not printed)`);
 
@@ -508,28 +512,69 @@ async function main() {
   {
     // THE SOURCE MUST BE A REAL ONE. The adapter refuses any URL that
     // is not on the configured storage origin, so a made-up URL would
-    // test the guard rather than the upload. This finds an actual
-    // generated image in the bucket.
-    const { data: listed, error: listErr } = await service.storage
-      .from("ad-creatives")
-      .list(dealershipId, { limit: 5, sortBy: { column: "created_at", order: "desc" } });
+    // test the guard rather than the upload.
+    //
+    // ONE BUCKET, MANY PREFIXES — and the first version of this looked
+    // only under `<dealershipId>/`, which is where AD CREATIVES go. A
+    // business that had generated graphics but never an ad would have
+    // been told "no image found, generate one first" while holding
+    // several. Each writer in the codebase picks its own prefix; these
+    // are all of the image ones, read off the upload calls rather than
+    // assumed. Videos and voiceovers are excluded by extension, and
+    // `agency-branding/` is keyed on a user id rather than a business.
+    const PREFIXES = [
+      `${dealershipId}`, // ads: adlaunch, generate-creative, preview
+      `graphic-designs/${dealershipId}`,
+      `content-autopilot/${dealershipId}`,
+      `content-queue/${dealershipId}`,
+      `social/${dealershipId}`,
+      `website-assets/${dealershipId}`,
+      `landing/${dealershipId}`,
+      `logos/${dealershipId}`,
+    ];
+
+    type Found = { path: string; name: string; prefix: string; at: string };
+    const candidates: Found[] = [];
+    const listErrors: string[] = [];
+
+    for (const prefix of PREFIXES) {
+      const { data: listed, error: listErr } = await service.storage
+        .from("ad-creatives")
+        .list(prefix, { limit: 20, sortBy: { column: "created_at", order: "desc" } });
+      if (listErr) {
+        listErrors.push(`${prefix}: ${listErr.message}`);
+        continue;
+      }
+      for (const f of listed ?? []) {
+        if (!/\.(png|jpe?g|webp)$/i.test(f.name)) continue;
+        candidates.push({
+          path: `${prefix}/${f.name}`,
+          name: f.name,
+          prefix,
+          at: (f as any).created_at ?? (f as any).updated_at ?? "",
+        });
+      }
+    }
 
     let source: string | null = null;
-    if (listErr) {
-      record("find a Hawlai-generated image", false, `couldn't list storage: ${listErr.message}`);
+    if (!candidates.length) {
+      record(
+        "find a Hawlai-generated image",
+        false,
+        listErrors.length
+          ? `no image found; storage errors: ${listErrors.join(" | ")}`
+          : `no image under any of ${PREFIXES.length} prefixes for this business — generate a graphic in the product first, then re-run`
+      );
     } else {
-      const img = (listed ?? []).find((f) => /\.(png|jpe?g|webp)$/i.test(f.name));
-      if (!img) {
-        record(
-          "find a Hawlai-generated image",
-          false,
-          `no image found under ad-creatives/${dealershipId} — generate one in the product first, then re-run`
-        );
-      } else {
-        const { data: pub } = service.storage.from("ad-creatives").getPublicUrl(`${dealershipId}/${img.name}`);
-        source = pub.publicUrl;
-        record("find a Hawlai-generated image", true, `${img.name}`);
-      }
+      candidates.sort((a, b) => b.at.localeCompare(a.at));
+      const img = candidates[0];
+      const { data: pub } = service.storage.from("ad-creatives").getPublicUrl(img.path);
+      source = pub.publicUrl;
+      record(
+        "find a Hawlai-generated image",
+        true,
+        `${img.path}  (newest of ${candidates.length} across ${new Set(candidates.map((c) => c.prefix)).size} prefix(es))`
+      );
     }
 
     if (source) {
@@ -566,10 +611,11 @@ async function main() {
     }
   }
 
-  finish();
+  return finish();
 }
 
-function finish() {
+/** Prints the summary and returns the exit code. Never exits. */
+function finish(): number {
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${"-".repeat(60)}`);
   console.log(`${results.length - failed.length} passed, ${failed.length} failed`);
@@ -580,11 +626,25 @@ function finish() {
   if (!WRITE) {
     console.log("\nDRY RUN — nothing was written. Re-run with --write to execute.");
   }
-  process.exit(failed.length ? 1 : 0);
+  return failed.length ? 1 : 0;
 }
 
-main().catch((e) => {
-  console.error("\nThe script itself threw, which is not a result about Shopify:");
-  console.error(e);
-  process.exit(2);
-});
+// NO process.exit() ANYWHERE, and that is the fix for a real failure
+// rather than tidiness. Calling it while the Supabase client and
+// in-flight fetches still hold handles makes libuv abort on Windows:
+//
+//   Assertion failed: !(handle->flags & UV_HANDLE_CLOSING),
+//   file src\win\async.c, line 94
+//
+// An abort does not flush stdout, so the run that hit it could have
+// lost results it had already produced. Setting `exitCode` lets the
+// event loop drain and the process end on its own.
+main()
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((e) => {
+    console.error("\nThe script itself threw, which is not a result about Shopify:");
+    console.error(e);
+    process.exitCode = 2;
+  });
