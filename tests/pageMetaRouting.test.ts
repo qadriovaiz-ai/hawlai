@@ -176,10 +176,19 @@ describe("4. the schema tells the model not to guess", () => {
     // when the comment IS the thing being asserted. A later tidy-up
     // that moved the guard into the branches would read as reasonable
     // without this.
+    // SLICED TO THE CASE FIRST. This searched the whole file for
+    // "// ---- WHICH SURFACE" and passed — until edit_page_text gained
+    // the same routing and the same comment heading, EARLIER in the
+    // file, so indexOf found the wrong one. Fifth time that shape has
+    // cost something here: a bare indexOf finds somebody else's
+    // occurrence and reports on it with total confidence.
     const withComments = sourceWithComments(BRAIN);
-    const start = withComments.indexOf("// ---- WHICH SURFACE");
-    expect(start).toBeGreaterThan(-1);
-    const block = withComments.slice(start, start + 1200);
-    expect(block).toMatch(/deliberately ABOVE this line/);
+    const caseStart = withComments.indexOf('case "propose_page_meta": {');
+    expect(caseStart, "propose_page_meta has no case").toBeGreaterThan(-1);
+    const caseEnd = withComments.indexOf("\n    case \"", caseStart + 1);
+    const thisCase = withComments.slice(caseStart, caseEnd === -1 ? undefined : caseEnd);
+    const start = thisCase.indexOf("// ---- WHICH SURFACE");
+    expect(start, "the routing comment is not in this case").toBeGreaterThan(-1);
+    expect(thisCase.slice(start, start + 1200)).toMatch(/deliberately ABOVE this line/);
   });
 });

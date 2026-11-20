@@ -142,6 +142,12 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        surface: {
+          type: "string",
+          enum: ["hawlai", "shopify"],
+          description:
+            "Which site the page is on. Omit it: the tool works this out, and ASKS when the business has both a Hawlai website and a Shopify store, because \"my About page\" is then two different pages. Only pass it on the follow-up call, after they have said which. A Shopify page comes back as ONE body rather than separate lines, and an edit there replaces the whole thing.",
+        },
         page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"contact\", or its menu title. Defaults to the homepage." },
       },
       required: [],
@@ -154,6 +160,12 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
+        surface: {
+          type: "string",
+          enum: ["hawlai", "shopify"],
+          description:
+            "Which site the page is on. Omit it: the tool works this out, and ASKS when the business has both a Hawlai website and a Shopify store, because \"my About page\" is then two different pages. Only pass it on the follow-up call, after they have said which. A Shopify page comes back as ONE body rather than separate lines, and an edit there replaces the whole thing.",
+        },
         page: { type: "string", description: "Which page — the slug or menu title read_page reported. Defaults to the homepage." },
         edits: {
           type: "array",

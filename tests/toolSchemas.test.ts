@@ -67,7 +67,12 @@ import { code, sourceWithComments } from "./helpers/source";
 // `surface` parameter so it can route to a Shopify page instead of
 // growing a Shopify twin. One more tool avoided, at the cost of one
 // more cache warm.
-const FINGERPRINT = "70bd19891a2ceaffc94d488491401602d43b213470ac47d6a35aafa8e03c594b";
+// Changed again, same day and last time for this piece of work:
+// read_page and edit_page_text gained `surface` too, so all four
+// Shopify content actions are reachable. Four cache warms in one
+// session is the cost of one approved change landing in four commits;
+// splitting the tools themselves was avoided for exactly this reason.
+const FINGERPRINT = "f9328b926c52b4792c7649e582ffc2fead6a8a75b319868e7efe46d29155f9b0";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

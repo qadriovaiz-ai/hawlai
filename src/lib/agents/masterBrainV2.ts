@@ -728,7 +728,245 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       const { readPageContent } = await import("../pages/readPage");
       const { applyEdits, legalWarning, CATALOGUE_REFUSAL, statesPriceOrStock, unknownProductName, unknownNameWarning, unknownNameRefusal } = await import("../pages/editPage");
 
-      const { data: pageSite } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
+      // ---- WHICH SURFACE -------------------------------------------
+      //
+      // Same routing as propose_page_meta, and the same reason for
+      // asking rather than preferring: with both a Hawlai site and a
+      // Shopify store, "my About page" is two different pages.
+      //
+      // A SHOPIFY PAGE COMES BACK AS ONE BLOCK. The decision is in
+      // DECISIONS.md and the condition that made it honest is that
+      // this case's guards are text-level — statesPriceOrStock,
+      // unknownProductName and the fact-bound check all read a string,
+      // so a Shopify body gets exactly the protection a Hawlai line
+      // does. Only `applyEdits` is block-shaped, and that is plumbing
+      // rather than a guard. If a future guard is block-shaped, that
+      // decision reopens instead of being quietly waived.
+      const { data: textShopRow } = await supabase
+        .from("dealerships")
+        .select("shopify_store_url")
+        .eq("id", ctx.id)
+        .maybeSingle();
+      const textHasShopify = Boolean((textShopRow as any)?.shopify_store_url);
+
+      // ONE READ, reused as the Hawlai site below — the same collapse
+      // propose_page_meta needed.
+      const { data: pageSite } = await supabase
+        .from("websites")
+        .select("id, slug, published")
+        .eq("dealership_id", ctx.id)
+        .maybeSingle();
+
+      const textSurface = typeof input.surface === "string" ? input.surface.toLowerCase() : "";
+      const textWantsShopify = textSurface === "shopify" || (!textSurface && textHasShopify && !pageSite);
+
+      if (textHasShopify && pageSite && !textSurface) {
+        return {
+          needs_clarification: true,
+          question: "Which site — your Hawlai website, or your Shopify store?",
+          candidates: [
+            { surface: "hawlai", title: "Your Hawlai website" },
+            { surface: "shopify", title: `Your Shopify store (${(textShopRow as any).shopify_store_url})` },
+          ],
+          note: "Ask which one, then call this tool again with `surface` set. Do not guess — the two have different pages.",
+        };
+      }
+
+      if (textWantsShopify) {
+        const { shopifyCredentialsAdapter: textShopCreds } = await import("../publish/platforms/shopifyCredentials");
+        const { resolveShopifyResource: resolveTextPage, listShopifyResources } = await import("../publish/platforms/shopifyResources");
+        const { shopifyGraphQL: textGraphQL } = await import("../commerce/shopifyGraphQL");
+
+        const shopText = await textShopCreds(ctx.id);
+        if (!shopText) {
+          return {
+            error: "This business has no usable Shopify connection, so there are no Shopify pages to read.",
+            note: "If the store was connected before, it may need reconnecting from Settings.",
+          };
+        }
+
+        const askedTextPage = typeof input.page === "string" ? input.page : "";
+        const textHit = await resolveTextPage(shopText.shop, shopText.accessToken, "page", askedTextPage);
+        if (!textHit.ok) {
+          if (textHit.reason === "unreadable") return { error: textHit.message };
+          if (textHit.reason === "none_exist") return { error: "This Shopify store has no pages yet." };
+          return {
+            needs_clarification: true,
+            question: textHit.reason === "needs_confirmation" ? textHit.message : "Which page did you mean?",
+            candidates: textHit.candidates.map((c) => ({ page: c.handle, title: c.title })),
+          };
+        }
+
+        const liveRead = await textGraphQL<{ page: { id: string; title: string; handle: string; body: string | null; isPublished: boolean } | null }>(
+          shopText.shop,
+          shopText.accessToken,
+          `query ChatReadShopifyPage($id: ID!) { page(id: $id) { id title handle body isPublished } }`,
+          { id: textHit.resource.id }
+        );
+        if (!liveRead.ok || !liveRead.data.page) {
+          return { error: "Couldn't read that page from Shopify just now, so I can't show you what it says." };
+        }
+        const shopPage = liveRead.data.page;
+        const currentBody = shopPage.body ?? "";
+
+        // A SHOPIFY PAGE IS A LEGAL PAGE BY ITS HANDLE, and that is
+        // weaker than the Hawlai check on purpose and on the record.
+        // Hawlai pages carry a `page_type`; Shopify has none, so the
+        // only signal is the handle Shopify's own default legal pages
+        // use. A page the owner made by hand and titled "Refund
+        // policy" will NOT match. Saying so beats claiming an
+        // equivalence that does not exist.
+        const legalish = /privacy|terms|refund|shipping-policy|legal|data-sharing/i.test(shopPage.handle);
+
+        if (toolName === "read_page") {
+          const others = (await listShopifyResources(shopText.shop, shopText.accessToken, "page")) ?? [];
+          return {
+            surface: "shopify",
+            page: shopPage.handle,
+            title: shopPage.title,
+            url: `https://${shopText.shop}/pages/${shopPage.handle}`,
+            published: shopPage.isPublished,
+            legal: legalish,
+            catalogueDriven: false,
+            // ONE LINE, AND ITS id MEANS THE WHOLE BODY. Not a
+            // convenient fiction: the adapter writes the whole body
+            // and there is nothing finer to address. The id is spelled
+            // so a reader cannot mistake it for a block.
+            lines: [
+              {
+                blockId: "shopify:page-body",
+                prop: "body",
+                blockType: "page_body",
+                text: currentBody,
+                source: "unknown",
+                catalogueDriven: false,
+              },
+            ],
+            otherPages: others
+              .filter((o) => o.id !== shopPage.id)
+              .map((o) => ({ page: o.handle, title: o.title })),
+            note:
+              "This is a Shopify page, so it is ONE body rather than separate lines. An edit replaces the whole thing — read it back to them before changing a sentence, and send the complete new text, not just the part that changes.",
+          };
+        }
+
+        // ---- the edit ----
+        const { statesPriceOrStock: shopStatesPrice, unknownProductName: shopUnknownName, unknownNameWarning: shopNameWarning, unknownNameRefusal: shopNameRefusal, legalWarning: shopLegalWarning } = await import("../pages/editPage");
+        const shopFacts = await factsFor(supabase, ctx);
+
+        const newBody = typeof input.text === "string" ? input.text : "";
+        if (!newBody.trim()) {
+          return { error: "Tell me what the page should say. A Shopify page is replaced whole, so send the complete new text." };
+        }
+        const ownerWrote = input.writtenByOwner === true;
+
+        // THE SAME GUARDS, IN THE SAME ORDER, AND FOR THE SAME REASONS
+        // as the Hawlai branch below. A price in page text is refused
+        // outright — not because the number is wrong but because no
+        // number belongs in prose that nothing keeps in step with the
+        // catalogue.
+        const statedShop = shopStatesPrice(newBody);
+        if (statedShop) {
+          return {
+            error: statedShop,
+            saved: false,
+            note: "Do NOT retry with a different number — no number belongs in page text. Offer the catalogue tool instead.",
+          };
+        }
+
+        // A product name Hawlai does not recognise: refused when
+        // Hawlai wrote it, warned when the owner dictated it. Rule C.
+        const shopWarnings: string[] = [];
+        const unknownShopName = shopUnknownName(newBody, shopFacts);
+        if (unknownShopName) {
+          if (!ownerWrote) {
+            return {
+              error: shopNameRefusal(unknownShopName),
+              saved: false,
+              note: `Do NOT retry with the same name. Use a product that is actually in the catalogue, or ask which one they meant. ${OWNER_WORDS_PATH}`,
+            };
+          }
+          shopWarnings.push(shopNameWarning(unknownShopName));
+        }
+
+        // THE FACT-BOUND CHECK, BEHIND THE SAME FLAG. Running it here
+        // while the other surfaces wait on FACT_BOUND_COPY would be
+        // the split S2 spent its budget preventing.
+        if (process.env.FACT_BOUND_COPY === "1" && shopFacts && !ownerWrote) {
+          const { verifyEditedText, editRefusalNote } = await import("../content/verifyEditedText");
+          const checkedShop = await verifyEditedText({
+            texts: [newBody],
+            facts: shopFacts,
+            dealershipId: ctx.id,
+            topic: shopPage.handle,
+            logContext: { supabase, dealershipId: ctx.id },
+          });
+          if (!checkedShop.ok) {
+            return {
+              error: editRefusalNote(checkedShop),
+              saved: false,
+              note: checkedShop.unverified
+                ? "Do NOT retry immediately with the same wording — the check itself was unavailable."
+                : `Write it again from what the business can actually support, or ask them to record the missing fact first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
+            };
+          }
+        }
+
+        // legalWarning takes {before, after} pairs, so a whole-body
+        // edit is one pair — which is why this guard transferred at all.
+        const shopLegalNote = legalish ? shopLegalWarning([{ before: currentBody, after: newBody } as any]) : null;
+        if (shopLegalNote) shopWarnings.push(shopLegalNote);
+
+        const { createPublishAction: createTextAction } = await import("../publish/create");
+        const { createShopifyPlatform: makeShopifyForText } = await import("../publish/platforms/shopify");
+        const { createServiceClient: makeTextService } = await import("../supabase/service");
+
+        const textCreated = await createTextAction(
+          makeTextService(),
+          makeShopifyForText({ getCredentials: async () => shopText }),
+          {
+            dealershipId: ctx.id,
+            platform: "shopify",
+            actionKey: "update_page_text",
+            targetRef: shopPage.id,
+            targetLabel: `${shopPage.title} (/pages/${shopPage.handle})`,
+            requestedChanges: { html: newBody, claimWarnings: shopWarnings },
+            requestedBy: null,
+            resolutionPath: textHit.matchType === "only_one" ? "direct" : "exact",
+            resolutionDetail: {
+              query: askedTextPage,
+              candidateCount: 1,
+              matchType: textHit.matchType === "only_one" ? "direct" : "exact",
+              chosenRef: shopPage.id,
+            },
+          }
+        );
+        if (!textCreated.ok) {
+          return {
+            error: textCreated.reason,
+            saved: false,
+            note:
+              "Nothing was saved anywhere — this failed before any record was written, so there is no draft, no queue and no retry waiting. " +
+              "Do NOT tell them their wording is being held or that you will apply it later. Say plainly that it did not go through.",
+          };
+        }
+
+        return {
+          success: true,
+          already_pending: textCreated.alreadyPending ?? false,
+          approval_id: textCreated.approvalId,
+          action_id: textCreated.actionId,
+          surface: "shopify",
+          page: shopPage.handle,
+          page_label: shopPage.title,
+          summary: textCreated.preview.summary,
+          warnings: [...textCreated.preview.warnings, ...shopWarnings],
+          note: textCreated.alreadyPending
+            ? "You already asked for this exact change — here it is again, still waiting on your approval."
+            : "Ready for your approval below — nothing on the storefront changes until you approve it. This replaces the whole page body, not one line of it.",
+        };
+      }
+
       if (!pageSite) return { error: "This business doesn't have a Hawlai website yet, so there are no pages to read. I can build one — just say the word." };
 
       const { data: siteRows } = await supabase
