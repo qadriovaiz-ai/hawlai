@@ -63,7 +63,11 @@ import { code, sourceWithComments } from "./helpers/source";
 // fingerprint invalidates the Anthropic prompt-cache prefix, and every
 // chat turn pays full price until it warms again. Three tools in three
 // commits would have paid that three times for one approved change.
-const FINGERPRINT = "7abe05304dad7ccda35aca1b9505286bfb88050a62e33e6a9f9e4351916d23f6";
+// Changed again on 21 November 2026: propose_page_meta gained a
+// `surface` parameter so it can route to a Shopify page instead of
+// growing a Shopify twin. One more tool avoided, at the cost of one
+// more cache warm.
+const FINGERPRINT = "70bd19891a2ceaffc94d488491401602d43b213470ac47d6a35aafa8e03c594b";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

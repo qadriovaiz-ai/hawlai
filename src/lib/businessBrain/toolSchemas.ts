@@ -111,7 +111,13 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage. If unsure which they mean, the tool returns the list to choose from." },
+        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage of their Hawlai site. If unsure which they mean, the tool returns the list to choose from." },
+        surface: {
+          type: "string",
+          enum: ["hawlai", "shopify"],
+          description:
+            "Which site the page is on. Omit it: the tool works this out, and ASKS when the business has both a Hawlai website and a Shopify store, because \"my About page\" is then genuinely two different pages. Only pass it on the follow-up call, after they have said which.",
+        },
         title: { type: "string", description: "The <title> for that page — what shows in the browser tab and as the blue line in a search result. When you write it yourself, keep it under 60 characters, because Google cuts it off there. Omit to leave it as it is." },
         metaDescription: { type: "string", description: "The description under the title in a search result. When you write it yourself, keep it WITHIN 160 characters — Google truncates around 155-160, and a sentence that ends mid-word in a search result is worse than a shorter one. Omit to leave it as it is." },
         shareImageUrl: {

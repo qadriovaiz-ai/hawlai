@@ -1044,7 +1044,163 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         };
       }
 
-      const { data: site } = await supabase.from("websites").select("id, slug, published").eq("dealership_id", ctx.id).maybeSingle();
+      // ---- WHICH SURFACE -------------------------------------------
+      //
+      // Routed by platform rather than grown a Shopify twin. The
+      // claims check above is deliberately ABOVE this line: what the
+      // guard does to a sentence has nothing to do with where the
+      // sentence is going, and duplicating it per platform is how one
+      // copy drifts.
+      //
+      // A business can have a Hawlai site, a Shopify store, both, or
+      // neither — and "update my About page" with both is genuinely
+      // ambiguous. It ASKS, for the reason the page resolver right
+      // below already records: the predecessor fell through and
+      // reported success.
+      // IS THERE A STORE — asked of the CALLER'S client, not of a new
+      // service client. `shopifyCredentialsAdapter` builds its own,
+      // which also DECRYPTS the token, and neither is needed to answer
+      // "does this business have a Shopify store at all". Resolving
+      // credentials up front broke every existing test of this tool and
+      // deserved to: it decrypts a secret to decide a branch that may
+      // not need one.
+      const { data: metaShopRow } = await supabase
+        .from("dealerships")
+        .select("shopify_store_url")
+        .eq("id", ctx.id)
+        .maybeSingle();
+      const hasShopify = Boolean((metaShopRow as any)?.shopify_store_url);
+
+      // ONE READ OF `websites`, reused below. Reading it twice was the
+      // other half of the breakage, and a second round trip for a row
+      // already in hand.
+      const { data: site } = await supabase
+        .from("websites")
+        .select("id, slug, published")
+        .eq("dealership_id", ctx.id)
+        .maybeSingle();
+
+      const askedSurface = typeof input.surface === "string" ? input.surface.toLowerCase() : "";
+      const wantsShopify = askedSurface === "shopify" || (!askedSurface && hasShopify && !site);
+      const bothExist = hasShopify && Boolean(site);
+
+      if (bothExist && !askedSurface) {
+        return {
+          needs_clarification: true,
+          question: "Which site — your Hawlai website, or your Shopify store?",
+          candidates: [
+            { surface: "hawlai", title: "Your Hawlai website" },
+            { surface: "shopify", title: `Your Shopify store (${(metaShopRow as any).shopify_store_url})` },
+          ],
+          note: "Ask which one, then call this tool again with `surface` set. Do not guess — the two have different pages.",
+        };
+      }
+
+      if (wantsShopify) {
+        // ONLY NOW is the token resolved and decrypted — the branch is
+        // taken, so the secret is actually needed.
+        const { shopifyCredentialsAdapter: metaShopCreds } = await import("../publish/platforms/shopifyCredentials");
+        const shopForMeta = await metaShopCreds(ctx.id);
+        if (!shopForMeta) {
+          return {
+            error: "This business has no usable Shopify connection, so there are no Shopify pages to set these on.",
+            note: "If the store was connected before, it may need reconnecting from Settings.",
+          };
+        }
+        // A SHOPIFY PAGE HAS NO SHARE IMAGE. Page carries body, title,
+        // handle, isPublished and metafields in the 2026-07 schema and
+        // nothing else — introspected, not assumed. Refused rather
+        // than dropped silently, because an owner who asked for a
+        // share image and got no warning would believe it was set.
+        if (shareImageUrl !== undefined) {
+          return {
+            error: "A Shopify page has no share-image field, so I can't set one there.",
+            note: "The search title and description can both be set. Offer those, and say the share image is only available on a Hawlai page.",
+          };
+        }
+
+        const { resolveShopifyResource: resolveMetaPage } = await import("../publish/platforms/shopifyResources");
+        const { createShopifyPlatform: makeShopifyForMeta } = await import("../publish/platforms/shopify");
+        const askedPage = typeof input.page === "string" ? input.page : "";
+        const pageHit = await resolveMetaPage(shopForMeta.shop, shopForMeta.accessToken, "page", askedPage);
+        if (!pageHit.ok) {
+          if (pageHit.reason === "unreadable") return { error: pageHit.message, saved: false };
+          if (pageHit.reason === "none_exist") {
+            return { error: "This Shopify store has no pages yet, so there's nothing to set a search title on." };
+          }
+          return {
+            needs_clarification: true,
+            question: pageHit.reason === "needs_confirmation" ? pageHit.message : "Which page did you mean?",
+            candidates: pageHit.candidates.map((c) => ({ page: c.handle, title: c.title })),
+          };
+        }
+
+        const shopMetaService = makeSiteService();
+        const shopCreated = await createMetaAction(
+          shopMetaService,
+          makeShopifyForMeta({ getCredentials: async () => shopForMeta }),
+          {
+            dealershipId: ctx.id,
+            platform: "shopify",
+            actionKey: "update_page_meta",
+            targetRef: pageHit.resource.id,
+            targetLabel: `${pageHit.resource.title} (/pages/${pageHit.resource.handle})`,
+            // THE SAME KEYS THE BUILT-IN SITE USES. One ActionKey, one
+            // payload shape — the thing publishPayloadContract.test.ts
+            // exists to keep true, after shopify.ts spent a day
+            // reading `metaTitle` while hawlaiSite read `seoTitle`.
+            requestedChanges: {
+              seoTitle: safeTitle,
+              metaDescription: safeDescription,
+              claimWarnings,
+              claimCheck: claimCheckField({
+                text: [safeTitle, safeDescription].filter(Boolean).join(" — "),
+                removed: metaRemoved,
+                keptUnsupported: metaKeptByOwner,
+                ownerWords: metaKeptByOwner > 0,
+              }),
+            },
+            requestedBy: null,
+            resolutionPath: pageHit.matchType === "only_one" ? "direct" : "exact",
+            resolutionDetail: {
+              query: askedPage,
+              candidateCount: 1,
+              matchType: pageHit.matchType === "only_one" ? "direct" : "exact",
+              chosenRef: pageHit.resource.id,
+            },
+          }
+        );
+        if (!shopCreated.ok) {
+          return {
+            error: shopCreated.reason,
+            saved: false,
+            note:
+              "Nothing was saved anywhere — this failed before any record was written, so there is no draft, no queue and no retry waiting. " +
+              "Do NOT tell them their wording is being held or that you will apply it later. Say plainly that it did not go through.",
+          };
+        }
+
+        return {
+          success: true,
+          already_pending: shopCreated.alreadyPending ?? false,
+          approval_id: shopCreated.approvalId,
+          action_id: shopCreated.actionId,
+          surface: "shopify",
+          page: pageHit.resource.handle,
+          page_label: pageHit.resource.title,
+          summary: shopCreated.preview.summary,
+          warnings: [...shopCreated.preview.warnings, ...claimWarnings],
+          lengths: [
+            safeTitle !== undefined ? `Title ${safeTitle.length}/60` : null,
+            safeDescription !== undefined ? `Description ${safeDescription.length}/160` : null,
+          ].filter(Boolean).join(" · "),
+          note: shopCreated.alreadyPending
+            ? "You already asked for this exact change — here it is again, still waiting on your approval."
+            : "Ready for your approval below — nothing on the storefront changes until you approve it. On Shopify these two lines are stored as the page's search-listing fields.",
+        };
+      }
+
+      // `site` was read above, once, for the routing decision.
       if (!site) return { error: "This business doesn't have a Hawlai website yet, so there's no page to set these on. I can build one — just say the word." };
 
       const { data: pages } = await supabase
