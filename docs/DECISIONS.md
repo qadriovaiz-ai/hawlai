@@ -4188,3 +4188,37 @@ never made — and only then deletes by title.
 
 **Sixth instance** of a recorded description differing from the code.
 The comment is corrected in place.
+
+## 2026-11-20 — read_customers and read_orders are deliberate, and read-only
+
+The Shopify app's active version declares `read_customers` and
+`read_orders`. I flagged these as outside the product's "orders and
+customers, never" rule. **They are not a breach.**
+
+The founder's clarification: they are read-only, for analytics and
+reporting — answering "how many orders came in" — and the rule is about
+**write and edit access**. Reading for a report is a different thing.
+
+Nothing in this codebase writes to an order or a customer, no write
+scope for either is requested, and none will be. Recorded so the next
+read of that scope list does not raise it again.
+
+## 2026-11-20 — the Shopify app's scopes are not in version control
+
+`shopify.app.toml` has never been committed, there is no Shopify CLI
+dependency, and the active app version (`hawlai-3`, 4 September 2026)
+was created in Shopify's dashboard rather than deployed from this repo.
+
+So there are two separate things with similar names: the **app
+version's scopes at Shopify**, which decide what a token carries, and
+`SHOPIFY_SCOPES` in `shopifyAuth.ts`, which is the callback's
+requirement. Only the second is in git.
+
+**Consequence found on the way:** `write_products` and `write_content`
+are ALREADY granted, so pages, blog posts, products and collections
+need no Shopify-side change. Only `write_files` (images) does.
+
+Steps are in `docs/SHOPIFY-APP-CONFIG.md`. The Dev Dashboard route is
+recommended over the CLI: `shopify app config link` would bring a live
+app under new management for a one-line change, and the documentation
+does not state what it overwrites.
