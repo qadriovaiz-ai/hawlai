@@ -29,12 +29,23 @@ export type ShopifyResource = {
 };
 
 export type ResolveResult =
-  | { ok: true; resource: ShopifyResource; matchType: "handle" | "title" | "only_one" | "contains" }
+  | { ok: true; resource: ShopifyResource; matchType: "handle" | "title" | "only_one" }
   /**
    * Could not tell. Carries what DOES exist, because the one useful
    * reply to "which page?" is the list.
    */
-  | { ok: false; reason: "ambiguous" | "none_exist" | "unreadable"; message: string; candidates: ShopifyResource[] };
+  /**
+   * `needs_confirmation` carries ONE candidate and means "did you mean
+   * this?" — kept distinct from `ambiguous`, which carries several and
+   * means "which of these?". Different sentences, and the owner can
+   * answer the first one with a yes.
+   */
+  | {
+      ok: false;
+      reason: "needs_confirmation" | "ambiguous" | "none_exist" | "unreadable";
+      message: string;
+      candidates: ShopifyResource[];
+    };
 
 const PAGES_QUERY = `
   query ResolvePages {
@@ -136,7 +147,25 @@ export function matchShopifyResource(asked: string, all: ShopifyResource[]): Res
       const t = fold(r.title);
       return h.includes(wanted) || wanted.includes(h) || t.includes(wanted) || wanted.includes(t);
     });
-    if (loose.length === 1) return { ok: true, resource: loose[0], matchType: "contains" };
+    // A LOOSE MATCH IS OFFERED, NEVER APPLIED — even when it is the
+    // only one. `ResolutionPath` in publish/resolve.ts is
+    // exact | user_clarified | direct, with NO value for "a substring
+    // matched and I went ahead", and that absence is a rule rather
+    // than an omission: this product's resolution design is that a
+    // loose match goes to the owner to confirm. propose_price_change
+    // has worked that way since the first version.
+    //
+    // So "about" does not silently become /pages/about-us. It comes
+    // back as "did you mean About us?", which costs one turn and
+    // removes a whole class of wrong target on a live storefront.
+    if (loose.length === 1) {
+      return {
+        ok: false,
+        reason: "needs_confirmation",
+        message: `Did you mean "${loose[0].title}"?`,
+        candidates: loose,
+      };
+    }
     if (loose.length > 1) {
       // NARROWED TO THE PLAUSIBLE ONES, not the whole store. Asking
       // "which of these two policies" is answerable; asking it about

@@ -139,16 +139,30 @@ describe("3. CHAT ASKS THE SAME WAY, AND ALSO SENDS NOTHING", () => {
     return rest.slice(0, rest.indexOf('\n    case "'));
   }
 
-  it("THE TOOL EXISTS AND IS THE 60TH", () => {
+  it("THE TOOL EXISTS AND IS STILL THE 60TH", () => {
     expect(TOOLS.map((t: any) => t.name)).toContain("get_growth_report");
-    expect(TOOLS).toHaveLength(60);
+    // Was `toHaveLength(60)` with this tool last. Three Shopify
+    // content tools were appended AFTER it on 21 November 2026, so
+    // "last" is no longer the property worth asserting — but the
+    // property it stood for is, and it is stated directly now:
+    // nothing was slotted in FRONT of this tool.
+    //
+    // Its index is what the prompt cache depends on. A tool inserted
+    // before it would shift it and miss the cache on every entry from
+    // there on, on every turn, until it warmed again.
+    expect(TOOLS.map((t: any) => t.name).indexOf("get_growth_report")).toBe(59);
   });
 
   it("IT IS APPENDED, so the prompt-cache prefix is not broken", () => {
     // The cached prefix is the array up to the marker. A tool slotted
     // into the middle misses the cache on every tool after it, on
     // every turn, until it warms again.
-    expect((TOOLS[TOOLS.length - 1] as any).name).toBe("get_growth_report");
+    //
+    // So the rule is positional, not "is it last": everything added
+    // since must come AFTER this tool, never before it.
+    const names = TOOLS.map((t: any) => t.name);
+    const addedSince = names.slice(names.indexOf("get_growth_report") + 1);
+    expect(addedSince).toEqual(["edit_collection_text", "publish_blog_post", "upload_store_image"]);
   });
 
   it("THE TOOL CASE CALLS NO SENDER", () => {

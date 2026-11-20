@@ -184,6 +184,9 @@ export const TOOL_FAMILIES: Record<string, ToolFamily> = {
   build_website: "ResourceEdit",
   propose_page_meta: "ResourceEdit",
   edit_page_text: "ResourceEdit",
+  edit_collection_text: "ResourceEdit",
+  publish_blog_post: "ResourceEdit",
+  upload_store_image: "ResourceEdit",
   undo_page_edit: "ResourceEdit",
   propose_price_change: "ResourceEdit",
   launch_meta_campaign: "ResourceEdit",
@@ -232,6 +235,59 @@ export const BUSINESS_BRAIN_TOOLS: BusinessBrainTool[] = [
     // mean?" over the phone against five similar variants is how the
     // wrong product gets repriced. The resolution rule is never guess;
     // a channel that cannot show the options cannot honour it.
+    channels: ["chat"],
+    handlerRef: "lib/publish/create.ts:createPublishAction",
+    status: "live",
+  },
+
+  {
+    name: "edit_collection_text",
+    description:
+      "Rewrite the paragraph above a group of products on one collection page of the connected Shopify store. Never applies it directly — resolves which collection they meant and shows a preview with Approve/Reject buttons inline in the chat, where the person decides. Never directs them to Shopify admin.",
+    parameters: {
+      text: { type: "string", description: "The new paragraph. Replaces the whole description", required: true },
+      collection: { type: "string", description: "Which collection, in their words or as the handle" },
+      writtenByOwner: { type: "boolean", description: "True only when the person typed the paragraph themselves" },
+    },
+    // CHAT ONLY, for the reason propose_price_change records: on a
+    // voice call there is no way to show a candidate list, and "which
+    // collection did you mean?" over the phone against six similar
+    // names is how the wrong one gets rewritten. The resolution rule
+    // is never guess; a channel that cannot show the options cannot
+    // honour it.
+    channels: ["chat"],
+    handlerRef: "lib/publish/create.ts:createPublishAction",
+    status: "live",
+  },
+
+  {
+    name: "publish_blog_post",
+    description:
+      "Put a blog post on the connected Shopify store's blog, created unpublished. Never publishes it live — shows a preview with Approve/Reject buttons inline in the chat, and the owner presses publish in Shopify when ready. Never directs them to Shopify admin to paste it in.",
+    parameters: {
+      title: { type: "string", description: "The post's headline", required: true },
+      text: { type: "string", description: "The body, as HTML or paragraphs", required: true },
+      blog: { type: "string", description: "Which blog, by handle or title. Omit when the store has one" },
+      author: { type: "string", description: "The byline, only if they named one" },
+      writtenByOwner: { type: "boolean", description: "True only when the person typed the body themselves" },
+    },
+    // CHAT ONLY. A post is read before it is agreed to, and a voice
+    // call cannot show the body.
+    channels: ["chat"],
+    handlerRef: "lib/publish/create.ts:createPublishAction",
+    status: "live",
+  },
+
+  {
+    name: "upload_store_image",
+    description:
+      "Add a picture Hawlai generated to the connected Shopify store's file library, so the store hosts it. Adds the file only — nothing appears on any page until something references it. Shows a preview with Approve/Reject buttons inline in the chat.",
+    parameters: {
+      imageUrl: { type: "string", description: "The exact URL of a picture Hawlai generated", required: true },
+      alt: { type: "string", description: "What is in the picture, under 512 characters" },
+      filename: { type: "string", description: "What to call the file in their library" },
+    },
+    // CHAT ONLY. The decision rests on seeing the picture.
     channels: ["chat"],
     handlerRef: "lib/publish/create.ts:createPublishAction",
     status: "live",

@@ -77,12 +77,26 @@ describe("1. the strongest evidence wins, in a fixed order", () => {
     }
   });
 
-  it("a unique substring, either way round", () => {
-    // "about" finds "About us"; "about us page" also finds it.
-    expect(matchShopifyResource("about", PAGES).ok).toBe(true);
-    const phrase = matchShopifyResource("about us page", PAGES);
-    expect(phrase.ok && phrase.resource.id).toBe("gid://shopify/Page/1");
-    expect(phrase.ok && phrase.matchType).toBe("contains");
+  it("A UNIQUE SUBSTRING IS OFFERED, NOT APPLIED", () => {
+    // This asserted that "about" RESOLVES to About us. The type system
+    // caught why that was wrong: `ResolutionPath` is
+    // exact | user_clarified | direct, with no value for "a substring
+    // matched and I went ahead". That absence is this product's
+    // resolution rule, not an oversight — propose_price_change has
+    // always sent a loose match back to the owner to pick.
+    //
+    // So a unique near-match comes back as a question with one
+    // candidate: answerable with a yes, one extra turn, and no
+    // storefront write on a target nobody named.
+    for (const typed of ["about", "about us page"]) {
+      const r = matchShopifyResource(typed, PAGES);
+      expect(r.ok, `"${typed}" must not resolve on its own`).toBe(false);
+      expect(!r.ok && r.reason, typed).toBe("needs_confirmation");
+      expect(!r.ok && r.candidates.map((c) => c.id), typed).toEqual(["gid://shopify/Page/1"]);
+      // "Did you mean X?" rather than "which of these?" — one
+      // candidate is a different question from several.
+      expect(!r.ok && r.message, typed).toContain("About us");
+    }
   });
 
   it("nothing named, and only one thing it could be", () => {
@@ -93,6 +107,12 @@ describe("1. the strongest evidence wins, in a fixed order", () => {
 });
 
 describe("2. NOT SURE MEANS ASK — the load-bearing half", () => {
+  it("several loose matches is the OTHER question — which, not whether", () => {
+    const r = matchShopifyResource("policy", PAGES);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toBe("ambiguous");
+  });
+
   it("THE LOAD-BEARING ONE: a tie is a question, never a pick", () => {
     // Two pages contain "policy". Choosing either would put a write on
     // a page the owner did not name, behind an approval card that said

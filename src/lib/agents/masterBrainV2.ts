@@ -1154,6 +1154,388 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           : "Ready for your approval below — nothing on the live site changes until you approve it. Once approved, Hawlai reads the live page back and will say whether the new text is actually being served.",
       };
     }
+    case "edit_collection_text": {
+      // The paragraph above a group of products on a Shopify
+      // collection page. The write path has existed and been verified
+      // live since 20 November 2026; this is the half that lets a
+      // sentence in chat reach it.
+      const { resolveShopifyResource } = await import("../publish/platforms/shopifyResources");
+      const { shopifyCredentialsAdapter } = await import("../publish/platforms/shopifyCredentials");
+      const { createShopifyPlatform: makeShopify } = await import("../publish/platforms/shopify");
+      const { createPublishAction: createCollectionAction } = await import("../publish/create");
+      const { createServiceClient: makeCollectionService } = await import("../supabase/service");
+
+      const newText = typeof input.text === "string" ? input.text.trim() : "";
+      if (!newText) return { error: "Tell me what the collection page should say." };
+
+      // CONNECTED FIRST, because every other failure below is a worse
+      // way to learn the store isn't attached.
+      const collCreds = await shopifyCredentialsAdapter(ctx.id);
+      if (!collCreds) {
+        return {
+          error: "This business has no Shopify store connected, so there are no collections to edit.",
+          note: "Connect Shopify from Settings first. Do not offer to edit a collection until it is connected.",
+        };
+      }
+
+      // THE CLAIMS CHECK, and the same split propose_page_meta makes.
+      // A collection description is customer-facing prose about a
+      // group of products, so it goes through the guard like every
+      // other piece of copy Hawlai writes — and wording the owner
+      // typed himself is his to stand behind, kept exactly, with the
+      // card warning instead of editing it.
+      const { guardGenerated: guardCollection } = await import("../claims/claimCheck");
+      const collFacts = await factsFor(supabase, ctx);
+      const collWarnings: string[] = [];
+      const collRemoved: string[] = [];
+      let collKeptByOwner = 0;
+      let safeText = newText;
+
+      if (collFacts) {
+        const verdict = guardCollection({ value: newText }, collFacts, "publish");
+        if (verdict.removed.length > 0) {
+          if (input.writtenByOwner === true) {
+            collKeptByOwner = verdict.removed.length;
+            collWarnings.push(
+              `Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`
+            );
+          } else {
+            const kept = String((verdict.output as any).value ?? "").trim();
+            collRemoved.push(...verdict.removed);
+            collWarnings.push(
+              `Taken out, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`
+            );
+            if (!kept) {
+              return {
+                error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to put on the page.",
+                saved: false,
+                note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
+              };
+            }
+            safeText = kept;
+          }
+        }
+      }
+
+      // WHICH COLLECTION — never a guess. The resolver returns the
+      // candidates when it cannot tell, and this hands them straight
+      // back: the one useful answer to "which one?" is the list.
+      const asked = typeof input.collection === "string" ? input.collection : "";
+      const resolved = await resolveShopifyResource(collCreds.shop, collCreds.accessToken, "collection", asked);
+      if (!resolved.ok) {
+        if (resolved.reason === "unreadable" || resolved.reason === "none_exist") {
+          return { error: resolved.message, saved: false };
+        }
+        // ONE CANDIDATE IS A DIFFERENT QUESTION FROM SEVERAL. "Did you
+        // mean Diwali gifting?" is answerable with a yes; "which of
+        // these?" needs a choice. Asking the wrong one of those is how
+        // a conversation stalls.
+        return {
+          needs_clarification: true,
+          question:
+            resolved.reason === "needs_confirmation"
+              ? resolved.message
+              : "Which collection did you mean?",
+          candidates: resolved.candidates.map((c) => ({ collection: c.handle, title: c.title })),
+        };
+      }
+
+      const collService = makeCollectionService();
+      const collCreated = await createCollectionAction(
+        collService,
+        makeShopify({ getCredentials: async () => collCreds }),
+        {
+          dealershipId: ctx.id,
+          platform: "shopify",
+          actionKey: "update_collection_text",
+          targetRef: resolved.resource.id,
+          targetLabel: `${resolved.resource.title} (/collections/${resolved.resource.handle})`,
+          requestedChanges: {
+            html: safeText,
+            claimWarnings: collWarnings,
+            claimCheck: claimCheckField({
+              text: safeText,
+              removed: collRemoved,
+              // HIS SENTENCE, NOT OURS. S7 must not demote anything
+              // for wording the owner stood behind himself —
+              // migration 217's owner_words.
+              keptUnsupported: collKeptByOwner,
+              ownerWords: collKeptByOwner > 0,
+            }),
+          },
+          requestedBy: null,
+          // MAPPED ONTO THE EXISTING VOCABULARY rather than widened.
+          // ResolutionPath is exact | direct | fuzzy | none across
+          // every action in this product, and the audit trail is only
+          // comparable if one word means one thing everywhere. An
+          // exact handle or title is `exact`; the only collection
+          // there is was never matched at all, so `direct`; a
+          // substring is `fuzzy`, which is exactly what it is.
+          // THE EXISTING VOCABULARY, not a widened one. ResolutionPath
+          // is exact | user_clarified | direct across every action in
+          // this product, and one word has to mean one thing for the
+          // audit trail to be comparable. The resolver now only ever
+          // returns an exact handle/title match or "the only one
+          // there is", because a loose match goes back to the owner
+          // to confirm — so there is nothing left to map awkwardly.
+          resolutionPath: resolved.matchType === "only_one" ? "direct" : "exact",
+          resolutionDetail: {
+            query: asked,
+            candidateCount: 1,
+            matchType: resolved.matchType === "only_one" ? "direct" : "exact",
+            chosenRef: resolved.resource.id,
+          },
+        }
+      );
+      if (!collCreated.ok) {
+        // NOTHING WAS STORED, and the reply must not imply otherwise —
+        // the lesson from 2026-09-29, when chat told an owner his
+        // wording was "safe with me" after the insert had failed.
+        return {
+          error: collCreated.reason,
+          saved: false,
+          note:
+            "Nothing was saved anywhere — this failed before any record was written, so there is no draft, no queue and no retry waiting. " +
+            "Do NOT tell them their wording is being held or that you will apply it later. Say plainly that it did not go through.",
+        };
+      }
+
+      return {
+        success: true,
+        already_pending: collCreated.alreadyPending ?? false,
+        approval_id: collCreated.approvalId,
+        action_id: collCreated.actionId,
+        collection: resolved.resource.handle,
+        collection_title: resolved.resource.title,
+        summary: collCreated.preview.summary,
+        warnings: [...collCreated.preview.warnings, ...collWarnings],
+        note: collCreated.alreadyPending
+          ? "You already asked for this exact change — here it is again, still waiting on your approval."
+          : "Ready for your approval below — nothing on the storefront changes until you approve it. This replaces the whole description, not part of it.",
+      };
+    }
+    case "publish_blog_post": {
+      // A post on the merchant's own store blog, created UNPUBLISHED.
+      // Approving puts nothing in front of a customer: they press
+      // publish in Shopify when they are happy, which is why the
+      // adapter sends isPublished false and the card says so.
+      const { resolveShopifyResource: resolveBlog } = await import("../publish/platforms/shopifyResources");
+      const { shopifyCredentialsAdapter: blogCreds } = await import("../publish/platforms/shopifyCredentials");
+      const { createShopifyPlatform: makeShopifyForBlog } = await import("../publish/platforms/shopify");
+      const { createPublishAction: createPostAction } = await import("../publish/create");
+      const { createServiceClient: makePostService } = await import("../supabase/service");
+
+      const postTitle = typeof input.title === "string" ? input.title.trim() : "";
+      const postBody = typeof input.text === "string" ? input.text.trim() : "";
+      if (!postTitle) return { error: "A blog post needs a headline." };
+      if (!postBody) return { error: "A blog post needs some text." };
+
+      const postCreds = await blogCreds(ctx.id);
+      if (!postCreds) {
+        return {
+          error: "This business has no Shopify store connected, so there is no blog to post to.",
+          note: "Connect Shopify from Settings first. Do not offer to publish a post until it is connected.",
+        };
+      }
+
+      // THE CLAIMS CHECK, on the headline and the body together. A
+      // blog post is the longest piece of customer-facing prose this
+      // product writes, so it is the last place to make an exception.
+      const { guardGenerated: guardPost } = await import("../claims/claimCheck");
+      const postFacts = await factsFor(supabase, ctx);
+      const postWarnings: string[] = [];
+      const postRemoved: string[] = [];
+      let postKeptByOwner = 0;
+      let safeTitleText = postTitle;
+      let safeBody = postBody;
+
+      if (postFacts) {
+        const verdict = guardPost({ title: postTitle, body: postBody }, postFacts, "publish");
+        if (verdict.removed.length > 0) {
+          if (input.writtenByOwner === true) {
+            postKeptByOwner = verdict.removed.length;
+            postWarnings.push(
+              `Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`
+            );
+          } else {
+            const out = verdict.output as any;
+            const keptTitle = String(out.title ?? "").trim();
+            const keptBody = String(out.body ?? "").trim();
+            postRemoved.push(...verdict.removed);
+            postWarnings.push(
+              `Taken out, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`
+            );
+            if (!keptTitle || !keptBody) {
+              return {
+                error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to post.",
+                saved: false,
+                note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
+              };
+            }
+            safeTitleText = keptTitle;
+            safeBody = keptBody;
+          }
+        }
+      }
+
+      // WHICH BLOG — and a store with one blog is not a question.
+      const askedBlog = typeof input.blog === "string" ? input.blog : "";
+      const blogHit = await resolveBlog(postCreds.shop, postCreds.accessToken, "blog", askedBlog);
+      if (!blogHit.ok) {
+        if (blogHit.reason === "unreadable") return { error: blogHit.message, saved: false };
+        if (blogHit.reason === "none_exist") {
+          return {
+            error: "This store has no blog yet, so there is nowhere to put a post.",
+            note: "They create one in Shopify under Online Store > Blog posts. Do not offer to publish until it exists.",
+          };
+        }
+        return {
+          needs_clarification: true,
+          question: blogHit.reason === "needs_confirmation" ? blogHit.message : "Which blog did you mean?",
+          candidates: blogHit.candidates.map((b) => ({ blog: b.handle, title: b.title })),
+        };
+      }
+
+      const postService = makePostService();
+      const postCreated = await createPostAction(
+        postService,
+        makeShopifyForBlog({ getCredentials: async () => postCreds }),
+        {
+          dealershipId: ctx.id,
+          platform: "shopify",
+          actionKey: "publish_post",
+          targetRef: blogHit.resource.id,
+          targetLabel: `${blogHit.resource.title} blog`,
+          requestedChanges: {
+            title: safeTitleText,
+            html: safeBody,
+            // Only when they named one. Omitted, the adapter uses the
+            // STORE'S own name — never this product's, and never a
+            // person's name nobody gave.
+            ...(typeof input.author === "string" && input.author.trim() ? { author: input.author.trim() } : {}),
+            claimWarnings: postWarnings,
+            claimCheck: claimCheckField({
+              text: `${safeTitleText} — ${safeBody}`,
+              removed: postRemoved,
+              keptUnsupported: postKeptByOwner,
+              ownerWords: postKeptByOwner > 0,
+            }),
+          },
+          requestedBy: null,
+          resolutionPath: blogHit.matchType === "only_one" ? "direct" : "exact",
+          resolutionDetail: {
+            query: askedBlog,
+            candidateCount: 1,
+            matchType: blogHit.matchType === "only_one" ? "direct" : "exact",
+            chosenRef: blogHit.resource.id,
+          },
+        }
+      );
+      if (!postCreated.ok) {
+        return {
+          error: postCreated.reason,
+          saved: false,
+          note:
+            "Nothing was saved anywhere — this failed before any record was written, so there is no draft waiting. " +
+            "Do NOT tell them the post is being held or that you will publish it later. Say plainly that it did not go through.",
+        };
+      }
+
+      return {
+        success: true,
+        already_pending: postCreated.alreadyPending ?? false,
+        approval_id: postCreated.approvalId,
+        action_id: postCreated.actionId,
+        blog: blogHit.resource.handle,
+        summary: postCreated.preview.summary,
+        warnings: [...postCreated.preview.warnings, ...postWarnings],
+        note: postCreated.alreadyPending
+          ? "You already asked for this exact post — here it is again, still waiting on your approval."
+          : "Ready for your approval below. It is created as a DRAFT in Shopify — nothing goes live on the storefront until you publish it there yourself.",
+      };
+    }
+    case "upload_store_image": {
+      // A picture Hawlai made, into the merchant's own file library.
+      // Adds the file only: nothing is on any page until something
+      // references it, and the card says so in those words.
+      const { shopifyCredentialsAdapter: imgCreds } = await import("../publish/platforms/shopifyCredentials");
+      const { createShopifyPlatform: makeShopifyForImage } = await import("../publish/platforms/shopify");
+      const { createPublishAction: createUploadAction } = await import("../publish/create");
+      const { createServiceClient: makeUploadService } = await import("../supabase/service");
+
+      const src = typeof input.imageUrl === "string" ? input.imageUrl.trim() : "";
+      if (!src) return { error: "Tell me which picture — the URL from the one Hawlai generated." };
+
+      const uploadCreds = await imgCreds(ctx.id);
+      if (!uploadCreds) {
+        return {
+          error: "This business has no Shopify store connected, so there is no file library to add to.",
+          note: "Connect Shopify from Settings first.",
+        };
+      }
+
+      // NO CLAIMS CHECK ON A PICTURE, and the reason is worth stating
+      // rather than leaving as an absence: the claims layer reads
+      // text, and nothing in this product reads what is drawn INSIDE
+      // an image. A graphic saying "50% off" carries a claim the guard
+      // cannot see. That gap is the same one generate_graphic has had
+      // since it shipped — it is not introduced here, and it is not
+      // closed here either. The alt text IS prose, but it is a
+      // description of a picture rather than a claim about the
+      // business, and it reaches no customer until something puts the
+      // image on a page.
+      const uploadService = makeUploadService();
+      const uploadCreated = await createUploadAction(
+        uploadService,
+        makeShopifyForImage({ getCredentials: async () => uploadCreds }),
+        {
+          dealershipId: ctx.id,
+          platform: "shopify",
+          actionKey: "upload_image",
+          // THE SOURCE URL IS THE TARGET, and that is the honest
+          // answer rather than a convenient one. There is no Shopify
+          // id to point at: the file does not exist until this runs.
+          //
+          // It matters because `intentKey` hashes targetRef. The
+          // source URL makes two requests to upload the SAME picture
+          // dedupe to the one approval already waiting — a double-tap
+          // is one decision. The shop domain would have collided
+          // every upload on the store into a single intent key, so the
+          // second picture would have surfaced the first one's card.
+          targetRef: src,
+          targetLabel: typeof input.filename === "string" && input.filename.trim() ? input.filename.trim() : "Picture",
+          requestedChanges: {
+            imageUrl: src,
+            ...(typeof input.alt === "string" && input.alt.trim() ? { alt: input.alt.trim() } : {}),
+            ...(typeof input.filename === "string" && input.filename.trim() ? { filename: input.filename.trim() } : {}),
+          },
+          requestedBy: null,
+          resolutionPath: "direct",
+          resolutionDetail: { query: src, candidateCount: 1, matchType: "direct" },
+        }
+      );
+      if (!uploadCreated.ok) {
+        return {
+          error: uploadCreated.reason,
+          saved: false,
+          note:
+            "Nothing was uploaded and nothing was saved. If the reason says the picture is not one Hawlai made, that is the guard working: " +
+            "pass the exact URL from a generate_graphic result in this conversation, not a URL from the web or one you composed.",
+        };
+      }
+
+      return {
+        success: true,
+        already_pending: uploadCreated.alreadyPending ?? false,
+        approval_id: uploadCreated.approvalId,
+        action_id: uploadCreated.actionId,
+        summary: uploadCreated.preview.summary,
+        warnings: uploadCreated.preview.warnings,
+        note: uploadCreated.alreadyPending
+          ? "You already asked for this exact upload — here it is again, still waiting on your approval."
+          : "Ready for your approval below. This only adds the picture to the store's file library — no customer sees it until something puts it on a page.",
+      };
+    }
     case "generate_social_management": {
       const { data: recentPosts } = await supabase
         .from("social_management_items")

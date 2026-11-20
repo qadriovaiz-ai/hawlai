@@ -53,8 +53,18 @@ import { code, sourceWithComments } from "./helpers/source";
 // cache warms again. A one-value enum change was judged worth it
 // because the alternative is a trigger the owner can only reach through
 // the dashboard, in a product whose premise is that chat can do it.
-const FINGERPRINT = "e3e5e4a18095d0626bc011e4c231fc73af13f8cdb980ad9f744a97f39351e753";
-const TOOL_COUNT = 60;
+// Updated 21 November 2026 for the three Shopify content tools —
+// edit_collection_text, publish_blog_post, upload_store_image — taking
+// the count from 60 to 63. The owner approved them under rule 5 with
+// the reason recorded in DECISIONS.md: depth, not breadth, connecting
+// a write path that was already built and live-verified.
+//
+// ALL THREE WENT IN ONE COMMIT ON PURPOSE. Each change to this
+// fingerprint invalidates the Anthropic prompt-cache prefix, and every
+// chat turn pays full price until it warms again. Three tools in three
+// commits would have paid that three times for one approved change.
+const FINGERPRINT = "7abe05304dad7ccda35aca1b9505286bfb88050a62e33e6a9f9e4351916d23f6";
+const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {
   it("THE PROMPT-CACHE PREFIX IS WHAT IT WAS", () => {

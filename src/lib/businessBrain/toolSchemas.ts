@@ -725,4 +725,84 @@ export const TOOLS = [
       "Build the growth report NOW and show it: what the agent found on the site and the catalogue, what it suggests, and the measurement health line. Use when the owner asks how things are going, where he stands, or for his report. It sends no email — the owner emails it to himself from the Strategy page if he wants a copy.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
+  {
+    name: "edit_collection_text",
+    description:
+      "Rewrite the paragraph shown above a group of products on one COLLECTION page of the connected Shopify store — what a customer reads before the grid of products. USE THIS when they talk about a collection, a category, a range or a group of products on their Shopify store — they will name the group rather than one product, and often in Hinglish (\"is group ka description badlo\", \"change the text above that range\"). NOT for a page like About or Contact — that is edit_page_text. NOT for a single product's own description. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT and nothing on the storefront changes until they approve; never send them to Shopify admin to paste it in. If you are not sure which collection they mean, call it with your best reading of their words and the tool returns the list to choose from rather than guessing. Anything you write yourself goes through the claims check; wording the owner typed is kept exactly as they typed it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        collection: {
+          type: "string",
+          description:
+            "Which collection, in the words they used, or the handle from its URL if they gave you that. Omit only when the store has exactly one collection. A near match is returned for them to confirm rather than applied, and several matches come back as candidates — so pass your best reading of their words rather than guessing between two.",
+        },
+        text: {
+          type: "string",
+          description:
+            "The new paragraph, as HTML or plain text. This REPLACES the whole description — read it back to them first if they only wanted a sentence changed, because there is no partial edit here.",
+        },
+        writtenByOwner: {
+          type: "boolean",
+          description:
+            "True only when the person typed this paragraph themselves, word for word. Their own wording is saved exactly as written and the card warns them if it claims something their Business Story does not back up. Anything you wrote goes through the claims check like every other piece of copy Hawlai writes — do not set this for your own words.",
+        },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "publish_blog_post",
+    description:
+      "Put a blog post on the connected Shopify store's blog. It is created UNPUBLISHED — a draft in their Shopify admin — so approving it puts nothing in front of a customer; they press publish in Shopify when they are happy. USE THIS when they want a post actually on their store (\"ye blog store pe daal do\", \"publish this to my shop's blog\"), not when they just want one written: generate_seo_keywords writes a post and saves nothing to the store. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. If the store has more than one blog and they did not say which, the tool returns the list rather than picking. Anything you wrote goes through the claims check; wording the owner typed is kept exactly as typed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "The post's headline, as it will appear on the store." },
+        text: { type: "string", description: "The body of the post, as HTML or plain text with paragraphs." },
+        blog: {
+          type: "string",
+          description:
+            "Which blog to post to — the handle or its title, e.g. \"news\". Omit when the store has one blog, which is the usual case. If it matches more than one the tool returns the candidates.",
+        },
+        author: {
+          type: "string",
+          description:
+            "The byline, only if they told you whose name should be on it. Omitted, the store's own name is used — never Hawlai's, and never a person's name you invented.",
+        },
+        writtenByOwner: {
+          type: "boolean",
+          description:
+            "True only when the person typed the body themselves, word for word. Their wording is saved exactly as written and the card warns them if it claims something their Business Story does not back up. Do not set this for your own words.",
+        },
+      },
+      required: ["title", "text"],
+    },
+  },
+
+  {
+    name: "upload_store_image",
+    description:
+      "Put a picture Hawlai made into the connected Shopify store's own file library, so the store hosts it instead of Hawlai. USE THIS after generate_graphic when they want to use that picture on their store — a page, a post, a collection — because an image referenced from Hawlai's storage breaks if that storage ever moves. It adds the file ONLY: nothing appears on any page and no customer sees it until something references it, and the card says so. The picture must be one Hawlai generated — pass the exact URL from an earlier generate_graphic or ad creative result. A URL from the web, from the person, or one you typed will be refused, and that refusal is the guard working, not a fault.",
+    input_schema: {
+      type: "object",
+      properties: {
+        imageUrl: {
+          type: "string",
+          description:
+            "The exact URL of a picture Hawlai generated, copied from an earlier tool result in this conversation. Never a URL from a web page, never one the person pasted, never one you composed.",
+        },
+        alt: {
+          type: "string",
+          description:
+            "A short description of what is in the picture, for screen readers and for search. Keep it under 512 characters — Shopify rejects the whole upload past that.",
+        },
+        filename: {
+          type: "string",
+          description: "What to call the file in their library, e.g. \"diwali-hero.png\". Optional; Shopify names it if omitted.",
+        },
+      },
+      required: ["imageUrl"],
+    },
+  },
 ];
