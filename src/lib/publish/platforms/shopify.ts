@@ -521,7 +521,20 @@ export function createShopifyPlatform(deps: {
             warnings.push("The page already reads this way — approving will change nothing.");
           }
         } else {
-          const title = typeof action.requestedChanges.metaTitle === "string" ? action.requestedChanges.metaTitle : null;
+          // `seoTitle`, NOT `metaTitle`. This read `metaTitle` while
+          // hawlaiSite.ts has always read `seoTitle` — the same
+          // ActionKey with two different payload contracts, so a
+          // producer would have had to know which platform it was
+          // talking to, which is the one thing the adapter layer
+          // exists to prevent. Worse, the failure was silent: the
+          // wrong key simply looked like "no title was given".
+          //
+          // Aligned on hawlaiSite's spelling because that one has real
+          // rows behind it. Nothing had ever written `metaTitle` — no
+          // producer existed — so there is no legacy payload to keep
+          // reading. tests/publishPayloadContract.test.ts pins the two
+          // together.
+          const title = typeof action.requestedChanges.seoTitle === "string" ? action.requestedChanges.seoTitle : null;
           const description =
             typeof action.requestedChanges.metaDescription === "string" ? action.requestedChanges.metaDescription : null;
           if (title === null && description === null) {
@@ -862,7 +875,13 @@ export function createShopifyPlatform(deps: {
           changed.push({ what: "Page text", from: String(c.after ?? ""), to: c.before });
         }
         if (c.field === "seoTitle") {
-          changes.metaTitle = c.before;
+          // `seoTitle`, matching what preview() reads. This said
+          // `metaTitle` — so the undo built a payload its own preview
+          // would not recognise, and an undo of a search title would
+          // have read as "no title was given" and quietly done
+          // nothing. The same silent-no-op shape the live run found in
+          // the clear path.
+          changes.seoTitle = c.before;
           changed.push({ what: "Search title", from: String(c.after ?? ""), to: c.before });
         }
         if (c.field === "seoDescription") {

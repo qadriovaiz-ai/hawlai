@@ -115,7 +115,7 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
 
   it("either half may change on its own", async () => {
     const { impl } = sequence([pageBody()]);
-    const r = await platform(impl).preview(meta({ metaTitle: "Qaaf Candles — About" }));
+    const r = await platform(impl).preview(meta({ seoTitle: "Qaaf Candles — About" }));
     expect(r.ok && r.preview.changes.map((c) => c.field)).toEqual(["seoTitle"]);
   });
 
@@ -135,9 +135,9 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
       { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } },
     ]);
     const p = platform(impl);
-    const previewed = await p.preview(meta({ metaTitle: "New title" }));
+    const previewed = await p.preview(meta({ seoTitle: "New title" }));
     expect(previewed.ok).toBe(true);
-    await p.execute(action({ actionKey: "update_page_meta", requestedChanges: { metaTitle: "New title" }, preview: previewed.ok ? previewed.preview : null }));
+    await p.execute(action({ actionKey: "update_page_meta", requestedChanges: { seoTitle: "New title" }, preview: previewed.ok ? previewed.preview : null }));
     const mutation = sent[sent.length - 1];
     // NO `seo` KEY AT ALL. Sending one is the bug this whole change
     // exists to remove, and it would be accepted by a mock for ever.
@@ -161,12 +161,12 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
       { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } },
     ]);
     const p = platform(impl);
-    const previewed = await p.preview(meta({ metaTitle: "First title", metaDescription: "First description" }));
+    const previewed = await p.preview(meta({ seoTitle: "First title", metaDescription: "First description" }));
     expect(previewed.ok).toBe(true);
     await p.execute(
       action({
         actionKey: "update_page_meta",
-        requestedChanges: { metaTitle: "First title", metaDescription: "First description" },
+        requestedChanges: { seoTitle: "First title", metaDescription: "First description" },
         preview: previewed.ok ? previewed.preview : null,
       })
     );
@@ -186,11 +186,11 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
       { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } },
     ]);
     const p = platform(impl);
-    const previewed = await p.preview(meta({ metaTitle: "Only a title" }));
+    const previewed = await p.preview(meta({ seoTitle: "Only a title" }));
     await p.execute(
       action({
         actionKey: "update_page_meta",
-        requestedChanges: { metaTitle: "Only a title" },
+        requestedChanges: { seoTitle: "Only a title" },
         preview: previewed.ok ? previewed.preview : null,
       })
     );
@@ -233,7 +233,7 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
     // page TEXT read too — the body write was valid all along and could
     // never get past its own preview.
     const { impl, sent } = sequence([pageBody()]);
-    await platform(impl).preview(meta({ metaTitle: "x" }));
+    await platform(impl).preview(meta({ seoTitle: "x" }));
     const query = String(sent[0].query);
     expect(query).toMatch(/metafield\(namespace: "global", key: "title_tag"\)/);
     expect(query).toMatch(/metafield\(namespace: "global", key: "description_tag"\)/);
@@ -962,7 +962,7 @@ describe("9. CLEARING A SEARCH TITLE, AND THE SILENT NO-OP IT USED TO BE", () =>
     const r = await platform(impl).execute(
       action({
         actionKey: "update_page_meta",
-        requestedChanges: { metaTitle: "" },
+        requestedChanges: { seoTitle: "" },
         preview: metaPreview([{ field: "seoTitle", before: "About Qaaf", after: "" }]),
       })
     );
@@ -981,7 +981,7 @@ describe("9. CLEARING A SEARCH TITLE, AND THE SILENT NO-OP IT USED TO BE", () =>
     const r = await platform(impl).execute(
       action({
         actionKey: "update_page_meta",
-        requestedChanges: { metaTitle: "", metaDescription: "" },
+        requestedChanges: { seoTitle: "", metaDescription: "" },
         preview: metaPreview([
           { field: "seoTitle", before: "About Qaaf", after: "" },
           { field: "seoDescription", before: "Hand poured candles", after: "" },
@@ -1036,7 +1036,7 @@ describe("9. CLEARING A SEARCH TITLE, AND THE SILENT NO-OP IT USED TO BE", () =>
     const r = await platform(impl).execute(
       action({
         actionKey: "update_page_meta",
-        requestedChanges: { metaTitle: "" },
+        requestedChanges: { seoTitle: "" },
         preview: metaPreview([{ field: "seoTitle", before: "About Qaaf", after: "" }]),
       })
     );
@@ -1052,7 +1052,7 @@ describe("9. CLEARING A SEARCH TITLE, AND THE SILENT NO-OP IT USED TO BE", () =>
     const r = await platform(impl).execute(
       action({
         actionKey: "update_page_meta",
-        requestedChanges: { metaTitle: "" },
+        requestedChanges: { seoTitle: "" },
         preview: metaPreview([{ field: "seoTitle", before: "", after: "" }]),
       })
     );
