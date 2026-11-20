@@ -99,6 +99,9 @@ const SHOP_ARG = (process.argv.find((a) => a.startsWith("--shop=")) ?? "").split
 /** A marker that makes every value this script writes obvious in the admin. */
 const STAMP = `[hawlai-verify ${new Date().toISOString().slice(0, 16)}]`;
 
+/** Which credential the run used, named in the summary so a pasted result is unambiguous. */
+let CREDENTIAL_SOURCE: "override" | "minted" | "database" = "database";
+
 type Outcome = { name: string; pass: boolean; detail: string };
 const results: Outcome[] = [];
 
@@ -141,7 +144,11 @@ const DISCOVER = `
   query VerifyDiscover {
     shop { name myshopifyDomain }
     pages(first: 5) {
-      nodes { id title handle isPublished seo { title description } }
+      nodes {
+        id title handle isPublished
+        seoTitle: metafield(namespace: "global", key: "title_tag") { value }
+        seoDescription: metafield(namespace: "global", key: "description_tag") { value }
+      }
     }
     collections(first: 5) {
       nodes { id title handle descriptionHtml productsCount { count } }
@@ -150,7 +157,17 @@ const DISCOVER = `
   }
 `;
 
-const READ_PAGE = `query VerifyPage($id: ID!) { page(id: $id) { id title body seo { title description } } }`;
+const READ_PAGE = `
+  query VerifyPage($id: ID!) {
+    page(id: $id) {
+      id
+      title
+      body
+      seoTitle: metafield(namespace: "global", key: "title_tag") { value }
+      seoDescription: metafield(namespace: "global", key: "description_tag") { value }
+    }
+  }
+`;
 const READ_COLLECTION = `query VerifyCollection($id: ID!) { collection(id: $id) { id title descriptionHtml } }`;
 const READ_ARTICLE = `query VerifyArticle($id: ID!) { article(id: $id) { id title isPublished publishedAt blog { title } } }`;
 
@@ -286,6 +303,80 @@ async function main(): Promise<number> {
       true,
       "SHOPIFY_VERIFY_TOKEN — a store-level token; the encrypted-token path is DELIBERATELY NOT exercised"
     );
+    CREDENTIAL_SOURCE = "override";
+  } else if (process.env.SHOPIFY_CLIENT_ID && process.env.SHOPIFY_CLIENT_SECRET) {
+    // ---- mint one, rather than relay one by hand -------------------
+    //
+    // THE CLIENT CREDENTIALS GRANT. One form POST with the client id
+    // and secret, both already in .env.local for the OAuth callback.
+    // No key pair, no signed assertion, no merchant session, and
+    // nothing to copy between windows — which is the whole point: an
+    // `id_token` is valid for 60 seconds and cannot be relayed by hand,
+    // and a Dev Dashboard custom app now issues 24-hour tokens through
+    // this same grant anyway. Minting on demand makes the expiry
+    // irrelevant.
+    //
+    // ONLY WORKS WITHIN ONE ORGANIZATION, in Shopify's words: "The
+    // client credentials grant only works when the app and the store
+    // belong to the same Shopify organization", and "Owning a store or
+    // having it installed doesn't automatically place it in your org."
+    // So this can legitimately fail, and the failure is reported as
+    // what it is rather than as a broken script.
+    const res = await fetch(`https://${SHOP_ARG}/admin/oauth/access_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: process.env.SHOPIFY_CLIENT_ID,
+        client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+      }).toString(),
+    }).catch((e) => ({ ok: false, status: 0, text: async () => String(e) }) as any);
+
+    const raw = await res.text();
+    let minted: any = null;
+    try {
+      minted = JSON.parse(raw);
+    } catch {
+      /* not JSON — reported below as the body Shopify actually sent */
+    }
+
+    if (!res.ok || !minted?.access_token) {
+      record(
+        "mint a token with the client credentials grant",
+        false,
+        `HTTP ${res.status} — ${raw.slice(0, 300)}`
+      );
+      console.error("");
+      console.error("The client credentials grant needs the app and the store to be in");
+      console.error("the SAME Shopify organization. Installing the app on a store does");
+      console.error("not put the store in the org — Shopify is explicit about that.");
+      console.error("");
+      console.error("If that is the problem, the remaining option is a store-level token:");
+      console.error(`  Shopify admin for ${SHOP_ARG} → Settings → Apps → Develop apps`);
+      console.error("  → Build apps in Dev Dashboard → Create app → Admin API scopes:");
+      console.error("  write_products, write_content, write_files → install on this store");
+      console.error("Then put it in .env.local as SHOPIFY_VERIFY_TOKEN=...");
+      console.error("");
+      console.error("Nothing was written.");
+      return 1;
+    }
+
+    creds = { shop: SHOP_ARG, accessToken: minted.access_token };
+    record(
+      "mint a token with the client credentials grant",
+      true,
+      `expires_in=${minted.expires_in ?? "?"}s · scope=${minted.scope ?? "(not returned)"} · token not printed`
+    );
+    CREDENTIAL_SOURCE = "minted";
+    // THE SCOPES ARE WORTH READING. This is the first chance to see
+    // what the app's granted scopes actually are from the API's own
+    // mouth rather than from the Dev Dashboard's screen — so a missing
+    // write_files here explains a later upload failure immediately.
+    if (typeof minted.scope === "string") {
+      for (const need of ["write_products", "write_content", "write_files"]) {
+        record(`granted: ${need}`, minted.scope.includes(need), minted.scope.includes(need) ? "" : "NOT in the granted scopes");
+      }
+    }
   } else {
     creds = await shopifyCredentialsAdapter(dealershipId);
     if (!creds) {
@@ -336,8 +427,8 @@ async function main(): Promise<number> {
   if (!page) {
     record("page SEO", false, "this store has no pages, so there is nothing to edit");
   } else {
-    const beforeTitle = page.seo?.title ?? "";
-    const beforeDescription = page.seo?.description ?? "";
+    const beforeTitle = page.seoTitle?.value ?? "";
+    const beforeDescription = page.seoDescription?.value ?? "";
     console.log(`   page "${page.title}" (/pages/${page.handle})`);
     console.log(`   before: title=${JSON.stringify(beforeTitle)} description=${JSON.stringify(beforeDescription)}`);
 
@@ -383,13 +474,18 @@ async function main(): Promise<number> {
           record("page SEO execute", false, ex.stale ? `reported STALE: ${JSON.stringify(ex.changed)}` : ex.reason);
         } else {
           record("page SEO execute", true, JSON.stringify(ex.platformResponse));
-          // THE LOAD-BEARING READ-BACK. Shopify's seo input replaces
-          // the object, so this is where a dropped description shows.
+          // THE LOAD-BEARING READ-BACK. Metafields upsert per
+          // namespace+key, so a dropped description would show here —
+          // and so would an empty one written to carry a half that was
+          // never set, which Shopify rejects outright.
           const after = await shopifyGraphQL<any>(creds.shop, creds.accessToken, READ_PAGE, { id: page.id });
           if (!after.ok) {
             record("page SEO read-back", false, after.reason);
           } else {
-            const a = after.data.page?.seo ?? {};
+            const a = {
+              title: after.data.page?.seoTitle?.value ?? "",
+              description: after.data.page?.seoDescription?.value ?? "",
+            };
             record("the title changed", (a.title ?? "") !== beforeTitle, `now ${JSON.stringify(a.title ?? "")}`);
             record(
               "THE DESCRIPTION SURVIVED UNTOUCHED",
@@ -410,11 +506,26 @@ async function main(): Promise<number> {
             })
           );
           if (stalePv.ok) {
+            // Moves the field behind the adapter's back, through the
+            // metafield the adapter itself reads — a nudge that wrote
+            // somewhere else would prove nothing.
             await shopifyGraphQL<any>(
               creds.shop,
               creds.accessToken,
               `mutation VerifyNudge($id: ID!, $page: PageUpdateInput!) { pageUpdate(id: $id, page: $page) { page { id } userErrors { message } } }`,
-              { id: page.id, page: { seo: { title: `${beforeTitle} ${STAMP} moved`, description: beforeDescription } } }
+              {
+                id: page.id,
+                page: {
+                  metafields: [
+                    {
+                      namespace: "global",
+                      key: "title_tag",
+                      type: "single_line_text_field",
+                      value: `${beforeTitle} ${STAMP} moved`,
+                    },
+                  ],
+                },
+              }
             );
             const staleEx = await platform.execute(
               action({
@@ -439,7 +550,10 @@ async function main(): Promise<number> {
           record("page SEO restored via undo()", restored === "restored", restored);
           const final = await shopifyGraphQL<any>(creds.shop, creds.accessToken, READ_PAGE, { id: page.id });
           if (final.ok) {
-            const f = final.data.page?.seo ?? {};
+            const f = {
+              title: final.data.page?.seoTitle?.value ?? "",
+              description: final.data.page?.seoDescription?.value ?? "",
+            };
             record(
               "the page is exactly as it was found",
               (f.title ?? "") === beforeTitle && (f.description ?? "") === beforeDescription,
@@ -684,7 +798,9 @@ function finish(): number {
   console.log(
     process.env.SHOPIFY_VERIFY_TOKEN
       ? "Credential: SHOPIFY_VERIFY_TOKEN (store-level). The encrypted-token path was not exercised."
-      : "Credential: resolved and decrypted from the database — that path was exercised too."
+      : CREDENTIAL_SOURCE === "minted"
+        ? "Credential: minted via the client credentials grant. The encrypted-token path was not exercised."
+        : "Credential: resolved and decrypted from the database — that path was exercised too."
   );
   return failed.length ? 1 : 0;
 }

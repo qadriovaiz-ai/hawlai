@@ -47,13 +47,23 @@ const action = (over: Partial<PublishActionRecord> = {}): PublishActionRecord =>
     ...over,
   }) as PublishActionRecord;
 
+// SHAPED LIKE THE REAL SCHEMA, which it was not until 20 November
+// 2026. This held `seo: { title, description }` — and `Page` has no
+// `seo` field in the 2026-07 Admin API, so every test here passed
+// against a page that cannot exist. A live read failed on the first
+// try with "Field 'seo' doesn't exist on type 'Page'".
+//
+// Page SEO is two metafields in the `global` namespace, aliased by
+// PAGE_QUERY. `id` is present because an existing metafield is updated
+// by id rather than by namespace+key.
 const PAGE = {
   id: "gid://shopify/Page/1",
   title: "About us",
   handle: "about-us",
   body: "<p>We pour candles.</p>",
   isPublished: true,
-  seo: { title: "About Qaaf", description: "Hand poured candles" },
+  seoTitle: { id: "gid://shopify/Metafield/11", value: "About Qaaf" },
+  seoDescription: { id: "gid://shopify/Metafield/12", value: "Hand poured candles" },
 };
 
 const pageBody = (over: Record<string, unknown> = {}) => ({ data: { page: { ...PAGE, ...over } } });
@@ -110,8 +120,15 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
   });
 
   it("THE LOAD-BEARING ONE: writing one half carries the other through", async () => {
-    // Shopify's seo input replaces the object, so sending only the
-    // title would blank a description nobody asked to remove.
+    // The INTENT is unchanged — sending only the title must not lose a
+    // description nobody asked to remove. The MECHANISM changed: this
+    // asserted an `seo` object, which does not exist on a Page.
+    //
+    // Metafields upsert per namespace+key, so omitting one would not
+    // actually blank it. Both are still sent, so this file holds one
+    // rule rather than two that differ by resource — and a
+    // Collection's `seo` input genuinely does replace the whole
+    // object.
     const { impl, sent } = sequence([
       pageBody(),
       pageBody(),
@@ -122,8 +139,106 @@ describe("2. THE SEARCH TITLE AND DESCRIPTION", () => {
     expect(previewed.ok).toBe(true);
     await p.execute(action({ actionKey: "update_page_meta", requestedChanges: { metaTitle: "New title" }, preview: previewed.ok ? previewed.preview : null }));
     const mutation = sent[sent.length - 1];
-    expect(mutation.variables.page.seo.title).toBe("New title");
-    expect(mutation.variables.page.seo.description).toBe("Hand poured candles");
+    // NO `seo` KEY AT ALL. Sending one is the bug this whole change
+    // exists to remove, and it would be accepted by a mock for ever.
+    expect(mutation.variables.page.seo).toBeUndefined();
+    const written = mutation.variables.page.metafields as any[];
+    // Updated BY ID, because both already exist on this page.
+    expect(written).toEqual([
+      { id: "gid://shopify/Metafield/11", value: "New title" },
+      { id: "gid://shopify/Metafield/12", value: "Hand poured candles" },
+    ]);
+  });
+
+  it("creates the metafield with its type when the page has never had one", async () => {
+    // A first write has no id to update, so it must carry
+    // namespace/key/type or Shopify rejects it. title_tag is a single
+    // line and description_tag is not, and sending the wrong type
+    // fails against any existing definition.
+    const { impl, sent } = sequence([
+      pageBody({ seoTitle: null, seoDescription: null }),
+      pageBody({ seoTitle: null, seoDescription: null }),
+      { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } },
+    ]);
+    const p = platform(impl);
+    const previewed = await p.preview(meta({ metaTitle: "First title", metaDescription: "First description" }));
+    expect(previewed.ok).toBe(true);
+    await p.execute(
+      action({
+        actionKey: "update_page_meta",
+        requestedChanges: { metaTitle: "First title", metaDescription: "First description" },
+        preview: previewed.ok ? previewed.preview : null,
+      })
+    );
+    expect(sent[sent.length - 1].variables.page.metafields).toEqual([
+      { namespace: "global", key: "title_tag", type: "single_line_text_field", value: "First title" },
+      { namespace: "global", key: "description_tag", type: "multi_line_text_field", value: "First description" },
+    ]);
+  });
+
+  it("DOES NOT WRITE AN EMPTY VALUE to carry a half that was never set", async () => {
+    // Shopify rejects an empty metafield value, which would fail the
+    // whole write — so a page with no description must not gain an
+    // empty one just because the title changed.
+    const { impl, sent } = sequence([
+      pageBody({ seoDescription: null }),
+      pageBody({ seoDescription: null }),
+      { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } },
+    ]);
+    const p = platform(impl);
+    const previewed = await p.preview(meta({ metaTitle: "Only a title" }));
+    await p.execute(
+      action({
+        actionKey: "update_page_meta",
+        requestedChanges: { metaTitle: "Only a title" },
+        preview: previewed.ok ? previewed.preview : null,
+      })
+    );
+    const written = sent[sent.length - 1].variables.page.metafields as any[];
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatchObject({ value: "Only a title" });
+  });
+
+  it("A PAGE EDIT NEVER TOUCHES THE SEARCH LISTING", async () => {
+    // The separation update_page_text and update_page_meta exist to
+    // enforce. A body write that also carried metafields would make
+    // "chat changed my homepage" and "chat changed what Google shows"
+    // the same audit record.
+    const { impl, sent } = sequence([
+      pageBody(),
+      pageBody(),
+      { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } },
+    ]);
+    const p = platform(impl);
+    const previewed = await p.preview(
+      action({ actionKey: "update_page_text", requestedChanges: { html: "<p>New words.</p>" } })
+    );
+    expect(previewed.ok).toBe(true);
+    await p.execute(
+      action({
+        actionKey: "update_page_text",
+        requestedChanges: { html: "<p>New words.</p>" },
+        preview: previewed.ok ? previewed.preview : null,
+      })
+    );
+    const page = sent[sent.length - 1].variables.page;
+    expect(page.body).toBe("<p>New words.</p>");
+    expect(page.metafields).toBeUndefined();
+    expect(page.seo).toBeUndefined();
+  });
+
+  it("THE QUERY ASKS FOR NOTHING A PAGE DOES NOT HAVE", async () => {
+    // The guard against the whole class. `Page` has no `seo` field in
+    // the 2026-07 schema, and one bad field in a shared query broke the
+    // page TEXT read too — the body write was valid all along and could
+    // never get past its own preview.
+    const { impl, sent } = sequence([pageBody()]);
+    await platform(impl).preview(meta({ metaTitle: "x" }));
+    const query = String(sent[0].query);
+    expect(query).toMatch(/metafield\(namespace: "global", key: "title_tag"\)/);
+    expect(query).toMatch(/metafield\(namespace: "global", key: "description_tag"\)/);
+    // The field that did not exist.
+    expect(query).not.toMatch(/\bseo\s*\{/);
   });
 
   it("neither half given is a refusal", async () => {
@@ -813,5 +928,210 @@ describe("8. A PICTURE INTO THE STORE'S OWN FILE LIBRARY", () => {
       if (key === "upload_image") continue;
       expect(risk, `${key} should not be low`).not.toBe("low");
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// WHAT THE LIVE RUN FOUND — 20 November 2026
+// ─────────────────────────────────────────────────────────────────────
+//
+// Both of these passed every mock test in this file and failed on
+// first contact with a real store. They are here so they cannot come
+// back, and so the next person reads what a mock cannot tell them.
+
+describe("9. CLEARING A SEARCH TITLE, AND THE SILENT NO-OP IT USED TO BE", () => {
+  const metaPreview = (changes: { field: string; before: string; after: string }[]) =>
+    ({ summary: "", changes, warnings: [] }) as any;
+
+  const deleted = {
+    data: { metafieldsDelete: { deletedMetafields: [{ namespace: "global", key: "title_tag" }], userErrors: [] } },
+  };
+  const updated = { data: { pageUpdate: { page: { id: PAGE.id }, userErrors: [] } } };
+
+  it("THE LOAD-BEARING ONE: an empty target is a DELETE, with the owner named", async () => {
+    // FOUND LIVE, 20 November 2026. Shopify rejects an empty metafield
+    // value, so the old code SKIPPED empty values — which meant
+    // "clear the search title" produced no metafield to write, execute
+    // sent `pageUpdate(id, page: {})`, Shopify accepted the empty
+    // mutation, and the run reported success. An undo said "restored"
+    // having restored nothing. Every mock test in this file passed.
+    //
+    // metafieldsDelete is keyed on ownerId+namespace+key, NOT on the
+    // metafield's own id.
+    const { impl, sent } = sequence([pageBody(), deleted, updated]);
+    const r = await platform(impl).execute(
+      action({
+        actionKey: "update_page_meta",
+        requestedChanges: { metaTitle: "" },
+        preview: metaPreview([{ field: "seoTitle", before: "About Qaaf", after: "" }]),
+      })
+    );
+    expect(r.ok).toBe(true);
+    const del = sent.find((c) => String(c.query).includes("metafieldsDelete"));
+    expect(del, "a delete must have been sent").toBeTruthy();
+    expect(del.variables.metafields).toEqual([{ ownerId: PAGE.id, namespace: "global", key: "title_tag" }]);
+  });
+
+  it("A DELETE-ONLY CHANGE SENDS NO EMPTY pageUpdate", async () => {
+    // Both halves cleared, so after the deletes there is nothing left
+    // to write. The old code would have sent `page: {}` here and
+    // called it a success; now there is no pageUpdate at all and the
+    // result names what was removed.
+    const { impl, sent } = sequence([pageBody(), deleted]);
+    const r = await platform(impl).execute(
+      action({
+        actionKey: "update_page_meta",
+        requestedChanges: { metaTitle: "", metaDescription: "" },
+        preview: metaPreview([
+          { field: "seoTitle", before: "About Qaaf", after: "" },
+          { field: "seoDescription", before: "Hand poured candles", after: "" },
+        ]),
+      })
+    );
+    expect(r.ok).toBe(true);
+    expect(r.ok && (r.platformResponse as any).removed).toEqual(["title_tag", "description_tag"]);
+    expect(sent.filter((c) => String(c.query).includes("pageUpdate")), "no empty pageUpdate").toHaveLength(0);
+    const del = sent.find((c) => String(c.query).includes("metafieldsDelete"));
+    expect(del.variables.metafields).toEqual([
+      { ownerId: PAGE.id, namespace: "global", key: "title_tag" },
+      { ownerId: PAGE.id, namespace: "global", key: "description_tag" },
+    ]);
+  });
+
+  it("NO EMPTY VALUE EVER REACHES SHOPIFY, on any path", async () => {
+    // The whole class rather than one path: Shopify rejects an empty
+    // metafield value outright, so a payload carrying one fails the
+    // entire mutation. Every combination of cleared and set is run and
+    // every metafield sent is inspected.
+    const cases: { title: string | null; description: string | null }[] = [
+      { title: "", description: null },
+      { title: null, description: "" },
+      { title: "", description: "" },
+      { title: "New", description: "" },
+      { title: "", description: "New description" },
+    ];
+    for (const c of cases) {
+      const changes = [];
+      if (c.title !== null) changes.push({ field: "seoTitle", before: "About Qaaf", after: c.title });
+      if (c.description !== null) {
+        changes.push({ field: "seoDescription", before: "Hand poured candles", after: c.description });
+      }
+      const { impl, sent } = sequence([pageBody(), deleted, updated]);
+      await platform(impl).execute(
+        action({ actionKey: "update_page_meta", requestedChanges: {}, preview: metaPreview(changes) })
+      );
+      for (const call of sent) {
+        for (const mf of (call.variables?.page?.metafields ?? []) as any[]) {
+          expect(mf.value, `empty value sent for ${JSON.stringify(c)}`).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("a failed delete is reported, not swallowed", async () => {
+    const { impl } = sequence([
+      pageBody(),
+      { data: { metafieldsDelete: { deletedMetafields: [], userErrors: [{ field: ["metafields"], message: "Owner not found" }] } } },
+    ]);
+    const r = await platform(impl).execute(
+      action({
+        actionKey: "update_page_meta",
+        requestedChanges: { metaTitle: "" },
+        preview: metaPreview([{ field: "seoTitle", before: "About Qaaf", after: "" }]),
+      })
+    );
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && !r.stale && r.reason).toContain("Owner not found");
+  });
+
+  it("clearing a title that was never set is ALREADY AT TARGET, not a delete", async () => {
+    // No metafield to remove and nothing to write — and the
+    // already-at-target check is what makes a retry after a timeout
+    // harmless rather than a false stale.
+    const { impl, sent } = sequence([pageBody({ seoTitle: null })]);
+    const r = await platform(impl).execute(
+      action({
+        actionKey: "update_page_meta",
+        requestedChanges: { metaTitle: "" },
+        preview: metaPreview([{ field: "seoTitle", before: "", after: "" }]),
+      })
+    );
+    expect(r.ok).toBe(true);
+    expect(sent.filter((c) => String(c.query).includes("mutation"))).toHaveLength(0);
+  });
+});
+
+describe("10. AN ARTICLE REQUIRES AN AUTHOR", () => {
+  const postAction = (over: Record<string, unknown> = {}) =>
+    action({
+      actionKey: "publish_post",
+      targetRef: null,
+      requestedChanges: { title: "Diwali care", html: "<p>Trim the wick.</p>", ...over },
+    });
+
+  const blogsThen = (extra: Record<string, unknown>[], shop: string | null = "Qaaf Candles") => {
+    const body: Record<string, unknown> = { blogs: { nodes: [{ id: "gid://shopify/Blog/7", title: "News", handle: "news" }] } };
+    if (shop !== null) body.shop = { name: shop };
+    return sequence([{ data: body }, { data: body }, ...extra]);
+  };
+
+  const created = { data: { articleCreate: { article: { id: "gid://shopify/Article/3", isPublished: false }, userErrors: [] } } };
+
+  it("THE LOAD-BEARING ONE: it sends an author, because the schema demands one", async () => {
+    // FOUND LIVE, and invisible to every mock in this file:
+    //   Variable $article of type ArticleCreateInput! was provided
+    //   invalid value for author (Expected AuthorInput! to not be null)
+    // `author: AuthorInput!` is non-null on ArticleCreateInput.
+    const { impl, sent } = blogsThen([created]);
+    const p = platform(impl);
+    const pv = await p.preview(postAction());
+    expect(pv.ok).toBe(true);
+    const r = await p.execute({ ...postAction(), preview: pv.ok ? pv.preview : null } as any);
+    expect(r.ok).toBe(true);
+    const mutation = sent.find((c) => String(c.query).includes("articleCreate"));
+    expect(mutation.variables.article.author).toBeTruthy();
+    expect(mutation.variables.article.author.name).toBeTruthy();
+  });
+
+  it("the byline is the STORE'S name, never this product's", async () => {
+    // Rule 3. A literal here would put Hawlai's name on a merchant's
+    // blog post, and a merchant's own store name is the only honest
+    // byline available without asking.
+    const { impl, sent } = blogsThen([created], "Qaaf Candles");
+    const p = platform(impl);
+    const pv = await p.preview(postAction());
+    await p.execute({ ...postAction(), preview: pv.ok ? pv.preview : null } as any);
+    const mutation = sent.find((c) => String(c.query).includes("articleCreate"));
+    expect(mutation.variables.article.author.name).toBe("Qaaf Candles");
+    expect(JSON.stringify(mutation.variables).toLowerCase()).not.toContain("hawlai");
+  });
+
+  it("a caller-supplied author wins", async () => {
+    const { impl, sent } = blogsThen([created]);
+    const p = platform(impl);
+    const act = postAction({ author: "Ovaiz" });
+    const pv = await p.preview(act);
+    await p.execute({ ...act, preview: pv.ok ? pv.preview : null } as any);
+    expect(sent.find((c) => String(c.query).includes("articleCreate")).variables.article.author.name).toBe("Ovaiz");
+  });
+
+  it("AND STILL SENDS ONE when the store's name cannot be read", async () => {
+    // A non-null argument has no safe omission. An unreadable shop
+    // name must not turn into a missing author and a failed write.
+    const { impl, sent } = blogsThen([created], null);
+    const p = platform(impl);
+    const pv = await p.preview(postAction());
+    const r = await p.execute({ ...postAction(), preview: pv.ok ? pv.preview : null } as any);
+    expect(r.ok).toBe(true);
+    expect(sent.find((c) => String(c.query).includes("articleCreate")).variables.article.author.name).toBeTruthy();
+  });
+
+  it("and the post is STILL created unpublished", async () => {
+    // The property the author fix must not have disturbed.
+    const { impl, sent } = blogsThen([created]);
+    const p = platform(impl);
+    const pv = await p.preview(postAction());
+    await p.execute({ ...postAction(), preview: pv.ok ? pv.preview : null } as any);
+    expect(sent.find((c) => String(c.query).includes("articleCreate")).variables.article.isPublished).toBe(false);
   });
 });

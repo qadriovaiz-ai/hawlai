@@ -66,6 +66,37 @@ const PRICE_MUTATION = `
 //
 // SEO IS A FIELD, NOT A METAFIELD. `seo { title description }` sits on
 // the Page itself, which is why 3.1 asked for no metafield scope.
+// A PAGE HAS NO `seo` FIELD, AND THIS FILE SAID IT DID.
+//
+// The comment here read: "SEO IS A FIELD, NOT A METAFIELD.
+// `seo { title description }` sits on the Page itself, which is why
+// 3.1 asked for no metafield scope." Every part of that was wrong, and
+// it was found on 20 November 2026 by the first read against a real
+// store — `Field 'seo' doesn't exist on type 'Page'`.
+//
+// Introspected against the live 2026-07 schema rather than argued
+// from a documentation page. `Page` carries exactly: body,
+// bodySummary, createdAt, defaultCursor, events, handle, id,
+// isPublished, metafield, metafields, publishedAt, templateSuffix,
+// title, translations, updatedAt. `PageUpdateInput` carries handle,
+// body, isPublished, publishDate, templateSuffix, metafields, title,
+// redirectNewHandle. There are three page mutations — pageCreate,
+// pageDelete, pageUpdate — and no SEO mutation among them.
+//
+// `Collection`, by contrast, really does have `seo: SEO!` and
+// `CollectionUpdateInput` really does take `seo: SEOInput`. So the
+// claim was not invented from nothing; it was true of the neighbouring
+// type and never checked against this one.
+//
+// SO PAGE SEO IS METAFIELDS, in the `global` namespace with the keys
+// the Online Store theme reads. Aliased on the way in so the rest of
+// the file still deals in "the search title" rather than in metafield
+// plumbing.
+//
+// AND THE BLAST RADIUS WAS BOTH PAGE ACTIONS, not just the SEO one:
+// `seo` sat in this shared query, so the read failed for a page TEXT
+// edit too. The body write was always valid in the schema and could
+// never get past its own preview.
 const PAGE_QUERY = `
   query PublishPage($id: ID!) {
     page(id: $id) {
@@ -74,31 +105,87 @@ const PAGE_QUERY = `
       handle
       body
       isPublished
-      seo { title description }
+      seoTitle: metafield(namespace: "global", key: "title_tag") { id value }
+      seoDescription: metafield(namespace: "global", key: "description_tag") { id value }
     }
   }
 `;
 
+// Metafields are upserted per namespace+key, so sending one does NOT
+// blank the other — the opposite of the `seo` object on a Collection,
+// where the input replaces the whole thing. Both halves are still sent
+// together: it costs nothing, and it keeps one rule in this file rather
+// than two that differ by resource.
+//
+// `type` is required on a first write and must match any existing
+// definition. title_tag is a single line; description_tag is not.
 const PAGE_MUTATION = `
   mutation PublishPageUpdate($id: ID!, $page: PageUpdateInput!) {
     pageUpdate(id: $id, page: $page) {
-      page { id title body seo { title description } }
+      page {
+        id
+        title
+        body
+        seoTitle: metafield(namespace: "global", key: "title_tag") { value }
+        seoDescription: metafield(namespace: "global", key: "description_tag") { value }
+      }
       userErrors { field message }
     }
   }
 `;
 
+// CLEARING ONE IS A DELETE. Shopify rejects an empty metafield value,
+// so "put the search title back to how it was" — when how it was is
+// *nothing* — cannot be expressed as a write. Found live on
+// 20 November 2026: the undo reported "restored" having sent
+// `pageUpdate(id, page: {})`, an empty mutation that Shopify happily
+// accepted. The field kept its changed value and the run said it had
+// been put back.
+const METAFIELDS_DELETE = `
+  mutation PublishMetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields { key namespace }
+      userErrors { field message }
+    }
+  }
+`;
+
+/** The two metafields the Online Store theme reads for a page's search listing. */
+const SEO_METAFIELDS = {
+  seoTitle: { namespace: "global", key: "title_tag", type: "single_line_text_field" },
+  seoDescription: { namespace: "global", key: "description_tag", type: "multi_line_text_field" },
+} as const;
+
 // A BLOG, NOT A BLOG POST. An article has to be created inside one,
 // and a store can have several — so the blog is read first and the
 // absence of any is a refusal rather than a guess.
+// The shop's own name comes along because an article REQUIRES an
+// author — see ARTICLE_MUTATION.
 const BLOGS_QUERY = `
   query PublishBlogs {
+    shop { name }
     blogs(first: 10) {
       nodes { id title handle }
     }
   }
 `;
 
+// `author` IS REQUIRED — `author: AuthorInput!` on ArticleCreateInput,
+// and omitting it fails the whole mutation:
+//
+//   Variable $article of type ArticleCreateInput! was provided invalid
+//   value for author (Expected AuthorInput! value to not be null)
+//
+// Found live on 20 November 2026. It was missed because the
+// introspection probe FILTERED the field list for readability, and the
+// filter hid the one required field it did not already expect. Reading
+// a schema is not reading a schema if the output is pre-selected by
+// what you think is in it.
+//
+// The name is the STORE'S OWN name, read from Shopify, or whatever the
+// caller supplied. Never a literal: Rule 3 leaves no room for a
+// business name in this file, and "Hawlai" would put this product's
+// name on a merchant's byline.
 const ARTICLE_MUTATION = `
   mutation PublishArticleCreate($article: ArticleCreateInput!) {
     articleCreate(article: $article) {
@@ -210,7 +297,9 @@ type PageNode = {
   handle: string;
   body: string | null;
   isPublished: boolean;
-  seo: { title: string | null; description: string | null } | null;
+  /** Aliased metafields — see PAGE_QUERY. Null when never set. */
+  seoTitle: { id: string; value: string | null } | null;
+  seoDescription: { id: string; value: string | null } | null;
 };
 
 type BlogNode = { id: string; title: string; handle: string };
@@ -351,8 +440,18 @@ export function createShopifyPlatform(deps: {
     return result.ok ? result.data.page ?? null : null;
   }
 
+  /** The store's own name, for an article byline. Null when unreadable. */
+  let shopName: string | null = null;
+
   async function readBlogs(shop: string, token: string): Promise<BlogNode[] | null> {
-    const result = await shopifyGraphQL<{ blogs: { nodes: BlogNode[] } }>(shop, token, BLOGS_QUERY, {}, fetchImpl);
+    const result = await shopifyGraphQL<{ blogs: { nodes: BlogNode[] }; shop?: { name: string } }>(
+      shop,
+      token,
+      BLOGS_QUERY,
+      {},
+      fetchImpl
+    );
+    if (result.ok) shopName = result.data.shop?.name ?? null;
     // NULL IS NOT AN EMPTY LIST. "Could not read your blogs" and "this
     // store has no blog" lead to different sentences, and only one of
     // them is the merchant's to fix.
@@ -428,9 +527,9 @@ export function createShopifyPlatform(deps: {
           if (title === null && description === null) {
             return { ok: false, reason: "No search title or description was given." };
           }
-          if (title !== null) changes.push({ field: "seoTitle", before: page.seo?.title ?? "", after: title });
+          if (title !== null) changes.push({ field: "seoTitle", before: page.seoTitle?.value ?? "", after: title });
           if (description !== null) {
-            changes.push({ field: "seoDescription", before: page.seo?.description ?? "", after: description });
+            changes.push({ field: "seoDescription", before: page.seoDescription?.value ?? "", after: description });
           }
         }
 
@@ -817,8 +916,8 @@ export function createShopifyPlatform(deps: {
           field === "body"
             ? current.body ?? ""
             : field === "seoTitle"
-              ? current.seo?.title ?? ""
-              : current.seo?.description ?? "";
+              ? current.seoTitle?.value ?? ""
+              : current.seoDescription?.value ?? "";
 
         const expected = action.preview.changes.filter((c) => ["body", "seoTitle", "seoDescription"].includes(c.field));
         if (!expected.length) return { ok: false, reason: "The preview did not record anything to verify against." };
@@ -839,20 +938,89 @@ export function createShopifyPlatform(deps: {
         }
 
         const page: Record<string, unknown> = {};
+        /** Metafields to remove — see METAFIELDS_DELETE. */
+        const toDelete: { ownerId: string; namespace: string; key: string }[] = [];
         for (const c of expected) {
           if (c.field === "body") page.body = c.after;
         }
         const seoTitle = expected.find((c) => c.field === "seoTitle");
         const seoDescription = expected.find((c) => c.field === "seoDescription");
         if (seoTitle || seoDescription) {
-          // BOTH SIDES SENT TOGETHER. Shopify's seo input replaces the
-          // object, so sending only the title would blank a
-          // description nobody asked to remove — the current value is
-          // carried through for whichever half is not changing.
-          page.seo = {
-            title: seoTitle ? seoTitle.after : current.seo?.title ?? "",
-            description: seoDescription ? seoDescription.after : current.seo?.description ?? "",
+          // BOTH SIDES SENT TOGETHER, with the unchanged half carried
+          // through from the current value. Metafields upsert per
+          // namespace+key so omitting one would not blank it — but
+          // sending both keeps ONE rule in this file instead of two
+          // that differ by resource, and a Collection's `seo` input
+          // genuinely does replace the whole object.
+          //
+          // An empty value is skipped rather than written: Shopify
+          // rejects an empty metafield value, and "no search title"
+          // and "a search title that is the empty string" are the same
+          // thing to a reader anyway.
+          const metafields: Record<string, unknown>[] = [];
+          const push = (which: keyof typeof SEO_METAFIELDS, value: string, existingId: string | undefined) => {
+            const def = SEO_METAFIELDS[which];
+            if (!value) {
+              // EMPTY MEANS REMOVE, and removing is a different
+              // mutation. Collected rather than skipped — skipping is
+              // what made an undo-to-nothing claim success.
+              if (existingId) {
+                toDelete.push({ ownerId: current.id, namespace: def.namespace, key: def.key });
+              }
+              return;
+            }
+            metafields.push({
+              ...(existingId ? { id: existingId } : { namespace: def.namespace, key: def.key, type: def.type }),
+              value,
+            });
           };
+          push("seoTitle", seoTitle ? seoTitle.after : current.seoTitle?.value ?? "", current.seoTitle?.id);
+          push(
+            "seoDescription",
+            seoDescription ? seoDescription.after : current.seoDescription?.value ?? "",
+            current.seoDescription?.id
+          );
+          if (metafields.length) page.metafields = metafields;
+        }
+
+        // A WRITE THAT WRITES NOTHING IS NOT A SUCCESS. This is the
+        // guard for the bug above: with no fields and no deletions
+        // there is nothing to send, and `pageUpdate(id, page: {})`
+        // returns ok — so the caller recorded a change that never
+        // happened and an undo that never undid.
+        if (!Object.keys(page).length && !toDelete.length) {
+          publishError("shopify.nothing_to_write", { action: action.id, page: current.id });
+          return {
+            ok: false,
+            reason: "Nothing could be applied — the change came out empty, so nothing was written.",
+          };
+        }
+
+        if (toDelete.length) {
+          publishLog("shopify.write", {
+            action: action.id,
+            page: current.id,
+            what: "metafields_delete",
+            keys: toDelete.map((d) => d.key).join(","),
+          });
+          const removed = await shopifyMutation<{ deletedMetafields: unknown[] }>(
+            creds.shop,
+            creds.accessToken,
+            METAFIELDS_DELETE,
+            { metafields: toDelete },
+            "metafieldsDelete",
+            fetchImpl
+          );
+          if (!removed.ok) {
+            publishError("shopify.write_failed", { action: action.id, detail: removed.reason });
+            return { ok: false, reason: removed.reason };
+          }
+        }
+
+        // Only now, and only if there is something left to send.
+        if (!Object.keys(page).length) {
+          publishLog("shopify.write_ok", { action: action.id, page: current.id, what: "metafields_delete_only" });
+          return { ok: true, platformResponse: { removed: toDelete.map((d) => d.key) } };
         }
 
         publishLog("shopify.write", { action: action.id, page: current.id, fields: Object.keys(page).join(",") });
@@ -1018,7 +1186,22 @@ export function createShopifyPlatform(deps: {
           creds.shop,
           creds.accessToken,
           ARTICLE_MUTATION,
-          { article: { blogId: blog.id, title, body, isPublished: false } },
+          {
+            article: {
+              blogId: blog.id,
+              title,
+              body,
+              isPublished: false,
+              // REQUIRED by the schema. The caller's name if given,
+              // else the store's own — never this product's.
+              author: {
+                name:
+                  (typeof action.requestedChanges.author === "string" && action.requestedChanges.author.trim()) ||
+                  shopName ||
+                  blog.title,
+              },
+            },
+          },
           "articleCreate",
           fetchImpl
         );
